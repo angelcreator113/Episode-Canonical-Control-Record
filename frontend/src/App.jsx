@@ -76,7 +76,6 @@ const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
 const UniversePage = lazy(() => import('./pages/UniversePage'));
 const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
-const BookOverview = lazy(() => import('./pages/BookOverview'));
 const RelationshipEngine = lazy(() => import('./pages/RelationshipEngine'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
@@ -91,7 +90,6 @@ const SetupWizard = lazy(() => import('./pages/SetupWizard'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
-const EpisodeWorkspace = lazy(() => import('./pages/EpisodeWorkspace'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
@@ -109,6 +107,7 @@ const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
 const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
 const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
 const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
+const ShowBrain = lazy(() => import('./pages/ShowBrain'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -399,6 +398,9 @@ function AppContent() {
 
           {/* Character Depth Engine — Body, money, time, cosmology, blind spot, joy, change capacity */}
           <Route path="/character-depth-engine" element={<CharacterDepthEngine />} />
+
+          {/* Show Brain — Master Intelligence Document: identity, world rules, stats, economy, beats, 5 brains, canon */}
+          <Route path="/show-brain" element={<ShowBrain />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />

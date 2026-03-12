@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import './CharacterDepthEngine.css';
+import usePageData from '../hooks/usePageData';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════
    The Character Depth Engine — Doc 09 · v1.0
@@ -128,6 +130,13 @@ const ARCHITECTURE_LAYERS = [
   { layer: 'Aliveness', dimensions: 'Joy source · Joy accessibility · Joy vs. ambition', generates: 'The proof she is not only her damage — the direction she comes alive in', color: '#e8b847' },
 ];
 
+const DEFAULTS = {
+  BODY_FIELDS, MONEY_PATTERNS, TIME_ORIENTATIONS, LUCK_FIELDS,
+  NARRATIVE_FIELDS, GAP_TYPES, BLINDSPOT_CATEGORIES, CHANGE_TYPES,
+  COSMOLOGY_TYPES, FORECLOSED_CATEGORIES, FORECLOSED_FIELDS,
+  JOY_ACCESSIBILITY, JOY_FIELDS, ARCHITECTURE_LAYERS,
+};
+
 /* ─── TAB RENDERERS ─── */
 
 function renderBody() {
@@ -137,14 +146,16 @@ function renderBody() {
         A character's relationship to their physical self is not appearance — it is the site where everything else lands. Stress, desire, grief, and shame live in the body.
       </p>
       <div className="cde-field-stack">
-        {BODY_FIELDS.map((f) => (
-          <div key={f.field} className="cde-field-card">
+        <EditableList constantKey="BODY_FIELDS" defaults={BODY_FIELDS} label="Add Body Field">
+          {(f) => (
+          <div className="cde-field-card">
             <h4 className="cde-field-name">{f.field}</h4>
             <div className="cde-field-row"><strong>What It Captures</strong><p>{f.captures}</p></div>
             <div className="cde-field-row"><strong>How It Generates Story</strong><p>{f.generates}</p></div>
             <div className="cde-field-example"><p>{f.example}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -158,8 +169,9 @@ function renderMoney() {
       </p>
       <p className="cde-registry-note">Registry fields: <code>money_behavior_pattern</code> (enum) + <code>money_behavior_note</code> (text)</p>
       <div className="cde-money-grid">
-        {MONEY_PATTERNS.map((m) => (
-          <div key={m.pattern} className="cde-money-card">
+        <EditableList constantKey="MONEY_PATTERNS" defaults={MONEY_PATTERNS} label="Add Money Pattern">
+          {(m) => (
+          <div className="cde-money-card">
             <div className="cde-money-header">
               <span className="cde-money-icon">{m.icon}</span>
               <h4>{m.pattern}</h4>
@@ -168,7 +180,8 @@ function renderMoney() {
             <div className="cde-money-wound"><strong>What Wound It Comes From</strong><p>{m.wound}</p></div>
             <div className="cde-money-story"><strong>Story It Creates</strong><p>{m.story}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -181,14 +194,16 @@ function renderTime() {
         A character's personal relationship to time shapes every decision they make. Time orientation explains behavior that nothing else does.
       </p>
       <div className="cde-time-stack">
-        {TIME_ORIENTATIONS.map((t) => (
-          <div key={t.orientation} className="cde-time-card" style={{ borderLeftColor: t.color }}>
+        <EditableList constantKey="TIME_ORIENTATIONS" defaults={TIME_ORIENTATIONS} label="Add Time Orientation">
+          {(t) => (
+          <div className="cde-time-card" style={{ borderLeftColor: t.color }}>
             <h4 style={{ color: t.color }}>{t.orientation}</h4>
             <div className="cde-time-row"><strong>How They Experience Time</strong><p>{t.experience}</p></div>
             <div className="cde-time-row"><strong>How It Shapes Decisions</strong><p>{t.shapes}</p></div>
             <div className="cde-time-story"><p>{t.story}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -201,13 +216,15 @@ function renderLuck() {
         Some of what happens to characters is not character — it is the world. The circumstance layer captures what they didn't choose. The operative cosmology captures how they interpret it.
       </p>
       <div className="cde-luck-stack">
-        {LUCK_FIELDS.map((f) => (
-          <div key={f.field} className="cde-luck-card">
+        <EditableList constantKey="LUCK_FIELDS" defaults={LUCK_FIELDS} label="Add Luck Field">
+          {(f) => (
+          <div className="cde-luck-card">
             <h4 className="cde-field-name">{f.field}</h4>
             <div className="cde-luck-row"><strong>What It Captures</strong><p>{f.captures}</p></div>
             <div className="cde-luck-gen"><strong>How It Generates Story</strong><p>{f.generates}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -220,24 +237,28 @@ function renderNarrative() {
         Every person has a story they tell about who they are and why. That story is almost always partially wrong. The system generates both versions. The gap between them is where the deepest character work lives.
       </p>
       <div className="cde-narr-stack">
-        {NARRATIVE_FIELDS.map((f) => (
-          <div key={f.field} className="cde-narr-card">
+        <EditableList constantKey="NARRATIVE_FIELDS" defaults={NARRATIVE_FIELDS} label="Add Narrative Field">
+          {(f) => (
+          <div className="cde-narr-card">
             <h4 className="cde-field-name">{f.field}</h4>
             <div className="cde-narr-row"><strong>What It Contains</strong><p>{f.contains}</p></div>
             <div className="cde-narr-row"><strong>Who Sees It</strong><p>{f.sees}</p></div>
             <div className="cde-narr-fn"><strong>Story Function</strong><p>{f.function_}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
 
       <h3 className="cde-sub-heading">Narrative Gap Types</h3>
       <div className="cde-gap-grid">
-        {GAP_TYPES.map((g) => (
-          <div key={g.type} className="cde-gap-chip">
+        <EditableList constantKey="GAP_TYPES" defaults={GAP_TYPES} label="Add Gap Type">
+          {(g) => (
+          <div className="cde-gap-chip">
             <strong>{g.type}</strong>
             <p>{g.desc}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -271,13 +292,15 @@ function renderBlindSpot() {
 
       <h3 className="cde-sub-heading">Blind Spot Categories</h3>
       <div className="cde-blind-grid">
-        {BLINDSPOT_CATEGORIES.map((b) => (
-          <div key={b.cat} className="cde-blind-cat-card">
+        <EditableList constantKey="BLINDSPOT_CATEGORIES" defaults={BLINDSPOT_CATEGORIES} label="Add Category">
+          {(b) => (
+          <div className="cde-blind-cat-card">
             <h4>{b.cat}</h4>
             <p className="cde-blind-desc">{b.desc}</p>
             <p className="cde-blind-ex">{b.example}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -290,13 +313,15 @@ function renderChange() {
         Not every character can change equally. The change capacity determines whether a character has an arc or whether their function is to be the thing that doesn't change while everything around them does. Both are valid. Both are powerful.
       </p>
       <div className="cde-change-track">
-        {CHANGE_TYPES.map((c) => (
-          <div key={c.capacity} className="cde-change-card" style={{ borderLeftColor: c.color }}>
+        <EditableList constantKey="CHANGE_TYPES" defaults={CHANGE_TYPES} label="Add Change Type">
+          {(c) => (
+          <div className="cde-change-card" style={{ borderLeftColor: c.color }}>
             <h4 style={{ color: c.color }}>{c.capacity}</h4>
             <p className="cde-change-desc">{c.desc}</p>
             <div className="cde-change-impl"><strong>Story Implication</strong><p>{c.implication}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
 
       <h3 className="cde-sub-heading">Supporting Fields</h3>
@@ -322,21 +347,24 @@ function renderCosmology() {
       </p>
       <p className="cde-registry-note">Registry fields: <code>operative_cosmology</code> (enum) + <code>cosmology_vs_stated_religion</code> (text)</p>
       <div className="cde-cosmo-stack">
-        {COSMOLOGY_TYPES.map((c) => (
-          <div key={c.type} className="cde-cosmo-card">
+        <EditableList constantKey="COSMOLOGY_TYPES" defaults={COSMOLOGY_TYPES} label="Add Cosmology Type">
+          {(c) => (
+          <div className="cde-cosmo-card">
             <h4>{c.type}</h4>
             <div className="cde-cosmo-row"><strong>Operative Logic</strong><p>{c.logic}</p></div>
             <div className="cde-cosmo-row"><strong>Response to Loss</strong><p>{c.loss}</p></div>
             <div className="cde-cosmo-row"><strong>How It Shapes Ambition</strong><p>{c.ambition}</p></div>
             <div className="cde-cosmo-break"><strong>Story When It Breaks</strong><p>{c.breaks}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
 }
 
 function renderForeclosed() {
+  const { data } = usePageEdit();
   return (
     <div className="cde-section">
       <p className="cde-intro">
@@ -344,19 +372,21 @@ function renderForeclosed() {
       </p>
 
       <div className="cde-foreclosed-cats">
-        {FORECLOSED_CATEGORIES.map((c) => (
-          <span key={c} className="cde-foreclosed-chip">{c}</span>
+        {(data.FORECLOSED_CATEGORIES || FORECLOSED_CATEGORIES).map((c, i) => (
+          <span key={i} className="cde-foreclosed-chip">{c}</span>
         ))}
       </div>
 
       <div className="cde-foreclosed-stack">
-        {FORECLOSED_FIELDS.map((f) => (
-          <div key={f.field} className="cde-foreclosed-card">
+        <EditableList constantKey="FORECLOSED_FIELDS" defaults={FORECLOSED_FIELDS} label="Add Foreclosure Field">
+          {(f) => (
+          <div className="cde-foreclosed-card">
             <h4 className="cde-field-name">{f.field}</h4>
             <div className="cde-foreclosed-row"><strong>What It Captures</strong><p>{f.captures}</p></div>
             <div className="cde-foreclosed-fn"><strong>Story Function</strong><p>{f.function_}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
 
       <div className="cde-foreclosed-example">
@@ -376,23 +406,27 @@ function renderJoy() {
 
       <h3 className="cde-sub-heading">Joy Accessibility Levels</h3>
       <div className="cde-joy-levels">
-        {JOY_ACCESSIBILITY.map((j) => (
-          <div key={j.level} className="cde-joy-level" style={{ borderLeftColor: j.color }}>
+        <EditableList constantKey="JOY_ACCESSIBILITY" defaults={JOY_ACCESSIBILITY} label="Add Joy Level">
+          {(j) => (
+          <div className="cde-joy-level" style={{ borderLeftColor: j.color }}>
             <span className="cde-joy-badge" style={{ background: j.color }}>{j.level}</span>
             <p>{j.desc}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
 
       <div className="cde-joy-stack">
-        {JOY_FIELDS.map((f) => (
-          <div key={f.field} className="cde-joy-card">
+        <EditableList constantKey="JOY_FIELDS" defaults={JOY_FIELDS} label="Add Joy Field">
+          {(f) => (
+          <div className="cde-joy-card">
             <h4 className="cde-field-name">{f.field}</h4>
             <div className="cde-joy-row"><strong>What It Captures</strong><p>{f.captures}</p></div>
             <div className="cde-joy-row"><strong>Story Function</strong><p>{f.function_}</p></div>
             <div className="cde-joy-threat"><strong>The Threat</strong><p>{f.threat}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -406,8 +440,9 @@ function renderArchitecture() {
       </p>
 
       <div className="cde-arch-stack">
-        {ARCHITECTURE_LAYERS.map((l) => (
-          <div key={l.layer} className="cde-arch-card" style={{ borderLeftColor: l.color }}>
+        <EditableList constantKey="ARCHITECTURE_LAYERS" defaults={ARCHITECTURE_LAYERS} label="Add Architecture Layer">
+          {(l) => (
+          <div className="cde-arch-card" style={{ borderLeftColor: l.color }}>
             <div className="cde-arch-header">
               <span className="cde-arch-dot" style={{ background: l.color }} />
               <h4>{l.layer}</h4>
@@ -415,7 +450,8 @@ function renderArchitecture() {
             <p className="cde-arch-dims">{l.dimensions}</p>
             <p className="cde-arch-gen">{l.generates}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
 
       <div className="cde-principle-callout">
@@ -447,10 +483,15 @@ const TAB_RENDERERS = {
 
 export default function CharacterDepthEngine() {
   const [activeTab, setActiveTab] = useState('body');
+  const { data, updateItems, addItem, removeItem, saving } = usePageData('character_depth_engine', DEFAULTS);
+  const [editItem, setEditItem] = useState(null);
+  const Renderer = TAB_RENDERERS[activeTab];
 
   return (
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="cde-page">
       <header className="cde-header">
+        {saving && <span className="eim-saving">Saving…</span>}
         <h1>The Character Depth Engine</h1>
         <p className="cde-subtitle">Doc 09 · v1.0 — The missing dimensions that make characters irreducible</p>
       </header>
@@ -470,8 +511,10 @@ export default function CharacterDepthEngine() {
       </nav>
 
       <main className="cde-content">
-        {TAB_RENDERERS[activeTab]?.()}
+        {Renderer && <Renderer />}
       </main>
     </div>
+    {editItem && <EditItemModal item={editItem.item} onSave={(updated) => { updateItems(editItem.key, editItem.index, updated); setEditItem(null); }} onCancel={() => setEditItem(null)} title={`Edit ${editItem.key}`} />}
+    </PageEditContext.Provider>
   );
 }

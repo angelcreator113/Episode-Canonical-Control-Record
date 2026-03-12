@@ -31,6 +31,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const { authenticateToken } = require('../middleware/auth');
 
 let Anthropic;
 try {
@@ -46,7 +47,7 @@ try {
 /**
  * POST / — Save or update a story (upsert by character_key + story_number)
  */
-router.post('/', async (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const {
@@ -95,7 +96,7 @@ router.post('/', async (req, res) => {
 /**
  * POST /auto-save — Auto-save from StoryReviewPanel (lighter payload)
  */
-router.post('/auto-save', async (req, res) => {
+router.post('/auto-save', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const { character_key, story_number, text, editor_notes } = req.body;
@@ -163,7 +164,7 @@ router.get('/:id', async (req, res) => {
 /**
  * PATCH /:id — Update story
  */
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const story = await db.StorytellerStory.findByPk(req.params.id);
@@ -191,7 +192,7 @@ router.patch('/:id', async (req, res) => {
 /**
  * DELETE /:id — Delete story
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const story = await db.StorytellerStory.findByPk(req.params.id);
@@ -207,7 +208,7 @@ router.delete('/:id', async (req, res) => {
 /**
  * POST /:id/approve — Approve a story
  */
-router.post('/:id/approve', async (req, res) => {
+router.post('/:id/approve', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const story = await db.StorytellerStory.findByPk(req.params.id);
@@ -234,7 +235,7 @@ const PLATFORMS = ['instagram', 'twitter', 'tiktok', 'youtube', 'reddit', 'custo
 /**
  * POST /social/import — Import social content and run AI analysis
  */
-router.post('/social/import', async (req, res) => {
+router.post('/social/import', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const { character_key, platform, source_url, raw_content, import_batch } = req.body;
@@ -337,7 +338,7 @@ router.get('/social/character/:charKey', async (req, res) => {
 /**
  * PATCH /social/:id — Update import canon status
  */
-router.patch('/social/:id', async (req, res) => {
+router.patch('/social/:id', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const record = await db.SocialMediaImport.findByPk(req.params.id);
@@ -360,7 +361,7 @@ router.patch('/social/:id', async (req, res) => {
 /**
  * DELETE /social/:id — Delete import
  */
-router.delete('/social/:id', async (req, res) => {
+router.delete('/social/:id', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const record = await db.SocialMediaImport.findByPk(req.params.id);
@@ -376,7 +377,7 @@ router.delete('/social/:id', async (req, res) => {
 /**
  * POST /social/:id/detect-lala — Run Lala detection on import
  */
-router.post('/social/:id/detect-lala', async (req, res) => {
+router.post('/social/:id/detect-lala', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const record = await db.SocialMediaImport.findByPk(req.params.id);
@@ -451,7 +452,7 @@ Return JSON only:
 /**
  * POST /assemblies — Create assembly
  */
-router.post('/assemblies', async (req, res) => {
+router.post('/assemblies', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const { title, character_key, story_ids, social_import_ids } = req.body;
@@ -511,7 +512,7 @@ router.get('/assemblies/:id', async (req, res) => {
 /**
  * PATCH /assemblies/:id — Update assembly
  */
-router.patch('/assemblies/:id', async (req, res) => {
+router.patch('/assemblies/:id', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const assembly = await db.NovelAssembly.findByPk(req.params.id);
@@ -537,7 +538,7 @@ router.patch('/assemblies/:id', async (req, res) => {
 /**
  * DELETE /assemblies/:id — Delete assembly
  */
-router.delete('/assemblies/:id', async (req, res) => {
+router.delete('/assemblies/:id', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const assembly = await db.NovelAssembly.findByPk(req.params.id);
@@ -553,7 +554,7 @@ router.delete('/assemblies/:id', async (req, res) => {
 /**
  * POST /assemblies/:id/compile — Compile assembly: stitch stories, compute emotional curve
  */
-router.post('/assemblies/:id/compile', async (req, res) => {
+router.post('/assemblies/:id/compile', authenticateToken, async (req, res) => {
   try {
     const db = require('../models');
     const assembly = await db.NovelAssembly.findByPk(req.params.id);

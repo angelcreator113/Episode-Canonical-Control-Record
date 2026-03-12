@@ -12,7 +12,6 @@
   font-family: 'DM Sans', sans-serif;
   color: #2e2e3a;
   background: #faf9fc;
-  min-height: 100vh;
 }
 
 /* ── Header ── */
@@ -315,4 +314,10 @@
   margin-top: 2.5rem;
   font-size: 0.8rem;
   color: #bbb;
+}
+
+/* ── Phone ── */
+@media (max-width: 480px) {
+  .st-page { padding: 1rem 0.75rem 2rem; }
+  .st-header h1 { font-size: 1.3rem; }
 }

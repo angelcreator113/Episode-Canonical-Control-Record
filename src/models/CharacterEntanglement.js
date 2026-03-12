@@ -74,6 +74,13 @@ module.exports = (sequelize, DataTypes) => {
       type:      DataTypes.TEXT,
       allowNull: true,
     },
+
+    /* ── Want Field (Component 3) ── */
+    what_they_want: { type: DataTypes.TEXT, allowNull: true },
+    want_category: {
+      type: DataTypes.ENUM('to_become','to_have','to_destroy','to_be_seen_by','to_escape','to_protect','to_understand'),
+      allowNull: true,
+    },
   }, {
     sequelize,
     modelName:  'CharacterEntanglement',

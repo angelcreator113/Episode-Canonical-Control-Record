@@ -10,16 +10,14 @@ const outfitSetsController = require('../controllers/outfitSetsController');
 const episodeAssetsController = require('../controllers/episodeAssetsController');
 const timelinePlacementsController = require('../controllers/timelinePlacementsController');
 const videoCompositionController = require('../controllers/videoCompositionController');
-const { _authenticateToken } = require('../middleware/auth');
-const { _requirePermission } = require('../middleware/rbac');
+const { authenticateToken } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/requestValidation');
 
 /**
  * Episode Routes
  * Base path: /api/v1/episodes
- *
- * ✅ AUTH TEMPORARILY DISABLED FOR TESTING
  */
 
 // Test endpoint to verify basic functionality
@@ -71,6 +69,7 @@ router.get(
 router.post(
   '/:id/wardrobe/:wardrobeId',
   validateUUIDParam('id'),
+  authenticateToken,
   asyncHandler(wardrobeController.linkWardrobeToEpisode)
 );
 
@@ -78,6 +77,7 @@ router.post(
 router.patch(
   '/:id/wardrobe/:wardrobeId/favorite',
   validateUUIDParam('id'),
+  authenticateToken,
   asyncHandler(wardrobeController.toggleEpisodeFavorite)
 );
 
@@ -85,6 +85,7 @@ router.patch(
 router.delete(
   '/:id/wardrobe/:wardrobeId',
   validateUUIDParam('id'),
+  authenticateToken,
   asyncHandler(wardrobeController.unlinkWardrobeFromEpisode)
 );
 
@@ -102,6 +103,7 @@ router.get(
 router.post(
   '/:id/outfits',
   validateUUIDParam('id'),
+  authenticateToken,
   asyncHandler(outfitSetsController.createEpisodeOutfit)
 );
 
@@ -109,6 +111,7 @@ router.post(
 router.delete(
   '/:episodeId/outfits/:outfitId',
   validateUUIDParam('episodeId'),
+  authenticateToken,
   asyncHandler(outfitSetsController.deleteEpisodeOutfit)
 );
 
@@ -126,6 +129,7 @@ router.get(
 router.post(
   '/:id/assets',
   validateUUIDParam('id'),
+  authenticateToken,
   asyncHandler(episodeController.addEpisodeAsset)
 );
 
@@ -133,6 +137,7 @@ router.post(
 router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
+  authenticateToken,
   asyncHandler(episodeController.removeEpisodeAsset)
 );
 
@@ -140,6 +145,7 @@ router.delete(
 router.patch(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
+  authenticateToken,
   asyncHandler(episodeController.updateEpisodeAsset)
 );
 
@@ -168,6 +174,7 @@ router.get(
 router.put(
   '/:id/platform',
   validateUUIDParam('id'),
+  authenticateToken,
   asyncHandler(async (req, res) => {
     const { Episode } = require('../models');
     const episode = await Episode.findByPk(req.params.id);
@@ -285,19 +292,17 @@ router.get('/:id/status', asyncHandler(episodeController.getEpisodeStatus));
 // Get single episode
 router.get('/:id', validateUUIDParam('id'), asyncHandler(episodeController.getEpisode));
 
-// ✅ CREATE EPISODE - AUTH DISABLED FOR TESTING
+// CREATE EPISODE
 router.post(
   '/',
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('episodes', 'create'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(episodeController.createEpisode)
 );
 
-// ✅ UPDATE EPISODE - AUTH DISABLED FOR TESTING
+// UPDATE EPISODE
 router.put(
   '/:id',
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('episodes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(episodeController.updateEpisode)
 );
 
@@ -354,19 +359,17 @@ router.post(
   })
 );
 
-// ✅ DELETE EPISODE - AUTH DISABLED FOR TESTING
+// DELETE EPISODE
 router.delete(
   '/:id',
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('episodes', 'delete'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(episodeController.deleteEpisode)
 );
 
 // Enqueue episode for processing
 router.post(
   '/:id/enqueue',
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('episodes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(episodeController.enqueueEpisode)
 );
 

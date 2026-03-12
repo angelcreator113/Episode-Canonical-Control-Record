@@ -125,6 +125,9 @@ let CalendarEventRipple; // Story Calendar: event propagation / ripple threads
 let FeedProfileRelationship; // Feed Relationship Map: influencer-to-influencer
 let CharacterCrossing; // Character Crossings: interior → public transition
 let AuthorNote; // Author Layer: polymorphic creative decision notes
+let PageContent; // Page Content: editable page data (JSONB)
+let AssetRole; // Asset role registry (semantic slots)
+let UniverseCharacter; // Universe-level promoted characters
 
 try {
   // Core models
@@ -349,6 +352,9 @@ try {
   FeedProfileRelationship = require('./FeedProfileRelationship')(sequelize, DataTypes);
   CharacterCrossing = require('./CharacterCrossing')(sequelize, DataTypes);
   AuthorNote = require('./AuthorNote')(sequelize, DataTypes);
+  PageContent = require('./PageContent')(sequelize, DataTypes);
+  AssetRole = require('./AssetRole')(sequelize, DataTypes);
+  UniverseCharacter = require('./UniverseCharacter')(sequelize, DataTypes);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -481,6 +487,9 @@ const requiredModels = {
   FeedProfileRelationship,
   CharacterCrossing,
   AuthorNote,
+  PageContent,
+  AssetRole,
+  UniverseCharacter,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -680,6 +689,12 @@ if (CharacterCrossing && CharacterCrossing.associate) {
 }
 if (AuthorNote && AuthorNote.associate) {
   AuthorNote.associate(requiredModels);
+}
+if (UniverseCharacter && UniverseCharacter.associate) {
+  UniverseCharacter.associate(requiredModels);
+}
+if (EditMap && EditMap.associate) {
+  EditMap.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1818,3 +1833,7 @@ module.exports.CalendarEventRipple = CalendarEventRipple;
 module.exports.FeedProfileRelationship = FeedProfileRelationship;
 module.exports.CharacterCrossing = CharacterCrossing;
 module.exports.AuthorNote = AuthorNote;
+module.exports.PageContent = PageContent;
+module.exports.AssetRole = AssetRole;
+module.exports.UniverseCharacter = UniverseCharacter;
+module.exports.SocialProfileRelationship = SocialProfileRelationship;

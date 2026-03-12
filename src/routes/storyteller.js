@@ -841,6 +841,25 @@ router.put('/lines/:id', optionalAuth, async (req, res) => {
       })();
     }
 
+    // ── Calendar Auto-Detect: scan approved line for temporal markers ──
+    if (updates.status === 'approved') {
+      (async () => {
+        try {
+          const axios = require('axios');
+          const chapter = await models.StorytellerChapter.findByPk(line.chapter_id, {
+            include: [{ model: models.StorytellerBook, as: 'book' }],
+          });
+          const baseUrl = `http://localhost:${process.env.PORT || 3001}`;
+          axios.post(`${baseUrl}/api/v1/calendar/auto-detect`, {
+            line_text: line.text || updates.text,
+            series_id: chapter?.book?.series_id || null,
+          }).catch(e => console.error('Calendar auto-detect (non-fatal):', e.message));
+        } catch (e) {
+          console.error('Calendar auto-detect hook error (non-fatal):', e.message);
+        }
+      })();
+    }
+
     // ── SCENE INTELLIGENCE — the edit IS the signal ──
     // Fires all four checks in parallel, non-blocking:
     //   1. Voice signal capture (edit-as-signal engine)

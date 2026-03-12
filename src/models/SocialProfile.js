@@ -103,6 +103,21 @@ module.exports = (sequelize, DataTypes) => {
     status:                { type: DataTypes.ENUM('draft','generated','finalized','crossed','archived'), defaultValue: 'draft' },
     generation_model:      { type: DataTypes.STRING(60), allowNull: true },
     full_profile:          { type: DataTypes.JSONB, defaultValue: {} },
+
+    /* ── Mirror Field (Component 2) ── */
+    justawoman_mirror: {
+      type: DataTypes.ENUM('ambition','desire_unnamed','visibility_wound','grief','class','body','habits','belonging','shadow','integration'),
+      allowNull: true,
+    },
+    mirror_proposed_by_amber: { type: DataTypes.TEXT, allowNull: true },
+    mirror_confirmed:         { type: DataTypes.BOOLEAN, defaultValue: false },
+    mirror_confirmed_at:      { type: DataTypes.DATE, allowNull: true },
+
+    /* ── Underground (Component 4) ── */
+    visibility_tier: {
+      type: DataTypes.ENUM('public','semi_private','underground'),
+      defaultValue: 'public',
+    },
   }, {
     sequelize,
     modelName:  'SocialProfile',

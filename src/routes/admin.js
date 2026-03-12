@@ -1,21 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const { getPool } = require('../config/database');
+const { authenticateToken, authorize } = require('../middleware/auth');
+const rateLimit = require('express-rate-limit');
+
+const queryLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: 'Too many queries, slow down' },
+});
 
 async function getModels() {
   try { return require('../models'); } catch { return null; }
 }
 
 // ═══════════════════════════════════════════
-// POST /query  — Run a read-only SQL query (dev only)
+// POST /query  — Run a read-only SQL query (admin only)
 // ═══════════════════════════════════════════
-router.post('/query', async (req, res) => {
+router.post('/query', authenticateToken, authorize(['admin']), queryLimiter, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
     const { sequelize } = models;
     const { sql } = req.body;
     if (!sql) return res.status(400).json({ error: 'sql field required' });
+
+    // Only allow SELECT queries
+    const trimmed = sql.trim().toLowerCase();
+    if (!trimmed.startsWith('select')) {
+      return res.status(403).json({ error: 'Only SELECT queries allowed' });
+    }
 
     const rows = await sequelize.query(sql, { type: sequelize.QueryTypes.SELECT });
     res.json({ success: true, count: rows.length, rows });

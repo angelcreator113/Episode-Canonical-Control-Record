@@ -10,7 +10,6 @@
   font-family: 'DM Sans', sans-serif;
   color: #2e2e3a;
   background: #faf9fc;
-  min-height: 100vh;
 }
 
 /* ─── HEADER ─── */
@@ -724,4 +723,8 @@
   .cde-change-support { grid-template-columns: 1fr; }
   .cde-gap-grid { grid-template-columns: 1fr; }
   .cde-joy-levels { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .cde-page { padding: 1rem 0.75rem 1.5rem; }
 }

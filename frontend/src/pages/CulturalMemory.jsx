@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import './CulturalMemory.css';
+import usePageData from '../hooks/usePageData';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════
    The Cultural Memory System — Doc 08 · v1.0
@@ -95,6 +97,11 @@ const RANKING_METRICS = [
   { metric: 'Cultural references generated', measures: 'How often this creator is used as shorthand — named as influence, cited as origin', measured_by: 'Language itself. How often the name appears in subsequent content.', misses: 'Creators who influenced without being named — the culture absorbed and forgot to credit.' },
 ];
 
+const DEFAULTS = {
+  MEMORY_TYPES, STRENGTH_LEVELS, ARCHIVES, ANNIVERSARIES, NOSTALGIA_WAVES,
+  LEGEND_PATHS, FEUD_STAGES, CAPSULE_TYPES, REFERENCE_TYPES, RANKING_METRICS,
+};
+
 /* ─── TAB RENDERERS ─── */
 
 function renderTypes() {
@@ -104,8 +111,9 @@ function renderTypes() {
         Memories are classified into six categories. Each has different cultural weight, different lifespan expectations, and different ways it gets referenced when the world looks back.
       </p>
       <div className="cm-type-grid">
-        {MEMORY_TYPES.map((m) => (
-          <div key={m.type} className="cm-type-card">
+        <EditableList constantKey="MEMORY_TYPES" defaults={MEMORY_TYPES} label="Add Memory Type">
+          {(m) => (
+          <div className="cm-type-card">
             <div className="cm-type-header">
               <span className="cm-type-icon">{m.icon}</span>
               <h4>{m.type}</h4>
@@ -115,7 +123,8 @@ function renderTypes() {
             <div className="cm-type-ref"><strong>How It Gets Referenced</strong><p>{m.referenced}</p></div>
             <div className="cm-type-story"><strong>Story Potential</strong><p>{m.story}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -128,8 +137,9 @@ function renderStrength() {
         Not all events are remembered equally. The strength level determines how long a memory persists, how often it gets referenced, and whether it becomes part of LalaVerse's permanent record.
       </p>
       <div className="cm-strength-track">
-        {STRENGTH_LEVELS.map((s) => (
-          <div key={s.level} className="cm-strength-card" style={{ borderLeftColor: s.color }}>
+        <EditableList constantKey="STRENGTH_LEVELS" defaults={STRENGTH_LEVELS} label="Add Strength Level">
+          {(s) => (
+          <div className="cm-strength-card" style={{ borderLeftColor: s.color }}>
             <div className="cm-strength-header">
               <span className="cm-strength-level" style={{ background: s.color }}>Level {s.level}</span>
               <h4>{s.name}</h4>
@@ -139,7 +149,8 @@ function renderStrength() {
             <div className="cm-strength-field"><strong>What Elevates It</strong><p>{s.elevates}</p></div>
             <div className="cm-strength-example"><p>{s.example}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -161,15 +172,17 @@ function renderArchives() {
       </div>
 
       <div className="cm-archive-grid">
-        {ARCHIVES.map((a) => (
-          <div key={a.name} className="cm-archive-card" style={{ borderTopColor: a.accent }}>
+        <EditableList constantKey="ARCHIVES" defaults={ARCHIVES} label="Add Archive">
+          {(a) => (
+          <div className="cm-archive-card" style={{ borderTopColor: a.accent }}>
             <h4 style={{ color: a.accent }}>{a.name}</h4>
             <p className="cm-archive-maintained">Maintained by: {a.maintained}</p>
             <div className="cm-archive-field"><strong>What It Tracks</strong><p>{a.tracks}</p></div>
             <div className="cm-archive-omit"><strong>What It Leaves Out</strong><p>{a.leaves_out}</p></div>
             <div className="cm-archive-control"><strong>Who Controls the Narrative</strong><p>{a.control}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -182,14 +195,16 @@ function renderAnniversary() {
         Important events get remembered annually. Media networks repost. Audiences re-engage. The anniversary creates a second wave of cultural conversation around the original event.
       </p>
       <div className="cm-anniv-stack">
-        {ANNIVERSARIES.map((a) => (
-          <div key={a.type} className="cm-anniv-card">
+        <EditableList constantKey="ANNIVERSARIES" defaults={ANNIVERSARIES} label="Add Anniversary Type">
+          {(a) => (
+          <div className="cm-anniv-card">
             <h4>{a.type}</h4>
             <div className="cm-anniv-field"><strong>Who Re-engages</strong><p>{a.who}</p></div>
             <div className="cm-anniv-field"><strong>What Gets Surfaced</strong><p>{a.surfaced}</p></div>
             <div className="cm-anniv-story"><strong>Story Potential</strong><p>{a.story}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -202,15 +217,17 @@ function renderNostalgia() {
         Older trends return. The revival is never identical to the original — it carries the weight of the intervening years and the question of whether this time is different.
       </p>
       <div className="cm-nostalgia-grid">
-        {NOSTALGIA_WAVES.map((n) => (
-          <div key={n.type} className="cm-nostalgia-card">
+        <EditableList constantKey="NOSTALGIA_WAVES" defaults={NOSTALGIA_WAVES} label="Add Nostalgia Wave">
+          {(n) => (
+          <div className="cm-nostalgia-card">
             <h4>{n.type}</h4>
             <div className="cm-nostalgia-field"><strong>What Returns</strong><p>{n.returns}</p></div>
             <div className="cm-nostalgia-field"><strong>Who Drives the Revival</strong><p>{n.driven}</p></div>
             <div className="cm-nostalgia-field"><strong>Original Creators React</strong><p>{n.original_reaction}</p></div>
             <div className="cm-nostalgia-gap"><strong>Story in the Gap</strong><p>{n.gap}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -223,37 +240,43 @@ function renderLegends() {
         Some creators become legendary figures — their stories preserved in cultural memory, their names used as shorthand. Legendary status is conferred by the culture, not claimed by the creator.
       </p>
       <div className="cm-legend-stack">
-        {LEGEND_PATHS.map((l) => (
-          <div key={l.path} className="cm-legend-card">
+        <EditableList constantKey="LEGEND_PATHS" defaults={LEGEND_PATHS} label="Add Legend Path">
+          {(l) => (
+          <div className="cm-legend-card">
             <h4 className="cm-legend-path">{l.path}</h4>
             <div className="cm-legend-row"><span className="cm-legend-tag requires">Requires</span><p>{l.requires}</p></div>
             <div className="cm-legend-row"><span className="cm-legend-tag costs">Costs</span><p>{l.costs}</p></div>
             <div className="cm-legend-row"><span className="cm-legend-tag preserved">Preserved</span><p>{l.preserved}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
 }
 
 function renderFeuds() {
+  const { data } = usePageEdit();
+  const items = data.FEUD_STAGES || FEUD_STAGES;
   return (
     <div className="cm-section">
       <p className="cm-intro">
         Certain rivalries become part of LalaVerse history — permanent references. The feud outlasts both careers and continues to be discussed when neither party is currently relevant.
       </p>
       <div className="cm-feud-timeline">
-        {FEUD_STAGES.map((f, i) => (
-          <React.Fragment key={f.stage}>
-            <div className="cm-feud-card" style={{ borderLeftColor: f.color }}>
-              <h4 style={{ color: f.color }}>{f.stage}</h4>
-              <div className="cm-feud-field"><strong>What It Looks Like</strong><p>{f.looks}</p></div>
-              <div className="cm-feud-field"><strong>Who's Paying Attention</strong><p>{f.attention}</p></div>
-              <div className="cm-feud-preserved"><strong>What Gets Preserved</strong><p>{f.preserved}</p></div>
-            </div>
-            {i < FEUD_STAGES.length - 1 && <div className="cm-feud-arrow">↓</div>}
-          </React.Fragment>
-        ))}
+        <EditableList constantKey="FEUD_STAGES" defaults={FEUD_STAGES} label="Add Feud Stage">
+          {(f, idx) => (
+            <>
+              <div className="cm-feud-card" style={{ borderLeftColor: f.color }}>
+                <h4 style={{ color: f.color }}>{f.stage}</h4>
+                <div className="cm-feud-field"><strong>What It Looks Like</strong><p>{f.looks}</p></div>
+                <div className="cm-feud-field"><strong>Who's Paying Attention</strong><p>{f.attention}</p></div>
+                <div className="cm-feud-preserved"><strong>What Gets Preserved</strong><p>{f.preserved}</p></div>
+              </div>
+              {idx < items.length - 1 && <div className="cm-feud-arrow">↓</div>}
+            </>
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -266,8 +289,9 @@ function renderCapsules() {
         Every few years LalaVerse reflects on past eras. Media networks compile retrospectives. The culture looks back and decides what mattered.
       </p>
       <div className="cm-capsule-grid">
-        {CAPSULE_TYPES.map((c) => (
-          <div key={c.type} className="cm-capsule-card">
+        <EditableList constantKey="CAPSULE_TYPES" defaults={CAPSULE_TYPES} label="Add Capsule Type">
+          {(c) => (
+          <div className="cm-capsule-card">
             <h4>{c.type}</h4>
             <p className="cm-capsule-by">Compiled by: {c.made_by}</p>
             <div className="cm-capsule-columns">
@@ -276,7 +300,8 @@ function renderCapsules() {
             </div>
             <div className="cm-capsule-truth"><strong>Story It Tells vs. Story That Was True</strong><p>{c.truth}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -289,13 +314,15 @@ function renderLiving() {
         The Cultural Memory System gives characters language for the world's history. References make LalaVerse feel deep and lived-in.
       </p>
       <div className="cm-living-stack">
-        {REFERENCE_TYPES.map((r) => (
-          <div key={r.type} className="cm-living-card">
+        <EditableList constantKey="REFERENCE_TYPES" defaults={REFERENCE_TYPES} label="Add Reference Type">
+          {(r) => (
+          <div className="cm-living-card">
             <h4 className="cm-living-type">{r.type}</h4>
             <div className="cm-living-example"><p>"{r.example}"</p></div>
             <div className="cm-living-function"><strong>Narrative Function</strong><p>{r.function_}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -308,14 +335,16 @@ function renderRankings() {
         Historical impact can be measured. These rankings determine who gets Legendary status — and who gets forgotten.
       </p>
       <div className="cm-ranking-grid">
-        {RANKING_METRICS.map((r) => (
-          <div key={r.metric} className="cm-ranking-card">
+        <EditableList constantKey="RANKING_METRICS" defaults={RANKING_METRICS} label="Add Ranking Metric">
+          {(r) => (
+          <div className="cm-ranking-card">
             <h4>{r.metric}</h4>
             <div className="cm-ranking-field"><strong>What It Measures</strong><p>{r.measures}</p></div>
             <div className="cm-ranking-field"><strong>Who Measures It</strong><p>{r.measured_by}</p></div>
             <div className="cm-ranking-misses"><strong>What It Misses</strong><p>{r.misses}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -338,10 +367,15 @@ const TAB_RENDERERS = {
 
 export default function CulturalMemory() {
   const [activeTab, setActiveTab] = useState('types');
+  const { data, updateItems, addItem, removeItem, saving } = usePageData('cultural_memory', DEFAULTS);
+  const [editItem, setEditItem] = useState(null);
+  const Renderer = TAB_RENDERERS[activeTab];
 
   return (
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="cm-page">
       <header className="cm-header">
+        {saving && <span className="eim-saving">Saving…</span>}
         <h1>The Cultural Memory System</h1>
         <p className="cm-subtitle">Doc 08 · v1.0 — A living archive of moments that become part of LalaVerse history</p>
       </header>
@@ -361,8 +395,10 @@ export default function CulturalMemory() {
       </nav>
 
       <main className="cm-content">
-        {TAB_RENDERERS[activeTab]?.()}
+        {Renderer && <Renderer />}
       </main>
     </div>
+    {editItem && <EditItemModal item={editItem.item} onSave={(updated) => { updateItems(editItem.key, editItem.index, updated); setEditItem(null); }} onCancel={() => setEditItem(null)} title={`Edit ${editItem.key}`} />}
+    </PageEditContext.Provider>
   );
 }

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import './SocialPersonality.css';
+import usePageData from '../hooks/usePageData';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ══════════════════════════════════════════════
    Data Constants — Doc 06 · Social Personality v1.0
@@ -97,6 +99,12 @@ const JAW_PROFILE = {
   ]
 };
 
+const DEFAULTS = {
+  PERSONALITY_TRAITS, POSTING_ARCHETYPES, MOTIVATION_TYPES, RELATIONSHIP_DYNAMICS,
+  EMOTIONAL_REACTIONS, REPUTATION_TYPES, GROWTH_FORCES, DAMAGE_EVENTS,
+  STORY_ARCS, ALGO_INTERACTIONS, JAW_PROFILE,
+};
+
 /* ═══════════════════
    Tab definitions
    ═══════════════════ */
@@ -122,8 +130,9 @@ function TabTraits() {
     <div className="sp-tab-content">
       <p className="sp-intro">Each character has a score (0–100) in six traits. The score shapes behavior — not as rules but as tendencies. The most interesting characters have trait scores in conflict with each other.</p>
       <div className="sp-card-grid sp-cols-1">
-        {PERSONALITY_TRAITS.map(t => (
-          <div key={t.trait} className="sp-card sp-card-wide">
+        <EditableList constantKey="PERSONALITY_TRAITS" defaults={PERSONALITY_TRAITS} label="Add Trait">
+          {(t) => (
+          <div className="sp-card sp-card-wide">
             <div className="sp-card-header">
               <span className="sp-badge sp-badge-rose">{t.trait}</span>
             </div>
@@ -140,7 +149,8 @@ function TabTraits() {
             </div>
             <p className="sp-card-body sp-conflict"><strong>In-Conflict Story:</strong> {t.conflict}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -151,8 +161,9 @@ function TabArchetypes() {
     <div className="sp-tab-content">
       <p className="sp-intro">Characters naturally fall into posting styles based on their trait scores. The archetype can shift across a character's arc — this is one of the signals that something has changed.</p>
       <div className="sp-card-grid sp-cols-1">
-        {POSTING_ARCHETYPES.map(a => (
-          <div key={a.archetype} className="sp-card sp-card-wide">
+        <EditableList constantKey="POSTING_ARCHETYPES" defaults={POSTING_ARCHETYPES} label="Add Archetype">
+          {(a) => (
+          <div className="sp-card sp-card-wide">
             <div className="sp-card-header">
               <span className="sp-badge sp-badge-orchid">{a.archetype}</span>
               <span className="sp-badge sp-badge-amber">{a.rate}</span>
@@ -161,7 +172,8 @@ function TabArchetypes() {
             <p className="sp-card-body"><strong>Trait Profile:</strong> {a.traits}</p>
             <p className="sp-card-body sp-muted"><strong>When It Shifts:</strong> {a.shift}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -172,8 +184,9 @@ function TabMotivations() {
     <div className="sp-tab-content">
       <p className="sp-intro">These define why characters use social media. The gap between real motivation and performed motivation is story.</p>
       <div className="sp-card-grid sp-cols-1">
-        {MOTIVATION_TYPES.map(m => (
-          <div key={m.type} className="sp-card sp-card-wide">
+        <EditableList constantKey="MOTIVATION_TYPES" defaults={MOTIVATION_TYPES} label="Add Motivation">
+          {(m) => (
+          <div className="sp-card sp-card-wide">
             <div className="sp-card-header">
               <span className="sp-badge sp-badge-gold">{m.type}</span>
             </div>
@@ -182,7 +195,8 @@ function TabMotivations() {
             <p className="sp-card-body"><strong>What Audience Sees vs. Truth:</strong> {m.gap}</p>
             <p className="sp-card-body sp-muted"><strong>When It Breaks:</strong> {m.breaks}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -193,8 +207,9 @@ function TabRelationships() {
     <div className="sp-tab-content">
       <p className="sp-intro">Characters interact through social bonds that shape their content, their audience, and their arcs.</p>
       <div className="sp-card-grid sp-cols-1">
-        {RELATIONSHIP_DYNAMICS.map(r => (
-          <div key={r.type} className="sp-card sp-card-wide">
+        <EditableList constantKey="RELATIONSHIP_DYNAMICS" defaults={RELATIONSHIP_DYNAMICS} label="Add Relationship">
+          {(r) => (
+          <div className="sp-card sp-card-wide">
             <div className="sp-card-header">
               <span className="sp-badge sp-badge-rose">{r.type}</span>
             </div>
@@ -203,7 +218,8 @@ function TabRelationships() {
             <p className="sp-card-body"><strong>What Ends It:</strong> {r.ends}</p>
             <p className="sp-card-body sp-muted"><strong>Story After:</strong> {r.after}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -225,15 +241,17 @@ function TabReactions() {
             </tr>
           </thead>
           <tbody>
-            {EMOTIONAL_REACTIONS.map(r => (
-              <tr key={r.type}>
+            <EditableList constantKey="EMOTIONAL_REACTIONS" defaults={EMOTIONAL_REACTIONS} label="Add Reaction">
+              {(r) => (
+              <tr>
                 <td className="sp-cell-label">{r.type}</td>
                 <td>{r.triggers}</td>
                 <td>{r.feedLook}</td>
                 <td>{r.traits}</td>
                 <td className="sp-muted">{r.shift}</td>
               </tr>
-            ))}
+              )}
+            </EditableList>
           </tbody>
         </table>
       </div>
@@ -246,8 +264,9 @@ function TabReputation() {
     <div className="sp-tab-content">
       <p className="sp-intro">Each character develops a public reputation that travels ahead of them — the audience's expectation before they've seen the latest content.</p>
       <div className="sp-card-grid sp-cols-1">
-        {REPUTATION_TYPES.map(r => (
-          <div key={r.type} className="sp-card sp-card-wide">
+        <EditableList constantKey="REPUTATION_TYPES" defaults={REPUTATION_TYPES} label="Add Reputation">
+          {(r) => (
+          <div className="sp-card sp-card-wide">
             <div className="sp-card-header">
               <span className="sp-badge sp-badge-orchid">{r.type}</span>
             </div>
@@ -256,7 +275,8 @@ function TabReputation() {
             <p className="sp-card-body"><strong>Attracts:</strong> {r.attracts}</p>
             <p className="sp-card-body sp-muted"><strong>Destroyed By:</strong> {r.destroyed}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -267,8 +287,9 @@ function TabGrowth() {
     <div className="sp-tab-content">
       <p className="sp-intro">Creators gain influence through four forces. The fastest growth combines all four. The most sustainable growth is built on the first two.</p>
       <div className="sp-card-grid sp-cols-2">
-        {GROWTH_FORCES.map(g => (
-          <div key={g.force} className="sp-card">
+        <EditableList constantKey="GROWTH_FORCES" defaults={GROWTH_FORCES} label="Add Force">
+          {(g) => (
+          <div className="sp-card">
             <div className="sp-card-header">
               <span className="sp-badge sp-badge-mint">{g.force}</span>
             </div>
@@ -277,7 +298,8 @@ function TabGrowth() {
             <p className="sp-card-body"><strong>Cannot Build:</strong> {g.cannot}</p>
             <p className="sp-card-body sp-muted"><strong>Risk:</strong> {g.risk}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -288,8 +310,9 @@ function TabDamage() {
     <div className="sp-tab-content">
       <p className="sp-intro">The damage is not the event — it's the gap between the event and the reputation the character had built. The bigger the reputation, the more specific the damage.</p>
       <div className="sp-card-grid sp-cols-1">
-        {DAMAGE_EVENTS.map((d, i) => (
-          <div key={i} className="sp-card sp-card-wide">
+        <EditableList constantKey="DAMAGE_EVENTS" defaults={DAMAGE_EVENTS} label="Add Event">
+          {(d) => (
+          <div className="sp-card sp-card-wide">
             <div className="sp-card-header">
               <span className="sp-badge sp-badge-rose">{d.event}</span>
             </div>
@@ -298,7 +321,8 @@ function TabDamage() {
             <p className="sp-card-body"><strong>Recovery:</strong> {d.recovery}</p>
             <p className="sp-card-body sp-muted"><strong>Cost:</strong> {d.cost}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -309,8 +333,9 @@ function TabArcs() {
     <div className="sp-tab-content">
       <p className="sp-intro">These arc types describe the external narrative shape of a character's journey — running parallel to, and in tension with, the internal arc stages tracked in the Character Registry.</p>
       <div className="sp-card-grid sp-cols-1">
-        {STORY_ARCS.map(a => (
-          <div key={a.arc} className="sp-card sp-card-wide">
+        <EditableList constantKey="STORY_ARCS" defaults={STORY_ARCS} label="Add Arc">
+          {(a) => (
+          <div className="sp-card sp-card-wide">
             <div className="sp-card-header">
               <span className="sp-badge sp-badge-gold">{a.arc}</span>
             </div>
@@ -318,13 +343,16 @@ function TabArcs() {
             <p className="sp-card-body"><strong>Internal:</strong> {a.internal}</p>
             <p className="sp-card-body sp-muted"><strong>What Breaks It Open:</strong> {a.breaks}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
 }
 
 function TabAlgorithm() {
+  const { data } = usePageEdit();
+  const jawProfile = data.JAW_PROFILE || JAW_PROFILE;
   return (
     <div className="sp-tab-content">
       <p className="sp-intro">The Timeline Engine and the Personality Engine interact. A character's trait profile determines how the algorithm responds — and how their behavior responds to the algorithm over time.</p>
@@ -339,14 +367,16 @@ function TabAlgorithm() {
             </tr>
           </thead>
           <tbody>
-            {ALGO_INTERACTIONS.map((a, i) => (
-              <tr key={i}>
+            <EditableList constantKey="ALGO_INTERACTIONS" defaults={ALGO_INTERACTIONS} label="Add Interaction">
+              {(a) => (
+              <tr>
                 <td className="sp-cell-label">{a.traits}</td>
                 <td>{a.pattern}</td>
                 <td>{a.algorithm}</td>
                 <td className="sp-muted">{a.longTerm}</td>
               </tr>
-            ))}
+              )}
+            </EditableList>
           </tbody>
         </table>
       </div>
@@ -358,7 +388,7 @@ function TabAlgorithm() {
           <span className="sp-badge sp-badge-rose">Profile Note</span>
         </div>
         <div className="sp-jaw-scores">
-          {Object.entries(JAW_PROFILE.scores).map(([key, val]) => {
+          {Object.entries((jawProfile.scores || JAW_PROFILE.scores)).map(([key, val]) => {
             const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
             return (
               <div key={key} className="sp-jaw-score">
@@ -372,7 +402,7 @@ function TabAlgorithm() {
           })}
         </div>
         <ul className="sp-jaw-notes">
-          {JAW_PROFILE.notes.map((n, i) => <li key={i}>{n}</li>)}
+          {(jawProfile.notes || JAW_PROFILE.notes).map((n, i) => <li key={i}>{n}</li>)}
         </ul>
       </div>
     </div>
@@ -398,12 +428,18 @@ const TAB_RENDERERS = {
 
 export default function SocialPersonality() {
   const [activeTab, setActiveTab] = useState('traits');
+  const [editItem, setEditItem] = useState(null);
+  const { data, updateItem, addItem, removeItem, saving } = usePageData('social_personality', DEFAULTS);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="sp-page">
       <header className="sp-header">
-        <h1 className="sp-title">The Social Personality Engine</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1 className="sp-title">The Social Personality Engine</h1>
+          {saving && <span className="eim-saving">Saving…</span>}
+        </div>
         <p className="sp-subtitle">Doc 06 · v1.0 · March 2026 — What characters post, how they react, and how they grow</p>
       </header>
 
@@ -428,6 +464,20 @@ export default function SocialPersonality() {
       <footer className="sp-footer">
         Source: <em>social-personality-v1.0</em> · franchise_law · always_inject
       </footer>
+
+      {editItem && (
+        <EditItemModal
+          item={editItem.item}
+          title={`Edit ${editItem.key.replace(/_/g, ' ')}`}
+          onSave={(updated) => {
+            if (editItem.index === -1) addItem(editItem.key, updated);
+            else updateItem(editItem.key, editItem.index, updated);
+            setEditItem(null);
+          }}
+          onCancel={() => setEditItem(null)}
+        />
+      )}
     </div>
+    </PageEditContext.Provider>
   );
 }

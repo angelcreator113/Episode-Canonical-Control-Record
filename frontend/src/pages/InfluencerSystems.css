@@ -7,11 +7,9 @@
 .is-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
   font-family: 'DM Sans', 'Segoe UI', sans-serif;
   background: #faf9fc;
   color: #0f0c14;
-  overflow: hidden;
 }
 
 /* ─── Header ─── */
@@ -72,8 +70,6 @@
 
 /* ─── Content Area ─── */
 .is-content {
-  flex: 1;
-  overflow-y: auto;
   padding: 28px 36px;
 }
 
