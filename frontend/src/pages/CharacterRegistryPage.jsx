@@ -2114,7 +2114,10 @@ export default function CharacterRegistryPage() {
                         </div>
                         <div className="cr-world-card-title">
                           <div className="cr-world-card-name">{charName}</div>
-                          <div className="cr-world-card-role">{char.role_label || char.belief_pressured || '—'}</div>
+                          <div className="cr-world-card-role">
+                            {char.role_label || char.belief_pressured || '—'}
+                            {char.pronouns && <span className="cr-world-pronouns"> · {char.pronouns}</span>}
+                          </div>
                           <div className="cr-world-card-badges">
                             <span className="cr-world-type-badge" style={{ background: `${meta.color}18`, color: meta.color, borderColor: `${meta.color}55` }}>
                               {ROLE_LABELS[char.role_type] || char.role_type}
@@ -2126,11 +2129,10 @@ export default function CharacterRegistryPage() {
                           </div>
                         </div>
                         {ls?.isGenerated && (
-                          <div className="cr-world-card-preview">
+                          <div className="cr-world-card-preview" title={`Momentum: ${mom.label}`}>
                             <span style={{ color: mom.color }}>{mom.symbol}</span>
                           </div>
                         )}
-                        <span className="cr-world-expand-btn">→</span>
                       </div>
                     </div>
                   );

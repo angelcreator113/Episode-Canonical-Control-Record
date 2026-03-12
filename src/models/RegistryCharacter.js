@@ -586,6 +586,8 @@ module.exports = (sequelize) => {
     // Sequelize STRING is compatible with Postgres ENUM columns at query time.
 
     // Identity
+    gender: { type: DataTypes.STRING, allowNull: true },
+    pronouns: { type: DataTypes.STRING, allowNull: true },
     age: { type: DataTypes.INTEGER, allowNull: true },
     birth_year: { type: DataTypes.INTEGER, allowNull: true },
     cultural_background: { type: DataTypes.TEXT, allowNull: true },

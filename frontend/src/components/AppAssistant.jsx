@@ -20,7 +20,7 @@ const API = '/api/v1/memories/assistant-command';
 
 const GREETING = {
   role: 'assistant',
-  text: "Hey, I'm Amber. Ask me anything — about your characters, your book, navigation, or whatever you need.",
+  text: "hey it's amber. whatever you're working on rn — characters, the book, the feed, navigation — just tell me and i'll pull it up. i've been watching the world while you were gone.",
 };
 
 // ─── Speech Recognition singleton ────────────────────────────────────────────
@@ -388,10 +388,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           {messages.length === 1 && (
             <div className="apa-quick-cmds">
               {[
-                'What are the six franchise laws?',
-                'Who is JustAWoman?',
-                "What's deployed right now?",
-                "What's next in the build queue?",
+                'what are the six franchise laws?',
+                'tell me about JustAWoman',
+                "what's deployed rn?",
+                "what should i work on next?",
               ].map(cmd => (
                 <button key={cmd} className="apa-quick-cmd" onClick={() => send(cmd)}>
                   {cmd}
@@ -491,25 +491,19 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               ▾
             </button>
           )}
-          <button
-            className="apa-trigger"
-            onClick={() => setOpen(o => !o)}
-            title="Ask Amber"
-            aria-label="Ask Amber"
-          >
-            {open ? (
+          {!open && (
+            <button
+              className="apa-trigger"
+              onClick={() => setOpen(true)}
+              title="Ask Amber"
+              aria-label="Ask Amber"
+            >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
-            ) : (
-              <>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                {hasUnread && <span className="apa-unread-dot" />}
-              </>
-            )}
-          </button>
+              {hasUnread && <span className="apa-unread-dot" />}
+            </button>
+          )}
         </>
       )}
     </div>
