@@ -21,10 +21,10 @@
 /* ── Trigger button ──────────────────────────────────────────────── */
 
 .apa-trigger {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: #6366f1;
+  background: linear-gradient(135deg, #c4607e, #d4789a);
   border: none;
   color: white;
   font-size: 16px;
@@ -34,25 +34,34 @@
   justify-content: center;
   pointer-events: all;
   position: relative;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 20px rgba(196, 96, 126, 0.4);
   transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
 }
 
 .apa-trigger:hover {
-  background: #4f46e5;
+  background: linear-gradient(135deg, #b3506e, #c4607e);
   transform: scale(1.08);
-  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 6px 28px rgba(196, 96, 126, 0.5);
+}
+
+.apa-trigger-letter {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 22px;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1;
+  letter-spacing: -0.5px;
 }
 
 .apa-root.open .apa-trigger {
-  background: #6366f1;
+  background: linear-gradient(135deg, #c4607e, #d4789a);
   color: #fff;
-  box-shadow: 0 3px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 3px 12px rgba(196, 96, 126, 0.35);
 }
 
 .apa-root.open .apa-trigger:hover {
-  background: #4f46e5;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+  background: linear-gradient(135deg, #b3506e, #c4607e);
+  box-shadow: 0 4px 16px rgba(196, 96, 126, 0.45);
 }
 
 .apa-trigger-icon {
@@ -77,62 +86,6 @@
 @keyframes apa-dot-pulse {
   0%, 100% { transform: scale(1);   opacity: 0.9; }
   50%       { transform: scale(1.3); opacity: 1;   }
-}
-
-/* ── Minimize / Restore ────────────────────────────────────────── */
-
-/* Small chevron button that appears below the trigger */
-.apa-minimize-btn {
-  width: 48px;
-  height: 18px;
-  border: none;
-  border-radius: 0 0 10px 10px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #6366f1;
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  pointer-events: all;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-  margin-top: -4px;
-}
-
-.apa-minimize-btn:hover {
-  background: rgba(99, 102, 241, 0.3);
-  color: #4f46e5;
-}
-
-/* When minimized — tiny tab flush with bottom-right corner */
-.apa-minimized {
-  bottom: 0 !important;
-  right: 0 !important;
-}
-
-.apa-restore-tab {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px 0 0 0;
-  background: #6366f1;
-  border: none;
-  color: white;
-  font-size: 12px;
-  cursor: pointer;
-  pointer-events: all;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: -2px -2px 8px rgba(99, 102, 241, 0.25);
-  transition: background 0.15s, transform 0.15s;
-  opacity: 0.7;
-}
-
-.apa-restore-tab:hover {
-  opacity: 1;
-  background: #4f46e5;
-  transform: scale(1.12);
 }
 
 /* ── Panel ────────────────────────────────────────────────────────── */
@@ -180,7 +133,7 @@
 }
 
 .apa-panel-icon {
-  color: #6366f1;
+  color: #c4607e;
 }
 
 .apa-panel-context {
@@ -191,12 +144,12 @@
 }
 
 .apa-ctx-pill {
-  background: #eef2ff;
-  border: 1px solid #e0e7ff;
+  background: #fdf2f5;
+  border: 1px solid #f5d5df;
   border-radius: 10px;
   padding: 2px 8px;
   font-size: 10px;
-  color: #6366f1;
+  color: #c4607e;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -258,7 +211,7 @@
 }
 
 .apa-msg-avatar {
-  color: #6366f1;
+  color: #c4607e;
   font-size: 10px;
   margin-top: 4px;
   flex-shrink: 0;
@@ -286,7 +239,7 @@
 }
 
 .apa-msg--user .apa-msg-text {
-  background: #6366f1;
+  background: #c4607e;
   color: white;
   border-radius: 12px 12px 2px 12px;
   padding: 8px 12px;
@@ -306,7 +259,7 @@
 
 .apa-msg-tag {
   font-size: 10px;
-  color: #6366f1;
+  color: #c4607e;
   opacity: 0.7;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -318,9 +271,9 @@
   margin: 6px 0 2px;
   padding: 6px 10px;
   font-size: 11.5px;
-  color: #c4b5fd;
-  background: rgba(99, 102, 241, 0.06);
-  border-left: 2px solid #6366f1;
+  color: #d4789a;
+  background: rgba(196, 96, 126, 0.06);
+  border-left: 2px solid #c4607e;
   border-radius: 0 6px 6px 0;
   font-style: italic;
   line-height: 1.4;
@@ -339,7 +292,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #6366f1;
+  background: #c4607e;
   opacity: 0.25;
   animation: apa-think 1.2s ease infinite;
 }
@@ -373,9 +326,9 @@
   font-weight: 500;
 }
 .apa-quick-cmd:hover {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #6366f1;
+  background: #fdf2f5;
+  border-color: #f5d5df;
+  color: #c4607e;
 }
 
 /* Input row */
@@ -405,8 +358,8 @@
   transition: border-color 0.15s;
 }
 .apa-input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+  border-color: #c4607e;
+  box-shadow: 0 0 0 2px rgba(196, 96, 126, 0.1);
 }
 .apa-input::placeholder { color: #9ca3af; }
 
@@ -414,7 +367,7 @@
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #6366f1;
+  background: #c4607e;
   border: none;
   color: white;
   cursor: pointer;
@@ -425,7 +378,7 @@
   transition: background 0.15s, transform 0.1s;
 }
 .apa-send:hover:not(:disabled) {
-  background: #4f46e5;
+  background: #b3506e;
   transform: scale(1.05);
 }
 .apa-send:disabled {
@@ -454,9 +407,9 @@
 }
 
 .apa-mic:hover:not(:disabled) {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #6366f1;
+  background: #fdf2f5;
+  border-color: #f5d5df;
+  color: #c4607e;
 }
 
 .apa-mic:disabled {
@@ -466,16 +419,16 @@
 
 /* Active state — holding the mic */
 .apa-mic.apa-mic--active {
-  background: #6366f1;
-  border-color: #6366f1;
+  background: #c4607e;
+  border-color: #c4607e;
   color: #fff;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 0 0 4px rgba(196, 96, 126, 0.25);
   animation: apa-mic-pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes apa-mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25); }
-  50%      { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.10); }
+  0%, 100% { box-shadow: 0 0 0 4px rgba(196, 96, 126, 0.25); }
+  50%      { box-shadow: 0 0 0 8px rgba(196, 96, 126, 0.10); }
 }
 
 /* ── Listening badge in header ───────────────────────────────────── */
@@ -560,10 +513,6 @@
     border-radius: 12px;
   }
 
-  .apa-minimize-btn {
-    width: 48px;
-    height: 44px;
-  }
 }
 
 /* Hide Amber on Story Engine page at mobile widths — the page has its own AI tools */
@@ -578,4 +527,45 @@
   body:has(.cr-mobile-bottom-bar) .apa-root {
     bottom: calc(68px + env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* ── Voice toggle in panel header ───────────────────────────────── */
+
+.apa-voice-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.apa-voice-toggle:hover {
+  background: #fdf2f5;
+  border-color: #f5d5df;
+  color: #c4607e;
+}
+
+.apa-voice-toggle--on {
+  background: #fdf2f5;
+  border-color: #d4789a55;
+  color: #c4607e;
+}
+
+.apa-voice-toggle--on:hover {
+  background: #fbe8ee;
+  border-color: #d4789a;
+}
+
+.apa-voice-toggle__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
