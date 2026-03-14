@@ -17,15 +17,24 @@ const NAV = [
     items: [
       { icon: '◈',  label: 'Universe',             route: '/universe',
         children: [
-          { icon: '▦', label: 'Social Import',    route: '/universe/social-import' },
-          { icon: '◧', label: 'Series',           route: '/universe/series' },
-          { icon: '▨', label: 'Production',       route: '/universe/production' },
-          { icon: '△', label: 'Wardrobe',         route: '/universe/wardrobe' },
-          { icon: '□', label: 'Assets',            route: '/universe/assets' },
-          { icon: '📜', label: 'World State',      route: '/universe/world-state' },
-          { icon: '✦', label: 'Story Dashboard',  route: '/universe/story-dashboard' },
-          { icon: '⬡', label: 'Franchise Brain',  route: '/universe/knowledge' },
-          { icon: '◇', label: 'Writing Rhythm',   route: '/universe/writing-rhythm' },
+          { icon: '▦', label: 'Social Import',      route: '/universe/social-import' },
+          { icon: '◧', label: 'Series',             route: '/universe/series' },
+          { icon: '▨', label: 'Production',         route: '/universe/production' },
+          { icon: '△', label: 'Wardrobe',           route: '/universe/wardrobe' },
+          { icon: '□', label: 'Assets',              route: '/universe/assets' },
+          { icon: '📜', label: 'World State',        route: '/universe/world-state' },
+          { icon: '📅', label: 'Cultural Calendar',  route: '/cultural-calendar' },
+          { icon: '⭐', label: 'Influencer Systems', route: '/influencer-systems' },
+          { icon: '🏗️', label: 'Infrastructure',     route: '/world-infrastructure' },
+          { icon: '📱', label: 'Social Timeline',    route: '/social-timeline' },
+          { icon: '🧠', label: 'Social Personality', route: '/social-personality' },
+          { icon: '🎭', label: 'Life Simulation',    route: '/character-life-simulation' },
+          { icon: '📜', label: 'Cultural Memory',    route: '/cultural-memory' },
+          { icon: '💎', label: 'Depth Engine',       route: '/character-depth-engine' },
+          { icon: '📍', label: 'World Locations',    route: '/world-locations' },
+          { icon: '✦', label: 'Story Dashboard',    route: '/universe/story-dashboard' },
+          { icon: '⬡', label: 'Franchise Brain',    route: '/universe/knowledge' },
+          { icon: '◇', label: 'Writing Rhythm',     route: '/universe/writing-rhythm' },
         ],
       },
       { icon: '✦',  label: 'World Studio',         route: '/world-studio',
@@ -34,14 +43,6 @@ const NAV = [
           { icon: '📱', label: 'The Feed',            route: '/feed' },
           { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
           { icon: '🔗', label: 'Relationships',      route: '/relationships' },
-          { icon: '📅', label: 'Cultural Calendar',   route: '/cultural-calendar' },
-          { icon: '⭐', label: 'Influencer Systems',  route: '/influencer-systems' },
-          { icon: '🏗️', label: 'Infrastructure',      route: '/world-infrastructure' },
-          { icon: '📱', label: 'Social Timeline',     route: '/social-timeline' },
-          { icon: '🧠', label: 'Social Personality',  route: '/social-personality' },
-          { icon: '🎭', label: 'Life Simulation',     route: '/character-life-simulation' },
-          { icon: '📜', label: 'Cultural Memory',     route: '/cultural-memory' },
-          { icon: '💎', label: 'Depth Engine',        route: '/character-depth-engine' },
         ],
       },
       { icon: '💭', label: 'Therapy',              route: '/therapy/default' },
@@ -147,16 +148,16 @@ function Sidebar({ isOpen, onClose }) {
     if (location.pathname.startsWith('/shows/')) setShowsOpen(true);
   }, [location.pathname]);
 
-  // Auto-expand Universe sub-nav when on a /universe/* sub-page
+  // Auto-expand Universe sub-nav when on a /universe/* sub-page or world-building route
   useEffect(() => {
-    if (location.pathname.startsWith('/universe/') || location.pathname === '/universe') {
+    if (location.pathname.startsWith('/universe') || ['/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations'].some(p => location.pathname.startsWith(p))) {
       setUniverseOpen(true);
     }
   }, [location.pathname]);
 
-  // Auto-expand Create World sub-nav when on character-registry or relationships
+  // Auto-expand World Studio sub-nav when on character-registry or relationships
   useEffect(() => {
-    if (['/world-studio', '/character-registry', '/relationships', '/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine'].some(p => location.pathname.startsWith(p))) {
+    if (['/world-studio', '/character-registry', '/relationships', '/scene-studio', '/feed'].some(p => location.pathname.startsWith(p))) {
       setWorldOpen(true);
     }
   }, [location.pathname]);
