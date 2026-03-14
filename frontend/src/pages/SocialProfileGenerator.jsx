@@ -385,13 +385,13 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
               <input value={vibe} onChange={e=>setVibe(e.target.value)} disabled={generating} placeholder="One sentence — who is this creator?" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}
                 onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&generateProfile()}/>
             </div>
-            <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()} style={{
+            <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()||(feedLayer==='lalaverse'&&!lvCity)} style={{
               padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:generating||!handle.trim()||!vibe.trim()?'not-allowed':'pointer',
-              background:generating||!handle.trim()||!vibe.trim()?C.border:C.lavender,
+              background:generating||!handle.trim()||!vibe.trim()?C.border:stats.total>=feedCap?'#c0392b':C.lavender,
               color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
               display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
             }}>
-              {generating?<><Spinner/> Generating…</>:'✦ Generate'}
+              {generating?<><Spinner/> Generating…</>:stats.total>=feedCap?'Generate anyway (cap exceeded)':'✦ Generate'}
             </button>
           </div>
 

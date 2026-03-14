@@ -259,17 +259,14 @@ router.post('/generate', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
 
   try {
-    // Layer-aware cap check
+    // Layer-aware cap check — soft warning, never hard block.
+    // The number has meaning without preventing deliberate overrides.
     const capCheck = await checkFeedCap(db, layer);
-    if (capCheck.atCap) {
-      return res.status(400).json({
-        error: `${layer === 'lalaverse' ? 'LalaVerse Feed' : 'Feed'} capacity reached`,
-        current: capCheck.count,
-        cap: capCheck.cap,
-      });
-    }
     res.set('X-Creator-Cap-Count', `${capCheck.count}/${capCheck.cap}`);
-    if (capCheck.remaining <= 23) {
+    if (capCheck.atCap) {
+      res.set('X-Creator-Cap-Warning', 'true');
+      res.set('X-Creator-Cap-Exceeded', 'true');
+    } else if (capCheck.remaining <= 23) {
       res.set('X-Creator-Cap-Warning', 'approaching');
     }
 
