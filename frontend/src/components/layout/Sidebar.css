@@ -225,6 +225,8 @@
   flex-direction: column;
   padding: 2px 0 4px 40px;
   animation: ps-subnav-in 0.15s ease;
+  overflow: hidden;
+  max-width: 100%;
 }
 
 @keyframes ps-subnav-in {
@@ -233,6 +235,8 @@
 }
 
 .ps-subnav-item {
+  display: block;
+  width: 100%;
   padding: 5px 10px;
   border: none;
   background: transparent;
@@ -245,6 +249,9 @@
   transition: background 0.1s, color 0.1s;
   font-family: inherit;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
 }
 
 .ps-subnav-item:hover {
