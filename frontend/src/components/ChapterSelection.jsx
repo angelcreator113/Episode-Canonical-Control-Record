@@ -135,6 +135,25 @@ export default function ChapterSelection({ book, onSelectChapter, onHome, onRefr
         </div>
       </div>
 
+      {/* ── Chapter Pacing Curve ── */}
+      {!loading && chapters.length >= 2 && (() => {
+        const wordCounts = chapters.map(ch => (ch.draft_prose || '').split(/\s+/).filter(Boolean).length);
+        const maxW = Math.max(...wordCounts, 1);
+        const barW = Math.min(32, Math.floor(600 / chapters.length));
+        const svgW = chapters.length * barW + 8;
+        return (
+          <div style={{ padding: '0 32px 8px', opacity: 0.7 }}>
+            <div style={{ fontSize: 10, color: '#999', marginBottom: 4, fontFamily: 'var(--st-sans, sans-serif)' }}>Chapter Pacing</div>
+            <svg width={Math.min(svgW, 600)} height={40} viewBox={`0 0 ${svgW} 40`} style={{ display: 'block' }}>
+              {wordCounts.map((w, i) => {
+                const h = Math.max(2, (w / maxW) * 34);
+                return <rect key={i} x={4 + i * barW} y={38 - h} width={Math.max(barW - 3, 4)} height={h} rx={2} fill={w === 0 ? '#e0dcd4' : '#c9a96e'} opacity={w === 0 ? 0.3 : 0.6 + 0.4 * (w / maxW)} />;
+              })}
+            </svg>
+          </div>
+        );
+      })()}
+
       {/* ── Chapter List ── */}
       {loading ? (
         <div className="st-dash-loading">

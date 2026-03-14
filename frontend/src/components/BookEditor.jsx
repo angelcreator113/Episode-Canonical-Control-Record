@@ -7,15 +7,15 @@
  * Extracted from StorytellerPage.jsx for maintainability.
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { MemoryCard, MEMORY_STYLES } from '../pages/MemoryConfirmation';
-import MemoryBankView from '../pages/MemoryBankView';
-import ChapterBrief from '../pages/ChapterBrief';
-import SceneInterview from '../pages/SceneInterview';
-import NarrativeIntelligence from '../pages/NarrativeIntelligence';
-import { ContinuityGuard, RewriteOptions } from '../pages/ContinuityGuard';
+import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
+import MemoryBankView from './MemoryBankView';
+import ChapterBrief from './ChapterBrief';
+import SceneInterview from './SceneInterview';
+import NarrativeIntelligence from './NarrativeIntelligence';
+import { ContinuityGuard, RewriteOptions } from './ContinuityGuard';
 import ScenesPanel from '../pages/ScenesPanel';
-import TOCPanel from '../pages/TOCPanel';
-import ImportDraftModal from '../pages/ImportDraftModal';
+import TOCPanel from './TOCPanel';
+import ImportDraftModal from './ImportDraftModal';
 import LalaSceneDetection from './LalaSceneDetection';
 import ExportPanel from './ExportPanel';
 import ScriptBridgePanel from './ScriptBridgePanel';
@@ -778,6 +778,12 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
               <button className={`st-tools-item${activeView === 'export' ? ' active' : ''}`} onClick={() => openWorkspace('export')}>
                 <span className="st-tools-icon">↓</span> Export
               </button>
+              <button className={`st-tools-item${activeView === 'preview' ? ' active' : ''}`} onClick={() => openWorkspace('preview')}>
+                <span className="st-tools-icon">📖</span> Manuscript Preview
+              </button>
+              <button className={`st-tools-item${activeView === 'history' ? ' active' : ''}`} onClick={() => openWorkspace('history')}>
+                <span className="st-tools-icon">⟳</span> Version History
+              </button>
             </div>
 
             {activeChapter && (
@@ -1279,7 +1285,175 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
               onClose={() => setActiveView('book')}
               toast={toast}
             />
-          ) : null}
+          ) : activeView === 'preview' ? (
+            <div className="st-preview-manuscript">
+              <div className="st-preview-toolbar">
+                <span className="st-preview-toolbar-title">📖 Manuscript Preview</span>
+                <button className="st-btn st-btn-sm st-btn-ghost" onClick={() => window.print()}>🖨 Print</button>
+                <button className="st-btn st-btn-sm st-btn-ghost" onClick={() => setActiveView('book')}>← Back to Editor</button>
+              </div>
+              <div className="st-preview-page">
+                <div className="st-preview-title-page">
+                  <h1 className="st-preview-book-title">{book.title || 'Untitled'}</h1>
+                  {book.subtitle && <p className="st-preview-subtitle">{book.subtitle}</p>}
+                  <p className="st-preview-by">A Novel</p>
+                </div>
+                {chapters.map((ch, i) => (
+                  <div className="st-preview-chapter" key={ch.id}>
+                    <div className="st-preview-chapter-break" />
+                    <div className="st-preview-chapter-label">Chapter {numberWord(i)}</div>
+                    <h2 className="st-preview-chapter-title">{ch.title || 'Untitled'}</h2>
+                    <div className="st-preview-chapter-body">
+                      {ch.draft_prose
+                        ? ch.draft_prose.split('\n').filter(Boolean).map((para, pi) => (
+                            <p key={pi} className="st-preview-para">{para}</p>
+                          ))
+                        : (ch.lines || [])
+                            .filter(l => l.status === 'approved' || l.status === 'edited')
+                            .map((l, li) => (
+                              <p key={li} className="st-preview-para">{l.text}</p>
+                            ))
+                      }
+                      {!ch.draft_prose && !(ch.lines || []).some(l => l.status === 'approved' || l.status === 'edited') && (
+                        <p className="st-preview-empty">[ No content yet ]</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="st-preview-end">— End —</div>
+              </div>
+              <style>{`
+                .st-preview-manuscript { padding: 0; background: var(--se-bg, #f6f3ef); min-height: 100vh; }
+                .st-preview-toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid #e0dcd4; position: sticky; top: 0; background: var(--se-bg, #f6f3ef); z-index: 10; }
+                .st-preview-toolbar-title { font-family: 'DM Sans', sans-serif; font-weight: 600; color: #3a3226; flex: 1; }
+                .st-preview-page { max-width: 680px; margin: 0 auto; padding: 48px 40px 80px; }
+                .st-preview-title-page { text-align: center; padding: 80px 0 60px; border-bottom: 2px solid #c9c2b5; margin-bottom: 40px; }
+                .st-preview-book-title { font-family: 'Playfair Display', serif; font-size: 2.4rem; color: #2a2318; margin: 0 0 8px; letter-spacing: 0.02em; }
+                .st-preview-subtitle { font-family: 'Spectral', serif; font-size: 1.1rem; color: #7a7060; margin: 0 0 16px; font-style: italic; }
+                .st-preview-by { font-family: 'DM Sans', sans-serif; font-size: 0.85rem; color: #9a9080; text-transform: uppercase; letter-spacing: 0.15em; }
+                .st-preview-chapter { margin-bottom: 48px; }
+                .st-preview-chapter-break { height: 40px; }
+                .st-preview-chapter-label { font-family: 'DM Sans', sans-serif; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--se-gold, #b0922e); margin-bottom: 4px; text-align: center; }
+                .st-preview-chapter-title { font-family: 'Playfair Display', serif; font-size: 1.6rem; color: #2a2318; text-align: center; margin: 0 0 28px; font-weight: 600; }
+                .st-preview-chapter-body { font-family: 'Spectral', serif; font-size: 1.05rem; line-height: 1.85; color: #3a3226; }
+                .st-preview-para { margin: 0 0 0; text-indent: 1.5em; }
+                .st-preview-para:first-child { text-indent: 0; }
+                .st-preview-empty { color: #b0a898; font-style: italic; text-align: center; padding: 20px; }
+                .st-preview-end { text-align: center; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: #9a9080; margin-top: 60px; letter-spacing: 0.1em; }
+                @media print {
+                  .st-preview-toolbar, .st-sidebar, .st-topbar, .st-bottombar { display: none !important; }
+                  .st-preview-page { max-width: 100%; padding: 0; }
+                  .st-preview-chapter-break { page-break-before: always; height: 0; }
+                  .st-preview-para { font-size: 12pt; line-height: 2; }
+                }
+              `}</style>
+            </div>
+          ) : activeView === 'history' ? (() => {
+            const VersionHistory = () => {
+              const [versions, setVersions] = React.useState([]);
+              const [loading, setLoading] = React.useState(false);
+              const [viewContent, setViewContent] = React.useState(null);
+
+              React.useEffect(() => {
+                if (!activeChapterId) return;
+                setLoading(true);
+                fetch(`/api/v1/story-health/versions/chapter/${activeChapterId}`, { headers: authHeader() })
+                  .then(r => r.json())
+                  .then(d => setVersions(d.versions || []))
+                  .catch(() => {})
+                  .finally(() => setLoading(false));
+              }, []);
+
+              const viewVersion = (id) => {
+                fetch(`/api/v1/story-health/versions/${id}/content`, { headers: authHeader() })
+                  .then(r => r.json())
+                  .then(d => setViewContent({ id, content: d.content || '' }))
+                  .catch(() => {});
+              };
+
+              const saveSnapshot = () => {
+                fetch(`/api/v1/story-health/versions/chapter/${activeChapterId}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', ...authHeader() },
+                  body: JSON.stringify({ content: proseText, label: `Manual snapshot` })
+                })
+                  .then(r => r.json())
+                  .then(d => {
+                    if (d.version) setVersions(prev => [d.version, ...prev]);
+                    toast?.('Snapshot saved');
+                  })
+                  .catch(() => toast?.('Failed to save snapshot'));
+              };
+
+              if (!activeChapterId) {
+                return (
+                  <div className="st-welcome">
+                    <div className="st-welcome-icon">⟳</div>
+                    <h2 className="st-welcome-title">Select a chapter first</h2>
+                    <p className="st-welcome-sub">Pick a chapter to browse its version history.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ padding: 24 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                    <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: '1.2rem', margin: 0, color: '#2a2318' }}>
+                      ⟳ Version History
+                    </h3>
+                    <button className="st-btn st-btn-sm st-btn-gold" onClick={saveSnapshot}>
+                      📸 Save Snapshot
+                    </button>
+                    <button className="st-btn st-btn-sm st-btn-ghost" onClick={() => setActiveView('book')}>
+                      ← Back
+                    </button>
+                  </div>
+
+                  {viewContent ? (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                        <button className="st-btn st-btn-sm st-btn-ghost" onClick={() => setViewContent(null)}>← Back to list</button>
+                        <span style={{ fontSize: 12, color: '#9a9080' }}>Version #{viewContent.id}</span>
+                      </div>
+                      <div style={{
+                        fontFamily: "'Spectral', serif", fontSize: '1rem', lineHeight: 1.8,
+                        padding: 24, background: '#faf8f4', borderRadius: 10, border: '1px solid #e8e3da',
+                        whiteSpace: 'pre-wrap', color: '#3a3226'
+                      }}>
+                        {viewContent.content || '(empty)'}
+                      </div>
+                    </div>
+                  ) : loading ? (
+                    <div style={{ color: '#9a9080', padding: 20 }}>Loading versions…</div>
+                  ) : versions.length === 0 ? (
+                    <div style={{ color: '#9a9080', padding: 20 }}>
+                      No versions saved yet. Click "Save Snapshot" to create the first one.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {versions.map(v => (
+                        <div key={v.id} style={{
+                          padding: '12px 16px', background: '#faf8f4', borderRadius: 8,
+                          border: '1px solid #e8e3da', display: 'flex', alignItems: 'center', gap: 12
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13, color: '#3a3226' }}>
+                              {v.label || `Version`}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#9a9080' }}>
+                              {v.word_count || 0} words · {new Date(v.created_at).toLocaleDateString()} {new Date(v.created_at).toLocaleTimeString()}
+                            </div>
+                          </div>
+                          <button className="st-btn st-btn-sm st-btn-ghost" onClick={() => viewVersion(v.id)}>View</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            };
+            return <VersionHistory />;
+          })() : null}
         </div>
       </div>
 

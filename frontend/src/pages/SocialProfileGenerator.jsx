@@ -161,10 +161,12 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   // ── SSE job tracking ───────────────────────────────────────────────
   const sseRef = useRef(null);
+  const sseRetryTimer = useRef(null);
   const [cancellingJob,setCancellingJob] = useState(false);
 
   const connectJobSSE = useCallback((jobId)=>{
     if(sseRef.current){sseRef.current.close();sseRef.current=null;}
+    if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}
     const es=new EventSource(`${API}/bulk/jobs/${jobId}/stream`);
     sseRef.current=es;
     es.addEventListener('connected',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,id:jobId}));}catch{}});
@@ -173,13 +175,13 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     es.addEventListener('profile_failed',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('cancelled',()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
     es.addEventListener('done',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch{}localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
-    es.addEventListener('error',()=>{es.close();sseRef.current=null;setTimeout(async()=>{try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}}catch{}},3000);});
+    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}}catch{}},3000);});
   },[loadProfiles]);
 
   useEffect(()=>{
     const saved=localStorage.getItem('spg_active_job');
     if(saved){fetch(`${API}/bulk/jobs/${saved}`,{headers:authHeaders()}).then(r=>r.json()).then(d=>{if(d.job){setActiveJob(d.job);if(!['completed','failed','cancelled'].includes(d.job.status))connectJobSSE(saved);else localStorage.removeItem('spg_active_job');}}).catch(()=>{});}
-    return()=>{if(sseRef.current){sseRef.current.close();sseRef.current=null;}};
+    return()=>{if(sseRef.current){sseRef.current.close();sseRef.current=null;}if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}};
   },[connectJobSSE]);
 
   const startJobPolling = id=>{localStorage.setItem('spg_active_job',id);setActiveJob({id,status:'pending',total:0,completed:0,failed:0});connectJobSSE(id);};

@@ -4,8 +4,8 @@
  * Editorial Fashion Intelligence — fully modernized
  * Palette: #d4789a rose · #7ab3d4 steel · #a889c8 orchid
  */
-import { useReducer, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import './RelationshipEngine.css';
 
 import {
@@ -68,8 +68,22 @@ function reducer(state, action) {
    ═══════════════════════════════════════════════════════════════════════ */
 export default function RelationshipEngine() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toasts, show: toast } = useToast();
   const [s, dispatch] = useReducer(reducer, initial);
+  const [charSearch, setCharSearch] = useState('');
+  const [autoSuggestions, setAutoSuggestions] = useState(null);
+
+  // ── Handle auto-suggestions from Story Evaluation Engine ─────────────
+  useEffect(() => {
+    const st = location.state;
+    if (st?.autoSuggestions?.length) {
+      setAutoSuggestions({ suggestions: st.autoSuggestions, fromScene: st.fromScene || 'Scene' });
+      toast(`${st.autoSuggestions.length} relationship suggestions from "${st.fromScene || 'Scene'}"`, 'success');
+      // Clear the state so refreshing doesn't re-trigger
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, toast]);
 
   /* ── Load registries ───────────────────────────────────────────────── */
   useEffect(() => {
@@ -249,15 +263,44 @@ export default function RelationshipEngine() {
     return m;
   }, [s.layers]);
 
-  const filtChars = useMemo(() =>
-    s.lf === 'all' ? s.chars : s.chars.filter(c => clayer(c) === s.lf),
-    [s.chars, s.lf]
-  );
+  const filtChars = useMemo(() => {
+    let list = s.lf === 'all' ? s.chars : s.chars.filter(c => clayer(c) === s.lf);
+    if (charSearch.trim()) {
+      const q = charSearch.toLowerCase();
+      list = list.filter(c => cname(c).toLowerCase().includes(q) || (c.role_type || '').toLowerCase().includes(q));
+    }
+    return list;
+  }, [s.chars, s.lf, charSearch]);
   const filtRels = useMemo(() => {
     if (s.lf === 'all') return s.rels;
     const ids = new Set(filtChars.map(c => c.id));
     return s.rels.filter(r => ids.has(r.character_id_a) || ids.has(r.character_id_b));
   }, [s.rels, s.lf, filtChars]);
+
+  /* ── Export relationships as JSON ────────────────────────────────────── */
+  const exportRelationships = useCallback(() => {
+    const data = {
+      registry: s.reg?.name || s.reg?.id || 'unknown',
+      exported_at: new Date().toISOString(),
+      characters: s.chars.map(c => ({ id: c.id, name: cname(c), role_type: c.role_type, layer: clayer(c) })),
+      relationships: s.rels.map(r => ({ id: r.id, character_a: r.character_id_a, character_b: r.character_id_b, type: r.relationship_type, subtype: r.subtype, tension: r.tension_level, description: r.description })),
+      stats: { characters: s.chars.length, relationships: s.rels.length, pending_seeds: s.cands.length },
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `relationships-${s.reg?.id?.slice(0, 8) || 'export'}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Relationships exported', 'success');
+  }, [s.chars, s.rels, s.cands, s.reg, toast]);
+
+  /* ── Relationship type distribution ────────────────────────────────── */
+  const relStats = useMemo(() => {
+    const byType = {};
+    s.rels.forEach(r => { byType[r.relationship_type || 'unknown'] = (byType[r.relationship_type || 'unknown'] || 0) + 1; });
+    return byType;
+  }, [s.rels]);
 
   const tabs = [
     { key: 'tree',       label: 'Tree',       icon: '◇' },
@@ -316,16 +359,69 @@ export default function RelationshipEngine() {
         </nav>
 
         <div className="re-header-actions">
+          <Btn variant="ghost" onClick={exportRelationships} title="Export relationships as JSON">↓ Export</Btn>
           <Btn variant="outline" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ Generate</Btn>
           <Btn variant="primary" onClick={() => dispatch({ type: 'SET', payload: { addOpen: true } })}>+ Add</Btn>
         </div>
       </header>
 
       {/* ── BODY ─────────────────────────────────────────────────── */}
+      {/* Auto-suggestion banner from Story Evaluation */}
+      {autoSuggestions && (
+        <div style={{
+          padding: '12px 20px', background: `${T.orchid || '#a889c8'}10`,
+          borderBottom: `1px solid ${T.orchid || '#a889c8'}30`,
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.text || '#1a1a1a' }}>
+              ◈ Relationship Suggestions from &ldquo;{autoSuggestions.fromScene}&rdquo;
+            </div>
+            <button onClick={() => setAutoSuggestions(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: T.textDim || '#666' }}>✕</button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {autoSuggestions.suggestions.map((sug, i) => (
+              <div key={i} style={{
+                padding: '8px 12px', borderRadius: 8,
+                background: '#fff', border: `1px solid ${sug.signal === 'strong' ? '#6ec9a0' : sug.signal === 'moderate' ? '#c9a96e' : '#e0e0e0'}`,
+                fontSize: 11,
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                  {sug.pair[0]} ↔ {sug.pair[1]}
+                </div>
+                <div style={{ color: '#887766', fontSize: 10 }}>
+                  {sug.sharedDimensions.map(d => d.replace(/_/g, ' ')).join(', ')}
+                </div>
+                <span style={{
+                  display: 'inline-block', marginTop: 4, fontSize: 9, padding: '1px 6px', borderRadius: 8,
+                  background: sug.signal === 'strong' ? '#e8f5e9' : sug.signal === 'moderate' ? '#fff8e1' : '#f5f5f5',
+                  color: sug.signal === 'strong' ? '#2a8a5e' : sug.signal === 'moderate' ? '#b8944e' : '#999',
+                  fontWeight: 600,
+                }}>{sug.signal} signal</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="re-body">
         {/* LEFT SIDEBAR */}
         {s.tab !== 'web' && (
           <aside className="re-sidebar" role="navigation" aria-label="Characters">
+            {/* search */}
+            <div className="re-sidebar-section" style={{ padding: '0 12px 8px' }}>
+              <input
+                value={charSearch}
+                onChange={e => setCharSearch(e.target.value)}
+                placeholder="Search characters…"
+                style={{
+                  width: '100%', padding: '7px 10px', fontSize: 12,
+                  border: `1px solid ${T.border}`, borderRadius: 6,
+                  background: T.surface, color: T.text, outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
             {/* layer filter */}
             <div className="re-sidebar-section">
               <div className="re-label">Layers</div>
@@ -385,6 +481,18 @@ export default function RelationshipEngine() {
               <span className="re-sub-stats">{subline}</span>
             </div>
             <div className="re-sub-actions">
+              {/* relationship type pills */}
+              {s.tab !== 'candidates' && Object.keys(relStats).length > 0 && (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginRight: 8 }}>
+                  {Object.entries(relStats).slice(0, 5).map(([type, count]) => (
+                    <span key={type} style={{
+                      fontSize: 9, padding: '2px 7px', borderRadius: 10,
+                      background: `${T.accent}15`, color: T.accent,
+                      fontWeight: 600, whiteSpace: 'nowrap',
+                    }}>{type} ({count})</span>
+                  ))}
+                </div>
+              )}
               {s.tab === 'candidates' && s.cands.length > 0 && (
                 <Btn variant="ghost" onClick={() => dispatch({ type: 'SET', payload: { genOpen: true } })}>◈ Regenerate</Btn>
               )}

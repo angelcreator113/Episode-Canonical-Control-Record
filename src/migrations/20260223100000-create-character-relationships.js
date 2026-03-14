@@ -1,5 +1,11 @@
 'use strict';
 
+/**
+ * Create character_relationships table.
+ *
+ * Schema aligned with the CharacterRelationship model — uses UUID foreign keys
+ * (character_id_a, character_id_b) into registry_characters.
+ */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable('character_relationships', {
@@ -9,47 +15,95 @@ module.exports = {
         primaryKey: true,
         allowNull: false,
       },
-      show_id: {
+      character_id_a: {
         type: Sequelize.UUID,
-        allowNull: true,
+        allowNull: false,
+        references: { model: 'registry_characters', key: 'id' },
+        onDelete: 'CASCADE',
       },
-      book_id: {
+      character_id_b: {
         type: Sequelize.UUID,
-        allowNull: true,
-      },
-      layer: {
-        type: Sequelize.STRING(20),
         allowNull: false,
-        defaultValue: 'real_world',
-        comment: 'real_world | lalaverse',
-      },
-      source_name: {
-        type: Sequelize.STRING(120),
-        allowNull: false,
-      },
-      target_name: {
-        type: Sequelize.STRING(120),
-        allowNull: false,
+        references: { model: 'registry_characters', key: 'id' },
+        onDelete: 'CASCADE',
       },
       relationship_type: {
-        type: Sequelize.STRING(40),
+        type: Sequelize.STRING(100),
         allowNull: false,
-        defaultValue: 'knows',
       },
-      direction: {
-        type: Sequelize.STRING(10),
+      connection_mode: {
+        type: Sequelize.STRING(50),
         allowNull: false,
-        defaultValue: 'both',
-        comment: 'both | source_to_target | target_to_source',
+        defaultValue: 'IRL',
       },
-      label: {
-        type: Sequelize.STRING(60),
+      lala_connection: {
+        type: Sequelize.STRING(100),
+        allowNull: false,
+        defaultValue: 'none',
+      },
+      status: {
+        type: Sequelize.STRING(50),
+        allowNull: false,
+        defaultValue: 'Active',
+      },
+      notes: {
+        type: Sequelize.TEXT,
         allowNull: true,
       },
-      subtext: {
-        type: Sequelize.STRING(200),
+      situation: {
+        type: Sequelize.TEXT,
         allowNull: true,
       },
+      tension_state: {
+        type: Sequelize.STRING(80),
+        allowNull: true,
+      },
+      pain_point_category: {
+        type: Sequelize.STRING(100),
+        allowNull: true,
+      },
+      lala_mirror: {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      },
+      career_echo_potential: {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      },
+      confirmed: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+      },
+
+      /* ── Ensemble-World Fields ── */
+      family_role: {
+        type: Sequelize.STRING(120),
+        allowNull: true,
+        defaultValue: null,
+      },
+      is_blood_relation: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      is_romantic: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      conflict_summary: {
+        type: Sequelize.TEXT,
+        allowNull: true,
+        defaultValue: null,
+      },
+      knows_about_connection: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+
+      /* ── Knowledge Asymmetry ── */
       source_knows: {
         type: Sequelize.TEXT,
         allowNull: true,
@@ -62,32 +116,14 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true,
       },
-      status: {
-        type: Sequelize.STRING(20),
-        allowNull: false,
-        defaultValue: 'active',
-        comment: 'active | dormant | broken | secret',
-      },
-      appears_in: {
-        type: Sequelize.JSONB,
+
+      /* ── Scene Brief Classification ── */
+      role_tag: {
+        type: Sequelize.STRING(50),
         allowNull: true,
-        defaultValue: [],
-        comment: 'Array of chapter slugs / scene ids',
+        defaultValue: null,
       },
-      intensity: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        defaultValue: 3,
-        comment: '1-5 emotional weight',
-      },
-      notes: {
-        type: Sequelize.TEXT,
-        allowNull: true,
-      },
-      source_x: { type: Sequelize.FLOAT, defaultValue: 0 },
-      source_y: { type: Sequelize.FLOAT, defaultValue: 0 },
-      target_x: { type: Sequelize.FLOAT, defaultValue: 0 },
-      target_y: { type: Sequelize.FLOAT, defaultValue: 0 },
+
       created_at: {
         type: Sequelize.DATE,
         allowNull: false,
@@ -101,11 +137,9 @@ module.exports = {
     });
 
     // Indexes
-    await queryInterface.addIndex('character_relationships', ['show_id']);
-    await queryInterface.addIndex('character_relationships', ['book_id']);
-    await queryInterface.addIndex('character_relationships', ['layer']);
-    await queryInterface.addIndex('character_relationships', ['source_name']);
-    await queryInterface.addIndex('character_relationships', ['target_name']);
+    await queryInterface.addIndex('character_relationships', ['character_id_a']);
+    await queryInterface.addIndex('character_relationships', ['character_id_b']);
+    await queryInterface.addIndex('character_relationships', ['relationship_type']);
     await queryInterface.addIndex('character_relationships', ['status']);
   },
 

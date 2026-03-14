@@ -20,7 +20,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { Op }    = require('sequelize');
 const path      = require('path');
 const fs        = require('fs').promises;
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const db        = require('../models');
 const { optionalAuth } = require('../middleware/auth');
 
@@ -319,9 +319,9 @@ RULES:
 - Report exactly what you changed`;
 
   try {
-    const escaped = prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-    const output  = execSync(
-      `claude --print --no-interactive -p "${escaped}"`,
+    const output = execFileSync(
+      'claude',
+      ['--print', '--no-interactive', '-p', prompt],
       {
         cwd:      PROJECT_DIR,
         timeout:  120000,

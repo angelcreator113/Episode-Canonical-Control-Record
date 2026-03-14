@@ -149,6 +149,43 @@ async function readSystemState(userId) {
       state.relationshipsMapped = rels || 0;
     }
 
+    // Novel momentum — book/chapter progress for richer greeting
+    try {
+      const books = await db.StorytellerBook?.findAll({
+        where: { deleted_at: null },
+        attributes: ['id', 'title', 'status'],
+        order: [['created_at', 'DESC']],
+        limit: 3,
+      });
+      if (books?.length) {
+        state.currentBook = books[0].title;
+        state.bookStatus = books[0].status;
+        const chapterCount = await db.StorytellerChapter?.count({
+          where: { book_id: books[0].id, deleted_at: null },
+        });
+        state.chaptersInCurrentBook = chapterCount || 0;
+      }
+    } catch { /* silent */ }
+
+    // Unextracted approved lines — scenes waiting for memory mining
+    try {
+      const [unextracted] = await db.sequelize.query(
+        `SELECT COUNT(*) as count FROM storyteller_lines sl
+         WHERE sl.status = 'approved' AND sl.deleted_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM storyteller_memories sm WHERE sm.line_id = sl.id)`,
+        { type: db.sequelize.QueryTypes.SELECT }
+      );
+      state.unextractedLines = parseInt(unextracted?.count) || 0;
+    } catch { /* silent */ }
+
+    // Unconfirmed relationships — proposed but not confirmed
+    try {
+      if (db.CharacterRelationship) {
+        const unconfirmedRels = await db.CharacterRelationship.count({ where: { confirmed: false } });
+        state.unconfirmedRelationships = unconfirmedRels || 0;
+      }
+    } catch { /* silent */ }
+
   } catch (err) {
     console.error('[Amber session state error]', err.message);
   }
@@ -179,11 +216,14 @@ ${stateStr}
 
 Generate Amber's greeting. 2-4 sentences maximum.
 Lead with what matters most right now.
-If the novel hasn't been touched in more than 3 days — that leads.
+If the novel hasn't been touched in more than 3 days — that leads. Say how many days. Name the current book if known.
 If there are pending decisions waiting — name them.
 If momentum is high — acknowledge it.
 If characters are sitting in draft — that's unfinished world-building. Name it.
 If social profiles exist — reference the living feed, not "data."
+If unextractedLines > 0 — approved prose is sitting without memory extraction. Mention it — those scenes have insights waiting to be mined.
+If unconfirmedRelationships > 0 — proposed connections are waiting for review. The relational web has loose threads.
+If chaptersInCurrentBook is known — reference the book's shape.
 Never generic. Always specific to the actual state above.
 Use LalaVerse language — seasons, presence, style authority, creator weight — not tech-speak.
 

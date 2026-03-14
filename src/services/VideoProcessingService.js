@@ -6,12 +6,12 @@
  * - Generate video thumbnails
  */
 const { promisify } = require('util');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../utils/logger');
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 class VideoProcessingService {
   constructor() {
@@ -46,10 +46,10 @@ class VideoProcessingService {
       }
 
       // Use ffprobe to extract metadata (fallback to ffmpeg if ffprobe not available)
-      const ffprobeCmd = `"${this.ffmpegPath}" -i "${inputPath}" -f null - 2>&1`;
-
       try {
-        const { stdout, stderr } = await execAsync(ffprobeCmd);
+        const { stdout, stderr } = await execFileAsync(
+          this.ffmpegPath, ['-i', inputPath, '-f', 'null', '-']
+        ).catch(err => ({ stdout: err.stdout || '', stderr: err.stderr || '' }));
         // ffmpeg outputs to stderr, but we redirect with 2>&1
         const output = stdout || stderr;
 
@@ -143,9 +143,10 @@ class VideoProcessingService {
 
       // Build ffmpeg command for thumbnail generation
       const scaleFilter = height ? `scale=${width}:${height}` : `scale=${width}:-1`;
-      const ffmpegCmd = `"${this.ffmpegPath}" -ss ${timestamp} -i "${inputPath}" -vframes 1 -vf "${scaleFilter}" "${outputPath}" -y`;
-
-      await execAsync(ffmpegCmd);
+      await execFileAsync(this.ffmpegPath, [
+        '-ss', String(timestamp), '-i', inputPath,
+        '-vframes', '1', '-vf', scaleFilter, outputPath, '-y'
+      ]);
 
       // Read thumbnail file
       const thumbnailBuffer = await fs.readFile(outputPath);

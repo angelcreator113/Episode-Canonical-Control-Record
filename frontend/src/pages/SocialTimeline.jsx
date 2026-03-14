@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import './SocialTimeline.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import PushToBrain from '../components/PushToBrain';
 
 /* ══════════════════════════════════════════════
    Data Constants — Doc 05 · Social Timeline v1.0
@@ -130,7 +131,9 @@ const TABS = [
   { key: 'shocks',       label: 'Shocks' },
   { key: 'memory',       label: 'Memory' },
   { key: 'crossIndustry', label: 'Cross-Industry' },
-  { key: 'engine',       label: 'Engine' }
+  { key: 'engine',       label: 'Engine' },
+  { key: 'simulator',    label: '▶ Simulator' },
+  { key: 'metrics',      label: '◈ Metrics' },
 ];
 
 /* ═══════════════════
@@ -429,6 +432,223 @@ function TabEngine() {
   );
 }
 
+const SIM_POST_TYPES = [
+  { id: 'personal', label: 'Personal Update', layer: 1, baseReach: 0.3, engagementMul: 1.2, viralCeiling: 2 },
+  { id: 'trend_aligned', label: 'Trend-Aligned', layer: 2, baseReach: 0.5, engagementMul: 1.5, viralCeiling: 3 },
+  { id: 'cultural', label: 'Cultural Moment', layer: 3, baseReach: 0.7, engagementMul: 1.8, viralCeiling: 4 },
+  { id: 'controversial', label: 'Controversial Take', layer: 4, baseReach: 0.6, engagementMul: 2.5, viralCeiling: 4 },
+  { id: 'collab', label: 'Collaboration', layer: 2, baseReach: 0.65, engagementMul: 1.6, viralCeiling: 3 },
+  { id: 'apology', label: 'Apology / Response', layer: 4, baseReach: 0.8, engagementMul: 2.0, viralCeiling: 4 },
+];
+
+const SIM_MOMENTUM_LEVELS = [
+  { id: 'dormant', label: 'Dormant', multiplier: 0.3 },
+  { id: 'low', label: 'Low', multiplier: 0.6 },
+  { id: 'steady', label: 'Steady', multiplier: 1.0 },
+  { id: 'rising', label: 'Rising', multiplier: 1.5 },
+  { id: 'peak', label: 'Peak', multiplier: 2.2 },
+];
+
+function simulateSpread(postType, momentum, eventOverride) {
+  const post = SIM_POST_TYPES.find(p => p.id === postType) || SIM_POST_TYPES[0];
+  const mom = SIM_MOMENTUM_LEVELS.find(m => m.id === momentum) || SIM_MOMENTUM_LEVELS[2];
+  const eventBoost = eventOverride ? 1.4 : 1.0;
+  const baseFollowers = 50000;
+  const stages = VIRAL_STAGES.map((vs, i) => {
+    const stageMultiplier = Math.pow(2.5, i);
+    const reach = Math.round(baseFollowers * post.baseReach * mom.multiplier * stageMultiplier * eventBoost);
+    const comments = Math.round(reach * 0.04 * post.engagementMul * (i < 2 ? 1 : 0.6));
+    const shares = Math.round(reach * 0.02 * post.engagementMul * (i >= 1 ? 1.3 : 0.5));
+    const saves = Math.round(reach * 0.015 * (i < 3 ? 1.2 : 0.4));
+    const likes = Math.round(reach * 0.12);
+    const probability = Math.min(100, Math.round((post.baseReach * mom.multiplier * eventBoost * 100) / (i + 1)));
+    const reachedStage = i < post.viralCeiling;
+    return { ...vs, reach, comments, shares, saves, likes, probability, reachedStage };
+  });
+  return stages;
+}
+
+function TabSimulator() {
+  const [postType, setPostType] = useState('personal');
+  const [momentum, setMomentum] = useState('steady');
+  const [eventActive, setEventActive] = useState('');
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState(null);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = setTimeout(() => {
+      setResults(simulateSpread(postType, momentum, !!eventActive));
+      setRunning(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [running, postType, momentum, eventActive]);
+
+  const runSim = useCallback(() => {
+    setRunning(true);
+  }, []);
+
+  return (
+    <div className="st-tab-content">
+      <p className="st-intro">Simulate how a post spreads through the LalaVerse Feed. Choose a post type, creator momentum, and cultural event to see projected viral stages.</p>
+
+      <div className="st-sim-controls" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 12, marginBottom: 20, alignItems: 'end' }}>
+        <div>
+          <label className="st-sim-label" style={{ display: 'block', fontSize: 11, fontWeight: 600, marginBottom: 4, color: '#887766' }}>Post Type</label>
+          <select value={postType} onChange={e => setPostType(e.target.value)}
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #e0d8d0', fontSize: 13, background: '#fff', color: '#1a1a1a' }}>
+            {SIM_POST_TYPES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="st-sim-label" style={{ display: 'block', fontSize: 11, fontWeight: 600, marginBottom: 4, color: '#887766' }}>Creator Momentum</label>
+          <select value={momentum} onChange={e => setMomentum(e.target.value)}
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #e0d8d0', fontSize: 13, background: '#fff', color: '#1a1a1a' }}>
+            {SIM_MOMENTUM_LEVELS.map(m => <option key={m.id} value={m.id}>{m.label} (×{m.multiplier})</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="st-sim-label" style={{ display: 'block', fontSize: 11, fontWeight: 600, marginBottom: 4, color: '#887766' }}>Cultural Event</label>
+          <select value={eventActive} onChange={e => setEventActive(e.target.value)}
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #e0d8d0', fontSize: 13, background: '#fff', color: '#1a1a1a' }}>
+            <option value="">None active</option>
+            {CULTURAL_OVERRIDES.map(ev => <option key={ev.event} value={ev.event}>{ev.event} ({ev.dates})</option>)}
+          </select>
+        </div>
+        <button onClick={runSim} disabled={running}
+          style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: '#c9a96e', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>
+          {running ? 'Simulating…' : '▶ Run'}
+        </button>
+      </div>
+
+      {results && (
+        <div className="st-sim-results">
+          <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: '#1a1a1a' }}>Viral Spread Projection</h3>
+          <div className="st-card-grid st-cols-2">
+            {results.map((s, i) => (
+              <div key={i} className="st-card" style={{ opacity: s.reachedStage ? 1 : 0.35, position: 'relative' }}>
+                {!s.reachedStage && (
+                  <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 9, color: '#c96e6e', fontWeight: 600 }}>CEILING</div>
+                )}
+                <div className="st-card-header">
+                  <span className="st-badge st-badge-orchid">Stage {s.stage}</span>
+                  <span className="st-card-title">{s.name}</span>
+                  <span className="st-badge st-badge-mint">{s.probability}%</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8, fontSize: 12 }}>
+                  <div><strong style={{ color: '#887766' }}>Reach:</strong> {s.reach.toLocaleString()}</div>
+                  <div><strong style={{ color: '#887766' }}>Comments:</strong> {s.comments.toLocaleString()}</div>
+                  <div><strong style={{ color: '#887766' }}>Shares:</strong> {s.shares.toLocaleString()}</div>
+                  <div><strong style={{ color: '#887766' }}>Saves:</strong> {s.saves.toLocaleString()}</div>
+                  <div><strong style={{ color: '#887766' }}>Likes:</strong> {s.likes.toLocaleString()}</div>
+                </div>
+                <p className="st-card-body st-muted" style={{ marginTop: 8 }}>{s.story}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabMetrics() {
+  const metrics = useMemo(() => {
+    const clusters = INFLUENCE_CLUSTERS.map(c => {
+      const crossCount = (c.cross.match(/,/g) || []).length + 1;
+      return {
+        name: c.cluster,
+        members: c.members.split(',').length,
+        crossInfluence: crossCount,
+        engagementIndex: Math.round(60 + Math.random() * 35),
+        momentumScore: Math.round(40 + Math.random() * 55),
+      };
+    });
+    const engagementBreakdown = ENGAGEMENT_SIGNALS.map(s => ({
+      type: s.type,
+      strength: s.strength,
+      weight: s.strength === 'Strong' ? Math.round(15 + Math.random() * 15) : Math.round(3 + Math.random() * 8),
+    }));
+    const eventImpact = CULTURAL_OVERRIDES.map(e => ({
+      event: e.event,
+      dates: e.dates,
+      reachBoost: `+${Math.round(120 + Math.random() * 180)}%`,
+      contentSuppressed: e.buried.slice(0, 50),
+    }));
+    return { clusters, engagementBreakdown, eventImpact };
+  }, []);
+
+  return (
+    <div className="st-tab-content">
+      <p className="st-intro">Engagement metrics preview — see projected engagement distribution, cluster health, and event impact across the LalaVerse Feed.</p>
+
+      <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#1a1a1a' }}>Cluster Health</h3>
+      <div className="st-table-wrap" style={{ marginBottom: 24 }}>
+        <table className="st-table">
+          <thead>
+            <tr><th>Cluster</th><th>Members</th><th>Cross-Influence</th><th>Engagement Index</th><th>Momentum</th></tr>
+          </thead>
+          <tbody>
+            {metrics.clusters.map(c => (
+              <tr key={c.name}>
+                <td className="st-cell-label">{c.name}</td>
+                <td>{c.members}</td>
+                <td>{c.crossInfluence} clusters</td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ flex: 1, height: 6, background: '#f0ebe4', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${c.engagementIndex}%`, height: '100%', background: '#6ec9a0', borderRadius: 3 }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: '#887766' }}>{c.engagementIndex}</span>
+                  </div>
+                </td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ flex: 1, height: 6, background: '#f0ebe4', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${c.momentumScore}%`, height: '100%', background: '#c9a96e', borderRadius: 3 }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: '#887766' }}>{c.momentumScore}</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#1a1a1a' }}>Engagement Signal Weights</h3>
+      <div className="st-card-grid st-cols-3" style={{ marginBottom: 24 }}>
+        {metrics.engagementBreakdown.map(s => (
+          <div key={s.type} className="st-card" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: s.strength === 'Strong' ? '#6ec9a0' : '#999' }}>{s.weight}%</div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>{s.type}</div>
+            <span className={`st-badge ${s.strength === 'Strong' ? 'st-badge-mint' : 'st-badge-muted'}`} style={{ marginTop: 6 }}>{s.strength}</span>
+          </div>
+        ))}
+      </div>
+
+      <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#1a1a1a' }}>Cultural Event Impact</h3>
+      <div className="st-table-wrap">
+        <table className="st-table">
+          <thead>
+            <tr><th>Event</th><th>Window</th><th>Reach Boost</th><th>Content Suppressed</th></tr>
+          </thead>
+          <tbody>
+            {metrics.eventImpact.map(e => (
+              <tr key={e.event}>
+                <td className="st-cell-label">{e.event}</td>
+                <td>{e.dates}</td>
+                <td><span className="st-badge st-badge-mint">{e.reachBoost}</span></td>
+                <td className="st-muted">{e.contentSuppressed}…</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 const TAB_RENDERERS = {
   layers: TabLayers,
   viral: TabViral,
@@ -441,7 +661,9 @@ const TAB_RENDERERS = {
   shocks: TabShocks,
   memory: TabMemory,
   crossIndustry: TabCrossIndustry,
-  engine: TabEngine
+  engine: TabEngine,
+  simulator: TabSimulator,
+  metrics: TabMetrics,
 };
 
 /* ═══════════════════
@@ -460,7 +682,10 @@ export default function SocialTimeline() {
       <header className="st-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 className="st-title">The Social Timeline Engine</h1>
-          {saving && <span className="eim-saving">Saving…</span>}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saving && <span className="eim-saving">Saving…</span>}
+            <PushToBrain pageName="social_timeline" data={data} />
+          </span>
         </div>
         <p className="st-subtitle">Doc 05 · v1.0 · March 2026 — How the Feed works, spreads, amplifies, and remembers</p>
       </header>

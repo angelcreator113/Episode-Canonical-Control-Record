@@ -104,6 +104,7 @@
   align-items: center;
   gap: 0.75rem;
   flex: 0 0 auto;
+  margin-right: 52px; /* room for Amber trigger */
 }
 
 .user-info {

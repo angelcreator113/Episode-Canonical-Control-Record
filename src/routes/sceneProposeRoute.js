@@ -113,35 +113,36 @@ async function readCharacterContext(registryId) {
       },
     });
 
-    const relationships = await db.CharacterRelationship.findAll({
-      where: {
-        [Op.or]: [
-          { character_id_a: characters.map(c => c.id) },
-          { character_id_b: characters.map(c => c.id) },
-        ],
-      },
-    });
+    const charIds = characters.map(c => c.id);
 
-    // Recent character revelations — last 10 (graceful if model unavailable)
-    let recentRevelations = [];
-    try {
-      if (db.PainPointMemory) {
-        recentRevelations = await db.PainPointMemory.findAll({
-          where: { memory_type: 'character_revelation' },
-          order: [['created_at', 'DESC']],
-          limit: 10,
-        });
-      }
-    } catch (e) { /* model may not exist yet */ }
+    // Run all independent queries in parallel
+    const [relationships, recentRevelations, recentBeats, growthLogs, crossings] = await Promise.all([
+      db.CharacterRelationship.findAll({
+        where: {
+          [Op.or]: [
+            { character_id_a: charIds },
+            { character_id_b: charIds },
+          ],
+        },
+      }),
+      // Recent character revelations — last 10
+      (db.PainPointMemory
+        ? db.PainPointMemory.findAll({ where: { memory_type: 'character_revelation' }, order: [['created_at', 'DESC']], limit: 10 }).catch(() => [])
+        : Promise.resolve([])),
+      // Recent continuity beats — last 8
+      db.ContinuityBeat.findAll({ order: [['created_at', 'DESC']], limit: 8 }).catch(() => []),
+      // Character growth logs — last 20 accepted/unreviewed
+      (db.CharacterGrowthLog
+        ? db.CharacterGrowthLog.findAll({ where: { character_id: charIds, author_decision: { [Op.or]: ['accepted', null] } }, order: [['created_at', 'DESC']], limit: 20 }).catch(() => [])
+        : Promise.resolve([])),
+      // Character crossings — last 10
+      (db.CharacterCrossing
+        ? db.CharacterCrossing.findAll({ where: { character_id: charIds }, order: [['created_at', 'DESC']], limit: 10 }).catch(() => [])
+        : Promise.resolve([])),
+    ]);
 
-    // Recent continuity beats — last 8
-    let recentBeats = [];
-    try {
-      recentBeats = await db.ContinuityBeat.findAll({
-        order: [['created_at', 'DESC']],
-        limit: 8,
-      });
-    } catch (e) { /* graceful */ }
+    const charMap = {};
+    characters.forEach(c => { charMap[c.id] = c.selected_name || c.name; });
 
     return {
       characters: characters.map(c => ({
@@ -175,10 +176,22 @@ async function readCharacterContext(registryId) {
         beat_type: b.beat_type,
         created_at: b.created_at,
       })),
+      growthLogs: growthLogs.map(l => {
+        const name = charMap[l.character_id] || '?';
+        const flag = l.update_type === 'flagged_contradiction' ? ' ⚠ CONTRADICTION' : '';
+        return { name, field: l.field_updated, from: l.previous_value, to: l.new_value, flag, source: l.growth_source };
+      }),
+      crossings: crossings.map(cx => ({
+        name: charMap[cx.character_id] || '?',
+        trigger: cx.trigger,
+        feed_state: cx.initial_feed_state,
+        gap_score: cx.performance_gap_score,
+        gap_observed: cx.gap_proposed_by_amber,
+      })),
     };
   } catch (err) {
     console.error('Character context read error:', err);
-    return { characters: [], relationships: [], recentRevelations: [], recentBeats: [] };
+    return { characters: [], relationships: [], recentRevelations: [], recentBeats: [], growthLogs: [], crossings: [] };
   }
 }
 
@@ -205,6 +218,28 @@ router.post('/propose-scene', optionalAuth, async (req, res) => {
 
     // ── 2. Read all character context ───────────────────────────────────────
     const context = await readCharacterContext(registry_id);
+
+    // ── 2b. Load world state snapshot ───────────────────────────────────────
+    let worldStateCtx = '';
+    try {
+      if (db.WorldStateSnapshot) {
+        const where = {};
+        if (chapter_id) where.chapter_id = chapter_id;
+        else if (book_id) where.book_id = book_id;
+        const snapshot = await db.WorldStateSnapshot.findOne({
+          where,
+          order: [['timeline_position', 'DESC'], ['created_at', 'DESC']],
+        });
+        if (snapshot) {
+          const parts = [`World State: "${snapshot.snapshot_label}"`];
+          const threads = Array.isArray(snapshot.active_threads) ? snapshot.active_threads : [];
+          if (threads.length) parts.push(`  Active threads: ${threads.slice(0, 6).map(t => typeof t === 'string' ? t : t.name || JSON.stringify(t)).join('; ')}`);
+          const facts = Array.isArray(snapshot.world_facts) ? snapshot.world_facts : [];
+          if (facts.length) parts.push(`  Established facts: ${facts.slice(0, 6).map(f => typeof f === 'string' ? f : f.fact || JSON.stringify(f)).join('; ')}`);
+          worldStateCtx = parts.join('\n');
+        }
+      }
+    } catch (e) { /* graceful */ }
 
     // ── 3. Check for lala_seed — only once ─────────────────────────────────
     const lalaSeedWhere = { scene_type: 'lala_seed', status: { [Op.in]: ['accepted', 'generated'] } };
@@ -243,6 +278,12 @@ ${context.recentRevelations.length ? context.recentRevelations.map(r => `- [${r.
 
 RECENT STORY BEATS (what has happened):
 ${context.recentBeats.length ? context.recentBeats.map(b => `- ${b.content}`).join('\n') : 'No beats logged yet'}
+
+${context.growthLogs.length ? `CHARACTER GROWTH ARC (how characters have been changing — write with awareness of trajectory):\n${context.growthLogs.map(g => `- ${g.name}: ${g.field} "${g.from || '—'}" → "${g.to}"${g.flag}${g.source ? ` (${g.source})` : ''}`).join('\n')}` : ''}
+
+${worldStateCtx ? `WORLD STATE (current reality — ground the scene in what is TRUE):\n${worldStateCtx}` : ''}
+
+${context.crossings.length ? `CHARACTER CROSSINGS (when digital personas crossed into narrative reality):\n${context.crossings.map(cx => `- ${cx.name}${cx.trigger ? ` crossed via: ${cx.trigger}` : ''}${cx.gap_score != null ? ` gap: ${cx.gap_score}/10` : ''}${cx.gap_observed ? ` — ${cx.gap_observed}` : ''}`).join('\n')}` : ''}
 
 Now propose the next scene. Think about: what tension is unresolved, whose wound hasn't been touched, what the arc stage demands, what would feel inevitable given everything that has happened.
 
@@ -315,6 +356,9 @@ Respond ONLY in valid JSON. No markdown. No backticks. No explanation outside th
         relationships_read: context.relationships.length,
         recent_revelations: context.recentRevelations.length,
         recent_beats: context.recentBeats.length,
+        growth_logs: context.growthLogs.length,
+        crossings: context.crossings.length,
+        world_state: worldStateCtx ? true : false,
       },
     });
 

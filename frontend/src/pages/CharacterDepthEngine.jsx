@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './CharacterDepthEngine.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import PushToBrain from '../components/PushToBrain';
 
 /* ═══════════════════════════════════════════════════════════════
    The Character Depth Engine — Doc 09 · v1.0
@@ -491,8 +492,13 @@ export default function CharacterDepthEngine() {
     <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="cde-page">
       <header className="cde-header">
-        {saving && <span className="eim-saving">Saving…</span>}
-        <h1>The Character Depth Engine</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1>The Character Depth Engine</h1>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saving && <span className="eim-saving">Saving…</span>}
+            <PushToBrain pageName="character_depth_engine" data={data} />
+          </span>
+        </div>
         <p className="cde-subtitle">Doc 09 · v1.0 — The missing dimensions that make characters irreducible</p>
       </header>
 

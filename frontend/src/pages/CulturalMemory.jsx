@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './CulturalMemory.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import PushToBrain from '../components/PushToBrain';
 
 /* ═══════════════════════════════════════════════════════════════
    The Cultural Memory System — Doc 08 · v1.0
@@ -375,8 +376,13 @@ export default function CulturalMemory() {
     <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="cm-page">
       <header className="cm-header">
-        {saving && <span className="eim-saving">Saving…</span>}
-        <h1>The Cultural Memory System</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1>The Cultural Memory System</h1>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saving && <span className="eim-saving">Saving…</span>}
+            <PushToBrain pageName="cultural_memory" data={data} />
+          </span>
+        </div>
         <p className="cm-subtitle">Doc 08 · v1.0 — A living archive of moments that become part of LalaVerse history</p>
       </header>
 

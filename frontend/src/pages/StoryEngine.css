@@ -76,6 +76,7 @@ html, body {
   align-items: center;
   gap: 14px;
   padding: 10px 20px;
+  padding-right: 64px; /* room for Amber trigger */
   border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
   background: var(--se-surface-glass);

@@ -14,8 +14,11 @@ if (!process.env.PM2_HOME) {
 
 console.log('🚀 Starting application... [VERSION 2026-01-23-19:25]');
 console.log('🔍 This log confirms latest code is running!');
-console.log('�🚨🚨 [2026-02-10 05:17] - NEW CODE WITH ULTRA-EARLY LOGGING 🚨🚨🚨');
-console.log('�📋 Environment:', process.env.NODE_ENV || 'development');
+
+// AI Cost Tracking — patches Anthropic SDK before any routes load
+require('./services/aiCostTracker');
+
+console.log('📋 Environment:', process.env.NODE_ENV || 'development');
 console.log('📋 Database URL:', process.env.DATABASE_URL ? '***SET***' : '❌ NOT SET');
 console.log('📋 Port:', process.env.PORT || 3002);
 console.log('📋 DB_HOST:', process.env.DB_HOST || 'NOT SET');
@@ -574,6 +577,26 @@ app.use('/api/v1/processing-queue', processingRoutes);
 const adminRoutes = trackRouteLoad('admin', () => require('./routes/admin'));
 app.use('/api/v1/admin', adminRoutes);
 
+// AI Usage / Cost Tracking routes
+const aiUsageRoutes = trackRouteLoad('aiUsage', () => require('./routes/aiUsageRoutes'));
+app.use('/api/v1/ai-usage', aiUsageRoutes);
+
+// CFO Agent routes
+const cfoAgentRoutes = trackRouteLoad('cfoAgent', () => require('./routes/cfoAgentRoutes'));
+app.use('/api/v1/cfo', cfoAgentRoutes);
+
+// Site Organizer Agent routes
+const siteOrganizerRoutes = trackRouteLoad('siteOrganizer', () => require('./routes/siteOrganizerRoutes'));
+app.use('/api/v1/site-organizer', siteOrganizerRoutes);
+
+// Design Agent routes
+const designAgentRoutes = trackRouteLoad('designAgent', () => require('./routes/designAgentRoutes'));
+app.use('/api/v1/design-agent', designAgentRoutes);
+
+// Start CFO Agent scheduler (runs audit every 6 hours automatically)
+const { startScheduler: startCFO } = require('./services/cfoAgent');
+startCFO(6);
+
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
 app.use('/api/v1/search', searchRoutes);
@@ -1073,6 +1096,15 @@ try {
   console.log('✓ Consciousness routes loaded at /api/v1/consciousness');
 } catch (e) {
   console.error('✗ Failed to load Consciousness routes:', e.message);
+}
+
+// Story Health Dashboard + Cross-System Search + Version History + Therapy Suggestions
+try {
+  const storyHealthRoutes = require('./routes/storyHealth');
+  app.use('/api/v1/story-health', storyHealthRoutes);
+  console.log('✓ Story Health routes loaded at /api/v1/story-health');
+} catch (e) {
+  console.error('✗ Failed to load Story Health routes:', e.message);
 }
 
 // Onboarding wizard routes
