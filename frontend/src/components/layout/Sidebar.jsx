@@ -29,17 +29,12 @@ const NAV = [
     zone: 'WORLD',
     requiresZone: null,
     items: [
-      { path: '/universe',      label: 'Universe',      icon: '◉' },
       {
-        path: '/world-studio',
-        label: 'Create World',
-        icon: '✦',
+        path: '/universe',
+        label: 'Universe',
+        icon: '◉',
         children: [
-          { path: '/world-studio',                  label: 'Characters'        },
-          { path: '/world-studio?tab=feed',         label: 'The Feed'          },
-          { path: '/world-studio?tab=relationships', label: 'Relationships'    },
-          { path: '/world-studio?tab=locations',    label: 'Locations'         },
-          { path: '/world-studio?tab=tensions',     label: 'Tensions'          },
+          { path: '/universe',                      label: 'Overview'          },
           { path: '/cultural-calendar',             label: 'Cultural Calendar' },
           { path: '/influencer-systems',            label: 'Influencer Systems'},
           { path: '/world-infrastructure',          label: 'Infrastructure'    },
@@ -48,10 +43,23 @@ const NAV = [
           { path: '/character-life-simulation',     label: 'Life Simulation'   },
           { path: '/cultural-memory',               label: 'Cultural Memory'   },
           { path: '/character-depth-engine',        label: 'Depth Engine'      },
+          { path: '/amber',                         label: 'Amber'             },
+        ],
+      },
+      {
+        path: '/world-studio',
+        label: 'Create World',
+        icon: '✦',
+        toggleOnly: true,
+        children: [
+          { path: '/world-studio',                  label: 'Characters'        },
+          { path: '/world-studio?tab=feed',         label: 'The Feed'          },
+          { path: '/world-studio?tab=relationships', label: 'Relationships'    },
+          { path: '/world-studio?tab=locations',    label: 'Locations'         },
+          { path: '/world-studio?tab=tensions',     label: 'Tensions'          },
         ],
       },
       { path: '/therapy/default', label: 'Therapy',    icon: '♡' },
-      { path: '/amber',           label: 'Amber',      icon: '◎' },
     ],
   },
   {
@@ -195,8 +203,18 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   /* ── Helpers ─────────────────────────────────────────────────────────── */
   const isActive = (path) => {
-    const base = path.split('?')[0];
-    return location.pathname === base || location.pathname.startsWith(base + '/');
+    const [base, query] = path.split('?');
+    const pathMatch = location.pathname === base || location.pathname.startsWith(base + '/');
+    if (!pathMatch) return false;
+    // If path has query params, also check they match
+    if (query) {
+      const params = new URLSearchParams(query);
+      const current = new URLSearchParams(location.search);
+      for (const [k, v] of params) {
+        if (current.get(k) !== v) return false;
+      }
+    }
+    return true;
   };
 
   const isZoneLocked = (zone) => {
@@ -278,15 +296,24 @@ export default function Sidebar({ collapsed, onToggle }) {
                     {/* Sub-nav — suppressed when locked or collapsed */}
                     {hasChildren && open && !locked && !collapsed && (
                       <div className="ps-subnav">
-                        {item.children.map(child => (
-                          <button
-                            key={child.path}
-                            className={`ps-subnav-item ${isActive(child.path) ? 'ps-subnav-item-active' : ''}`}
-                            onClick={() => navigate(child.path)}
-                          >
-                            {child.label}
-                          </button>
-                        ))}
+                        {item.children.map(child => {
+                          const [childBase, childSearch] = child.path.split('?');
+                          return (
+                            <button
+                              key={child.path}
+                              className={`ps-subnav-item ${isActive(child.path) ? 'ps-subnav-item-active' : ''}`}
+                              onClick={() => {
+                                if (childSearch) {
+                                  navigate({ pathname: childBase, search: `?${childSearch}` });
+                                } else {
+                                  navigate(child.path);
+                                }
+                              }}
+                            >
+                              {child.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

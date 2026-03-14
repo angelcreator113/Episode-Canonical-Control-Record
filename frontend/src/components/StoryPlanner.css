@@ -53,7 +53,7 @@
 .sp-tabs {
   display: flex;
   gap: 4px;
-  background: rgba(47, 42, 38, 0.04);
+  background: rgba(0, 0, 0, 0.04);
   border-radius: 8px;
   padding: 3px;
 }
@@ -78,7 +78,7 @@
 .sp-tab.active {
   background: var(--st-surface);
   color: var(--st-ink);
-  box-shadow: 0 1px 4px rgba(47, 42, 38, 0.08);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   font-weight: 600;
 }
 
@@ -235,7 +235,7 @@
 
 .sp-btn-gold:hover:not(:disabled) {
   background: var(--st-gold-dim);
-  box-shadow: 0 2px 12px rgba(198, 168, 94, 0.3);
+  box-shadow: 0 2px 12px rgba(212, 120, 154, 0.3);
 }
 
 .sp-btn-ghost {
@@ -411,7 +411,7 @@
 .sp-plan-char-tag {
   font-family: var(--st-sans);
   font-size: 11px;
-  background: rgba(47, 42, 38, 0.04);
+  background: rgba(0, 0, 0, 0.04);
   border: 1px solid var(--st-border);
   border-radius: 4px;
   padding: 2px 8px;
@@ -548,7 +548,7 @@
 }
 
 .sp-chapter-header:hover {
-  background: rgba(198, 168, 94, 0.03);
+  background: rgba(212, 120, 154, 0.03);
 }
 
 .sp-chapter-info {
