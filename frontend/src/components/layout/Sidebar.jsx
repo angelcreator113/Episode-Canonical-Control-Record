@@ -32,6 +32,7 @@ const NAV = [
           { icon: '📜', label: 'Cultural Memory',    route: '/cultural-memory' },
           { icon: '💎', label: 'Depth Engine',       route: '/character-depth-engine' },
           { icon: '📍', label: 'World Locations',    route: '/world-locations' },
+          { icon: '🟠', label: 'Amber',              route: '/amber' },
           { icon: '✦', label: 'Story Dashboard',    route: '/universe/story-dashboard' },
           { icon: '⬡', label: 'Franchise Brain',    route: '/universe/knowledge' },
           { icon: '◇', label: 'Writing Rhythm',     route: '/universe/writing-rhythm' },
@@ -40,13 +41,10 @@ const NAV = [
       { icon: '✦',  label: 'World Studio',         route: '/world-studio',
         children: [
           { icon: '🔥', label: 'Scene Studio',       route: '/scene-studio' },
-          { icon: '📱', label: 'The Feed',            route: '/feed' },
           { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
-          { icon: '🔗', label: 'Relationships',      route: '/relationships' },
         ],
       },
       { icon: '💭', label: 'Therapy',              route: '/therapy/default' },
-      { icon: '🟠', label: 'Amber',                route: '/amber' },
     ],
   },
   {
@@ -150,14 +148,14 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Universe sub-nav when on a /universe/* sub-page or world-building route
   useEffect(() => {
-    if (location.pathname.startsWith('/universe') || ['/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations'].some(p => location.pathname.startsWith(p))) {
+    if (location.pathname.startsWith('/universe') || ['/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations', '/amber'].some(p => location.pathname.startsWith(p))) {
       setUniverseOpen(true);
     }
   }, [location.pathname]);
 
-  // Auto-expand World Studio sub-nav when on character-registry or relationships
+  // Auto-expand World Studio sub-nav
   useEffect(() => {
-    if (['/world-studio', '/character-registry', '/relationships', '/scene-studio', '/feed'].some(p => location.pathname.startsWith(p))) {
+    if (['/world-studio', '/character-registry', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
       setWorldOpen(true);
     }
   }, [location.pathname]);
