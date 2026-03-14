@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from '../components/StoryReviewPanel';
 import WriteModeAIWriter from '../components/WriteModeAIWriter';
 import StoryHubNav from '../components/StoryHubNav';
+import ArcTrackingPanel from '../components/ArcTrackingPanel';
 import './StoryEngine.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -1041,6 +1042,7 @@ export default function StoryEngine() {
   const [therapyLoading, setTherapyLoading] = useState(false);
   const [registryUpdate, setRegistryUpdate] = useState(null);
   const [savingForLater, setSavingForLater] = useState(false);
+  const [amberNotification, setAmberNotification] = useState(null);
 
   const [showStats, setShowStats] = useState(false);
   const [readingMode, setReadingMode] = useState(false);
@@ -1537,6 +1539,55 @@ export default function StoryEngine() {
     } catch (e) {
       console.error('registry update error:', e);
     }
+
+    // Arc tracking update
+    try {
+      await fetch(`${API_BASE}/arc-tracking/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_key: selectedChar,
+          story_number: story.story_number,
+          story_type: story.story_type,
+          phase: story.phase,
+          phone_appeared: story.text?.toLowerCase().includes('her phone') ||
+                          story.text?.toLowerCase().includes('the phone'),
+        }),
+      });
+    } catch (e) {
+      console.error('arc tracking update error:', e);
+    }
+
+    // Scene eligibility check
+    try {
+      const eligibilityRes = await fetch(`${API_BASE}/world/scenes/check-eligibility`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          story_id: story.db_id,
+          character_key: selectedChar,
+          story_text: story.text,
+          story_type: story.story_type,
+          story_number: story.story_number,
+          characters_present: tasks
+            .find(t => t.story_number === story.story_number)
+            ?.characters_present || [],
+        }),
+      });
+      if (eligibilityRes.ok) {
+        const eligibility = await eligibilityRes.json();
+        if (eligibility.eligible) {
+          setAmberNotification({
+            type: 'scene_eligible',
+            story_number: story.story_number,
+            story_title: story.title,
+            eligibility,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('scene eligibility check error:', e);
+    }
   }
 
   function handleReject(story) {
@@ -1721,6 +1772,12 @@ export default function StoryEngine() {
             savedStories={savedStories}
             stories={stories}
           />
+          {selectedChar && (
+            <ArcTrackingPanel
+              characterKey={selectedChar}
+              characterName={char?.display_name || selectedChar}
+            />
+          )}
         </div>
       )}
 
@@ -1991,6 +2048,94 @@ export default function StoryEngine() {
           <span>F Reading mode</span>
           <span>Ctrl+S Save</span>
           <span>Ctrl+Enter Approve</span>
+        </div>
+      )}
+
+      {/* Amber notification — scene eligibility after story approval */}
+      {amberNotification?.type === 'scene_eligible' && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          width: 340,
+          background: '#fff',
+          border: '1px solid #e8dcf5',
+          borderRadius: 14,
+          boxShadow: '0 8px 32px rgba(168,137,200,0.18)',
+          padding: '16px 18px',
+          zIndex: 500,
+          animation: 'ws-slide-up 0.22s ease',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #d4789a, #a889c8)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, color: '#fff', fontWeight: 700,
+            }}>A</div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Amber</div>
+              <div style={{ fontSize: 10, color: '#9999b3' }}>Story {amberNotification.story_number} approved</div>
+            </div>
+            <button
+              onClick={() => setAmberNotification(null)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none',
+                cursor: 'pointer', color: '#9999b3', fontSize: 16 }}
+            >×</button>
+          </div>
+
+          <div style={{ fontSize: 12, color: '#5a5a7a', lineHeight: 1.6, marginBottom: 12 }}>
+            <strong style={{ color: '#1a1a2e' }}>
+              {amberNotification.eligibility.charA.name}
+              {amberNotification.eligibility.charB
+                ? ` & ${amberNotification.eligibility.charB.name}`
+                : ''
+              }
+            </strong>
+            {' '}— this story ends at a door.{' '}
+            <span style={{ color: '#a889c8' }}>
+              {amberNotification.eligibility.scene_type?.replace(/_/g, ' ')}
+            </span>
+            {' '}· intensity:{' '}
+            <span style={{ color: '#d4789a' }}>
+              {amberNotification.eligibility.intensity}
+            </span>
+            {amberNotification.eligibility.location && (
+              <span style={{ color: '#7ab3d4' }}>
+                {' '}· {amberNotification.eligibility.location}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => {
+                navigate('/scene-studio', {
+                  state: { autoPopulate: amberNotification.eligibility }
+                });
+                setAmberNotification(null);
+              }}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 8,
+                background: '#a889c8', color: '#fff',
+                border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600,
+              }}
+            >
+              Generate Scene
+            </button>
+            <button
+              onClick={() => setAmberNotification(null)}
+              style={{
+                padding: '8px 14px', borderRadius: 8,
+                background: 'transparent', color: '#9999b3',
+                border: '1px solid #e8e0f0', cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Skip
+            </button>
+          </div>
         </div>
       )}
     </div>

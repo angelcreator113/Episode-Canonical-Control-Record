@@ -926,6 +926,15 @@ try {
   console.error('✗ Failed to load Story Evaluation routes:', e.message);
 }
 
+// Arc Tracking routes (wound clock, stakes, visibility, scene eligibility)
+try {
+  const arcTrackingRoutes = require('./routes/arcTrackingRoutes');
+  app.use('/api/v1', arcTrackingRoutes);
+  console.log('✓ Arc Tracking routes loaded at /api/v1/arc-tracking');
+} catch (e) {
+  console.error('✗ Failed to load Arc Tracking routes:', e.message);
+}
+
 // Character Spark routes (3-field fast entry + Claude Opus pre-fill)
 try {
   const characterSparkRoute = require('./routes/characterSparkRoute');

@@ -130,6 +130,7 @@ let AssetRole; // Asset role registry (semantic slots)
 let UniverseCharacter; // Universe-level promoted characters
 let BrainDocument; // Brain Documents: stores full ingested document text
 let AIUsageLog; // AI API cost/token tracking
+let CharacterArc; // Arc tracking: wound clock, stakes, visibility, David silence
 
 try {
   // Core models
@@ -309,6 +310,10 @@ try {
   FranchiseTechKnowledge = require('./FranchiseTechKnowledge')(sequelize, DataTypes);
   BrainDocument = require('./BrainDocument')(sequelize, DataTypes);
   AIUsageLog = require('./AIUsageLog')(sequelize, DataTypes);
+
+  // Arc Tracking model (wound clock, stakes, visibility, David silence)
+  CharacterArc = require('./CharacterArc')(sequelize);
+
   SessionBrief = require('./SessionBrief')(sequelize, DataTypes);
   PostGenerationReview = require('./PostGenerationReview')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
@@ -496,6 +501,7 @@ const requiredModels = {
   UniverseCharacter,
   BrainDocument,
   AIUsageLog,
+  CharacterArc,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -701,6 +707,9 @@ if (UniverseCharacter && UniverseCharacter.associate) {
 }
 if (EditMap && EditMap.associate) {
   EditMap.associate(requiredModels);
+}
+if (CharacterArc && CharacterArc.associate) {
+  CharacterArc.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1844,3 +1853,4 @@ module.exports.AssetRole = AssetRole;
 module.exports.UniverseCharacter = UniverseCharacter;
 module.exports.SocialProfileRelationship = SocialProfileRelationship;
 module.exports.AIUsageLog = AIUsageLog;
+module.exports.CharacterArc = CharacterArc;

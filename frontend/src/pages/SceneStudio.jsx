@@ -13,7 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import './WorldStudio.css';
 
 const API = '/api/v1';
@@ -32,6 +32,7 @@ function SectionLabel({ children, color = '' }) {
 ═══════════════════════════════════════════════════════════════════════ */
 export default function SceneStudio() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   /* ── Characters (for dropdowns) ─────────────────────────────────── */
   const [characters, setCharacters] = useState([]);
@@ -79,7 +80,24 @@ export default function SceneStudio() {
     } catch { setTensionPairs([]); }
   }, [flash]);
 
-  useEffect(() => { loadCharacters(); loadScenes(); }, []);
+  useEffect(() => {
+    loadCharacters();
+    loadScenes();
+
+    // Auto-populate from StoryEngine eligibility check
+    if (location.state?.autoPopulate) {
+      const ap = location.state.autoPopulate;
+      setSceneGen({
+        loading: false,
+        charA: ap.charA.id,
+        charB: ap.charB?.id || '',
+        sceneType: ap.scene_type,
+        location: ap.location || '',
+      });
+      // Clear navigation state so refresh doesn't re-trigger
+      window.history.replaceState({}, document.title);
+    }
+  }, []);
   useEffect(() => { loadScenes(); }, [filterStatus]);
 
   /* ── Scene actions ──────────────────────────────────────────────── */

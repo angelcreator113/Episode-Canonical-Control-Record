@@ -21,6 +21,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const db = require('../models');
 
 const anthropic = new Anthropic();
+const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
 
 let optionalAuth;
 try {
@@ -1130,7 +1131,19 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       loadCharacterCrossingContext(characters_in_scene, registry_id),
     ]);
 
-    const fullCharBlocks = charBlocks + storyMemories + therapyCtx + franchiseCtx + authorNoteCtx + worldCtx + voiceRuleCtx + arcCtx + socialCtx + continuityCtx + growthCtx + worldStateCtx + crossingCtx;
+    // Load arc tracking context for POV character (first in scene)
+    const povCharKey = characters_in_scene?.[0];
+    let arcTrackingSection = '';
+    if (povCharKey) {
+      try {
+        const arcCtxData = await buildArcContext(db, povCharKey);
+        arcTrackingSection = buildArcContextPromptSection(arcCtxData);
+      } catch (e) {
+        console.error('[arc-tracking] failed to load arc context:', e.message);
+      }
+    }
+
+    const fullCharBlocks = charBlocks + storyMemories + therapyCtx + franchiseCtx + authorNoteCtx + worldCtx + voiceRuleCtx + arcCtx + socialCtx + continuityCtx + growthCtx + worldStateCtx + crossingCtx + arcTrackingSection;
 
     const genOpts = { characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks, tone_dial, dossiers, must_include, never_include };
     const promptA = buildGenerationPrompt({ scene_brief, voice_key: 'voice_a', ...genOpts });
