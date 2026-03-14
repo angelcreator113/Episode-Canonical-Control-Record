@@ -1,6 +1,8 @@
 /**
  * Sidebar.jsx — Prime Studios Navigation
- * 4 zones: WRITE · WORLD · PRODUCE · MANAGE
+ * 5 zones: WORLD · WRITE · STUDIO · PRODUCE · MANAGE
+ * Gating: WRITE locked until World has characters
+ *         STUDIO locked until Write has content
  * Props: isOpen (mobile drawer), onClose (close drawer)
  */
 import React, { useState, useEffect } from 'react';
@@ -14,6 +16,7 @@ import './Sidebar.css';
 const NAV = [
   {
     zone: 'WORLD',
+    requiresZone: null,
     items: [
       { icon: '◈',  label: 'Universe',             route: '/universe',
         children: [
@@ -42,6 +45,7 @@ const NAV = [
   },
   {
     zone: 'WRITE',
+    requiresZone: 'world',
     items: [
       { icon: '⚡', label: 'Short Stories',    route: '/story-engine',
         children: [
@@ -61,6 +65,7 @@ const NAV = [
   },
   {
     zone: 'STUDIO',
+    requiresZone: 'write',
     items: [
       {
         icon: '🎬', label: 'Shows', route: '/shows',
@@ -73,6 +78,7 @@ const NAV = [
   },
   {
     zone: 'PRODUCE',
+    requiresZone: 'write',
     items: [
       { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
       { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
@@ -83,6 +89,7 @@ const NAV = [
   },
   {
     zone: 'MANAGE',
+    requiresZone: null,
     items: [
       { icon: '�', label: 'CFO Agent',       route: '/cfo',
         children: [
@@ -120,6 +127,26 @@ function useShows() {
   return shows;
 }
 
+/* ─── Lock badge ─────────────────────────────────────────────── */
+function LockBadge() {
+  return (
+    <span style={{
+      fontSize: 9,
+      fontWeight: 700,
+      letterSpacing: '0.06em',
+      color: '#bbb',
+      background: '#f2f2f2',
+      border: '1px solid #e0e0e0',
+      borderRadius: 4,
+      padding: '1px 5px',
+      marginLeft: 4,
+      textTransform: 'uppercase',
+    }}>
+      locked
+    </span>
+  );
+}
+
 /* ─── Sidebar ───────────────────────────────────────────────── */
 function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
@@ -133,6 +160,40 @@ function Sidebar({ isOpen, onClose }) {
   const [cfoOpen, setCfoOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+
+  // ── Zone completion gating ──
+  const [worldComplete, setWorldComplete] = useState(false);
+  const [writeComplete, setWriteComplete] = useState(false);
+
+  useEffect(() => {
+    const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+    // World: check if any characters exist
+    fetch(`${API_BASE}/world/characters?limit=1`)
+      .then(r => r.json())
+      .then(data => {
+        const chars = data.characters || data;
+        setWorldComplete(Array.isArray(chars) && chars.length > 0);
+      })
+      .catch(() => {});
+
+    // Write: check if any storyteller books exist with lines
+    fetch(`${API_BASE}/storyteller/books`)
+      .then(r => r.json())
+      .then(data => {
+        const books = data.books || data;
+        setWriteComplete(Array.isArray(books) && books.length > 0);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Determine if a zone is unlocked
+  const isZoneUnlocked = (requiresZone) => {
+    if (!requiresZone) return true;
+    if (requiresZone === 'world') return worldComplete;
+    if (requiresZone === 'write') return writeComplete;
+    return true;
+  };
 
   // Auto-expand Shows sub-nav when on a /shows/* route
   useEffect(() => {
@@ -231,9 +292,18 @@ function Sidebar({ isOpen, onClose }) {
           </NavLink>
 
           {/* Zones */}
-          {NAV.map(({ zone, items }) => (
+          {NAV.map(({ zone, requiresZone, items }) => {
+            const unlocked = isZoneUnlocked(requiresZone);
+            const lockedStyle = { pointerEvents: 'none', opacity: 0.45 };
+
+            return (
             <div className="nav-section" key={zone}>
-              {!collapsed && <div className="nav-section-label">{zone}</div>}
+              {!collapsed && (
+                <div className="nav-section-label">
+                  {zone}
+                  {!unlocked && <LockBadge />}
+                </div>
+              )}
 
               {items.map(item => {
                 // ── Expandable item with static children (Universe) ──
@@ -253,10 +323,12 @@ function Sidebar({ isOpen, onClose }) {
                       <div
                         className={`nav-item ${groupActive ? 'active' : ''}`}
                         onClick={() => {
+                          if (!unlocked) return;
                           if (!toggleOnly) go(item.route);
                           setGroupOpen(o => !o);
                         }}
                         title={collapsed ? item.label : undefined}
+                        style={!unlocked ? lockedStyle : undefined}
                       >
                         <span className="nav-icon">{item.icon}</span>
                         {!collapsed && (
@@ -267,7 +339,7 @@ function Sidebar({ isOpen, onClose }) {
                         )}
                       </div>
 
-                      {groupOpen && !collapsed && (
+                      {groupOpen && !collapsed && unlocked && (
                         <div className="nav-subgroup">
                           {item.children.map(child => (
                             <NavLink
@@ -294,10 +366,12 @@ function Sidebar({ isOpen, onClose }) {
                       <div
                         className={`nav-item ${showsActive ? 'active' : ''}`}
                         onClick={() => {
+                          if (!unlocked) return;
                           go(item.route);
                           setShowsOpen(o => !o);
                         }}
                         title={collapsed ? item.label : undefined}
+                        style={!unlocked ? lockedStyle : undefined}
                       >
                         <span className="nav-icon">{item.icon}</span>
                         {!collapsed && (
@@ -309,7 +383,7 @@ function Sidebar({ isOpen, onClose }) {
                       </div>
 
                       {/* Shows sub-list */}
-                      {showsOpen && !collapsed && (
+                      {showsOpen && !collapsed && unlocked && (
                         <div className="nav-subgroup">
                           {shows.length === 0 ? (
                             <div className="sub-empty">No shows yet</div>
@@ -347,8 +421,12 @@ function Sidebar({ isOpen, onClose }) {
                     to={item.route}
                     end={item.route === '/episodes'}
                     className={({ isActive: a }) => `nav-item ${a ? 'active' : ''}`}
-                    onClick={() => { if (onClose) onClose(); }}
+                    onClick={(e) => {
+                      if (!unlocked) { e.preventDefault(); return; }
+                      if (onClose) onClose();
+                    }}
                     title={collapsed ? item.label : undefined}
+                    style={!unlocked ? lockedStyle : undefined}
                   >
                     <span className="nav-icon">{item.icon}</span>
                     {!collapsed && <span className="nav-label">{item.label}</span>}
@@ -356,7 +434,8 @@ function Sidebar({ isOpen, onClose }) {
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* ── Setup Progress ── */}
