@@ -56,7 +56,7 @@ const NAV = [
       },
       { icon: '✦',  label: 'World Studio',         route: '/world-studio',
         children: [
-          { icon: '🔥', label: 'Scene Studio',       route: '/scene-studio' },
+          { icon: '🔥', label: 'Book Scene Studio',  route: '/scene-studio' },
           { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
         ],
       },

@@ -458,7 +458,7 @@ function AppContent() {
           {/* World Studio — LalaVerse world character hub */}
           <Route path="/world-studio" element={<WorldStudio />} />
 
-          {/* Scene Studio — Intimate scene generation + reader */}
+          {/* Book Scene Studio — Intimate scene generation + reader */}
           <Route path="/scene-studio" element={<SceneStudio />} />
 
           {/* The Feed — Parasocial Creator Profile Generator */}
@@ -560,7 +560,7 @@ function AppContent() {
             '/story-evaluation': 'Story Evaluation Engine',
             '/storyteller': 'Storyteller Book Editor',
             '/world-studio': 'World Studio',
-            '/scene-studio': 'Scene Studio',
+            '/scene-studio': 'Book Scene Studio',
             '/feed': 'Social Feed Profiles',
             '/social-timeline': 'Social Timeline Engine',
             '/social-personality': 'Social Personality Engine',
