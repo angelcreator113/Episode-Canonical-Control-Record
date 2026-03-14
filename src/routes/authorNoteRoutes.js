@@ -22,23 +22,32 @@ function getModels(req) {
 }
 
 // GET /
+// Supports two query modes:
+//   1. entity_type + entity_id → notes for a specific entity
+//   2. note_type (optionally + entity_type) → actionable notes across entities (Dashboard use)
 router.get('/', async (req, res) => {
   const { AuthorNote } = getModels(req);
   try {
-    const { entity_type, entity_id, viewer } = req.query;
-    if (!entity_type || !entity_id) {
-      return res.status(400).json({ error: 'entity_type and entity_id required' });
-    }
+    const { entity_type, entity_id, note_type, viewer, limit } = req.query;
 
-    const where = { entity_type, entity_id };
+    const where = {};
+    if (entity_type) where.entity_type = entity_type;
+    if (entity_id)   where.entity_id   = entity_id;
+    if (note_type)   where.note_type   = note_type;
     // If Amber is viewing, exclude private notes
     if (viewer === 'amber') {
       where.visible_to_amber = true;
     }
 
+    // Require at least one filter to prevent unbounded queries
+    if (Object.keys(where).length === 0) {
+      return res.status(400).json({ error: 'At least one filter required (entity_type, entity_id, or note_type)' });
+    }
+
     const notes = await AuthorNote.findAll({
       where,
       order: [['created_at', 'DESC']],
+      limit: limit ? parseInt(limit, 10) : 50,
     });
     res.json({ notes });
   } catch (err) {

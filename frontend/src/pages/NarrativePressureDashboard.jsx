@@ -12,8 +12,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 
-const ENTANGLE_API = '/api/v1/entanglements';
-
 const STATE_COLORS = {
   rising:        { bg: '#f0faf4', text: '#2d7a4f', border: '#b8e8cc' },
   peaking:       { bg: '#fef9e7', text: '#8a6d00', border: '#f5d97a' },
@@ -289,6 +287,33 @@ function SimultaneousView() {
 // ── ZONE 2: Self-Portrait Panel ────────────────────────────────────────────
 
 function SelfPortraitPanel({ portrait, loading }) {
+  const [pending, setPending] = useState([]);
+  const [pendingLoading, setPendingLoading] = useState(true);
+
+  // Load pending Amber proposals (mirror_proposed_by_amber set, mirror_confirmed false)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/api/v1/social-profiles?limit=100');
+        const profiles = res.data?.profiles || res.data?.rows || [];
+        const unconfirmed = profiles.filter(p =>
+          p.mirror_proposed_by_amber && !p.mirror_confirmed
+        );
+        setPending(unconfirmed);
+      } catch { /* ignore */ }
+      setPendingLoading(false);
+    })();
+  }, []);
+
+  const handleConfirm = async (profileId, dimension) => {
+    try {
+      await api.post(`/api/v1/social-profiles/${profileId}/mirror/confirm`, { dimension });
+      setPending(prev => prev.filter(p => p.id !== profileId));
+    } catch (err) {
+      console.warn('[SelfPortrait] confirm error:', err.message);
+    }
+  };
+
   if (loading) return <LoadingZone />;
   if (!portrait) return <EmptyZone message="Mirror Field data unavailable" />;
 
@@ -299,39 +324,105 @@ function SelfPortraitPanel({ portrait, loading }) {
       <SectionHeader accent="#a889c8" count={dimensions.reduce((n, [, v]) => n + v.profiles.length, 0)}>
         Self-Portrait
       </SectionHeader>
-      {dimensions.length === 0 ? (
+      {dimensions.length === 0 && pending.length === 0 ? (
         <EmptyZone message="No confirmed mirror dimensions yet. Propose and confirm to build the portrait." />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-          {dimensions.map(([dim, data]) => (
-            <div key={dim} style={{
-              background: `${DIMENSION_COLORS[dim] || '#ddd'}0a`,
-              border: `1px solid ${DIMENSION_COLORS[dim] || '#ddd'}33`,
-              borderLeft: `3px solid ${DIMENSION_COLORS[dim] || '#ddd'}`,
-              borderRadius: 8, padding: '12px 14px',
-            }}>
-              <div style={{
-                fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-                letterSpacing: '0.08em', color: DIMENSION_COLORS[dim] || '#888',
-                fontFamily: "'DM Mono', monospace", marginBottom: 4,
-              }}>
-                {dim.replace(/_/g, ' ')}
-              </div>
-              <div style={{ fontSize: 12, color: '#666', fontStyle: 'italic', marginBottom: 8, lineHeight: 1.4 }}>
-                {data.label}
-              </div>
-              {data.profiles.map(p => (
-                <div key={p.id} style={{
-                  fontSize: 11, color: '#555', padding: '2px 0',
-                  display: 'flex', gap: 6, alignItems: 'center',
+        <>
+          {dimensions.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+              {dimensions.map(([dim, data]) => (
+                <div key={dim} style={{
+                  background: `${DIMENSION_COLORS[dim] || '#ddd'}0a`,
+                  border: `1px solid ${DIMENSION_COLORS[dim] || '#ddd'}33`,
+                  borderLeft: `3px solid ${DIMENSION_COLORS[dim] || '#ddd'}`,
+                  borderRadius: 8, padding: '12px 14px',
                 }}>
-                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: DIMENSION_COLORS[dim] || '#ccc', flexShrink: 0 }} />
-                  @{p.handle}
+                  <div style={{
+                    fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                    letterSpacing: '0.08em', color: DIMENSION_COLORS[dim] || '#888',
+                    fontFamily: "'DM Mono', monospace", marginBottom: 4,
+                  }}>
+                    {dim.replace(/_/g, ' ')}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#666', fontStyle: 'italic', marginBottom: 8, lineHeight: 1.4 }}>
+                    {data.label}
+                  </div>
+                  {data.profiles.map(p => (
+                    <div key={p.id} style={{
+                      fontSize: 11, color: '#555', padding: '2px 0',
+                      display: 'flex', gap: 6, alignItems: 'center',
+                    }}>
+                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: DIMENSION_COLORS[dim] || '#ccc', flexShrink: 0 }} />
+                      @{p.handle}
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
+          )}
+
+          {/* ── Pending Amber proposals ── */}
+          {!pendingLoading && pending.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{
+                fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.08em', color: '#c9a84c', marginBottom: 8,
+                fontFamily: "'DM Mono', monospace",
+              }}>
+                Pending proposals ({pending.length})
+              </div>
+              {pending.map(p => {
+                const proposedDim = p.justawoman_mirror;
+                const dimColor = DIMENSION_COLORS[proposedDim] || '#c9a84c';
+                return (
+                  <div key={p.id} style={{
+                    background: '#fffdf5', border: '1px solid #f5e6c0',
+                    borderLeft: `3px solid ${dimColor}`,
+                    borderRadius: 6, padding: '10px 14px', marginBottom: 6,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 600, fontSize: 12, color: '#333' }}>
+                          @{p.handle}
+                        </span>
+                        {proposedDim && (
+                          <span style={{
+                            fontSize: 9, padding: '1px 6px', borderRadius: 10,
+                            background: `${dimColor}15`, color: dimColor,
+                            border: `1px solid ${dimColor}33`,
+                            fontWeight: 600, fontFamily: "'DM Mono', monospace",
+                          }}>
+                            {proposedDim.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleConfirm(p.id, proposedDim)}
+                        style={{
+                          padding: '3px 10px', background: '#a889c8', color: '#fff',
+                          border: 'none', borderRadius: 12, fontSize: 10, fontWeight: 600,
+                          cursor: 'pointer', flexShrink: 0,
+                        }}
+                      >
+                        Confirm
+                      </button>
+                    </div>
+                    {p.mirror_proposed_by_amber && (
+                      <div style={{ fontSize: 11, color: '#888', fontStyle: 'italic', lineHeight: 1.4 }}>
+                        Amber: {p.mirror_proposed_by_amber}
+                      </div>
+                    )}
+                    {proposedDim && MIRROR_LABELS[proposedDim] && (
+                      <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                        {MIRROR_LABELS[proposedDim]}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -388,43 +479,93 @@ function HotZonesPanel({ events, loading }) {
 // ── ZONE 4: Pressure Wave ─────────────────────────────────────────────────
 
 function PressureWavePanel({ feedRelationships, loading }) {
-  if (loading) return <LoadingZone />;
+  const [ripples, setRipples] = useState({});
+
   const pressureRels = (feedRelationships || []).filter(r =>
     ['beef', 'former_friends', 'public_shade'].includes(r.relationship_type)
   );
+
+  // Load caught-in-middle flags for each conflict relationship
+  useEffect(() => {
+    if (loading || pressureRels.length === 0) return;
+    (async () => {
+      const results = {};
+      for (const r of pressureRels) {
+        try {
+          const res = await api.post(`/api/v1/feed-relationships/${r.id}/generate-ripples`);
+          if (res.data?.flags?.length > 0) {
+            results[r.id] = res.data.flags;
+          }
+        } catch { /* ignore individual failures */ }
+      }
+      setRipples(results);
+    })();
+  }, [loading, feedRelationships]);
+
+  if (loading) return <LoadingZone />;
   return (
     <div>
       <SectionHeader count={pressureRels.length} accent="#d4789a">Pressure Wave</SectionHeader>
       {pressureRels.length === 0 ? (
         <EmptyZone message="No active feed conflicts. Tension is dormant." />
       ) : (
-        pressureRels.map(r => (
-          <div key={r.id} style={{
-            background: '#fff', border: '1px solid #f0e4ea', borderRadius: 8,
-            padding: '10px 14px', marginBottom: 8,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>
-                @{r.influencerA?.handle || '?'}
-              </span>
-              <span style={{
-                fontSize: 10, padding: '1px 8px', borderRadius: 10,
-                background: '#fef0f0', color: '#b91c1c', border: '1px solid #fca5a5',
-                fontWeight: 600, fontFamily: "'DM Mono', monospace",
-              }}>
-                {r.relationship_type?.replace(/_/g, ' ')}
-              </span>
-              <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>
-                @{r.influencerB?.handle || '?'}
-              </span>
-            </div>
-            {r.notes && (
-              <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic' }}>
-                {r.notes}
+        pressureRels.map(r => {
+          const caught = ripples[r.id] || [];
+          return (
+            <div key={r.id} style={{
+              background: '#fff', border: '1px solid #f0e4ea', borderRadius: 8,
+              padding: '10px 14px', marginBottom: 8,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>
+                  @{r.influencerA?.handle || '?'}
+                </span>
+                <span style={{
+                  fontSize: 10, padding: '1px 8px', borderRadius: 10,
+                  background: '#fef0f0', color: '#b91c1c', border: '1px solid #fca5a5',
+                  fontWeight: 600, fontFamily: "'DM Mono', monospace",
+                }}>
+                  {r.relationship_type?.replace(/_/g, ' ')}
+                </span>
+                <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>
+                  @{r.influencerB?.handle || '?'}
+                </span>
               </div>
-            )}
-          </div>
-        ))
+              {r.notes && (
+                <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic', marginBottom: caught.length > 0 ? 6 : 0 }}>
+                  {r.notes}
+                </div>
+              )}
+              {/* Caught-in-middle characters */}
+              {caught.length > 0 && (
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed #f0e4ea' }}>
+                  <div style={{
+                    fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+                    letterSpacing: '0.08em', color: '#a889c8', marginBottom: 4,
+                    fontFamily: "'DM Mono', monospace",
+                  }}>
+                    Caught in the middle ({caught.length})
+                  </div>
+                  {caught.map(f => (
+                    <div key={f.character_id} style={{
+                      fontSize: 11, color: '#666', padding: '3px 0',
+                      display: 'flex', alignItems: 'baseline', gap: 6,
+                    }}>
+                      <span style={{
+                        fontWeight: 600, color: '#333', flexShrink: 0,
+                      }}>
+                        {f.character_name}
+                      </span>
+                      <span style={{ color: '#999', fontSize: 10 }}>
+                        {f.flag}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -432,27 +573,54 @@ function PressureWavePanel({ feedRelationships, loading }) {
 
 // ── ZONE 5: Underground Activity ──────────────────────────────────────────
 
-function UndergroundPanel({ events, loading }) {
+function UndergroundPanel() {
+  const [profiles, setProfiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/api/v1/social-profiles/underground');
+        setProfiles(res.data?.profiles || []);
+      } catch { /* ignore */ }
+      setLoading(false);
+    })();
+  }, []);
+
   if (loading) return <LoadingZone />;
-  const underground = (events || []).filter(e => e.visibility === 'underground');
   return (
     <div>
-      <SectionHeader count={underground.length} accent="#6b7280">Underground Activity</SectionHeader>
-      {underground.length === 0 ? (
+      <SectionHeader count={profiles.length} accent="#6b7280">Underground Activity</SectionHeader>
+      {profiles.length === 0 ? (
         <EmptyZone message="Nothing stirring underground." />
       ) : (
-        underground.map(ev => (
-          <div key={ev.id} style={{
+        profiles.map(p => (
+          <div key={p.id} style={{
             background: '#f8f8f8', border: '1px solid #ddd',
             borderLeft: '3px solid #6b7280', borderRadius: 8,
             padding: '10px 14px', marginBottom: 8,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 14 }}>◎</span>
-              <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>{ev.title}</span>
+              <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>
+                @{p.handle}
+              </span>
+              <span style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+                textTransform: 'uppercase', padding: '1px 6px', borderRadius: 10,
+                background: '#f0f0f0', color: '#6b7280', border: '1px solid #ddd',
+                fontFamily: "'DM Mono', monospace",
+              }}>
+                underground
+              </span>
             </div>
-            {ev.lalaverse_district && (
-              <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{ev.lalaverse_district}</div>
+            <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+              {p.display_name || p.handle}
+              {p.platform && ` · ${p.platform}`}
+              {p.current_state && ` · ${p.current_state.replace(/_/g, ' ')}`}
+            </div>
+            {p.content_category && (
+              <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{p.content_category}</div>
             )}
           </div>
         ))
@@ -552,15 +720,17 @@ function AuthorFlagsPanel({ loading }) {
     if (loading) return;
     (async () => {
       try {
-        // Load actionable notes of types: watch, plant, intent
+        // Load actionable notes across all entity types: watch, plant, intent
         const types = ['watch', 'plant', 'intent'];
         const allNotes = [];
         for (const t of types) {
           try {
-            const res = await api.get(`/api/v1/author-notes?entity_type=character&entity_id=*&note_type=${t}`);
+            const res = await api.get(`/api/v1/author-notes?note_type=${t}&limit=20`);
             if (res.data?.notes) allNotes.push(...res.data.notes);
           } catch { /* ignore individual failures */ }
         }
+        // Sort combined results by created_at descending
+        allNotes.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         setNotes(allNotes);
       } catch { /* ignore */ }
       setLoaded(true);
@@ -660,10 +830,10 @@ export default function NarrativePressureDashboard() {
     (async () => {
       try {
         const [evRes, relRes] = await Promise.all([
-          fetch(`${ENTANGLE_API}/events?resolved=false`).then(r => r.json()).catch(() => ({ events: [] })),
+          api.get('/api/v1/entanglements/events?resolved=false').catch(() => ({ data: { events: [] } })),
           api.get('/api/v1/feed-relationships').catch(() => ({ data: { relationships: [] } })),
         ]);
-        setEntangleEvents(evRes.events || []);
+        setEntangleEvents(evRes.data?.events || []);
         setFeedRels(relRes.data?.relationships || []);
       } catch { /* ignore */ }
       setPressureLoading(false);
@@ -755,7 +925,7 @@ export default function NarrativePressureDashboard() {
         {/* Row 3: Underground + Crossings */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
           <ZoneCard>
-            <UndergroundPanel events={calEvents} loading={calLoading} />
+            <UndergroundPanel />
           </ZoneCard>
           <ZoneCard>
             <CrossingTracker crossings={crossings} loading={crossingLoading} onConfirmGap={handleConfirmGap} />
