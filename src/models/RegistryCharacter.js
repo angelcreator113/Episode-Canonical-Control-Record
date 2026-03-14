@@ -144,6 +144,11 @@ module.exports = (sequelize) => {
     },
 
     /* ── Death Tracking ── */
+    intimate_eligible: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     is_alive: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
