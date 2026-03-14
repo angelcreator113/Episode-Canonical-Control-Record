@@ -51,9 +51,23 @@ const DETAIL_TABS = [
   { key: 'overview',      label: 'Overview' },
   { key: 'desire',        label: 'Desire' },
   { key: 'relationships', label: 'Relationships' },
+  { key: 'scenes',        label: 'Scenes' },
   { key: 'depth',         label: 'Depth' },
   { key: 'demographics',  label: 'Demographics' },
+  { key: 'evolution',     label: 'Evolution' },
 ];
+
+/* ── Fidelity pattern labels ───────────────────────────────────────── */
+const FIDELITY_LABELS = {
+  faithful_tested: { label: 'Faithful (Tested)', color: '#4ade80' },
+  faithful_untested: { label: 'Faithful (Untested)', color: '#86efac' },
+  emotionally_unfaithful: { label: 'Emotionally Unfaithful', color: '#fbbf24' },
+  physically_unfaithful: { label: 'Physically Unfaithful', color: '#f87171' },
+  serial_cheater: { label: 'Serial Cheater', color: '#ef4444' },
+  loyal_until_broken: { label: 'Loyal Until Broken', color: '#60a5fa' },
+  would_never: { label: 'Would Never', color: '#34d399' },
+  already_has: { label: 'Already Has', color: '#fb923c' },
+};
 
 /* ── Depth dimension config ──────────────────────────────────────────── */
 const DEPTH_DIMS = [
@@ -405,6 +419,22 @@ export default function WorldStudio() {
   });
   const [savingRel, setSavingRel] = useState(false);
 
+  /* ── Scenes ────────────────────────────────────────────────────────── */
+  const [charScenes,     setCharScenes]     = useState([]);
+  const [tensionPairs,   setTensionPairs]   = useState([]);
+  const [sceneGen,       setSceneGen]       = useState({ loading: false, charB: '', sceneType: 'hook_up', location: '' });
+  const [activeScene,    setActiveScene]    = useState(null);
+
+  /* ── Batches ──────────────────────────────────────────────────────── */
+  const [batches,        setBatches]        = useState([]);
+
+  /* ── Compare ──────────────────────────────────────────────────────── */
+  const [compareChar,    setCompareChar]    = useState(null);
+  const [compareDetail,  setCompareDetail]  = useState(null);
+
+  /* ── Deepen ───────────────────────────────────────────────────────── */
+  const [deepening,      setDeepening]      = useState(false);
+
   /* ── Toast ─────────────────────────────────────────────────────────── */
   const [toast, setToast] = useState(null);
   const flash = useCallback((msg, type = 'success') => {
@@ -564,6 +594,133 @@ export default function WorldStudio() {
     loadCharDetail(selectedChar);
   };
 
+  /* ── Scene loaders & actions ──────────────────────────────────────── */
+  const loadCharScenes = useCallback(async (charId) => {
+    try {
+      const r = await fetch(`${API}/world/scenes?character_id=${charId}`);
+      const d = await r.json();
+      setCharScenes(d.scenes || []);
+    } catch { setCharScenes([]); }
+  }, []);
+
+  const loadTensionPairs = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/world/tension-check`);
+      const d = await r.json();
+      setTensionPairs(d.pairs || []);
+    } catch { setTensionPairs([]); }
+  }, []);
+
+  const generateScene = async (charAId) => {
+    setSceneGen(p => ({ ...p, loading: true }));
+    try {
+      const r = await fetch(`${API}/world/scenes/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_a_id: charAId,
+          character_b_id: sceneGen.charB || undefined,
+          scene_type: sceneGen.sceneType,
+          location: sceneGen.location || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (d.scene) { setActiveScene(d.scene); flash('Scene generated'); loadCharScenes(charAId); }
+      else flash(d.error || 'Scene generation failed', 'error');
+    } catch (e) { flash(e.message, 'error'); }
+    finally { setSceneGen(p => ({ ...p, loading: false })); }
+  };
+
+  const approveScene = async (sceneId) => {
+    try {
+      const r = await fetch(`${API}/world/scenes/${sceneId}/approve`, { method: 'POST' });
+      const d = await r.json();
+      if (d.scene) { flash('Scene approved & written to StoryTeller'); setActiveScene(d.scene); if (selectedChar) loadCharScenes(selectedChar); }
+      else flash(d.error || 'Approve failed', 'error');
+    } catch (e) { flash(e.message, 'error'); }
+  };
+
+  const deleteScene = async (sceneId) => {
+    if (!window.confirm('Delete this scene draft?')) return;
+    await fetch(`${API}/world/scenes/${sceneId}`, { method: 'DELETE' });
+    flash('Scene deleted'); setActiveScene(null);
+    if (selectedChar) loadCharScenes(selectedChar);
+  };
+
+  // Load scenes when switching to scenes detail tab
+  useEffect(() => {
+    if (detailTab === 'scenes' && selectedChar) loadCharScenes(selectedChar);
+  }, [detailTab, selectedChar]);
+
+  /* ── Batch loader ────────────────────────────────────────────────── */
+  const loadBatches = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/world/batches`);
+      const d = await r.json();
+      setBatches(d.batches || []);
+    } catch { setBatches([]); }
+  }, []);
+
+  useEffect(() => { if (pageTab === 'characters' && !selectedChar) loadBatches(); }, [pageTab, selectedChar]);
+
+  /* ── Compare loader ──────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!compareChar) { setCompareDetail(null); return; }
+    fetch(`${API}/world/characters/${compareChar}`).then(r => r.json()).then(d => setCompareDetail(d.character || null)).catch(() => setCompareDetail(null));
+  }, [compareChar]);
+
+  /* ── AI Deepen ───────────────────────────────────────────────────── */
+  const deepenCharacter = async (charId) => {
+    setDeepening(true);
+    try {
+      const r = await fetch(`${API}/world/characters/${charId}/deepen`, { method: 'POST' });
+      const d = await r.json();
+      if (d.character) { flash('Character deepened with AI'); loadCharDetail(charId); }
+      else flash(d.error || 'Deepening failed', 'error');
+    } catch (e) { flash(e.message, 'error'); }
+    finally { setDeepening(false); }
+  };
+
+  /* ── Export ──────────────────────────────────────────────────────── */
+  const exportCharacter = (char) => {
+    const blob = new Blob([JSON.stringify(char, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `${(char.name || 'character').replace(/\s+/g, '_')}.json`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importCharacter = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const r = await fetch(`${API}/world/generate-ecosystem-confirm`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characters: [data], world_tag: worldTag, generation_notes: `Imported from ${file.name}` }),
+      });
+      const d = await r.json();
+      if (d.characters) { flash(`Imported ${data.name || 'character'}`); loadCharacters(); }
+      else flash(d.error || 'Import failed', 'error');
+    } catch (e) { flash('Invalid JSON file', 'error'); }
+    e.target.value = '';
+  };
+
+  /* ── Ecosystem balance warnings ─────────────────────────────────── */
+  const getEcosystemWarnings = () => {
+    if (characters.length < 3) return [];
+    const warnings = [];
+    const types = characters.map(c => c.character_type);
+    const sexualities = characters.map(c => (c.sexuality || '').toLowerCase()).filter(Boolean);
+    const fidelities = characters.map(c => c.fidelity_pattern).filter(Boolean);
+    if (!types.includes('antagonist') && !types.includes('rival')) warnings.push('No antagonist or rival — consider adding conflict');
+    if (!types.includes('love_interest') && !types.includes('one_night_stand')) warnings.push('No love interest — romantic tension missing');
+    if (!types.includes('mentor') && !types.includes('collaborator')) warnings.push('No mentor or collaborator — growth pathway missing');
+    if (!['spouse','partner','temptation','ex'].some(t => types.includes(t))) warnings.push('No fidelity tension characters (spouse/partner/temptation/ex)');
+    if (sexualities.length && sexualities.every(s => s === 'straight')) warnings.push('All characters are straight — consider diversity');
+    if (characters.filter(c => c.intimate_eligible).length === 0) warnings.push('No intimate-eligible characters');
+    if (fidelities.length && fidelities.every(f => f === 'faithful_untested')) warnings.push('No tested fidelity patterns — moral tension may be flat');
+    return warnings;
+  };
+
   /* ── Derived ───────────────────────────────────────────────────────── */
   const filtered = characters.filter(c => {
     if (charFilter !== 'all' && c.character_type !== charFilter) return false;
@@ -600,6 +757,7 @@ export default function WorldStudio() {
           <nav className="ws4-page-tabs">
             {[
               { key: 'characters',    label: 'Characters',    icon: '◈' },
+              { key: 'scenes',        label: 'Scenes',        icon: '🔥' },
               { key: 'feed',          label: 'The Feed',      icon: '📱' },
               { key: 'relationships', label: 'Relationships', icon: '🔗' },
             ].map(t => (
@@ -654,6 +812,116 @@ export default function WorldStudio() {
           )}
         </div>
       </div>
+
+      {/* ── SCENES TAB (Intimate Scene Studio) ─────────────────────── */}
+      {pageTab === 'scenes' && (
+        <div className="ws4-scenes-tab">
+          <div className="ws4-scenes-header">
+            <h2 className="ws4-section-title">Intimate Scene Studio</h2>
+            <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={loadTensionPairs}>Scan Tension</button>
+          </div>
+
+          {/* Tension pairs */}
+          {tensionPairs.length > 0 && (
+            <div className="ws4-tension-grid">
+              <SectionLabel color="pink">Tension Triggers</SectionLabel>
+              {tensionPairs.map((p, i) => (
+                <div key={i} className="ws4-tension-card">
+                  <div className="ws4-tension-names">{p.character_a_name} ↔ {p.character_b_name}</div>
+                  <div className="ws4-tension-badges">
+                    <Badge variant="intimate">{p.tension_state}</Badge>
+                    <Badge variant="default">{p.relationship_type}</Badge>
+                  </div>
+                  {p.situation && <div className="ws4-tension-situation">{p.situation}</div>}
+                  <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => {
+                    setSceneGen(g => ({ ...g, charB: p.character_b_id }));
+                    generateScene(p.character_a_id);
+                  }}>Generate Scene</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Scene reader */}
+          {activeScene && (
+            <div className="ws4-scene-reader">
+              <div className="ws4-scene-reader-header">
+                <h3>{activeScene.character_a_name} {activeScene.character_b_name ? `& ${activeScene.character_b_name}` : ''}</h3>
+                <div className="ws4-scene-meta">
+                  <Badge variant="default">{activeScene.scene_type?.replace(/_/g, ' ')}</Badge>
+                  <Badge variant="intimate">{activeScene.intensity}</Badge>
+                  <Badge variant={activeScene.status === 'approved' ? 'primary' : 'draft'}>{activeScene.status}</Badge>
+                </div>
+              </div>
+
+              {activeScene.approach_text && (
+                <div className="ws4-scene-beat">
+                  <div className="ws4-scene-beat-label">The Approach</div>
+                  <div className="ws4-scene-beat-text">{activeScene.approach_text}</div>
+                </div>
+              )}
+              {activeScene.scene_text && (
+                <div className="ws4-scene-beat ws4-scene-beat-main">
+                  <div className="ws4-scene-beat-label">The Scene</div>
+                  <div className="ws4-scene-beat-text">{activeScene.scene_text}</div>
+                </div>
+              )}
+              {activeScene.aftermath_text && (
+                <div className="ws4-scene-beat">
+                  <div className="ws4-scene-beat-label">The Aftermath</div>
+                  <div className="ws4-scene-beat-text">{activeScene.aftermath_text}</div>
+                </div>
+              )}
+
+              {activeScene.relationship_shift && (
+                <div className="ws4-scene-shift">
+                  <strong>What shifted:</strong> {activeScene.relationship_shift}
+                </div>
+              )}
+
+              <div className="ws4-scene-actions">
+                {activeScene.status === 'draft' && (
+                  <>
+                    <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => approveScene(activeScene.id)}>
+                      Approve & Write to StoryTeller
+                    </button>
+                    <button className="ws4-btn ws4-btn-danger ws4-btn-sm" onClick={() => deleteScene(activeScene.id)}>Delete</button>
+                  </>
+                )}
+                {activeScene.status === 'approved' && (
+                  <span className="ws4-scene-approved-note">Written to StoryTeller</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Quick generate */}
+          <div className="ws4-scene-generate-box">
+            <SectionLabel>Generate New Scene</SectionLabel>
+            <div className="ws4-scene-gen-form">
+              <select className="ws4-select" value={sceneGen.charB} onChange={e => setSceneGen(p => ({ ...p, charB: e.target.value }))}>
+                <option value="">Select Character B…</option>
+                {characters.filter(c => c.status === 'active' && c.intimate_eligible).map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <select className="ws4-select" value={sceneGen.sceneType} onChange={e => setSceneGen(p => ({ ...p, sceneType: e.target.value }))}>
+                {['hook_up','first_encounter','charged_moment','recurring','one_night_stand'].map(t => (
+                  <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+              <input className="ws4-input" placeholder="Location (optional)" value={sceneGen.location} onChange={e => setSceneGen(p => ({ ...p, location: e.target.value }))} />
+              <button className="ws4-btn ws4-btn-primary" onClick={() => {
+                const charA = characters.find(c => c.status === 'active' && c.intimate_eligible && c.id !== sceneGen.charB);
+                if (charA) generateScene(charA.id);
+                else flash('No eligible character A found', 'error');
+              }} disabled={sceneGen.loading}>
+                {sceneGen.loading ? '⏳ Generating…' : '🔥 Generate Scene'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── FEED TAB ────────────────────────────────────────────────── */}
       {pageTab === 'feed' && (
@@ -798,6 +1066,17 @@ export default function WorldStudio() {
               <div className="ws4-dashboard-heading">
                 {worldTag === 'all' ? '⊞ All Worlds' : `${curWorld?.icon} ${curWorld?.label}`} — Ecosystem Overview
               </div>
+              {/* Ecosystem Balance Warnings */}
+              {(() => {
+                const warnings = getEcosystemWarnings();
+                return warnings.length > 0 ? (
+                  <div className="ws4-warnings">
+                    <div className="ws4-warnings-title">⚠ Ecosystem Balance</div>
+                    {warnings.map((w, i) => <div key={i} className="ws4-warning-item">{w}</div>)}
+                  </div>
+                ) : null;
+              })()}
+
               <div className="ws4-dash-label">Character Types</div>
               <div className="ws4-type-grid">
                 {uniqueTypes.map(t => {
@@ -814,6 +1093,58 @@ export default function WorldStudio() {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Relationship Web (text-based visualizer) */}
+              {characters.length >= 2 && (
+                <>
+                  <div className="ws4-dash-label">Relationship Web</div>
+                  <div className="ws4-rel-web">
+                    {characters.filter(c => c.relationship_graph && (
+                      typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : c.relationship_graph
+                    ).length > 0).slice(0, 12).map(c => {
+                      const rels = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []);
+                      return (
+                        <div key={c.id} className="ws4-rel-web-node" onClick={() => { setSelectedChar(c.id); }}>
+                          <div className="ws4-rel-web-name">{c.name}</div>
+                          <div className="ws4-rel-web-links">
+                            {rels.slice(0, 3).map((r, i) => (
+                              <span key={i} className="ws4-rel-web-link">→ {r.character_name || '?'} <em>({r.relationship_type})</em></span>
+                            ))}
+                            {rels.length > 3 && <span className="ws4-rel-web-more">+{rels.length - 3} more</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Batch History */}
+              {batches.length > 0 && (
+                <>
+                  <div className="ws4-dash-label">Generation History</div>
+                  <div className="ws4-batch-list">
+                    {batches.slice(0, 5).map(b => (
+                      <div key={b.id} className="ws4-batch-card">
+                        <div className="ws4-batch-meta">
+                          <span className="ws4-batch-date">{new Date(b.created_at).toLocaleDateString()}</span>
+                          <Badge variant="default">{b.character_count} characters</Badge>
+                          <Badge variant="draft">{b.series_label}</Badge>
+                        </div>
+                        {b.generation_notes && <div className="ws4-batch-notes">{b.generation_notes.substring(0, 200)}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Import button */}
+              <div className="ws4-dash-actions">
+                <label className="ws4-btn ws4-btn-outline ws4-btn-sm">
+                  ↙ Import Character JSON
+                  <input type="file" accept=".json" onChange={importCharacter} style={{ display: 'none' }} />
+                </label>
               </div>
             </div>
           )}
@@ -850,6 +1181,13 @@ export default function WorldStudio() {
                   {!editMode ? (
                     <>
                       <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => { setEditForm({ ...charDetail }); setEditMode(true); }}>✎ Edit</button>
+                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => deepenCharacter(charDetail.id)} disabled={deepening}>
+                        {deepening ? '⏳' : '🧠'} Deepen
+                      </button>
+                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => exportCharacter(charDetail)}>↗ Export</button>
+                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => setCompareChar(compareChar ? null : charDetail.id)}>
+                        {compareChar ? '✕ Close Compare' : '⇄ Compare'}
+                      </button>
                       {charDetail.status !== 'archived' && (
                         <button className="ws4-btn ws4-btn-ghost ws4-btn-sm ws4-btn-muted" onClick={() => archiveChar(charDetail.id)}>Archive</button>
                       )}
@@ -927,6 +1265,52 @@ export default function WorldStudio() {
                         )}
                         {charDetail.dynamic && (
                           <FieldCard label="Dynamic" value={charDetail.dynamic} />
+                        )}
+
+                        {/* Fidelity & Moral Profile */}
+                        {(charDetail.fidelity_pattern || charDetail.moral_code || charDetail.relationship_status) && (
+                          <>
+                            <SectionLabel color="lav">Moral Profile</SectionLabel>
+                            <div className="ws4-moral-grid">
+                              {charDetail.relationship_status && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Status</div>
+                                  <div className="ws4-moral-value">
+                                    {charDetail.relationship_status.replace(/_/g, ' ')}
+                                    {charDetail.committed_to && <span className="ws4-moral-committed"> → {charDetail.committed_to}</span>}
+                                  </div>
+                                </div>
+                              )}
+                              {charDetail.fidelity_pattern && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Fidelity</div>
+                                  <div className="ws4-moral-value">
+                                    <span className="ws4-fidelity-badge" style={{ borderColor: FIDELITY_LABELS[charDetail.fidelity_pattern]?.color || '#999' }}>
+                                      {FIDELITY_LABELS[charDetail.fidelity_pattern]?.label || charDetail.fidelity_pattern.replace(/_/g, ' ')}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              {charDetail.moral_code && (
+                                <div className="ws4-moral-card ws4-moral-card-wide">
+                                  <div className="ws4-moral-label">Moral Code</div>
+                                  <div className="ws4-moral-value">{charDetail.moral_code}</div>
+                                </div>
+                              )}
+                              {charDetail.sexuality && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Sexuality</div>
+                                  <div className="ws4-moral-value">{charDetail.sexuality}</div>
+                                </div>
+                              )}
+                              {charDetail.gender && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Gender</div>
+                                  <div className="ws4-moral-value">{charDetail.gender}</div>
+                                </div>
+                              )}
+                            </div>
+                          </>
                         )}
 
                         {(charDetail.origin_story || charDetail.public_persona || charDetail.private_reality) && (
@@ -1039,6 +1423,112 @@ export default function WorldStudio() {
                       <DemographicsPanel charDetail={charDetail} />
                     )}
 
+                    {/* ── SCENES (per-character) ─────────────────── */}
+                    {detailTab === 'scenes' && (
+                      <div className="ws4-char-scenes">
+                        {charScenes.length === 0 ? (
+                          <div className="ws4-tab-empty">
+                            No scenes yet.
+                            {charDetail.intimate_eligible && (
+                              <button className="ws4-btn ws4-btn-primary ws4-btn-sm" style={{ marginTop: 12 }} onClick={() => generateScene(charDetail.id)}>
+                                🔥 Generate First Scene
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            {charScenes.map(s => (
+                              <div key={s.id} className={`ws4-scene-card ${activeScene?.id === s.id ? 'ws4-scene-card-active' : ''}`} onClick={() => setActiveScene(s)}>
+                                <div className="ws4-scene-card-top">
+                                  <Badge variant="default">{s.scene_type?.replace(/_/g, ' ')}</Badge>
+                                  <Badge variant="intimate">{s.intensity}</Badge>
+                                  <Badge variant={s.status === 'approved' ? 'primary' : 'draft'}>{s.status}</Badge>
+                                </div>
+                                <div className="ws4-scene-card-preview">{(s.approach_text || s.scene_text || '').substring(0, 120)}…</div>
+                                <div className="ws4-scene-card-date">{new Date(s.created_at).toLocaleDateString()}</div>
+                              </div>
+                            ))}
+                            {charDetail.intimate_eligible && (
+                              <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={() => generateScene(charDetail.id)} disabled={sceneGen.loading}>
+                                + Generate Another Scene
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {/* Inline scene reader */}
+                        {activeScene && (
+                          <div className="ws4-scene-inline-reader">
+                            <div className="ws4-scene-beat-label">The Approach</div>
+                            <div className="ws4-scene-beat-text">{activeScene.approach_text}</div>
+                            <div className="ws4-scene-beat-label">The Scene</div>
+                            <div className="ws4-scene-beat-text">{activeScene.scene_text}</div>
+                            <div className="ws4-scene-beat-label">The Aftermath</div>
+                            <div className="ws4-scene-beat-text">{activeScene.aftermath_text}</div>
+                            {activeScene.relationship_shift && <div className="ws4-scene-shift"><strong>Shift:</strong> {activeScene.relationship_shift}</div>}
+                            <div className="ws4-scene-actions">
+                              {activeScene.status === 'draft' && (
+                                <>
+                                  <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => approveScene(activeScene.id)}>Approve</button>
+                                  <button className="ws4-btn ws4-btn-danger ws4-btn-sm" onClick={() => deleteScene(activeScene.id)}>Delete</button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── EVOLUTION TIMELINE ──────────────────────── */}
+                    {detailTab === 'evolution' && (
+                      <div className="ws4-evolution">
+                        {charDetail.registry_character_id ? (
+                          <>
+                            <SectionLabel>Character Evolution</SectionLabel>
+                            <div className="ws4-evolution-timeline">
+                              <div className="ws4-evo-entry">
+                                <div className="ws4-evo-dot" />
+                                <div className="ws4-evo-content">
+                                  <div className="ws4-evo-date">Created {new Date(charDetail.created_at).toLocaleDateString()}</div>
+                                  <div className="ws4-evo-label">Generated as {charDetail.character_type?.replace(/_/g, ' ')}</div>
+                                  <div className="ws4-evo-detail">Status: {charDetail.status} · World: {charDetail.world_tag}</div>
+                                </div>
+                              </div>
+                              {charDetail.status === 'active' && (
+                                <div className="ws4-evo-entry">
+                                  <div className="ws4-evo-dot ws4-evo-dot-active" />
+                                  <div className="ws4-evo-content">
+                                    <div className="ws4-evo-label">Activated — now part of the living world</div>
+                                  </div>
+                                </div>
+                              )}
+                              {charDetail.is_alive === false && (
+                                <div className="ws4-evo-entry">
+                                  <div className="ws4-evo-dot ws4-evo-dot-dead" />
+                                  <div className="ws4-evo-content">
+                                    <div className="ws4-evo-label">† Deceased</div>
+                                    {charDetail.death_cause && <div className="ws4-evo-detail">{charDetail.death_cause}</div>}
+                                  </div>
+                                </div>
+                              )}
+                              {charScenes.length > 0 && charScenes.map(s => (
+                                <div key={s.id} className="ws4-evo-entry">
+                                  <div className="ws4-evo-dot ws4-evo-dot-scene" />
+                                  <div className="ws4-evo-content">
+                                    <div className="ws4-evo-date">{new Date(s.created_at).toLocaleDateString()}</div>
+                                    <div className="ws4-evo-label">Scene: {s.scene_type?.replace(/_/g, ' ')} ({s.intensity})</div>
+                                    {s.relationship_shift && <div className="ws4-evo-detail">{s.relationship_shift}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="ws4-tab-empty">Activate this character to begin tracking evolution.</div>
+                        )}
+                      </div>
+                    )}
+
                   </div>
                 </>
               )}
@@ -1065,6 +1555,10 @@ export default function WorldStudio() {
                     { key: 'public_persona',           label: 'Public Persona',                     long: true },
                     { key: 'private_reality',          label: 'Private Reality',                    long: true },
                     { key: 'arc_role',                 label: 'Arc Role',                           long: true },
+                    { key: 'intimate_dynamic',         label: 'Intimate Dynamic',                   long: true },
+                    { key: 'what_lala_feels',          label: `What ${curWorld.protagonist} Feels`,  long: true },
+                    { key: 'moral_code',               label: 'Moral Code',                         long: true },
+                    { key: 'exit_reason',              label: 'Exit Reason',                        long: true },
                   ].map(f => (
                     <div key={f.key} className="ws4-edit-row">
                       <label className="ws4-edit-label">{f.label}</label>
@@ -1074,6 +1568,46 @@ export default function WorldStudio() {
                       }
                     </div>
                   ))}
+
+                  <div className="ws4-edit-section">Moral & Relationship</div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Sexuality</label>
+                    <select className="ws4-select" value={editForm.sexuality || ''} onChange={e => setEditForm(p => ({ ...p, sexuality: e.target.value }))}>
+                      <option value="">—</option>
+                      {['straight','gay','lesbian','bisexual','pansexual','queer','fluid'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Relationship Status</label>
+                    <select className="ws4-select" value={editForm.relationship_status || ''} onChange={e => setEditForm(p => ({ ...p, relationship_status: e.target.value }))}>
+                      <option value="">—</option>
+                      {['single','dating','engaged','married','divorced','separated','its_complicated'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                    </select>
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Committed To</label>
+                    <input className="ws4-input" value={editForm.committed_to || ''} onChange={e => setEditForm(p => ({ ...p, committed_to: e.target.value }))} placeholder="Name of person they're committed to" />
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Fidelity Pattern</label>
+                    <select className="ws4-select" value={editForm.fidelity_pattern || ''} onChange={e => setEditForm(p => ({ ...p, fidelity_pattern: e.target.value }))}>
+                      <option value="">—</option>
+                      {Object.entries(FIDELITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Tension Type</label>
+                    <select className="ws4-select" value={editForm.tension_type || ''} onChange={e => setEditForm(p => ({ ...p, tension_type: e.target.value }))}>
+                      <option value="">—</option>
+                      {['romantic','professional','creative','power','unspoken','moral','fidelity','temptation','betrayal','guilt'].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-checkbox-label">
+                      <input type="checkbox" checked={editForm.intimate_eligible || false} onChange={e => setEditForm(p => ({ ...p, intimate_eligible: e.target.checked }))} />
+                      Intimate Eligible
+                    </label>
+                  </div>
 
                   <div className="ws4-edit-section">Identity</div>
                   <div className="ws4-edit-row">
@@ -1126,6 +1660,49 @@ export default function WorldStudio() {
           )}
         </main>
       </div>
+
+      {/* ═══ COMPARE PANEL ═══════════════════════════════════════════ */}
+      {compareChar && charDetail && compareDetail && compareDetail.id !== charDetail.id && (
+        <div className="ws4-compare-panel">
+          <div className="ws4-compare-header">
+            <span>⇄ Comparing</span>
+            <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => setCompareChar(null)}>✕ Close</button>
+          </div>
+          <div className="ws4-compare-grid">
+            {[charDetail, compareDetail].map(c => (
+              <div key={c.id} className="ws4-compare-col">
+                <div className="ws4-compare-name">{c.name}</div>
+                <div className="ws4-compare-sub">{c.character_type?.replace(/_/g, ' ')} · {c.occupation}</div>
+                {[
+                  ['Aesthetic', c.aesthetic],
+                  ['Surface Want', c.surface_want],
+                  ['Real Want', c.real_want],
+                  ['Dynamic', c.dynamic],
+                  ['Sexuality', c.sexuality],
+                  ['Fidelity', FIDELITY_LABELS[c.fidelity_pattern]?.label || c.fidelity_pattern],
+                  ['Moral Code', c.moral_code],
+                  ['How They Love', c.how_they_love],
+                  ['Tension', c.tension_type],
+                  ['Arc Role', c.arc_role],
+                ].filter(([, v]) => v).map(([label, val]) => (
+                  <div key={label} className="ws4-compare-field">
+                    <div className="ws4-compare-field-label">{label}</div>
+                    <div className="ws4-compare-field-value">{val}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="ws4-compare-pick">
+            <span>Compare with:</span>
+            <select className="ws4-select" value={compareChar} onChange={e => setCompareChar(e.target.value)}>
+              {characters.filter(c => c.id !== charDetail.id).map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* ═══ PREVIEW MODAL ════════════════════════════════════════════ */}
       {showPreview && (

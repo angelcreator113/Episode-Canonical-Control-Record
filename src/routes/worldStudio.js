@@ -953,6 +953,71 @@ router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /world/characters/:id/deepen — AI fills in missing fields
+router.post('/world/characters/:id/deepen', optionalAuth, async (req, res) => {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+    }
+    const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
+    if (!char) return res.status(404).json({ error: 'Character not found' });
+
+    const wCfg = WORLD_CONFIGS[char.world_tag] || WORLD_CONFIGS['lalaverse'];
+
+    // Identify empty fields to fill
+    const fillable = ['origin_story','public_persona','private_reality','moral_code','fidelity_pattern',
+      'attracted_to','how_they_love','desire_they_wont_admit','intimate_style','intimate_dynamic','what_lala_feels',
+      'aesthetic','arc_role','exit_reason','how_they_meet','dynamic'];
+    const missing = fillable.filter(f => !char[f]);
+    if (missing.length === 0) return res.json({ character: char, deepened: false, message: 'All fields already filled' });
+
+    const result = await claude(
+      wCfg.system_prompt,
+      `Deepen this existing character by filling in missing fields. Only generate the MISSING fields listed below.
+
+CHARACTER: ${char.name}
+Type: ${char.character_type}
+Occupation: ${char.occupation || 'unknown'}
+Age: ${char.age_range || 'unknown'}
+Sexuality: ${char.sexuality || 'unknown'}
+Existing aesthetic: ${char.aesthetic || 'none'}
+Existing dynamic: ${char.dynamic || 'none'}
+Intimate eligible: ${char.intimate_eligible}
+
+MISSING FIELDS TO FILL:
+${missing.map(f => `- ${f}`).join('\n')}
+
+Return JSON only — an object with ONLY the missing field keys and their values. Be specific, vivid, and true to this character's type.`,
+      4000
+    );
+
+    const parsed = parseJSON(result);
+    if (!parsed) return res.status(500).json({ error: 'Deepen failed — Claude returned unparseable response' });
+
+    // Update only the fields that were missing
+    const updates = [];
+    const replacements = { id: req.params.id };
+    for (const field of missing) {
+      if (parsed[field]) {
+        updates.push(`${field} = :${field}`);
+        replacements[field] = parsed[field];
+      }
+    }
+    if (updates.length > 0) {
+      await sequelize.query(
+        `UPDATE world_characters SET ${updates.join(', ')}, updated_at = NOW() WHERE id = :id`,
+        { replacements, type: sequelize.QueryTypes.UPDATE }
+      );
+    }
+
+    const [updated] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
+    res.json({ character: updated, deepened: true, fields_filled: updates.length });
+  } catch (err) {
+    console.error('deepen error:', err.message);
+    res.status(err.aiStatus || 500).json({ error: err.message });
+  }
+});
+
 // DELETE /world/characters/:id
 router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
   try {
