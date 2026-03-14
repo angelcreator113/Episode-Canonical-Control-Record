@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { optionalAuth } = require('../middleware/auth');
 const db = require('../models');
-const { analyzeWritingPatterns } = require('../utils/scriptParser');
 
 /**
  * Get or create show configuration

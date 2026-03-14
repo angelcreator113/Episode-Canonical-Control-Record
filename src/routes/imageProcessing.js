@@ -14,7 +14,7 @@ const router = express.Router();
 const FormData = require('form-data');
 const fetch = require('node-fetch');
 const { models } = require('../models');
-const { uploadToS3 } = require('../services/s3Service');
+const s3Service = require('../services/S3Service');
 
 /**
  * POST /api/v1/assets/:id/remove-background
@@ -100,7 +100,9 @@ router.post('/:id/remove-background', async (req, res) => {
     // Upload to S3
     const s3Key = `processed/${asset.id}/no-bg-${Date.now()}.png`;
     console.log('📤 Uploading to S3:', s3Key);
-    const s3Url = await uploadToS3(imageBuffer, s3Key, 'image/png');
+    const bucket = process.env.AWS_S3_BUCKET || 'episode-metadata-assets';
+    const s3Result = await s3Service.uploadFile(bucket, s3Key, imageBuffer, { ContentType: 'image/png' });
+    const s3Url = s3Result.Location || `https://${bucket}.s3.amazonaws.com/${s3Key}`;
     console.log('✅ Uploaded to S3:', s3Url);
 
     // Update asset with processed URL
