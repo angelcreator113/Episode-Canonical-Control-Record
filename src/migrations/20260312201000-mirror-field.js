@@ -9,6 +9,10 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const desc = await queryInterface.describeTable('social_profiles');
+
+    if (desc.justawoman_mirror) return; // Already applied
+
     await queryInterface.addColumn('social_profiles', 'justawoman_mirror', {
       type: Sequelize.ENUM(
         'ambition', 'desire_unnamed', 'visibility_wound', 'grief',

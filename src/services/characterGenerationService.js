@@ -51,6 +51,7 @@ const DEEP_PROFILE_DIMENSIONS = [
  */
 async function generateFullCharacter({ spark, worldContext, bookContext, existingCharacters = [] }) {
   const { name, vibe, role } = spark;
+  const age = spark.age || null;
 
   // Build the world context string
   const worldString = worldContext
@@ -72,7 +73,7 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
     familyTree,
     belongingMap,
   ] = await Promise.all([
-    generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString }),
+    generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age }),
     determinesSocialPresence({ name, vibe, role, worldString }),
     generateFamilyTree({ name, vibe, role, worldString }),
     generateBelongingMap({ name, vibe, role, worldString }),
@@ -137,10 +138,16 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
 // INTERIOR ARCHITECTURE
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString }) {
+async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age }) {
+  const isMinor = age != null && age < 18;
+  const minorRule = isMinor
+    ? `\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${age}). Do NOT generate "sexuality_desire" content. Set it to: "Dimension deferred — character is a minor."\n`
+    : '';
+
   const prompt = `${worldString}
 ${bookString}
 ${castString}
+${minorRule}
 
 You are generating the complete interior architecture for a character.
 
@@ -227,7 +234,12 @@ Return ONLY the JSON object. No preamble. No explanation.`;
   const clean = text.replace(/```json|```/g, '').trim();
 
   try {
-    return JSON.parse(clean);
+    const parsed = JSON.parse(clean);
+    // Hard enforcement: strip sexuality_desire for minors regardless of what the model returned
+    if (isMinor && parsed.deep_profile) {
+      parsed.deep_profile.sexuality_desire = 'Dimension deferred — character is a minor.';
+    }
+    return parsed;
   } catch {
     console.error('[characterGenerationService] Interior architecture parse failed:', clean.slice(0, 200));
     return {};

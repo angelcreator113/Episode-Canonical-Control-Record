@@ -6,7 +6,6 @@ import { episodeService } from '../services/episodeService';
 import { showService } from '../services/showService';
 import universeService from '../services/universeService';
 import storytellerService from '../services/storytellerService';
-import AmberPresence from '../components/AmberPresence';
 import './Home.css';
 
 const CHIP_COLORS = ['pink', 'purple', 'blue'];
@@ -111,9 +110,6 @@ function Home() {
             <span className="home-hero__date">{today}</span>
           </div>
         </header>
-
-        {/* ─── Amber Presence ─── */}
-        <AmberPresence page="dashboard" className="hp-amber" />
 
         {/* ─── Universe ─── */}
         <section className="hp-section">

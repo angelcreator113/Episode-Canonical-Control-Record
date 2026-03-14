@@ -76,7 +76,6 @@ const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
 const UniversePage = lazy(() => import('./pages/UniversePage'));
 const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
-const BookOverview = lazy(() => import('./pages/BookOverview'));
 const RelationshipEngine = lazy(() => import('./pages/RelationshipEngine'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
@@ -85,13 +84,15 @@ const StoryEngine = lazy(() => import('./pages/StoryEngine'));
 const StoryEvaluationEngine = lazy(() => import('./pages/StoryEvaluationEngine'));
 const StoryProposer = lazy(() => import('./pages/StoryProposer'));
 const NovelAssembler = lazy(() => import('./pages/NovelAssembler'));
+const StoryThreadTracker = lazy(() => import('./pages/StoryThreadTracker'));
+const StoryCalendar = lazy(() => import('./pages/StoryCalendar'));
+const StoryHealthDashboard = lazy(() => import('./pages/StoryHealthDashboard'));
 const CharacterGenerator = lazy(() => import('./pages/CharacterGenerator'));
 const CharacterProfile = lazy(() => import('./pages/CharacterProfilePage'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
-const EpisodeWorkspace = lazy(() => import('./pages/EpisodeWorkspace'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
@@ -99,8 +100,21 @@ const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPa
 const SocialProfileGenerator = lazy(() => import('./pages/SocialProfileGenerator'));
 const NarrativeControlCenter = lazy(() => import('./pages/NarrativeControlCenter'));
 const AmberCommandCenter = lazy(() => import('./pages/AmberCommandCenter'));
+const AICostTracker = lazy(() => import('./pages/AICostTracker'));
+const CFOAgent = lazy(() => import('./pages/CFOAgent'));
+const SiteOrganizer = lazy(() => import('./pages/SiteOrganizer'));
+const DesignAgent = lazy(() => import('./pages/DesignAgent'));
 const NarrativePressureDashboard = lazy(() => import('./pages/NarrativePressureDashboard'));
 const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
+const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
+const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
+const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
+const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
+const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
+const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
+const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
+const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
+const ShowBrain = lazy(() => import('./pages/ShowBrain'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -115,6 +129,8 @@ import ToastProvider from './components/ToastContainer';
 import OrientationToast from './components/OrientationToast';
 import LoadingSkeleton from './components/LoadingSkeleton';
 import AppAssistant from './components/AppAssistant';
+import PullToRefresh from './components/PullToRefresh';
+import CommandPalette from './components/CommandPalette';
 
 import './App.css';
 
@@ -222,9 +238,11 @@ function AppContent() {
   const isChapterJourney = location.pathname.startsWith('/chapter/');
   const isStoryEngine = location.pathname === '/story-engine';
   const isStoryEval = location.pathname === '/story-evaluation';
+  const isStoryThreads = location.pathname === '/story-threads';
+  const isStoryCalendar = location.pathname === '/story-calendar';
   // Social Import is now embedded in Universe page as a tab
   const isSetupWizard = location.pathname === '/setup';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isSetupWizard;
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isStoryThreads || isStoryCalendar || isSetupWizard;
   const hideFooter = isFullScreen;
 
   return (
@@ -363,6 +381,33 @@ function AppContent() {
           
           {/* PNOS Relationships — Unified Tree + Web + Candidates + List */}
           <Route path="/relationships" element={<RelationshipEngine />} />
+
+          {/* Cultural Calendar — LalaVerse Social & Industry Calendar */}
+          <Route path="/cultural-calendar" element={<CulturalCalendar />} />
+
+          {/* Influencer Systems — Archetypes, Relationships, Economy, Trends, Momentum, Legacy */}
+          <Route path="/influencer-systems" element={<InfluencerSystems />} />
+
+          {/* World Infrastructure — Cities, Universities, Corporations, 50 Legends, The Loop */}
+          <Route path="/world-infrastructure" element={<WorldInfrastructure />} />
+
+          {/* Social Timeline Engine — Feed layers, viral spread, engagement, drama, cultural memory */}
+          <Route path="/social-timeline" element={<SocialTimeline />} />
+
+          {/* Social Personality Engine — Traits, archetypes, motivations, reputation, arcs, algorithm */}
+          <Route path="/social-personality" element={<SocialPersonality />} />
+
+          {/* Character Life Simulation — Career stages, paths, relationships, rivalries, migration, persona */}
+          <Route path="/character-life-simulation" element={<CharacterLifeSimulation />} />
+
+          {/* Cultural Memory System — Archives, legends, feuds, nostalgia, time capsules, influence rankings */}
+          <Route path="/cultural-memory" element={<CulturalMemory />} />
+
+          {/* Character Depth Engine — Body, money, time, cosmology, blind spot, joy, change capacity */}
+          <Route path="/character-depth-engine" element={<CharacterDepthEngine />} />
+
+          {/* Show Brain — Master Intelligence Document: identity, world rules, stats, economy, beats, 5 brains, canon */}
+          <Route path="/show-brain" element={<ShowBrain />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
@@ -375,6 +420,15 @@ function AppContent() {
 
           {/* Scene Intelligence Engine — Propose + Character Growth */}
           <Route path="/scene-proposer" element={<StoryProposer />} />
+
+          {/* Story Thread Tracker — Threads, Memories, Continuity, Voice */}
+          <Route path="/story-threads" element={<StoryThreadTracker />} />
+
+          {/* Story Calendar — Timeline events + clock markers */}
+          <Route path="/story-calendar" element={<StoryCalendar />} />
+
+          {/* Story Health Dashboard — Quality metrics + velocity + arc progress */}
+          <Route path="/story-health" element={<StoryHealthDashboard />} />
 
           {/* World Studio — LalaVerse world character + scene hub */}
           <Route path="/world-studio" element={<WorldStudio />} />
@@ -403,6 +457,10 @@ function AppContent() {
           
           {/* Analytics */}
           <Route path="/analytics/decisions" element={<DecisionAnalyticsDashboard />} />
+          <Route path="/ai-costs" element={<AICostTracker />} />
+          <Route path="/cfo" element={<CFOAgent />} />
+          <Route path="/site-organizer" element={<SiteOrganizer />} />
+          <Route path="/design-agent" element={<DesignAgent />} />
           
           {/* Admin */}
           <Route path="/admin" element={<AdminPanel />} />
@@ -444,9 +502,72 @@ function AppContent() {
       {/* Orientation awareness toast */}
       <OrientationToast />
 
-      {/* AI Assistant — floating chat bubble */}
+      {/* Pull-to-refresh for standalone PWA (no browser refresh button) */}
+      <PullToRefresh />
+
+      {/* Global Command Palette — Ctrl+K cross-system search */}
+      <CommandPalette />
+
+      {/* AI Assistant — top-right corner */}
       <AppAssistant
-        appContext={{ currentView: location.pathname }}
+        appContext={(() => {
+          const p = location.pathname;
+          const pageNames = {
+            '/': 'Home Dashboard',
+            '/universe': 'Universe Hub',
+            '/character-registry': 'Character Registry',
+            '/relationships': 'Relationship Engine',
+            '/continuity': 'Continuity Engine',
+            '/story-engine': 'Story Engine',
+            '/story-evaluation': 'Story Evaluation Engine',
+            '/storyteller': 'Storyteller Book Editor',
+            '/world-studio': 'World Studio',
+            '/feed': 'Social Feed Profiles',
+            '/social-timeline': 'Social Timeline Engine',
+            '/social-personality': 'Social Personality Engine',
+            '/feed-relationships': 'Feed Relationship Map',
+            '/cultural-calendar': 'Cultural Calendar',
+            '/influencer-systems': 'Influencer Systems',
+            '/world-infrastructure': 'World Infrastructure',
+            '/character-life-simulation': 'Character Life Simulation',
+            '/cultural-memory': 'Cultural Memory',
+            '/character-depth-engine': 'Character Depth Engine',
+            '/show-brain': 'Show Brain',
+            '/narrative-control': 'Narrative Control Center',
+            '/scene-proposer': 'Scene Proposer',
+            '/pressure': 'Narrative Pressure Dashboard',
+            '/assembler': 'Novel Assembler',
+            '/press': 'LalaVerse Press',
+            '/wardrobe': 'Wardrobe',
+            '/template-studio': 'Template Studio',
+            '/amber': 'Amber Command Center',
+            '/settings': 'Settings',
+            '/setup': 'Setup Wizard',
+          };
+          // Extract IDs from URL for deeper context
+          const charMatch = p.match(/\/character\/([^/]+)/);
+          const bookMatch = p.match(/\/(?:books?|write|chapter)\/([^/]+)/);
+          const chapterMatch = p.match(/\/(?:write|chapter)\/[^/]+\/([^/]+)/);
+          const showMatch = p.match(/\/shows\/([^/]+)/);
+          const therapyMatch = p.match(/\/therapy\/([^/]+)/);
+          const episodeMatch = p.match(/\/episodes\/([^/]+)/);
+          const ctx = {
+            currentView: p,
+            pageName: pageNames[p] || (charMatch ? 'Character Profile' : bookMatch ? 'Book Editor' : showMatch ? 'Show Detail' : episodeMatch ? 'Episode Detail' : p),
+          };
+          if (charMatch) ctx.activeCharacterId = charMatch[1];
+          if (bookMatch) ctx.activeBookId = bookMatch[1];
+          if (chapterMatch) ctx.activeChapterId = chapterMatch[1];
+          if (showMatch) ctx.activeShowId = showMatch[1];
+          if (therapyMatch) ctx.activeRegistryId = therapyMatch[1];
+          if (episodeMatch && episodeMatch[1] !== 'create') ctx.activeEpisodeId = episodeMatch[1];
+          if (currentEpisodeId) ctx.currentEpisodeId = currentEpisodeId;
+          // Pass URL search params for tab context
+          const sp = new URLSearchParams(location.search);
+          if (sp.get('tab')) ctx.activeTab = sp.get('tab');
+          if (sp.get('view')) ctx.activeView = sp.get('view');
+          return ctx;
+        })()}
         onNavigate={(path) => navigate(path)}
         onRefresh={() => window.dispatchEvent(new Event('app-refresh'))}
       />

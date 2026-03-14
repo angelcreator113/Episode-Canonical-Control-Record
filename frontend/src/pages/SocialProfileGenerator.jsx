@@ -1,1696 +1,808 @@
 /**
  * SocialProfileGenerator.jsx — The Feed
- * Parasocial Creator Profile Generator
+ * Prime Studios · LalaVerse
  *
- * Architecture: Same as Character Spark — minimum input, maximum output.
- * Three fields: handle, platform, vibe_sentence → full AI-generated profile.
- *
- * Props:
- *   embedded  — boolean, if true suppresses page wrapper (for WorldStudio tab)
- *   worldTag  — optional world filter inherited from WorldStudio
+ * Refactored for Prime Studios light theme:
+ *   #d4789a (pink) · #7ab3d4 (blue) · #a889c8 (lavender)
  */
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
-import './SocialProfileGenerator.css';
 
 const API = '/api/v1/social-profiles';
 
+// ── Prime Studios Design Tokens ────────────────────────────────────────
+const C = {
+  pink:       '#d4789a',
+  pinkLight:  '#fce8f0',
+  pinkMid:    '#f0b8cc',
+  blue:       '#7ab3d4',
+  blueLight:  '#e8f3fa',
+  lavender:   '#a889c8',
+  lavLight:   '#ede6f7',
+  ink:        '#1a1625',
+  inkMid:     '#4a3f5c',
+  inkLight:   '#7a6e8a',
+  surface:    '#ffffff',
+  surfaceAlt: '#faf8fc',
+  border:     '#ede8f5',
+  shadow:     '0 2px 16px rgba(168,137,200,0.10)',
+  shadowMd:   '0 6px 32px rgba(168,137,200,0.15)',
+  radius:     '12px',
+  radiusSm:   '8px',
+  font:       "'DM Sans', 'Segoe UI', sans-serif",
+};
+
 const PLATFORMS = [
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'tiktok',    label: 'TikTok' },
-  { value: 'youtube',   label: 'YouTube' },
-  { value: 'twitter',   label: 'Twitter / X' },
-  { value: 'onlyfans',  label: 'OnlyFans' },
-  { value: 'twitch',    label: 'Twitch' },
-  { value: 'substack',  label: 'Substack' },
-  { value: 'multi',     label: 'Multi-Platform' },
+  { value:'instagram', label:'Instagram' },
+  { value:'tiktok',   label:'TikTok' },
+  { value:'youtube',  label:'YouTube' },
+  { value:'twitter',  label:'Twitter / X' },
+  { value:'onlyfans', label:'OnlyFans' },
+  { value:'twitch',   label:'Twitch' },
+  { value:'substack', label:'Substack' },
+  { value:'multi',    label:'Multi-Platform' },
 ];
 
 const ARCHETYPE_LABELS = {
-  polished_curator:   'Polished Curator',
-  messy_transparent:  'Messy Transparent',
-  soft_life:          'Soft Life',
-  explicitly_paid:    'Explicitly Paid',
-  overnight_rise:     'Overnight Rise',
-  cautionary:         'Cautionary',
-  the_peer:           'The Peer',
-  the_watcher:        'The Watcher',
-  chaos_creator:      'Chaos Creator',
-  community_builder:  'Community Builder',
+  polished_curator:  'Polished Curator',
+  messy_transparent: 'Messy Transparent',
+  soft_life:         'Soft Life',
+  explicitly_paid:   'Explicitly Paid',
+  overnight_rise:    'Overnight Rise',
+  cautionary:        'Cautionary',
+  the_peer:          'The Peer',
+  the_watcher:       'The Watcher',
+  chaos_creator:     'Chaos Creator',
+  community_builder: 'Community Builder',
 };
 
 const STATUS_LABELS = {
-  draft:     'Draft',
-  generated: 'Generated',
-  finalized: 'Finalized',
-  crossed:   'Crossed',
-  archived:  'Archived',
+  draft:'Draft', generated:'Generated', finalized:'Finalized', crossed:'Crossed', archived:'Archived',
+};
+
+const STATUS_COLORS = {
+  draft:     { bg:'#f0f0f5',     color:'#6b6a80' },
+  generated: { bg:C.blueLight,  color:'#1e4a7a' },
+  finalized: { bg:'#e8f5ee',    color:'#2d7a50' },
+  crossed:   { bg:C.lavLight,   color:'#5c2d8a' },
+  archived:  { bg:'#f0ede6',    color:'#6b6560' },
 };
 
 const FEED_STATE_CONFIG = {
-  rising:        { label: 'Rising',        color: '#6a9e60', bg: '#f0f7ee' },
-  peaking:       { label: 'Peaking',       color: '#c9a84c', bg: '#fdf6ee' },
-  plateauing:    { label: 'Plateauing',    color: '#888',    bg: '#f5f5f5' },
-  controversial: { label: 'Controversial', color: '#d47a3a', bg: '#fdf3ee' },
-  cancelled:     { label: 'Cancelled',     color: '#c44',    bg: '#fdf0f0' },
-  gone_dark:     { label: 'Gone Dark',     color: '#555',    bg: '#eee' },
-  rebuilding:    { label: 'Rebuilding',    color: '#7ab3d4', bg: '#eef5fb' },
-  crossed:       { label: 'Crossed',       color: '#d4789a', bg: '#fdf0f4' },
+  rising:        { label:'Rising',        color:'#4a8a3c', bg:'#eef7ec' },
+  peaking:       { label:'Peaking',       color:'#8a6010', bg:'#fdf8e8' },
+  plateauing:    { label:'Plateauing',    color:'#6b6a80', bg:'#f0f0f5' },
+  controversial: { label:'Controversial', color:'#8a4410', bg:'#fdf0e8' },
+  cancelled:     { label:'Cancelled',     color:'#8a2020', bg:'#fde8e8' },
+  gone_dark:     { label:'Gone Dark',     color:'#444',    bg:'#eee' },
+  rebuilding:    { label:'Rebuilding',    color:'#1e4a7a', bg:C.blueLight },
+  crossed:       { label:'Crossed',       color:'#5c2d8a', bg:C.lavLight },
 };
 
-const FEED_STATES = Object.keys(FEED_STATE_CONFIG);
-
-// ── Protagonist Contexts ─────────────────────────────────────────────────────
-// Each universe/book protagonist has their own character context for AI generation
 const PROTAGONISTS = [
   {
-    key: 'justawoman',
-    label: 'Book 1 · JustAWoman',
-    icon: '◈',
+    key:'justawoman', label:'Book 1 · JustAWoman', icon:'◈',
     context: {
-      name: 'JustAWoman',
-      description: 'A Black woman, mother, wife, content creator in fashion/beauty/lifestyle.',
-      wound: 'She does everything right and the right room has not found her yet.',
-      goal: 'To be legendary.',
-      audience: 'Besties',
-      detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
+      name:'JustAWoman',
+      description:'A Black woman, mother, wife, content creator in fashion/beauty/lifestyle.',
+      wound:'She does everything right and the right room has not found her yet.',
+      goal:'To be legendary.', audience:'Besties',
+      detail:'She posts for women. Men show up with their wallets and something in her responds.',
     },
   },
   {
-    key: 'lala',
-    label: 'Book 2 · Lala',
-    icon: '✦',
+    key:'lala', label:'Book 2 · Lala', icon:'✦',
     context: {
-      name: 'Lala',
-      description: 'The daughter. Born from JustAWoman\'s world but building her own. Young, sharp, digitally native — she sees patterns her mother can\'t.',
-      wound: 'She inherited her mother\'s ambition but not her patience. The algorithm sees her before she sees herself.',
-      goal: 'To become something that can\'t be copied.',
-      audience: 'The generation that learned to perform before they learned to feel',
-      detail: 'She grew up watching her mother watch creators. Now she is one — or becoming one. The line between consuming and creating dissolved before she noticed.',
+      name:'Lala',
+      description:'Born from JustAWoman\'s world but building her own. Young, sharp, digitally native.',
+      wound:'She inherited her mother\'s ambition but not her patience.',
+      goal:'To become something that can\'t be copied.',
+      audience:'The generation that learned to perform before they learned to feel',
+      detail:'The line between consuming and creating dissolved before she noticed.',
     },
   },
 ];
 
-function lalaClass(score) {
-  if (score >= 7) return 'high';
-  if (score >= 4) return 'mid';
-  return 'low';
-}
+function lalaClass(score) { return score>=7?'high':score>=4?'mid':'low'; }
+function getToken() { return localStorage.getItem('authToken')||localStorage.getItem('token')||sessionStorage.getItem('token'); }
+function authHeaders() { const t=getToken(); return t?{Authorization:`Bearer ${t}`,'Content-Type':'application/json'}:{'Content-Type':'application/json'}; }
 
-function getToken() {
-  return localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-}
-
-function authHeaders() {
-  const t = getToken();
-  return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }
-           : { 'Content-Type': 'application/json' };
-}
-
-/* ════════════════════════════════════════════════════════════════════════════ */
-export default function SocialProfileGenerator({ embedded = false, worldTag }) {
-  // ── State ────────────────────────────────────────────────────────────────
-  const [profiles, setProfiles]   = useState([]);
-  const [selected, setSelected]   = useState(null);
-  const [loading, setLoading]     = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError]         = useState(null);
-  const [filterStatus, setFilterStatus] = useState(null);
-  const [view, setView]           = useState('feed'); // 'feed' | 'bulk'
-  const [protagonist, setProtagonist] = useState(PROTAGONISTS[0]);
-
-  // Pagination
-  const [page, setPage]           = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [statusCounts, setStatusCounts] = useState({ total: 0, generated: 0, finalized: 0, crossed: 0, archived: 0 });
+// ══════════════════════════════════════════════════════════════════════
+export default function SocialProfileGenerator({ embedded=false, worldTag }) {
+  const [profiles,setProfiles]   = useState([]);
+  const [selected,setSelected]   = useState(null);
+  const [loading,setLoading]     = useState(false);
+  const [generating,setGenerating] = useState(false);
+  const [error,setError]         = useState(null);
+  const [filterStatus,setFilterStatus] = useState(null);
+  const [view,setView]           = useState('feed');
+  const [protagonist,setProtagonist] = useState(PROTAGONISTS[0]);
+  const [page,setPage]           = useState(1);
+  const [totalPages,setTotalPages] = useState(1);
+  const [totalCount,setTotalCount] = useState(0);
+  const [statusCounts,setStatusCounts] = useState({total:0,generated:0,finalized:0,crossed:0,archived:0});
   const PAGE_SIZE = 24;
-
-  // Search & sort
-  const [search, setSearch]       = useState('');
-  const [sortBy, setSortBy]       = useState('score');
+  const [search,setSearch]       = useState('');
+  const [sortBy,setSortBy]       = useState('score');
   const searchTimer = useRef(null);
-
-  // Bulk selection
-  const [bulkMode, setBulkMode]   = useState(false);
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const [selectAllPages, setSelectAllPages] = useState(false); // true = all profiles across pages
-
-  // Toast notifications
-  const [toast, setToast]         = useState(null);
+  const [bulkMode,setBulkMode]   = useState(false);
+  const [selectedIds,setSelectedIds] = useState(new Set());
+  const [selectAllPages,setSelectAllPages] = useState(false);
+  const [toast,setToast]         = useState(null);
   const toastTimer = useRef(null);
+  const [handle,setHandle]       = useState('');
+  const [platform,setPlatform]   = useState('instagram');
+  const [vibe,setVibe]           = useState('');
+  const [showAdvanced,setShowAdvanced] = useState(false);
+  const [advFields,setAdvFields] = useState({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});
+  const [activeJob,setActiveJob] = useState(null);
 
-  // Spark form
-  const [handle, setHandle]       = useState('');
-  const [platform, setPlatform]   = useState('instagram');
-  const [vibe, setVibe]           = useState('');
-
-  // Advanced context (expandable)
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [advLocationHint, setAdvLocationHint]     = useState('');
-  const [advFollowerHint, setAdvFollowerHint]     = useState('');
-  const [advRelationshipHint, setAdvRelationshipHint] = useState('');
-  const [advDramaHint, setAdvDramaHint]           = useState('');
-  const [advAestheticHint, setAdvAestheticHint]   = useState('');
-  const [advRevenueHint, setAdvRevenueHint]       = useState('');
-
-  // Active background job tracking
-  const [activeJob, setActiveJob] = useState(null);
-
-  // ── Load profiles ────────────────────────────────────────────────────────
+  // ── Load profiles ──────────────────────────────────────────────────
   const loadProfiles = useCallback(async (targetPage) => {
     setLoading(true);
     try {
-      const pg = targetPage || page;
-      const qs = new URLSearchParams();
-      if (filterStatus) qs.set('status', filterStatus);
-      if (search.trim()) qs.set('search', search.trim());
-      qs.set('sort', sortBy);
-      qs.set('page', pg);
-      qs.set('limit', PAGE_SIZE);
-      const res = await fetch(`${API}?${qs}`, { headers: authHeaders() });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Server error (${res.status})`);
-      }
-      const data = await res.json();
-      const loadedProfiles = data.profiles || [];
+      const pg=targetPage||page;
+      const qs=new URLSearchParams();
+      if(filterStatus)qs.set('status',filterStatus);
+      if(search.trim())qs.set('search',search.trim());
+      qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',PAGE_SIZE);
+      const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});
+      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`Server error (${res.status})`);}
+      const data=await res.json();
+      setProfiles(data.profiles||[]);
+      if(data.pagination){setTotalPages(data.pagination.totalPages||1);setTotalCount(data.pagination.total||0);}
+      if(data.statusCounts)setStatusCounts(data.statusCounts);
+    } catch(err){setError(err.message);}
+    finally{setLoading(false);}
+  },[filterStatus,search,sortBy,page]);
 
-      // Enrich profiles with turbulence indicator (unresolved entanglements)
-      const charIds = [...new Set(loadedProfiles.filter(p => p.character_id).map(p => p.character_id))];
-      if (charIds.length > 0) {
-        try {
-          const turbResults = await Promise.all(
-            charIds.map(cid =>
-              fetch(`/api/v1/entanglements/character/${cid}`, { headers: authHeaders() })
-                .then(r => r.ok ? r.json() : { entanglements: [] })
-                .catch(() => ({ entanglements: [] }))
-            )
-          );
-          const turbMap = {};
-          charIds.forEach((cid, i) => {
-            const ents = turbResults[i].entanglements || turbResults[i] || [];
-            turbMap[cid] = Array.isArray(ents) && ents.some(e => !e.resolved);
-          });
-          loadedProfiles.forEach(p => {
-            if (p.character_id && turbMap[p.character_id]) {
-              p._has_turbulence = true;
-            }
-          });
-        } catch (_) { /* turbulence enrichment is best-effort */ }
-      }
+  useEffect(()=>{loadProfiles();},[loadProfiles]);
 
-      setProfiles(loadedProfiles);
-      if (data.pagination) {
-        setTotalPages(data.pagination.totalPages || 1);
-        setTotalCount(data.pagination.total || 0);
-      }
-      if (data.statusCounts) {
-        setStatusCounts(data.statusCounts);
-      }
-    } catch (err) {
-      console.error('Load profiles error:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterStatus, search, sortBy, page]);
-
-  useEffect(() => { loadProfiles(); }, [loadProfiles]);
-
-  // ── Background job SSE streaming (replaces polling) ──────────────────────
+  // ── SSE job tracking ───────────────────────────────────────────────
   const sseRef = useRef(null);
-  const [cancellingJob, setCancellingJob] = useState(false);
+  const sseRetryTimer = useRef(null);
+  const [cancellingJob,setCancellingJob] = useState(false);
 
-  const connectJobSSE = useCallback((jobId) => {
-    // Close any existing connection
-    if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+  const connectJobSSE = useCallback((jobId)=>{
+    if(sseRef.current){sseRef.current.close();sseRef.current=null;}
+    if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}
+    const es=new EventSource(`${API}/bulk/jobs/${jobId}/stream`);
+    sseRef.current=es;
+    es.addEventListener('connected',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,id:jobId}));}catch{}});
+    es.addEventListener('started',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'processing'}));}catch{}});
+    es.addEventListener('profile_complete',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,total:d.total,status:'processing'}));}catch{}});
+    es.addEventListener('profile_failed',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing'}));}catch{}});
+    es.addEventListener('cancelled',()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
+    es.addEventListener('done',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch{}localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
+    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}}catch{}},3000);});
+  },[loadProfiles]);
 
-    const es = new EventSource(`${API}/bulk/jobs/${jobId}/stream`);
-    sseRef.current = es;
+  useEffect(()=>{
+    const saved=localStorage.getItem('spg_active_job');
+    if(saved){fetch(`${API}/bulk/jobs/${saved}`,{headers:authHeaders()}).then(r=>r.json()).then(d=>{if(d.job){setActiveJob(d.job);if(!['completed','failed','cancelled'].includes(d.job.status))connectJobSSE(saved);else localStorage.removeItem('spg_active_job');}}).catch(()=>{});}
+    return()=>{if(sseRef.current){sseRef.current.close();sseRef.current=null;}if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}};
+  },[connectJobSSE]);
 
-    es.addEventListener('connected', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setActiveJob(prev => ({ ...prev, ...data, id: jobId }));
-      } catch {}
-    });
+  const startJobPolling = id=>{localStorage.setItem('spg_active_job',id);setActiveJob({id,status:'pending',total:0,completed:0,failed:0});connectJobSSE(id);};
+  const dismissJob = ()=>{setActiveJob(null);localStorage.removeItem('spg_active_job');if(sseRef.current){sseRef.current.close();sseRef.current=null;}};
+  const cancelJob = async()=>{if(!activeJob?.id)return;setCancellingJob(true);try{await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`,{method:'POST',headers:authHeaders()});}catch{}finally{setCancellingJob(false);}};
 
-    es.addEventListener('started', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setActiveJob(prev => ({ ...prev, ...data, status: 'processing' }));
-      } catch {}
-    });
+  const showToast = (message,type='success')=>{clearTimeout(toastTimer.current);setToast({message,type});toastTimer.current=setTimeout(()=>setToast(null),4000);};
 
-    es.addEventListener('profile_complete', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setActiveJob(prev => ({ ...prev, completed: data.completed, total: data.total, status: 'processing' }));
-      } catch {}
-    });
+  const changeFilter = s=>{setFilterStatus(s);setPage(1);setSelectedIds(new Set());};
+  const changeSort   = s=>{setSortBy(s);setPage(1);};
+  const handleSearch = val=>{setSearch(val);clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>setPage(1),400);};
 
-    es.addEventListener('profile_failed', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setActiveJob(prev => ({ ...prev, completed: data.completed, failed: data.failed, total: data.total, status: 'processing' }));
-      } catch {}
-    });
-
-    es.addEventListener('cancelled', () => {
-      setActiveJob(prev => prev ? { ...prev, status: 'cancelled' } : prev);
-      localStorage.removeItem('spg_active_job');
-      es.close(); sseRef.current = null;
-      loadProfiles();
-    });
-
-    es.addEventListener('done', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setActiveJob(prev => ({ ...prev, ...data, status: 'completed' }));
-      } catch {}
-      localStorage.removeItem('spg_active_job');
-      es.close(); sseRef.current = null;
-      loadProfiles();
-    });
-
-    es.addEventListener('error', () => {
-      // SSE connection lost — fall back to a single poll then reconnect
-      es.close(); sseRef.current = null;
-      setTimeout(async () => {
-        try {
-          const res = await fetch(`${API}/bulk/jobs/${jobId}`, { headers: authHeaders() });
-          const data = await res.json();
-          if (data.job) {
-            setActiveJob(data.job);
-            if (data.job.status === 'completed' || data.job.status === 'failed' || data.job.status === 'cancelled') {
-              localStorage.removeItem('spg_active_job');
-              loadProfiles();
-            } else {
-              connectJobSSE(jobId); // Reconnect
-            }
-          }
-        } catch (err) {
-          console.error('Job fallback poll error:', err);
-        }
-      }, 3000);
-    });
-  }, [loadProfiles]);
-
-  // On mount, check for an active job from localStorage
-  useEffect(() => {
-    const savedJobId = localStorage.getItem('spg_active_job');
-    if (savedJobId) {
-      // Initial fetch to show something immediately, then open SSE
-      fetch(`${API}/bulk/jobs/${savedJobId}`, { headers: authHeaders() })
-        .then(r => r.json())
-        .then(data => {
-          if (data.job) {
-            setActiveJob(data.job);
-            if (data.job.status !== 'completed' && data.job.status !== 'failed' && data.job.status !== 'cancelled') {
-              connectJobSSE(savedJobId);
-            } else {
-              localStorage.removeItem('spg_active_job');
-            }
-          }
-        })
-        .catch(() => {});
-    }
-    return () => { if (sseRef.current) { sseRef.current.close(); sseRef.current = null; } };
-  }, [connectJobSSE]);
-
-  const startJobPolling = (jobId) => {
-    localStorage.setItem('spg_active_job', jobId);
-    setActiveJob({ id: jobId, status: 'pending', total: 0, completed: 0, failed: 0 });
-    connectJobSSE(jobId);
-  };
-
-  const dismissJob = () => {
-    setActiveJob(null);
-    localStorage.removeItem('spg_active_job');
-    if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
-  };
-
-  const cancelJob = async () => {
-    if (!activeJob?.id) return;
-    setCancellingJob(true);
-    try {
-      await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`, { method: 'POST', headers: authHeaders() });
-    } catch (err) {
-      console.error('Cancel job error:', err);
-    } finally {
-      setCancellingJob(false);
-    }
-  };
-
-  const retryJob = async (jobId) => {
-    try {
-      const res = await fetch(`${API}/bulk/jobs/${jobId}/retry`, { method: 'POST', headers: authHeaders() });
-      const data = await res.json();
-      if (data.job_id) {
-        startJobPolling(data.job_id);
-      }
-    } catch (err) {
-      console.error('Retry job error:', err);
-    }
-  };
-
-  // Reset to page 1 when filters change
-  const changeFilter = (s) => { setFilterStatus(s); setPage(1); setSelectedIds(new Set()); };
-  const changeSort = (s) => { setSortBy(s); setPage(1); };
-  const handleSearch = (val) => {
-    setSearch(val);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => setPage(1), 400);
-  };
-
-  // ── Toast helper ────────────────────────────────────────────────────────
-  const showToast = (message, type = 'success') => {
-    clearTimeout(toastTimer.current);
-    setToast({ message, type });
-    toastTimer.current = setTimeout(() => setToast(null), 5000);
-  };
-
-  // ── Bulk selection helpers ───────────────────────────────────────────────
-  const toggleSelect = (id) => {
-    setSelectAllPages(false);
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const selectAllVisible = () => {
-    setSelectAllPages(false);
-    setSelectedIds(new Set(profiles.map(p => p.id)));
-  };
-  const selectAllAcrossPages = () => {
-    setSelectAllPages(true);
-  };
-  const clearSelection = () => { setSelectedIds(new Set()); setSelectAllPages(false); setBulkMode(false); };
-
-  // Helper: get IDs for bulk ops (handles multi-page select all)
-  const getBulkIds = async () => {
-    if (!selectAllPages) return [...selectedIds];
-    // Fetch ALL profile IDs matching current filter, paginating through
-    const allIds = [];
-    let pg = 1;
-    while (true) {
-      const qs = new URLSearchParams();
-      if (filterStatus) qs.set('status', filterStatus);
-      if (search.trim()) qs.set('search', search.trim());
-      qs.set('sort', sortBy);
-      qs.set('page', pg);
-      qs.set('limit', 100);
-      const res = await fetch(`${API}?${qs}`, { headers: authHeaders() });
-      const data = await res.json();
-      const batch = (data.profiles || []).map(p => p.id);
-      allIds.push(...batch);
-      if (batch.length < 100 || allIds.length >= (data.total || 0)) break;
-      pg++;
-    }
+  // ── Bulk helpers ───────────────────────────────────────────────────
+  const toggleSelect = id=>{setSelectAllPages(false);setSelectedIds(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});};
+  const clearSelection = ()=>{setSelectedIds(new Set());setSelectAllPages(false);setBulkMode(false);};
+  const getBulkIds = async()=>{
+    if(!selectAllPages)return[...selectedIds];
+    const allIds=[];let pg=1;
+    while(true){const qs=new URLSearchParams();if(filterStatus)qs.set('status',filterStatus);if(search.trim())qs.set('search',search.trim());qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',100);const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});const d=await res.json();const batch=(d.profiles||[]).map(p=>p.id);allIds.push(...batch);if(batch.length<100||allIds.length>=(d.total||0))break;pg++;}
     return allIds;
   };
+  const runBulk = async(ids,endpoint)=>{const results=[];for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);const res=await fetch(`${API}/${endpoint}`,{method:'POST',headers:authHeaders(),body:JSON.stringify({ids:chunk})});const d=await res.json();if(!res.ok)throw new Error(d.error);results.push(d);}return results;};
+  const bulkOp = async(endpoint,confirmMsg,onDone)=>{const ids=await getBulkIds();if(!ids.length)return;if(!window.confirm(confirmMsg.replace('$n',selectAllPages?`all ${statusCounts.total}`:ids.length)))return;try{const r=await runBulk(ids,endpoint);onDone(r);setSelectedIds(new Set());setSelectAllPages(false);loadProfiles();}catch(err){setError(err.message);}};
 
-  // Helper: run a bulk operation in batches of 100
-  const runBulkInBatches = async (ids, endpoint) => {
-    const results = [];
-    for (let i = 0; i < ids.length; i += 100) {
-      const chunk = ids.slice(i, i + 100);
-      const res = await fetch(`${API}/${endpoint}`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ ids: chunk }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      results.push(data);
-    }
-    return results;
+  // ── Generate ───────────────────────────────────────────────────────
+  const generateProfile = async()=>{
+    if(!handle.trim()||!vibe.trim())return;
+    setGenerating(true);setError(null);
+    try{
+      const hasAdv=Object.values(advFields).some(v=>v);
+      const res=await fetch(`${API}/generate`,{method:'POST',headers:authHeaders(),body:JSON.stringify({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...(hasAdv?{advanced_context:advFields}:{})})});
+      const data=await res.json();
+      if(!res.ok)throw new Error(data.error||'Generation failed');
+      setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);loadProfiles(1);
+    }catch(err){setError(err.message);}
+    finally{setGenerating(false);}
   };
 
-  const bulkFinalize = async () => {
-    const ids = await getBulkIds();
-    if (!ids.length) return;
-    const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
-    if (!window.confirm(`Finalize ${count} profile(s)?`)) return;
-    try {
-      const results = await runBulkInBatches(ids, 'bulk/finalize');
-      const totals = results.reduce((acc, d) => ({ finalized: acc.finalized + (d.finalized || 0), skipped: acc.skipped + (d.skipped || 0) }), { finalized: 0, skipped: 0 });
-      setSelectedIds(new Set());
-      setSelectAllPages(false);
-      loadProfiles();
-      if (totals.finalized > 0) {
-        showToast(`Finalized ${totals.finalized} profile(s)${totals.skipped ? ` · ${totals.skipped} already finalized` : ''}`);
-      } else {
-        showToast(`No profiles changed — ${totals.skipped} already finalized or not in "Generated" status`, 'warn');
-      }
-    } catch (err) { setError(err.message); }
-  };
+  const finalizeProfile = async id=>{try{const res=await fetch(`${API}/${id}/finalize`,{method:'POST',headers:authHeaders()});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.message);}};
+  const crossProfile   = async id=>{try{const res=await fetch(`${API}/${id}/cross`,{method:'POST',headers:authHeaders(),body:JSON.stringify({})});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.message);}};
+  const editProfile    = async(id,updates)=>{try{const res=await fetch(`${API}/${id}`,{method:'PUT',headers:authHeaders(),body:JSON.stringify(updates)});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.message);}};
+  const deleteProfile  = async id=>{if(!window.confirm('Delete this profile permanently?'))return;try{const res=await fetch(`${API}/${id}`,{method:'DELETE',headers:authHeaders()});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.message);}};
 
-  const bulkCross = async () => {
-    const ids = await getBulkIds();
-    if (!ids.length) return;
-    const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
-    if (!window.confirm(`Cross ${count} profile(s) into the story world?`)) return;
-    try {
-      const results = await runBulkInBatches(ids, 'bulk/cross');
-      const totals = results.reduce((acc, d) => ({ crossed: acc.crossed + (d.crossed || 0), skipped: acc.skipped + (d.skipped || 0) }), { crossed: 0, skipped: 0 });
-      setSelectedIds(new Set());
-      setSelectAllPages(false);
-      loadProfiles();
-      if (totals.crossed > 0) {
-        showToast(`Crossed ${totals.crossed} profile(s)${totals.skipped ? ` · ${totals.skipped} skipped (not finalized)` : ''}`);
-      } else {
-        showToast(`No profiles crossed — only finalized profiles can be crossed`, 'warn');
-      }
-    } catch (err) { setError(err.message); }
-  };
+  const fp = p=>p?.full_profile||p||{};
+  const stats = { total:statusCounts.total||totalCount, generated:statusCounts.generated, finalized:statusCounts.finalized, crossed:statusCounts.crossed };
 
-  const bulkArchive = async () => {
-    const ids = await getBulkIds();
-    if (!ids.length) return;
-    const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
-    if (!window.confirm(`Archive ${count} profile(s)?`)) return;
-    try {
-      const results = await runBulkInBatches(ids, 'bulk/archive');
-      const totals = results.reduce((acc, d) => ({ archived: acc.archived + (d.archived || 0), skipped: acc.skipped + (d.skipped || 0) }), { archived: 0, skipped: 0 });
-      setSelectedIds(new Set());
-      setSelectAllPages(false);
-      loadProfiles();
-      if (totals.archived > 0) {
-        showToast(`Archived ${totals.archived} profile(s)${totals.skipped ? ` · ${totals.skipped} already archived` : ''}`);
-      } else {
-        showToast(`No profiles changed — all already archived`, 'warn');
-      }
-    } catch (err) { setError(err.message); }
-  };
-
-  const bulkDelete = async () => {
-    const ids = await getBulkIds();
-    if (!ids.length) return;
-    const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
-    if (!window.confirm(`Permanently delete ${count} profile(s)? This cannot be undone.`)) return;
-    try {
-      const results = await runBulkInBatches(ids, 'bulk/delete');
-      const totalDeleted = results.reduce((acc, d) => acc + (d.deleted || 0), 0);
-      setSelectedIds(new Set());
-      setSelectAllPages(false);
-      if (selected && ids.includes(selected.id)) setSelected(null);
-      loadProfiles();
-      showToast(`Deleted ${totalDeleted} profile(s)`);
-    } catch (err) { setError(err.message); }
-  };
-
-  // ── Generate ─────────────────────────────────────────────────────────────
-  const generateProfile = async () => {
-    if (!handle.trim() || !vibe.trim()) return;
-    setGenerating(true);
-    setError(null);
-    try {
-      // Build advanced context only if any hint is filled
-      const advFields = {
-        location_hint: advLocationHint.trim(),
-        follower_hint: advFollowerHint.trim(),
-        relationship_hint: advRelationshipHint.trim(),
-        drama_hint: advDramaHint.trim(),
-        aesthetic_hint: advAestheticHint.trim(),
-        revenue_hint: advRevenueHint.trim(),
-      };
-      const hasAdvanced = Object.values(advFields).some(v => v);
-
-      const res = await fetch(`${API}/generate`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          handle: handle.trim(),
-          platform,
-          vibe_sentence: vibe.trim(),
-          character_context: protagonist.context,
-          character_key: protagonist.key,
-          ...(hasAdvanced ? { advanced_context: advFields } : {}),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
-      setSelected(data.profile);
-      setHandle('');
-      setVibe('');
-      // Clear advanced fields
-      setAdvLocationHint(''); setAdvFollowerHint(''); setAdvRelationshipHint('');
-      setAdvDramaHint(''); setAdvAestheticHint(''); setAdvRevenueHint('');
-      setShowAdvanced(false);
-      setPage(1);
-      loadProfiles(1);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // ── Finalize ─────────────────────────────────────────────────────────────
-  const finalizeProfile = async (id) => {
-    try {
-      const res = await fetch(`${API}/${id}/finalize`, {
-        method: 'POST', headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setProfiles(prev => prev.map(p => p.id === id ? data.profile : p));
-      if (selected?.id === id) setSelected(data.profile);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // ── Cross ────────────────────────────────────────────────────────────────
-  const crossProfile = async (id) => {
-    try {
-      const res = await fetch(`${API}/${id}/cross`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setProfiles(prev => prev.map(p => p.id === id ? data.profile : p));
-      if (selected?.id === id) setSelected(data.profile);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // ── Edit ─────────────────────────────────────────────────────────────────
-  const editProfile = async (id, updates) => {
-    try {
-      const res = await fetch(`${API}/${id}`, {
-        method: 'PUT', headers: authHeaders(),
-        body: JSON.stringify(updates),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setProfiles(prev => prev.map(p => p.id === id ? data.profile : p));
-      if (selected?.id === id) setSelected(data.profile);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // ── Delete ───────────────────────────────────────────────────────────────
-  const deleteProfile = async (id) => {
-    if (!window.confirm('Delete this profile permanently?')) return;
-    try {
-      const res = await fetch(`${API}/${id}`, {
-        method: 'DELETE', headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setProfiles(prev => prev.filter(p => p.id !== id));
-      if (selected?.id === id) setSelected(null);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // ── Computed ─────────────────────────────────────────────────────────────
-  const stats = {
-    total: statusCounts.total || totalCount,
-    generated: statusCounts.generated,
-    finalized: statusCounts.finalized,
-    crossed:   statusCounts.crossed,
-  };
-
-  // ── Get full_profile data (AI output stored as JSONB) ────────────────────
-  const fp = (profile) => profile?.full_profile || profile || {};
-
-  // ── Pagination helper ───────────────────────────────────────────────────
-  const renderPagination = () => {
-    if (loading || totalPages <= 1) return null;
+  const Pagination = ()=>{
+    if(loading||totalPages<=1)return null;
     return (
-      <div className="spg-pagination">
-        <button className="spg-page-btn" disabled={page <= 1} onClick={() => setPage(1)} title="First page">«</button>
-        <button className="spg-page-btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>‹ Prev</button>
-        <span className="spg-page-info">Page {page} of {totalPages}</span>
-        <button className="spg-page-btn" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next ›</button>
-        <button className="spg-page-btn" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Last page">»</button>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px 0',fontSize:13}}>
+        <PageBtn disabled={page<=1} onClick={()=>setPage(1)}>«</PageBtn>
+        <PageBtn disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>‹ Prev</PageBtn>
+        <span style={{color:C.inkLight,fontSize:12}}>Page {page} of {totalPages}</span>
+        <PageBtn disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next ›</PageBtn>
+        <PageBtn disabled={page>=totalPages} onClick={()=>setPage(totalPages)}>»</PageBtn>
       </div>
     );
   };
 
-  // ────────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────
   return (
-    <div className={`spg-page ${embedded ? 'spg-embedded' : ''}`}>
+    <div style={{display:'flex',flexDirection:'column',...(embedded?{flex:1,minHeight:0}:{minHeight:'100vh'}),background:C.surfaceAlt,fontFamily:C.font}}>
+
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="spg-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:14}}>
           <div>
-            <div className="spg-header-title">📱 The Feed</div>
-            <div className="spg-header-sub">
-              Parasocial Creator Profiles — Lala's online world
-            </div>
+            <div style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed</div>
+            <div style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — LalaVerse social ecosystem</div>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              className="spg-btn"
-              style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-              onClick={() => setView(view === 'feed' ? 'bulk' : 'feed')}
-            >
-              {view === 'feed' ? '⊞ Bulk Import' : '← Back to Feed'}
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {/* Protagonist switcher — hidden when embedded in WorldStudio */}
+            {!embedded && <div style={{display:'flex',gap:4,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`}}>
+              {PROTAGONISTS.map(p=>(
+                <button key={p.key} onClick={()=>setProtagonist(p)} style={{padding:'5px 12px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+                  background:protagonist.key===p.key?C.lavender:'transparent',
+                  color:protagonist.key===p.key?'#fff':C.inkLight,transition:'all 0.15s'}}>
+                  {p.icon} {p.label}
+                </button>
+              ))}
+            </div>}
+            <button onClick={()=>setView(view==='feed'?'bulk':'feed')} style={{padding:'7px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>
+              {view==='feed'?'⊞ Bulk Import':'← Back to Feed'}
             </button>
           </div>
         </div>
-        <div className="spg-header-stats">
-          <div className="spg-stat">
-            <span className="spg-stat-value">{stats.total}</span>
-            <span className="spg-stat-label">Profiles</span>
-          </div>
-          <div className="spg-stat">
-            <span className="spg-stat-value">{stats.finalized}</span>
-            <span className="spg-stat-label">Finalized</span>
-          </div>
-          <div className="spg-stat">
-            <span className="spg-stat-value">{stats.crossed}</span>
-            <span className="spg-stat-label">Crossed</span>
-          </div>
+        {/* Stats */}
+        <div style={{display:'flex',gap:20}}>
+          {[['Profiles',stats.total,C.lavender],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
+            <div key={label} style={{display:'flex',alignItems:'baseline',gap:6}}>
+              <span style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{val||0}</span>
+              <span style={{fontSize:12,color:C.inkLight}}>{label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* ── Active Job Banner ──────────────────────────────────── */}
+      {/* ── Job Banner ──────────────────────────────────────────── */}
       {activeJob && (
-        <div className={`spg-job-banner ${activeJob.status === 'completed' ? 'spg-job-done' : activeJob.status === 'failed' ? 'spg-job-failed' : activeJob.status === 'cancelled' ? 'spg-job-failed' : 'spg-job-active'}`}>
-          <div className="spg-job-banner-text">
-            {activeJob.status === 'processing' && (
-              <>⟳ Generating profiles in background... {activeJob.completed || 0}/{activeJob.total || 0} done{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
-            )}
-            {activeJob.status === 'pending' && (
-              <>⟳ Job queued — waiting to start ({activeJob.total} profiles)...</>
-            )}
-            {activeJob.status === 'completed' && (
-              <>✓ Background import complete — {activeJob.completed}/{activeJob.total} profiles generated{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
-            )}
-            {activeJob.status === 'cancelled' && (
-              <>⊘ Job cancelled — {activeJob.completed || 0}/{activeJob.total || 0} profiles generated before cancellation</>
-            )}
-            {activeJob.status === 'failed' && (
-              <>✕ Job failed{activeJob.error_message ? `: ${activeJob.error_message}` : ''}</>
-            )}
-          </div>
-          {(activeJob.status === 'processing' || activeJob.status === 'pending') && (
-            <>
-              <div className="spg-job-progress-bar">
-                <div className="spg-job-progress-fill" style={{ width: `${activeJob.total ? ((activeJob.completed || 0) / activeJob.total) * 100 : 0}%` }} />
-              </div>
-              <button className="spg-job-dismiss" onClick={cancelJob} disabled={cancellingJob} style={{ marginLeft: '8px' }}>
-                {cancellingJob ? 'Cancelling…' : '✕ Cancel'}
-              </button>
-            </>
+        <div style={{background:activeJob.status==='completed'?'#e8f5ee':activeJob.status==='failed'?'#fde8e8':C.lavLight,borderBottom:`1px solid ${C.border}`,padding:'10px 24px',display:'flex',alignItems:'center',gap:12,fontSize:13}}>
+          <span style={{flex:1,color:activeJob.status==='completed'?'#2d7a50':activeJob.status==='failed'?'#8a2020':C.inkMid}}>
+            {activeJob.status==='processing'&&<>⟳ Generating… {activeJob.completed||0}/{activeJob.total||0} done{activeJob.failed>0?`, ${activeJob.failed} failed`:''}</>}
+            {activeJob.status==='pending'&&<>⟳ Job queued — waiting to start…</>}
+            {activeJob.status==='completed'&&<>✓ Import complete — {activeJob.completed}/{activeJob.total} profiles generated</>}
+            {activeJob.status==='cancelled'&&<>⊘ Job cancelled — {activeJob.completed||0}/{activeJob.total||0} generated</>}
+            {activeJob.status==='failed'&&<>✕ Job failed{activeJob.error_message?`: ${activeJob.error_message}`:''}</>}
+          </span>
+          {['processing','pending'].includes(activeJob.status)&&(
+            <div style={{width:200,height:4,background:C.border,borderRadius:2,overflow:'hidden'}}>
+              <div style={{height:'100%',background:C.lavender,transition:'width 0.5s',width:`${activeJob.total?((activeJob.completed||0)/activeJob.total)*100:0}%`}}/>
+            </div>
           )}
-          {(activeJob.status === 'completed' || activeJob.status === 'failed' || activeJob.status === 'cancelled') && (
-            <button className="spg-job-dismiss" onClick={dismissJob}>Dismiss</button>
+          {['processing','pending'].includes(activeJob.status)&&(
+            <button onClick={cancelJob} disabled={cancellingJob} style={{padding:'4px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.pink,border:`1px solid ${C.pinkMid}`,cursor:'pointer'}}>{cancellingJob?'Cancelling…':'✕ Cancel'}</button>
+          )}
+          {['completed','failed','cancelled'].includes(activeJob.status)&&(
+            <button onClick={dismissJob} style={{padding:'4px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkLight,border:`1px solid ${C.border}`,cursor:'pointer'}}>Dismiss</button>
           )}
         </div>
       )}
 
       {/* ── Bulk Import View ─────────────────────────────────── */}
-      {view === 'bulk' && (
-        <FeedBulkImport
-          onDone={() => { setView('feed'); setPage(1); loadProfiles(1); }}
-          characterContext={protagonist.context}
-          characterKey={protagonist.key}
-          onJobStarted={(jobId) => { setView('feed'); startJobPolling(jobId); }}
-        />
+      {view==='bulk' && (
+        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);loadProfiles(1);}} characterContext={protagonist.context} characterKey={protagonist.key} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
       )}
 
-      {/* ── Spark Form ──────────────────────────────────────────── */}
-      {view === 'feed' && <div className="spg-spark-form">
-        <div className="spg-spark-title">✦ New Creator Spark</div>
-        <div className="spg-spark-row">
-          <div className="spg-field">
-            <span className="spg-label">Handle</span>
-            <input
-              className="spg-input"
-              placeholder="@username"
-              value={handle}
-              onChange={e => setHandle(e.target.value)}
-              disabled={generating}
-            />
+      {view==='feed' && <>
+        {/* ── Spark Form ──────────────────────────────────────── */}
+        <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px'}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:10}}>
+            ✦ New Creator Spark
           </div>
-          <div className="spg-field">
-            <span className="spg-label">Platform</span>
-            <select
-              className="spg-input"
-              value={platform}
-              onChange={e => setPlatform(e.target.value)}
-              disabled={generating}
-            >
-              {PLATFORMS.map(p => (
-                <option key={p.value} value={p.value}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="spg-field">
-            <span className="spg-label">Vibe</span>
-            <input
-              className="spg-input"
-              placeholder="One sentence — who is this creator?"
-              value={vibe}
-              onChange={e => setVibe(e.target.value)}
-              disabled={generating}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && generateProfile()}
-            />
-          </div>
-          <button
-            className="spg-btn spg-btn-gold"
-            onClick={generateProfile}
-            disabled={generating || !handle.trim() || !vibe.trim()}
-          >
-            {generating ? <><span className="spg-spinner" /> Generating…</> : '✦ Generate'}
-          </button>
-        </div>
-
-        {/* Advanced Context Toggle */}
-        <button
-          className="spg-advanced-toggle"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          type="button"
-        >
-          {showAdvanced ? '▾' : '▸'} Advanced Context
-          <span className="spg-advanced-hint">optional — guide the AI with extra detail</span>
-        </button>
-
-        {/* Advanced Context Panel */}
-        {showAdvanced && (
-          <div className="spg-advanced-panel">
-            <div className="spg-advanced-grid">
-              <div className="spg-field">
-                <span className="spg-label">📍 Location</span>
-                <input
-                  className="spg-input"
-                  placeholder="e.g. Atlanta, Houston, Lagos, London"
-                  value={advLocationHint}
-                  onChange={e => setAdvLocationHint(e.target.value)}
-                  disabled={generating}
-                />
-              </div>
-              <div className="spg-field">
-                <span className="spg-label">👥 Follower Range</span>
-                <input
-                  className="spg-input"
-                  placeholder="e.g. 50K-100K, micro, mega"
-                  value={advFollowerHint}
-                  onChange={e => setAdvFollowerHint(e.target.value)}
-                  disabled={generating}
-                />
-              </div>
-              <div className="spg-field">
-                <span className="spg-label">💔 Relationship Hint</span>
-                <input
-                  className="spg-input"
-                  placeholder="e.g. ex of @kingdave, collabs with @styleguru"
-                  value={advRelationshipHint}
-                  onChange={e => setAdvRelationshipHint(e.target.value)}
-                  disabled={generating}
-                />
-              </div>
-              <div className="spg-field">
-                <span className="spg-label">🔥 Drama Context</span>
-                <input
-                  className="spg-input"
-                  placeholder="e.g. caught cheating scandal, brand deal gone wrong"
-                  value={advDramaHint}
-                  onChange={e => setAdvDramaHint(e.target.value)}
-                  disabled={generating}
-                />
-              </div>
-              <div className="spg-field">
-                <span className="spg-label">🎨 Aesthetic</span>
-                <input
-                  className="spg-input"
-                  placeholder="e.g. clean girl, dark academia, y2k nostalgic"
-                  value={advAestheticHint}
-                  onChange={e => setAdvAestheticHint(e.target.value)}
-                  disabled={generating}
-                />
-              </div>
-              <div className="spg-field">
-                <span className="spg-label">💰 Revenue</span>
-                <input
-                  className="spg-input"
-                  placeholder="e.g. brand deals only, OF crossover, merch empire"
-                  value={advRevenueHint}
-                  onChange={e => setAdvRevenueHint(e.target.value)}
-                  disabled={generating}
-                />
-              </div>
+          <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Handle</label>
+              <input value={handle} onChange={e=>setHandle(e.target.value)} disabled={generating} placeholder="@username" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}/>
             </div>
-          </div>
-        )}
-
-        {error && <div style={{ color: 'var(--red)', marginTop: 8, fontSize: '0.82rem' }}>{error}</div>}
-      </div>}
-
-      {/* ── Content ─────────────────────────────────────────────── */}
-      {view === 'feed' && <div className="spg-content">
-        {/* Toolbar: Filters + Search + Sort + Bulk */}
-        <div className="spg-toolbar">
-          <div className="spg-filters">
-            {[null, 'generated', 'finalized', 'crossed', 'archived'].map(s => {
-              const count = s ? (statusCounts[s] || 0) : statusCounts.total;
-              return (
-                <button
-                  key={s || 'all'}
-                  className={`spg-filter-btn ${filterStatus === s ? 'spg-filter-btn-active' : ''}`}
-                  onClick={() => changeFilter(s)}
-                >
-                  {s ? STATUS_LABELS[s] : 'All'}
-                  {count > 0 && <span className="spg-filter-count">{count}</span>}
-                </button>
-              );
-            })}
-          </div>
-          <div className="spg-toolbar-right">
-            <input
-              className="spg-search-input"
-              placeholder="Search handle or name…"
-              value={search}
-              onChange={e => handleSearch(e.target.value)}
-            />
-            <select className="spg-sort-select" value={sortBy} onChange={e => changeSort(e.target.value)}>
-              <option value="score">Score ↓</option>
-              <option value="newest">Newest</option>
-              <option value="oldest">Oldest</option>
-              <option value="handle">Handle A–Z</option>
-            </select>
-            <button
-              className={`spg-btn spg-btn-sm ${bulkMode ? 'spg-btn-gold' : 'spg-btn-outline'}`}
-              onClick={() => { const entering = !bulkMode; setBulkMode(entering); setSelectedIds(new Set()); if (entering) setSelected(null); }}
-            >
-              {bulkMode ? '✕ Cancel' : '☐ Select'}
+            <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Platform</label>
+              <select value={platform} onChange={e=>setPlatform(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                {PLATFORMS.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:200}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Vibe</label>
+              <input value={vibe} onChange={e=>setVibe(e.target.value)} disabled={generating} placeholder="One sentence — who is this creator?" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}
+                onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&generateProfile()}/>
+            </div>
+            <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()} style={{
+              padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:generating||!handle.trim()||!vibe.trim()?'not-allowed':'pointer',
+              background:generating||!handle.trim()||!vibe.trim()?C.border:C.lavender,
+              color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
+              display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
+            }}>
+              {generating?<><Spinner/> Generating…</>:'✦ Generate'}
             </button>
           </div>
+
+          {/* Advanced toggle */}
+          <button onClick={()=>setShowAdvanced(!showAdvanced)} style={{marginTop:10,background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.inkLight,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
+            <span style={{transition:'transform 0.2s',display:'inline-block',transform:showAdvanced?'rotate(90deg)':'none'}}>▸</span>
+            Advanced Context
+            <span style={{color:C.inkLight,opacity:0.6,fontSize:11}}>— optional hints for AI</span>
+          </button>
+          {showAdvanced && (
+            <div style={{marginTop:10,display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:10,padding:'14px',background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
+              {[['📍 Location','location_hint','e.g. Atlanta, London'],['👥 Follower Range','follower_hint','e.g. 50K-100K'],['💔 Relationship','relationship_hint','e.g. ex of @handle'],['🔥 Drama','drama_hint','e.g. cheating scandal'],['🎨 Aesthetic','aesthetic_hint','e.g. clean girl, y2k'],['💰 Revenue','revenue_hint','e.g. brand deals only']].map(([label,key,ph])=>(
+                <div key={key} style={{display:'flex',flexDirection:'column',gap:3}}>
+                  <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>{label}</label>
+                  <input value={advFields[key]} onChange={e=>setAdvFields(f=>({...f,[key]:e.target.value}))} disabled={generating} placeholder={ph} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font}}/>
+                </div>
+              ))}
+            </div>
+          )}
+          {error && <div style={{color:C.pink,marginTop:8,fontSize:12}}>{error}</div>}
         </div>
 
-        {/* Bulk Action Bar */}
-        {bulkMode && (
-          <div className="spg-bulk-bar">
-            <div className="spg-bulk-bar-left">
-              <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={selectAllVisible}>
-                Select Page ({profiles.length})
-              </button>
-              {totalCount > profiles.length && (
-                <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={selectAllAcrossPages}>
-                  Select All {totalCount}
-                </button>
-              )}
-              {(selectedIds.size > 0 || selectAllPages) && (
-                <span className="spg-bulk-count">
-                  {selectAllPages ? `All ${totalCount}` : selectedIds.size} selected
-                </span>
-              )}
+        {/* ── Content ─────────────────────────────────────────── */}
+        <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+          {/* Toolbar */}
+          <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'10px 24px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
+            {/* Status filters */}
+            <div style={{display:'flex',gap:4}}>
+              {[null,'generated','finalized','crossed','archived'].map(s=>{
+                const cnt=s?(statusCounts[s]||0):statusCounts.total;
+                const isActive=filterStatus===s;
+                return (
+                  <button key={s||'all'} onClick={()=>changeFilter(s)} style={{padding:'5px 12px',borderRadius:14,fontSize:12,fontWeight:600,cursor:'pointer',transition:'all 0.15s',
+                    background:isActive?C.lavLight:'transparent',color:isActive?C.lavender:C.inkLight,
+                    border:`1.5px solid ${isActive?C.lavender:'transparent'}`}}>
+                    {s?STATUS_LABELS[s]:'All'}
+                    {cnt>0&&<span style={{marginLeft:4,fontSize:10,background:isActive?C.lavender:C.border,color:isActive?'#fff':C.inkLight,borderRadius:8,padding:'0 5px'}}>{cnt}</span>}
+                  </button>
+                );
+              })}
             </div>
-            <div className="spg-bulk-bar-right">
-              <button
-                className="spg-btn spg-btn-sm spg-btn-green"
-                disabled={selectedIds.size === 0 && !selectAllPages}
-                onClick={bulkFinalize}
-              >
-                ✓ Finalize
-              </button>
-              <button
-                className="spg-btn spg-btn-sm spg-btn-purple"
-                disabled={selectedIds.size === 0 && !selectAllPages}
-                onClick={bulkCross}
-              >
-                ✦ Cross
-              </button>
-              <button
-                className="spg-btn spg-btn-sm spg-btn-outline"
-                disabled={selectedIds.size === 0 && !selectAllPages}
-                onClick={bulkArchive}
-              >
-                ▪ Archive
-              </button>
-              <button
-                className="spg-btn spg-btn-sm spg-btn-danger"
-                disabled={selectedIds.size === 0 && !selectAllPages}
-                onClick={bulkDelete}
-              >
-                ✕ Delete
+            <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
+              <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Search handle or name…" style={{padding:'6px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:200}}/>
+              <select value={sortBy} onChange={e=>changeSort(e.target.value)} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,background:C.surface}}>
+                <option value="score">Score ↓</option>
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="handle">Handle A–Z</option>
+              </select>
+              <button onClick={()=>{const e=!bulkMode;setBulkMode(e);setSelectedIds(new Set());if(e)setSelected(null);}} style={{padding:'6px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',
+                background:bulkMode?C.lavLight:'transparent',color:bulkMode?C.lavender:C.inkLight,
+                border:`1.5px solid ${bulkMode?C.lavender:C.border}`}}>
+                {bulkMode?'✕ Cancel':'☐ Select'}
               </button>
             </div>
           </div>
-        )}
 
-        {/* Top Pagination */}
-        {renderPagination()}
-
-        {/* Loading */}
-        {loading && (
-          <div className="spg-loading">
-            <span className="spg-spinner" /> Loading profiles…
-          </div>
-        )}
-
-        {/* Empty */}
-        {!loading && profiles.length === 0 && (
-          <div className="spg-empty">
-            <div className="spg-empty-icon">📱</div>
-            <div className="spg-empty-text">{search ? 'No matching creators' : 'No creators yet'}</div>
-            <div className="spg-empty-sub">
-              {search ? 'Try a different search term' : 'Enter a handle, platform, and vibe above to generate a creator profile'}
+          {/* Bulk action bar */}
+          {bulkMode && (
+            <div style={{background:C.lavLight,borderBottom:`1px solid ${C.lavender}40`,padding:'8px 24px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
+              <button onClick={()=>setSelectedIds(new Set(profiles.map(p=>p.id)))} style={sBtnSm}>Select Page ({profiles.length})</button>
+              {totalCount>profiles.length&&<button onClick={()=>setSelectAllPages(true)} style={sBtnSm}>Select All {totalCount}</button>}
+              {(selectedIds.size>0||selectAllPages)&&<span style={{fontSize:12,color:C.lavender,fontWeight:700}}>{selectAllPages?`All ${totalCount}`:selectedIds.size} selected</span>}
+              <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+                <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/finalize','Finalize $n profile(s)?',r=>{const t=r.reduce((a,d)=>a+(d.finalized||0),0);showToast(`Finalized ${t} profile(s)`);})} style={{...sBtnSm,background:'#e8f5ee',color:'#2d7a50'}}>✓ Finalize</button>
+                <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/cross','Cross $n profile(s) into the story world?',r=>{const t=r.reduce((a,d)=>a+(d.crossed||0),0);showToast(`Crossed ${t} profile(s)`);})} style={{...sBtnSm,background:C.lavLight,color:C.lavender}}>✦ Cross</button>
+                <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/archive','Archive $n profile(s)?',r=>{const t=r.reduce((a,d)=>a+(d.archived||0),0);showToast(`Archived ${t} profile(s)`);})} style={sBtnSm}>▪ Archive</button>
+                <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/delete','Permanently delete $n profile(s)? This cannot be undone.',r=>{const t=r.reduce((a,d)=>a+(d.deleted||0),0);showToast(`Deleted ${t} profile(s)`,'warn');})} style={{...sBtnSm,color:C.pink}}>✕ Delete</button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Card Grid */}
-        {!loading && profiles.length > 0 && (
-          <div className="spg-grid">
-            {profiles.map(p => {
-              const data = fp(p);
-              const isChecked = selectAllPages || selectedIds.has(p.id);
-              return (
-                <div
-                  key={p.id}
-                  className={`spg-card ${selected?.id === p.id ? 'spg-card-active' : ''} ${isChecked ? 'spg-card-checked' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => bulkMode ? toggleSelect(p.id) : setSelected(selected?.id === p.id ? null : p)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { bulkMode ? toggleSelect(p.id) : setSelected(selected?.id === p.id ? null : p); } }}
-                >
-                  {bulkMode && (
-                    <div className="spg-card-checkbox">
-                      <span className={`spg-checkbox ${isChecked ? 'spg-checkbox-checked' : ''}`}>
-                        {isChecked ? '✓' : ''}
-                      </span>
-                    </div>
-                  )}
-                  <div className="spg-card-header">
-                    <span className="spg-card-handle">{p.handle}</span>
-                    <div className="spg-card-header-right">
-                      {p.current_state && FEED_STATE_CONFIG[p.current_state] && (
-                        <span
-                          className="spg-current-state-badge"
-                          style={{ background: FEED_STATE_CONFIG[p.current_state].bg, color: FEED_STATE_CONFIG[p.current_state].color }}
-                        >
-                          {FEED_STATE_CONFIG[p.current_state].label}
-                        </span>
+          <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
+            <Pagination/>
+            {loading && <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:40,gap:10,color:C.inkLight}}><Spinner/> Loading profiles…</div>}
+            {!loading&&profiles.length===0 && (
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:60,gap:12,textAlign:'center'}}>
+                <div style={{fontSize:40,opacity:0.2}}>📱</div>
+                <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{search?'No matching creators':'No creators yet'}</div>
+                <div style={{fontSize:13,color:C.inkLight}}>{search?'Try a different search term':'Enter a handle, platform, and vibe above to generate a creator profile'}</div>
+              </div>
+            )}
+            {!loading&&profiles.length>0 && (
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:16}}>
+                {profiles.map(p=>{
+                  const d=fp(p);
+                  const isChecked=selectAllPages||selectedIds.has(p.id);
+                  const isActive=selected?.id===p.id;
+                  const sc=p.current_state&&FEED_STATE_CONFIG[p.current_state];
+                  const stc=STATUS_COLORS[p.status]||STATUS_COLORS.draft;
+                  const score=p.lala_relevance_score??d.lala_relevance_score??0;
+                  const lc=lalaClass(score);
+                  return (
+                    <div key={p.id} onClick={()=>bulkMode?toggleSelect(p.id):setSelected(selected?.id===p.id?null:p)}
+                      style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${isActive?C.lavender:isChecked?C.lavender+'80':C.border}`,cursor:'pointer',overflow:'hidden',boxShadow:isActive?C.shadowMd:C.shadow,transition:'all 0.15s',position:'relative'}}>
+                      {/* Top accent bar */}
+                      <div style={{height:3,background:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
+                      {/* Checkbox */}
+                      {bulkMode && (
+                        <div style={{position:'absolute',top:10,right:10,width:20,height:20,borderRadius:5,border:`2px solid ${isChecked?C.lavender:C.border}`,background:isChecked?C.lavender:C.surface,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700}}>
+                          {isChecked?'✓':''}
+                        </div>
                       )}
-                      {p._has_turbulence && (
-                        <span className="spg-turbulence-warn" title="Unresolved entanglement">&#x26A0;</span>
-                      )}
-                      <span className={`spg-status spg-status-${p.status}`}>
-                        {STATUS_LABELS[p.status] || p.status}
-                      </span>
-                      <span className="spg-card-platform">{p.platform}</span>
+                      <div style={{padding:'12px 14px'}}>
+                        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:4,gap:6}}>
+                          <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{p.handle}</span>
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
+                            {sc&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10,background:sc.bg,color:sc.color}}>{sc.label}</span>}
+                            <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10,background:stc.bg,color:stc.color}}>{STATUS_LABELS[p.status]||p.status}</span>
+                          </div>
+                        </div>
+                        {(p.display_name||d.display_name)&&<div style={{fontSize:12,color:C.inkMid,marginBottom:2}}>{p.display_name||d.display_name}</div>}
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+                          <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
+                          {(p.archetype||d.archetype)&&<span style={{fontSize:10,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
+                          {p.adult_content_present&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+</span>}
+                        </div>
+                        <div style={{fontSize:12,color:C.inkMid,lineHeight:1.5,marginBottom:8,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+                          {p.content_persona||d.content_persona||p.vibe_sentence}
+                        </div>
+                        {(p.geographic_cluster||p.engagement_rate)&&(
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                            {p.geographic_cluster&&<span style={{fontSize:10,color:C.inkLight}}>📍 {p.geographic_cluster}</span>}
+                            {p.engagement_rate&&<span style={{fontSize:10,color:C.inkLight}}>💬 {p.engagement_rate}</span>}
+                          </div>
+                        )}
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <span style={{fontSize:11,color:C.inkLight}}>{p.follower_count_approx||d.follower_count_approx||'—'}</span>
+                          <div style={{display:'flex',alignItems:'center',gap:6}}>
+                            {p.followers?.length>0&&(
+                              <div style={{display:'flex',gap:3}}>
+                                {p.followers.map(f=>(
+                                  <span key={f.character_key} title={`${f.character_name} follows`} style={{fontSize:14,color:f.character_key==='justawoman'?C.blue:C.lavender}}>{f.character_key==='justawoman'?'◈':'✦'}</span>
+                                ))}
+                              </div>
+                            )}
+                            <div style={{display:'flex',alignItems:'center',gap:3}}>
+                              <div style={{width:40,height:3,borderRadius:2,background:C.border,overflow:'hidden'}}>
+                                <div style={{height:'100%',borderRadius:2,background:lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight,width:`${score*10}%`}}/>
+                              </div>
+                              <span style={{fontSize:10,fontWeight:700,color:lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight}}>✦{score}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  {(p.display_name || data.display_name) && (
-                    <div className="spg-card-display-name">{p.display_name || data.display_name}</div>
-                  )}
-                  {(p.archetype || data.archetype) && (
-                    <div className="spg-card-archetype">
-                      {ARCHETYPE_LABELS[p.archetype || data.archetype] || p.archetype || data.archetype}
-                    </div>
-                  )}
-                  {p.adult_content_present && (
-                    <span className="spg-adult-badge">18+</span>
-                  )}
-                  <div className="spg-card-persona">
-                    {p.content_persona || data.content_persona || p.vibe_sentence}
-                  </div>
-                  {/* Enhanced data badges */}
-                  {(p.geographic_cluster || p.post_frequency || p.engagement_rate) && (
-                    <div className="spg-card-badges">
-                      {p.geographic_cluster && <span className="spg-card-badge spg-badge-geo">📍 {p.geographic_cluster}</span>}
-                      {p.post_frequency && <span className="spg-card-badge spg-badge-freq">{p.post_frequency}</span>}
-                      {p.engagement_rate && <span className="spg-card-badge spg-badge-engage">💬 {p.engagement_rate}</span>}
-                    </div>
-                  )}
-                  <div className="spg-card-footer">
-                    <span className="spg-card-followers">
-                      {p.follower_count_approx || data.follower_count_approx || '—'}
-                    </span>
-                    {p.followers && p.followers.length > 0 && (
-                      <span className="spg-card-followed-by">
-                        {p.followers.map(f => (
-                          <span key={f.character_key} className="spg-follower-pill" title={`${f.character_name} follows this profile`}>
-                            {f.character_key === 'justawoman' ? '◈' : '✦'}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                    <span className={`spg-card-lala-score spg-lala-${lalaClass(p.lala_relevance_score || data.lala_relevance_score || 0)}`}>
-                      ✦ {p.lala_relevance_score ?? data.lala_relevance_score ?? 0}/10
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
+            <Pagination/>
           </div>
-        )}
+        </div>
+      </>}
 
-        {/* ── Bottom Pagination ────────────────────────────── */}
-        {renderPagination()}
+      {/* Detail side panel */}
+      {selected && createPortal(
+        <div style={{position:'fixed',inset:0,zIndex:9998,display:'flex',justifyContent:'flex-end'}}>
+          {/* Backdrop — click to close */}
+          <div onClick={()=>setSelected(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.25)',backdropFilter:'blur(2px)',cursor:'pointer'}}/>
+          {/* Panel */}
+          <div style={{position:'relative',width:'min(520px,90vw)',height:'100%',background:C.surface,boxShadow:'-4px 0 24px rgba(0,0,0,0.12)',overflowY:'auto',animation:'slideInRight 0.2s ease-out'}}>
+            <DetailPanel profile={selected} fp={fp(selected)} onClose={()=>setSelected(null)}
+              onFinalize={finalizeProfile} onCross={crossProfile} onEdit={editProfile} onDelete={deleteProfile} onRefresh={loadProfiles}/>
+          </div>
+        </div>,
+        document.body
+      )}
 
-        {/* ── Detail Panel ──────────────────────────────────────── */}
-        {selected && <DetailPanel
-          profile={selected}
-          fp={fp(selected)}
-          onClose={() => setSelected(null)}
-          onFinalize={finalizeProfile}
-          onCross={crossProfile}
-          onEdit={editProfile}
-          onDelete={deleteProfile}
-          onRefresh={loadProfiles}
-          autoScroll
-        />}
-      </div>}
-
-      {/* Toast notification — portaled to body so no parent can clip/trap it */}
+      {/* Toast */}
       {toast && createPortal(
-        <div className={`spg-toast spg-toast-${toast.type}`} onClick={() => setToast(null)}>
+        <div onClick={()=>setToast(null)} style={{position:'fixed',bottom:24,right:24,zIndex:9999,padding:'12px 18px',borderRadius:C.radiusSm,fontSize:13,fontWeight:600,cursor:'pointer',boxShadow:C.shadowMd,
+          background:toast.type==='error'?'#fde8e8':toast.type==='warn'?'#fdf8e8':'#e8f5ee',
+          color:toast.type==='error'?'#8a2020':toast.type==='warn'?'#8a6010':'#2d7a50',
+          border:`1px solid ${toast.type==='error'?C.pinkMid:toast.type==='warn'?'#f0d890':'#b6dfc8'}`}}>
           {toast.message}
         </div>,
         document.body
       )}
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
     </div>
   );
 }
 
-/* ════════════════════════════════════════════════════════════════════════════ */
-/* Feed State Picker — inline state change for social profiles                */
-/* ════════════════════════════════════════════════════════════════════════════ */
+// ── Shared button style for bulk bar ──────────────────────────────────
+const sBtnSm = { padding:'5px 12px', borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', border:`1px solid ${C.border}`, background:'transparent', color:C.inkMid };
+
+// ── Spinner ───────────────────────────────────────────────────────────
+function Spinner() {
+  return <span style={{width:14,height:14,border:`2px solid ${C.lavender}40`,borderTopColor:C.lavender,borderRadius:'50%',display:'inline-block',animation:'spin 0.8s linear infinite'}}/>;
+}
+
+// ── Page button ───────────────────────────────────────────────────────
+function PageBtn({ children, disabled, onClick }) {
+  return <button disabled={disabled} onClick={onClick} style={{padding:'5px 10px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,background:'transparent',color:disabled?C.border:C.inkMid,cursor:disabled?'not-allowed':'pointer'}}>{children}</button>;
+}
+
+// ── Feed State Picker ─────────────────────────────────────────────────
 function FeedStatePicker({ profile, onStateChange }) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [open,setOpen]   = useState(false);
+  const [saving,setSaving] = useState(false);
   const current = profile.current_state;
-
-  const changeState = async (newState) => {
-    if (newState === current || saving) return;
+  const cfg     = current?FEED_STATE_CONFIG[current]:null;
+  const changeState = async newState=>{
+    if(newState===current||saving)return;
     setSaving(true);
-    try {
-      await fetch(`${API}/${profile.id}`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ current_state: newState }),
-      });
-      onStateChange?.();
-    } catch (err) {
-      console.error('State change failed:', err);
-    } finally {
-      setSaving(false);
-      setOpen(false);
-    }
+    try{await fetch(`${API}/${profile.id}`,{method:'PATCH',headers:authHeaders(),body:JSON.stringify({current_state:newState})});onStateChange?.();}
+    catch(err){console.error('State change failed:',err);}
+    finally{setSaving(false);setOpen(false);}
   };
-
-  const cfg = current ? FEED_STATE_CONFIG[current] : null;
-
   return (
-    <div className="spg-state-picker">
-      <button
-        className="spg-state-picker-trigger"
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-        style={cfg ? { background: cfg.bg, color: cfg.color } : undefined}
-      >
-        {cfg ? cfg.label : 'Set State'}
+    <div style={{position:'relative'}}>
+      <button onClick={e=>{e.stopPropagation();setOpen(!open);}} style={{padding:'4px 12px',borderRadius:12,fontSize:11,fontWeight:700,cursor:'pointer',border:'none',
+        background:cfg?cfg.bg:C.border,color:cfg?cfg.color:C.inkLight}}>
+        {cfg?cfg.label:'Set State'} ▾
       </button>
       {open && (
-        <div className="spg-state-picker-dropdown">
-          {FEED_STATES.map(s => {
-            const sc = FEED_STATE_CONFIG[s];
-            return (
-              <button
-                key={s}
-                className={`spg-state-option ${s === current ? 'spg-state-option-active' : ''}`}
-                style={{ color: sc.color }}
-                onClick={(e) => { e.stopPropagation(); changeState(s); }}
-                disabled={saving}
-              >
-                {sc.label}
-              </button>
-            );
-          })}
+        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:C.radiusSm,boxShadow:C.shadowMd,zIndex:100,minWidth:140,overflow:'hidden'}}>
+          {Object.entries(FEED_STATE_CONFIG).map(([s,sc])=>(
+            <button key={s} onClick={e=>{e.stopPropagation();changeState(s);}} disabled={saving} style={{width:'100%',padding:'7px 12px',textAlign:'left',fontSize:12,fontWeight:600,cursor:'pointer',border:'none',background:s===current?sc.bg:'transparent',color:sc.color,display:'block'}}>{sc.label}</button>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-/* ════════════════════════════════════════════════════════════════════════════ */
-/* Detail Panel Sub-component                                                 */
-/* ════════════════════════════════════════════════════════════════════════════ */
-function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh, autoScroll }) {
+// ══════════════════════════════════════════════════════════════════════
+// DETAIL PANEL
+// ══════════════════════════════════════════════════════════════════════
+function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh }) {
   const p = profile;
-  const d = fp;
-  const score = p.lala_relevance_score ?? d.lala_relevance_score ?? 0;
-  const cls = lalaClass(score);
-  const panelRef = useRef(null);
+  const [editing,setEditing] = useState(false);
+  const [draft,setDraft]     = useState({});
+  const [followers,setFollowers] = useState(p.followers||[]);
+  const [followLoading,setFollowLoading] = useState(null);
 
-  useEffect(() => {
-    if (autoScroll && panelRef.current) {
-      panelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [profile?.id, autoScroll]);
+  useEffect(()=>{setFollowers(p.followers||[]);},[profile?.id]);
 
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({});
-  const [followers, setFollowers] = useState(p.followers || []);
-  const [followLoading, setFollowLoading] = useState(null);
+  const score = p.lala_relevance_score??d.lala_relevance_score??0;
+  const lc    = lalaClass(score);
+  const lColor = lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight;
 
-  // Refresh followers when profile changes
-  useEffect(() => { setFollowers(p.followers || []); }, [profile?.id]);
-
-  const toggleFollow = async (protag) => {
-    setFollowLoading(protag.key);
-    try {
-      const isFollowing = followers.some(f => f.character_key === protag.key);
-      if (isFollowing) {
-        await fetch(`${API}/${p.id}/followers/${protag.key}`, { method: 'DELETE', headers: authHeaders() });
-        setFollowers(prev => prev.filter(f => f.character_key !== protag.key));
-      } else {
-        const res = await fetch(`${API}/${p.id}/followers`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ character_key: protag.key, character_name: protag.context.name }),
-        });
-        const data = await res.json();
-        if (data.follower) setFollowers(prev => [...prev, data.follower]);
-      }
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      console.error('Follow toggle error:', err);
-    } finally {
-      setFollowLoading(null);
-    }
-  };
-
-  const startEdit = () => {
-    setDraft({
-      handle: p.handle || '',
-      display_name: p.display_name || d.display_name || '',
-      platform: p.platform || '',
-      vibe_sentence: p.vibe_sentence || '',
-      content_persona: p.content_persona || d.content_persona || '',
-      real_signal: p.real_signal || d.real_signal || '',
-      posting_voice: p.posting_voice || d.posting_voice || '',
-      comment_energy: p.comment_energy || d.comment_energy || '',
-      parasocial_function: p.parasocial_function || d.parasocial_function || '',
-      emotional_activation: d.emotional_activation || p.emotional_activation || '',
-      watch_reason: d.watch_reason || p.watch_reason || '',
-      what_it_costs_her: d.what_it_costs_her || p.what_it_costs_her || '',
-      current_trajectory: p.current_trajectory || d.current_trajectory || '',
-      trajectory_detail: p.trajectory_detail || d.trajectory_detail || '',
-      pinned_post: p.pinned_post || d.pinned_post || '',
-    });
+  const startEdit = ()=>{
+    setDraft({ handle:p.handle||'', display_name:p.display_name||d.display_name||'', platform:p.platform||'', vibe_sentence:p.vibe_sentence||'', content_persona:p.content_persona||d.content_persona||'', real_signal:p.real_signal||d.real_signal||'', posting_voice:p.posting_voice||d.posting_voice||'', comment_energy:p.comment_energy||d.comment_energy||'', parasocial_function:p.parasocial_function||d.parasocial_function||'', emotional_activation:d.emotional_activation||p.emotional_activation||'', watch_reason:d.watch_reason||p.watch_reason||'', what_it_costs_her:d.what_it_costs_her||p.what_it_costs_her||'', current_trajectory:p.current_trajectory||d.current_trajectory||'', pinned_post:p.pinned_post||d.pinned_post||'' });
     setEditing(true);
   };
 
-  const saveEdit = async () => {
-    await onEdit(p.id, draft);
-    setEditing(false);
+  const toggleFollow = async protag=>{
+    setFollowLoading(protag.key);
+    try{
+      const isF=followers.some(f=>f.character_key===protag.key);
+      if(isF){await fetch(`${API}/${p.id}/followers/${protag.key}`,{method:'DELETE',headers:authHeaders()});setFollowers(prev=>prev.filter(f=>f.character_key!==protag.key));}
+      else{const res=await fetch(`${API}/${p.id}/followers`,{method:'POST',headers:authHeaders(),body:JSON.stringify({character_key:protag.key,character_name:protag.context.name})});const dt=await res.json();if(dt.follower)setFollowers(prev=>[...prev,dt.follower]);}
+      if(onRefresh)onRefresh();
+    }catch(err){console.error('Follow toggle error:',err);}
+    finally{setFollowLoading(null);}
   };
 
-  const field = (label, key, textarea) => {
-    if (!editing) return null;
-    return (
-      <div style={{ marginBottom: 10 }}>
-        <div className="spg-section-label">{label}</div>
-        {textarea ? (
-          <textarea className="spg-input" rows={3} value={draft[key] || ''} onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))} style={{ width: '100%', resize: 'vertical' }} />
-        ) : (
-          <input className="spg-input" value={draft[key] || ''} onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))} style={{ width: '100%' }} />
-        )}
-      </div>
-    );
-  };
+  const Section = ({title,children})=>(
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${C.border}`}}>{title}</div>
+      {children}
+    </div>
+  );
+  const Field = ({label,value})=>value?(<div style={{marginBottom:6}}><div style={{fontSize:10,fontWeight:600,color:C.inkLight,marginBottom:2}}>{label}</div><div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{value}</div></div>):null;
+  const inp=(label,key,multi)=>(
+    <div style={{marginBottom:8}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>{label}</div>
+      {multi?<textarea value={draft[key]||''} onChange={e=>setDraft(f=>({...f,[key]:e.target.value}))} rows={3} style={{width:'100%',padding:'7px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,resize:'vertical',fontFamily:C.font,boxSizing:'border-box'}}/>
+            :<input value={draft[key]||''} onChange={e=>setDraft(f=>({...f,[key]:e.target.value}))} style={{width:'100%',padding:'7px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,boxSizing:'border-box'}}/>}
+    </div>
+  );
 
   return (
-    <div className="spg-detail" ref={panelRef}>
-      <div className="spg-detail-header">
-        <button className="spg-detail-close" onClick={onClose}>✕ Close</button>
-        <div className="spg-detail-handle">{p.handle}</div>
-        <div className="spg-detail-meta">
-          <span className="spg-detail-meta-item">{p.display_name || d.display_name}</span>
-          <span className="spg-detail-meta-item">{p.platform}</span>
-          <span className="spg-detail-meta-item">{p.follower_count_approx || d.follower_count_approx}</span>
-          <span className="spg-detail-meta-item">{ARCHETYPE_LABELS[p.archetype || d.archetype] || p.archetype || d.archetype}</span>
-          {(p.geographic_base || d.geographic_base) && <span className="spg-detail-meta-item">📍 {p.geographic_base || d.geographic_base}</span>}
-          {(p.relationship_status || d.relationship_status) && <span className="spg-detail-meta-item">💍 {p.relationship_status || d.relationship_status}</span>}
-          {p.adult_content_present && <span className="spg-adult-badge">18+ Content</span>}
+    <div style={{minHeight:'100%'}}>
+      {/* Accent bar */}
+      <div style={{height:4,background:`linear-gradient(90deg,${C.pink},${C.lavender},${C.blue})`}}/>
+      {/* Header */}
+      <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
+          <div>
+            <div style={{fontSize:20,fontWeight:700,color:C.ink,marginBottom:2}}>{p.handle}</div>
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+              {(p.display_name||d.display_name)&&<span style={{fontSize:13,color:C.inkMid}}>{p.display_name||d.display_name}</span>}
+              <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
+              {(p.archetype||d.archetype)&&<span style={{fontSize:11,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
+              {p.adult_content_present&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+ Content</span>}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:C.inkLight,lineHeight:1,flexShrink:0}}>×</button>
         </div>
-        <div className="spg-detail-actions">
-          {editing ? (
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <FeedStatePicker profile={p} onStateChange={onRefresh}/>
+          {editing?(
             <>
-              <button className="spg-btn spg-btn-sm spg-btn-green" onClick={saveEdit}>✓ Save</button>
-              <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={() => setEditing(false)}>Cancel</button>
+              <button onClick={()=>{onEdit(p.id,draft);setEditing(false);}} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:'none',cursor:'pointer'}}>✓ Save</button>
+              <button onClick={()=>setEditing(false)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Cancel</button>
             </>
-          ) : (
+          ):(
             <>
-              {p.status === 'generated' && (
-                <button className="spg-btn spg-btn-sm spg-btn-green" onClick={() => onFinalize(p.id)}>
-                  ✓ Finalize
-                </button>
-              )}
-              {(p.status === 'finalized') && (
-                <button className="spg-btn spg-btn-sm spg-btn-purple" onClick={() => onCross(p.id)}>
-                  ⚡ Cross Into World
-                </button>
-              )}
-              {p.status === 'crossed' && (
-                <span className="spg-btn spg-btn-sm spg-btn-outline" style={{ cursor: 'default' }}>
-                  ✦ Crossed {p.crossed_at ? `on ${new Date(p.crossed_at).toLocaleDateString()}` : ''}
-                </span>
-              )}
-              <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={startEdit}>✎ Edit</button>
-              <button className="spg-btn spg-btn-sm" onClick={() => onDelete(p.id)} style={{ color: 'var(--red, #c45858)' }}>✕ Delete</button>
+              {p.status==='generated'&&<button onClick={()=>onFinalize(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:'none',cursor:'pointer'}}>✓ Finalize</button>}
+              {p.status==='finalized'&&<button onClick={()=>onCross(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:C.lavLight,color:C.lavender,border:'none',cursor:'pointer'}}>⚡ Cross Into World</button>}
+              {p.status==='crossed'&&<span style={{fontSize:11,color:C.lavender,fontWeight:600}}>✦ Crossed {p.crossed_at?`on ${new Date(p.crossed_at).toLocaleDateString()}`:''}</span>}
+              <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>✎ Edit</button>
+              <button onClick={()=>onDelete(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.pink,border:`1px solid ${C.pinkMid}`,cursor:'pointer'}}>✕ Delete</button>
             </>
           )}
         </div>
-        {/* State picker */}
-        <FeedStatePicker profile={p} onStateChange={onRefresh} />
       </div>
 
-      <div className="spg-detail-body">
-        {/* Edit form for core fields */}
-        {editing && (
-          <div className="spg-section" style={{ marginBottom: 20, padding: 16, background: 'var(--surface-alt, #f4f3f7)', borderRadius: 10 }}>
-            <div className="spg-section-title" style={{ marginBottom: 12 }}>Edit Profile</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
-              {field('Handle', 'handle')}
-              {field('Display Name', 'display_name')}
-              {field('Platform', 'platform')}
-              {field('Vibe Sentence', 'vibe_sentence')}
+      {/* Body */}
+      <div style={{padding:'16px 20px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+        {editing ? (
+          <div style={{gridColumn:'1/-1'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
+              {inp('Handle','handle')}{inp('Display Name','display_name')}{inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
             </div>
-            {field('Content Persona', 'content_persona', true)}
-            {field('Real Signal', 'real_signal', true)}
-            {field('Posting Voice', 'posting_voice', true)}
-            {field('Comment Energy', 'comment_energy', true)}
-            {field('Parasocial Function', 'parasocial_function', true)}
-            {field('Emotional Activation', 'emotional_activation', true)}
-            {field('Why She Watches', 'watch_reason', true)}
-            {field('What It Costs Her', 'what_it_costs_her', true)}
-            {field('Trajectory', 'current_trajectory')}
-            {field('Trajectory Detail', 'trajectory_detail', true)}
-            {field('Pinned Post', 'pinned_post', true)}
+            {inp('Content Persona','content_persona',true)}{inp('Real Signal','real_signal',true)}{inp('Posting Voice','posting_voice',true)}{inp('Comment Energy','comment_energy',true)}{inp('Parasocial Function','parasocial_function',true)}{inp('Emotional Activation','emotional_activation',true)}{inp('Why She Watches','watch_reason',true)}{inp('What It Costs Her','what_it_costs_her',true)}{inp('Trajectory','current_trajectory')}{inp('Pinned Post','pinned_post',true)}
           </div>
+        ) : (
+          <>
+            {/* Left column */}
+            <div>
+              <Section title="Content Persona"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.content_persona||d.content_persona}</div></Section>
+              <Section title="Real Signal"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.real_signal||d.real_signal}</div></Section>
+              <Section title="Posting Voice"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.posting_voice||d.posting_voice}</div></Section>
+              <Section title="Comment Energy"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.comment_energy||d.comment_energy}</div></Section>
+              {p.adult_content_present&&<Section title="Adult Content"><Field label="Type" value={p.adult_content_type||d.adult_content_type}/><Field label="Framing" value={p.adult_content_framing||d.adult_content_framing}/></Section>}
+            </div>
+            {/* Right column */}
+            <div>
+              <Section title="Parasocial Function">
+                <div style={{fontSize:13,color:C.inkMid,lineHeight:1.7,marginBottom:8}}>{p.parasocial_function||d.parasocial_function}</div>
+                <Field label="Emotional Activation" value={d.emotional_activation||p.emotional_activation}/>
+                <Field label="Why She Watches" value={d.watch_reason||p.watch_reason}/>
+                <Field label="What It Costs Her" value={d.what_it_costs_her||p.what_it_costs_her}/>
+              </Section>
+              <Section title="Trajectory">
+                <div style={{fontSize:11,fontWeight:700,color:C.inkMid,marginBottom:4}}>{p.current_trajectory||d.current_trajectory}</div>
+                <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.trajectory_detail||d.trajectory_detail}</div>
+              </Section>
+              <Section title="Lala Relevance">
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                  <div style={{flex:1,height:6,borderRadius:3,background:C.border,overflow:'hidden'}}>
+                    <div style={{height:'100%',borderRadius:3,background:lColor,width:`${score*10}%`,transition:'width 0.5s'}}/>
+                  </div>
+                  <span style={{fontSize:13,fontWeight:700,color:lColor,flexShrink:0}}>{score}/10</span>
+                </div>
+                <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.lala_relevance_reason||d.lala_relevance_reason}</div>
+              </Section>
+            </div>
+          </>
         )}
+      </div>
 
-        {!editing && <div className="spg-detail-grid">
-          {/* Left column */}
-          <div>
-            <div className="spg-section">
-              <div className="spg-section-title">Content Persona</div>
-              <div className="spg-section-text">{p.content_persona || d.content_persona}</div>
-            </div>
-
-            <div className="spg-section">
-              <div className="spg-section-title">Real Signal</div>
-              <div className="spg-section-text">{p.real_signal || d.real_signal}</div>
-            </div>
-
-            <div className="spg-section">
-              <div className="spg-section-title">Posting Voice</div>
-              <div className="spg-section-text">{p.posting_voice || d.posting_voice}</div>
-            </div>
-
-            <div className="spg-section">
-              <div className="spg-section-title">Comment Energy</div>
-              <div className="spg-section-text">{p.comment_energy || d.comment_energy}</div>
-            </div>
-
-            {p.adult_content_present && (
-              <div className="spg-section">
-                <div className="spg-section-title">Adult Content</div>
-                <div className="spg-section-label">Type</div>
-                <div className="spg-section-text">{p.adult_content_type || d.adult_content_type}</div>
-                <div className="spg-section-label">Framing</div>
-                <div className="spg-section-text">{p.adult_content_framing || d.adult_content_framing}</div>
-              </div>
-            )}
-          </div>
-
-          {/* Right column */}
-          <div>
-            <div className="spg-section">
-              <div className="spg-section-title">Parasocial Function</div>
-              <div className="spg-section-text">{p.parasocial_function || d.parasocial_function}</div>
-              <div className="spg-section-label">Emotional Activation</div>
-              <div className="spg-section-text" style={{ fontStyle: 'italic', color: 'var(--purple-deep)' }}>
-                {d.emotional_activation || p.emotional_activation}
-              </div>
-              <div className="spg-section-label">Why She Watches</div>
-              <div className="spg-section-text">{d.watch_reason || p.watch_reason}</div>
-              <div className="spg-section-label">What It Costs Her</div>
-              <div className="spg-section-text">{d.what_it_costs_her || p.what_it_costs_her}</div>
-            </div>
-
-            <div className="spg-section">
-              <div className="spg-section-title">Trajectory</div>
-              <div className="spg-card-archetype" style={{ marginBottom: 8 }}>
-                {p.current_trajectory || d.current_trajectory}
-              </div>
-              <div className="spg-section-text">{p.trajectory_detail || d.trajectory_detail}</div>
-            </div>
-
-            {/* Lala Relevance */}
-            <div className="spg-section">
-              <div className="spg-section-title">Lala Relevance</div>
-              <div className="spg-lala-bar">
-                <div className="spg-lala-track">
-                  <div
-                    className={`spg-lala-fill spg-lala-fill-${cls}`}
-                    style={{ width: `${score * 10}%` }}
-                  />
-                </div>
-                <span className={`spg-lala-number spg-lala-${cls}`}>{score}/10</span>
-              </div>
-              <div className="spg-section-text" style={{ marginTop: 6 }}>
-                {p.lala_relevance_reason || d.lala_relevance_reason}
-              </div>
-            </div>
-          </div>
-        </div>}
-
-        {/* Followers */}
-        <div className="spg-section" style={{ marginTop: 24 }}>
-          <div className="spg-section-title">Character Followers</div>
-          <div className="spg-follower-row">
-            {PROTAGONISTS.map(protag => {
-              const isFollowing = followers.some(f => f.character_key === protag.key);
-              const followData = followers.find(f => f.character_key === protag.key);
-              const isLoading = followLoading === protag.key;
-              return (
-                <button
-                  key={protag.key}
-                  className={`spg-follow-btn ${isFollowing ? 'spg-follow-btn-active' : ''}`}
-                  onClick={() => toggleFollow(protag)}
-                  disabled={isLoading}
-                  title={followData?.follow_context || ''}
-                >
-                  <span className="spg-follow-icon">{protag.icon}</span>
-                  <span>{isLoading ? '...' : isFollowing ? `${protag.context.name} follows` : `Add ${protag.context.name}`}</span>
-                  {followData?.follow_probability != null && (
-                    <span className="spg-follow-prob">{Math.round(followData.follow_probability * 100)}%</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          {followers.length > 0 && (
-            <div className="spg-follower-details">
-              {followers.map(f => (
-                <div key={f.character_key} className="spg-follower-detail-item spg-follower-detail-enhanced">
-                  <div className="spg-follower-detail-header">
-                    <span className="spg-follower-detail-name">
-                      {f.character_key === 'justawoman' ? '◈' : '✦'} {f.character_name}
-                    </span>
-                    {f.auto_generated && <span className="spg-follower-auto-badge">auto</span>}
-                    {f.follow_motivation && (
-                      <span className={`spg-follower-motivation spg-motivation-${f.follow_motivation}`}>
-                        {f.follow_motivation.replace('_', ' ')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="spg-follower-detail-meta">
-                    {f.influence_type && <span className="spg-follower-detail-tag">{f.influence_type}</span>}
-                    {f.influence_level && <span className="spg-follower-detail-level">Influence: {f.influence_level}/10</span>}
-                    {f.follow_probability != null && (
-                      <span className="spg-follower-detail-prob">Match: {Math.round(f.follow_probability * 100)}%</span>
-                    )}
-                  </div>
-                  {f.emotional_reaction && (
-                    <div className="spg-follower-emotional">{f.emotional_reaction}</div>
-                  )}
-                  {f.follow_context && (
-                    <div className="spg-follower-context">{f.follow_context}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Followers section */}
+      <div style={{padding:'0 20px 16px'}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Character Followers</div>
+        <div style={{display:'flex',gap:8,marginBottom:10}}>
+          {PROTAGONISTS.map(protag=>{
+            const isF=followers.some(f=>f.character_key===protag.key);
+            const fd=followers.find(f=>f.character_key===protag.key);
+            const isL=followLoading===protag.key;
+            return (
+              <button key={protag.key} onClick={()=>toggleFollow(protag)} disabled={isL} style={{
+                padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,cursor:'pointer',border:`1.5px solid ${isF?C.lavender:C.border}`,
+                background:isF?C.lavLight:'transparent',color:isF?C.lavender:C.inkMid,display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:16}}>{protag.icon}</span>
+                {isL?'…':isF?`${protag.context.name} follows`:`Add ${protag.context.name}`}
+                {fd?.follow_probability!=null&&<span style={{fontSize:10,opacity:0.7}}>{Math.round(fd.follow_probability*100)}%</span>}
+              </button>
+            );
+          })}
         </div>
-
-        {/* Pinned Post */}
-        {(p.pinned_post || d.pinned_post) && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Pinned Post</div>
-            <div className="spg-pinned">
-              <span className="spg-pinned-label">📌 Pinned</span>
-              <div className="spg-pinned-text">{p.pinned_post || d.pinned_post}</div>
-            </div>
-          </div>
-        )}
-
-        {/* Sample Captions */}
-        {((p.sample_captions || d.sample_captions) || []).length > 0 && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Sample Captions</div>
-            <div className="spg-samples">
-              {(p.sample_captions || d.sample_captions || []).map((c, i) => (
-                <div key={i} className="spg-sample">{c}</div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Sample Comments */}
-        {((p.sample_comments || d.sample_comments) || []).length > 0 && (
-          <div className="spg-section" style={{ marginTop: 16 }}>
-            <div className="spg-section-title">Sample Comments</div>
-            <div className="spg-samples">
-              {(p.sample_comments || d.sample_comments || []).map((c, i) => (
-                <div key={i} className="spg-sample" style={{ borderLeftColor: 'var(--purple)' }}>{c}</div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Moment Log */}
-        {((p.moment_log || d.moment_log) || []).length > 0 && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Moment Log</div>
-            <div className="spg-moments">
-              {(p.moment_log || d.moment_log || []).map((m, i) => (
-                <div key={i} className="spg-moment">
-                  <div className="spg-moment-type">
-                    {m.moment_type} · {m.platform_format}
-                  </div>
-                  <div className="spg-moment-text">{m.description}</div>
-                  <div className="spg-moment-reaction">{m.justawoman_reaction}</div>
-                  {m.lala_seed && (
-                    <span className="spg-moment-seed">✦ Lala Seed — {m.lala_seed_reason}</span>
-                  )}
+        {followers.length>0&&(
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {followers.map(f=>(
+              <div key={f.character_key} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:f.follow_context?4:0}}>
+                  <span style={{fontSize:15,color:f.character_key==='justawoman'?C.blue:C.lavender}}>{f.character_key==='justawoman'?'◈':'✦'}</span>
+                  <span style={{fontWeight:700,color:C.ink}}>{f.character_name}</span>
+                  {f.auto_generated&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:4,background:C.blueLight,color:C.blue}}>auto</span>}
+                  {f.follow_motivation&&<span style={{fontSize:10,color:C.inkLight,marginLeft:'auto'}}>{f.follow_motivation.replace('_',' ')}</span>}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Book Relevance */}
-        {((p.book_relevance || d.book_relevance) || []).length > 0 && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Book Relevance</div>
-            <div className="spg-samples">
-              {(p.book_relevance || d.book_relevance || []).map((b, i) => (
-                <div key={i} className="spg-sample" style={{ borderLeftColor: 'var(--cyan)' }}>{b}</div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Enhanced Creator Intel ──────────────────────────────── */}
-        {(p.post_frequency || d.post_frequency || p.engagement_rate || d.engagement_rate || p.geographic_base || d.geographic_base) && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Creator Intel</div>
-            <div className="spg-intel-grid">
-              {(p.post_frequency || d.post_frequency) && (
-                <div className="spg-intel-item">
-                  <span className="spg-intel-icon">📊</span>
-                  <span className="spg-intel-label">Post Frequency</span>
-                  <span className="spg-intel-value">{p.post_frequency || d.post_frequency}</span>
-                </div>
-              )}
-              {(p.engagement_rate || d.engagement_rate) && (
-                <div className="spg-intel-item">
-                  <span className="spg-intel-icon">💬</span>
-                  <span className="spg-intel-label">Engagement Rate</span>
-                  <span className="spg-intel-value">{p.engagement_rate || d.engagement_rate}</span>
-                </div>
-              )}
-              {(p.geographic_base || d.geographic_base) && (
-                <div className="spg-intel-item">
-                  <span className="spg-intel-icon">📍</span>
-                  <span className="spg-intel-label">Location</span>
-                  <span className="spg-intel-value">{p.geographic_base || d.geographic_base}</span>
-                </div>
-              )}
-              {(p.geographic_cluster || d.geographic_cluster) && (
-                <div className="spg-intel-item">
-                  <span className="spg-intel-icon">🗺️</span>
-                  <span className="spg-intel-label">Cluster</span>
-                  <span className="spg-intel-value">{p.geographic_cluster || d.geographic_cluster}</span>
-                </div>
-              )}
-              {(p.age_range || d.age_range) && (
-                <div className="spg-intel-item">
-                  <span className="spg-intel-icon">🎂</span>
-                  <span className="spg-intel-label">Age Range</span>
-                  <span className="spg-intel-value">{p.age_range || d.age_range}</span>
-                </div>
-              )}
-              {(p.relationship_status || d.relationship_status) && (
-                <div className="spg-intel-item">
-                  <span className="spg-intel-icon">💍</span>
-                  <span className="spg-intel-label">Relationship</span>
-                  <span className="spg-intel-value">{p.relationship_status || d.relationship_status}</span>
-                </div>
-              )}
-              {(p.influencer_tier_detail || d.influencer_tier_detail) && (
-                <div className="spg-intel-item">
-                  <span className="spg-intel-icon">👑</span>
-                  <span className="spg-intel-label">Tier Detail</span>
-                  <span className="spg-intel-value">{p.influencer_tier_detail || d.influencer_tier_detail}</span>
-                </div>
-              )}
-              {(p.collab_style || d.collab_style) && (
-                <div className="spg-intel-item">
-                  <span className="spg-intel-icon">🤝</span>
-                  <span className="spg-intel-label">Collab Style</span>
-                  <span className="spg-intel-value">{p.collab_style || d.collab_style}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Aesthetic DNA */}
-        {(p.aesthetic_dna || d.aesthetic_dna) && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Aesthetic DNA</div>
-            <div className="spg-aesthetic-grid">
-              {(() => {
-                const aes = p.aesthetic_dna || d.aesthetic_dna;
-                return (
-                  <>
-                    {aes.visual_style && <div className="spg-aesthetic-item"><span className="spg-section-label">Visual Style</span><span>{aes.visual_style}</span></div>}
-                    {aes.color_palette && <div className="spg-aesthetic-item"><span className="spg-section-label">Color Palette</span><span>{aes.color_palette}</span></div>}
-                    {aes.editing_style && <div className="spg-aesthetic-item"><span className="spg-section-label">Editing Style</span><span>{aes.editing_style}</span></div>}
-                    {aes.vibe_tags && Array.isArray(aes.vibe_tags) && (
-                      <div className="spg-aesthetic-tags">
-                        {aes.vibe_tags.map((t, i) => <span key={i} className="spg-tag">{t}</span>)}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        )}
-
-        {/* Revenue Streams */}
-        {((p.revenue_streams || d.revenue_streams) || []).length > 0 && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Revenue Streams</div>
-            <div className="spg-tag-row">
-              {(p.revenue_streams || d.revenue_streams || []).map((r, i) => (
-                <span key={i} className="spg-tag spg-tag-green">{typeof r === 'string' ? r : r.source || r.type || JSON.stringify(r)}</span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Brand Partnerships */}
-        {((p.brand_partnerships || d.brand_partnerships) || []).length > 0 && (
-          <div className="spg-section" style={{ marginTop: 16 }}>
-            <div className="spg-section-title">Brand Partnerships</div>
-            <div className="spg-tag-row">
-              {(p.brand_partnerships || d.brand_partnerships || []).map((b, i) => (
-                <span key={i} className="spg-tag spg-tag-purple">{typeof b === 'string' ? b : b.brand || b.name || JSON.stringify(b)}</span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Audience Demographics */}
-        {(p.audience_demographics || d.audience_demographics) && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Audience Demographics</div>
-            <div className="spg-intel-grid">
-              {(() => {
-                const aud = p.audience_demographics || d.audience_demographics;
-                return (
-                  <>
-                    {aud.primary_age && <div className="spg-intel-item"><span className="spg-intel-icon">📊</span><span className="spg-intel-label">Primary Age</span><span className="spg-intel-value">{aud.primary_age}</span></div>}
-                    {aud.gender_split && <div className="spg-intel-item"><span className="spg-intel-icon">⚤</span><span className="spg-intel-label">Gender Split</span><span className="spg-intel-value">{aud.gender_split}</span></div>}
-                    {aud.psychographic && <div className="spg-intel-item"><span className="spg-intel-icon">🧠</span><span className="spg-intel-label">Psychographic</span><span className="spg-intel-value">{aud.psychographic}</span></div>}
-                    {aud.top_locations && Array.isArray(aud.top_locations) && (
-                      <div className="spg-intel-item"><span className="spg-intel-icon">🌍</span><span className="spg-intel-label">Top Locations</span><span className="spg-intel-value">{aud.top_locations.join(', ')}</span></div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        )}
-
-        {/* Known Associates / Network */}
-        {((p.known_associates || d.known_associates) || []).length > 0 && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Network / Known Associates</div>
-            <div className="spg-associates">
-              {(p.known_associates || d.known_associates || []).map((a, i) => (
-                <div key={i} className="spg-associate-card">
-                  <div className="spg-associate-handle">{a.handle || a}</div>
-                  {a.platform && <span className="spg-associate-platform">{a.platform}</span>}
-                  {a.relationship_type && (
-                    <span className={`spg-associate-rel spg-rel-${a.relationship_type}`}>
-                      {a.relationship_type.replace(/_/g, ' ')}
-                    </span>
-                  )}
-                  {a.drama_level != null && a.drama_level > 0 && (
-                    <span className="spg-associate-drama" title={`Drama Level: ${a.drama_level}/10`}>
-                      {'🔥'.repeat(Math.min(5, Math.ceil(a.drama_level / 2)))}
-                    </span>
-                  )}
-                  {a.description && <div className="spg-associate-desc">{a.description}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Controversy History */}
-        {((p.controversy_history || d.controversy_history) || []).length > 0 && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">Controversy History</div>
-            <div className="spg-controversies">
-              {(p.controversy_history || d.controversy_history || []).map((c, i) => (
-                <div key={i} className="spg-controversy-item">
-                  <div className="spg-controversy-event">{c.event || c}</div>
-                  {c.date_approx && <span className="spg-controversy-date">{c.date_approx}</span>}
-                  {c.severity && <span className={`spg-controversy-severity spg-severity-${c.severity}`}>{c.severity}</span>}
-                  {c.resolved != null && <span className={`spg-tag ${c.resolved ? 'spg-tag-green' : 'spg-tag-red'}`}>{c.resolved ? 'Resolved' : 'Ongoing'}</span>}
-                  {c.narrative_potential && <div className="spg-controversy-narrative">{c.narrative_potential}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Crossing Pathway */}
-        {(p.crossing_trigger || d.crossing_trigger) && (
-          <div className="spg-section" style={{ marginTop: 24 }}>
-            <div className="spg-section-title">World Crossing</div>
-            <div className="spg-crossing">
-              <div className="spg-crossing-title">Crossing Trigger</div>
-              <div className="spg-section-text">{p.crossing_trigger || d.crossing_trigger}</div>
-              <div className="spg-crossing-title" style={{ marginTop: 12 }}>Mechanism</div>
-              <div className="spg-section-text">{p.crossing_mechanism || d.crossing_mechanism}</div>
-            </div>
+                {f.follow_context&&<div style={{color:C.inkMid,lineHeight:1.5,paddingLeft:22}}>{f.follow_context}</div>}
+              </div>
+            ))}
           </div>
         )}
       </div>
+
+      {/* Pinned post */}
+      {(p.pinned_post||d.pinned_post)&&(
+        <div style={{padding:'0 20px 16px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>Pinned Post</div>
+          <div style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.pink}`,fontSize:13,color:C.inkMid,lineHeight:1.6}}>
+            <span style={{fontSize:11,fontWeight:700,color:C.pink,marginRight:6}}>📌</span>{p.pinned_post||d.pinned_post}
+          </div>
+        </div>
+      )}
+
+      {/* Sample captions */}
+      {((p.sample_captions||d.sample_captions)||[]).length>0&&(
+        <div style={{padding:'0 20px 16px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Sample Captions</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {(p.sample_captions||d.sample_captions||[]).map((c,i)=>(
+              <div key={i} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,borderLeft:`3px solid ${C.lavender}`,fontSize:12,color:C.inkMid,lineHeight:1.6}}>{c}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Moment log */}
+      {((p.moment_log||d.moment_log)||[]).length>0&&(
+        <div style={{padding:'0 20px 16px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Moment Log</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {(p.moment_log||d.moment_log||[]).map((m,i)=>(
+              <div key={i} style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.lavender,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:4}}>{m.moment_type} · {m.platform_format}</div>
+                <div style={{fontSize:12,color:C.ink,marginBottom:4}}>{m.description}</div>
+                <div style={{fontSize:11,color:C.inkMid,fontStyle:'italic',marginBottom:m.lala_seed?4:0}}>{m.justawoman_reaction}</div>
+                {m.lala_seed&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>✦ Lala Seed — {m.lala_seed_reason}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Creator intel */}
+      {(p.post_frequency||d.post_frequency||p.engagement_rate||d.engagement_rate||p.geographic_base||d.geographic_base)&&(
+        <div style={{padding:'0 20px 16px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Creator Intel</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
+            {[
+              ['📊','Post Frequency',p.post_frequency||d.post_frequency],
+              ['💬','Engagement Rate',p.engagement_rate||d.engagement_rate],
+              ['📍','Location',p.geographic_base||d.geographic_base],
+              ['🎂','Age Range',p.age_range||d.age_range],
+              ['💍','Relationship',p.relationship_status||d.relationship_status],
+              ['🤝','Collab Style',p.collab_style||d.collab_style],
+            ].filter(([,,v])=>v).map(([icon,label,val])=>(
+              <div key={label} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>{icon} {label}</div>
+                <div style={{fontSize:12,fontWeight:600,color:C.ink}}>{val}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Crossing pathway */}
+      {(p.crossing_trigger||d.crossing_trigger)&&(
+        <div style={{padding:'0 20px 16px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>World Crossing</div>
+          <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.lavender,marginBottom:4}}>Crossing Trigger</div>
+            <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6,marginBottom:8}}>{p.crossing_trigger||d.crossing_trigger}</div>
+            <div style={{fontSize:11,fontWeight:700,color:C.lavender,marginBottom:4}}>Mechanism</div>
+            <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.crossing_mechanism||d.crossing_mechanism}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

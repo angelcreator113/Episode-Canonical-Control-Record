@@ -25,14 +25,8 @@ const Wardrobe = ({ embedded = false }) => {
   };
 
   const getPrimaryAction = () => {
-    switch (activeTab) {
-      case 'items':
-        return null; // Removed - functionality now in WardrobeBrowser
-      case 'outfits':
-        return { label: '+ Create Outfit', onClick: () => {} }; // Handled by OutfitSets
-      default:
-        return null;
-    }
+    // All creation actions are handled by sub-components (WardrobeBrowser, OutfitSets)
+    return null;
   };
 
   const primaryAction = getPrimaryAction();

@@ -34,7 +34,7 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
-const { optionalAuth } = require('../middleware/auth');
+const { optionalAuth, authenticateToken } = require('../middleware/auth');
 
 router.use(optionalAuth);
 
@@ -64,26 +64,35 @@ router.get('/markers', async (req, res) => {
 });
 
 // POST /markers
-router.post('/markers', async (req, res) => {
-  const { StoryClockMarker } = getModels(req);
+router.post('/markers', authenticateToken, async (req, res) => {
+  const models = getModels(req);
+  const { StoryClockMarker } = models;
   try {
     const { name, description, calendar_date, sequence_order, is_present, series_id } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
-    // If creating as present, clear others first
-    if (is_present && series_id) {
-      await StoryClockMarker.update({ is_present: false }, {
-        where: { series_id, is_present: true },
-      });
-    }
+    // Wrap in transaction to prevent race condition on is_present toggle
+    const transaction = await models.sequelize.transaction();
+    try {
+      if (is_present && series_id) {
+        await StoryClockMarker.update({ is_present: false }, {
+          where: { series_id, is_present: true }, transaction,
+        });
+      }
 
-    const marker = await StoryClockMarker.create({
-      name, description, calendar_date,
-      sequence_order: sequence_order || 0,
-      is_present: is_present || false,
-      series_id,
-    });
-    res.status(201).json({ marker });
+      const marker = await StoryClockMarker.create({
+        name, description, calendar_date,
+        sequence_order: sequence_order || 0,
+        is_present: is_present || false,
+        series_id,
+      }, { transaction });
+
+      await transaction.commit();
+      res.status(201).json({ marker });
+    } catch (txErr) {
+      await transaction.rollback();
+      throw txErr;
+    }
   } catch (err) {
     console.error('[Calendar] POST /markers error:', err);
     res.status(500).json({ error: err.message });
@@ -91,21 +100,28 @@ router.post('/markers', async (req, res) => {
 });
 
 // PUT /markers/:id/set-present
-router.put('/markers/:id/set-present', async (req, res) => {
-  const { StoryClockMarker } = getModels(req);
+router.put('/markers/:id/set-present', authenticateToken, async (req, res) => {
+  const models = getModels(req);
+  const { StoryClockMarker } = models;
   try {
-    const marker = await StoryClockMarker.findByPk(req.params.id);
-    if (!marker) return res.status(404).json({ error: 'Marker not found' });
+    const transaction = await models.sequelize.transaction();
+    try {
+      const marker = await StoryClockMarker.findByPk(req.params.id, { transaction, lock: true });
+      if (!marker) { await transaction.rollback(); return res.status(404).json({ error: 'Marker not found' }); }
 
-    // Clear all others for same series
-    if (marker.series_id) {
-      await StoryClockMarker.update({ is_present: false }, {
-        where: { series_id: marker.series_id, is_present: true },
-      });
+      if (marker.series_id) {
+        await StoryClockMarker.update({ is_present: false }, {
+          where: { series_id: marker.series_id, is_present: true }, transaction,
+        });
+      }
+      marker.is_present = true;
+      await marker.save({ transaction });
+      await transaction.commit();
+      res.json({ marker });
+    } catch (txErr) {
+      await transaction.rollback();
+      throw txErr;
     }
-    marker.is_present = true;
-    await marker.save();
-    res.json({ marker });
   } catch (err) {
     console.error('[Calendar] PUT /markers/:id/set-present error:', err);
     res.status(500).json({ error: err.message });
@@ -121,10 +137,15 @@ router.get('/events', async (req, res) => {
   const { StoryCalendarEvent, StoryClockMarker } = getModels(req);
   try {
     const where = {};
-    if (req.query.series_id)      where.series_id = req.query.series_id;
-    if (req.query.event_type)     where.event_type = req.query.event_type;
-    if (req.query.story_position) where.story_position = req.query.story_position;
-    if (req.query.visibility)     where.visibility = req.query.visibility;
+    if (req.query.series_id)         where.series_id = req.query.series_id;
+    if (req.query.event_type)        where.event_type = req.query.event_type;
+    if (req.query.story_position)    where.story_position = req.query.story_position;
+    if (req.query.visibility)        where.visibility = req.query.visibility;
+    if (req.query.cultural_category) where.cultural_category = req.query.cultural_category;
+    if (req.query.severity_level)    where.severity_level = req.query.severity_level;
+    if (req.query.is_micro_event !== undefined) {
+      where.is_micro_event = req.query.is_micro_event === 'true';
+    }
 
     const events = await StoryCalendarEvent.findAll({
       where,
@@ -139,7 +160,7 @@ router.get('/events', async (req, res) => {
 });
 
 // POST /events
-router.post('/events', async (req, res) => {
+router.post('/events', authenticateToken, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const {
@@ -168,7 +189,7 @@ router.post('/events', async (req, res) => {
 });
 
 // PUT /events/:id
-router.put('/events/:id', async (req, res) => {
+router.put('/events/:id', authenticateToken, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -182,7 +203,7 @@ router.put('/events/:id', async (req, res) => {
 });
 
 // DELETE /events/:id
-router.delete('/events/:id', async (req, res) => {
+router.delete('/events/:id', authenticateToken, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -219,7 +240,7 @@ router.get('/events/:id/attendees', async (req, res) => {
 });
 
 // POST /events/:id/attendees
-router.post('/events/:id/attendees', async (req, res) => {
+router.post('/events/:id/attendees', authenticateToken, async (req, res) => {
   const { CalendarEventAttendee, StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -246,7 +267,7 @@ router.post('/events/:id/attendees', async (req, res) => {
 });
 
 // PUT /events/:id/attendees/:attendeeId
-router.put('/events/:id/attendees/:attendeeId', async (req, res) => {
+router.put('/events/:id/attendees/:attendeeId', authenticateToken, async (req, res) => {
   const { CalendarEventAttendee } = getModels(req);
   try {
     const attendee = await CalendarEventAttendee.findOne({
@@ -266,7 +287,7 @@ router.put('/events/:id/attendees/:attendeeId', async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────
 
 // POST /events/:id/ripples/generate — Amber generates ripple threads via Claude
-router.post('/events/:id/ripples/generate', async (req, res) => {
+router.post('/events/:id/ripples/generate', authenticateToken, async (req, res) => {
   const models = getModels(req);
   const { StoryCalendarEvent, CalendarEventAttendee, CalendarEventRipple, RegistryCharacter } = models;
   try {
@@ -346,7 +367,7 @@ Generate ripple proposals for characters who may be affected — consider who wa
 });
 
 // PUT /ripples/:id/confirm
-router.put('/ripples/:id/confirm', async (req, res) => {
+router.put('/ripples/:id/confirm', authenticateToken, async (req, res) => {
   const { CalendarEventRipple } = getModels(req);
   try {
     const ripple = await CalendarEventRipple.findByPk(req.params.id);
@@ -397,7 +418,7 @@ router.get('/simultaneous', async (req, res) => {
 });
 
 // POST /auto-detect — Claude scans text for temporal markers, proposes event
-router.post('/auto-detect', async (req, res) => {
+router.post('/auto-detect', authenticateToken, async (req, res) => {
   try {
     const { line_text, series_id } = req.body;
     if (!line_text) return res.status(400).json({ error: 'line_text required' });

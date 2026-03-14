@@ -1,0 +1,231 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   EditItemModal.css — Inline edit system for world-building pages
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Modal Overlay ── */
+.eim-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 12, 20, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.eim-modal {
+  background: #faf9fc;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.eim-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8e4f0;
+}
+
+.eim-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #0f0c14;
+}
+
+.eim-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #7a7088;
+  line-height: 1;
+}
+
+/* ── Form ── */
+.eim-form {
+  padding: 16px 20px 20px;
+}
+
+.eim-field {
+  margin-bottom: 14px;
+}
+
+.eim-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #7a7088;
+  margin-bottom: 4px;
+}
+
+.eim-input, .eim-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e8e4f0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #0f0c14;
+  background: #fff;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.eim-input:focus, .eim-textarea:focus {
+  outline: none;
+  border-color: #a889c8;
+}
+
+.eim-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+/* ── Actions ── */
+.eim-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e8e4f0;
+}
+
+.eim-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.eim-btn-cancel {
+  background: #e8e4f0;
+  color: #7a7088;
+}
+
+.eim-btn-cancel:hover {
+  background: #d8d4e0;
+}
+
+.eim-btn-save {
+  background: #a889c8;
+  color: #fff;
+}
+
+.eim-btn-save:hover {
+  background: #9070b8;
+}
+
+/* ── Toolbar ── */
+.eim-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.eim-toolbar-btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid #e8e4f0;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #7a7088;
+}
+
+.eim-toolbar-btn:hover {
+  border-color: #a889c8;
+  color: #a889c8;
+}
+
+.eim-toolbar-btn.active {
+  background: #a889c8;
+  color: #fff;
+  border-color: #a889c8;
+}
+
+.eim-saving {
+  font-size: 12px;
+  color: #c9a84c;
+  font-weight: 600;
+}
+
+/* ── Item Overlay ── */
+.eim-item-wrapper {
+  position: relative;
+}
+
+.eim-item-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.eim-item-wrapper:hover .eim-item-actions {
+  opacity: 1;
+}
+
+.eim-item-edit, .eim-item-delete {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #e8e4f0;
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.eim-item-edit:hover {
+  border-color: #a889c8;
+  background: #f6f0fc;
+}
+
+.eim-item-delete:hover {
+  border-color: #d4789a;
+  background: #fdf2f6;
+}
+
+/* ── Add Button ── */
+.eim-add-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  border: 2px dashed #e8e4f0;
+  border-radius: 8px;
+  background: transparent;
+  color: #7a7088;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.eim-add-btn:hover {
+  border-color: #a889c8;
+  color: #a889c8;
+  background: #f6f0fc;
+}

@@ -20,7 +20,7 @@ const API = '/api/v1/memories/assistant-command';
 
 const GREETING = {
   role: 'assistant',
-  text: "Hey, I'm Amber. Ask me anything — about your characters, your book, navigation, or whatever you need.",
+  text: "hey it's amber. whatever you're working on rn — characters, the book, the feed, navigation — just tell me and i'll pull it up. i've been watching the world while you were gone.",
 };
 
 // ─── Speech Recognition singleton ────────────────────────────────────────────
@@ -86,9 +86,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
   const [messages,   setMessages]   = useState([GREETING]);
   const [input,      setInput]      = useState('');
   const [sending,    setSending]    = useState(false);
-  const [minimized,  setMinimized]  = useState(() => {
-    try { return localStorage.getItem('apa-minimized') === '1'; } catch { return false; }
-  });
 
   // ── Voice state ─────────────────────────────────────────────────────────
   const [listening,      setListening]      = useState(false);
@@ -96,23 +93,13 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
   const recognizerRef  = useRef(null);
   const voiceSupported = !!SpeechRecognition;
 
+  // ── Voice-response toggle — Amber speaks ALL replies when on ────────────
+  const [voiceResponse, setVoiceResponse] = useState(() => {
+    try { return localStorage.getItem('amber-voice-response') !== '0'; } catch { return true; }
+  });
+
   const chatRef  = useRef(null);
   const inputRef = useRef(null);
-
-  // Persist minimized preference
-  const toggleMinimized = useCallback(() => {
-    setMinimized(prev => {
-      const next = !prev;
-      try { localStorage.setItem('apa-minimized', next ? '1' : '0'); } catch {}
-      if (next) setOpen(false);
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.style.setProperty('--apa-trigger-size', '80px');
-    return () => document.documentElement.style.removeProperty('--apa-trigger-size');
-  }, []);
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -137,7 +124,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           message: text.trim(),
-          history: messages.slice(-6),
+          history: messages.slice(-20),
           context: appContext,
         }),
       });
@@ -151,11 +138,15 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           error: true,
         }]);
       } else {
+        const reply = data.reply || 'Done.';
         setMessages(prev => [...prev, {
-          role:   'assistant',
-          text:   data.reply || 'Done.',
-          action: data.action,
+          role:           'assistant',
+          text:           reply,
+          action:         data.action,
+          nextBestAction: data.nextBestAction || null,
         }]);
+        // Speak reply when voice-response is enabled
+        if (voiceResponse) speak(reply);
       }
 
       if (data.navigate && onNavigate) {
@@ -175,7 +166,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       setSending(false);
       inputRef.current?.focus();
     }
-  }, [sending, messages, appContext, onNavigate, onRefresh]);
+  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse]);
 
   // ── Voice send — wraps send() and marks as voice-triggered ───────────────
   const sendVoice = useCallback(async (text) => {
@@ -192,7 +183,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           message:         text.trim(),
-          history:         messages.slice(-6),
+          history:         messages.slice(-20),
           context:         appContext,
           _voiceTriggered: true,
         }),
@@ -209,9 +200,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       } else {
         const reply = data.reply || 'Done.';
         setMessages(prev => [...prev, {
-          role:   'assistant',
-          text:   reply,
-          action: data.action,
+          role:           'assistant',
+          text:           reply,
+          action:         data.action,
+          nextBestAction: data.nextBestAction || null,
         }]);
         // Voice-first: Amber speaks her reply
         speak(reply);
@@ -304,8 +296,17 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
 
   const hasUnread = !open && messages.length > 1;
 
+  const toggleVoiceResponse = useCallback(() => {
+    setVoiceResponse(prev => {
+      const next = !prev;
+      try { localStorage.setItem('amber-voice-response', next ? '1' : '0'); } catch {}
+      if (!next && currentAudio) { currentAudio.pause(); currentAudio = null; }
+      return next;
+    });
+  }, []);
+
   return (
-    <div className={`apa-root${open ? ' open' : ''}${minimized ? ' apa-minimized' : ''}`}>
+    <div className={`apa-root${open ? ' open' : ''}`}>
 
       {open && (
         <div className="apa-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
@@ -324,6 +325,24 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               )}
             </div>
             <div className="apa-panel-context">
+              {appContext.pageName && appContext.pageName !== appContext.currentView && (
+                <span className="apa-ctx-pill">{appContext.pageName}</span>
+              )}
+              {appContext.activeTab && (
+                <span className="apa-ctx-pill">tab: {appContext.activeTab}</span>
+              )}
+              {appContext.activeCharacterId && (
+                <span className="apa-ctx-pill">char: {appContext.activeCharacterId.slice(0, 8)}</span>
+              )}
+              {appContext.activeBookId && (
+                <span className="apa-ctx-pill">book: {appContext.activeBookId.slice(0, 8)}</span>
+              )}
+              {appContext.activeShowId && (
+                <span className="apa-ctx-pill">show: {appContext.activeShowId.slice(0, 8)}</span>
+              )}
+              {appContext.activeRegistryId && (
+                <span className="apa-ctx-pill">registry: {appContext.activeRegistryId.slice(0, 8)}</span>
+              )}
               {appContext.currentBook && (
                 <span className="apa-ctx-pill">{appContext.currentBook.title}</span>
               )}
@@ -331,6 +350,32 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 <span className="apa-ctx-pill">{appContext.currentChapter.title}</span>
               )}
             </div>
+            <button
+              className={`apa-voice-toggle${voiceResponse ? ' apa-voice-toggle--on' : ''}`}
+              onClick={toggleVoiceResponse}
+              title={voiceResponse ? 'Voice on — Amber speaks replies' : 'Voice off — text only'}
+              aria-label={voiceResponse ? 'Turn voice off' : 'Turn voice on'}
+            >
+              {voiceResponse ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </svg>
+              )}
+              <span className="apa-voice-toggle__label">{voiceResponse ? 'voice on' : 'voice off'}</span>
+            </button>
+            <button className="apa-close" onClick={() => window.location.reload()} aria-label="Refresh page" title="Refresh page" style={{ marginLeft: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+            </button>
             <button className="apa-close" onClick={() => setOpen(false)} aria-label="Close">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -350,6 +395,9 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 )}
                 <div className="apa-msg-body">
                   <p className="apa-msg-text">{msg.text}</p>
+                  {msg.nextBestAction && (
+                    <p className="apa-msg-nba">→ {msg.nextBestAction}</p>
+                  )}
                   {msg.action && !msg.error && (
                     <span className="apa-msg-tag">{msg.action.replace(/_/g, ' ')}</span>
                   )}
@@ -383,10 +431,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           {messages.length === 1 && (
             <div className="apa-quick-cmds">
               {[
-                'What are the six franchise laws?',
-                'Who is JustAWoman?',
-                "What's deployed right now?",
-                "What's next in the build queue?",
+                'what are the six franchise laws?',
+                'tell me about JustAWoman',
+                "what's deployed rn?",
+                "what should i work on next?",
               ].map(cmd => (
                 <button key={cmd} className="apa-quick-cmd" onClick={() => send(cmd)}>
                   {cmd}
@@ -465,47 +513,16 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         </div>
       )}
 
-      {minimized ? (
+      {!open && (
         <button
-          className="apa-restore-tab"
-          onClick={toggleMinimized}
-          title="Show Amber assistant"
-          aria-label="Show Amber assistant"
+          className="apa-trigger"
+          onClick={() => setOpen(true)}
+          title="Talk to Amber"
+          aria-label="Talk to Amber"
         >
-          ✦
+          <span className="apa-trigger-letter">A</span>
+          {hasUnread && <span className="apa-unread-dot" />}
         </button>
-      ) : (
-        <>
-          {!open && (
-            <button
-              className="apa-minimize-btn"
-              onClick={toggleMinimized}
-              title="Minimize assistant"
-              aria-label="Minimize assistant"
-            >
-              ▾
-            </button>
-          )}
-          <button
-            className="apa-trigger"
-            onClick={() => setOpen(o => !o)}
-            title="Ask Amber"
-            aria-label="Ask Amber"
-          >
-            {open ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            ) : (
-              <>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                {hasUnread && <span className="apa-unread-dot" />}
-              </>
-            )}
-          </button>
-        </>
       )}
     </div>
   );

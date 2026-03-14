@@ -21,41 +21,52 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     const table = 'character_relationships';
+    const cols = await queryInterface.describeTable(table);
 
-    await queryInterface.addColumn(table, 'family_role', {
-      type:         Sequelize.STRING(120),
-      allowNull:    true,
-      defaultValue: null,
-      comment:      'mother | father | sister | brother | aunt | uncle | cousin | grandmother | etc.',
-    });
+    if (!cols.family_role) {
+      await queryInterface.addColumn(table, 'family_role', {
+        type:         Sequelize.STRING(120),
+        allowNull:    true,
+        defaultValue: null,
+        comment:      'mother | father | sister | brother | aunt | uncle | cousin | grandmother | etc.',
+      });
+    }
 
-    await queryInterface.addColumn(table, 'is_blood_relation', {
-      type:         Sequelize.BOOLEAN,
-      allowNull:    false,
-      defaultValue: false,
-      comment:      'true = biological family. false = found family, step, or chosen.',
-    });
+    if (!cols.is_blood_relation) {
+      await queryInterface.addColumn(table, 'is_blood_relation', {
+        type:         Sequelize.BOOLEAN,
+        allowNull:    false,
+        defaultValue: false,
+        comment:      'true = biological family. false = found family, step, or chosen.',
+      });
+    }
 
-    await queryInterface.addColumn(table, 'is_romantic', {
-      type:         Sequelize.BOOLEAN,
-      allowNull:    false,
-      defaultValue: false,
-      comment:      'Explicit romantic flag — enables filtering independent of relationship_type label.',
-    });
+    if (!cols.is_romantic) {
+      await queryInterface.addColumn(table, 'is_romantic', {
+        type:         Sequelize.BOOLEAN,
+        allowNull:    false,
+        defaultValue: false,
+        comment:      'Explicit romantic flag — enables filtering independent of relationship_type label.',
+      });
+    }
 
-    await queryInterface.addColumn(table, 'conflict_summary', {
-      type:         Sequelize.TEXT,
-      allowNull:    true,
-      defaultValue: null,
-      comment:      'The conflict between character A and character B — independent of Lala.',
-    });
+    if (!cols.conflict_summary) {
+      await queryInterface.addColumn(table, 'conflict_summary', {
+        type:         Sequelize.TEXT,
+        allowNull:    true,
+        defaultValue: null,
+        comment:      'The conflict between character A and character B — independent of Lala.',
+      });
+    }
 
-    await queryInterface.addColumn(table, 'knows_about_connection', {
-      type:         Sequelize.BOOLEAN,
-      allowNull:    false,
-      defaultValue: false,
-      comment:      'Does character B know about character A\'s connection to Lala / JustAWoman?',
-    });
+    if (!cols.knows_about_connection) {
+      await queryInterface.addColumn(table, 'knows_about_connection', {
+        type:         Sequelize.BOOLEAN,
+        allowNull:    false,
+        defaultValue: false,
+        comment:      'Does character B know about character A\'s connection to Lala / JustAWoman?',
+      });
+    }
   },
 
   async down(queryInterface) {

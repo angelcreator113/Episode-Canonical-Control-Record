@@ -113,6 +113,7 @@
   flex-direction: row;
   align-items: center;
   padding: 6px 12px;
+  padding-right: 64px; /* room for Amber trigger */
   gap: 8px;
 }
 .cj-root .cj-ribbon-top {

@@ -159,6 +159,118 @@ router.get('/canvas', async (req, res) => {
   }
 });
 
+// ── Relationship-type mapping from SocialProfileRelationship → FeedProfileRelationship ──
+const SPR_TO_FEED = {
+  collab:        'collab',
+  bestie:        'collab',
+  rival:         'competitors',
+  feud:          'beef',
+  shade:         'public_shade',
+  ex:            'former_friends',
+  copycat:       'copy_cat',
+  mentor:        'mentor',
+  management:    'orbit',
+  couple:        'orbit',
+  baby_daddy:    'orbit',
+  baby_mama:     'orbit',
+  situationship: 'orbit',
+  family:        'orbit',
+  secret_link:   'silent_alliance',
+};
+
+// POST /auto-generate — create feed relationships from SocialProfileRelationship + shared entanglements
+router.post('/auto-generate', async (req, res) => {
+  const models = getModels(req);
+  const { FeedProfileRelationship, SocialProfileRelationship, SocialProfile, CharacterEntanglement } = models;
+  try {
+    // ── 1. From SocialProfileRelationship ──────────────────────────
+    const sprRows = SocialProfileRelationship
+      ? await SocialProfileRelationship.findAll({ attributes: ['source_profile_id', 'target_profile_id', 'relationship_type'] })
+      : [];
+
+    // Existing feed rels (keyed as "minId-maxId" to avoid dupes)
+    const existing = await FeedProfileRelationship.findAll({ attributes: ['influencer_a_id', 'influencer_b_id'] });
+    const existingSet = new Set(existing.map(r => {
+      const lo = Math.min(r.influencer_a_id, r.influencer_b_id);
+      const hi = Math.max(r.influencer_a_id, r.influencer_b_id);
+      return `${lo}-${hi}`;
+    }));
+
+    const created = [];
+
+    for (const spr of sprRows) {
+      const feedType = SPR_TO_FEED[spr.relationship_type] || 'orbit';
+      const lo = Math.min(spr.source_profile_id, spr.target_profile_id);
+      const hi = Math.max(spr.source_profile_id, spr.target_profile_id);
+      const key = `${lo}-${hi}`;
+      if (existingSet.has(key)) continue;
+      existingSet.add(key);
+      const rel = await FeedProfileRelationship.create({
+        influencer_a_id: spr.source_profile_id,
+        influencer_b_id: spr.target_profile_id,
+        relationship_type: feedType,
+        is_public: true,
+      });
+      created.push(rel);
+    }
+
+    // ── 2. From shared entanglements (profiles entangled with same character) ──
+    if (CharacterEntanglement) {
+      const entanglements = await CharacterEntanglement.findAll({
+        where: { is_active: true },
+        attributes: ['character_id', 'profile_id'],
+      });
+      // Group by character
+      const byChar = {};
+      for (const e of entanglements) {
+        if (!e.profile_id) continue;
+        (byChar[e.character_id] || (byChar[e.character_id] = [])).push(e.profile_id);
+      }
+      // For each character linked to 2+ profiles, create edges between them
+      for (const profileIds of Object.values(byChar)) {
+        const unique = [...new Set(profileIds)];
+        for (let i = 0; i < unique.length; i++) {
+          for (let j = i + 1; j < unique.length; j++) {
+            const lo = Math.min(unique[i], unique[j]);
+            const hi = Math.max(unique[i], unique[j]);
+            const key = `${lo}-${hi}`;
+            if (existingSet.has(key)) continue;
+            existingSet.add(key);
+            const rel = await FeedProfileRelationship.create({
+              influencer_a_id: lo,
+              influencer_b_id: hi,
+              relationship_type: 'orbit',
+              is_public: true,
+              notes: 'Auto-generated: shared character entanglement',
+            });
+            created.push(rel);
+          }
+        }
+      }
+    }
+
+    res.json({ created: created.length, message: `${created.length} new feed relationships generated` });
+  } catch (err) {
+    console.error('[FeedRelationships] auto-generate error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /profiles — list all social profiles for picker UI
+router.get('/profiles', async (req, res) => {
+  const { SocialProfile } = getModels(req);
+  try {
+    const profiles = await SocialProfile.findAll({
+      attributes: ['id', 'handle', 'display_name', 'platform', 'current_state'],
+      order: [['handle', 'ASC']],
+    });
+    res.json({ profiles });
+  } catch (err) {
+    console.error('[FeedRelationships] GET /profiles error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /:id/generate-ripples — caught-in-middle flags for beef/former_friends
 router.post('/:id/generate-ripples', async (req, res) => {
   const models = getModels(req);

@@ -841,6 +841,25 @@ router.put('/lines/:id', optionalAuth, async (req, res) => {
       })();
     }
 
+    // ── Calendar Auto-Detect: scan approved line for temporal markers ──
+    if (updates.status === 'approved') {
+      (async () => {
+        try {
+          const axios = require('axios');
+          const chapter = await models.StorytellerChapter.findByPk(line.chapter_id, {
+            include: [{ model: models.StorytellerBook, as: 'book' }],
+          });
+          const baseUrl = `http://localhost:${process.env.PORT || 3001}`;
+          axios.post(`${baseUrl}/api/v1/calendar/auto-detect`, {
+            line_text: line.text || updates.text,
+            series_id: chapter?.book?.series_id || null,
+          }).catch(e => console.error('Calendar auto-detect (non-fatal):', e.message));
+        } catch (e) {
+          console.error('Calendar auto-detect hook error (non-fatal):', e.message);
+        }
+      })();
+    }
+
     // ── SCENE INTELLIGENCE — the edit IS the signal ──
     // Fires all four checks in parallel, non-blocking:
     //   1. Voice signal capture (edit-as-signal engine)
@@ -1295,6 +1314,359 @@ router.get('/chapters/:id/scene-intelligence', optionalAuth, async (req, res) =>
   } catch (err) {
     console.error('GET /chapters/:id/scene-intelligence error:', err);
     return res.json({ success: false, emotional_temperature: null, pending_memory_proposals: [], recent_voice_signals: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /chapters — List all chapters
+// ═══════════════════════════════════════════
+router.get('/chapters', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StorytellerChapter) return res.json({ chapters: [] });
+    const chapters = await models.StorytellerChapter.findAll({
+      order: [['created_at', 'DESC']],
+      attributes: ['id', 'title', 'book_id', 'chapter_number', 'created_at'],
+      limit: 200,
+    });
+    res.json({ chapters });
+  } catch (err) {
+    console.error('GET /chapters error:', err.message);
+    res.json({ chapters: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /memories/pending — Unconfirmed memories
+// ═══════════════════════════════════════════
+router.get('/memories/pending', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StorytellerMemory) return res.json({ memories: [] });
+    const memories = await models.StorytellerMemory.findAll({
+      where: { confirmed: false },
+      order: [['created_at', 'DESC']],
+      limit: 100,
+    });
+    res.json({ memories });
+  } catch (err) {
+    console.error('GET /memories/pending error:', err.message);
+    res.json({ memories: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// PATCH /memories/:id/confirm — Confirm a memory
+// ═══════════════════════════════════════════
+router.patch('/memories/:id/confirm', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StorytellerMemory) return res.status(404).json({ error: 'Model not available' });
+    const mem = await models.StorytellerMemory.findByPk(req.params.id);
+    if (!mem) return res.status(404).json({ error: 'Memory not found' });
+    await mem.update({ confirmed: true, confirmed_at: new Date() });
+    res.json({ success: true, memory: mem });
+  } catch (err) {
+    console.error('PATCH /memories/:id/confirm error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// PATCH /memories/:id/reject — Delete/reject an unconfirmed memory
+// ═══════════════════════════════════════════
+router.patch('/memories/:id/reject', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StorytellerMemory) return res.status(404).json({ error: 'Model not available' });
+    const mem = await models.StorytellerMemory.findByPk(req.params.id);
+    if (!mem) return res.status(404).json({ error: 'Memory not found' });
+    await mem.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('PATCH /memories/:id/reject error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// PATCH /memories/:id — Update memory statement/type
+// ═══════════════════════════════════════════
+router.patch('/memories/:id', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StorytellerMemory) return res.status(404).json({ error: 'Model not available' });
+    const mem = await models.StorytellerMemory.findByPk(req.params.id);
+    if (!mem) return res.status(404).json({ error: 'Memory not found' });
+    const { statement, type } = req.body;
+    const updates = {};
+    if (statement !== undefined) updates.statement = statement;
+    if (type !== undefined) updates.type = type;
+    await mem.update(updates);
+    res.json({ success: true, memory: mem });
+  } catch (err) {
+    console.error('PATCH /memories/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /voice-signals — Voice pattern signals
+// ═══════════════════════════════════════════
+router.get('/voice-signals', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.VoiceSignal) return res.json({ signals: [] });
+    const signals = await models.VoiceSignal.findAll({
+      order: [['created_at', 'DESC']],
+      limit: 100,
+      include: models.VoiceRule ? [{ model: models.VoiceRule, required: false }] : [],
+    });
+    res.json({ signals });
+  } catch (err) {
+    console.error('GET /voice-signals error:', err.message);
+    res.json({ signals: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /voice-rules — Voice rules
+// ═══════════════════════════════════════════
+router.get('/voice-rules', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.VoiceRule) return res.json({ rules: [] });
+    const rules = await models.VoiceRule.findAll({
+      order: [['signal_count', 'DESC']],
+      limit: 100,
+    });
+    res.json({ rules });
+  } catch (err) {
+    console.error('GET /voice-rules error:', err.message);
+    res.json({ rules: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /threads — Story threads
+// ═══════════════════════════════════════════
+router.get('/threads', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StoryThread) return res.json({ threads: [] });
+    const where = {};
+    if (req.query.book_id) where.book_id = req.query.book_id;
+    if (req.query.status) where.status = req.query.status;
+    const threads = await models.StoryThread.findAll({
+      where,
+      order: [['updated_at', 'DESC']],
+      limit: 200,
+    });
+    res.json({ threads });
+  } catch (err) {
+    console.error('GET /threads error:', err.message);
+    res.json({ threads: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// POST /threads — Create story thread
+// ═══════════════════════════════════════════
+router.post('/threads', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StoryThread) return res.status(404).json({ error: 'Model not available' });
+    const { thread_name, description, thread_type, book_id, characters_involved } = req.body;
+    if (!thread_name) return res.status(400).json({ error: 'thread_name is required' });
+    const thread = await models.StoryThread.create({
+      thread_name,
+      description: description || null,
+      thread_type: thread_type || 'subplot',
+      book_id: book_id || null,
+      characters_involved: characters_involved || [],
+      status: 'active',
+    });
+    res.json({ success: true, thread });
+  } catch (err) {
+    console.error('POST /threads error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// PATCH /threads/:id — Update story thread
+// ═══════════════════════════════════════════
+router.patch('/threads/:id', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StoryThread) return res.status(404).json({ error: 'Model not available' });
+    const thread = await models.StoryThread.findByPk(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    const allowed = ['thread_name', 'description', 'thread_type', 'status', 'tension_level', 'characters_involved', 'key_events', 'resolved_chapter_id'];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    await thread.update(updates);
+    res.json({ success: true, thread });
+  } catch (err) {
+    console.error('PATCH /threads/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// DELETE /threads/:id — Delete story thread
+// ═══════════════════════════════════════════
+router.delete('/threads/:id', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StoryThread) return res.status(404).json({ error: 'Model not available' });
+    const thread = await models.StoryThread.findByPk(req.params.id);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    await thread.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /threads/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /threads/dangling — Threads not referenced in many chapters
+// ═══════════════════════════════════════════
+router.get('/threads/dangling', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StoryThread) return res.json({ threads: [] });
+    const { Op } = require('sequelize');
+    const threads = await models.StoryThread.findAll({
+      where: {
+        status: 'active',
+        chapters_since_last_reference: { [Op.gte]: 3 },
+      },
+      order: [['chapters_since_last_reference', 'DESC']],
+    });
+    res.json({ threads });
+  } catch (err) {
+    console.error('GET /threads/dangling error:', err.message);
+    res.json({ threads: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /calendar/events — Story calendar events
+// ═══════════════════════════════════════════
+router.get('/calendar/events', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StoryCalendarEvent) return res.json({ events: [] });
+    const where = {};
+    if (req.query.event_type) where.event_type = req.query.event_type;
+    const events = await models.StoryCalendarEvent.findAll({
+      where,
+      order: [['start_datetime', 'ASC']],
+      limit: 200,
+      include: models.StoryClockMarker ? [{ model: models.StoryClockMarker, required: false }] : [],
+    });
+    res.json({ events });
+  } catch (err) {
+    console.error('GET /calendar/events error:', err.message);
+    res.json({ events: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// POST /calendar/events — Create calendar event
+// ═══════════════════════════════════════════
+router.post('/calendar/events', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StoryCalendarEvent) return res.status(404).json({ error: 'Model not available' });
+    const { title, event_type, start_datetime, end_datetime, location_name, lalaverse_district, visibility, what_world_knows, what_only_we_know, logged_by } = req.body;
+    if (!title || !event_type || !start_datetime) return res.status(400).json({ error: 'title, event_type, start_datetime required' });
+    const event = await models.StoryCalendarEvent.create({
+      title, event_type, start_datetime,
+      end_datetime: end_datetime || null,
+      location_name: location_name || null,
+      lalaverse_district: lalaverse_district || null,
+      visibility: visibility || 'public',
+      what_world_knows: what_world_knows || null,
+      what_only_we_know: what_only_we_know || null,
+      logged_by: logged_by || 'system',
+    });
+    res.json({ success: true, event });
+  } catch (err) {
+    console.error('POST /calendar/events error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /calendar/markers — Story clock markers (timeline positions)
+// ═══════════════════════════════════════════
+router.get('/calendar/markers', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StoryClockMarker) return res.json({ markers: [] });
+    const markers = await models.StoryClockMarker.findAll({
+      order: [['sequence_order', 'ASC']],
+      include: models.StoryCalendarEvent ? [{ model: models.StoryCalendarEvent, required: false }] : [],
+    });
+    res.json({ markers });
+  } catch (err) {
+    console.error('GET /calendar/markers error:', err.message);
+    res.json({ markers: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /continuity/issues — Continuity problems across threads
+// ═══════════════════════════════════════════
+router.get('/continuity/issues', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    const issues = [];
+
+    // Dangling threads (active but not referenced recently)
+    if (models?.StoryThread) {
+      const { Op } = require('sequelize');
+      const dangling = await models.StoryThread.findAll({
+        where: { status: 'active', chapters_since_last_reference: { [Op.gte]: 2 } },
+        order: [['chapters_since_last_reference', 'DESC']],
+      });
+      dangling.forEach(t => issues.push({
+        type: 'dangling_thread',
+        severity: t.chapters_since_last_reference >= 5 ? 'high' : 'medium',
+        description: `Thread "${t.thread_name}" hasn't been referenced in ${t.chapters_since_last_reference} chapters`,
+        entity_id: t.id,
+        entity_type: 'StoryThread',
+      }));
+    }
+
+    // Unconfirmed memories (stale > 7 days)
+    if (models?.StorytellerMemory) {
+      const { Op } = require('sequelize');
+      const stale = await models.StorytellerMemory.findAll({
+        where: {
+          confirmed: false,
+          created_at: { [Op.lt]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+        limit: 20,
+      });
+      stale.forEach(m => issues.push({
+        type: 'stale_memory',
+        severity: 'low',
+        description: `Unconfirmed memory "${m.statement?.slice(0, 60)}..." pending for >7 days`,
+        entity_id: m.id,
+        entity_type: 'StorytellerMemory',
+      }));
+    }
+
+    res.json({ issues, total: issues.length });
+  } catch (err) {
+    console.error('GET /continuity/issues error:', err.message);
+    res.json({ issues: [], total: 0 });
   }
 });
 

@@ -4628,6 +4628,11 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.cr-world-pronouns {
+  opacity: 0.6;
+  font-weight: 400;
+  text-transform: lowercase;
+}
 
 .cr-world-card-badges {
   display: flex;

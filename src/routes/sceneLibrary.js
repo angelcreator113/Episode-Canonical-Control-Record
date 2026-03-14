@@ -4,6 +4,7 @@ const multer = require('multer');
 const sceneLibraryController = require('../controllers/sceneLibraryController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
+const { authenticateToken } = require('../middleware/auth');
 
 // Configure multer for file uploads (memory storage for direct S3 upload)
 const upload = multer({
@@ -41,7 +42,6 @@ const upload = multer({
  * Scene Library Routes
  * Base path: /api/scene-library
  *
- * ✅ AUTH TEMPORARILY DISABLED FOR TESTING
  */
 
 /**
@@ -67,7 +67,7 @@ router.get('/:id', validateUUIDParam('id'), asyncHandler(sceneLibraryController.
  */
 router.post(
   '/upload',
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   upload.single('file'),
   asyncHandler(sceneLibraryController.uploadSceneClip)
 );
@@ -80,7 +80,7 @@ router.post(
 router.put(
   '/:id',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneLibraryController.updateLibraryScene)
 );
 
@@ -92,7 +92,7 @@ router.put(
 router.delete(
   '/:id',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneLibraryController.deleteLibraryScene)
 );
 

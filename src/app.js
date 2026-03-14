@@ -14,8 +14,11 @@ if (!process.env.PM2_HOME) {
 
 console.log('🚀 Starting application... [VERSION 2026-01-23-19:25]');
 console.log('🔍 This log confirms latest code is running!');
-console.log('�🚨🚨 [2026-02-10 05:17] - NEW CODE WITH ULTRA-EARLY LOGGING 🚨🚨🚨');
-console.log('�📋 Environment:', process.env.NODE_ENV || 'development');
+
+// AI Cost Tracking — patches Anthropic SDK before any routes load
+require('./services/aiCostTracker');
+
+console.log('📋 Environment:', process.env.NODE_ENV || 'development');
 console.log('📋 Database URL:', process.env.DATABASE_URL ? '***SET***' : '❌ NOT SET');
 console.log('📋 Port:', process.env.PORT || 3002);
 console.log('📋 DB_HOST:', process.env.DB_HOST || 'NOT SET');
@@ -50,29 +53,10 @@ if (process.env.NODE_ENV !== 'test') {
       await db.authenticate();
       console.log('✅ Database connection authenticated');
 
-      // Run pending Sequelize CLI migrations automatically on startup
-      try {
-        const Umzug = require('umzug');
-        const path = require('path');
-        const umzug = new Umzug({
-          storage: 'sequelize',
-          storageOptions: { sequelize: db.sequelize },
-          migrations: {
-            path: path.join(__dirname, 'migrations'),
-            params: [db.sequelize.getQueryInterface(), db.Sequelize || require('sequelize')],
-          },
-        });
-        const pending = await umzug.pending();
-        if (pending.length > 0) {
-          console.log(`🔄 Running ${pending.length} pending migration(s)...`);
-          await umzug.up();
-          console.log('✅ Migrations completed');
-        } else {
-          console.log('✅ All migrations already applied');
-        }
-      } catch (migErr) {
-        console.error('⚠️  Migration runner error (non-fatal):', migErr.message);
-      }
+      // Migrations are handled by sequelize-cli db:migrate during deployment.
+      // Running them again at app startup via Umzug causes partial state when
+      // migrations fail mid-execution (tables half-created, missing columns).
+      // The deploy pipeline now uses 'set -eo pipefail' to catch migration errors.
 
       // Check if DB sync is enabled via environment variable
       console.log('DEBUG: ENABLE_DB_SYNC =', process.env.ENABLE_DB_SYNC);
@@ -224,6 +208,37 @@ app.use(attachRBAC);
 
 // Capture response data for audit logging
 app.use(captureResponseData);
+
+// ============================================================================
+// RATE LIMITING
+// ============================================================================
+const rateLimit = require('express-rate-limit');
+
+// Global API rate limiter — generous for normal use, blocks abuse
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500,                  // 500 requests per window per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+});
+app.use('/api', apiLimiter);
+
+// Stricter limiter for write operations
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000,      // 1 minute
+  max: 60,                   // 60 writes per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many write requests, please slow down' },
+});
+// Apply to all mutating methods on /api
+app.use('/api', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
 
 // ============================================================================
 // HEALTH CHECK
@@ -561,6 +576,26 @@ app.use('/api/v1/processing-queue', processingRoutes);
 // Admin routes for migrations/setup
 const adminRoutes = trackRouteLoad('admin', () => require('./routes/admin'));
 app.use('/api/v1/admin', adminRoutes);
+
+// AI Usage / Cost Tracking routes
+const aiUsageRoutes = trackRouteLoad('aiUsage', () => require('./routes/aiUsageRoutes'));
+app.use('/api/v1/ai-usage', aiUsageRoutes);
+
+// CFO Agent routes
+const cfoAgentRoutes = trackRouteLoad('cfoAgent', () => require('./routes/cfoAgentRoutes'));
+app.use('/api/v1/cfo', cfoAgentRoutes);
+
+// Site Organizer Agent routes
+const siteOrganizerRoutes = trackRouteLoad('siteOrganizer', () => require('./routes/siteOrganizerRoutes'));
+app.use('/api/v1/site-organizer', siteOrganizerRoutes);
+
+// Design Agent routes
+const designAgentRoutes = trackRouteLoad('designAgent', () => require('./routes/designAgentRoutes'));
+app.use('/api/v1/design-agent', designAgentRoutes);
+
+// Start CFO Agent scheduler (runs audit every 6 hours automatically)
+const { startScheduler: startCFO } = require('./services/cfoAgent');
+startCFO(6);
 
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
@@ -1063,6 +1098,15 @@ try {
   console.error('✗ Failed to load Consciousness routes:', e.message);
 }
 
+// Story Health Dashboard + Cross-System Search + Version History + Therapy Suggestions
+try {
+  const storyHealthRoutes = require('./routes/storyHealth');
+  app.use('/api/v1/story-health', storyHealthRoutes);
+  console.log('✓ Story Health routes loaded at /api/v1/story-health');
+} catch (e) {
+  console.error('✗ Failed to load Story Health routes:', e.message);
+}
+
 // Onboarding wizard routes
 try {
   const onboardingRoutes = require('./routes/onboarding');
@@ -1236,6 +1280,15 @@ try {
   console.log('✓ Author Note routes loaded at /api/v1/author-notes');
 } catch (e) {
   console.error('✗ Failed to load Author Note routes:', e.message);
+}
+
+// Page Content — editable world-building page data (JSONB)
+try {
+  const pageContentRoutes = require('./routes/pageContent');
+  app.use('/api/v1/page-content', pageContentRoutes);
+  console.log('✓ Page Content routes loaded at /api/v1/page-content');
+} catch (e) {
+  console.error('✗ Failed to load Page Content routes:', e.message);
 }
 
 // API info endpoint

@@ -1,0 +1,728 @@
+/* ═══════════════════════════════════════════════════════════════
+   CulturalMemory.css — Doc 08 · Amber accent (#b89060)
+   Prefix: .cm-*
+   ═══════════════════════════════════════════════════════════════ */
+
+.cm-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 2.5rem 3rem;
+  font-family: 'DM Sans', sans-serif;
+  color: #2e2e3a;
+  background: #faf9fc;
+}
+
+/* ─── HEADER ─── */
+
+.cm-header {
+  margin-bottom: 2rem;
+}
+
+.cm-header h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #b89060;
+  margin: 0 0 .35rem;
+}
+
+.cm-subtitle {
+  font-size: .95rem;
+  color: #8a8a9a;
+  margin: 0;
+}
+
+/* ─── TABS ─── */
+
+.cm-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #eee;
+  padding-bottom: .75rem;
+}
+
+.cm-tab {
+  background: none;
+  border: 1.5px solid transparent;
+  border-radius: 20px;
+  padding: .45rem 1.1rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: .85rem;
+  font-weight: 500;
+  color: #8a8a9a;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.cm-tab:hover {
+  color: #b89060;
+  border-color: #b8906040;
+}
+
+.cm-tab--active {
+  background: #b89060;
+  color: #fff;
+  border-color: #b89060;
+}
+
+/* ─── SHARED ─── */
+
+.cm-section { animation: cmFadeIn .3s ease; }
+@keyframes cmFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+.cm-intro {
+  font-size: .95rem;
+  color: #6a6a7a;
+  line-height: 1.65;
+  margin: 0 0 1.75rem;
+  max-width: 800px;
+}
+
+/* ─── MEMORY TYPES ─── */
+
+.cm-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.25rem;
+}
+
+.cm-type-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.35rem;
+  border: 1px solid #eee;
+  transition: box-shadow .2s;
+}
+
+.cm-type-card:hover { box-shadow: 0 4px 16px rgba(184, 144, 96, .12); }
+
+.cm-type-header {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+
+.cm-type-icon { font-size: 1.4rem; }
+.cm-type-header h4 { margin: 0; font-size: .95rem; color: #b89060; font-weight: 600; }
+
+.cm-type-field, .cm-type-ref, .cm-type-story {
+  margin-bottom: .65rem;
+}
+.cm-type-field strong, .cm-type-ref strong, .cm-type-story strong {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .2rem;
+}
+.cm-type-field p, .cm-type-ref p, .cm-type-story p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+  color: #4a4a5a;
+}
+
+.cm-type-ref { background: #faf6f0; border-radius: 8px; padding: .65rem .8rem; }
+.cm-type-story { background: #f4f0fa; border-radius: 8px; padding: .65rem .8rem; }
+
+/* ─── STRENGTH LEVELS ─── */
+
+.cm-strength-track {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cm-strength-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.35rem;
+  border: 1px solid #eee;
+  border-left: 4px solid;
+}
+
+.cm-strength-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.cm-strength-level {
+  color: #fff;
+  font-size: .75rem;
+  font-weight: 700;
+  padding: .25rem .7rem;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.cm-strength-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2e2e3a;
+}
+
+.cm-strength-lifespan {
+  font-size: .82rem;
+  color: #8a8a9a;
+  margin-left: auto;
+  font-style: italic;
+}
+
+.cm-strength-field {
+  margin-bottom: .6rem;
+}
+.cm-strength-field strong {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .2rem;
+}
+.cm-strength-field p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+  color: #4a4a5a;
+}
+
+.cm-strength-example {
+  background: #faf6f0;
+  border-radius: 8px;
+  padding: .6rem .85rem;
+  margin-top: .5rem;
+}
+.cm-strength-example p {
+  margin: 0;
+  font-size: .85rem;
+  font-style: italic;
+  color: #6a6a7a;
+}
+
+/* ─── ARCHIVES ─── */
+
+.cm-power-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: linear-gradient(135deg, #faf6f0, #f4f0fa);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.75rem;
+  border: 1px solid #e8ddd0;
+}
+
+.cm-power-icon { font-size: 1.6rem; flex-shrink: 0; margin-top: .15rem; }
+.cm-power-callout strong { font-size: .9rem; color: #b89060; display: block; margin-bottom: .3rem; }
+.cm-power-callout p { margin: 0; font-size: .88rem; line-height: 1.55; color: #4a4a5a; }
+
+.cm-archive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.cm-archive-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid #eee;
+  border-top: 4px solid;
+}
+
+.cm-archive-card h4 { margin: 0 0 .15rem; font-size: .95rem; font-weight: 700; }
+.cm-archive-maintained { margin: 0 0 .9rem; font-size: .8rem; color: #8a8a9a; font-style: italic; }
+
+.cm-archive-field, .cm-archive-omit, .cm-archive-control {
+  margin-bottom: .6rem;
+}
+.cm-archive-field strong, .cm-archive-omit strong, .cm-archive-control strong {
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-archive-field p, .cm-archive-omit p, .cm-archive-control p {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: #4a4a5a;
+}
+
+.cm-archive-omit {
+  background: #fff5f5;
+  border-radius: 8px;
+  padding: .55rem .7rem;
+}
+.cm-archive-control {
+  background: #f0f5fa;
+  border-radius: 8px;
+  padding: .55rem .7rem;
+}
+
+/* ─── ANNIVERSARIES ─── */
+
+.cm-anniv-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cm-anniv-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.35rem;
+  border: 1px solid #eee;
+}
+
+.cm-anniv-card h4 {
+  margin: 0 0 .85rem;
+  font-size: .95rem;
+  font-weight: 600;
+  color: #b89060;
+}
+
+.cm-anniv-field {
+  margin-bottom: .6rem;
+}
+.cm-anniv-field strong {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-anniv-field p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+  color: #4a4a5a;
+}
+
+.cm-anniv-story {
+  background: #faf6f0;
+  border-radius: 8px;
+  padding: .65rem .85rem;
+  margin-top: .35rem;
+}
+.cm-anniv-story strong {
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #b89060;
+  display: block;
+  margin-bottom: .2rem;
+}
+.cm-anniv-story p {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.55;
+  color: #6a6a7a;
+  font-style: italic;
+}
+
+/* ─── NOSTALGIA WAVES ─── */
+
+.cm-nostalgia-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.cm-nostalgia-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid #eee;
+}
+
+.cm-nostalgia-card h4 {
+  margin: 0 0 .85rem;
+  font-size: .95rem;
+  font-weight: 600;
+  color: #b89060;
+}
+
+.cm-nostalgia-field {
+  margin-bottom: .6rem;
+}
+.cm-nostalgia-field strong {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-nostalgia-field p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+  color: #4a4a5a;
+}
+
+.cm-nostalgia-gap {
+  background: #f4f0fa;
+  border-radius: 8px;
+  padding: .65rem .85rem;
+  margin-top: .35rem;
+}
+.cm-nostalgia-gap strong {
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #a889c8;
+  display: block;
+  margin-bottom: .2rem;
+}
+.cm-nostalgia-gap p {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.55;
+  color: #6a6a7a;
+  font-style: italic;
+}
+
+/* ─── LEGENDS ─── */
+
+.cm-legend-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cm-legend-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.35rem;
+  border: 1px solid #eee;
+}
+
+.cm-legend-path {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #b89060;
+}
+
+.cm-legend-row {
+  display: flex;
+  gap: .75rem;
+  align-items: flex-start;
+  margin-bottom: .65rem;
+}
+
+.cm-legend-tag {
+  flex-shrink: 0;
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: .2rem .55rem;
+  border-radius: 6px;
+  margin-top: .1rem;
+}
+.cm-legend-tag.requires { background: #e8f4f0; color: #4ea8a6; }
+.cm-legend-tag.costs    { background: #fdedef; color: #c05050; }
+.cm-legend-tag.preserved { background: #faf6f0; color: #b89060; }
+
+.cm-legend-row p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+  color: #4a4a5a;
+}
+
+/* ─── HISTORICAL FEUDS ─── */
+
+.cm-feud-timeline {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.cm-feud-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.35rem;
+  border: 1px solid #eee;
+  border-left: 4px solid;
+}
+
+.cm-feud-card h4 {
+  margin: 0 0 .85rem;
+  font-size: .95rem;
+  font-weight: 700;
+}
+
+.cm-feud-field {
+  margin-bottom: .6rem;
+}
+.cm-feud-field strong {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-feud-field p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+  color: #4a4a5a;
+}
+
+.cm-feud-preserved {
+  background: #faf6f0;
+  border-radius: 8px;
+  padding: .6rem .8rem;
+}
+.cm-feud-preserved strong {
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #b89060;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-feud-preserved p {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: #6a6a7a;
+}
+
+.cm-feud-arrow {
+  text-align: center;
+  font-size: 1.3rem;
+  color: #c9a84c;
+  padding: .35rem 0;
+}
+
+/* ─── TIME CAPSULES ─── */
+
+.cm-capsule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.cm-capsule-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid #eee;
+}
+
+.cm-capsule-card h4 {
+  margin: 0 0 .2rem;
+  font-size: .95rem;
+  font-weight: 600;
+  color: #b89060;
+}
+
+.cm-capsule-by {
+  margin: 0 0 .85rem;
+  font-size: .8rem;
+  color: #8a8a9a;
+  font-style: italic;
+}
+
+.cm-capsule-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75rem;
+  margin-bottom: .75rem;
+}
+
+.cm-capsule-col {
+  border-radius: 8px;
+  padding: .55rem .7rem;
+}
+.cm-capsule-col.included { background: #f0faf5; }
+.cm-capsule-col.omitted  { background: #fff5f5; }
+
+.cm-capsule-col strong {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-capsule-col p {
+  margin: 0;
+  font-size: .82rem;
+  line-height: 1.5;
+  color: #4a4a5a;
+}
+
+.cm-capsule-truth {
+  background: #faf6f0;
+  border-radius: 8px;
+  padding: .6rem .8rem;
+}
+.cm-capsule-truth strong {
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #b89060;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-capsule-truth p {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: #6a6a7a;
+  font-style: italic;
+}
+
+/* ─── LIVING HISTORY ─── */
+
+.cm-living-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cm-living-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid #eee;
+  display: grid;
+  grid-template-columns: 160px 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.cm-living-type {
+  margin: 0;
+  font-size: .9rem;
+  font-weight: 600;
+  color: #b89060;
+  padding-top: .15rem;
+}
+
+.cm-living-example {
+  background: #f4f0fa;
+  border-radius: 8px;
+  padding: .6rem .8rem;
+}
+.cm-living-example p {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: #6a6a7a;
+  font-style: italic;
+}
+
+.cm-living-function strong {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-living-function p {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: #4a4a5a;
+}
+
+/* ─── INFLUENCE RANKINGS ─── */
+
+.cm-ranking-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.cm-ranking-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid #eee;
+}
+
+.cm-ranking-card h4 {
+  margin: 0 0 .85rem;
+  font-size: .95rem;
+  font-weight: 600;
+  color: #b89060;
+}
+
+.cm-ranking-field {
+  margin-bottom: .6rem;
+}
+.cm-ranking-field strong {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #8a8a9a;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-ranking-field p {
+  margin: 0;
+  font-size: .88rem;
+  line-height: 1.55;
+  color: #4a4a5a;
+}
+
+.cm-ranking-misses {
+  background: #fff5f5;
+  border-radius: 8px;
+  padding: .6rem .8rem;
+  margin-top: .35rem;
+}
+.cm-ranking-misses strong {
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #c05050;
+  display: block;
+  margin-bottom: .15rem;
+}
+.cm-ranking-misses p {
+  margin: 0;
+  font-size: .85rem;
+  line-height: 1.5;
+  color: #6a6a7a;
+  font-style: italic;
+}
+
+/* ─── RESPONSIVE ─── */
+
+@media (max-width: 768px) {
+  .cm-page { padding: 1.25rem 1rem 2rem; }
+  .cm-type-grid { grid-template-columns: 1fr; }
+  .cm-archive-grid { grid-template-columns: 1fr; }
+  .cm-capsule-columns { grid-template-columns: 1fr; }
+  .cm-living-card { grid-template-columns: 1fr; }
+  .cm-nostalgia-grid { grid-template-columns: 1fr; }
+  .cm-ranking-grid { grid-template-columns: 1fr; }
+  .cm-capsule-grid { grid-template-columns: 1fr; }
+  .cm-living-card { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .cm-page { padding: 1rem 0.75rem 1.5rem; }
+}

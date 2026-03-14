@@ -99,10 +99,12 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'episode_id',
       onDelete: 'CASCADE'
     });
-    EditMap.belongsTo(models.RawFootage, { 
-      foreignKey: 'raw_footage_id',
-      onDelete: 'CASCADE'
-    });
+    if (models.RawFootage) {
+      EditMap.belongsTo(models.RawFootage, { 
+        foreignKey: 'raw_footage_id',
+        onDelete: 'CASCADE'
+      });
+    }
   };
 
   return EditMap;

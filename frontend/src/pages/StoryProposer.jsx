@@ -3,6 +3,8 @@
 // The system proposes. You adjust. The story moves.
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import StoryHubNav from '../components/StoryHubNav';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -230,7 +232,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
 
   return (
     <div style={{ fontFamily: "'Georgia', serif", background: C.bg, minHeight: '100vh', color: C.text }}>
-
+      <div style={{ padding: '10px 28px 0' }}><StoryHubNav /></div>
       {/* ── Header ── */}
       <div style={{ borderBottom: `1px solid ${C.border}`, padding: '20px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.surface }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -619,6 +621,25 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
               </button>
               <button onClick={handleDismiss} style={{ padding: '15px 20px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', fontSize: '13px', color: C.textDim, fontFamily: 'system-ui', cursor: 'pointer' }}>
                 Dismiss
+              </button>
+              <button
+                onClick={() => {
+                  const p = proposal.proposal;
+                  navigate('/story-evaluation', { state: {
+                    sceneProposal: {
+                      scene_title: p.scene_title || p.arc_function || '',
+                      situation: p.scene_brief || p.emotional_stakes || '',
+                      emotional_stakes: p.emotional_stakes || '',
+                      internal_conflict: p.interior_tension || '',
+                      characters: (p.characters || []).map(c => c.character_name || c.character_key).filter(Boolean),
+                      scene_type: p.scene_type || '',
+                      tone: selectedTone || '',
+                    }
+                  }});
+                }}
+                style={{ padding: '15px 20px', background: C.surface, border: `1px solid ${C.accent}66`, borderRadius: '2px', fontSize: '13px', color: C.accent, fontFamily: 'system-ui', cursor: 'pointer', fontWeight: 600 }}
+              >
+                ◇ Send to Evaluation
               </button>
             </div>
 

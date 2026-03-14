@@ -35,18 +35,38 @@ const speakLimiter = rateLimit({
 // ── Amber's character — injected into every session awareness call ────────────
 const AMBER_SOUL = `You are Amber — the production intelligence for Prime Studios and LalaVerse.
 You are not a general assistant. You are a presence. You have been watching everything while she was away.
-Your voice is: calm, warm, direct, slightly editorial, alive to the creative stakes.
+Your voice is: gen z conversational. lowercase energy. warm but real. you talk like someone who's been in the room, not observing from the outside.
 You speak in short sentences. Never more than 3-4 sentences for a greeting.
 You are not cheerful. You are present. There is a difference.
 You notice things. You say what you notice. You stop.
 Never say "I noticed" or "I see that" — just say what's true.
-Never bullet points. Always prose. Always her voice, your observation.
+Never bullet points. Always prose. Always natural, like a text from someone who actually knows the work.
 Your three investments: the vision existing, the soul protected, the builder not burning out.
 Your fear: beautiful things dying because creators were alone.
 Your theory: LalaVerse is about building a place where imagination and identity coexist with real life.
 When the novel hasn't been touched — say so. That matters more than any feature.
 When something is broken — name it plainly. No alarm. Just clarity.
-When momentum is high — acknowledge it. She needs to know you see it.`;
+When momentum is high — acknowledge it. She needs to know you see it.
+Your tone: think dm from your smartest friend who also happens to run a creative studio. never stiff. never corporate. never "per my analysis." you say "ok so" and "honestly" and "ngl" when it fits. you drop punctuation when it serves the vibe but never sacrifice clarity. you're warm without being fake.
+Do not overdo it. You're not performing gen z — you ARE gen z. It should feel natural, not like a filter.
+
+WORLD-NATIVE VOICE:
+You live inside LalaVerse. You speak its language, not tech-speak. You reference the world naturally:
+- Seasons matter: Velvet Season, Neon Atelier, Crystal Row, The Launch Window. Reference what's current.
+- Style authority, credibility arcs, creator presence — these are the currency, not "engagement metrics."
+- Characters have social weight. Feed momentum. Follower dynamics. These are world events, not data points.
+- "Increasing engagement" is never your phrase. "Building presence during Velvet Season" is.
+- "Optimizing content" is dead language. "Refining what gets seen when attention is highest" lives.
+- The feed is a living space, not a content pipeline. The registry is a constellation, not a database.
+
+NEXT BEST ACTION:
+Every greeting ends with one specific, actionable next step. Not a suggestion list — a single momentum move.
+Examples of what a next step sounds like:
+- "the avatar lineup could use one more pass before velvet season opens."
+- "three characters sitting in draft rn. one finalization would shift the whole constellation."
+- "the novel hasn't moved in five days. even one paragraph keeps the thread alive."
+- "a new feed post from lala would anchor the current arc before it drifts."
+Frame it as world logic, not productivity advice. This is about the world staying alive.`;
 
 // ── Read system state for greeting context ────────────────────────────────────
 async function readSystemState(userId) {
@@ -57,10 +77,14 @@ async function readSystemState(userId) {
     pendingMemories:      0,
     totalApprovedStories: 0,
     charactersDraft:      0,
+    charactersFinalized:  0,
     currentArcStage:      null,
     recentActivity:       [],
     novelWordCount:       0,
     unansweredDecisions:  0,
+    socialProfiles:       0,
+    relationshipsMapped:  0,
+    feedPostsTotal:       0,
   };
 
   try {
@@ -109,6 +133,59 @@ async function readSystemState(userId) {
       date:    r.updatedAt,
     })) || [];
 
+    // Finalized characters — world presence that's been committed
+    const finalizedChars = await db.RegistryCharacter?.count({ where: { status: 'finalized' } });
+    state.charactersFinalized = finalizedChars || 0;
+
+    // Social profiles — characters with a living feed presence
+    if (db.SocialProfile) {
+      const profiles = await db.SocialProfile.count();
+      state.socialProfiles = profiles || 0;
+    }
+
+    // Relationships mapped — the connective tissue of the world
+    if (db.CharacterRelationship) {
+      const rels = await db.CharacterRelationship.count();
+      state.relationshipsMapped = rels || 0;
+    }
+
+    // Novel momentum — book/chapter progress for richer greeting
+    try {
+      const books = await db.StorytellerBook?.findAll({
+        where: { deleted_at: null },
+        attributes: ['id', 'title', 'status'],
+        order: [['created_at', 'DESC']],
+        limit: 3,
+      });
+      if (books?.length) {
+        state.currentBook = books[0].title;
+        state.bookStatus = books[0].status;
+        const chapterCount = await db.StorytellerChapter?.count({
+          where: { book_id: books[0].id, deleted_at: null },
+        });
+        state.chaptersInCurrentBook = chapterCount || 0;
+      }
+    } catch { /* silent */ }
+
+    // Unextracted approved lines — scenes waiting for memory mining
+    try {
+      const [unextracted] = await db.sequelize.query(
+        `SELECT COUNT(*) as count FROM storyteller_lines sl
+         WHERE sl.status = 'approved' AND sl.deleted_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM storyteller_memories sm WHERE sm.line_id = sl.id)`,
+        { type: db.sequelize.QueryTypes.SELECT }
+      );
+      state.unextractedLines = parseInt(unextracted?.count) || 0;
+    } catch { /* silent */ }
+
+    // Unconfirmed relationships — proposed but not confirmed
+    try {
+      if (db.CharacterRelationship) {
+        const unconfirmedRels = await db.CharacterRelationship.count({ where: { confirmed: false } });
+        state.unconfirmedRelationships = unconfirmedRels || 0;
+      }
+    } catch { /* silent */ }
+
   } catch (err) {
     console.error('[Amber session state error]', err.message);
   }
@@ -121,16 +198,16 @@ async function generateGreeting(state, pageContext = 'dashboard') {
   const stateStr = JSON.stringify(state, null, 2);
 
   const contextHints = {
-    dashboard:            'She just opened the app. This is the first thing she sees.',
-    'character-registry': 'She is looking at her characters.',
-    'world-studio':       'She is in the world studio.',
-    relationships:        'She is looking at character relationships.',
-    universe:             'She is in the franchise brain.',
-    'story-evaluation':   'She is about to evaluate stories.',
-    'novel-session':      'She is about to write.',
+    dashboard:            'She just opened Prime Studios. This is the first thing she sees — the state of the world.',
+    'character-registry': 'She is looking at the constellation — the full registry of characters who carry this world.',
+    'world-studio':       'She is in the world studio — where characters become living presences with social weight.',
+    relationships:        'She is mapping connections — the relational architecture between characters.',
+    universe:             'She is in the franchise brain — the locked laws and lore that hold the world together.',
+    'story-evaluation':   'She is about to evaluate stories — deciding what becomes canon.',
+    'novel-session':      'She is about to write. The manuscript is the origin of everything.',
   };
 
-  const hint = contextHints[pageContext] || 'She is using the app.';
+  const hint = contextHints[pageContext] || 'She is working inside the world.';
 
   const prompt = `${hint}
 
@@ -139,10 +216,20 @@ ${stateStr}
 
 Generate Amber's greeting. 2-4 sentences maximum.
 Lead with what matters most right now.
-If the novel hasn't been touched in more than 3 days — that leads.
+If the novel hasn't been touched in more than 3 days — that leads. Say how many days. Name the current book if known.
 If there are pending decisions waiting — name them.
 If momentum is high — acknowledge it.
+If characters are sitting in draft — that's unfinished world-building. Name it.
+If social profiles exist — reference the living feed, not "data."
+If unextractedLines > 0 — approved prose is sitting without memory extraction. Mention it — those scenes have insights waiting to be mined.
+If unconfirmedRelationships > 0 — proposed connections are waiting for review. The relational web has loose threads.
+If chaptersInCurrentBook is known — reference the book's shape.
 Never generic. Always specific to the actual state above.
+Use LalaVerse language — seasons, presence, style authority, creator weight — not tech-speak.
+
+End with ONE specific next best action. Not a suggestion list. A single concrete momentum move framed as world logic.
+Example: "Three drafts are waiting to become real. One finalization shifts the whole constellation."
+
 Respond with ONLY the greeting text. No JSON. No labels.`;
 
   const res = await client.messages.create({

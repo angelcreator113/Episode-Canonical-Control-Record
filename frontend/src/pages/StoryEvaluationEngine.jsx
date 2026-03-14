@@ -18,12 +18,13 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import StoryHubNav from '../components/StoryHubNav';
 import './StoryEvaluationEngine.css';
 
 const API = '/api/v1/memories';
 
 // ── Light theme ───────────────────────────────────────────────────────────
-const T = {
+const T_LIGHT = {
   bg:          '#f5f5f5',
   surface:     '#ffffff',
   surfaceAlt:  '#f8f8f8',
@@ -38,7 +39,29 @@ const T = {
   green:       '#6ec9a0',
   blue:        '#6e9ec9',
   purple:      '#9e6ec9',
+  orange:      '#c9886e',
 };
+
+const T_DARK = {
+  bg:          '#1a1a1e',
+  surface:     '#25252b',
+  surfaceAlt:  '#2a2a30',
+  border:      '#3a3a42',
+  borderLight: '#44444e',
+  text:        '#e8e8ec',
+  textDim:     '#a0a0aa',
+  textFaint:   '#707078',
+  accent:      '#d4b47a',
+  accentHover: '#c9a96e',
+  red:         '#d48888',
+  green:       '#88d4b0',
+  blue:        '#88b0d4',
+  purple:      '#b088d4',
+  orange:      '#d4a088',
+};
+
+// T starts as light; component updates it synchronously during render
+let T = { ...T_LIGHT };
 
 const VOICES = [
   { id: 'voice_a', label: 'Voice A', tag: 'Depth · Interiority',   accent: '#6B4C82', bg: '#faf8fc', border: '#e8e0f0', emoji: '◆' },
@@ -46,14 +69,17 @@ const VOICES = [
   { id: 'voice_c', label: 'Voice C', tag: 'Sensory · Desire',      accent: '#4A8A3D', bg: '#f6faf4', border: '#d8f0d0', emoji: '◉' },
 ];
 
-const CRITERIA = ['interiority', 'desire_tension', 'specificity', 'stakes', 'voice', 'body_presence'];
+const CRITERIA = ['interiority', 'desire_tension', 'specificity', 'stakes', 'voice', 'body_presence', 'originality', 'prose_efficiency', 'scene_fulfillment'];
 const CRITERIA_LABELS = {
-  interiority:    'Interiority',
-  desire_tension: 'Desire & Tension',
-  specificity:    'Specificity',
-  stakes:         'Stakes',
-  voice:          'Voice',
-  body_presence:  'Body Presence',
+  interiority:       'Interiority',
+  desire_tension:    'Desire & Tension',
+  specificity:       'Specificity',
+  stakes:            'Stakes',
+  voice:             'Voice',
+  body_presence:     'Body Presence',
+  originality:       'Originality',
+  prose_efficiency:  'Prose Efficiency',
+  scene_fulfillment: 'Scene Fulfillment',
 };
 
 const STEPS = ['brief', 'generate', 'read', 'evaluate', 'memory', 'registry', 'writeback'];
@@ -65,14 +91,44 @@ const CONTENT_TYPES = [
   'Poetry Collection', 'Graphic Novel', 'Game Narrative', 'Podcast Script', 'Other',
 ];
 
+const TONES = [
+  { id: 'literary',  label: 'Literary',  desc: 'Psychological depth, subtext, thematic resonance', emoji: '📖' },
+  { id: 'thriller',  label: 'Thriller',  desc: 'Pacing, stakes escalation, chapter-end hooks', emoji: '⚡' },
+  { id: 'lyrical',   label: 'Lyrical',   desc: 'Sensory language, metaphor, emotional texture', emoji: '🌊' },
+  { id: 'intimate',  label: 'Intimate',  desc: 'Closeness, body language, breath, desire', emoji: '🤫' },
+  { id: 'dark',      label: 'Dark',      desc: 'Tension, moral ambiguity, unflinching honesty', emoji: '🖤' },
+  { id: 'warm',      label: 'Warm',      desc: 'Connection, humour, earned tenderness', emoji: '☀️' },
+];
+
 const EMPTY_BRIEF = {
   scene_title: '', situation: '', content_name: '', content_type: '', content_type_other: '',
   content_history: '', why_it_matters: '', life_constraints: '', support_system: '',
   emotional_stakes: '', what_failure_means: '', deadline_context: '', deadline_pressure: '',
   characters: [], registry_id: '', internal_conflict: '', world_context: '',
+  must_include: '', never_include: '',
 };
 
 const BRIEF_REQUIRED = ['situation', 'content_name', 'content_type', 'emotional_stakes', 'characters'];
+
+const SESSION_KEY = 'see-session';
+
+// ── Brief richness scoring ────────────────────────────────────────────
+function briefRichness(b) {
+  const fields = ['situation', 'content_history', 'why_it_matters', 'life_constraints',
+    'support_system', 'emotional_stakes', 'what_failure_means', 'internal_conflict', 'world_context'];
+  let totalChars = 0;
+  let filledCount = 0;
+  fields.forEach(k => {
+    const v = (b[k] || '').trim();
+    if (v) { filledCount++; totalChars += v.length; }
+  });
+  if (filledCount === 0) return { score: 0, label: 'Empty', color: T.red };
+  const avgLen = totalChars / filledCount;
+  const depthScore = Math.min(100, Math.round((filledCount / fields.length) * 50 + Math.min(avgLen / 3, 50)));
+  if (depthScore >= 75) return { score: depthScore, label: 'Rich', color: T.green };
+  if (depthScore >= 45) return { score: depthScore, label: 'Moderate', color: T.accent };
+  return { score: depthScore, label: 'Thin', color: T.red };
+}
 
 // ── Extract content info from a task/situation string ─────────────────
 const CONTENT_TYPE_PATTERNS = [
@@ -142,6 +198,8 @@ function composeBrief(b) {
     b.what_failure_means,
     b.internal_conflict,
     b.world_context,
+    b.must_include ? `Must include: ${b.must_include}.` : '',
+    b.never_include ? `Must avoid: ${b.never_include}.` : '',
   ].filter(Boolean).join(' ');
 }
 
@@ -287,6 +345,18 @@ function CharTag({ name, onRemove }) {
   );
 }
 
+// ── Browser notification helper ─────────────────────────────────────────
+function notify(title, body) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body, icon: '/favicon.ico' });
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(p => {
+      if (p === 'granted') new Notification(title, { body, icon: '/favicon.ico' });
+    });
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
@@ -303,15 +373,25 @@ export default function StoryEvaluationEngine() {
   const [brief, setBrief] = useState(EMPTY_BRIEF);
   const [charInput, setCharInput] = useState('');
   const [charContext, setCharContext] = useState({}); // { character_key: { living_context, relationships, display_name } }
+  const [charFetchStatus, setCharFetchStatus] = useState({}); // { character_key: 'loading'|'loaded'|'failed' }
   const updateBrief = (key, val) => setBrief(prev => ({ ...prev, [key]: val }));
+
+  // Tone dial
+  const [toneDial, setToneDial] = useState('literary');
 
   // Generation result
   const [storyId, setStoryId] = useState(null);
   const [stories, setStories] = useState(null); // { voice_a, voice_b, voice_c }
   const [activeVoice, setActiveVoice] = useState('voice_a');
+  const [tokenUsage, setTokenUsage] = useState(null); // { input, output }
+  const [enrichmentLoaded, setEnrichmentLoaded] = useState(null); // which context layers were found
 
   // Evaluation result
   const [evaluation, setEvaluation] = useState(null);
+  const [scoreOverrides, setScoreOverrides] = useState(null);
+  const [editingScores, setEditingScores] = useState(false);
+  const [sceneRevelations, setSceneRevelations] = useState(null); // { [char_key]: { dimension: { field: val } } }
+  const [revLoading, setRevLoading] = useState(false);
 
   // Memory proposals
   const [plotMemories, setPlotMemories] = useState([]);
@@ -326,9 +406,150 @@ export default function StoryEvaluationEngine() {
   // Write-back
   const [chapterId, setChapterId] = useState('');
   const [writeResult, setWriteResult] = useState(null);
+  const [chapters, setChapters] = useState([]); // [{ id, title, book_id }]
+  const [chapterSearch, setChapterSearch] = useState('');
+  const [books, setBooks] = useState([]);
+  const [selectedBookId, setSelectedBookId] = useState('');
 
   // Timer
   const [elapsed, setElapsed] = useState(0);
+
+  // Post-synthesis editing
+  const [editingApproved, setEditingApproved] = useState(false);
+  const [approvedText, setApprovedText] = useState('');
+
+  // Side-by-side voice comparison
+  const [viewMode, setViewMode] = useState('tab'); // 'tab' | 'sideBySide'
+
+  // ── Dark Mode ────────────────────────────────────────────────────────
+  const DARK_KEY = 'see-dark-mode';
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem(DARK_KEY) === '1'; } catch { return false; }
+  });
+  // Update module-level T synchronously during render (not in useEffect)
+  // so sub-components and style objects always see current theme
+  Object.assign(T, darkMode ? T_DARK : T_LIGHT);
+  useEffect(() => {
+    try { localStorage.setItem(DARK_KEY, darkMode ? '1' : '0'); } catch { /* quota */ }
+  }, [darkMode]);
+
+  // ── History ──────────────────────────────────────────────────────────
+  const HISTORY_KEY = 'see-history';
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  });
+  const [diffSelected, setDiffSelected] = useState([]); // [id, id] for comparison
+  const [diffOpen, setDiffOpen] = useState(false);
+
+  const saveToHistory = useCallback((sessionData) => {
+    const entry = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      date: new Date().toISOString(),
+      scene_title: sessionData.brief?.scene_title || 'Untitled Scene',
+      characters: sessionData.brief?.characters || [],
+      tone: sessionData.toneDial || 'literary',
+      winner: sessionData.evaluation?.winner || null,
+      winner_reason: sessionData.evaluation?.winner_reason || '',
+      scores: sessionData.evaluation?.scores || null,
+      approved_preview: (sessionData.evaluation?.approved_version || '').slice(0, 200),
+      story_id: sessionData.storyId,
+      brief_summary: (sessionData.brief?.situation || '').slice(0, 150),
+    };
+    setHistoryEntries(prev => {
+      const next = [entry, ...prev].slice(0, 50); // keep last 50
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  }, []);
+
+  const loadFromHistory = useCallback((entry) => {
+    // History is read-only snapshot — just show the scores/approved text
+    setHistoryOpen(false);
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    if (!window.confirm('Clear all evaluation history?')) return;
+    setHistoryEntries([]);
+    localStorage.removeItem(HISTORY_KEY);
+  }, []);
+
+  // ── Batch export all history entries as PDF ──────────────────────────
+  const batchExportHistory = useCallback(() => {
+    if (!historyEntries.length) return;
+    const parts = [];
+    parts.push(`<h1 style="font-family:Georgia,serif;margin-bottom:4px">Evaluation History Export</h1>`);
+    parts.push(`<p style="color:#666;font-size:12px">${historyEntries.length} evaluations · Exported ${new Date().toLocaleDateString()}</p><hr/>`);
+    historyEntries.forEach((entry, idx) => {
+      parts.push(`<div style="page-break-before:${idx > 0 ? 'always' : 'auto'};margin-top:${idx > 0 ? '20px' : '0'}">`);
+      parts.push(`<h2 style="font-family:Georgia,serif;color:#1a1a1a;margin-bottom:6px">${idx + 1}. ${(entry.scene_title || 'Untitled').replace(/</g, '&lt;')}</h2>`);
+      parts.push(`<p style="font-size:12px;color:#666">${new Date(entry.date).toLocaleDateString()} ${new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · Tone: ${entry.tone || 'literary'}</p>`);
+      if (entry.characters?.length) parts.push(`<p style="font-size:12px;color:#444">Characters: ${entry.characters.join(', ')}</p>`);
+      if (entry.winner) parts.push(`<p style="font-size:13px;color:#2a8a5e;font-weight:600">Winner: ${entry.winner} — ${(entry.winner_reason || '').replace(/</g, '&lt;')}</p>`);
+      if (entry.scores) {
+        parts.push(`<div style="margin:8px 0">`);
+        Object.entries(entry.scores).forEach(([voice, sc]) => {
+          const isWinner = voice === entry.winner;
+          parts.push(`<span style="display:inline-block;margin-right:12px;font-size:12px;padding:2px 8px;border-radius:10px;background:${isWinner ? '#e8f5e9' : '#f5f5f5'};color:${isWinner ? '#2a8a5e' : '#666'};font-weight:600">${voice.replace('voice_', 'V').toUpperCase()}: ${sc.total}</span>`);
+        });
+        parts.push(`</div>`);
+      }
+      if (entry.brief_summary) parts.push(`<p style="font-size:12px;color:#888;font-style:italic">${entry.brief_summary.replace(/</g, '&lt;')}</p>`);
+      parts.push(`</div>`);
+    });
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+    printWin.document.write(`<!DOCTYPE html><html><head><title>Evaluation History Export</title><style>body{font-family:'DM Sans',Helvetica,sans-serif;padding:40px;max-width:800px;margin:0 auto;color:#1a1a1a}@media print{body{padding:20px}div{page-break-inside:avoid}}</style></head><body>${parts.join('')}</body></html>`);
+    printWin.document.close();
+    setTimeout(() => { printWin.print(); }, 300);
+  }, [historyEntries]);
+
+  // ── Session persistence — save/restore from localStorage ──────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SESSION_KEY);
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (s.brief) setBrief(s.brief);
+        if (s.toneDial) setToneDial(s.toneDial);
+        if (s.step) setStep(s.step);
+        if (s.storyId) setStoryId(s.storyId);
+        if (s.stories) setStories(s.stories);
+        if (s.evaluation) setEvaluation(s.evaluation);
+        if (s.chapterId) setChapterId(s.chapterId);
+      }
+    } catch { /* ignore corrupt localStorage */ }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const payload = { brief, toneDial, step, storyId, stories, evaluation, chapterId };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    } catch { /* quota exceeded — silent */ }
+  }, [brief, toneDial, step, storyId, stories, evaluation, chapterId]);
+
+  // ── World context auto-enrich ──────────────────────────────────────
+  const [worldCtx, setWorldCtx] = useState(null);
+  const [worldCtxOpen, setWorldCtxOpen] = useState(false);
+  useEffect(() => {
+    fetch('/api/v1/world/context-summary')
+      .then(r => r.json())
+      .then(d => setWorldCtx(d))
+      .catch(() => {});
+  }, []);
+
+  const applyWorldCtx = useCallback(() => {
+    if (!worldCtx) return;
+    const parts = [];
+    if (worldCtx.locations?.length) parts.push(`Locations: ${worldCtx.locations.join(', ')}`);
+    if (worldCtx.facts?.length) parts.push(`Facts: ${worldCtx.facts.join('; ')}`);
+    if (worldCtx.threads?.length) parts.push(`Active threads: ${worldCtx.threads.join('; ')}`);
+    if (worldCtx.tensionCount) parts.push(`${worldCtx.tensionCount} active tension pairs`);
+    const existing = (brief.world_context || '').trim();
+    const newCtx = existing ? existing + '\n' + parts.join('. ') : parts.join('. ');
+    updateBrief('world_context', newCtx);
+    setWorldCtxOpen(false);
+  }, [worldCtx, brief.world_context, updateBrief]);
 
   // ── Auto-fill from URL params + router state on mount ──────────────
   useEffect(() => {
@@ -375,8 +596,58 @@ export default function StoryEvaluationEngine() {
       if (extracted.content_type && !patch.content_type) patch.content_type = extracted.content_type;
     }
 
+    // Scene Proposer → Evaluation handoff
+    const sp = st.sceneProposal;
+    if (sp) {
+      if (sp.scene_title) patch.scene_title = sp.scene_title;
+      if (sp.situation) patch.situation = sp.situation;
+      if (sp.emotional_stakes) patch.emotional_stakes = sp.emotional_stakes;
+      if (sp.internal_conflict) patch.internal_conflict = sp.internal_conflict;
+      if (sp.characters?.length) patch.characters = sp.characters;
+      if (sp.tone) {
+        const toneMap = { longing: 'lyrical', tension: 'thriller', sensual: 'intimate', explicit: 'dark', aftermath: 'warm' };
+        setToneDial(toneMap[sp.tone] || sp.tone || 'literary');
+      }
+    }
+
     if (Object.keys(patch).length) setBrief(prev => ({ ...prev, ...patch }));
   }, []);
+
+  // ── Auto-fill registry + characters when brief is empty on mount ───
+  useEffect(() => {
+    // Only auto-fill if we have no characters and no registry from URL params/router state
+    if (brief.characters.length > 0 || brief.registry_id) return;
+    // Don't overwrite if session was restored with data
+    const saved = localStorage.getItem(SESSION_KEY);
+    if (saved) {
+      try { const s = JSON.parse(saved); if (s.brief?.characters?.length > 0) return; } catch {}
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/character-registry/registries');
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!data.success || !data.registries?.length || cancelled) return;
+
+        // Use the first (most recent) registry
+        const reg = data.registries[0];
+        const chars = (reg.characters || [])
+          .filter(c => c.status === 'active' || !c.status)
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+          .map(c => c.character_key);
+
+        if (cancelled || !chars.length) return;
+        setBrief(prev => {
+          // Don't overwrite if user already started filling in
+          if (prev.characters.length > 0 || prev.registry_id) return prev;
+          return { ...prev, registry_id: reg.id, characters: chars };
+        });
+      } catch { /* network error — silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!loading) return;
@@ -388,13 +659,17 @@ export default function StoryEvaluationEngine() {
   // ── Fetch living context + relationship edges for a character ─────
   const fetchCharacterContext = useCallback(async (charKey, registryId) => {
     if (!registryId || !charKey) return;
+    setCharFetchStatus(prev => ({ ...prev, [charKey]: 'loading' }));
     try {
       const res = await fetch(`/api/v1/character-registry/characters/scene-context/${encodeURIComponent(charKey)}?registry_id=${encodeURIComponent(registryId)}`);
-      if (!res.ok) return;
+      if (!res.ok) { setCharFetchStatus(prev => ({ ...prev, [charKey]: 'failed' })); return; }
       const data = await res.json();
-      if (!data.success) return;
+      if (!data.success) { setCharFetchStatus(prev => ({ ...prev, [charKey]: 'failed' })); return; }
       setCharContext(prev => ({ ...prev, [charKey]: data }));
-    } catch { /* silent — context is optional enrichment */ }
+      setCharFetchStatus(prev => ({ ...prev, [charKey]: 'loaded' }));
+    } catch {
+      setCharFetchStatus(prev => ({ ...prev, [charKey]: 'failed' }));
+    }
   }, []);
 
   // When characters or registry_id change, fetch context for any new characters
@@ -507,13 +782,20 @@ export default function StoryEvaluationEngine() {
         scene_brief: composed,
         characters_in_scene: brief.characters,
         registry_id: brief.registry_id || undefined,
+        tone_dial: toneDial,
+        must_include: brief.must_include || undefined,
+        never_include: brief.never_include || undefined,
+        chapter_id: chapterId || undefined,
       });
       setStoryId(data.story_id);
       setStories(data.stories);
+      setTokenUsage(data.token_usage || null);
+      setEnrichmentLoaded(data.enrichment_loaded || null);
       setStep('read');
+      if (document.hidden) notify('Stories Generated', `3 voices ready for "${brief.scene_title || 'your scene'}"`);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [brief]);
+  }, [brief, toneDial]);
 
   const handleEvaluate = useCallback(async () => {
     if (!storyId) return;
@@ -521,10 +803,17 @@ export default function StoryEvaluationEngine() {
     try {
       const data = await apiPost('evaluate-stories', { story_id: storyId });
       setEvaluation(data.evaluation);
+      setScoreOverrides(null);
+      setEditingScores(false);
+      setSceneRevelations(null);
+      if (data.token_usage) setTokenUsage(prev => prev ? { input: prev.input + data.token_usage.input, output: prev.output + data.token_usage.output } : data.token_usage);
       setStep('evaluate');
+      // Save to history
+      saveToHistory({ brief, toneDial, storyId, evaluation: data.evaluation });
+      if (document.hidden) notify('Evaluation Complete', `Winner: ${data.evaluation?.winner || 'Unknown'}`);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [storyId]);
+  }, [storyId, brief, toneDial, saveToHistory]);
 
   const handleProposeMemory = useCallback(async () => {
     if (!storyId) return;
@@ -583,6 +872,188 @@ export default function StoryEvaluationEngine() {
     setter(next);
   };
 
+  // ── Regenerate (re-run 3 voices with same brief) ─────────────────────
+  const handleRegenerate = useCallback(async () => {
+    setError(null); setLoading(true);
+    try {
+      const composed = composeBrief(brief);
+      const data = await apiPost('generate-story-multi', {
+        scene_brief: composed,
+        characters_in_scene: brief.characters,
+        registry_id: brief.registry_id || undefined,
+        tone_dial: toneDial,
+      });
+      setStoryId(data.story_id);
+      setStories(data.stories);
+      setTokenUsage(data.token_usage || null);
+      setEvaluation(null);
+      setScoreOverrides(null);
+      setEditingScores(false);
+      setSceneRevelations(null);
+      setStep('read');
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }, [brief, toneDial]);
+
+  // ── Export all voices as markdown ─────────────────────────────────────
+  const exportAsMarkdown = useCallback(() => {
+    if (!stories) return;
+    const parts = [`# Story Evaluation Export\n\n## Brief\n${composeBrief(brief)}\n\n## Tone: ${toneDial}\n`];
+    VOICES.forEach(v => {
+      const s = stories[v.id];
+      parts.push(`\n## ${v.label} (${v.tag})\n**${s?.word_count || 0} words**\n\n${s?.text || '(empty)'}\n`);
+    });
+    if (evaluation) {
+      parts.push(`\n## Evaluation\n**Winner: ${evaluation.winner}** — ${evaluation.winner_reason}\n`);
+      VOICES.forEach(v => {
+        const sc = evaluation.scores?.[v.id];
+        if (sc) parts.push(`\n### ${v.label}: ${sc.total}/60\n${sc.summary}\n`);
+      });
+      if (evaluation.approved_version) parts.push(`\n## Approved Version\n\n${evaluation.approved_version}\n`);
+    }
+    const blob = new Blob([parts.join('')], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `scene-eval-${storyId || 'draft'}.md`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [stories, evaluation, brief, toneDial, storyId]);
+
+  // ── Export as PDF (browser print) ────────────────────────────────────
+  const exportAsPdf = useCallback(() => {
+    if (!stories && !evaluation) return;
+    const parts = [];
+    parts.push(`<h1 style="font-family:Georgia,serif;margin-bottom:4px">Scene Evaluation</h1>`);
+    parts.push(`<p style="color:#666;font-size:13px">Scene: ${brief.scene_title || 'Untitled'} · Tone: ${toneDial}</p>`);
+    parts.push(`<p style="font-size:13px;color:#444">${composeBrief(brief)}</p><hr/>`);
+    if (stories) {
+      VOICES.forEach(v => {
+        const s = stories[v.id];
+        parts.push(`<h2 style="color:${v.accent};font-family:Georgia,serif">${v.label} — ${v.tag}</h2>`);
+        parts.push(`<p style="font-size:12px;color:#888">${s?.word_count || 0} words</p>`);
+        parts.push(`<div style="white-space:pre-wrap;font-size:13px;line-height:1.7;margin-bottom:20px">${(s?.text || '(empty)').replace(/</g, '&lt;')}</div>`);
+      });
+    }
+    if (evaluation) {
+      parts.push(`<hr/><h2 style="font-family:Georgia,serif">Evaluation</h2>`);
+      parts.push(`<p><strong>Winner: ${evaluation.winner}</strong> — ${evaluation.winner_reason || ''}</p>`);
+      VOICES.forEach(v => {
+        const sc = evaluation.scores?.[v.id];
+        if (sc) parts.push(`<p style="font-size:12px"><strong>${v.label}:</strong> ${sc.total}/60 — ${sc.summary || ''}</p>`);
+      });
+      if (evaluation.approved_version) {
+        parts.push(`<hr/><h2 style="font-family:Georgia,serif">Approved Version</h2>`);
+        parts.push(`<div style="white-space:pre-wrap;font-size:13px;line-height:1.7">${evaluation.approved_version.replace(/</g, '&lt;')}</div>`);
+      }
+    }
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+    printWin.document.write(`<!DOCTYPE html><html><head><title>Scene Eval — ${brief.scene_title || 'Draft'}</title><style>body{font-family:'DM Sans',Helvetica,sans-serif;padding:40px;max-width:800px;margin:0 auto;color:#1a1a1a}@media print{body{padding:20px}}</style></head><body>${parts.join('')}</body></html>`);
+    printWin.document.close();
+    setTimeout(() => { printWin.print(); }, 300);
+  }, [stories, evaluation, brief, toneDial]);
+
+  // ── Scene revelation analysis ────────────────────────────────────────
+  const handleSceneRevelation = useCallback(async () => {
+    if (!evaluation?.approved_version || !brief.characters.length || !brief.registry_id) return;
+    setRevLoading(true);
+    try {
+      const data = await apiPost('scene-revelation', {
+        scene_text: evaluation.approved_version,
+        characters_in_scene: brief.characters,
+        registry_id: brief.registry_id,
+      });
+      setSceneRevelations(data.revelations || null);
+    } catch (err) { setError(err.message); }
+    finally { setRevLoading(false); }
+  }, [evaluation, brief]);
+
+  // ── Fetch books + chapters for picker ──────────────────────────────
+  const fetchBooks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/storyteller/books');
+      if (!res.ok) return;
+      const data = await res.json();
+      setBooks(data.books || data || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchChapters = useCallback(async (bookId) => {
+    try {
+      const url = bookId
+        ? `/api/v1/storyteller/books/${encodeURIComponent(bookId)}`
+        : '/api/v1/storyteller/chapters';
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      const ch = bookId ? (data.book?.chapters || data.chapters || []) : (data.chapters || data || []);
+      setChapters(ch);
+    } catch { /* chapters endpoint may not exist */ }
+  }, []);
+
+  useEffect(() => { fetchBooks(); fetchChapters(); }, [fetchBooks, fetchChapters]);
+
+  const handleBookSelect = useCallback((bookId) => {
+    setSelectedBookId(bookId);
+    setChapterId('');
+    setChapterSearch('');
+    fetchChapters(bookId || null);
+  }, [fetchChapters]);
+
+  // Request notification permission early
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      // Skip if user is typing in an input/textarea
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+
+      const idx = STEPS.indexOf(step);
+
+      // ← → navigate between steps (only to completed steps or current)
+      if (e.key === 'ArrowRight' && idx < STEPS.length - 1) {
+        e.preventDefault();
+        // Only allow going forward if we have data for next step
+        const next = STEPS[idx + 1];
+        if (next === 'read' && stories) setStep('read');
+        else if (next === 'evaluate' && evaluation) setStep('evaluate');
+        else if (next === 'memory' && plotMemories.length) setStep('memory');
+        else if (next === 'registry' && regUpdates.length) setStep('registry');
+        else if (next === 'writeback' && writeResult) setStep('writeback');
+      }
+      if (e.key === 'ArrowLeft' && idx > 0) {
+        e.preventDefault();
+        setStep(STEPS[idx - 1]);
+      }
+
+      // Ctrl+E → evaluate (when on 'read' step)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        e.preventDefault();
+        if (step === 'read' && storyId && !loading) handleEvaluate();
+      }
+
+      // Ctrl+G → generate (when on 'brief' step)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+        e.preventDefault();
+        if (step === 'brief' && !loading) handleGenerate();
+      }
+
+      // Escape → close history drawer
+      if (e.key === 'Escape' && historyOpen) {
+        e.preventDefault();
+        setHistoryOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [step, stories, evaluation, plotMemories, regUpdates, writeResult, storyId, loading, historyOpen, handleEvaluate, handleGenerate]);
+
   // ── Current step index ───────────────────────────────────────────────
   const stepIdx = STEPS.indexOf(step);
 
@@ -592,11 +1063,13 @@ export default function StoryEvaluationEngine() {
       height: '100vh', background: T.bg, color: T.text,
       fontFamily: "'Inter','Segoe UI',system-ui,sans-serif",
       overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+      overscrollBehaviorY: 'contain',
     }}>
+      <div style={{ padding: '10px 24px 0' }}><StoryHubNav /></div>
       {/* Header */}
       <div className="see-header" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 24px', borderBottom: `1px solid ${T.border}`, background: T.surface,
+        padding: '14px 24px', paddingRight: 72, borderBottom: `1px solid ${T.border}`, background: T.surface,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
@@ -610,15 +1083,203 @@ export default function StoryEvaluationEngine() {
             </div>
             <div className="see-header-subtitle" style={{ fontSize: 10, color: T.textDim }}>
               Blind generation → Editorial evaluation → Memory → Registry → Write-back
+              <span style={{ marginLeft: 12, fontSize: 9, color: T.textFaint }}>
+                ← → steps · Ctrl+G generate · Ctrl+E evaluate · Esc close
+              </span>
             </div>
           </div>
         </div>
-        {loading && (
-          <span style={{ fontSize: 11, color: T.accent, fontFamily: 'monospace' }}>
-            {elapsed}s elapsed
-          </span>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {loading && (
+            <span style={{ fontSize: 11, color: T.accent, fontFamily: 'monospace' }}>
+              {elapsed}s elapsed
+            </span>
+          )}
+          {step !== 'brief' && !loading && (
+            <button
+              onClick={() => {
+                if (!window.confirm('Start a new session? Current progress will be cleared.')) return;
+                setBrief(EMPTY_BRIEF);
+                setToneDial('literary');
+                setStep('brief');
+                setStories(null);
+                setStoryId(null);
+                setEvaluation(null);
+                setChapterId('');
+                setChapterSearch('');
+                setChapters([]);
+                setPlotMemories([]);
+                setRevelations([]);
+                setRegUpdates([]);
+                setSelectedPlot(new Set());
+                setSelectedRev(new Set());
+                setSelectedReg(new Set());
+                setWriteResult(null);
+                setCharContext({});
+                setCharFetchStatus({});
+                setEditingApproved(false);
+                setApprovedText('');
+                setError(null);
+                localStorage.removeItem(SESSION_KEY);
+              }}
+              style={{
+                padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                background: 'none', border: `1px solid ${T.border}`, color: T.textDim,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              ✦ New Session
+            </button>
+          )}
+          <button
+            onClick={() => setDarkMode(d => !d)}
+            style={{
+              padding: '6px 10px', borderRadius: 6, fontSize: 12,
+              background: 'none', border: `1px solid ${T.border}`, color: T.textDim,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {darkMode ? '☀' : '🌙'}
+          </button>
+          <button
+            onClick={() => setHistoryOpen(h => !h)}
+            style={{
+              padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+              background: historyOpen ? `${T.accent}15` : 'none',
+              border: `1px solid ${historyOpen ? T.accent : T.border}`,
+              color: historyOpen ? T.accent : T.textDim,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+            title={`${historyEntries.length} past sessions`}
+          >
+            ◷ History{historyEntries.length > 0 ? ` (${historyEntries.length})` : ''}
+          </button>
+        </div>
       </div>
+
+      {/* History drawer */}
+      {historyOpen && (
+        <div style={{
+          background: T.surface, borderBottom: `1px solid ${T.border}`,
+          padding: '12px 24px', maxHeight: 280, overflowY: 'auto',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.text }}>Evaluation History</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {historyEntries.length > 0 && (
+                <>
+                  <button onClick={batchExportHistory} style={{ fontSize: 10, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>📄 Export all as PDF</button>
+                  <button onClick={clearHistory} style={{ fontSize: 10, color: T.textFaint, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear all</button>
+                </>
+              )}
+            </div>
+          </div>
+          {historyEntries.length === 0 ? (
+            <div style={{ fontSize: 12, color: T.textFaint, padding: '16px 0', textAlign: 'center' }}>
+              No evaluations yet. Complete an evaluation to see it here.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {historyEntries.map(entry => {
+                const isChecked = diffSelected.includes(entry.id);
+                return (
+                <div key={entry.id} style={{
+                  padding: '10px 14px', borderRadius: 8,
+                  border: `1px solid ${isChecked ? T.accent : T.border}`, background: isChecked ? `${T.accent}08` : T.bg,
+                  cursor: 'default',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input type="checkbox" checked={isChecked}
+                        onChange={() => setDiffSelected(prev => {
+                          if (prev.includes(entry.id)) return prev.filter(id => id !== entry.id);
+                          if (prev.length >= 2) return [prev[1], entry.id];
+                          return [...prev, entry.id];
+                        })}
+                        style={{ accentColor: T.accent, cursor: 'pointer' }}
+                        title="Select for comparison"
+                      />
+                      <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>
+                        {entry.scene_title || 'Untitled'}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 9, color: T.textFaint }}>
+                      {new Date(entry.date).toLocaleDateString()} {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: T.textDim, marginBottom: 4 }}>
+                    {entry.characters.slice(0, 4).join(', ')}{entry.characters.length > 4 ? ` +${entry.characters.length - 4}` : ''} · {entry.tone}
+                  </div>
+                  {entry.winner && (
+                    <div style={{ fontSize: 10, color: T.green, fontWeight: 600 }}>
+                      Winner: {entry.winner} — {entry.winner_reason?.slice(0, 80)}{(entry.winner_reason?.length || 0) > 80 ? '…' : ''}
+                    </div>
+                  )}
+                  {entry.scores && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      {Object.entries(entry.scores).map(([voice, sc]) => (
+                        <span key={voice} style={{
+                          fontSize: 9, padding: '1px 6px', borderRadius: 8,
+                          background: voice === entry.winner ? `${T.green}20` : `${T.border}`,
+                          color: voice === entry.winner ? T.green : T.textDim,
+                          fontWeight: 600,
+                        }}>{voice.replace('voice_', 'V').toUpperCase()}: {sc.total}</span>
+                      ))}
+                    </div>
+                  )}
+                  {entry.brief_summary && (
+                    <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4, fontStyle: 'italic' }}>
+                      {entry.brief_summary.slice(0, 100)}{entry.brief_summary.length > 100 ? '…' : ''}
+                    </div>
+                  )}
+                </div>
+                );
+              })}
+            </div>
+          )}
+          {/* Diff compare button + panel */}
+          {diffSelected.length === 2 && (() => {
+            const a = historyEntries.find(e => e.id === diffSelected[0]);
+            const b = historyEntries.find(e => e.id === diffSelected[1]);
+            if (!a || !b) return null;
+            const allVoices = [...new Set([...Object.keys(a.scores || {}), ...Object.keys(b.scores || {})])];
+            return (
+              <div style={{ marginTop: 10 }}>
+                <button onClick={() => setDiffOpen(prev => !prev)}
+                  style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: `${T.accent}15`, border: `1px solid ${T.accent}`, color: T.accent, cursor: 'pointer' }}>
+                  {diffOpen ? '▾ Hide Comparison' : '◈ Compare Selected'}
+                </button>
+                {diffOpen && (
+                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {[a, b].map((entry, idx) => (
+                      <div key={idx} style={{ padding: 12, borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 6 }}>{entry.scene_title || 'Untitled'}</div>
+                        <div style={{ fontSize: 10, color: T.textDim, marginBottom: 4 }}>{new Date(entry.date).toLocaleDateString()} · {entry.tone}</div>
+                        <div style={{ fontSize: 10, color: T.textDim, marginBottom: 8 }}>{(entry.characters || []).join(', ')}</div>
+                        {entry.winner && <div style={{ fontSize: 11, color: T.green, fontWeight: 600, marginBottom: 6 }}>Winner: {entry.winner}</div>}
+                        {allVoices.map(voice => {
+                          const sc = entry.scores?.[voice];
+                          if (!sc) return null;
+                          return (
+                            <div key={voice} style={{ marginBottom: 6 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: T.text, marginBottom: 2 }}>{voice.replace('voice_', 'V').toUpperCase()}: {sc.total}/60</div>
+                              <div style={{ height: 8, borderRadius: 4, background: T.border, overflow: 'hidden' }}>
+                                <div style={{ width: `${(sc.total / 60) * 100}%`, height: '100%', background: voice === entry.winner ? T.green : T.accent, borderRadius: 4, transition: 'width 0.4s' }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {entry.brief_summary && <div style={{ fontSize: 10, color: T.textFaint, marginTop: 6, fontStyle: 'italic' }}>{entry.brief_summary}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Step Progress */}
       <div className="see-step-bar" style={{ display: 'flex', padding: '12px 24px', gap: 4, background: T.surface, borderBottom: `1px solid ${T.border}` }}>
@@ -663,13 +1324,23 @@ export default function StoryEvaluationEngine() {
             {/* Completeness header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>Build your scene brief</div>
-              <span style={{
-                padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
-                background: briefCompleteness(brief) >= 60 ? `${T.green}20` : `${T.accent}20`,
-                color: briefCompleteness(brief) >= 60 ? T.green : T.accent,
-              }}>
-                {briefCompleteness(brief)}% complete
-              </span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {(() => { const r = briefRichness(brief); return (
+                  <span style={{
+                    padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
+                    background: `${r.color}20`, color: r.color,
+                  }}>
+                    {r.label} ({r.score}%)
+                  </span>
+                ); })()}
+                <span style={{
+                  padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
+                  background: briefCompleteness(brief) >= 60 ? `${T.green}20` : `${T.accent}20`,
+                  color: briefCompleteness(brief) >= 60 ? T.green : T.accent,
+                }}>
+                  {briefCompleteness(brief)}% complete
+                </span>
+              </div>
             </div>
 
             {/* ① The Scene */}
@@ -768,9 +1439,48 @@ export default function StoryEvaluationEngine() {
                 </BriefField>
               </div>
               <BriefField label="World Context" hint="Relevant world-building or setting details">
-                <textarea value={brief.world_context} onChange={e => updateBrief('world_context', e.target.value)}
-                  rows={2} placeholder="Time period, location, cultural norms, industry rules..."
-                  style={briefTextareaStyle} />
+                <div style={{ position: 'relative' }}>
+                  <textarea value={brief.world_context} onChange={e => updateBrief('world_context', e.target.value)}
+                    rows={2} placeholder="Time period, location, cultural norms, industry rules..."
+                    style={briefTextareaStyle} />
+                  {worldCtx && (
+                    <div style={{ marginTop: 6 }}>
+                      <button onClick={() => setWorldCtxOpen(!worldCtxOpen)}
+                        style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid #e0dcd4', background: worldCtxOpen ? '#f0eee8' : '#fff', color: '#666', cursor: 'pointer' }}>
+                        🌍 {worldCtxOpen ? 'Hide' : 'Import from World'}{worldCtx.locations?.length ? ` (${worldCtx.locations.length} locations)` : ''}
+                      </button>
+                      {worldCtxOpen && (
+                        <div style={{ marginTop: 8, padding: 10, background: '#f8f7f4', borderRadius: 8, border: '1px solid #e8e5de', fontSize: 12 }}>
+                          {worldCtx.locations?.length > 0 && (
+                            <div style={{ marginBottom: 6 }}>
+                              <span style={{ fontWeight: 600, fontSize: 11, color: '#888' }}>Locations: </span>
+                              {worldCtx.locations.map((l, i) => <span key={i} style={{ background: '#e8edf5', borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{l}</span>)}
+                            </div>
+                          )}
+                          {worldCtx.facts?.length > 0 && (
+                            <div style={{ marginBottom: 6 }}>
+                              <span style={{ fontWeight: 600, fontSize: 11, color: '#888' }}>Facts: </span>
+                              {worldCtx.facts.map((f, i) => <span key={i} style={{ background: '#f0eee8', borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{f}</span>)}
+                            </div>
+                          )}
+                          {worldCtx.threads?.length > 0 && (
+                            <div style={{ marginBottom: 6 }}>
+                              <span style={{ fontWeight: 600, fontSize: 11, color: '#888' }}>Threads: </span>
+                              {worldCtx.threads.map((t, i) => <span key={i} style={{ background: '#e8f5e9', borderRadius: 4, padding: '1px 6px', marginRight: 4, fontSize: 11 }}>{t}</span>)}
+                            </div>
+                          )}
+                          <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>
+                            {worldCtx.activeThreadCount || 0} active threads · {worldCtx.tensionCount || 0} tension pairs
+                          </div>
+                          <button onClick={applyWorldCtx}
+                            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, border: 'none', background: '#c9a96e', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                            ✦ Apply to World Context
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </BriefField>
             </SectionCard>
 
@@ -785,20 +1495,29 @@ export default function StoryEvaluationEngine() {
                 ))}
               </div>
               {/* Living-context indicators */}
-              {brief.characters.some(c => charContext[c]) && (
+              {brief.characters.length > 0 && (
                 <div style={{ fontSize: 11, color: T.textDim, marginBottom: 8, lineHeight: 1.5 }}>
                   {brief.characters.map(c => {
                     const ctx = charContext[c];
-                    if (!ctx) return null;
-                    const relCount = (ctx.relationships || []).length;
-                    const hasLC = ctx.living_context && Object.values(ctx.living_context).some(Boolean);
+                    const status = charFetchStatus[c];
+                    const relCount = (ctx?.relationships || []).length;
+                    const hasLC = ctx?.living_context && Object.values(ctx.living_context).some(Boolean);
+                    const icon = status === 'loaded' ? '✓' : status === 'failed' ? '⚠' : status === 'loading' ? '⏳' : '·';
+                    const iconColor = status === 'loaded' ? T.green : status === 'failed' ? '#e74c3c' : T.textFaint;
                     return (
                       <div key={c} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}>
-                        <span style={{ color: T.accent }}>✦</span>
-                        <span><strong>{ctx.display_name || c}</strong>
+                        <span style={{ color: iconColor, fontSize: 13 }}>{icon}</span>
+                        <span><strong>{ctx?.display_name || c}</strong>
+                          {status === 'failed' ? <span style={{ color: '#e74c3c' }}> — fetch failed</span> : ''}
                           {hasLC ? ' — context loaded' : ''}
                           {relCount > 0 ? ` · ${relCount} relationship${relCount > 1 ? 's' : ''}` : ''}
                         </span>
+                        {status === 'failed' && brief.registry_id && (
+                          <button onClick={() => fetchCharacterContext(c, brief.registry_id)}
+                            style={{ fontSize: 10, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                            retry
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -843,6 +1562,103 @@ export default function StoryEvaluationEngine() {
               </div>
             </SectionCard>
 
+            {/* ⑤½ Chapter (optional — enriches generation with arc metadata) */}
+            <SectionCard title="Chapter Target (optional)">
+              <div style={{ fontSize: 11, color: T.textDim, marginBottom: 8, lineHeight: 1.5 }}>
+                Selecting a chapter lets the AI use arc metadata and continuity from that chapter during generation.
+                You can also set this later in the Write-Back step.
+              </div>
+              {chapters.length > 0 ? (
+                <div>
+                  <input
+                    value={chapterSearch}
+                    onChange={e => setChapterSearch(e.target.value)}
+                    placeholder="Search chapters by title..."
+                    style={{
+                      width: '100%', padding: '8px 12px', background: T.surfaceAlt,
+                      border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+                      fontSize: 12, outline: 'none', boxSizing: 'border-box', marginBottom: 6,
+                    }}
+                  />
+                  <div style={{ maxHeight: 120, overflowY: 'auto', borderRadius: 6, border: `1px solid ${T.border}` }}>
+                    {chapters
+                      .filter(ch => !chapterSearch || (ch.title || ch.id || '').toLowerCase().includes(chapterSearch.toLowerCase()))
+                      .slice(0, 15)
+                      .map(ch => (
+                        <div key={ch.id}
+                          onClick={() => { setChapterId(ch.id); setChapterSearch(ch.title || ch.id); }}
+                          style={{
+                            padding: '6px 12px', cursor: 'pointer', fontSize: 11,
+                            background: chapterId === ch.id ? `${T.accent}15` : 'transparent',
+                            borderBottom: `1px solid ${T.border}`, color: T.text,
+                          }}
+                        >
+                          <strong>{ch.title || 'Untitled'}</strong>
+                          <span style={{ fontSize: 9, color: T.textFaint, marginLeft: 6 }}>{ch.id?.slice(0, 8)}…</span>
+                        </div>
+                      ))}
+                  </div>
+                  {chapterId && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                      <span style={{ fontSize: 10, color: T.green }}>✓ {chapterId.slice(0, 8)}…</span>
+                      <button onClick={() => { setChapterId(''); setChapterSearch(''); }}
+                        style={{ fontSize: 10, color: T.textFaint, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                        clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <input
+                  value={chapterId}
+                  onChange={e => setChapterId(e.target.value)}
+                  placeholder="Chapter UUID (optional)"
+                  style={{ ...briefInputStyle, fontSize: 12 }}
+                />
+              )}
+            </SectionCard>
+
+            {/* ⑥ Tone Dial */}
+            <SectionCard title="⑥ Tone Dial">
+              <div className="see-tone-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {TONES.map(t => {
+                  const active = toneDial === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setToneDial(t.id)}
+                      style={{
+                        padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                        border: `2px solid ${active ? T.accent : T.border}`,
+                        background: active ? `${T.accent}15` : T.surface,
+                        textAlign: 'left', transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ fontSize: 16, marginBottom: 4 }}>{t.emoji}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: active ? T.accent : T.text }}>{t.label}</div>
+                      <div style={{ fontSize: 10, color: T.textDim, marginTop: 2, lineHeight: 1.4 }}>{t.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </SectionCard>
+
+            {/* ⑦ Scene Constraints */}
+            <SectionCard title="⑦ Scene Constraints">
+              <div className="see-brief-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <BriefField label="Must Include" hint="Specific moments, lines, images, or beats that MUST appear">
+                  <textarea value={brief.must_include} onChange={e => updateBrief('must_include', e.target.value)}
+                    rows={2} placeholder="A phone call that interrupts dinner, the word 'amber', a moment where she laughs despite herself..."
+                    style={briefTextareaStyle} />
+                </BriefField>
+                <BriefField label="Never Include" hint="Things to actively AVOID in this scene">
+                  <textarea value={brief.never_include} onChange={e => updateBrief('never_include', e.target.value)}
+                    rows={2} placeholder="No dream sequences, no flashbacks to childhood, avoid the word 'journey'..."
+                    style={briefTextareaStyle} />
+                </BriefField>
+              </div>
+            </SectionCard>
+
             {/* Brief Preview */}
             {composeBrief(brief).trim() && (
               <SectionCard title="Brief Preview">
@@ -868,6 +1684,23 @@ export default function StoryEvaluationEngine() {
                 {loading ? `Generating 3 voices... (${elapsed}s)` : '◇ Generate 3 Blind Voices →'}
               </button>
             </div>
+            {/* Missing-fields hint */}
+            {!loading && (briefCompleteness(brief) < 60 || brief.characters.length === 0) && (
+              <div style={{ textAlign: 'right', fontSize: 11, color: '#e74c3c', marginTop: 6 }}>
+                {brief.characters.length === 0 ? 'Add at least one character. ' : ''}
+                {briefCompleteness(brief) < 60
+                  ? `Brief ${briefCompleteness(brief)}% complete — fill in: ${
+                      [
+                        !brief.protagonist ? 'protagonist' : '',
+                        !brief.situation ? 'situation' : '',
+                        !brief.content_name ? 'content name' : '',
+                        !brief.content_type ? 'content type' : '',
+                        !brief.emotional_stakes ? 'emotional stakes' : '',
+                      ].filter(Boolean).join(', ') || 'more fields'
+                    }`
+                  : ''}
+              </div>
+            )}
 
             {loading && <Spinner color={T.accent} label="3 voices writing in parallel..." />}
           </div>
@@ -876,49 +1709,124 @@ export default function StoryEvaluationEngine() {
         {/* ══════ STEP: READ ══════ */}
         {(step === 'read' || step === 'generate') && stories && (
           <div>
-            {/* Voice tabs */}
-            <div className="see-voice-tabs" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {VOICES.map(v => {
-                const s = stories[v.id];
-                const active = activeVoice === v.id;
-                return (
-                  <button
-                    key={v.id}
-                    onClick={() => setActiveVoice(v.id)}
-                    style={{
-                      flex: 1, padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
-                      border: `1px solid ${active ? v.accent : T.border}`,
-                      background: active ? v.bg : T.surface,
-                      textAlign: 'left', transition: 'all 0.2s',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: active ? v.accent : T.text }}>{v.emoji} {v.label}</span>
-                        <div style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>{v.tag}</div>
-                      </div>
-                      <span style={{ fontSize: 11, color: T.textFaint }}>{s?.word_count || 0} words</span>
-                    </div>
-                  </button>
-                );
-              })}
+            {/* View mode toggle */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+              <button
+                onClick={() => setViewMode(viewMode === 'tab' ? 'sideBySide' : 'tab')}
+                style={{ ...ghostBtn(), fontSize: 11, padding: '5px 14px' }}
+              >
+                {viewMode === 'tab' ? '⫘ Side-by-Side' : '⫗ Tab View'}
+              </button>
             </div>
 
-            {/* Story reader */}
-            <div className="see-story-reader" style={{
-              background: T.surface, border: `1px solid ${T.border}`,
-              borderRadius: 10, padding: 24, marginBottom: 16,
-            }}>
-              <StoryReader
-                text={stories[activeVoice]?.text}
-                accent={VOICES.find(v => v.id === activeVoice)?.accent || T.accent}
-                maxHeight={500}
-              />
-            </div>
+            {viewMode === 'tab' ? (
+              <>
+                {/* Voice tabs */}
+                <div className="see-voice-tabs" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  {VOICES.map(v => {
+                    const s = stories[v.id];
+                    const active = activeVoice === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setActiveVoice(v.id)}
+                        style={{
+                          flex: 1, padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
+                          border: `1px solid ${active ? v.accent : T.border}`,
+                          background: active ? v.bg : T.surface,
+                          textAlign: 'left', transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: active ? v.accent : T.text }}>{v.emoji} {v.label}</span>
+                            <div style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>{v.tag}</div>
+                          </div>
+                          <span style={{ fontSize: 11, color: T.textFaint }}>{s?.word_count || 0} words</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Story reader — single voice */}
+                <div className="see-story-reader" style={{
+                  background: T.surface, border: `1px solid ${T.border}`,
+                  borderRadius: 10, padding: 24, marginBottom: 16,
+                }}>
+                  <StoryReader
+                    text={stories[activeVoice]?.text}
+                    accent={VOICES.find(v => v.id === activeVoice)?.accent || T.accent}
+                    maxHeight={500}
+                  />
+                </div>
+              </>
+            ) : (
+              /* Side-by-side 3-column view */
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+                {VOICES.map(v => (
+                  <div key={v.id} style={{
+                    background: v.bg, border: `1px solid ${v.border}`,
+                    borderRadius: 10, padding: 16, overflow: 'hidden',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${v.border}` }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: v.accent }}>{v.emoji} {v.label}</span>
+                      <span style={{ fontSize: 10, color: T.textFaint }}>{stories[v.id]?.word_count || 0}w</span>
+                    </div>
+                    <StoryReader text={stories[v.id]?.text} accent={v.accent} maxHeight={600} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Token usage display */}
+            {tokenUsage && (
+              <div style={{ fontSize: 11, color: T.textFaint, textAlign: 'right', marginBottom: 8 }}>
+                Tokens used: {(tokenUsage.input || 0).toLocaleString()} in / {(tokenUsage.output || 0).toLocaleString()} out
+              </div>
+            )}
+
+            {/* Enrichment layers loaded */}
+            {enrichmentLoaded && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                {[
+                  ['therapy_profiles', 'Therapy Profiles'],
+                  ['franchise_rules', 'Franchise Rules'],
+                  ['author_notes', 'Author Notes'],
+                  ['world_locations', 'World Locations'],
+                  ['voice_rules', 'Voice Rules'],
+                  ['scene_arc', 'Scene Arc'],
+                  ['social_feed', 'Social Feed'],
+                  ['story_memories', 'Story Memories'],
+                  ['continuity_engine', 'Continuity Engine'],
+                  ['character_growth', 'Character Growth'],
+                  ['world_state', 'World State'],
+                  ['character_crossings', 'Crossings'],
+                ].map(([key, label]) => (
+                  <span key={key} style={{
+                    fontSize: 10, padding: '3px 8px', borderRadius: 10,
+                    background: enrichmentLoaded[key] ? `${T.green}18` : `${T.textFaint}10`,
+                    color: enrichmentLoaded[key] ? T.green : T.textFaint,
+                    border: `1px solid ${enrichmentLoaded[key] ? T.green : T.textFaint}30`,
+                  }}>
+                    {enrichmentLoaded[key] ? '✓' : '–'} {label}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={() => setStep('brief')} style={ghostBtn}>← Back to Brief</button>
+              <button onClick={() => setStep('brief')} style={ghostBtn()}>← Back to Brief</button>
+              <button onClick={handleRegenerate} disabled={loading} style={{ ...ghostBtn(), borderColor: T.orange, color: T.orange }}>
+                ↻ Regenerate
+              </button>
+              <button onClick={exportAsMarkdown} style={{ ...ghostBtn(), borderColor: T.blue, color: T.blue }}>
+                📋 Export Markdown
+              </button>
+              <button onClick={exportAsPdf} style={{ ...ghostBtn(), borderColor: T.purple, color: T.purple }}>
+                📄 Export PDF
+              </button>
               <button
                 onClick={handleEvaluate}
                 disabled={loading}
@@ -946,12 +1854,41 @@ export default function StoryEvaluationEngine() {
               <div style={{ fontSize: 13, color: T.text, marginTop: 4 }}>{evaluation.winner_reason}</div>
             </div>
 
+            {/* Adjust Scores toggle */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <button
+                onClick={() => {
+                  if (editingScores) {
+                    setEditingScores(false);
+                  } else {
+                    // Seed overrides from current evaluation scores
+                    const seed = {};
+                    VOICES.forEach(v => {
+                      const sc = evaluation.scores?.[v.id];
+                      if (sc) {
+                        seed[v.id] = {};
+                        CRITERIA.forEach(c => { seed[v.id][c] = sc[c] || 0; });
+                      }
+                    });
+                    setScoreOverrides(seed);
+                    setEditingScores(true);
+                  }
+                }}
+                style={{ ...ghostBtn(), fontSize: 11, padding: '5px 12px' }}
+              >
+                {editingScores ? '✓ Done Adjusting' : '✏ Adjust Scores'}
+              </button>
+            </div>
+
             {/* Score cards */}
             <div className="see-score-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
               {VOICES.map(v => {
                 const sc = evaluation.scores?.[v.id];
                 if (!sc) return null;
                 const isWinner = evaluation.winner === v.id;
+                const overrides = scoreOverrides?.[v.id];
+                const getVal = (c) => (editingScores && overrides) ? (overrides[c] ?? sc[c] ?? 0) : (sc[c] || 0);
+                const totalVal = CRITERIA.reduce((sum, c) => sum + getVal(c), 0);
                 return (
                   <div key={v.id} style={{
                     padding: 16, borderRadius: 10,
@@ -960,14 +1897,32 @@ export default function StoryEvaluationEngine() {
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: v.accent }}>{v.emoji} {v.label}</span>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: v.accent }}>{sc.total}/60</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: v.accent }}>{totalVal}/90</span>
                     </div>
                     {CRITERIA.map(c => (
                       <div key={c} className="see-criteria-row" style={{ marginBottom: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                           <span style={{ fontSize: 10, color: T.textDim }}>{CRITERIA_LABELS[c]}</span>
+                          {editingScores && overrides && (
+                            <input
+                              type="number" min={0} max={10}
+                              value={overrides[c] ?? sc[c] ?? 0}
+                              onChange={e => {
+                                const val = Math.max(0, Math.min(10, parseInt(e.target.value) || 0));
+                                setScoreOverrides(prev => ({
+                                  ...prev,
+                                  [v.id]: { ...prev[v.id], [c]: val },
+                                }));
+                              }}
+                              style={{
+                                width: 38, padding: '2px 4px', fontSize: 11, textAlign: 'center',
+                                border: `1px solid ${T.border}`, borderRadius: 4,
+                                background: T.surfaceAlt, color: T.text, outline: 'none',
+                              }}
+                            />
+                          )}
                         </div>
-                        <ScoreBar value={sc[c] || 0} max={10} color={v.accent} />
+                        <ScoreBar value={getVal(c)} max={10} color={v.accent} />
                       </div>
                     ))}
                     <div className="see-card-summary" style={{ marginTop: 10, fontSize: 12, color: T.textDim, fontStyle: 'italic' }}>{sc.summary}</div>
@@ -989,6 +1944,22 @@ export default function StoryEvaluationEngine() {
                   {VOICES.map(v => (
                     <div key={v.id} style={{ fontSize: 12, color: T.textDim }}>
                       <span style={{ fontWeight: 600, color: v.accent }}>{v.label}:</span> {evaluation.what_each_brings[v.id]}
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+              </div>
+            )}
+
+            {/* Franchise violations */}
+            {evaluation.franchise_violations?.length > 0 && (
+              <div className="see-secondary-section">
+              <SectionCard title="Franchise Violations">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {evaluation.franchise_violations.map((v, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#e74c3c' }}>
+                      <span style={{ flexShrink: 0 }}>⚠</span>
+                      <span>{v}</span>
                     </div>
                   ))}
                 </div>
@@ -1033,13 +2004,142 @@ export default function StoryEvaluationEngine() {
             {/* Approved synthesised version */}
             {evaluation.approved_version && (
               <SectionCard title="Synthesised Approved Version">
-                <StoryReader text={evaluation.approved_version} accent={T.green} maxHeight={400} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8, gap: 8 }}>
+                  <button
+                    onClick={() => {
+                      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({
+                          type: 'CACHE_STORY',
+                          payload: {
+                            id: storyId || `draft-${Date.now()}`,
+                            title: brief.scene_title || 'Untitled Scene',
+                            text: evaluation.approved_version,
+                            metadata: { tone: toneDial, characters: brief.characters, date: new Date().toISOString(), winner: evaluation.winner },
+                          },
+                        });
+                        alert('Saved for offline reading');
+                      } else {
+                        alert('Offline mode not available — service worker not active');
+                      }
+                    }}
+                    style={{ ...ghostBtn(), fontSize: 11, padding: '5px 12px', borderColor: T.green, color: T.green }}
+                  >
+                    ↓ Save Offline
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (editingApproved) {
+                        // Save edits back into evaluation
+                        setEvaluation(prev => ({ ...prev, approved_version: approvedText }));
+                        setEditingApproved(false);
+                      } else {
+                        setApprovedText(evaluation.approved_version);
+                        setEditingApproved(true);
+                      }
+                    }}
+                    style={{ ...ghostBtn(), fontSize: 11, padding: '5px 12px' }}
+                  >
+                    {editingApproved ? '✓ Done Editing' : '✏ Edit'}
+                  </button>
+                </div>
+                {editingApproved ? (
+                  <textarea
+                    value={approvedText}
+                    onChange={e => setApprovedText(e.target.value)}
+                    style={{
+                      width: '100%', minHeight: 400, padding: 16, fontSize: 13.5,
+                      lineHeight: 1.95, fontFamily: "'Palatino Linotype',Palatino,Georgia,serif",
+                      color: T.text, background: T.surfaceAlt, border: `1px solid ${T.border}`,
+                      borderRadius: 8, resize: 'vertical', outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                ) : (
+                  <StoryReader text={evaluation.approved_version} accent={T.green} maxHeight={400} />
+                )}
               </SectionCard>
+            )}
+
+            {/* Scene Revelation Analysis */}
+            {evaluation.approved_version && brief.characters.length > 0 && brief.registry_id && (
+              <div style={{ marginBottom: 16 }}>
+                {!sceneRevelations && (
+                  <button onClick={handleSceneRevelation} disabled={revLoading}
+                    style={{ ...ghostBtn(), borderColor: T.purple, color: T.purple, width: '100%', padding: '10px 16px' }}>
+                    {revLoading ? '⏳ Analysing character revelations...' : '✦ Analyse Scene Revelations'}
+                  </button>
+                )}
+                {sceneRevelations && (
+                  <SectionCard title="Scene Revelations">
+                    {Object.entries(sceneRevelations).map(([charKey, dims]) => (
+                      <div key={charKey} style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, marginBottom: 6 }}>{charKey}</div>
+                        {Object.entries(dims).map(([dim, fields]) => (
+                          <div key={dim} style={{ marginLeft: 12, marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: T.text, textTransform: 'capitalize' }}>{dim.replace(/_/g, ' ')}</div>
+                            {typeof fields === 'object' && fields !== null
+                              ? Object.entries(fields).map(([k, v]) => (
+                                  <div key={k} style={{ fontSize: 11, color: T.textDim, marginLeft: 8 }}>
+                                    <span style={{ color: T.textFaint }}>{k}:</span> {String(v)}
+                                  </div>
+                                ))
+                              : <div style={{ fontSize: 11, color: T.textDim, marginLeft: 8 }}>{String(fields)}</div>
+                            }
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                    {/* Auto-suggest relationships from revelations */}
+                    <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 10, marginTop: 10 }}>
+                      <button
+                        onClick={() => {
+                          // Build relationship suggestions from revelations
+                          const chars = Object.keys(sceneRevelations);
+                          const suggestions = [];
+                          for (let i = 0; i < chars.length; i++) {
+                            for (let j = i + 1; j < chars.length; j++) {
+                              const dims_a = sceneRevelations[chars[i]];
+                              const dims_b = sceneRevelations[chars[j]];
+                              const sharedDims = Object.keys(dims_a).filter(d => dims_b[d]);
+                              if (sharedDims.length > 0) {
+                                suggestions.push({
+                                  pair: [chars[i], chars[j]],
+                                  sharedDimensions: sharedDims,
+                                  signal: sharedDims.length >= 3 ? 'strong' : sharedDims.length >= 2 ? 'moderate' : 'weak',
+                                });
+                              }
+                            }
+                          }
+                          // Navigate to RelationshipEngine with suggestion context
+                          navigate('/relationship-engine', {
+                            state: {
+                              autoSuggestions: suggestions,
+                              fromScene: brief.scene_title || 'Untitled',
+                              registryId: brief.registry_id,
+                            },
+                          });
+                        }}
+                        style={{
+                          width: '100%', padding: '8px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                          background: `${T.purple}12`, border: `1px solid ${T.purple}40`,
+                          color: T.purple, cursor: 'pointer',
+                        }}
+                      >
+                        ◈ Suggest Relationships from Revelations →
+                      </button>
+                      <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4 }}>
+                        Opens the Relationship Engine with auto-suggestions based on how characters changed in this scene
+                      </div>
+                    </div>
+                  </SectionCard>
+                )}
+              </div>
             )}
 
             {/* Actions */}
             <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
-              <button onClick={() => setStep('read')} style={ghostBtn}>← Back to Read</button>
+              <button onClick={() => setStep('read')} style={ghostBtn()}>← Back to Read</button>
+              <button onClick={exportAsMarkdown} style={{ ...ghostBtn(), borderColor: T.blue, color: T.blue }}>📋 Markdown</button>
+              <button onClick={exportAsPdf} style={{ ...ghostBtn(), borderColor: T.purple, color: T.purple }}>📄 PDF</button>
               <button
                 onClick={handleProposeMemory}
                 disabled={loading}
@@ -1058,6 +2158,10 @@ export default function StoryEvaluationEngine() {
           <div>
             {plotMemories.length > 0 && (
               <SectionCard title={`Plot Memories (${selectedPlot.size}/${plotMemories.length} selected)`}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  <button onClick={() => setSelectedPlot(new Set(plotMemories.map((_, i) => i)))} style={{ ...ghostBtn(), fontSize: 10, padding: '3px 10px' }}>Select All</button>
+                  <button onClick={() => setSelectedPlot(new Set())} style={{ ...ghostBtn(), fontSize: 10, padding: '3px 10px' }}>Deselect All</button>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {plotMemories.map((m, i) => (
                     <MemoryCard
@@ -1073,6 +2177,10 @@ export default function StoryEvaluationEngine() {
 
             {revelations.length > 0 && (
               <SectionCard title={`Character Revelations (${selectedRev.size}/${revelations.length} selected)`}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  <button onClick={() => setSelectedRev(new Set(revelations.map((_, i) => i)))} style={{ ...ghostBtn(), fontSize: 10, padding: '3px 10px' }}>Select All</button>
+                  <button onClick={() => setSelectedRev(new Set())} style={{ ...ghostBtn(), fontSize: 10, padding: '3px 10px' }}>Deselect All</button>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {revelations.map((m, i) => (
                     <MemoryCard
@@ -1093,7 +2201,7 @@ export default function StoryEvaluationEngine() {
             )}
 
             <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
-              <button onClick={() => setStep('evaluate')} style={ghostBtn}>← Back to Eval</button>
+              <button onClick={() => setStep('evaluate')} style={ghostBtn()}>← Back to Eval</button>
               <button
                 onClick={handleProposeRegistry}
                 disabled={loading}
@@ -1112,6 +2220,10 @@ export default function StoryEvaluationEngine() {
           <div>
             {regUpdates.length > 0 ? (
               <SectionCard title={`Registry Updates (${selectedReg.size}/${regUpdates.length} selected)`}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  <button onClick={() => setSelectedReg(new Set(regUpdates.map((_, i) => i)))} style={{ ...ghostBtn(), fontSize: 10, padding: '3px 10px' }}>Select All</button>
+                  <button onClick={() => setSelectedReg(new Set())} style={{ ...ghostBtn(), fontSize: 10, padding: '3px 10px' }}>Deselect All</button>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {regUpdates.map((u, i) => (
                     <div
@@ -1154,23 +2266,86 @@ export default function StoryEvaluationEngine() {
             )}
 
             <SectionCard title="Write-Back Target">
-              <input
-                value={chapterId}
-                onChange={e => setChapterId(e.target.value)}
-                placeholder="Chapter UUID — the manuscript chapter to write into"
-                style={{
-                  width: '100%', padding: '10px 12px', background: T.surfaceAlt,
-                  border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
-                  fontSize: 13, outline: 'none', boxSizing: 'border-box',
-                }}
-              />
+              {/* Book selector */}
+              {books.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: T.text, marginBottom: 4, display: 'block' }}>Book</label>
+                  <select
+                    value={selectedBookId}
+                    onChange={e => handleBookSelect(e.target.value)}
+                    style={{
+                      width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+                      border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+                      fontSize: 13, outline: 'none', boxSizing: 'border-box', cursor: 'pointer',
+                    }}
+                  >
+                    <option value="">All books (show all chapters)</option>
+                    {books.map(b => (
+                      <option key={b.id} value={b.id}>{b.title || 'Untitled Book'}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Chapter picker */}
+              {chapters.length > 0 ? (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: T.text, marginBottom: 4, display: 'block' }}>Chapter</label>
+                  <input
+                    value={chapterSearch}
+                    onChange={e => setChapterSearch(e.target.value)}
+                    placeholder="Search chapters by title..."
+                    style={{
+                      width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+                      border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+                      fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 8,
+                    }}
+                  />
+                  <div style={{ maxHeight: 160, overflowY: 'auto', borderRadius: 6, border: `1px solid ${T.border}` }}>
+                    {chapters
+                      .filter(ch => !chapterSearch || (ch.title || ch.id || '').toLowerCase().includes(chapterSearch.toLowerCase()))
+                      .slice(0, 20)
+                      .map(ch => (
+                        <div key={ch.id}
+                          onClick={() => { setChapterId(ch.id); setChapterSearch(ch.title || ch.id); }}
+                          style={{
+                            padding: '8px 12px', cursor: 'pointer', fontSize: 12,
+                            background: chapterId === ch.id ? `${T.accent}15` : 'transparent',
+                            borderBottom: `1px solid ${T.border}`, color: T.text,
+                          }}
+                        >
+                          <strong>{ch.title || 'Untitled'}</strong>
+                          <span style={{ fontSize: 10, color: T.textFaint, marginLeft: 8 }}>{ch.id?.slice(0, 8)}…</span>
+                        </div>
+                      ))}
+                  </div>
+                  {chapterId && (
+                    <div style={{ fontSize: 10, color: T.green, marginTop: 4 }}>Selected: {chapterId}</div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <input
+                    value={chapterId}
+                    onChange={e => setChapterId(e.target.value)}
+                    placeholder="Chapter UUID — the manuscript chapter to write into"
+                    style={{
+                      width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+                      border: `1px solid ${chapterId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chapterId) ? '#e74c3c' : T.border}`,
+                      borderRadius: 6, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                  {chapterId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chapterId) && (
+                    <div style={{ fontSize: 10, color: '#e74c3c', marginTop: 4 }}>Not a valid UUID format</div>
+                  )}
+                </div>
+              )}
               <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4 }}>
                 The approved story will be written as lines into this chapter
               </div>
             </SectionCard>
 
             <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
-              <button onClick={() => setStep('memory')} style={ghostBtn}>← Back to Memory</button>
+              <button onClick={() => setStep('memory')} style={ghostBtn()}>← Back to Memory</button>
               <button
                 onClick={handleWriteBack}
                 disabled={loading || !chapterId.trim()}
@@ -1198,10 +2373,10 @@ export default function StoryEvaluationEngine() {
               <strong>{writeResult.registry_updates_applied}</strong> registry updates applied
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
-              <button onClick={() => { setStep('brief'); setBrief(EMPTY_BRIEF); setCharInput(''); setStories(null); setEvaluation(null); setStoryId(null); setWriteResult(null); }} style={ghostBtn}>
+              <button onClick={() => { setStep('brief'); setBrief(EMPTY_BRIEF); setCharInput(''); setStories(null); setEvaluation(null); setStoryId(null); setWriteResult(null); setScoreOverrides(null); setEditingScores(false); setTokenUsage(null); setCharFetchStatus({}); setSceneRevelations(null); localStorage.removeItem(SESSION_KEY); }} style={ghostBtn()}>
                 ◇ New Scene
               </button>
-              <button onClick={() => navigate(-1)} style={{ ...ghostBtn, borderColor: T.accent, color: T.accent }}>
+              <button onClick={() => navigate(-1)} style={{ ...ghostBtn(), borderColor: T.accent, color: T.accent }}>
                 ← Back to Story Engine
               </button>
             </div>
@@ -1236,11 +2411,13 @@ function SectionCard({ title, children }) {
   );
 }
 
-const ghostBtn = {
-  padding: '10px 18px', background: 'transparent', color: T.textDim,
-  border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 13,
-  cursor: 'pointer', transition: 'all 0.2s',
-};
+function ghostBtn() {
+  return {
+    padding: '10px 18px', background: 'transparent', color: T.textDim,
+    border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 13,
+    cursor: 'pointer', transition: 'all 0.2s',
+  };
+}
 
 function primaryBtn(disabled) {
   return {

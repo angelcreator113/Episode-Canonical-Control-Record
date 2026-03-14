@@ -1,0 +1,323 @@
+/* ═══════════════════════════════════════════════
+   SocialTimeline.css  — .st-* prefix
+   Doc 05 · Social Timeline Engine · v1.0
+   Palette: Rose · Steel · Orchid · Gold · Mint · Amber
+   ═══════════════════════════════════════════════ */
+
+/* ── Page ── */
+.st-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+  font-family: 'DM Sans', sans-serif;
+  color: #2e2e3a;
+  background: #faf9fc;
+}
+
+/* ── Header ── */
+.st-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.st-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #d4789a;
+  margin: 0 0 0.35rem;
+}
+
+.st-subtitle {
+  font-size: 0.92rem;
+  color: #999;
+  margin: 0;
+}
+
+/* ── Tabs ── */
+.st-tabs {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #eee;
+  scrollbar-width: thin;
+}
+
+.st-tab {
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #777;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, color 0.2s;
+}
+
+.st-tab:hover {
+  background: #f3eef7;
+  color: #a889c8;
+}
+
+.st-tab-active {
+  background: #a889c8;
+  color: #fff;
+  font-weight: 600;
+}
+
+.st-tab-active:hover {
+  background: #9678b6;
+  color: #fff;
+}
+
+/* ── Panel ── */
+.st-panel {
+  animation: stFadeIn 0.25s ease;
+}
+
+@keyframes stFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Tab content ── */
+.st-tab-content {
+  padding: 0;
+}
+
+.st-intro {
+  font-size: 0.95rem;
+  color: #555;
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+}
+
+/* ── Card grid ── */
+.st-card-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.st-cols-1 { grid-template-columns: 1fr; }
+.st-cols-2 { grid-template-columns: repeat(2, 1fr); }
+
+@media (max-width: 720px) {
+  .st-cols-2 { grid-template-columns: 1fr; }
+}
+
+/* ── Cards ── */
+.st-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid #ece8f1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.st-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+  transform: translateY(-2px);
+}
+
+.st-card-wide {
+  /* no extra width — just 1-col layout */
+}
+
+.st-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.st-card-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: #2e2e3a;
+}
+
+.st-card-arrow {
+  color: #c9a84c;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.st-card-subtitle {
+  font-size: 0.9rem;
+  color: #777;
+}
+
+.st-card-body {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0.35rem 0;
+}
+
+/* ── Badges ── */
+.st-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.st-badge-rose   { background: #fbeaf0; color: #d4789a; }
+.st-badge-steel  { background: #e8f2fa; color: #5a9ac2; }
+.st-badge-orchid { background: #f3eef7; color: #9678b6; }
+.st-badge-gold   { background: #faf3e3; color: #b89060; }
+.st-badge-mint   { background: #e6f6f0; color: #4ea07e; }
+.st-badge-amber  { background: #faf0e0; color: #b89060; }
+.st-badge-muted  { background: #f0f0f0; color: #999; }
+
+/* ── Muted text ── */
+.st-muted {
+  color: #888;
+  font-style: italic;
+}
+
+/* ── Tables ── */
+.st-table-wrap {
+  overflow-x: auto;
+}
+
+.st-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.st-table th {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 2px solid #ece8f1;
+  font-family: 'Syne', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #a889c8;
+  white-space: nowrap;
+}
+
+.st-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #f3f0f6;
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.st-table tbody tr:hover {
+  background: #faf7fd;
+}
+
+.st-cell-label {
+  font-weight: 600;
+  color: #2e2e3a;
+  white-space: nowrap;
+}
+
+/* ── Steps (Trend Waves) ── */
+.st-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.st-step-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  background: #fff;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  border: 1px solid #ece8f1;
+  transition: box-shadow 0.2s;
+}
+
+.st-step-row:hover {
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+}
+
+.st-step-num {
+  flex-shrink: 0;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #a889c8;
+  color: #fff;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.st-step-body {
+  flex: 1;
+}
+
+.st-step-who {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #2e2e3a;
+  margin-bottom: 0.2rem;
+}
+
+.st-step-signal {
+  font-size: 0.88rem;
+  color: #555;
+  margin-bottom: 0.2rem;
+}
+
+.st-step-story {
+  font-size: 0.85rem;
+}
+
+/* ── Engine questions ── */
+.st-engine-questions {
+  padding-left: 1.5rem;
+  margin: 0 0 1.5rem;
+}
+
+.st-engine-q {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin-bottom: 0.5rem;
+  color: #444;
+}
+
+.st-core-rule {
+  background: linear-gradient(135deg, #fbeaf0 0%, #f3eef7 100%);
+  border-left: 4px solid #d4789a;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: #2e2e3a;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* ── Footer ── */
+.st-footer {
+  text-align: center;
+  margin-top: 2.5rem;
+  font-size: 0.8rem;
+  color: #bbb;
+}
+
+/* ── Phone ── */
+@media (max-width: 480px) {
+  .st-page { padding: 1rem 0.75rem 2rem; }
+  .st-header h1 { font-size: 1.3rem; }
+}

@@ -31,11 +31,31 @@ try {
 }
 
 // ── Voice system prompts for blind 3-agent generation ─────────────────────
-const VOICE_SYSTEM = {
+const VOICE_SYSTEM_BASE = {
   voice_a: `You are a literary voice that prioritises depth and interiority. Write in close third-person, past tense, literary present. Focus on what the character cannot say aloud, the subtext beneath every gesture. Every scene should feel like standing inside the character's ribcage.`,
   voice_b: `You are a narrative voice that prioritises tension and momentum. Write in close third-person, past tense. Every paragraph should tighten the noose — desire vs. obstacle, silence vs. eruption. Pace like a thriller, feel like literature.`,
   voice_c: `You are a sensory-first voice that prioritises desire and the body. Write in close third-person, past tense, lyric-literary register. Let the reader feel skin, breath, fabric, heat. The body knows before the mind does.`,
 };
+
+// Build voice system prompts enriched with character wounds/desires
+function buildVoiceSystem(dossiers) {
+  if (!dossiers?.length) return VOICE_SYSTEM_BASE;
+  const charLines = dossiers.map(d => {
+    const parts = [`${d.display_name || d.character_key}`];
+    if (d.core_wound) parts.push(`  Wound: ${d.core_wound}`);
+    if (d.core_desire) parts.push(`  Desire: ${d.core_desire}`);
+    if (d.hidden_want) parts.push(`  Hidden want: ${d.hidden_want}`);
+    if (d.core_fear) parts.push(`  Fear: ${d.core_fear}`);
+    if (d.emotional_baseline) parts.push(`  Emotional baseline: ${d.emotional_baseline}`);
+    return parts.join('\n');
+  }).join('\n\n');
+  const prefix = `CHARACTER ESSENTIALS (know these, let them shape every sentence):\n${charLines}\n\n---\n\n`;
+  return {
+    voice_a: prefix + VOICE_SYSTEM_BASE.voice_a,
+    voice_b: prefix + VOICE_SYSTEM_BASE.voice_b,
+    voice_c: prefix + VOICE_SYSTEM_BASE.voice_c,
+  };
+}
 
 // ── Tone dial modifiers ───────────────────────────────────────────────────
 const TONE_MODIFIERS = {
@@ -55,24 +75,72 @@ const VOICE_TONES = {
 };
 
 // ── Helper: build generation prompt ───────────────────────────────────────
-const VOICE_DEEP_HINTS = {
+const VOICE_DEEP_HINTS_BASE = {
   voice_a: 'Lean into grief, family architecture, body history, the unprocessed loss, parent wounds. Interiority and the weight of the past.',
   voice_b: 'Lean into ambition, class/money, politics, career wounds, active dilemmas. Tension, stakes, and forward momentum.',
   voice_c: 'Lean into sexuality/desire, sensory signatures, habits/rituals, the unseen, comfort rituals. The body, warmth, what intimacy costs.',
 };
 
-function buildGenerationPrompt({ scene_brief, voice_key, characters_in_scene, charBlocks }) {
+// Build dynamic deep hints from actual character dossier wounds/desires
+function buildDynamicDeepHints(dossiers, voiceKey) {
+  const base = VOICE_DEEP_HINTS_BASE[voiceKey] || '';
+  if (!dossiers?.length) return base;
+  const charSpecific = dossiers.map(d => {
+    const parts = [];
+    if (voiceKey === 'voice_a') {
+      if (d.deep_profile?.grief_and_loss?.the_unprocessed_loss) parts.push(`unprocessed loss: "${d.deep_profile.grief_and_loss.the_unprocessed_loss}"`);
+      if (d.deep_profile?.family_architecture?.parent_wounds) parts.push(`parent wounds: "${d.deep_profile.family_architecture.parent_wounds}"`);
+      if (d.core_wound) parts.push(`core wound: "${d.core_wound}"`);
+    } else if (voiceKey === 'voice_b') {
+      if (d.deep_profile?.ambition_and_identity?.what_they_gave_up) parts.push(`what they gave up: "${d.deep_profile.ambition_and_identity.what_they_gave_up}"`);
+      if (d.deep_profile?.class_and_money?.money_wound) parts.push(`money wound: "${d.deep_profile.class_and_money.money_wound}"`);
+      if (d.living_context?.active_pressures) parts.push(`active pressure: "${d.living_context.active_pressures}"`);
+    } else if (voiceKey === 'voice_c') {
+      if (d.deep_profile?.sexuality_and_desire?.the_pattern) parts.push(`desire pattern: "${d.deep_profile.sexuality_and_desire.the_pattern}"`);
+      if (d.deep_profile?.the_body?.sensory_signature) parts.push(`sensory signature: "${d.deep_profile.the_body.sensory_signature}"`);
+      if (d.deep_profile?.habits_and_rituals?.comfort_ritual) parts.push(`comfort ritual: "${d.deep_profile.habits_and_rituals.comfort_ritual}"`);
+    }
+    return parts.length ? `  ${d.display_name || d.character_key}: ${parts.join('; ')}` : null;
+  }).filter(Boolean);
+  return charSpecific.length ? `${base}\n\nCHARACTER-SPECIFIC FOCUS:\n${charSpecific.join('\n')}` : base;
+}
+
+// Build selective dramatic irony hints from author knowledge (blind spots only)
+function buildDramaticIronyHints(dossiers) {
+  if (!dossiers?.length) return '';
+  const hints = dossiers.map(d => {
+    if (!d.blind_spot && !d.actual_narrative) return null;
+    const parts = [`${d.display_name || d.character_key}`];
+    if (d.blind_spot) parts.push(`  Cannot see: ${d.blind_spot}`);
+    if (d.actual_narrative) parts.push(`  True story (reader should sense): ${d.actual_narrative}`);
+    return parts.join('\n');
+  }).filter(Boolean);
+  if (!hints.length) return '';
+  return `\n\nDRAMATIC IRONY (the reader should SENSE these truths, but the character cannot name them — show through behaviour, body, choices, NOT through telling):\n${hints.join('\n\n')}`;
+}
+
+function buildGenerationPrompt({ scene_brief, voice_key, characters_in_scene, charBlocks, tone_dial, dossiers, must_include, never_include }) {
   const tones = VOICE_TONES[voice_key] || ['literary'];
   const toneMod = tones.map(t => TONE_MODIFIERS[t]).join(' ');
-  const deepHint = VOICE_DEEP_HINTS[voice_key] || '';
+  // Layer the writer's chosen tone_dial on top of the voice's assigned tones
+  const dialMod = (tone_dial && TONE_MODIFIERS[tone_dial]) ? `\nWRITER\'S TONE DIAL: ${TONE_MODIFIERS[tone_dial]}` : '';
+  const deepHint = buildDynamicDeepHints(dossiers, voice_key);
+  const ironyHint = buildDramaticIronyHints(dossiers);
 
-  return `TONE: ${toneMod}
+  // Must/Never constraints
+  let constraints = '';
+  if (must_include) constraints += `\nMUST INCLUDE in this scene: ${must_include}`;
+  if (never_include) constraints += `\nNEVER INCLUDE in this scene: ${never_include}`;
+
+  return `TONE: ${toneMod}${dialMod}
+
+You are writing ONE of THREE blind perspectives of the same scene. Two other voices are writing their own versions simultaneously. Do NOT try to cover everything — lean HARD into your voice's specialty. Assume the other voices will handle what you skip. Be distinctive, not comprehensive.
 
 CHARACTERS IN SCENE: ${(characters_in_scene || []).join(', ')}
-${charBlocks || ''}
+${charBlocks || ''}${ironyHint}
 
 DEEP PROFILE GUIDANCE: ${deepHint}
-Use the character dossier fields above — body history, sensory signatures, family wounds, desire patterns, verbal tells, comfort rituals — to make these people feel irreducible. Not all of it. The specific details that would surface in THIS scene.
+Use the character dossier fields above — body history, sensory signatures, family wounds, desire patterns, verbal tells, comfort rituals — to make these people feel irreducible. Not all of it. The specific details that would surface in THIS scene.${constraints}
 
 SCENE BRIEF:
 ${scene_brief}
@@ -477,10 +545,568 @@ async function loadStoryMemoriesForScene(characterKeys, registryId) {
   }
 }
 
+// ── Helper: load therapy profiles (psychodynamic depth) ───────────────────
+async function loadTherapyProfiles(characterKeys, registryId) {
+  if (!characterKeys?.length || !registryId) return '';
+  try {
+    const chars = await db.RegistryCharacter.findAll({
+      where: { registry_id: registryId, character_key: characterKeys },
+      attributes: ['id', 'character_key', 'display_name'],
+    });
+    if (!chars.length) return '';
+    const charIds = chars.map(c => c.id);
+    const charMap = {};
+    chars.forEach(c => { charMap[c.id] = c.display_name || c.character_key; });
+
+    const profiles = await db.CharacterTherapyProfile.findAll({
+      where: { character_id: charIds },
+    });
+    if (!profiles.length) return '';
+
+    const lines = profiles.map(tp => {
+      const name = charMap[tp.character_id] || '?';
+      const parts = [`${name}`];
+      if (tp.primary_defense) parts.push(`  Primary defense mechanism: ${tp.primary_defense}`);
+      // emotional_state is a JSONB object — extract key states
+      const es = tp.emotional_state || {};
+      if (es.dominant) parts.push(`  Dominant emotional state: ${es.dominant}`);
+      if (es.suppressed) parts.push(`  Suppressed emotion: ${es.suppressed}`);
+      if (es.volatility) parts.push(`  Emotional volatility: ${es.volatility}`);
+      // sensed — things the character senses but hasn't named
+      const sensed = Array.isArray(tp.sensed) ? tp.sensed : [];
+      if (sensed.length) parts.push(`  Senses but can't name: ${sensed.slice(0, 5).join('; ')}`);
+      // known — things the character knows about themselves
+      const known = Array.isArray(tp.known) ? tp.known : [];
+      if (known.length) parts.push(`  Self-aware of: ${known.slice(0, 5).join('; ')}`);
+      // never_knows — things the character will never see
+      const never = Array.isArray(tp.never_knows) ? tp.never_knows : [];
+      if (never.length) parts.push(`  Blind to (NEVER realizes): ${never.slice(0, 3).join('; ')}`);
+      // deja_vu — recurring psychodynamic patterns
+      const deja = Array.isArray(tp.deja_vu_events) ? tp.deja_vu_events : [];
+      if (deja.length) parts.push(`  Recurring pattern (déjà vu): ${deja.slice(0, 3).join('; ')}`);
+      return parts.length > 1 ? parts.join('\n') : null;
+    }).filter(Boolean);
+
+    return lines.length
+      ? `\n\nPSYCHODYNAMIC PROFILES (shape HOW characters react — their defenses, what they sense but can't name, what they'll never see):\n${lines.join('\n\n')}`
+      : '';
+  } catch (err) {
+    console.error('[loadTherapyProfiles] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load franchise knowledge (critical narrative rules) ───────────
+async function loadFranchiseConstraints(characterKeys) {
+  try {
+    // Load critical + always-inject franchise knowledge
+    const rules = await db.FranchiseKnowledge.findAll({
+      where: {
+        status: 'active',
+        [db.Sequelize.Op.or]: [
+          { severity: 'critical' },
+          { always_inject: true },
+        ],
+      },
+      attributes: ['title', 'content', 'category', 'severity', 'applies_to'],
+      order: [['severity', 'ASC']], // critical first
+      limit: 20,
+    });
+    if (!rules.length) return '';
+
+    // Filter to rules that apply globally or to characters in scene
+    const relevant = rules.filter(r => {
+      const appliesTo = Array.isArray(r.applies_to) ? r.applies_to : [];
+      if (!appliesTo.length || r.always_inject) return true; // global rule
+      return characterKeys?.some(k => appliesTo.includes(k));
+    });
+    if (!relevant.length) return '';
+
+    const lines = relevant.map(r => {
+      const sev = r.severity === 'critical' ? '🔒 LOCKED' : '⚠️ IMPORTANT';
+      return `  ${sev} [${r.category}] ${r.title}: ${r.content}`;
+    });
+
+    return `\n\nFRANCHISE RULES (NEVER violate these — they are authorial law):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.error('[loadFranchiseConstraints] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load author notes (intent/plant/watch markers) ────────────────
+async function loadAuthorNotes(characterKeys, registryId) {
+  if (!characterKeys?.length || !registryId) return '';
+  try {
+    const chars = await db.RegistryCharacter.findAll({
+      where: { registry_id: registryId, character_key: characterKeys },
+      attributes: ['id', 'character_key', 'display_name'],
+    });
+    if (!chars.length) return '';
+    const charIds = chars.map(c => c.id);
+    const charMap = {};
+    chars.forEach(c => { charMap[c.id] = c.display_name || c.character_key; });
+
+    const notes = await db.AuthorNote.findAll({
+      where: {
+        entity_type: 'character',
+        entity_id: charIds,
+        visible_to_amber: true,
+      },
+      attributes: ['entity_id', 'note_text', 'note_type'],
+      order: [['created_at', 'DESC']],
+      limit: 15,
+    });
+    if (!notes.length) return '';
+
+    const lines = notes.map(n => {
+      const name = charMap[n.entity_id] || '?';
+      const tag = n.note_type?.toUpperCase() || 'NOTE';
+      return `  [${tag}] ${name}: ${n.note_text}`;
+    });
+
+    return `\n\nAUTHOR'S INTENT (honor these directives — they represent the writer's vision):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.error('[loadAuthorNotes] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load world location sensory data ──────────────────────────────
+async function loadWorldLocationContext(sceneBrief, characterKeys, registryId) {
+  try {
+    // Try to find locations via registry universe or associated characters
+    const chars = registryId ? await db.RegistryCharacter.findAll({
+      where: { registry_id: registryId, character_key: characterKeys || [] },
+      attributes: ['id', 'character_key'],
+    }) : [];
+    const charIds = chars.map(c => c.id);
+
+    // Find locations associated with scene characters
+    let locations = [];
+    if (charIds.length) {
+      locations = await db.WorldLocation.findAll({
+        where: db.sequelize.literal(
+          `"associated_characters" @> ANY(ARRAY[${charIds.map(id => `'"${id}"'::jsonb`).join(',')}])`
+        ),
+        attributes: ['name', 'location_type', 'sensory_details', 'narrative_role', 'description'],
+        limit: 5,
+      });
+    }
+
+    // Fallback: search location names mentioned in the scene brief
+    if (!locations.length && sceneBrief) {
+      const words = sceneBrief.toLowerCase().split(/\s+/).filter(w => w.length > 4 && /^[a-z]+$/i.test(w)).slice(0, 20);
+      if (words.length) {
+        locations = await db.WorldLocation.findAll({
+          where: { name: { [db.Sequelize.Op.iLike]: { [db.Sequelize.Op.any]: words.map(w => `%${w}%`) } } },
+          attributes: ['name', 'location_type', 'sensory_details', 'narrative_role', 'description'],
+          limit: 3,
+        });
+      }
+    }
+
+    if (!locations.length) return '';
+
+    const lines = locations.map(loc => {
+      const parts = [`${loc.name} (${loc.location_type || 'space'})`];
+      if (loc.narrative_role) parts.push(`  Narrative role: ${loc.narrative_role}`);
+      const sd = loc.sensory_details || {};
+      if (sd.sight) parts.push(`  Sight: ${sd.sight}`);
+      if (sd.sound) parts.push(`  Sound: ${sd.sound}`);
+      if (sd.smell) parts.push(`  Smell: ${sd.smell}`);
+      if (sd.texture) parts.push(`  Texture: ${sd.texture}`);
+      if (sd.atmosphere) parts.push(`  Atmosphere: ${sd.atmosphere}`);
+      if (loc.description) parts.push(`  ${loc.description}`);
+      return parts.join('\n');
+    });
+
+    return `\n\nWORLD LOCATIONS (use these sensory details to ground the scene physically):\n${lines.join('\n\n')}`;
+  } catch (err) {
+    console.error('[loadWorldLocationContext] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load voice rules (prose-level style patterns) ─────────────────
+async function loadVoiceRules(characterKeys) {
+  try {
+    const rules = await db.VoiceRule.findAll({
+      where: {
+        status: 'active',
+        [db.Sequelize.Op.or]: [
+          { character_name: characterKeys || [] },
+          { character_name: null }, // series-wide rules
+        ],
+      },
+      attributes: ['character_name', 'rule_text', 'rule_type', 'example_original', 'example_edited'],
+      order: [['signal_count', 'DESC']],
+      limit: 15,
+    });
+    if (!rules.length) return '';
+
+    const lines = rules.map(r => {
+      const who = r.character_name || 'ALL';
+      const example = r.example_edited ? ` (e.g. "${r.example_edited}")` : '';
+      return `  [${who}] ${r.rule_type}: ${r.rule_text}${example}`;
+    });
+
+    return `\n\nVOICE RULES (prose-level patterns the author has established — maintain these):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.error('[loadVoiceRules] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load scene arc metadata from SceneProposal ────────────────────
+async function loadSceneArcMetadata(chapterId) {
+  if (!chapterId) return '';
+  try {
+    const proposal = await db.SceneProposal.findOne({
+      where: { chapter_id: chapterId, status: ['accepted', 'adjusted', 'proposed'] },
+      order: [['created_at', 'DESC']],
+      attributes: ['arc_stage', 'arc_function', 'emotional_stakes', 'wounds_unaddressed', 'tensions_unresolved', 'scene_type', 'suggested_tone'],
+    });
+    if (!proposal) return '';
+
+    const parts = [];
+    if (proposal.arc_stage) parts.push(`Arc stage: ${proposal.arc_stage}`);
+    if (proposal.arc_function) parts.push(`Scene's narrative function: ${proposal.arc_function}`);
+    if (proposal.emotional_stakes) parts.push(`Emotional stakes: ${proposal.emotional_stakes}`);
+    if (proposal.scene_type && proposal.scene_type !== 'general') parts.push(`Scene type: ${proposal.scene_type}`);
+    const wounds = Array.isArray(proposal.wounds_unaddressed) ? proposal.wounds_unaddressed : [];
+    if (wounds.length) parts.push(`Wounds yet unaddressed: ${wounds.join('; ')}`);
+    const tensions = Array.isArray(proposal.tensions_unresolved) ? proposal.tensions_unresolved : [];
+    if (tensions.length) parts.push(`Tensions unresolved: ${tensions.join('; ')}`);
+
+    return parts.length
+      ? `\n\nSCENE ARC METADATA (this scene's role in the larger story — write with this PURPOSE):\n  ${parts.join('\n  ')}`
+      : '';
+  } catch (err) {
+    console.error('[loadSceneArcMetadata] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load continuity timeline context (beats, conflicts, character positions) ──
+async function loadContinuityContext(characterKeys, registryId) {
+  if (!characterKeys?.length) return '';
+  try {
+    if (!db.ContinuityTimeline || !db.ContinuityBeat) return '';
+
+    // Find active timelines that have beats involving characters in this scene
+    const timelines = await db.ContinuityTimeline.findAll({
+      where: { status: 'active' },
+      include: [{
+        model: db.ContinuityBeat, as: 'beats',
+        include: [{ model: db.ContinuityCharacter, as: 'characters', through: { attributes: [] } }],
+        order: [['sort_order', 'ASC']],
+      }],
+      limit: 5,
+    });
+    if (!timelines.length) return '';
+
+    const sections = [];
+    for (const tl of timelines) {
+      const beats = tl.beats || [];
+      if (!beats.length) continue;
+
+      // Filter to beats involving scene characters (match by name)
+      const charSet = new Set(characterKeys.map(k => k.toLowerCase()));
+      const relevantBeats = beats.filter(b =>
+        (b.characters || []).some(c => charSet.has((c.name || '').toLowerCase()))
+      );
+      if (!relevantBeats.length) continue;
+
+      const beatLines = relevantBeats.slice(-10).map(b => {
+        const charNames = (b.characters || []).map(c => c.name).join(', ');
+        return `  [${b.time_tag || '?'}] ${b.name} @ ${b.location || '?'} — ${charNames}`;
+      });
+      sections.push(`Timeline "${tl.title}" (${tl.season_tag || 'active'}):\n${beatLines.join('\n')}`);
+    }
+
+    // Detect same-time conflicts across beats
+    const allBeats = timelines.flatMap(tl => tl.beats || []);
+    const conflicts = [];
+    for (let i = 0; i < allBeats.length; i++) {
+      for (let j = i + 1; j < allBeats.length; j++) {
+        const a = allBeats[i], b = allBeats[j];
+        if (a.time_tag && a.time_tag === b.time_tag && a.location !== b.location) {
+          const aChars = (a.characters || []).map(c => c.name);
+          const bChars = (b.characters || []).map(c => c.name);
+          const overlap = aChars.filter(n => bChars.includes(n));
+          if (overlap.length) {
+            conflicts.push(`  ⚠ ${overlap.join(', ')} at "${a.time_tag}" — in "${a.location}" AND "${b.location}"`);
+          }
+        }
+      }
+    }
+    if (conflicts.length) {
+      sections.push('CONTINUITY CONFLICTS (characters in two places at once — avoid or acknowledge):\n' + conflicts.join('\n'));
+    }
+
+    return sections.length
+      ? `\n\nCONTINUITY ENGINE (where characters ARE in the timeline — respect this):\n${sections.join('\n\n')}`
+      : '';
+  } catch (err) {
+    console.error('[loadContinuityContext] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load character growth log (arc progression visible to generation) ──
+async function loadCharacterGrowthContext(characterKeys, registryId) {
+  if (!characterKeys?.length || !registryId) return '';
+  try {
+    if (!db.CharacterGrowthLog) return '';
+
+    const chars = await db.RegistryCharacter.findAll({
+      where: { registry_id: registryId, character_key: characterKeys },
+      attributes: ['id', 'character_key', 'display_name'],
+    });
+    if (!chars.length) return '';
+
+    const charIds = chars.map(c => c.id);
+    const charMap = {};
+    chars.forEach(c => { charMap[c.id] = c.display_name || c.character_key; });
+
+    // Load recent growth entries (accepted ones only, most recent first)
+    const logs = await db.CharacterGrowthLog.findAll({
+      where: {
+        character_id: charIds,
+        author_decision: ['accepted', null], // include unreviewed + accepted
+      },
+      order: [['created_at', 'DESC']],
+      limit: 20,
+    });
+    if (!logs.length) return '';
+
+    // Group by character
+    const grouped = {};
+    logs.forEach(l => {
+      const name = charMap[l.character_id] || '?';
+      if (!grouped[name]) grouped[name] = [];
+      grouped[name].push(l);
+    });
+
+    const sections = Object.entries(grouped).map(([name, entries]) => {
+      const lines = entries.slice(0, 5).map(e => {
+        const flag = e.update_type === 'flagged_contradiction' ? ' ⚠ CONTRADICTION' : '';
+        return `  ${e.field_updated}: "${e.previous_value || '—'}" → "${e.new_value}"${flag}${e.growth_source ? ` (${e.growth_source})` : ''}`;
+      });
+      return `${name} — recent changes:\n${lines.join('\n')}`;
+    });
+
+    return `\n\nCHARACTER GROWTH ARC (how these characters have been changing — write with awareness of their trajectory):\n${sections.join('\n\n')}`;
+  } catch (err) {
+    console.error('[loadCharacterGrowthContext] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load world state snapshot (temporal grounding) ──
+async function loadWorldStateContext(chapterId, bookId) {
+  if (!chapterId && !bookId) return '';
+  try {
+    if (!db.WorldStateSnapshot) return '';
+
+    // Find the most recent snapshot for this chapter/book
+    const where = {};
+    if (chapterId) where.chapter_id = chapterId;
+    else if (bookId) where.book_id = bookId;
+
+    const snapshot = await db.WorldStateSnapshot.findOne({
+      where,
+      order: [['timeline_position', 'DESC'], ['created_at', 'DESC']],
+    });
+
+    // Also get recent timeline events
+    let events = [];
+    if (db.WorldTimelineEvent) {
+      const eventWhere = { is_canon: true };
+      if (chapterId) eventWhere.chapter_id = chapterId;
+      else if (bookId) eventWhere.book_id = bookId;
+
+      events = await db.WorldTimelineEvent.findAll({
+        where: eventWhere,
+        order: [['sort_order', 'DESC']],
+        limit: 10,
+      });
+    }
+
+    const sections = [];
+
+    if (snapshot) {
+      const parts = [`World State: "${snapshot.snapshot_label}"`];
+      const threads = Array.isArray(snapshot.active_threads) ? snapshot.active_threads : [];
+      if (threads.length) parts.push(`  Active threads: ${threads.slice(0, 6).map(t => typeof t === 'string' ? t : t.name || JSON.stringify(t)).join('; ')}`);
+      const facts = Array.isArray(snapshot.world_facts) ? snapshot.world_facts : [];
+      if (facts.length) parts.push(`  Established facts: ${facts.slice(0, 6).map(f => typeof f === 'string' ? f : f.fact || JSON.stringify(f)).join('; ')}`);
+      sections.push(parts.join('\n'));
+    }
+
+    if (events.length) {
+      const eventLines = events.map(e => {
+        const impact = e.impact_level !== 'minor' ? ` [${e.impact_level}]` : '';
+        const chars = Array.isArray(e.characters_involved) ? e.characters_involved.map(c => c.name || c.id || c).join(', ') : '';
+        return `  [${e.story_date || '?'}] ${e.event_name}${impact}${chars ? ` — ${chars}` : ''}`;
+      });
+      sections.push('Recent timeline events:\n' + eventLines.join('\n'));
+    }
+
+    return sections.length
+      ? `\n\nWORLD STATE (the current reality of this world — ground the scene in what's TRUE):\n${sections.join('\n\n')}`
+      : '';
+  } catch (err) {
+    console.error('[loadWorldStateContext] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load character crossing context (digital ↔ narrative boundary) ──
+async function loadCharacterCrossingContext(characterKeys, registryId) {
+  if (!characterKeys?.length || !registryId) return '';
+  try {
+    if (!db.CharacterCrossing) return '';
+
+    const chars = await db.RegistryCharacter.findAll({
+      where: { registry_id: registryId, character_key: characterKeys },
+      attributes: ['id', 'character_key', 'display_name'],
+    });
+    if (!chars.length) return '';
+
+    const charIds = chars.map(c => c.id);
+    const charMap = {};
+    chars.forEach(c => { charMap[c.id] = c.display_name || c.character_key; });
+
+    const crossings = await db.CharacterCrossing.findAll({
+      where: { character_id: charIds },
+      order: [['created_at', 'DESC']],
+      limit: 10,
+    });
+    if (!crossings.length) return '';
+
+    const lines = crossings.map(cx => {
+      const name = charMap[cx.character_id] || '?';
+      const parts = [`${name}`];
+      if (cx.trigger) parts.push(`crossed via: ${cx.trigger}`);
+      if (cx.initial_feed_state) parts.push(`feed state at crossing: ${cx.initial_feed_state}`);
+      if (cx.performance_gap_score != null) parts.push(`performance gap: ${cx.performance_gap_score}/10`);
+      if (cx.gap_proposed_by_amber) parts.push(`gap observed: ${cx.gap_proposed_by_amber}`);
+      return `  ${parts.join(' — ')}`;
+    });
+
+    return `\n\nCHARACTER CROSSINGS (when digital personas crossed into narrative reality — the gap between performance and truth):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.error('[loadCharacterCrossingContext] error:', err?.message);
+    return '';
+  }
+}
+
+// ── Helper: load recent social feed context (entanglements + trajectory) ──
+async function loadSocialFeedContext(characterKeys, registryId) {
+  if (!characterKeys?.length || !registryId) return '';
+  try {
+    const chars = await db.RegistryCharacter.findAll({
+      where: { registry_id: registryId, character_key: characterKeys },
+      attributes: ['id', 'character_key', 'display_name'],
+    });
+    if (!chars.length) return '';
+    const charIds = chars.map(c => c.id);
+    const charMap = {};
+    chars.forEach(c => { charMap[c.id] = c.display_name || c.character_key; });
+
+    // Load social profiles (full field set for deep generation context)
+    const profiles = await db.SocialProfile.findAll({
+      where: { registry_character_id: charIds },
+      attributes: [
+        'id', 'registry_character_id', 'handle', 'platform', 'display_name', 'vibe_sentence',
+        'follower_tier', 'follower_count_approx', 'post_frequency', 'engagement_rate', 'platform_metrics',
+        'content_persona', 'posting_voice', 'comment_energy', 'archetype',
+        'adult_content_present', 'adult_content_type', 'adult_content_framing',
+        'parasocial_function', 'emotional_activation', 'watch_reason', 'what_it_costs_her',
+        'current_trajectory', 'trajectory_detail', 'current_state',
+        'moment_log', 'sample_captions', 'sample_comments', 'controversy_history',
+        'lala_relevance_score', 'lala_relevance_reason',
+        'justawoman_mirror', 'mirror_proposed_by_amber',
+        'visibility_tier', 'pinned_post',
+      ],
+    });
+    if (!profiles.length) return '';
+    const profileIds = profiles.map(p => p.id);
+
+    // Load recent unresolved entanglement events
+    let events = [];
+    try {
+      events = await db.EntanglementEvent.findAll({
+        where: { profile_id: profileIds, resolved: false },
+        attributes: ['profile_id', 'event_type', 'description', 'new_state', 'affected_dimensions'],
+        order: [['created_at', 'DESC']],
+        limit: 8,
+      });
+    } catch { /* table may not exist */ }
+
+    const profileMap = {};
+    profiles.forEach(p => { profileMap[p.id] = p; });
+
+    const sections = [];
+
+    // Profile context (full depth)
+    profiles.forEach(p => {
+      const name = charMap[p.registry_character_id] || '?';
+      const parts = [`${name} — @${p.handle} (${p.platform})`];
+      if (p.vibe_sentence) parts.push(`  Vibe: ${p.vibe_sentence}`);
+      if (p.follower_tier) parts.push(`  Reach: ${p.follower_tier}${p.follower_count_approx ? ` (~${p.follower_count_approx})` : ''}`);
+      if (p.post_frequency) parts.push(`  Post frequency: ${p.post_frequency}`);
+      if (p.engagement_rate) parts.push(`  Engagement rate: ${p.engagement_rate}`);
+      if (p.content_persona) parts.push(`  Content persona: ${p.content_persona}`);
+      if (p.posting_voice) parts.push(`  Posting voice: ${p.posting_voice}`);
+      if (p.comment_energy) parts.push(`  Comment energy: ${p.comment_energy}`);
+      if (p.archetype) parts.push(`  Archetype: ${p.archetype}`);
+      if (p.current_trajectory) parts.push(`  Trajectory: ${p.current_trajectory}${p.trajectory_detail ? ` — ${p.trajectory_detail}` : ''}`);
+      if (p.current_state) parts.push(`  Current state: ${p.current_state}`);
+      if (p.emotional_activation) parts.push(`  Emotional activation: ${p.emotional_activation}`);
+      if (p.parasocial_function) parts.push(`  Parasocial function: ${p.parasocial_function}`);
+      if (p.watch_reason) parts.push(`  Why people watch: ${p.watch_reason}`);
+      if (p.what_it_costs_her) parts.push(`  What it costs her: ${p.what_it_costs_her}`);
+      if (p.adult_content_present) parts.push(`  Adult content: ${p.adult_content_type || 'yes'}${p.adult_content_framing ? ` (${p.adult_content_framing})` : ''}`);
+      if (p.justawoman_mirror) parts.push(`  Mirror theme: ${p.justawoman_mirror}`);
+      if (p.visibility_tier) parts.push(`  Visibility: ${p.visibility_tier}`);
+      const captions = Array.isArray(p.sample_captions) ? p.sample_captions : [];
+      if (captions.length) parts.push(`  Voice example: "${captions[0]}"`);
+      const comments = Array.isArray(p.sample_comments) ? p.sample_comments : [];
+      if (comments.length) parts.push(`  Comment example: "${comments[0]}"`);
+      if (p.pinned_post) parts.push(`  Pinned: ${typeof p.pinned_post === 'string' ? p.pinned_post : JSON.stringify(p.pinned_post)}`);
+      const controversies = Array.isArray(p.controversy_history) ? p.controversy_history : [];
+      if (controversies.length) parts.push(`  Recent controversies: ${controversies.slice(0, 3).map(c => typeof c === 'string' ? c : c.summary || JSON.stringify(c)).join('; ')}`);
+      if (p.lala_relevance_score > 0) parts.push(`  LalaVerse relevance: ${p.lala_relevance_score}/10${p.lala_relevance_reason ? ` — ${p.lala_relevance_reason}` : ''}`);
+      sections.push(parts.join('\n'));
+    });
+
+    // Active entanglements
+    if (events.length) {
+      const eventLines = events.map(e => {
+        const prof = profileMap[e.profile_id];
+        const handle = prof?.handle || '?';
+        const dims = Array.isArray(e.affected_dimensions) ? e.affected_dimensions.join(', ') : '';
+        return `  @${handle}: ${e.event_type}${e.new_state ? ` → ${e.new_state}` : ''} — ${e.description || ''}${dims ? ` [affects: ${dims}]` : ''}`;
+      });
+      sections.push('ACTIVE ENTANGLEMENTS (unresolved social events creating pressure):\n' + eventLines.join('\n'));
+    }
+
+    return sections.length
+      ? `\n\nSOCIAL FEED CONTEXT (the parasocial/digital pressure layer — characters exist in public):\n${sections.join('\n\n')}`
+      : '';
+  } catch (err) {
+    console.error('[loadSocialFeedContext] error:', err?.message);
+    return '';
+  }
+}
+
 // ── POST /generate-story-multi ────────────────────────────────────────────
 router.post('/generate-story-multi', optionalAuth, async (req, res) => {
   try {
-    const { chapter_id, book_id, scene_brief, characters_in_scene, registry_id, tone_dial } = req.body;
+    const { chapter_id, book_id, scene_brief, characters_in_scene, registry_id, tone_dial, must_include, never_include } = req.body;
     if (!scene_brief) {
       return res.status(400).json({ error: 'scene_brief is required' });
     }
@@ -488,42 +1114,51 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
     // Fetch enriched character context (living context + relationships + knowledge asymmetry)
     const { dossiers, charBlocks } = await fetchSceneContext(characters_in_scene, registry_id);
 
-    // Load accumulated story memories (pain points, belief shifts, therapy openings)
-    const storyMemories = await loadStoryMemoriesForScene(characters_in_scene, registry_id);
-    const fullCharBlocks = charBlocks + storyMemories;
+    // Load ALL enrichment layers in parallel for maximum context
+    const [storyMemories, therapyCtx, franchiseCtx, authorNoteCtx, worldCtx, voiceRuleCtx, arcCtx, socialCtx, continuityCtx, growthCtx, worldStateCtx, crossingCtx] = await Promise.all([
+      loadStoryMemoriesForScene(characters_in_scene, registry_id),
+      loadTherapyProfiles(characters_in_scene, registry_id),
+      loadFranchiseConstraints(characters_in_scene),
+      loadAuthorNotes(characters_in_scene, registry_id),
+      loadWorldLocationContext(scene_brief, characters_in_scene, registry_id),
+      loadVoiceRules(characters_in_scene),
+      loadSceneArcMetadata(chapter_id),
+      loadSocialFeedContext(characters_in_scene, registry_id),
+      loadContinuityContext(characters_in_scene, registry_id),
+      loadCharacterGrowthContext(characters_in_scene, registry_id),
+      loadWorldStateContext(chapter_id, book_id),
+      loadCharacterCrossingContext(characters_in_scene, registry_id),
+    ]);
 
-    const promptA = buildGenerationPrompt({
-      scene_brief, voice_key: 'voice_a',
-      characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks,
-    });
-    const promptB = buildGenerationPrompt({
-      scene_brief, voice_key: 'voice_b',
-      characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks,
-    });
-    const promptC = buildGenerationPrompt({
-      scene_brief, voice_key: 'voice_c',
-      characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks,
-    });
+    const fullCharBlocks = charBlocks + storyMemories + therapyCtx + franchiseCtx + authorNoteCtx + worldCtx + voiceRuleCtx + arcCtx + socialCtx + continuityCtx + growthCtx + worldStateCtx + crossingCtx;
+
+    const genOpts = { characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks, tone_dial, dossiers, must_include, never_include };
+    const promptA = buildGenerationPrompt({ scene_brief, voice_key: 'voice_a', ...genOpts });
+    const promptB = buildGenerationPrompt({ scene_brief, voice_key: 'voice_b', ...genOpts });
+    const promptC = buildGenerationPrompt({ scene_brief, voice_key: 'voice_c', ...genOpts });
+
+    // Build voice system prompts enriched with character wounds/desires
+    const VOICE_SYSTEM = buildVoiceSystem(dossiers);
 
     // Generate all 3 voices in parallel (blind — each voice doesn't see the others)
     // Each voice gets its own 2 tones from the full palette of 6
     req.setTimeout(300000); // 5 min for long AI generation
     const [resultA, resultB, resultC] = await Promise.all([
       anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 6000,
         system: VOICE_SYSTEM.voice_a,
         messages: [{ role: 'user', content: promptA }],
       }),
       anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 6000,
         system: VOICE_SYSTEM.voice_b,
         messages: [{ role: 'user', content: promptB }],
       }),
       anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 6000,
         system: VOICE_SYSTEM.voice_c,
         messages: [{ role: 'user', content: promptC }],
       }),
@@ -545,6 +1180,8 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       scene_brief,
       tone_dial: tone_dial || 'literary',
       characters_in_scene,
+      must_include: must_include || null,
+      never_include: never_include || null,
       registry_dossiers_used: dossiers,
       story_a: storyA,
       story_b: storyB,
@@ -552,6 +1189,28 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
     });
 
     const wordCount = (t) => (t || '').split(/\s+/).filter(Boolean).length;
+
+    // Compute token usage
+    const tokenUsage = {
+      input: (resultA.usage?.input_tokens || 0) + (resultB.usage?.input_tokens || 0) + (resultC.usage?.input_tokens || 0),
+      output: (resultA.usage?.output_tokens || 0) + (resultB.usage?.output_tokens || 0) + (resultC.usage?.output_tokens || 0),
+    };
+
+    // Build enrichment summary so frontend can show what data was loaded
+    const enrichment_loaded = {
+      therapy_profiles: therapyCtx.length > 0,
+      franchise_rules: franchiseCtx.length > 0,
+      author_notes: authorNoteCtx.length > 0,
+      world_locations: worldCtx.length > 0,
+      voice_rules: voiceRuleCtx.length > 0,
+      scene_arc: arcCtx.length > 0,
+      social_feed: socialCtx.length > 0,
+      story_memories: storyMemories.length > 0,
+      continuity_engine: continuityCtx.length > 0,
+      character_growth: growthCtx.length > 0,
+      world_state: worldStateCtx.length > 0,
+      character_crossings: crossingCtx.length > 0,
+    };
 
     return res.json({
       success: true,
@@ -561,6 +1220,8 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
         voice_b: { text: storyB, word_count: wordCount(storyB) },
         voice_c: { text: storyC, word_count: wordCount(storyC) },
       },
+      token_usage: tokenUsage,
+      enrichment_loaded,
     });
   } catch (err) {
     console.error('[generate-story-multi]', err?.message);
@@ -595,13 +1256,26 @@ router.post('/evaluate-stories', optionalAuth, async (req, res) => {
       }
     }
 
+    // Load franchise constraints + author notes + enrichment context for evaluation
+    const charKeys = story.characters_in_scene || [];
+    const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
+    const [evalFranchise, evalAuthorNotes, evalContinuity, evalGrowth, evalWorldState, evalCrossings] = await Promise.all([
+      loadFranchiseConstraints(charKeys),
+      loadAuthorNotes(charKeys, regId),
+      loadContinuityContext(charKeys, regId),
+      loadCharacterGrowthContext(charKeys, regId),
+      loadWorldStateContext(story.chapter_id, story.book_id),
+      loadCharacterCrossingContext(charKeys, regId),
+    ]);
+    const evalExtraCtx = evalFranchise + evalAuthorNotes + evalContinuity + evalGrowth + evalWorldState + evalCrossings;
+
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      max_tokens: 16000,
       system: `You are a ruthlessly honest literary editor. Evaluate three blind versions of the same scene. Your PRIMARY task is to create a synthesised version that COMBINES the best elements from ALL three voices into an enhanced final version — do NOT simply pick the winner's text. Return ONLY valid JSON — no markdown fences, no commentary.`,
       messages: [{
         role: 'user',
-        content: `Original brief:\n"${story.scene_brief || ''}"\n\nTone dial: ${story.tone_dial || 'literary'}${authorKnowledgeBlock}\n\n=== VOICE A (Depth & Interiority) ===\n${story.story_a}\n\n=== VOICE B (Tension & Momentum) ===\n${story.story_b}\n\n=== VOICE C (Sensory & Desire) ===\n${story.story_c}\n\nReturn JSON:\n{\n  "scores": {\n    "voice_a": { "interiority": 0-10, "desire_tension": 0-10, "specificity": 0-10, "stakes": 0-10, "voice": 0-10, "body_presence": 0-10, "total": 0-60, "summary": "one sentence", "best_moment": "direct quote" },\n    "voice_b": { ...same },\n    "voice_c": { ...same }\n  },\n  "winner": "voice_a"|"voice_b"|"voice_c",\n  "winner_reason": "why this version wins",\n  "what_each_brings": { "voice_a": "strength", "voice_b": "strength", "voice_c": "strength" },\n  "proofreading": { "voice_a": ["issue"], "voice_b": ["issue"], "voice_c": ["issue"] },\n  "brief_diagnosis": { "score": 0-10, "what_was_missing": "text", "improved_brief": "text" },\n  "synthesis_notes": "Detailed explanation of how you combined elements: which passages/moments came from Voice A, which pacing/structure from Voice B, which sensory details from Voice C, and what you enhanced or rewrote to unify them into a cohesive whole",\n  "approved_version": "A FULLY SYNTHESISED version (2500-3500 words) that COMBINES the strongest elements from ALL three voices. Do NOT simply copy the winner. Take Voice A's best interiority/psychological depth passages, Voice B's best tension/pacing/structural momentum, and Voice C's best sensory details/desire/body language. Weave them together into a unified narrative that is BETTER than any single version. Enhance weak transitions, deepen where all three fell short, and ensure tonal consistency throughout."\n}`,
+        content: `Original brief:\n"${story.scene_brief || ''}"\n\nTone dial: ${story.tone_dial || 'literary'}${story.must_include ? `\nMust include: ${story.must_include}` : ''}${story.never_include ? `\nNever include: ${story.never_include}` : ''}${authorKnowledgeBlock}${evalExtraCtx}\n\n=== VOICE A (Depth & Interiority) ===\n${story.story_a}\n\n=== VOICE B (Tension & Momentum) ===\n${story.story_b}\n\n=== VOICE C (Sensory & Desire) ===\n${story.story_c}\n\nReturn JSON:\n{\n  "scores": {\n    "voice_a": { "interiority": 0-10, "desire_tension": 0-10, "specificity": 0-10, "stakes": 0-10, "voice": 0-10, "body_presence": 0-10, "originality": 0-10, "prose_efficiency": 0-10, "scene_fulfillment": 0-10, "total": 0-90, "summary": "one sentence", "best_moment": "direct quote" },\n    "voice_b": { ...same },\n    "voice_c": { ...same }\n  },\n  "winner": "voice_a"|"voice_b"|"voice_c",\n  "winner_reason": "why this version wins",\n  "what_each_brings": { "voice_a": "strength", "voice_b": "strength", "voice_c": "strength" },\n  "proofreading": { "voice_a": ["issue"], "voice_b": ["issue"], "voice_c": ["issue"] },\n  "franchise_violations": ["any narrative rule or locked constraint that was broken — or empty array if none"],\n  "brief_diagnosis": { "score": 0-10, "what_was_missing": "text", "improved_brief": "text" },\n  "synthesis_notes": "Detailed explanation of how you combined elements: which passages/moments came from Voice A, which pacing/structure from Voice B, which sensory details from Voice C, and what you enhanced or rewrote to unify them into a cohesive whole",\n  "approved_version": "A FULLY SYNTHESISED version (2500-3500 words) that COMBINES the strongest elements from ALL three voices using proportional weighting — the highest-scoring voice's approaches to interiority, momentum, and sensory detail should dominate, while layering in the unique strengths of the lower-scoring voices. Take Voice A's best interiority/psychological depth passages, Voice B's best tension/pacing/structural momentum, and Voice C's best sensory details/desire/body language. Weave them together into a unified narrative that is BETTER than any single version. Enhance weak transitions, deepen where all three fell short, and ensure tonal consistency throughout. Verify the synthesis delivers everything the original brief asked for and respects ALL franchise rules."\n}`,
       }],
     });
 
@@ -642,7 +1316,13 @@ router.post('/evaluate-stories', optionalAuth, async (req, res) => {
       });
     } catch { /* PipelineTracking table may not exist yet */ }
 
-    return res.json({ success: true, evaluation, story_id });
+    // Token usage for evaluation
+    const evalTokenUsage = {
+      input: msg.usage?.input_tokens || 0,
+      output: msg.usage?.output_tokens || 0,
+    };
+
+    return res.json({ success: true, evaluation, story_id, token_usage: evalTokenUsage });
   } catch (err) {
     console.error('[evaluate-stories]', err?.message);
     return res.status(500).json({ error: err?.message || 'Evaluation failed' });
@@ -660,24 +1340,34 @@ router.post('/propose-memory', optionalAuth, async (req, res) => {
     if (!story.text) return res.status(400).json({ error: 'Story must have approved text first' });
 
     // Load existing memories for context
-    const existingMemories = await db.StorytellerMemory.findAll({
-      where: { character_key: story.character_key },
-      order: [['created_at', 'DESC']],
-      limit: 30,
-      attributes: ['type', 'content', 'weight'],
-    });
+    const charKeys = story.characters_in_scene || [];
+    const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
+
+    const [existingMemories, continuityCtx, growthCtx, worldStateCtx] = await Promise.all([
+      db.StorytellerMemory.findAll({
+        where: { character_key: story.character_key },
+        order: [['created_at', 'DESC']],
+        limit: 30,
+        attributes: ['type', 'content', 'weight'],
+      }),
+      loadContinuityContext(charKeys, regId),
+      loadCharacterGrowthContext(charKeys, regId),
+      loadWorldStateContext(story.chapter_id, story.book_id),
+    ]);
 
     const memCtx = existingMemories.map(m =>
       `[${m.type}] ${m.content} (weight: ${m.weight})`
     ).join('\n');
 
+    const enrichmentCtx = continuityCtx + growthCtx + worldStateCtx;
+
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
-      system: `You are a narrative memory architect. Given a story and existing character memories, propose new memories that should be stored. Return ONLY valid JSON.`,
+      system: `You are a narrative memory architect. Given a story and existing character memories, propose new memories that should be stored. IMPORTANT: Do NOT propose memories that duplicate or closely restate existing memories listed below — only propose genuinely NEW information this scene reveals. Respect the established timeline, character growth arc, and world state provided below. Return ONLY valid JSON.`,
       messages: [{
         role: 'user',
-        content: `CHARACTER: ${story.character_key}\n\nEXISTING MEMORIES:\n${memCtx || '(none yet)'}\n\nSTORY TEXT:\n${story.text}\n\nPropose memories in JSON:\n{\n  "plot_memories": [\n    { "type": "event|relationship|belief|constraint", "content": "what happened", "weight": 1-10, "reason": "why this matters for future stories" }\n  ],\n  "character_revelations": [\n    { "type": "transformation|pain_point|character_dynamic", "content": "what was revealed", "weight": 1-10, "reason": "why this changes the character" }\n  ]\n}`,
+        content: `CHARACTER: ${story.character_key}\n\nEXISTING MEMORIES (do NOT duplicate these):\n${memCtx || '(none yet)'}${enrichmentCtx}\n\nSTORY TEXT:\n${story.text}\n\nPropose memories in JSON:\n{\n  "plot_memories": [\n    { "type": "event|relationship|belief|constraint", "content": "what happened", "weight": 1-10, "reason": "why this matters for future stories" }\n  ],\n  "character_revelations": [\n    { "type": "transformation|pain_point|character_dynamic", "content": "what was revealed", "weight": 1-10, "reason": "why this changes the character" }\n  ]\n}`,
       }],
     });
 
@@ -706,13 +1396,23 @@ router.post('/propose-registry-update', optionalAuth, async (req, res) => {
     if (!story) return res.status(404).json({ error: 'Story not found' });
 
     // Load current registry profiles for characters in scene
+    const charKeys = story.characters_in_scene || [];
+    const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
+
     let charProfiles = [];
-    if (story.characters_in_scene?.length && story.registry_dossiers_used?.[0]?.registry_id) {
-      const rid = story.registry_dossiers_used[0].registry_id;
+    if (charKeys.length && regId) {
       charProfiles = await db.RegistryCharacter.findAll({
-        where: { registry_id: rid, character_key: story.characters_in_scene },
+        where: { registry_id: regId, character_key: charKeys },
       });
     }
+
+    // Load growth + continuity context to prevent contradictory proposals
+    const [growthCtx, continuityCtx, worldStateCtx] = await Promise.all([
+      loadCharacterGrowthContext(charKeys, regId),
+      loadContinuityContext(charKeys, regId),
+      loadWorldStateContext(story.chapter_id, story.book_id),
+    ]);
+    const enrichmentCtx = growthCtx + continuityCtx + worldStateCtx;
 
     const profileCtx = charProfiles.map(c => {
       const j = c.toJSON();
@@ -722,10 +1422,10 @@ router.post('/propose-registry-update', optionalAuth, async (req, res) => {
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
-      system: `You are a character registry curator. After reading a story, propose specific updates to character registry profiles. Return ONLY valid JSON.`,
+      system: `You are a character registry curator. After reading a story, propose specific updates to character registry profiles. Respect the character growth history, continuity timeline, and world state provided — do NOT propose changes that contradict established arcs. Return ONLY valid JSON.`,
       messages: [{
         role: 'user',
-        content: `CURRENT PROFILES:\n${profileCtx || '(none)'}\n\nSTORY:\n${story.text}\n\nPropose registry updates in JSON:\n{\n  "updates": [\n    {\n      "character_key": "key",\n      "field": "core_desire|core_wound|hidden_want|core_belief|living_context|voice_notes",\n      "current_value": "what it is now",\n      "proposed_value": "what it should become",\n      "reason": "why this scene changes this"\n    }\n  ]\n}`,
+        content: `CURRENT PROFILES:\n${profileCtx || '(none)'}${enrichmentCtx}\n\nSTORY:\n${story.text}\n\nPropose registry updates in JSON:\n{\n  "updates": [\n    {\n      "character_key": "key",\n      "field": "core_desire|core_wound|hidden_want|core_belief|living_context|voice_notes",\n      "current_value": "what it is now",\n      "proposed_value": "what it should become",\n      "reason": "why this scene changes this"\n    }\n  ]\n}`,
       }],
     });
 
@@ -745,23 +1445,26 @@ router.post('/propose-registry-update', optionalAuth, async (req, res) => {
 
 // ── POST /write-back ──────────────────────────────────────────────────────
 router.post('/write-back', optionalAuth, async (req, res) => {
+  const transaction = await db.sequelize.transaction();
   try {
     const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates } = req.body;
     if (!story_id || !chapter_id) {
+      await transaction.rollback();
       return res.status(400).json({ error: 'story_id and chapter_id are required' });
     }
 
-    const story = await db.StorytellerStory.findByPk(story_id);
-    if (!story) return res.status(404).json({ error: 'Story not found' });
-    if (!story.text) return res.status(400).json({ error: 'No approved text to write back' });
+    const story = await db.StorytellerStory.findByPk(story_id, { transaction, lock: true });
+    if (!story) { await transaction.rollback(); return res.status(404).json({ error: 'Story not found' }); }
+    if (!story.text) { await transaction.rollback(); return res.status(400).json({ error: 'No approved text to write back' }); }
+    if (story.status === 'written_back') { await transaction.rollback(); return res.status(409).json({ error: 'Story already written back' }); }
 
     // Verify chapter exists
-    const chapter = await db.StorytellerChapter.findByPk(chapter_id);
-    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+    const chapter = await db.StorytellerChapter.findByPk(chapter_id, { transaction });
+    if (!chapter) { await transaction.rollback(); return res.status(404).json({ error: 'Chapter not found' }); }
 
     // 1. Write story text as lines in the chapter
     const paragraphs = story.text.split('\n').filter(p => p.trim());
-    const existingLines = await db.StorytellerLine.count({ where: { chapter_id } });
+    const existingLines = await db.StorytellerLine.count({ where: { chapter_id }, transaction });
     let lineOrder = existingLines;
 
     for (const para of paragraphs) {
@@ -771,7 +1474,7 @@ router.post('/write-back', optionalAuth, async (req, res) => {
         text: para.trim(),
         line_order: lineOrder++,
         line_type: 'prose',
-      });
+      }, { transaction });
     }
 
     // 2. Commit confirmed memories
@@ -784,7 +1487,7 @@ router.post('/write-back', optionalAuth, async (req, res) => {
           weight: mem.weight || 5,
           source: 'evaluation_engine',
           story_id: story.id,
-        });
+        }, { transaction });
       }
     }
 
@@ -793,10 +1496,11 @@ router.post('/write-back', optionalAuth, async (req, res) => {
       for (const upd of confirmed_registry_updates) {
         const char = await db.RegistryCharacter.findOne({
           where: { character_key: upd.character_key },
+          transaction,
         });
         if (char && upd.field && upd.proposed_value !== undefined) {
           char[upd.field] = upd.proposed_value;
-          await char.save();
+          await char.save({ transaction });
         }
       }
     }
@@ -806,7 +1510,9 @@ router.post('/write-back', optionalAuth, async (req, res) => {
     story.written_back_chapter_id = chapter_id;
     story.memory_confirmed_at = confirmed_memories?.length ? new Date() : story.memory_confirmed_at;
     story.status = 'written_back';
-    await story.save();
+    await story.save({ transaction });
+
+    await transaction.commit();
 
     return res.json({
       success: true,
@@ -817,6 +1523,7 @@ router.post('/write-back', optionalAuth, async (req, res) => {
       registry_updates_applied: confirmed_registry_updates?.length || 0,
     });
   } catch (err) {
+    await transaction.rollback();
     console.error('[write-back]', err?.message);
     return res.status(500).json({ error: err?.message || 'Write-back failed' });
   }
