@@ -425,8 +425,9 @@ export default function WorldStudio() {
   const [sceneGen,       setSceneGen]       = useState({ loading: false, charB: '', sceneType: 'hook_up', location: '' });
   const [activeScene,    setActiveScene]    = useState(null);
 
-  /* ── Batches ──────────────────────────────────────────────────────── */
+  /* ── Batches & Saved Previews ─────────────────────────────────────── */
   const [batches,        setBatches]        = useState([]);
+  const [savedPreviews,  setSavedPreviews]  = useState([]);
 
   /* ── Compare ──────────────────────────────────────────────────────── */
   const [compareChar,    setCompareChar]    = useState(null);
@@ -651,7 +652,7 @@ export default function WorldStudio() {
     if (detailTab === 'scenes' && selectedChar) loadCharScenes(selectedChar);
   }, [detailTab, selectedChar]);
 
-  /* ── Batch loader ────────────────────────────────────────────────── */
+  /* ── Batch & Saved Preview loaders ────────────────────────────────── */
   const loadBatches = useCallback(async () => {
     try {
       const r = await fetch(`${API}/world/batches`);
@@ -660,7 +661,35 @@ export default function WorldStudio() {
     } catch { setBatches([]); }
   }, []);
 
-  useEffect(() => { if (pageTab === 'characters' && !selectedChar) loadBatches(); }, [pageTab, selectedChar]);
+  const loadSavedPreviews = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/world/previews`);
+      const d = await r.json();
+      setSavedPreviews((d.previews || []).filter(p => p.status === 'pending'));
+    } catch { setSavedPreviews([]); }
+  }, []);
+
+  const restorePreview = async (pid) => {
+    try {
+      const r = await fetch(`${API}/world/preview/${pid}`);
+      const d = await r.json();
+      if (d.characters?.length) {
+        setPreviewChars(d.characters);
+        setPreviewNotes(d.generation_notes || '');
+        setPreviewSel(new Set(d.characters.map((_, i) => i)));
+        setPreviewId(d.preview_id || pid);
+        setShowPreview(true);
+      } else flash('Preview is empty or expired', 'error');
+    } catch { flash('Could not restore preview', 'error'); }
+  };
+
+  const discardPreview = async (pid) => {
+    await fetch(`${API}/world/previews/${pid}`, { method: 'DELETE' });
+    flash('Preview discarded');
+    loadSavedPreviews();
+  };
+
+  useEffect(() => { if (pageTab === 'characters' && !selectedChar) { loadBatches(); loadSavedPreviews(); } }, [pageTab, selectedChar]);
 
   /* ── Compare loader ──────────────────────────────────────────────── */
   useEffect(() => {
@@ -1066,6 +1095,28 @@ export default function WorldStudio() {
               <div className="ws4-dashboard-heading">
                 {worldTag === 'all' ? '⊞ All Worlds' : `${curWorld?.icon} ${curWorld?.label}`} — Ecosystem Overview
               </div>
+              {/* Saved Previews — resume generation you left */}
+              {savedPreviews.length > 0 && (
+                <div className="ws4-saved-previews">
+                  <div className="ws4-saved-previews-title">Saved Ecosystems</div>
+                  <div className="ws4-saved-previews-desc">You generated these but haven't confirmed them yet. Resume or discard.</div>
+                  {savedPreviews.map(p => (
+                    <div key={p.preview_id} className="ws4-saved-preview-card">
+                      <div className="ws4-saved-preview-meta">
+                        <Badge variant="default">{p.character_count} characters</Badge>
+                        <Badge variant="draft">{p.world_tag}</Badge>
+                        <span className="ws4-saved-preview-date">{new Date(p.created_at).toLocaleString()}</span>
+                      </div>
+                      {p.generation_notes && <div className="ws4-saved-preview-notes">{p.generation_notes.substring(0, 160)}</div>}
+                      <div className="ws4-saved-preview-actions">
+                        <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => restorePreview(p.preview_id)}>Resume</button>
+                        <button className="ws4-btn ws4-btn-ghost ws4-btn-sm ws4-btn-muted" onClick={() => discardPreview(p.preview_id)}>Discard</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Ecosystem Balance Warnings */}
               {(() => {
                 const warnings = getEcosystemWarnings();

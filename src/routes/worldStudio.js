@@ -251,12 +251,47 @@ function storePreview(previewId, data) {
   for (const [k, v] of previewCache) {
     if (Date.now() > v.expires) previewCache.delete(k);
   }
+  // Also persist to DB so it survives page navigation & server restarts
+  persistPreviewToDB(previewId, data).catch(err => console.error('preview persist error:', err.message));
 }
 function getPreview(previewId) {
   const entry = previewCache.get(previewId);
   if (!entry) return null;
   if (Date.now() > entry.expires) { previewCache.delete(previewId); return null; }
   return entry.data;
+}
+
+// Persistent preview storage in DB
+async function ensurePreviewsTable() {
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS ecosystem_previews (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      preview_id VARCHAR(255) UNIQUE NOT NULL,
+      world_tag VARCHAR(100) NOT NULL DEFAULT 'lalaverse',
+      characters JSONB NOT NULL DEFAULT '[]',
+      generation_notes TEXT DEFAULT '',
+      status VARCHAR(50) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `).catch(() => {});
+}
+let previewsTableReady = false;
+async function persistPreviewToDB(previewId, data) {
+  if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
+  await sequelize.query(`
+    INSERT INTO ecosystem_previews (preview_id, world_tag, characters, generation_notes, status)
+    VALUES (:previewId, :worldTag, :characters, :notes, 'pending')
+    ON CONFLICT (preview_id) DO UPDATE SET characters = :characters, generation_notes = :notes, updated_at = NOW()
+  `, {
+    replacements: {
+      previewId,
+      worldTag: data.world_tag || 'lalaverse',
+      characters: JSON.stringify(data.characters || []),
+      notes: data.generation_notes || '',
+    },
+    type: sequelize.QueryTypes.INSERT,
+  });
 }
 
 /**
@@ -1585,12 +1620,60 @@ router.post('/world/continuations/:contId/approve', optionalAuth, async (req, re
 
 /**
  * GET /world/preview/:previewId
- * Restore a server-side preview (survives browser refresh within 10 min window).
+ * Restore a server-side preview — checks in-memory cache first, then DB.
  */
-router.get('/world/preview/:previewId', optionalAuth, (req, res) => {
-  const data = getPreview(req.params.previewId);
-  if (!data) return res.status(404).json({ error: 'Preview expired or not found' });
-  res.json({ preview_id: req.params.previewId, ...data });
+router.get('/world/preview/:previewId', optionalAuth, async (req, res) => {
+  // Try in-memory cache first (fast path)
+  const cached = getPreview(req.params.previewId);
+  if (cached) return res.json({ preview_id: req.params.previewId, ...cached });
+
+  // Fall back to DB
+  try {
+    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
+    const [row] = await Q(req,
+      `SELECT * FROM ecosystem_previews WHERE preview_id = :pid AND status = 'pending'`,
+      { replacements: { pid: req.params.previewId } }
+    );
+    if (!row) return res.status(404).json({ error: 'Preview not found' });
+    const characters = typeof row.characters === 'string' ? JSON.parse(row.characters) : row.characters;
+    res.json({ preview_id: row.preview_id, characters, generation_notes: row.generation_notes, world_tag: row.world_tag });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /world/previews
+ * List all saved (pending) ecosystem previews — survives page navigation.
+ */
+router.get('/world/previews', optionalAuth, async (req, res) => {
+  try {
+    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
+    const rows = await Q(req,
+      `SELECT preview_id, world_tag, generation_notes, status, created_at,
+              jsonb_array_length(characters) AS character_count
+       FROM ecosystem_previews
+       ORDER BY created_at DESC
+       LIMIT 20`
+    );
+    res.json({ previews: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/**
+ * DELETE /world/previews/:previewId
+ * Discard a saved preview.
+ */
+router.delete('/world/previews/:previewId', optionalAuth, async (req, res) => {
+  try {
+    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
+    await sequelize.query(
+      `DELETE FROM ecosystem_previews WHERE preview_id = :pid`,
+      { replacements: { pid: req.params.previewId }, type: sequelize.QueryTypes.DELETE }
+    );
+    previewCache.delete(req.params.previewId);
+    res.json({ deleted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 /**
@@ -1896,8 +1979,14 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
     const interCount = await seedInterCharacterRelationships(inserted, registryId, relCap);
     console.log(`generate-ecosystem-confirm: Seeded ${interCount} inter-character relationship(s) (cap: ${relCap})`);
 
-    // Clear preview cache entry
-    if (preview_id) previewCache.delete(preview_id);
+    // Clear preview cache entry and mark DB preview as confirmed
+    if (preview_id) {
+      previewCache.delete(preview_id);
+      sequelize.query(
+        `UPDATE ecosystem_previews SET status = 'confirmed', updated_at = NOW() WHERE preview_id = :pid`,
+        { replacements: { pid: preview_id }, type: sequelize.QueryTypes.UPDATE }
+      ).catch(() => {});
+    }
 
     res.status(201).json({
       characters: inserted,
