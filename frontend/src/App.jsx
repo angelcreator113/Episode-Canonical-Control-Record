@@ -43,6 +43,7 @@ const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
 const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
 const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
 const WorldStudio = lazy(() => import('./pages/WorldStudio'));
+const SceneStudio = lazy(() => import('./pages/SceneStudio'));
 const ShowSettings = lazy(() => import('./pages/ShowSettings'));
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
@@ -434,8 +435,11 @@ function AppContent() {
           {/* Story Health Dashboard — Quality metrics + velocity + arc progress */}
           <Route path="/story-health" element={<StoryHealthDashboard />} />
 
-          {/* World Studio — LalaVerse world character + scene hub */}
+          {/* World Studio — LalaVerse world character hub */}
           <Route path="/world-studio" element={<WorldStudio />} />
+
+          {/* Scene Studio — Intimate scene generation + reader */}
+          <Route path="/scene-studio" element={<SceneStudio />} />
 
           {/* The Feed — Parasocial Creator Profile Generator */}
           <Route path="/feed" element={<SocialProfileGenerator />} />
@@ -526,6 +530,7 @@ function AppContent() {
             '/story-evaluation': 'Story Evaluation Engine',
             '/storyteller': 'Storyteller Book Editor',
             '/world-studio': 'World Studio',
+            '/scene-studio': 'Scene Studio',
             '/feed': 'Social Feed Profiles',
             '/social-timeline': 'Social Timeline Engine',
             '/social-personality': 'Social Personality Engine',

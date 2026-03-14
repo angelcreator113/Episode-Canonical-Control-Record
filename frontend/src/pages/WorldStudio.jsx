@@ -14,8 +14,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import SocialProfileGenerator from './SocialProfileGenerator';
-import RelationshipEngine from './RelationshipEngine';
 import './WorldStudio.css';
 
 const API = '/api/v1';
@@ -379,8 +377,7 @@ function DemographicsPanel({ charDetail }) {
 export default function WorldStudio() {
   const navigate = useNavigate();
 
-  /* ── Top-level page tab ─────────────────────────────────────────────── */
-  const [pageTab, setPageTab] = useState('characters');
+  /* ── (page tabs removed — Scenes/Feed/Relationships are now separate pages) ──── */
 
   /* ── World ─────────────────────────────────────────────────────────── */
   const [worldTag, setWorldTag] = useState('lalaverse');
@@ -419,10 +416,9 @@ export default function WorldStudio() {
   });
   const [savingRel, setSavingRel] = useState(false);
 
-  /* ── Scenes ────────────────────────────────────────────────────────── */
+  /* ── Per-character scenes (detail tab) ──────────────────────────────── */
   const [charScenes,     setCharScenes]     = useState([]);
-  const [tensionPairs,   setTensionPairs]   = useState([]);
-  const [sceneGen,       setSceneGen]       = useState({ loading: false, charB: '', sceneType: 'hook_up', location: '' });
+  const [sceneGen,       setSceneGen]       = useState({ loading: false });
   const [activeScene,    setActiveScene]    = useState(null);
 
   /* ── Batches & Saved Previews ─────────────────────────────────────── */
@@ -604,25 +600,12 @@ export default function WorldStudio() {
     } catch { setCharScenes([]); }
   }, []);
 
-  const loadTensionPairs = useCallback(async () => {
-    try {
-      const r = await fetch(`${API}/world/tension-check`);
-      const d = await r.json();
-      setTensionPairs(d.pairs || []);
-    } catch { setTensionPairs([]); }
-  }, []);
-
   const generateScene = async (charAId) => {
     setSceneGen(p => ({ ...p, loading: true }));
     try {
       const r = await fetch(`${API}/world/scenes/generate`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_a_id: charAId,
-          character_b_id: sceneGen.charB || undefined,
-          scene_type: sceneGen.sceneType,
-          location: sceneGen.location || undefined,
-        }),
+        body: JSON.stringify({ character_a_id: charAId }),
       });
       const d = await r.json();
       if (d.scene) { setActiveScene(d.scene); flash('Scene generated'); loadCharScenes(charAId); }
@@ -782,33 +765,21 @@ export default function WorldStudio() {
             <h1 className="ws4-page-title">World Studio</h1>
           </div>
 
-          {/* Top-level tabs — three creation flows */}
+          {/* Quick-nav to related pages */}
           <nav className="ws4-page-tabs">
             {[
-              { key: 'characters',    label: 'Characters',    icon: '◈' },
-              { key: 'scenes',        label: 'Scenes',        icon: '🔥' },
-              { key: 'feed',          label: 'The Feed',      icon: '📱' },
-              { key: 'relationships', label: 'Relationships', icon: '🔗' },
+              { label: 'Scene Studio',   icon: '🔥', route: '/scene-studio' },
+              { label: 'The Feed',       icon: '📱', route: '/feed' },
+              { label: 'Relationships',  icon: '🔗', route: '/relationships' },
             ].map(t => (
-              <button
-                key={t.key}
-                className={`ws4-page-tab ${pageTab === t.key ? 'ws4-page-tab-active' : ''}`}
-                onClick={() => {
-                  setPageTab(t.key);
-                  setSelectedChar(null);
-                  setCharDetail(null);
-                  setCharFilter('all');
-                }}
-              >
+              <button key={t.route} className="ws4-page-tab" onClick={() => navigate(t.route)}>
                 <span className="ws4-page-tab-icon">{t.icon}</span>
                 {t.label}
               </button>
             ))}
           </nav>
 
-          {/* Action buttons — Characters tab only */}
-          {pageTab === 'characters' && (
-            <div className="ws4-header-actions">
+          <div className="ws4-header-actions">
               {/* World switcher — now lives here, inside Characters tab */}
               <div className="ws4-world-switcher">
                 {WORLD_OPTIONS.map(w => (
@@ -838,136 +809,10 @@ export default function WorldStudio() {
                 </button>
               )}
             </div>
-          )}
         </div>
       </div>
 
-      {/* ── SCENES TAB (Intimate Scene Studio) ─────────────────────── */}
-      {pageTab === 'scenes' && (
-        <div className="ws4-scenes-tab">
-          <div className="ws4-scenes-header">
-            <h2 className="ws4-section-title">Intimate Scene Studio</h2>
-            <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={loadTensionPairs}>Scan Tension</button>
-          </div>
-
-          {/* Tension pairs */}
-          {tensionPairs.length > 0 && (
-            <div className="ws4-tension-grid">
-              <SectionLabel color="pink">Tension Triggers</SectionLabel>
-              {tensionPairs.map((p, i) => (
-                <div key={i} className="ws4-tension-card">
-                  <div className="ws4-tension-names">{p.character_a_name} ↔ {p.character_b_name}</div>
-                  <div className="ws4-tension-badges">
-                    <Badge variant="intimate">{p.tension_state}</Badge>
-                    <Badge variant="default">{p.relationship_type}</Badge>
-                  </div>
-                  {p.situation && <div className="ws4-tension-situation">{p.situation}</div>}
-                  <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => {
-                    setSceneGen(g => ({ ...g, charB: p.character_b_id }));
-                    generateScene(p.character_a_id);
-                  }}>Generate Scene</button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Scene reader */}
-          {activeScene && (
-            <div className="ws4-scene-reader">
-              <div className="ws4-scene-reader-header">
-                <h3>{activeScene.character_a_name} {activeScene.character_b_name ? `& ${activeScene.character_b_name}` : ''}</h3>
-                <div className="ws4-scene-meta">
-                  <Badge variant="default">{activeScene.scene_type?.replace(/_/g, ' ')}</Badge>
-                  <Badge variant="intimate">{activeScene.intensity}</Badge>
-                  <Badge variant={activeScene.status === 'approved' ? 'primary' : 'draft'}>{activeScene.status}</Badge>
-                </div>
-              </div>
-
-              {activeScene.approach_text && (
-                <div className="ws4-scene-beat">
-                  <div className="ws4-scene-beat-label">The Approach</div>
-                  <div className="ws4-scene-beat-text">{activeScene.approach_text}</div>
-                </div>
-              )}
-              {activeScene.scene_text && (
-                <div className="ws4-scene-beat ws4-scene-beat-main">
-                  <div className="ws4-scene-beat-label">The Scene</div>
-                  <div className="ws4-scene-beat-text">{activeScene.scene_text}</div>
-                </div>
-              )}
-              {activeScene.aftermath_text && (
-                <div className="ws4-scene-beat">
-                  <div className="ws4-scene-beat-label">The Aftermath</div>
-                  <div className="ws4-scene-beat-text">{activeScene.aftermath_text}</div>
-                </div>
-              )}
-
-              {activeScene.relationship_shift && (
-                <div className="ws4-scene-shift">
-                  <strong>What shifted:</strong> {activeScene.relationship_shift}
-                </div>
-              )}
-
-              <div className="ws4-scene-actions">
-                {activeScene.status === 'draft' && (
-                  <>
-                    <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => approveScene(activeScene.id)}>
-                      Approve & Write to StoryTeller
-                    </button>
-                    <button className="ws4-btn ws4-btn-danger ws4-btn-sm" onClick={() => deleteScene(activeScene.id)}>Delete</button>
-                  </>
-                )}
-                {activeScene.status === 'approved' && (
-                  <span className="ws4-scene-approved-note">Written to StoryTeller</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Quick generate */}
-          <div className="ws4-scene-generate-box">
-            <SectionLabel>Generate New Scene</SectionLabel>
-            <div className="ws4-scene-gen-form">
-              <select className="ws4-select" value={sceneGen.charB} onChange={e => setSceneGen(p => ({ ...p, charB: e.target.value }))}>
-                <option value="">Select Character B…</option>
-                {characters.filter(c => c.status === 'active' && c.intimate_eligible).map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <select className="ws4-select" value={sceneGen.sceneType} onChange={e => setSceneGen(p => ({ ...p, sceneType: e.target.value }))}>
-                {['hook_up','first_encounter','charged_moment','recurring','one_night_stand'].map(t => (
-                  <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
-                ))}
-              </select>
-              <input className="ws4-input" placeholder="Location (optional)" value={sceneGen.location} onChange={e => setSceneGen(p => ({ ...p, location: e.target.value }))} />
-              <button className="ws4-btn ws4-btn-primary" onClick={() => {
-                const charA = characters.find(c => c.status === 'active' && c.intimate_eligible && c.id !== sceneGen.charB);
-                if (charA) generateScene(charA.id);
-                else flash('No eligible character A found', 'error');
-              }} disabled={sceneGen.loading}>
-                {sceneGen.loading ? '⏳ Generating…' : '🔥 Generate Scene'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── FEED TAB ────────────────────────────────────────────────── */}
-      {pageTab === 'feed' && (
-        <div className="ws4-feed-tab">
-          <SocialProfileGenerator embedded={true} />
-        </div>
-      )}
-
-      {/* ── RELATIONSHIPS TAB ───────────────────────────────────────── */}
-      {pageTab === 'relationships' && (
-        <div className="ws4-relationships-tab">
-          <RelationshipEngine embedded={true} defaultWorldTag={worldTag} />
-        </div>
-      )}
-
-      {/* ── CHARACTERS TAB ──────────────────────────────────────────── */}
-      {pageTab === 'characters' && (
+      {/* ── Characters content (Scenes/Feed/Relationships are now separate pages) ── */}
       <>
 
       {/* ── STATS BAR ───────────────────────────────────────────────── */}
@@ -1897,7 +1742,6 @@ export default function WorldStudio() {
       )}
 
       </>
-      ) /* end characters tab */}
 
       {/* Toast */}
       {toast && (

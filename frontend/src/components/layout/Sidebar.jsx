@@ -24,6 +24,8 @@ const NAV = [
       },
       { icon: '✦',  label: 'World Studio',         route: '/world-studio',
         children: [
+          { icon: '🔥', label: 'Scene Studio',       route: '/scene-studio' },
+          { icon: '📱', label: 'The Feed',            route: '/feed' },
           { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
           { icon: '🔗', label: 'Relationships',      route: '/relationships' },
           { icon: '📅', label: 'Cultural Calendar',   route: '/cultural-calendar' },
