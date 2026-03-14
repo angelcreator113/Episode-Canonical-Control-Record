@@ -193,25 +193,105 @@ const INTER_CHAR_PAIRINGS = [
   ['coworker',       'antagonist',      'Office Politics',     'Professional', 'volatile',   false],
 ];
 
-// Sexuality compatibility for romantic pairings
+// Gender-aware sexuality compatibility for romantic pairings
+// Characters now carry a `gender` field (male|female|non_binary|agender)
 function areSexuallyCompatible(a, b) {
   const sA = (a.sexuality || '').toLowerCase();
   const sB = (b.sexuality || '').toLowerCase();
+  const gA = (a.gender || '').toLowerCase();
+  const gB = (b.gender || '').toLowerCase();
   // If either has no sexuality defined, allow the pairing (data not yet generated)
   if (!sA || !sB) return true;
-  // Bisexual/pansexual/queer are compatible with anyone
-  const flexA = ['bisexual', 'pansexual', 'queer', 'fluid'].includes(sA);
-  const flexB = ['bisexual', 'pansexual', 'queer', 'fluid'].includes(sB);
-  if (flexA || flexB) return true;
-  // Straight characters: only compatible with opposite orientation markers
-  // Gay/lesbian: only compatible with same orientation markers
-  // Since we don't track gender separately, use orientation labels:
-  // straight + straight = compatible (opposite genders assumed)
+  // Bisexual/pansexual/queer/fluid are compatible with anyone
+  const flex = ['bisexual', 'pansexual', 'queer', 'fluid'];
+  if (flex.includes(sA) || flex.includes(sB)) return true;
+  // Non-binary/agender: compatible with anyone who isn't strictly straight
+  if (['non_binary', 'agender'].includes(gA) || ['non_binary', 'agender'].includes(gB)) {
+    return sA !== 'straight' || sB !== 'straight';
+  }
+  // With explicit gender: check actual compatibility
+  if (gA && gB) {
+    const sameGender = gA === gB;
+    if (sA === 'straight' && sB === 'straight') return !sameGender;
+    if (sA === 'gay' && sB === 'gay') return sameGender;
+    if (sA === 'lesbian' && sB === 'lesbian') return sameGender;
+    return false;
+  }
+  // Fallback (no gender data): use old heuristic
   if (sA === 'straight' && sB === 'straight') return true;
-  // gay + gay or lesbian + lesbian = compatible
   if (sA === sB && ['gay', 'lesbian'].includes(sA)) return true;
-  // All other combos (straight + gay, etc.) = not compatible
   return false;
+}
+
+// In-memory rate limiter for ecosystem preview (max 3 per minute per IP)
+const previewRateLimit = new Map();
+function checkPreviewRateLimit(ip) {
+  const now = Date.now();
+  const window = 60_000; // 1 minute
+  const maxRequests = 3;
+  const key = ip || 'unknown';
+  const timestamps = (previewRateLimit.get(key) || []).filter(t => now - t < window);
+  if (timestamps.length >= maxRequests) return false;
+  timestamps.push(now);
+  previewRateLimit.set(key, timestamps);
+  // Cleanup old entries every 100 calls
+  if (previewRateLimit.size > 100) {
+    for (const [k, v] of previewRateLimit) {
+      if (v.every(t => now - t > window)) previewRateLimit.delete(k);
+    }
+  }
+  return true;
+}
+
+// Server-side preview cache (keyed by preview_id, expires after 10 min)
+const previewCache = new Map();
+function storePreview(previewId, data) {
+  previewCache.set(previewId, { data, expires: Date.now() + 10 * 60_000 });
+  // Cleanup expired entries
+  for (const [k, v] of previewCache) {
+    if (Date.now() > v.expires) previewCache.delete(k);
+  }
+  // Also persist to DB so it survives page navigation & server restarts
+  persistPreviewToDB(previewId, data).catch(err => console.error('preview persist error:', err.message));
+}
+function getPreview(previewId) {
+  const entry = previewCache.get(previewId);
+  if (!entry) return null;
+  if (Date.now() > entry.expires) { previewCache.delete(previewId); return null; }
+  return entry.data;
+}
+
+// Persistent preview storage in DB
+async function ensurePreviewsTable() {
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS ecosystem_previews (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      preview_id VARCHAR(255) UNIQUE NOT NULL,
+      world_tag VARCHAR(100) NOT NULL DEFAULT 'lalaverse',
+      characters JSONB NOT NULL DEFAULT '[]',
+      generation_notes TEXT DEFAULT '',
+      status VARCHAR(50) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `).catch(() => {});
+}
+let previewsTableReady = false;
+async function persistPreviewToDB(previewId, data) {
+  if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
+  await sequelize.query(`
+    INSERT INTO ecosystem_previews (preview_id, world_tag, characters, generation_notes, status)
+    VALUES (:previewId, :worldTag, :characters, :notes, 'pending')
+    ON CONFLICT (preview_id) DO UPDATE SET characters = :characters, generation_notes = :notes, updated_at = NOW()
+  `, {
+    replacements: {
+      previewId,
+      worldTag: data.world_tag || 'lalaverse',
+      characters: JSON.stringify(data.characters || []),
+      notes: data.generation_notes || '',
+    },
+    type: sequelize.QueryTypes.INSERT,
+  });
 }
 
 /**
@@ -332,7 +412,7 @@ For intimate_eligible characters: write intimate_style, intimate_dynamic, and wh
  * Create a registry_characters entry from a world_character,
  * then cross-link both records.
  */
-async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalaverse') {
+async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalaverse', protagonistName = null) {
   const rcId = uuidv4();
   const charKey = (c.name || 'char').toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 80) + '_' + worldCharId.substring(0, 8);
   const roleType = ROLE_MAP[c.character_type] || 'special';
@@ -430,8 +510,8 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
     { replacements: { rcId, wcId: worldCharId }, type: sequelize.QueryTypes.UPDATE }
   );
 
-  // Auto-seed a relationship candidate linking this character to Lala
-  await syncRelationships(rcId, c, registryId);
+  // Auto-seed a relationship candidate linking this character to the protagonist
+  await syncRelationships(rcId, c, registryId, protagonistName);
 
   return rcId;
 }
@@ -441,30 +521,39 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
  * row linking the new character to Lala (the protagonist) as an unconfirmed candidate.
  * This feeds the Relationship Engine → Candidates tab.
  */
-async function syncRelationships(rcId, c, registryId) {
+async function syncRelationships(rcId, c, registryId, protagonistName = null) {
   try {
-    // Find Lala (the protagonist) in the same registry
-    // Check role_type first, then fall back to display_name
-    let [lala] = await sequelize.query(
+    // Find the protagonist in the same registry
+    // Check role_type first, then fall back to display_name (supports Lala, JustAWoman, etc.)
+    let [protag] = await sequelize.query(
       `SELECT id FROM registry_characters
        WHERE registry_id = :registry_id AND role_type = 'protagonist' AND deleted_at IS NULL
        LIMIT 1`,
       { replacements: { registry_id: registryId }, type: sequelize.QueryTypes.SELECT }
     );
-    if (!lala) {
-      [lala] = await sequelize.query(
+    if (!protag && protagonistName) {
+      [protag] = await sequelize.query(
+        `SELECT id FROM registry_characters
+         WHERE registry_id = :registry_id AND LOWER(display_name) = LOWER(:name) AND deleted_at IS NULL
+         LIMIT 1`,
+        { replacements: { registry_id: registryId, name: protagonistName }, type: sequelize.QueryTypes.SELECT }
+      );
+    }
+    if (!protag) {
+      // Final fallback: try 'lala' for backwards compatibility
+      [protag] = await sequelize.query(
         `SELECT id FROM registry_characters
          WHERE registry_id = :registry_id AND LOWER(display_name) = 'lala' AND deleted_at IS NULL
          LIMIT 1`,
         { replacements: { registry_id: registryId }, type: sequelize.QueryTypes.SELECT }
       );
     }
-    if (!lala) {
+    if (!protag) {
       console.warn('syncRelationships: No protagonist found in registry', registryId);
       return null;
     }
     // Don't create a self-relationship
-    if (lala.id === rcId) return null;
+    if (protag.id === rcId) return null;
 
     // Check for existing relationship between these two
     const [existing] = await sequelize.query(
@@ -472,7 +561,7 @@ async function syncRelationships(rcId, c, registryId) {
        WHERE (character_id_a = :a AND character_id_b = :b)
           OR (character_id_a = :b AND character_id_b = :a)
        LIMIT 1`,
-      { replacements: { a: lala.id, b: rcId }, type: sequelize.QueryTypes.SELECT }
+      { replacements: { a: protag.id, b: rcId }, type: sequelize.QueryTypes.SELECT }
     );
     if (existing) return existing.id;
 
@@ -485,13 +574,13 @@ async function syncRelationships(rcId, c, registryId) {
           confirmed, created_at, updated_at)
        VALUES
          (:id, :char_a, :char_b, :rel_type,
-          :conn_mode, 'knows_lala', 'Active', :situation,
+          :conn_mode, 'knows_protagonist', 'Active', :situation,
           :tension_state, :pain_cat, :notes,
           false, NOW(), NOW())`,
       {
         replacements: {
           id: relId,
-          char_a: lala.id,
+          char_a: protag.id,
           char_b: rcId,
           rel_type: REL_TYPE_MAP[c.character_type] || 'Connection',
           conn_mode: CONNECTION_MODE_MAP[c.character_type] || 'IRL',
@@ -503,7 +592,7 @@ async function syncRelationships(rcId, c, registryId) {
         type: sequelize.QueryTypes.INSERT,
       }
     );
-    console.log(`syncRelationships: Created candidate relationship ${relId} (Lala ↔ ${c.name})`);
+    console.log(`syncRelationships: Created candidate relationship ${relId} (protagonist ↔ ${c.name})`);
     return relId;
   } catch (err) {
     console.error('syncRelationships error (non-fatal):', err.message);
@@ -520,7 +609,7 @@ async function syncRelationships(rcId, c, registryId) {
  * @param {string} registryId - the registry these characters belong to
  * @returns {number} count of relationships created
  */
-async function seedInterCharacterRelationships(characters, registryId) {
+async function seedInterCharacterRelationships(characters, registryId, maxPairs = 5) {
   let created = 0;
   const pairs = [];
 
@@ -546,13 +635,12 @@ async function seedInterCharacterRelationships(characters, registryId) {
     }
   }
 
-  // Limit to avoid flooding: max 5 inter-char relationships per batch
-  // Prioritize volatile/simmering tension over calm
+  // Prioritize volatile/simmering tension over calm, cap scaled by character count
   pairs.sort((x, y) => {
     const tensionRank = { volatile: 0, simmering: 1, calm: 2 };
     return (tensionRank[x.rule[4]] ?? 2) - (tensionRank[y.rule[4]] ?? 2);
   });
-  const selected = pairs.slice(0, 5);
+  const selected = pairs.slice(0, maxPairs);
 
   for (const { a, b, rule } of selected) {
     const [, , relType, connMode, tension] = rule;
@@ -791,13 +879,14 @@ Return JSON only:
       );
 
       // Sync to canonical registry
-      const rcId = await syncToRegistry(req, charId, c, registryId, world_tag);
+      const rcId = await syncToRegistry(req, charId, c, registryId, world_tag, wCfg.protagonist);
       inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
     // Seed inter-character relationships (not just Lala-centric)
-    const interCount = await seedInterCharacterRelationships(inserted, registryId);
-    console.log(`generate-ecosystem: Seeded ${interCount} inter-character relationship(s)`);
+    const relCap = Math.max(5, Math.min(15, Math.floor(inserted.length * (inserted.length - 1) / 6)));
+    const interCount = await seedInterCharacterRelationships(inserted, registryId, relCap);
+    console.log(`generate-ecosystem: Seeded ${interCount} inter-character relationship(s) (cap: ${relCap})`);
 
     res.status(201).json({ characters: inserted, batch_id: batchId, count: inserted.length, inter_relationships: interCount, generation_notes: parsed.generation_notes });
   } catch (err) {
@@ -897,6 +986,71 @@ router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
     ).catch(() => {});
     res.json({ archived: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /world/characters/:id/deepen — AI fills in missing fields
+router.post('/world/characters/:id/deepen', optionalAuth, async (req, res) => {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+    }
+    const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
+    if (!char) return res.status(404).json({ error: 'Character not found' });
+
+    const wCfg = WORLD_CONFIGS[char.world_tag] || WORLD_CONFIGS['lalaverse'];
+
+    // Identify empty fields to fill
+    const fillable = ['origin_story','public_persona','private_reality','moral_code','fidelity_pattern',
+      'attracted_to','how_they_love','desire_they_wont_admit','intimate_style','intimate_dynamic','what_lala_feels',
+      'aesthetic','arc_role','exit_reason','how_they_meet','dynamic'];
+    const missing = fillable.filter(f => !char[f]);
+    if (missing.length === 0) return res.json({ character: char, deepened: false, message: 'All fields already filled' });
+
+    const result = await claude(
+      wCfg.system_prompt,
+      `Deepen this existing character by filling in missing fields. Only generate the MISSING fields listed below.
+
+CHARACTER: ${char.name}
+Type: ${char.character_type}
+Occupation: ${char.occupation || 'unknown'}
+Age: ${char.age_range || 'unknown'}
+Sexuality: ${char.sexuality || 'unknown'}
+Existing aesthetic: ${char.aesthetic || 'none'}
+Existing dynamic: ${char.dynamic || 'none'}
+Intimate eligible: ${char.intimate_eligible}
+
+MISSING FIELDS TO FILL:
+${missing.map(f => `- ${f}`).join('\n')}
+
+Return JSON only — an object with ONLY the missing field keys and their values. Be specific, vivid, and true to this character's type.`,
+      4000
+    );
+
+    const parsed = parseJSON(result);
+    if (!parsed) return res.status(500).json({ error: 'Deepen failed — Claude returned unparseable response' });
+
+    // Update only the fields that were missing
+    const updates = [];
+    const replacements = { id: req.params.id };
+    for (const field of missing) {
+      if (parsed[field]) {
+        updates.push(`${field} = :${field}`);
+        replacements[field] = parsed[field];
+      }
+    }
+    if (updates.length > 0) {
+      await sequelize.query(
+        `UPDATE world_characters SET ${updates.join(', ')}, updated_at = NOW() WHERE id = :id`,
+        { replacements, type: sequelize.QueryTypes.UPDATE }
+      );
+    }
+
+    const [updated] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
+    res.json({ character: updated, deepened: true, fields_filled: updates.length });
+  } catch (err) {
+    console.error('deepen error:', err.message);
+    res.status(err.aiStatus || 500).json({ error: err.message });
+  }
 });
 
 // DELETE /world/characters/:id
@@ -1095,19 +1249,27 @@ ${charA.aesthetic ? `Aesthetic: ${charA.aesthetic}` : ''}
 ${charA.intimate_style ? `In intimate moments: ${charA.intimate_style}` : ''}
 ${charA.what_lala_feels ? `What she feels with this person: ${charA.what_lala_feels}` : ''}
 ${charA.dynamic ? `Their dynamic: ${charA.dynamic}` : ''}
+${charA.fidelity_pattern ? `Fidelity pattern: ${charA.fidelity_pattern}` : ''}
+${charA.relationship_status ? `Relationship status: ${charA.relationship_status}${charA.committed_to ? ` (committed to ${charA.committed_to})` : ''}` : ''}
+${charA.moral_code ? `Moral code: ${charA.moral_code}` : ''}
 
 ${charB ? `OTHER CHARACTER: ${charB.name}
 ${charB.aesthetic ? `Aesthetic: ${charB.aesthetic}` : ''}
 ${charB.intimate_style ? `In intimate moments: ${charB.intimate_style}` : ''}
 ${charB.intimate_dynamic ? `Their dynamic: ${charB.intimate_dynamic}` : ''}
 ${charB.surface_want ? `What they want: ${charB.surface_want}` : ''}
-${charB.real_want ? `What they'd never admit: ${charB.real_want}` : ''}` : 'OTHER CHARACTER: Unknown — this is a first encounter'}
+${charB.real_want ? `What they'd never admit: ${charB.real_want}` : ''}
+${charB.fidelity_pattern ? `Fidelity pattern: ${charB.fidelity_pattern}` : ''}
+${charB.relationship_status ? `Relationship status: ${charB.relationship_status}${charB.committed_to ? ` (committed to ${charB.committed_to})` : ''}` : ''}
+${charB.moral_code ? `Moral code: ${charB.moral_code}` : ''}` : 'OTHER CHARACTER: Unknown — this is a first encounter'}
 
 SCENE TYPE: ${scene_type}
 LOCATION: ${location || 'a private space in LalaVerse'}
 CONTEXT: ${sceneContext || 'After a charged evening. The tension has been building.'}
 TENSION THAT TRIGGERED THIS: ${trigger_tension || 'Unresolved'}
 CAREER STAGE: ${career_stage}
+
+FIDELITY DYNAMICS: ${[charA, charB].filter(Boolean).some(c => c.fidelity_pattern && c.fidelity_pattern !== 'faithful_untested') ? 'One or both characters carry fidelity complexity. This should inform the emotional weight of the scene — guilt, recklessness, the awareness of crossing a line, or the deliberate choice not to.' : 'No active fidelity tension in this pairing.'}
 
 ${sceneHistory.length > 0 ? `SCENE HISTORY: They have been here before — ${sceneHistory.map(s => s.scene_type).join(', ')}. This shapes the tone.` : 'SCENE HISTORY: This is a first encounter between them.'}
 
@@ -1457,12 +1619,79 @@ router.post('/world/continuations/:contId/approve', optionalAuth, async (req, re
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * GET /world/preview/:previewId
+ * Restore a server-side preview — checks in-memory cache first, then DB.
+ */
+router.get('/world/preview/:previewId', optionalAuth, async (req, res) => {
+  // Try in-memory cache first (fast path)
+  const cached = getPreview(req.params.previewId);
+  if (cached) return res.json({ preview_id: req.params.previewId, ...cached });
+
+  // Fall back to DB
+  try {
+    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
+    const [row] = await Q(req,
+      `SELECT * FROM ecosystem_previews WHERE preview_id = :pid AND status = 'pending'`,
+      { replacements: { pid: req.params.previewId } }
+    );
+    if (!row) return res.status(404).json({ error: 'Preview not found' });
+    const characters = typeof row.characters === 'string' ? JSON.parse(row.characters) : row.characters;
+    res.json({ preview_id: row.preview_id, characters, generation_notes: row.generation_notes, world_tag: row.world_tag });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /world/previews
+ * List all saved (pending) ecosystem previews — survives page navigation.
+ */
+router.get('/world/previews', optionalAuth, async (req, res) => {
+  try {
+    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
+    const rows = await Q(req,
+      `SELECT preview_id, world_tag, generation_notes, status, created_at,
+              jsonb_array_length(characters) AS character_count
+       FROM ecosystem_previews
+       ORDER BY created_at DESC
+       LIMIT 20`
+    );
+    res.json({ previews: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/**
+ * DELETE /world/previews/:previewId
+ * Discard a saved preview.
+ */
+router.delete('/world/previews/:previewId', optionalAuth, async (req, res) => {
+  try {
+    if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
+    await sequelize.query(
+      `DELETE FROM ecosystem_previews WHERE preview_id = :pid`,
+      { replacements: { pid: req.params.previewId }, type: sequelize.QueryTypes.DELETE }
+    );
+    previewCache.delete(req.params.previewId);
+    res.json({ deleted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/**
  * POST /world/generate-ecosystem-preview
  * Same Claude prompt as generate-ecosystem BUT does NOT commit to DB.
  * Returns preview characters so the user can select/deselect before confirming.
  */
 router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) => {
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+    }
+
+    // Rate limit: max 3 previews per minute per IP
+    if (!checkPreviewRateLimit(req.ip)) {
+      return res.status(429).json({ error: 'Too many preview requests — max 3 per minute. Wait and try again.' });
+    }
+
     const {
       world_tag = 'lalaverse',
       world_context = {},
@@ -1480,11 +1709,14 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
       protagonist  = wCfg.protagonist,
     } = world_context;
 
-    // Fetch existing to avoid duplication
+    // Fetch ALL active characters to avoid duplication (not just last 20)
     const existing = await Q(req, `
       SELECT name, character_type, occupation FROM world_characters
-      WHERE status != 'archived' ORDER BY created_at DESC LIMIT 20
+      WHERE status != 'archived' ORDER BY created_at DESC
     `);
+
+    // Adaptive token limit: ~1200 tokens per character (31 fields + JSON overhead)
+    const tokenLimit = Math.max(6000, Math.min(16000, character_count * 1200 + 2000));
 
     const result = await claude(
       wCfg.system_prompt,
@@ -1496,21 +1728,24 @@ WORLD: ${city}, ${industry} industry
 CAREER STAGE: ${career_stage}
 ERA: ${era}
 
-${existing.length > 0 ? `EXISTING CHARACTERS (don't duplicate):\n${existing.map(e => `- ${e.name} (${e.character_type})`).join('\n')}` : ''}
+${existing.length > 0 ? `EXISTING CHARACTERS (don't duplicate these names or archetypes):\n${existing.map(e => `- ${e.name} (${e.character_type})`).join('\n')}` : ''}
 
 Include a MIX of character types. At minimum: 2 love_interest or one_night_stand, 1 industry_peer, 1 mentor or collaborator, 1 antagonist or rival.
 Also include at least 1 of: spouse, partner, temptation, or ex — to create fidelity/moral tension.
 At least one character should be committed (married or partnered) and at least one should test that commitment.
+At least 2-3 characters should be intimate_eligible.
+Every character name MUST be unique — no duplicates within this batch.
 
 Return JSON only:
 {
   "characters": [
     {
-      "name": "full name",
+      "name": "full name — must be unique, no duplicates",
+      "gender": "male|female|non_binary|agender — explicit gender for relationship compatibility",
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
       "world_location": "where they exist in ${wCfg.title}",
-      "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant",
+      "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant|friend|coworker",
       "relationship_status": "single|dating|engaged|married|divorced|separated|its_complicated — their actual status, not what they tell people",
       "committed_to": "name of the person they're committed to (another character or offscreen person), or null if single",
       "moral_code": "1-2 sentences about their personal ethics — what lines they won't cross, or what lines they pretend they won't cross",
@@ -1521,13 +1756,13 @@ Return JSON only:
       "signature": "the one thing about them that is unforgettable",
       "surface_want": "what they'd tell you they want",
       "real_want": "what they'd never admit",
-      "what_they_want_from_lala": "what they're actually seeking from ${protagonist} specifically",
+      "what_they_want_from_protagonist": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
       "dynamic": "the texture of their connection with ${protagonist}",
       "tension_type": "romantic|professional|creative|power|unspoken|moral|fidelity|temptation|betrayal|guilt",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
-      "what_lala_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
+      "what_protagonist_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
       "arc_role": "how this character changes ${protagonist}'s trajectory",
       "exit_reason": "how or why they leave her world, or null if they stay",
       "career_echo_connection": true|false,
@@ -1542,7 +1777,7 @@ Return JSON only:
   ],
   "generation_notes": "brief note on ecosystem logic — who connects to who, what tensions exist, which characters test each other's loyalty/fidelity, who argues, who stays, who leaves"
 }`,
-      10000
+      tokenLimit
     );
 
     const parsed = parseJSON(result);
@@ -1550,8 +1785,42 @@ Return JSON only:
       return res.status(500).json({ error: 'Preview generation failed — Claude returned no characters' });
     }
 
-    // Return characters WITHOUT committing to DB
+    // Post-processing: deduplicate names within batch and against existing
+    const existingNames = new Set(existing.map(e => e.name.toLowerCase()));
+    const seenNames = new Set();
+    parsed.characters = parsed.characters.filter(c => {
+      const lower = (c.name || '').toLowerCase();
+      if (!lower || seenNames.has(lower) || existingNames.has(lower)) return false;
+      seenNames.add(lower);
+      return true;
+    });
+
+    // Normalize field names: map protagonist-specific fields to DB column names
+    for (const c of parsed.characters) {
+      if (c.what_they_want_from_protagonist) {
+        c.what_they_want_from_lala = c.what_they_want_from_protagonist;
+        delete c.what_they_want_from_protagonist;
+      }
+      if (c.what_protagonist_feels) {
+        c.what_lala_feels = c.what_protagonist_feels;
+        delete c.what_protagonist_feels;
+      }
+    }
+
+    if (!parsed.characters.length) {
+      return res.status(500).json({ error: 'All generated characters were duplicates of existing ones — try again' });
+    }
+
+    // Persist preview server-side so it survives browser refresh
+    const previewId = uuidv4();
+    storePreview(previewId, {
+      characters: parsed.characters,
+      generation_notes: parsed.generation_notes || '',
+      world_tag,
+    });
+
     res.json({
+      preview_id: previewId,
       characters: parsed.characters,
       generation_notes: parsed.generation_notes || '',
       count: parsed.characters.length,
@@ -1568,19 +1837,48 @@ Return JSON only:
  * Takes the user-selected characters from the preview and commits them to DB + registry.
  */
 router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) => {
+  const t = await sequelize.transaction();
   try {
-    const {
+    let {
       characters = [],
       generation_notes = '',
       show_id,
       world_tag = 'lalaverse',
+      preview_id,
     } = req.body;
+
+    // If preview_id provided, restore from server-side cache (survives browser refresh)
+    if (preview_id && !characters.length) {
+      const cached = getPreview(preview_id);
+      if (cached) {
+        characters = cached.data?.characters || cached.characters || [];
+        generation_notes = generation_notes || cached.data?.generation_notes || cached.generation_notes || '';
+        world_tag = cached.data?.world_tag || cached.world_tag || world_tag;
+      }
+    }
 
     const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
     const series_label = req.body.series_label || wCfg.series_label;
 
     if (!characters.length) {
+      await t.rollback();
       return res.status(400).json({ error: 'No characters to confirm' });
+    }
+
+    // Validate required columns exist (migration may not have run)
+    const cols = await sequelize.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'world_characters'`,
+      { type: sequelize.QueryTypes.SELECT, transaction: t }
+    );
+    const colNames = new Set(cols.map(c => c.column_name));
+    const required = ['relationship_status', 'committed_to', 'moral_code', 'fidelity_pattern', 'sexuality', 'family_layer', 'origin_story', 'public_persona', 'private_reality'];
+    const missing = required.filter(c => !colNames.has(c));
+    if (missing.length) {
+      await t.rollback();
+      console.error(`generate-ecosystem-confirm: missing columns: ${missing.join(', ')}. Run: npx sequelize-cli db:migrate`);
+      return res.status(500).json({
+        error: `Database schema outdated — missing columns: ${missing.join(', ')}. Run migrations on the server.`,
+      });
     }
 
     // Create batch record
@@ -1598,17 +1896,18 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
           notes: generation_notes,
         },
         type: sequelize.QueryTypes.INSERT,
+        transaction: t,
       }
     );
 
-    // Insert each character + sync to registry
+    // Insert each character + sync to registry (all within transaction)
     const registryId = await findOrCreateRegistryForWorld(req, world_tag);
     const inserted = [];
     for (const c of characters) {
       const charId = uuidv4();
       await sequelize.query(
         `INSERT INTO world_characters
-           (id, batch_id, name, age_range, occupation, world_location, character_type,
+           (id, batch_id, name, gender, age_range, occupation, world_location, character_type,
             sexuality, intimate_eligible, aesthetic, signature,
             surface_want, real_want, what_they_want_from_lala,
             how_they_meet, dynamic, tension_type,
@@ -1620,7 +1919,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             relationship_status, committed_to, moral_code, fidelity_pattern,
             world_tag, status, current_tension, created_at, updated_at)
          VALUES
-           (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
+           (:id, :batch_id, :name, :gender, :age_range, :occupation, :world_location, :char_type,
             :sexuality, :intimate_eligible, :aesthetic, :signature,
             :surface_want, :real_want, :what_from_lala,
             :how_meet, :dynamic, :tension_type,
@@ -1634,7 +1933,8 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
         {
           replacements: {
             id: charId, batch_id: batchId,
-            name: c.name, age_range: c.age_range || null, occupation: c.occupation || null,
+            name: c.name, gender: c.gender || null,
+            age_range: c.age_range || null, occupation: c.occupation || null,
             world_location: c.world_location || null, char_type: c.character_type,
             sexuality: c.sexuality || null,
             intimate_eligible: c.intimate_eligible || false,
@@ -1662,17 +1962,31 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             world_tag: world_tag,
           },
           type: sequelize.QueryTypes.INSERT,
+          transaction: t,
         }
       );
 
-      // Sync to canonical registry
-      const rcId = await syncToRegistry(req, charId, c, registryId, world_tag);
+      // Sync to canonical registry (pass protagonist name for correct lookup)
+      const rcId = await syncToRegistry(req, charId, c, registryId, world_tag, wCfg.protagonist);
       inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
-    // Seed inter-character relationships (not just Lala-centric)
-    const interCount = await seedInterCharacterRelationships(inserted, registryId);
-    console.log(`generate-ecosystem-confirm: Seeded ${interCount} inter-character relationship(s)`);
+    await t.commit();
+
+    // Seed inter-character relationships outside transaction (non-fatal)
+    // Scale cap by character count: ~n*(n-1)/6, min 5, max 15
+    const relCap = Math.max(5, Math.min(15, Math.floor(inserted.length * (inserted.length - 1) / 6)));
+    const interCount = await seedInterCharacterRelationships(inserted, registryId, relCap);
+    console.log(`generate-ecosystem-confirm: Seeded ${interCount} inter-character relationship(s) (cap: ${relCap})`);
+
+    // Clear preview cache entry and mark DB preview as confirmed
+    if (preview_id) {
+      previewCache.delete(preview_id);
+      sequelize.query(
+        `UPDATE ecosystem_previews SET status = 'confirmed', updated_at = NOW() WHERE preview_id = :pid`,
+        { replacements: { pid: preview_id }, type: sequelize.QueryTypes.UPDATE }
+      ).catch(() => {});
+    }
 
     res.status(201).json({
       characters: inserted,
@@ -1682,8 +1996,14 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       generation_notes,
     });
   } catch (err) {
+    await t.rollback();
     console.error('generate-ecosystem-confirm error:', err);
-    res.status(500).json({ error: err.message });
+    const detail = err.original?.message || err.parent?.message || '';
+    res.status(500).json({
+      error: err.message,
+      ...(detail && { detail }),
+      hint: detail.includes('column') ? 'Run migrations: npx sequelize-cli db:migrate' : undefined,
+    });
   }
 });
 

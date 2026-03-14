@@ -16,16 +16,6 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import ProductionTab from './ProductionTab';
-import Wardrobe from './Wardrobe';
-import AssetLibrary from './AssetLibrary';
-import SocialImport from './SocialImport';
-import UniverseTabBar, { SHOW_TABS, STORY_TABS } from './UniverseTabBar';
-import StoryDashboard from '../components/StoryDashboard';
-import FranchiseBrain from '../components/FranchiseBrain';
-import WritingRhythm from '../components/WritingRhythm';
-import WorldStateTensions from '../components/WorldStateTensions';
 import './UniversePage.css';
 
 function useWindowWidth() {
@@ -51,24 +41,6 @@ export default function UniversePage() {
   const width = useWindowWidth();
   const isMobile = width < 640;
   const isTablet = width >= 640 && width < 1024;
-  const [searchParams, setSearchParams] = useSearchParams();
-  const ALL_TABS = [...SHOW_TABS, ...STORY_TABS].map(t => t.key);
-  const initialTab = ALL_TABS.includes(searchParams.get('tab'))
-    ? searchParams.get('tab') : 'universe';
-  const [activeTab, setActiveTab] = useState(initialTab);
-
-  // Sync activeTab when URL search params change (e.g. sidebar clicks)
-  useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    if (ALL_TABS.includes(tabParam) && tabParam !== activeTab) {
-      setActiveTab(tabParam);
-    }
-  }, [searchParams]);
-
-  function switchTab(tab) {
-    setActiveTab(tab);
-    setSearchParams({ tab }, { replace: true });
-  }
   const [universe, setUniverse]   = useState(null);
   const [series, setSeries]       = useState([]);
   const [shows, setShows]         = useState([]);
@@ -81,7 +53,6 @@ export default function UniversePage() {
     setTimeout(() => setToast(null), 2800);
   }
 
-  // ── Load everything ──────────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -94,12 +65,10 @@ export default function UniversePage() {
       setUniverse(uData.universe);
       setSeries(sData.series || []);
 
-      // Load books
       const bRes = await fetch(`${STORYTELLER_API}/books`);
       const bData = await bRes.json();
       setBooks(bData.books || []);
 
-      // Load shows (try, don't fail if endpoint shape differs)
       try {
         const shRes = await fetch(`${SHOWS_API}`);
         const shData = await shRes.json();
@@ -119,14 +88,8 @@ export default function UniversePage() {
   if (loading) return <LoadingState />;
   if (!universe) return <ErrorState onRetry={load} />;
 
-  const px = isMobile ? 16 : isTablet ? 28 : 48;
-  const tabIcons = { universe: '🌌', 'social-import': '📱', series: '📚', production: '🎬', wardrobe: '👗', assets: '📁' };
-  const tabLabels = { universe: 'Universe', 'social-import': 'Social Import', series: 'Series', production: 'Production', wardrobe: 'Wardrobe', assets: 'Assets' };
-
   return (
     <div className="up-shell">
-
-      {/* Compact header bar */}
       <div className="up-hero-compact" style={{ padding: isMobile ? '10px 16px' : '10px 48px' }}>
         <div className="up-hero-compact-left">
           <h1 className="up-hero-compact-title">{universe.name}</h1>
@@ -140,71 +103,18 @@ export default function UniversePage() {
         </div>
       </div>
 
-      {/* Tab bar */}
-      <UniverseTabBar activeTab={activeTab} onChange={switchTab} />
-
-      {/* Tab content */}
       <div className="up-tab-content" style={isMobile ? { padding: '0 16px' } : isTablet ? { padding: '0 28px' } : undefined}>
-        {activeTab === 'universe' && (
-          <UniverseTab
-            universe={universe}
-            series={series}
-            books={books}
-            onSaved={(updated) => { setUniverse(updated); showToast('Universe saved'); }}
-            showToast={showToast}
-            isMobile={isMobile}
-            isTablet={isTablet}
-          />
-        )}
-        {activeTab === 'social-import' && (
-          <SocialImport embedded={true} />
-        )}
-        {activeTab === 'series' && (
-          <SeriesTab
-            series={series}
-            books={books}
-            shows={shows}
-            universeId={LALAVERSE_ID}
-            onChanged={() => { load(); showToast('Series updated'); }}
-            showToast={showToast}
-            isMobile={isMobile}
-            isTablet={isTablet}
-          />
-        )}
-        {activeTab === 'production' && (
-          <ProductionTab
-            shows={shows}
-            universeId={LALAVERSE_ID}
-            onChanged={() => { load(); showToast('Show updated'); }}
-            showToast={showToast}
-            isMobile={isMobile}
-            isTablet={isTablet}
-          />
-        )}
-        {activeTab === 'wardrobe' && (
-          <Wardrobe embedded={true} />
-        )}
-        {activeTab === 'assets' && (
-          <AssetLibrary embedded={true} />
-        )}
-        {activeTab === 'story-dashboard' && (
-          <StoryDashboard />
-        )}
-        {activeTab === 'knowledge' && (
-          <FranchiseBrain />
-        )}
-        {activeTab === 'writing-rhythm' && (
-          <WritingRhythm />
-        )}
-        {activeTab === 'world-state' && (
-          <WorldStateTensions activeSubTab="world-state" />
-        )}
-        {activeTab === 'tensions' && (
-          <WorldStateTensions activeSubTab="tensions" />
-        )}
+        <UniverseTab
+          universe={universe}
+          series={series}
+          books={books}
+          onSaved={(updated) => { setUniverse(updated); showToast('Universe saved'); }}
+          showToast={showToast}
+          isMobile={isMobile}
+          isTablet={isTablet}
+        />
       </div>
 
-      {/* Toast */}
       {toast && (
         <div className={`up-toast ${toast.type === 'error' ? 'up-toast--error' : 'up-toast--success'}`}>
           {toast.msg}
@@ -495,302 +405,6 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-//  TAB 2 — SERIES
-// ══════════════════════════════════════════════════════════════════════════
-
-function SeriesTab({ series, books, shows, universeId, onChanged, showToast, isMobile, isTablet }) {
-  const [creating, setCreating]   = useState(false);
-  const [newName, setNewName]     = useState('');
-  const [newDesc, setNewDesc]     = useState('');
-  const [saving, setSaving]       = useState(false);
-  const [editingEra, setEditingEra] = useState(null); // bookId
-  const [eraValues, setEraValues]   = useState({});
-  const [assigning, setAssigning]   = useState(null); // bookId being assigned
-
-  async function linkShow(seriesId, showId) {
-    try {
-      const res = await fetch(`${UNIVERSE_API}/series/${seriesId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ show_id: showId || null }),
-      });
-      if (!res.ok) throw new Error('Failed to link show');
-      showToast(showId ? 'Show linked to series' : 'Show unlinked');
-      onChanged();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  async function assignToSeries(bookId, seriesId) {
-    try {
-      const res = await fetch(`${STORYTELLER_API}/books/${bookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ series_id: seriesId || null }),
-      });
-      if (!res.ok) throw new Error('Failed to assign');
-      setAssigning(null);
-      showToast('Book assigned to series');
-      onChanged();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  async function createSeries() {
-    if (!newName.trim()) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`${UNIVERSE_API}/series`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          universe_id: universeId,
-          name: newName.trim(),
-          description: newDesc.trim(),
-          order_index: series.length,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setCreating(false);
-      setNewName('');
-      setNewDesc('');
-      onChanged();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function saveEra(bookId) {
-    const val = eraValues[bookId];
-    try {
-      const res = await fetch(`${STORYTELLER_API}/books/${bookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ era_name: val }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      setEditingEra(null);
-      onChanged();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  async function deleteSeries(seriesId) {
-    if (!confirm('Delete this series? Books will be unlinked but not deleted.')) return;
-    try {
-      const res = await fetch(`${UNIVERSE_API}/series/${seriesId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete');
-      onChanged();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
-  // Group books by series
-  const unassigned = books.filter(b => !b.series_id);
-
-  return (
-    <div className="up-tab-shell">
-
-      {/* Create series button */}
-      <div className="up-actions-bar">
-        <button className="up-btn-primary" onClick={() => setCreating(true)}>
-          + New Series
-        </button>
-      </div>
-
-      {/* New series form */}
-      {creating && (
-        <div className="up-create-card">
-          <div className="up-section-label">NEW SERIES</div>
-          <input
-            className="up-input"
-            style={{ marginBottom: 10 }}
-            placeholder='Series name — e.g. Becoming Prime'
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            autoFocus
-          />
-          <textarea
-            className="up-textarea"
-            style={{ minHeight: 80, marginBottom: 10 }}
-            placeholder='Series description — what story arc does this cover?'
-            value={newDesc}
-            onChange={e => setNewDesc(e.target.value)}
-          />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="up-btn-secondary" onClick={() => setCreating(false)}>Cancel</button>
-            <button
-              className="up-btn-primary"
-              style={{ opacity: saving ? 0.6 : 1 }}
-              onClick={createSeries}
-              disabled={saving}
-            >
-              {saving ? 'Creating…' : 'Create Series'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Series list */}
-      {series.map(ser => {
-        const seriesBooks = books.filter(b => b.series_id === ser.id);
-        return (
-          <div key={ser.id} className="up-series-card" style={isMobile ? { padding: '14px' } : undefined}>
-            <div className="up-series-header" style={isMobile ? { flexDirection: 'column', gap: 8 } : undefined}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div className="up-series-name" style={isMobile ? { fontSize: 19 } : undefined}>{ser.name}</div>
-                  {isMobile && (
-                    <button className="up-btn-delete" style={{ padding: '8px 12px', flexShrink: 0 }} onClick={() => deleteSeries(ser.id)} title='Delete series'>✕</button>
-                  )}
-                </div>
-                {ser.description && (
-                  <div className="up-series-desc" style={isMobile ? { maxWidth: '100%' } : undefined}>{ser.description}</div>
-                )}
-                {/* Link to show */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                  <span style={{ fontSize: 12, color: 'rgba(26,26,46,0.45)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Show:</span>
-                  <select
-                    className="up-assign-select"
-                    style={{ maxWidth: isMobile ? 'none' : 220, fontSize: 12, padding: '6px 10px' }}
-                    value={ser.show_id || ''}
-                    onChange={e => linkShow(ser.id, e.target.value || null)}
-                  >
-                    <option value=''>— None —</option>
-                    {(shows || []).map(sh => (
-                      <option key={sh.id} value={sh.id}>{sh.title || sh.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              {!isMobile && (
-                <button className="up-btn-delete" onClick={() => deleteSeries(ser.id)} title='Delete series'>✕</button>
-              )}
-            </div>
-
-            {/* Books in series */}
-            {seriesBooks.length === 0 ? (
-              <div className="up-empty-books">No books in this series yet.</div>
-            ) : (
-              <div className="up-book-list">
-                {seriesBooks.map(book => (
-                  <div key={book.id} className="up-book-row" style={isMobile ? { flexDirection: 'column', alignItems: 'flex-start' } : undefined}>
-                    <div className="up-book-row-left">
-                      <div className="up-book-title" style={isMobile ? { fontSize: 15 } : undefined}>{book.title}</div>
-                      <div className="up-book-meta">
-                        {book.primary_pov && <span className="up-meta-chip">{book.primary_pov.replace('_', ' ')}</span>}
-                        {book.canon_status && (
-                          <span className="up-meta-chip" style={{
-                            color: book.canon_status === 'locked' ? '#a78bfa'
-                              : book.canon_status === 'active' ? '#4ade80' : '#C9A84C',
-                          }}>
-                            {book.canon_status}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="up-book-row-right" style={isMobile ? { justifyContent: 'flex-start', width: '100%', flexWrap: 'wrap' } : undefined}>
-                      {editingEra === book.id ? (
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', width: isMobile ? '100%' : 'auto' }}>
-                          <input
-                            className="up-input"
-                            style={{ padding: '8px 10px', fontSize: 13, flex: 1, width: 'auto' }}
-                            value={eraValues[book.id] ?? book.era_name ?? ''}
-                            onChange={e => setEraValues(prev => ({ ...prev, [book.id]: e.target.value }))}
-                            autoFocus
-                          />
-                          <button className="up-btn-micro" style={isMobile ? { padding: '8px 12px' } : undefined} onClick={() => saveEra(book.id)}>✓</button>
-                          <button className="up-btn-micro" style={isMobile ? { padding: '8px 12px' } : undefined} onClick={() => setEditingEra(null)}>✕</button>
-                        </div>
-                      ) : (
-                        <button
-                          className="up-era-btn"
-                          style={isMobile ? { padding: '8px 12px', fontSize: 12 } : undefined}
-                          onClick={() => {
-                            setEditingEra(book.id);
-                            setEraValues(prev => ({ ...prev, [book.id]: book.era_name || '' }));
-                          }}
-                        >
-                          {book.era_name || '+ Set Era'}
-                        </button>
-                      )}
-
-                      {/* Move to different series */}
-                      <select
-                        className="up-assign-select"
-                        style={isMobile ? { maxWidth: 'none', flex: '1 1 auto', fontSize: 12, padding: '8px 10px' } : undefined}
-                        value={ser.id}
-                        onChange={e => {
-                          const val = e.target.value;
-                          if (val !== ser.id) assignToSeries(book.id, val || null);
-                        }}
-                      >
-                        {series.map(sr => (
-                          <option key={sr.id} value={sr.id}>{sr.name}</option>
-                        ))}
-                        <option value=''>— Unassign —</option>
-                      </select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      {/* Unassigned books */}
-      {unassigned.length > 0 && (
-        <div className="up-series-card" style={{ borderColor: '#eeebe4', ...(isMobile ? { padding: 14 } : {}) }}>
-          <div className="up-series-name">Unassigned Books</div>
-          <div className="up-book-list">
-            {unassigned.map(book => (
-              <div key={book.id} className="up-book-row" style={isMobile ? { flexDirection: 'column', alignItems: 'flex-start' } : undefined}>
-                <div className="up-book-row-left">
-                  <div className="up-book-title" style={isMobile ? { fontSize: 15 } : undefined}>{book.title}</div>
-                  <div className="up-book-meta">
-                    <span className="up-meta-chip" style={{ color: 'rgba(26,26,46,0.3)' }}>no series</span>
-                  </div>
-                </div>
-                <div className="up-book-row-right">
-                  {series.length > 0 ? (
-                    <select
-                      className="up-assign-select"
-                      value=''
-                      onChange={e => {
-                        if (e.target.value) assignToSeries(book.id, e.target.value);
-                      }}
-                    >
-                      <option value=''>Assign to series…</option>
-                      {series.map(sr => (
-                        <option key={sr.id} value={sr.id}>{sr.name}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="up-meta-chip" style={{ color: 'rgba(26,26,46,0.3)' }}>Create a series first</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-//  TAB 3 — PRODUCTION  (imported from ./ProductionTab.jsx)
-// ══════════════════════════════════════════════════════════════════════════
 
 // ══════════════════════════════════════════════════════════════════════════
 //  SHARED COMPONENTS

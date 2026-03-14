@@ -14,8 +14,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import SocialProfileGenerator from './SocialProfileGenerator';
-import RelationshipEngine from './RelationshipEngine';
 import './WorldStudio.css';
 
 const API = '/api/v1';
@@ -51,9 +49,23 @@ const DETAIL_TABS = [
   { key: 'overview',      label: 'Overview' },
   { key: 'desire',        label: 'Desire' },
   { key: 'relationships', label: 'Relationships' },
+  { key: 'scenes',        label: 'Scenes' },
   { key: 'depth',         label: 'Depth' },
   { key: 'demographics',  label: 'Demographics' },
+  { key: 'evolution',     label: 'Evolution' },
 ];
+
+/* ── Fidelity pattern labels ───────────────────────────────────────── */
+const FIDELITY_LABELS = {
+  faithful_tested: { label: 'Faithful (Tested)', color: '#4ade80' },
+  faithful_untested: { label: 'Faithful (Untested)', color: '#86efac' },
+  emotionally_unfaithful: { label: 'Emotionally Unfaithful', color: '#fbbf24' },
+  physically_unfaithful: { label: 'Physically Unfaithful', color: '#f87171' },
+  serial_cheater: { label: 'Serial Cheater', color: '#ef4444' },
+  loyal_until_broken: { label: 'Loyal Until Broken', color: '#60a5fa' },
+  would_never: { label: 'Would Never', color: '#34d399' },
+  already_has: { label: 'Already Has', color: '#fb923c' },
+};
 
 /* ── Depth dimension config ──────────────────────────────────────────── */
 const DEPTH_DIMS = [
@@ -365,8 +377,7 @@ function DemographicsPanel({ charDetail }) {
 export default function WorldStudio() {
   const navigate = useNavigate();
 
-  /* ── Top-level page tab ─────────────────────────────────────────────── */
-  const [pageTab, setPageTab] = useState('characters');
+  /* ── (page tabs removed — Scenes/Feed/Relationships are now separate pages) ──── */
 
   /* ── World ─────────────────────────────────────────────────────────── */
   const [worldTag, setWorldTag] = useState('lalaverse');
@@ -404,6 +415,22 @@ export default function WorldStudio() {
     conflict_summary: '', knows_about_connection: false,
   });
   const [savingRel, setSavingRel] = useState(false);
+
+  /* ── Per-character scenes (detail tab) ──────────────────────────────── */
+  const [charScenes,     setCharScenes]     = useState([]);
+  const [sceneGen,       setSceneGen]       = useState({ loading: false });
+  const [activeScene,    setActiveScene]    = useState(null);
+
+  /* ── Batches & Saved Previews ─────────────────────────────────────── */
+  const [batches,        setBatches]        = useState([]);
+  const [savedPreviews,  setSavedPreviews]  = useState([]);
+
+  /* ── Compare ──────────────────────────────────────────────────────── */
+  const [compareChar,    setCompareChar]    = useState(null);
+  const [compareDetail,  setCompareDetail]  = useState(null);
+
+  /* ── Deepen ───────────────────────────────────────────────────────── */
+  const [deepening,      setDeepening]      = useState(false);
 
   /* ── Toast ─────────────────────────────────────────────────────────── */
   const [toast, setToast] = useState(null);
@@ -443,6 +470,8 @@ export default function WorldStudio() {
   useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
 
   /* ── Ecosystem generate / preview / confirm ────────────────────────── */
+  const [previewId, setPreviewId] = useState(null);
+
   const generatePreview = async () => {
     setGenerating(true);
     try {
@@ -456,6 +485,7 @@ export default function WorldStudio() {
         setPreviewChars(d.characters);
         setPreviewNotes(d.generation_notes || '');
         setPreviewSel(new Set(d.characters.map((_, i) => i)));
+        setPreviewId(d.preview_id || null);
         setShowPreview(true);
         if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
           new Notification('Ecosystem Generated', { body: `${d.characters.length} characters ready for review`, icon: '/favicon.ico' });
@@ -472,12 +502,13 @@ export default function WorldStudio() {
     try {
       const r = await fetch(`${API}/world/generate-ecosystem-confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characters: selected, generation_notes: previewNotes, world_tag: worldTag }),
+        body: JSON.stringify({ characters: selected, generation_notes: previewNotes, world_tag: worldTag, preview_id: previewId }),
       });
       const d = await r.json();
       if (d.characters) {
-        flash(`${d.count} characters committed`);
+        flash(`${d.count} characters committed · ${d.inter_relationships || 0} relationships seeded`);
         setShowPreview(false);
+        setPreviewId(null);
         loadCharacters();
       } else flash(d.error || 'Confirm failed', 'error');
     } catch (e) { flash(e.message, 'error'); }
@@ -560,6 +591,148 @@ export default function WorldStudio() {
     loadCharDetail(selectedChar);
   };
 
+  /* ── Scene loaders & actions ──────────────────────────────────────── */
+  const loadCharScenes = useCallback(async (charId) => {
+    try {
+      const r = await fetch(`${API}/world/scenes?character_id=${charId}`);
+      const d = await r.json();
+      setCharScenes(d.scenes || []);
+    } catch { setCharScenes([]); }
+  }, []);
+
+  const generateScene = async (charAId) => {
+    setSceneGen(p => ({ ...p, loading: true }));
+    try {
+      const r = await fetch(`${API}/world/scenes/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character_a_id: charAId }),
+      });
+      const d = await r.json();
+      if (d.scene) { setActiveScene(d.scene); flash('Scene generated'); loadCharScenes(charAId); }
+      else flash(d.error || 'Scene generation failed', 'error');
+    } catch (e) { flash(e.message, 'error'); }
+    finally { setSceneGen(p => ({ ...p, loading: false })); }
+  };
+
+  const approveScene = async (sceneId) => {
+    try {
+      const r = await fetch(`${API}/world/scenes/${sceneId}/approve`, { method: 'POST' });
+      const d = await r.json();
+      if (d.scene) { flash('Scene approved & written to StoryTeller'); setActiveScene(d.scene); if (selectedChar) loadCharScenes(selectedChar); }
+      else flash(d.error || 'Approve failed', 'error');
+    } catch (e) { flash(e.message, 'error'); }
+  };
+
+  const deleteScene = async (sceneId) => {
+    if (!window.confirm('Delete this scene draft?')) return;
+    await fetch(`${API}/world/scenes/${sceneId}`, { method: 'DELETE' });
+    flash('Scene deleted'); setActiveScene(null);
+    if (selectedChar) loadCharScenes(selectedChar);
+  };
+
+  // Load scenes when switching to scenes detail tab
+  useEffect(() => {
+    if (detailTab === 'scenes' && selectedChar) loadCharScenes(selectedChar);
+  }, [detailTab, selectedChar]);
+
+  /* ── Batch & Saved Preview loaders ────────────────────────────────── */
+  const loadBatches = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/world/batches`);
+      const d = await r.json();
+      setBatches(d.batches || []);
+    } catch { setBatches([]); }
+  }, []);
+
+  const loadSavedPreviews = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/world/previews`);
+      const d = await r.json();
+      setSavedPreviews((d.previews || []).filter(p => p.status === 'pending'));
+    } catch { setSavedPreviews([]); }
+  }, []);
+
+  const restorePreview = async (pid) => {
+    try {
+      const r = await fetch(`${API}/world/preview/${pid}`);
+      const d = await r.json();
+      if (d.characters?.length) {
+        setPreviewChars(d.characters);
+        setPreviewNotes(d.generation_notes || '');
+        setPreviewSel(new Set(d.characters.map((_, i) => i)));
+        setPreviewId(d.preview_id || pid);
+        setShowPreview(true);
+      } else flash('Preview is empty or expired', 'error');
+    } catch { flash('Could not restore preview', 'error'); }
+  };
+
+  const discardPreview = async (pid) => {
+    await fetch(`${API}/world/previews/${pid}`, { method: 'DELETE' });
+    flash('Preview discarded');
+    loadSavedPreviews();
+  };
+
+  useEffect(() => { if (!selectedChar) { loadBatches(); loadSavedPreviews(); } }, [selectedChar]);
+
+  /* ── Compare loader ──────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!compareChar) { setCompareDetail(null); return; }
+    fetch(`${API}/world/characters/${compareChar}`).then(r => r.json()).then(d => setCompareDetail(d.character || null)).catch(() => setCompareDetail(null));
+  }, [compareChar]);
+
+  /* ── AI Deepen ───────────────────────────────────────────────────── */
+  const deepenCharacter = async (charId) => {
+    setDeepening(true);
+    try {
+      const r = await fetch(`${API}/world/characters/${charId}/deepen`, { method: 'POST' });
+      const d = await r.json();
+      if (d.character) { flash('Character deepened with AI'); loadCharDetail(charId); }
+      else flash(d.error || 'Deepening failed', 'error');
+    } catch (e) { flash(e.message, 'error'); }
+    finally { setDeepening(false); }
+  };
+
+  /* ── Export ──────────────────────────────────────────────────────── */
+  const exportCharacter = (char) => {
+    const blob = new Blob([JSON.stringify(char, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `${(char.name || 'character').replace(/\s+/g, '_')}.json`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importCharacter = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const r = await fetch(`${API}/world/generate-ecosystem-confirm`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characters: [data], world_tag: worldTag, generation_notes: `Imported from ${file.name}` }),
+      });
+      const d = await r.json();
+      if (d.characters) { flash(`Imported ${data.name || 'character'}`); loadCharacters(); }
+      else flash(d.error || 'Import failed', 'error');
+    } catch (e) { flash('Invalid JSON file', 'error'); }
+    e.target.value = '';
+  };
+
+  /* ── Ecosystem balance warnings ─────────────────────────────────── */
+  const getEcosystemWarnings = () => {
+    if (characters.length < 3) return [];
+    const warnings = [];
+    const types = characters.map(c => c.character_type);
+    const sexualities = characters.map(c => (c.sexuality || '').toLowerCase()).filter(Boolean);
+    const fidelities = characters.map(c => c.fidelity_pattern).filter(Boolean);
+    if (!types.includes('antagonist') && !types.includes('rival')) warnings.push('No antagonist or rival — consider adding conflict');
+    if (!types.includes('love_interest') && !types.includes('one_night_stand')) warnings.push('No love interest — romantic tension missing');
+    if (!types.includes('mentor') && !types.includes('collaborator')) warnings.push('No mentor or collaborator — growth pathway missing');
+    if (!['spouse','partner','temptation','ex'].some(t => types.includes(t))) warnings.push('No fidelity tension characters (spouse/partner/temptation/ex)');
+    if (sexualities.length && sexualities.every(s => s === 'straight')) warnings.push('All characters are straight — consider diversity');
+    if (characters.filter(c => c.intimate_eligible).length === 0) warnings.push('No intimate-eligible characters');
+    if (fidelities.length && fidelities.every(f => f === 'faithful_untested')) warnings.push('No tested fidelity patterns — moral tension may be flat');
+    return warnings;
+  };
+
   /* ── Derived ───────────────────────────────────────────────────────── */
   const filtered = characters.filter(c => {
     if (charFilter !== 'all' && c.character_type !== charFilter) return false;
@@ -592,32 +765,21 @@ export default function WorldStudio() {
             <h1 className="ws4-page-title">World Studio</h1>
           </div>
 
-          {/* Top-level tabs — three creation flows */}
+          {/* Quick-nav to related pages */}
           <nav className="ws4-page-tabs">
             {[
-              { key: 'characters',    label: 'Characters',    icon: '◈' },
-              { key: 'feed',          label: 'The Feed',      icon: '📱' },
-              { key: 'relationships', label: 'Relationships', icon: '🔗' },
+              { label: 'Scene Studio',   icon: '🔥', route: '/scene-studio' },
+              { label: 'The Feed',       icon: '📱', route: '/feed' },
+              { label: 'Relationships',  icon: '🔗', route: '/relationships' },
             ].map(t => (
-              <button
-                key={t.key}
-                className={`ws4-page-tab ${pageTab === t.key ? 'ws4-page-tab-active' : ''}`}
-                onClick={() => {
-                  setPageTab(t.key);
-                  setSelectedChar(null);
-                  setCharDetail(null);
-                  setCharFilter('all');
-                }}
-              >
+              <button key={t.route} className="ws4-page-tab" onClick={() => navigate(t.route)}>
                 <span className="ws4-page-tab-icon">{t.icon}</span>
                 {t.label}
               </button>
             ))}
           </nav>
 
-          {/* Action buttons — Characters tab only */}
-          {pageTab === 'characters' && (
-            <div className="ws4-header-actions">
+          <div className="ws4-header-actions">
               {/* World switcher — now lives here, inside Characters tab */}
               <div className="ws4-world-switcher">
                 {WORLD_OPTIONS.map(w => (
@@ -647,26 +809,10 @@ export default function WorldStudio() {
                 </button>
               )}
             </div>
-          )}
         </div>
       </div>
 
-      {/* ── FEED TAB ────────────────────────────────────────────────── */}
-      {pageTab === 'feed' && (
-        <div className="ws4-feed-tab">
-          <SocialProfileGenerator embedded={true} />
-        </div>
-      )}
-
-      {/* ── RELATIONSHIPS TAB ───────────────────────────────────────── */}
-      {pageTab === 'relationships' && (
-        <div className="ws4-relationships-tab">
-          <RelationshipEngine embedded={true} defaultWorldTag={worldTag} />
-        </div>
-      )}
-
-      {/* ── CHARACTERS TAB ──────────────────────────────────────────── */}
-      {pageTab === 'characters' && (
+      {/* ── Characters content (Scenes/Feed/Relationships are now separate pages) ── */}
       <>
 
       {/* ── STATS BAR ───────────────────────────────────────────────── */}
@@ -794,6 +940,39 @@ export default function WorldStudio() {
               <div className="ws4-dashboard-heading">
                 {worldTag === 'all' ? '⊞ All Worlds' : `${curWorld?.icon} ${curWorld?.label}`} — Ecosystem Overview
               </div>
+              {/* Saved Previews — resume generation you left */}
+              {savedPreviews.length > 0 && (
+                <div className="ws4-saved-previews">
+                  <div className="ws4-saved-previews-title">Saved Ecosystems</div>
+                  <div className="ws4-saved-previews-desc">You generated these but haven't confirmed them yet. Resume or discard.</div>
+                  {savedPreviews.map(p => (
+                    <div key={p.preview_id} className="ws4-saved-preview-card">
+                      <div className="ws4-saved-preview-meta">
+                        <Badge variant="default">{p.character_count} characters</Badge>
+                        <Badge variant="draft">{p.world_tag}</Badge>
+                        <span className="ws4-saved-preview-date">{new Date(p.created_at).toLocaleString()}</span>
+                      </div>
+                      {p.generation_notes && <div className="ws4-saved-preview-notes">{p.generation_notes.substring(0, 160)}</div>}
+                      <div className="ws4-saved-preview-actions">
+                        <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => restorePreview(p.preview_id)}>Resume</button>
+                        <button className="ws4-btn ws4-btn-ghost ws4-btn-sm ws4-btn-muted" onClick={() => discardPreview(p.preview_id)}>Discard</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Ecosystem Balance Warnings */}
+              {(() => {
+                const warnings = getEcosystemWarnings();
+                return warnings.length > 0 ? (
+                  <div className="ws4-warnings">
+                    <div className="ws4-warnings-title">⚠ Ecosystem Balance</div>
+                    {warnings.map((w, i) => <div key={i} className="ws4-warning-item">{w}</div>)}
+                  </div>
+                ) : null;
+              })()}
+
               <div className="ws4-dash-label">Character Types</div>
               <div className="ws4-type-grid">
                 {uniqueTypes.map(t => {
@@ -810,6 +989,58 @@ export default function WorldStudio() {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Relationship Web (text-based visualizer) */}
+              {characters.length >= 2 && (
+                <>
+                  <div className="ws4-dash-label">Relationship Web</div>
+                  <div className="ws4-rel-web">
+                    {characters.filter(c => c.relationship_graph && (
+                      typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : c.relationship_graph
+                    ).length > 0).slice(0, 12).map(c => {
+                      const rels = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []);
+                      return (
+                        <div key={c.id} className="ws4-rel-web-node" onClick={() => { setSelectedChar(c.id); }}>
+                          <div className="ws4-rel-web-name">{c.name}</div>
+                          <div className="ws4-rel-web-links">
+                            {rels.slice(0, 3).map((r, i) => (
+                              <span key={i} className="ws4-rel-web-link">→ {r.character_name || '?'} <em>({r.relationship_type})</em></span>
+                            ))}
+                            {rels.length > 3 && <span className="ws4-rel-web-more">+{rels.length - 3} more</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Batch History */}
+              {batches.length > 0 && (
+                <>
+                  <div className="ws4-dash-label">Generation History</div>
+                  <div className="ws4-batch-list">
+                    {batches.slice(0, 5).map(b => (
+                      <div key={b.id} className="ws4-batch-card">
+                        <div className="ws4-batch-meta">
+                          <span className="ws4-batch-date">{new Date(b.created_at).toLocaleDateString()}</span>
+                          <Badge variant="default">{b.character_count} characters</Badge>
+                          <Badge variant="draft">{b.series_label}</Badge>
+                        </div>
+                        {b.generation_notes && <div className="ws4-batch-notes">{b.generation_notes.substring(0, 200)}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Import button */}
+              <div className="ws4-dash-actions">
+                <label className="ws4-btn ws4-btn-outline ws4-btn-sm">
+                  ↙ Import Character JSON
+                  <input type="file" accept=".json" onChange={importCharacter} style={{ display: 'none' }} />
+                </label>
               </div>
             </div>
           )}
@@ -846,6 +1077,13 @@ export default function WorldStudio() {
                   {!editMode ? (
                     <>
                       <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => { setEditForm({ ...charDetail }); setEditMode(true); }}>✎ Edit</button>
+                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => deepenCharacter(charDetail.id)} disabled={deepening}>
+                        {deepening ? '⏳' : '🧠'} Deepen
+                      </button>
+                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => exportCharacter(charDetail)}>↗ Export</button>
+                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => setCompareChar(compareChar ? null : charDetail.id)}>
+                        {compareChar ? '✕ Close Compare' : '⇄ Compare'}
+                      </button>
                       {charDetail.status !== 'archived' && (
                         <button className="ws4-btn ws4-btn-ghost ws4-btn-sm ws4-btn-muted" onClick={() => archiveChar(charDetail.id)}>Archive</button>
                       )}
@@ -923,6 +1161,52 @@ export default function WorldStudio() {
                         )}
                         {charDetail.dynamic && (
                           <FieldCard label="Dynamic" value={charDetail.dynamic} />
+                        )}
+
+                        {/* Fidelity & Moral Profile */}
+                        {(charDetail.fidelity_pattern || charDetail.moral_code || charDetail.relationship_status) && (
+                          <>
+                            <SectionLabel color="lav">Moral Profile</SectionLabel>
+                            <div className="ws4-moral-grid">
+                              {charDetail.relationship_status && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Status</div>
+                                  <div className="ws4-moral-value">
+                                    {charDetail.relationship_status.replace(/_/g, ' ')}
+                                    {charDetail.committed_to && <span className="ws4-moral-committed"> → {charDetail.committed_to}</span>}
+                                  </div>
+                                </div>
+                              )}
+                              {charDetail.fidelity_pattern && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Fidelity</div>
+                                  <div className="ws4-moral-value">
+                                    <span className="ws4-fidelity-badge" style={{ borderColor: FIDELITY_LABELS[charDetail.fidelity_pattern]?.color || '#999' }}>
+                                      {FIDELITY_LABELS[charDetail.fidelity_pattern]?.label || charDetail.fidelity_pattern.replace(/_/g, ' ')}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              {charDetail.moral_code && (
+                                <div className="ws4-moral-card ws4-moral-card-wide">
+                                  <div className="ws4-moral-label">Moral Code</div>
+                                  <div className="ws4-moral-value">{charDetail.moral_code}</div>
+                                </div>
+                              )}
+                              {charDetail.sexuality && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Sexuality</div>
+                                  <div className="ws4-moral-value">{charDetail.sexuality}</div>
+                                </div>
+                              )}
+                              {charDetail.gender && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Gender</div>
+                                  <div className="ws4-moral-value">{charDetail.gender}</div>
+                                </div>
+                              )}
+                            </div>
+                          </>
                         )}
 
                         {(charDetail.origin_story || charDetail.public_persona || charDetail.private_reality) && (
@@ -1035,6 +1319,112 @@ export default function WorldStudio() {
                       <DemographicsPanel charDetail={charDetail} />
                     )}
 
+                    {/* ── SCENES (per-character) ─────────────────── */}
+                    {detailTab === 'scenes' && (
+                      <div className="ws4-char-scenes">
+                        {charScenes.length === 0 ? (
+                          <div className="ws4-tab-empty">
+                            No scenes yet.
+                            {charDetail.intimate_eligible && (
+                              <button className="ws4-btn ws4-btn-primary ws4-btn-sm" style={{ marginTop: 12 }} onClick={() => generateScene(charDetail.id)}>
+                                🔥 Generate First Scene
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            {charScenes.map(s => (
+                              <div key={s.id} className={`ws4-scene-card ${activeScene?.id === s.id ? 'ws4-scene-card-active' : ''}`} onClick={() => setActiveScene(s)}>
+                                <div className="ws4-scene-card-top">
+                                  <Badge variant="default">{s.scene_type?.replace(/_/g, ' ')}</Badge>
+                                  <Badge variant="intimate">{s.intensity}</Badge>
+                                  <Badge variant={s.status === 'approved' ? 'primary' : 'draft'}>{s.status}</Badge>
+                                </div>
+                                <div className="ws4-scene-card-preview">{(s.approach_text || s.scene_text || '').substring(0, 120)}…</div>
+                                <div className="ws4-scene-card-date">{new Date(s.created_at).toLocaleDateString()}</div>
+                              </div>
+                            ))}
+                            {charDetail.intimate_eligible && (
+                              <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={() => generateScene(charDetail.id)} disabled={sceneGen.loading}>
+                                + Generate Another Scene
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {/* Inline scene reader */}
+                        {activeScene && (
+                          <div className="ws4-scene-inline-reader">
+                            <div className="ws4-scene-beat-label">The Approach</div>
+                            <div className="ws4-scene-beat-text">{activeScene.approach_text}</div>
+                            <div className="ws4-scene-beat-label">The Scene</div>
+                            <div className="ws4-scene-beat-text">{activeScene.scene_text}</div>
+                            <div className="ws4-scene-beat-label">The Aftermath</div>
+                            <div className="ws4-scene-beat-text">{activeScene.aftermath_text}</div>
+                            {activeScene.relationship_shift && <div className="ws4-scene-shift"><strong>Shift:</strong> {activeScene.relationship_shift}</div>}
+                            <div className="ws4-scene-actions">
+                              {activeScene.status === 'draft' && (
+                                <>
+                                  <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => approveScene(activeScene.id)}>Approve</button>
+                                  <button className="ws4-btn ws4-btn-danger ws4-btn-sm" onClick={() => deleteScene(activeScene.id)}>Delete</button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── EVOLUTION TIMELINE ──────────────────────── */}
+                    {detailTab === 'evolution' && (
+                      <div className="ws4-evolution">
+                        {charDetail.registry_character_id ? (
+                          <>
+                            <SectionLabel>Character Evolution</SectionLabel>
+                            <div className="ws4-evolution-timeline">
+                              <div className="ws4-evo-entry">
+                                <div className="ws4-evo-dot" />
+                                <div className="ws4-evo-content">
+                                  <div className="ws4-evo-date">Created {new Date(charDetail.created_at).toLocaleDateString()}</div>
+                                  <div className="ws4-evo-label">Generated as {charDetail.character_type?.replace(/_/g, ' ')}</div>
+                                  <div className="ws4-evo-detail">Status: {charDetail.status} · World: {charDetail.world_tag}</div>
+                                </div>
+                              </div>
+                              {charDetail.status === 'active' && (
+                                <div className="ws4-evo-entry">
+                                  <div className="ws4-evo-dot ws4-evo-dot-active" />
+                                  <div className="ws4-evo-content">
+                                    <div className="ws4-evo-label">Activated — now part of the living world</div>
+                                  </div>
+                                </div>
+                              )}
+                              {charDetail.is_alive === false && (
+                                <div className="ws4-evo-entry">
+                                  <div className="ws4-evo-dot ws4-evo-dot-dead" />
+                                  <div className="ws4-evo-content">
+                                    <div className="ws4-evo-label">† Deceased</div>
+                                    {charDetail.death_cause && <div className="ws4-evo-detail">{charDetail.death_cause}</div>}
+                                  </div>
+                                </div>
+                              )}
+                              {charScenes.length > 0 && charScenes.map(s => (
+                                <div key={s.id} className="ws4-evo-entry">
+                                  <div className="ws4-evo-dot ws4-evo-dot-scene" />
+                                  <div className="ws4-evo-content">
+                                    <div className="ws4-evo-date">{new Date(s.created_at).toLocaleDateString()}</div>
+                                    <div className="ws4-evo-label">Scene: {s.scene_type?.replace(/_/g, ' ')} ({s.intensity})</div>
+                                    {s.relationship_shift && <div className="ws4-evo-detail">{s.relationship_shift}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="ws4-tab-empty">Activate this character to begin tracking evolution.</div>
+                        )}
+                      </div>
+                    )}
+
                   </div>
                 </>
               )}
@@ -1061,6 +1451,10 @@ export default function WorldStudio() {
                     { key: 'public_persona',           label: 'Public Persona',                     long: true },
                     { key: 'private_reality',          label: 'Private Reality',                    long: true },
                     { key: 'arc_role',                 label: 'Arc Role',                           long: true },
+                    { key: 'intimate_dynamic',         label: 'Intimate Dynamic',                   long: true },
+                    { key: 'what_lala_feels',          label: `What ${curWorld.protagonist} Feels`,  long: true },
+                    { key: 'moral_code',               label: 'Moral Code',                         long: true },
+                    { key: 'exit_reason',              label: 'Exit Reason',                        long: true },
                   ].map(f => (
                     <div key={f.key} className="ws4-edit-row">
                       <label className="ws4-edit-label">{f.label}</label>
@@ -1070,6 +1464,46 @@ export default function WorldStudio() {
                       }
                     </div>
                   ))}
+
+                  <div className="ws4-edit-section">Moral & Relationship</div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Sexuality</label>
+                    <select className="ws4-select" value={editForm.sexuality || ''} onChange={e => setEditForm(p => ({ ...p, sexuality: e.target.value }))}>
+                      <option value="">—</option>
+                      {['straight','gay','lesbian','bisexual','pansexual','queer','fluid'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Relationship Status</label>
+                    <select className="ws4-select" value={editForm.relationship_status || ''} onChange={e => setEditForm(p => ({ ...p, relationship_status: e.target.value }))}>
+                      <option value="">—</option>
+                      {['single','dating','engaged','married','divorced','separated','its_complicated'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                    </select>
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Committed To</label>
+                    <input className="ws4-input" value={editForm.committed_to || ''} onChange={e => setEditForm(p => ({ ...p, committed_to: e.target.value }))} placeholder="Name of person they're committed to" />
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Fidelity Pattern</label>
+                    <select className="ws4-select" value={editForm.fidelity_pattern || ''} onChange={e => setEditForm(p => ({ ...p, fidelity_pattern: e.target.value }))}>
+                      <option value="">—</option>
+                      {Object.entries(FIDELITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-edit-label">Tension Type</label>
+                    <select className="ws4-select" value={editForm.tension_type || ''} onChange={e => setEditForm(p => ({ ...p, tension_type: e.target.value }))}>
+                      <option value="">—</option>
+                      {['romantic','professional','creative','power','unspoken','moral','fidelity','temptation','betrayal','guilt'].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="ws4-edit-row">
+                    <label className="ws4-checkbox-label">
+                      <input type="checkbox" checked={editForm.intimate_eligible || false} onChange={e => setEditForm(p => ({ ...p, intimate_eligible: e.target.checked }))} />
+                      Intimate Eligible
+                    </label>
+                  </div>
 
                   <div className="ws4-edit-section">Identity</div>
                   <div className="ws4-edit-row">
@@ -1122,6 +1556,49 @@ export default function WorldStudio() {
           )}
         </main>
       </div>
+
+      {/* ═══ COMPARE PANEL ═══════════════════════════════════════════ */}
+      {compareChar && charDetail && compareDetail && compareDetail.id !== charDetail.id && (
+        <div className="ws4-compare-panel">
+          <div className="ws4-compare-header">
+            <span>⇄ Comparing</span>
+            <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => setCompareChar(null)}>✕ Close</button>
+          </div>
+          <div className="ws4-compare-grid">
+            {[charDetail, compareDetail].map(c => (
+              <div key={c.id} className="ws4-compare-col">
+                <div className="ws4-compare-name">{c.name}</div>
+                <div className="ws4-compare-sub">{c.character_type?.replace(/_/g, ' ')} · {c.occupation}</div>
+                {[
+                  ['Aesthetic', c.aesthetic],
+                  ['Surface Want', c.surface_want],
+                  ['Real Want', c.real_want],
+                  ['Dynamic', c.dynamic],
+                  ['Sexuality', c.sexuality],
+                  ['Fidelity', FIDELITY_LABELS[c.fidelity_pattern]?.label || c.fidelity_pattern],
+                  ['Moral Code', c.moral_code],
+                  ['How They Love', c.how_they_love],
+                  ['Tension', c.tension_type],
+                  ['Arc Role', c.arc_role],
+                ].filter(([, v]) => v).map(([label, val]) => (
+                  <div key={label} className="ws4-compare-field">
+                    <div className="ws4-compare-field-label">{label}</div>
+                    <div className="ws4-compare-field-value">{val}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="ws4-compare-pick">
+            <span>Compare with:</span>
+            <select className="ws4-select" value={compareChar} onChange={e => setCompareChar(e.target.value)}>
+              {characters.filter(c => c.id !== charDetail.id).map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* ═══ PREVIEW MODAL ════════════════════════════════════════════ */}
       {showPreview && (
@@ -1265,7 +1742,6 @@ export default function WorldStudio() {
       )}
 
       </>
-      ) /* end characters tab */}
 
       {/* Toast */}
       {toast && (
