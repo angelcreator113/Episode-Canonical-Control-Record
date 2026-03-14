@@ -1,355 +1,382 @@
 /**
  * Sidebar.jsx — Prime Studios Navigation
- *
- * Gating rules:
- *   WORLD   → always visible
- *   WRITE   → requiresZone: 'world'  → unlocks when /world/characters returns ≥1 character
- *   STUDIO  → requiresZone: 'write'  → unlocks when /storyteller/books returns ≥1 book
- *   MANAGE  → always visible
- *
- * When locked: opacity 0.45, pointerEvents none, LOCKED badge, sub-navs suppressed
+ * 4 zones: WRITE · WORLD · PRODUCE · MANAGE
+ * Props: isOpen (mobile drawer), onClose (close drawer)
  */
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import showService from '../../services/showService';
+import SidebarProgress from '../SidebarProgress';
 import './Sidebar.css';
 
-const API = import.meta.env.VITE_API_URL || '/api/v1';
-
-/* ── Nav structure ─────────────────────────────────────────────────────── */
+/* ─── Navigation map ────────────────────────────────────────── */
 const NAV = [
   {
-    zone: 'HOME',
-    requiresZone: null,
-    items: [
-      { path: '/',      label: 'Home',     icon: '⌂' },
-    ],
-  },
-  {
     zone: 'WORLD',
-    requiresZone: null,
     items: [
-      {
-        path: '/universe',
-        label: 'Universe',
-        icon: '◉',
+      { icon: '◈',  label: 'Universe',             route: '/universe',
         children: [
-          { path: '/universe',                      label: 'Overview'          },
-          { path: '/cultural-calendar',             label: 'Cultural Calendar' },
-          { path: '/influencer-systems',            label: 'Influencer Systems'},
-          { path: '/world-infrastructure',          label: 'Infrastructure'    },
-          { path: '/social-timeline',               label: 'Social Timeline'   },
-          { path: '/social-personality',            label: 'Social Personality'},
-          { path: '/character-life-simulation',     label: 'Life Simulation'   },
-          { path: '/cultural-memory',               label: 'Cultural Memory'   },
-          { path: '/character-depth-engine',        label: 'Depth Engine'      },
-          { path: '/world-locations',               label: 'Locations'         },
-          { path: '/amber',                         label: 'Amber'             },
-          { path: '/universe?tab=world-state',      label: 'World State'       },
-          { path: '/universe?tab=tensions',         label: 'Tensions'          },
+          { icon: '✦', label: 'Story Dashboard', route: '/universe?tab=story-dashboard' },
+          { icon: '⬡', label: 'Franchise Brain',  route: '/universe?tab=knowledge' },
+          { icon: '◇', label: 'Writing Rhythm',  route: '/universe?tab=writing-rhythm' },
         ],
       },
-      {
-        path: '/world-studio',
-        label: 'Create World',
-        icon: '✦',
-        toggleOnly: true,
+      { icon: '✦',  label: 'Create World',         route: '/world-studio',
         children: [
-          { path: '/world-studio',                  label: 'Characters'        },
-          { path: '/world-studio?tab=feed',         label: 'The Feed'          },
-          { path: '/world-studio?tab=relationships', label: 'Relationships'    },
+          { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
+          { icon: '🔗', label: 'Relationships',      route: '/relationships' },
+          { icon: '📅', label: 'Cultural Calendar',   route: '/cultural-calendar' },
+          { icon: '⭐', label: 'Influencer Systems',  route: '/influencer-systems' },
+          { icon: '🏗️', label: 'Infrastructure',      route: '/world-infrastructure' },
+          { icon: '📱', label: 'Social Timeline',     route: '/social-timeline' },
+          { icon: '🧠', label: 'Social Personality',  route: '/social-personality' },
+          { icon: '🎭', label: 'Life Simulation',     route: '/character-life-simulation' },
+          { icon: '📜', label: 'Cultural Memory',     route: '/cultural-memory' },
+          { icon: '💎', label: 'Depth Engine',        route: '/character-depth-engine' },
         ],
       },
-      { path: '/therapy/default', label: 'Therapy',    icon: '♡' },
+      { icon: '💭', label: 'Therapy',              route: '/therapy/default' },
+      { icon: '🟠', label: 'Amber',                route: '/amber' },
     ],
   },
   {
     zone: 'WRITE',
-    requiresZone: 'world',
     items: [
-      {
-        path: '/story-engine',
-        label: 'Short Stories',
-        icon: '✐',
-        toggleOnly: true,
+      { icon: '⚡', label: 'Short Stories',    route: '/story-engine',
         children: [
-          { path: '/story-engine',      label: 'Story Engine'       },
-          { path: '/scene-proposer',    label: 'Scene Intelligence' },
-          { path: '/assembler',         label: 'Assembler'          },
-          { path: '/continuity',        label: 'Continuity'         },
-          { path: '/narrative-control', label: 'Narrative Control'  },
+          { icon: '📖', label: 'Story Engine',        route: '/story-engine' },
+          { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
+          { icon: '⬡', label: 'Assembler',           route: '/assembler' },
+          { icon: '◇', label: 'Continuity',           route: '/continuity' },
+          { icon: '🧠', label: 'Narrative Control',   route: '/narrative-control' },
         ],
       },
-      { path: '/storyteller',        label: 'Storyteller',    icon: '◈' },
-      { path: '/pressure',           label: 'Pressure',      icon: '⚡' },
-      { path: '/feed-relationships', label: 'Feed Map',      icon: '⊞' },
-      { path: '/start',              label: 'Novel Session', icon: '▶' },
-      { path: '/press',              label: 'Press',         icon: '▣' },
+      { icon: '�', label: 'Storyteller',      route: '/storyteller' },
+      { icon: '�🔥', label: 'Pressure',        route: '/pressure' },
+      { icon: '🕸️', label: 'Feed Map',         route: '/feed-relationships' },
+      { icon: '▶',  label: 'Novel Session',   route: '/start' },
+      { icon: '📰', label: 'Press',            route: '/press' },
     ],
   },
   {
     zone: 'STUDIO',
-    requiresZone: 'write',
     items: [
       {
-        path: '/shows',
-        label: 'Shows',
-        icon: '▷',
-        children: [
-          { path: '/shows',        label: 'All Shows' },
-          { path: '/shows/create', label: 'New Show'  },
-        ],
+        icon: '🎬', label: 'Shows', route: '/shows',
+        expandable: true,
       },
-      { path: '/show-brain',    label: 'Show Brain',    icon: '◐' },
-      { path: '/scene-library', label: 'Scene Library', icon: '◫' },
+      { icon: '🧠', label: 'Show Brain',      route: '/show-brain' },
+      { icon: '🎞️', label: 'Scene Library',   route: '/scene-library' },
+      { icon: '🖼️', label: 'Template Studio', route: '/template-studio' },
+    ],
+  },
+  {
+    zone: 'PRODUCE',
+    items: [
+      { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
+      { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
+      { icon: '�️', label: 'Assets',          route: '/assets' },
+      { icon: '�👗', label: 'Wardrobe',        route: '/wardrobe' },
+      { icon: '📦', label: 'Compositions',    route: '/library' },
     ],
   },
   {
     zone: 'MANAGE',
-    requiresZone: null,
     items: [
-      {
-        path: '/cfo',
-        label: 'CFO Agent',
-        icon: '◇',
+      { icon: '�', label: 'CFO Agent',       route: '/cfo',
         children: [
-          { path: '/cfo',                label: 'Overview'  },
-          { path: '/analytics/decisions', label: 'Analytics' },
-          { path: '/ai-costs',           label: 'AI Costs'  },
+          { icon: '📊', label: 'Analytics',     route: '/analytics/decisions' },
+          { icon: '💰', label: 'AI Costs',      route: '/ai-costs' },
         ],
       },
-      { path: '/site-organizer', label: 'Site Organizer', icon: '⊡' },
-      { path: '/design-agent',  label: 'Design Agent',   icon: '◆' },
-      { path: '/admin',         label: 'Admin',          icon: '⊙' },
-      { path: '/settings',      label: 'Settings',       icon: '⚙' },
+      { icon: '🗺️', label: 'Site Organizer',  route: '/site-organizer' },
+      { icon: '🎨', label: 'Design Agent',    route: '/design-agent' },
+      { icon: '🔍', label: 'Search',          route: '/search' },
+      { icon: '🛡️', label: 'Admin',           route: '/admin',
+        children: [
+          { icon: '📋', label: 'Audit Log',     route: '/audit-log' },
+          { icon: '🩺', label: 'Diagnostics',   route: '/diagnostics' },
+        ],
+      },
+      { icon: '🗑️', label: 'Recycle Bin',     route: '/recycle-bin' },
+      { icon: '⚙️', label: 'Settings',        route: '/settings' },
     ],
   },
 ];
 
-/* ── Progress bar config ────────────────────────────────────────────────── */
-const PROGRESS_STEPS = [
-  { label: 'Universe',    path: '/universe'       },
-  { label: 'World Built', path: '/world-studio'   },
-  { label: 'Writing',     path: '/storyteller'    },
-  { label: 'Show',        path: '/shows'          },
-  { label: 'Press',       path: '/press'          },
-];
-
-/* ══════════════════════════════════════════════════════════════════════════
-   SIDEBAR COMPONENT
-══════════════════════════════════════════════════════════════════════════ */
-export default function Sidebar({ collapsed, onToggle }) {
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const { user }  = useAuth();
-
-  /* ── Gate state ─────────────────────────────────────────────────────── */
-  const [worldUnlocked, setWorldUnlocked] = useState(false);
-  const [writeUnlocked, setWriteUnlocked] = useState(false);
-  const [checking,      setChecking]      = useState(true);
-
-  /* ── Expanded sub-navs ──────────────────────────────────────────────── */
-  const [expanded, setExpanded] = useState({});
-
-  /* ── Setup progress (0–100) ─────────────────────────────────────────── */
-  const [progress, setProgress] = useState(0);
-
-  /* ── Check unlock conditions ────────────────────────────────────────── */
-  const checkGates = useCallback(async () => {
-    try {
-      const [charRes, bookRes] = await Promise.all([
-        fetch(`${API}/world/characters?limit=1`).catch(() => null),
-        fetch(`${API}/storyteller/books?limit=1`).catch(() => null),
-      ]);
-
-      const charData = charRes?.ok ? await charRes.json() : {};
-      const bookData = bookRes?.ok ? await bookRes.json() : {};
-
-      const hasChars = (charData.characters?.length ?? charData.total ?? 0) > 0;
-      const hasBooks = (bookData.books?.length ?? bookData.total ?? 0) > 0;
-
-      setWorldUnlocked(hasChars);
-      setWriteUnlocked(hasBooks);
-
-      // Compute setup progress
-      let steps = 0;
-      if (hasChars) steps += 40;
-      if (hasBooks) steps += 40;
-      if (localStorage.getItem('ps_universe_visited')) steps += 20;
-      setProgress(Math.min(steps, 100));
-    } catch (e) {
-      console.error('Sidebar gate check failed', e);
-    } finally {
-      setChecking(false);
-    }
+/* ─── Shows hook (uses showService with auth) ───────────────── */
+function useShows() {
+  const [shows, setShows] = useState([]);
+  useEffect(() => {
+    showService.getAllShows()
+      .then(data => setShows((data || []).map(s => ({
+        id: s.id,
+        name: s.name || s.title || 'Untitled Show',
+        episodeCount: s.episodeCount || s.episode_count || 0,
+      }))))
+      .catch(() => setShows([]));
   }, []);
+  return shows;
+}
 
-  useEffect(() => {
-    checkGates();
-  }, [location.pathname, checkGates]);
+/* ─── Sidebar ───────────────────────────────────────────────── */
+function Sidebar({ isOpen, onClose }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+  const shows = useShows();
+  const [showsOpen, setShowsOpen] = useState(false);
+  const [universeOpen, setUniverseOpen] = useState(false);
+  const [worldOpen, setWorldOpen] = useState(false);
+  const [storiesOpen, setStoriesOpen] = useState(false);
+  const [cfoOpen, setCfoOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
-  /* ── Auto-expand active section ─────────────────────────────────────── */
+  // Auto-expand Shows sub-nav when on a /shows/* route
   useEffect(() => {
-    NAV.forEach(zone => {
-      zone.items.forEach(item => {
-        if (item.children) {
-          const isChildActive = item.children.some(c => location.pathname === c.path.split('?')[0]);
-          if (isChildActive) {
-            setExpanded(prev => ({ ...prev, [item.path]: true }));
-          }
-        }
-      });
-    });
+    if (location.pathname.startsWith('/shows/')) setShowsOpen(true);
   }, [location.pathname]);
 
-  /* ── Helpers ─────────────────────────────────────────────────────────── */
-  const isActive = (path) => {
-    const [base, query] = path.split('?');
-    const pathMatch = location.pathname === base || location.pathname.startsWith(base + '/');
-    if (!pathMatch) return false;
-    // If path has query params, also check they match
-    if (query) {
-      const params = new URLSearchParams(query);
-      const current = new URLSearchParams(location.search);
-      for (const [k, v] of params) {
-        if (current.get(k) !== v) return false;
-      }
+  // Auto-expand Universe sub-nav when on a story-side tab
+  useEffect(() => {
+    if (location.pathname === '/universe' && ['story-dashboard','knowledge','writing-rhythm'].includes(new URLSearchParams(location.search).get('tab'))) {
+      setUniverseOpen(true);
     }
-    return true;
-  };
+  }, [location.pathname, location.search]);
 
-  const isZoneLocked = (zone) => {
-    if (!zone.requiresZone) return false;
-    if (zone.requiresZone === 'world') return !worldUnlocked;
-    if (zone.requiresZone === 'write') return !writeUnlocked;
-    return false;
-  };
+  // Auto-expand Create World sub-nav when on character-registry or relationships
+  useEffect(() => {
+    if (['/world-studio', '/character-registry', '/relationships', '/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine'].some(p => location.pathname.startsWith(p))) {
+      setWorldOpen(true);
+    }
+  }, [location.pathname]);
 
-  const toggleExpand = (path) => {
-    setExpanded(prev => ({ ...prev, [path]: !prev[path] }));
-  };
+  // Auto-expand Short Stories sub-nav
+  useEffect(() => {
+    if (['/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
+      setStoriesOpen(true);
+    }
+  }, [location.pathname]);
 
-  /* ── Render ──────────────────────────────────────────────────────────── */
+  // Auto-expand CFO sub-nav
+  useEffect(() => {
+    if (['/cfo', '/analytics/decisions', '/ai-costs'].some(p => location.pathname.startsWith(p))) {
+      setCfoOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand Admin sub-nav
+  useEffect(() => {
+    if (['/admin', '/audit-log', '/diagnostics'].some(p => location.pathname.startsWith(p))) {
+      setAdminOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Navigate and close mobile drawer
+  const go = (path) => { navigate(path); if (onClose) onClose(); };
+
+  // Active-match helper
+  const isActive = (path) =>
+    location.pathname === path || location.pathname.startsWith(path + '/');
+
   return (
-    <aside className={`ps-sidebar ${collapsed ? 'ps-sidebar-collapsed' : ''}`}>
-      {/* ── Logo / brand ─────────────────────────────────────────────── */}
-      <div className="ps-sidebar-brand" onClick={() => navigate('/')}>
-        <div className="ps-brand-mark">PRIME</div>
-        <div className="ps-brand-diamond">◆</div>
-        {!collapsed && (
-          <button className="ps-collapse-btn" onClick={(e) => { e.stopPropagation(); onToggle?.(); }}>
-            ‹
-          </button>
-        )}
-      </div>
-      {collapsed && (
-        <button className="ps-collapse-btn ps-collapse-btn-out" onClick={onToggle}>›</button>
-      )}
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
-      {/* ── Nav ──────────────────────────────────────────────────────── */}
-      <nav className="ps-nav">
-        {NAV.map((zone) => {
-          const locked = isZoneLocked(zone);
+      <aside className={`sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+        {/* ── Logo / collapse toggle ── */}
+        <div className="sidebar-logo">
+          {!collapsed && (
+            <span className="logo-text" onClick={() => go('/start')}>
+              PRIME<span className="logo-accent">◈</span>
+            </span>
+          )}
+          <div className="logo-actions">
+            {/* Desktop collapse toggle */}
+            <button
+              className="collapse-btn"
+              onClick={() => setCollapsed(c => !c)}
+              title={collapsed ? 'Expand' : 'Collapse'}
+            >
+              {collapsed ? '›' : '‹'}
+            </button>
+            {/* Mobile close button */}
+            {onClose && (
+              <button
+                className="sidebar-close-btn"
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                aria-label="Close sidebar"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
 
-          return (
-            <div key={zone.zone} className={`ps-zone ${locked ? 'ps-zone-locked' : ''}`}>
-              {/* Zone label */}
-              {zone.zone !== 'HOME' && !collapsed && (
-                <div className="ps-zone-label">
-                  {zone.zone}
-                  {locked && <span className="ps-locked-badge">LOCKED</span>}
-                </div>
-              )}
+        {/* ── Navigation ── */}
+        <nav className="sidebar-nav">
+          {/* Home */}
+          <NavLink
+            to="/"
+            end
+            className={({ isActive: a }) => `nav-item ${a ? 'active' : ''}`}
+            onClick={() => { if (onClose) onClose(); }}
+            title={collapsed ? 'Home' : undefined}
+          >
+            <span className="nav-icon">🏠</span>
+            {!collapsed && <span className="nav-label">Home</span>}
+          </NavLink>
 
-              {/* Items */}
-              {zone.items.map(item => {
-                const active      = isActive(item.path);
-                const hasChildren = item.children?.length > 0;
-                const open        = expanded[item.path];
+          {/* Zones */}
+          {NAV.map(({ zone, items }) => (
+            <div className="nav-section" key={zone}>
+              {!collapsed && <div className="nav-section-label">{zone}</div>}
 
-                return (
-                  <div key={item.path} className="ps-item-group">
-                    <button
-                      className={`ps-nav-item ${active ? 'ps-nav-item-active' : ''}`}
-                      style={locked ? { opacity: 0.45, pointerEvents: 'none' } : {}}
-                      onClick={() => {
-                        if (locked) return;
-                        if (hasChildren) {
-                          toggleExpand(item.path);
-                          if (!item.toggleOnly) navigate(item.path);
-                        } else {
-                          navigate(item.path);
-                        }
-                      }}
-                      title={collapsed ? item.label : undefined}
-                    >
-                      <span className="ps-nav-icon">{item.icon}</span>
-                      {!collapsed && (
-                        <>
-                          <span className="ps-nav-label">{item.label}</span>
-                          {hasChildren && (
-                            <span className={`ps-nav-chevron ${open ? 'ps-nav-chevron-open' : ''}`}>›</span>
-                          )}
-                        </>
-                      )}
-                    </button>
-
-                    {/* Sub-nav — suppressed when locked or collapsed */}
-                    {hasChildren && open && !locked && !collapsed && (
-                      <div className="ps-subnav">
-                        {item.children.map(child => {
-                          const [childBase, childSearch] = child.path.split('?');
-                          return (
-                            <button
-                              key={child.path}
-                              className={`ps-subnav-item ${isActive(child.path) ? 'ps-subnav-item-active' : ''}`}
-                              onClick={() => {
-                                if (childSearch) {
-                                  navigate({ pathname: childBase, search: `?${childSearch}` });
-                                } else {
-                                  navigate(child.path);
-                                }
-                              }}
-                            >
-                              {child.label}
-                            </button>
-                          );
-                        })}
+              {items.map(item => {
+                // ── Expandable item with static children (Universe) ──
+                if (item.children) {
+                  const isUniverse = item.route === '/universe';
+                  const isWorld = item.route === '/world-studio';
+                  const isStories = item.route === '/story-engine';
+                  const isCfo = item.route === '/cfo';
+                  const isAdmin = item.route === '/admin';
+                  const groupOpen = isUniverse ? universeOpen : isWorld ? worldOpen : isStories ? storiesOpen : isCfo ? cfoOpen : isAdmin ? adminOpen : false;
+                  const setGroupOpen = isUniverse ? setUniverseOpen : isWorld ? setWorldOpen : isStories ? setStoriesOpen : isCfo ? setCfoOpen : isAdmin ? setAdminOpen : () => {};
+                  const childRoutes = item.children.map(c => c.route);
+                  const groupActive = isActive(item.route) || childRoutes.some(r => isActive(r));
+                  const toggleOnly = isStories; // Short Stories: toggle only, no navigate
+                  return (
+                    <div key={item.route} className="nav-group">
+                      <div
+                        className={`nav-item ${groupActive ? 'active' : ''}`}
+                        onClick={() => {
+                          if (!toggleOnly) go(item.route);
+                          setGroupOpen(o => !o);
+                        }}
+                        title={collapsed ? item.label : undefined}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        {!collapsed && (
+                          <>
+                            <span className="nav-label">{item.label}</span>
+                            <span className={`chevron ${groupOpen ? 'open' : ''}`}>›</span>
+                          </>
+                        )}
                       </div>
-                    )}
-                  </div>
+
+                      {groupOpen && !collapsed && (
+                        <div className="nav-subgroup">
+                          {item.children.map(child => (
+                            <NavLink
+                              key={child.route}
+                              to={child.route}
+                              className={({ isActive: a }) => `nav-subitem ${location.pathname + location.search === child.route ? 'active' : ''}`}
+                              onClick={() => { if (onClose) onClose(); }}
+                            >
+                              <span className="sub-dot" />
+                              <span className="subitem-label">{child.label}</span>
+                            </NavLink>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // ── Expandable Shows item ──
+                if (item.expandable) {
+                  const showsActive = isActive('/shows');
+                  return (
+                    <div key={item.route} className="nav-group">
+                      <div
+                        className={`nav-item ${showsActive ? 'active' : ''}`}
+                        onClick={() => {
+                          go(item.route);
+                          setShowsOpen(o => !o);
+                        }}
+                        title={collapsed ? item.label : undefined}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        {!collapsed && (
+                          <>
+                            <span className="nav-label">{item.label}</span>
+                            <span className={`chevron ${showsOpen ? 'open' : ''}`}>›</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Shows sub-list */}
+                      {showsOpen && !collapsed && (
+                        <div className="nav-subgroup">
+                          {shows.length === 0 ? (
+                            <div className="sub-empty">No shows yet</div>
+                          ) : (
+                            shows.map(show => (
+                              <NavLink
+                                key={show.id}
+                                to={`/shows/${show.id}`}
+                                className={({ isActive: a }) => `nav-subitem ${a ? 'active' : ''}`}
+                                onClick={() => { if (onClose) onClose(); }}
+                              >
+                                <span className="sub-dot" />
+                                <span className="subitem-label">{show.name}</span>
+                                <span className="subitem-count">{show.episodeCount}</span>
+                              </NavLink>
+                            ))
+                          )}
+                          <NavLink
+                            to="/shows/create"
+                            className="sub-create"
+                            onClick={() => { if (onClose) onClose(); }}
+                          >
+                            + New Show
+                          </NavLink>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // ── Standard nav item ──
+                return (
+                  <NavLink
+                    key={item.route}
+                    to={item.route}
+                    end={item.route === '/episodes'}
+                    className={({ isActive: a }) => `nav-item ${a ? 'active' : ''}`}
+                    onClick={() => { if (onClose) onClose(); }}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <span className="nav-icon">{item.icon}</span>
+                    {!collapsed && <span className="nav-label">{item.label}</span>}
+                  </NavLink>
                 );
               })}
             </div>
-          );
-        })}
-      </nav>
+          ))}
+        </nav>
 
-      {/* ── Setup progress ───────────────────────────────────────────── */}
-      {!collapsed && (
-        <div className="ps-progress-block">
-          <div className="ps-progress-row">
-            <span className="ps-progress-label">SETUP PROGRESS</span>
-            <span className="ps-progress-pct">• {progress}%</span>
-          </div>
-          <div className="ps-progress-track">
-            <div className="ps-progress-fill" style={{ width: `${progress}%` }} />
+        {/* ── Setup Progress ── */}
+        <SidebarProgress showId={shows[0]?.id} collapsed={collapsed} />
+
+        {/* ── Footer ── */}
+        <div className="sidebar-footer">
+          <div className="user-info" onClick={() => go('/settings')}>
+            <div className="user-avatar">{(user?.name || user?.email || 'U')[0].toUpperCase()}</div>
+            {!collapsed && (
+              <div className="user-details">
+                <div className="user-name">{user?.name || user?.email?.split('@')[0] || 'Creator'}</div>
+                <div className="user-status">Creator</div>
+              </div>
+            )}
           </div>
         </div>
-      )}
-
-      {/* ── User footer ──────────────────────────────────────────────── */}
-      <div className="ps-user-footer">
-        <div className="ps-user-avatar">
-          {(user?.name || user?.email || 'U')[0].toUpperCase()}
-        </div>
-        {!collapsed && (
-          <div className="ps-user-info">
-            <div className="ps-user-name">{user?.name || user?.email?.split('@')[0] || 'Creator'}</div>
-            <div className="ps-user-role">Creator</div>
-          </div>
-        )}
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
+
+export default Sidebar;
