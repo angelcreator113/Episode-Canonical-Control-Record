@@ -1184,7 +1184,7 @@ export default function WorldStudio() {
                 <input className="ws4-input" placeholder="Name or describe…" value={relForm.related_character_name} onChange={e => setRelForm(p => ({ ...p, related_character_name: e.target.value }))} />
               </div>
               <div className="ws4-form-row">
-                <label className="ws4-form-label">Character (if in Create World)</label>
+                <label className="ws4-form-label">Character (if in World Studio)</label>
                 <select className="ws4-select" value={relForm.related_character_id}
                   onChange={e => {
                     const char = characters.find(c => c.id === e.target.value);

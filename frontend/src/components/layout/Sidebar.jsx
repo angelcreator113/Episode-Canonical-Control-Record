@@ -22,7 +22,7 @@ const NAV = [
           { icon: '◇', label: 'Writing Rhythm',  route: '/universe?tab=writing-rhythm' },
         ],
       },
-      { icon: '✦',  label: 'Create World',         route: '/world-studio',
+      { icon: '✦',  label: 'World Studio',         route: '/world-studio',
         children: [
           { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
           { icon: '🔗', label: 'Relationships',      route: '/relationships' },
