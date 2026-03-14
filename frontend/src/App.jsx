@@ -151,13 +151,9 @@ function AppContent() {
     }
   }, [location.pathname]);
 
-  // Mobile sidebar drawer state
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // Close sidebar on route change (mobile)
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [location.pathname]);
+  // Sidebar collapsed state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const toggleSidebar = () => setSidebarCollapsed(c => !c);
 
   // Debug logging - disabled to reduce console noise
   // React.useEffect(() => {
@@ -235,14 +231,14 @@ function AppContent() {
     <div className="app-layout">
       {/* Sidebar Navigation (hidden on full-screen modes) */}
       {!isFullScreen && (
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       )}
       
       <div className={`app-main-wrapper ${isFullScreen ? 'full-screen' : ''}`}>
         {!isFullScreen && (
           <Header
-            navOpen={sidebarOpen}
-            onNavToggle={() => setSidebarOpen(prev => !prev)}
+            navOpen={!sidebarCollapsed}
+            onNavToggle={toggleSidebar}
           />
         )}
         
