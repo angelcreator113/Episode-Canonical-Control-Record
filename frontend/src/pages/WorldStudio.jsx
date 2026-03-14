@@ -768,7 +768,7 @@ export default function WorldStudio() {
           {/* Quick-nav to related pages */}
           <nav className="ws4-page-tabs">
             {[
-              { label: 'Scene Studio',   icon: '🔥', route: '/scene-studio' },
+              { label: 'Book Scene Studio', icon: '🔥', route: '/scene-studio' },
               { label: 'The Feed',       icon: '📱', route: '/feed' },
               { label: 'Relationships',  icon: '🔗', route: '/relationships' },
             ].map(t => (

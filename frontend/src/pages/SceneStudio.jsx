@@ -1,5 +1,5 @@
 /**
- * SceneStudio.jsx — Intimate Scene Studio (standalone page)
+ * SceneStudio.jsx — Intimate Book Scene Studio (standalone page)
  *
  * Extracted from WorldStudio.jsx to run as its own route at /scene-studio.
  * Features:
@@ -136,9 +136,9 @@ export default function SceneStudio() {
               <span className="ws4-breadcrumb-sep">/</span>
               <span className="ws4-breadcrumb-link" onClick={() => navigate('/world-studio')}>World Studio</span>
               <span className="ws4-breadcrumb-sep">/</span>
-              <span className="ws4-breadcrumb-current">Scene Studio</span>
+              <span className="ws4-breadcrumb-current">Book Scene Studio</span>
             </div>
-            <h1 className="ws4-page-title">Scene Studio</h1>
+            <h1 className="ws4-page-title">Book Scene Studio</h1>
             <p className="ws4-page-subtitle">Generate, read, and approve intimate scenes between characters</p>
           </div>
         </div>

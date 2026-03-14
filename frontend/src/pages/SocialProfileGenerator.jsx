@@ -1,6 +1,6 @@
 /**
  * SocialProfileGenerator.jsx — The Feed
- * Prime Studios · LalaVerse
+ * Prime Studios · JustAWoman's real-world online ecosystem
  *
  * Refactored for Prime Studios light theme:
  *   #d4789a (pink) · #7ab3d4 (blue) · #a889c8 (lavender)
@@ -80,6 +80,29 @@ const FEED_STATE_CONFIG = {
   crossed:       { label:'Crossed',       color:'#5c2d8a', bg:C.lavLight },
 };
 
+const LALAVERSE_CITIES = [
+  { value:'nova_prime',  label:'Nova Prime', desc:'Fashion & Aspiration' },
+  { value:'velour_city', label:'Velour City', desc:'Music & Culture' },
+  { value:'the_drift',   label:'The Drift', desc:'Underground & Anti-Algorithm' },
+  { value:'solenne',     label:'Solenne', desc:'Luxury & Soft Life' },
+  { value:'cascade_row', label:'Cascade Row', desc:'Commerce & Hustle' },
+];
+
+const LALA_RELATIONSHIPS = [
+  { value:'mutual_unaware', label:'Mutual Unaware' },
+  { value:'one_sided',      label:'Lala watches them' },
+  { value:'aware',          label:'Both aware' },
+  { value:'direct',         label:'Know each other' },
+  { value:'competitive',    label:'Active competition' },
+];
+
+const CAREER_PRESSURES = [
+  { value:'ahead',          label:'Ahead of Lala' },
+  { value:'level',          label:'Level with Lala' },
+  { value:'behind',         label:'Behind Lala' },
+  { value:'different_lane', label:'Different lane' },
+];
+
 const PROTAGONISTS = [
   {
     key:'justawoman', label:'Book 1 · JustAWoman', icon:'◈',
@@ -137,6 +160,12 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [showAdvanced,setShowAdvanced] = useState(false);
   const [advFields,setAdvFields] = useState({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});
   const [activeJob,setActiveJob] = useState(null);
+  // LalaVerse Feed layer
+  const [feedLayer,setFeedLayer] = useState('real_world');
+  const [lvCity,setLvCity]       = useState('');
+  const [lvRelationship,setLvRelationship] = useState('mutual_unaware');
+  const [lvPressure,setLvPressure] = useState('level');
+  const [justAwomanProfile,setJustAwomanProfile] = useState(null);
 
   // ── Load profiles ──────────────────────────────────────────────────
   const loadProfiles = useCallback(async (targetPage) => {
@@ -147,6 +176,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       if(filterStatus)qs.set('status',filterStatus);
       if(search.trim())qs.set('search',search.trim());
       qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',PAGE_SIZE);
+      qs.set('feed_layer',feedLayer);
       const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});
       if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`Server error (${res.status})`);}
       const data=await res.json();
@@ -155,9 +185,18 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       if(data.statusCounts)setStatusCounts(data.statusCounts);
     } catch(err){setError(err.message);}
     finally{setLoading(false);}
-  },[filterStatus,search,sortBy,page]);
+  },[filterStatus,search,sortBy,page,feedLayer]);
 
   useEffect(()=>{loadProfiles();},[loadProfiles]);
+
+  // Load JustAWoman's locked record for Lala's Feed pinned card
+  useEffect(()=>{
+    if(feedLayer!=='lalaverse'){setJustAwomanProfile(null);return;}
+    fetch(`${API}?feed_layer=lalaverse&search=justawoman&limit=1`,{headers:authHeaders()})
+      .then(r=>r.json())
+      .then(d=>{const jw=(d.profiles||[]).find(p=>p.is_justawoman_record);setJustAwomanProfile(jw||null);})
+      .catch(()=>{});
+  },[feedLayer]);
 
   // ── SSE job tracking ───────────────────────────────────────────────
   const sseRef = useRef(null);
@@ -212,7 +251,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     setGenerating(true);setError(null);
     try{
       const hasAdv=Object.values(advFields).some(v=>v);
-      const res=await fetch(`${API}/generate`,{method:'POST',headers:authHeaders(),body:JSON.stringify({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...(hasAdv?{advanced_context:advFields}:{})})});
+      const lvFields=feedLayer==='lalaverse'?{feed_layer:'lalaverse',city:lvCity,lala_relationship:lvRelationship,career_pressure:lvPressure}:{feed_layer:'real_world'};
+      const res=await fetch(`${API}/generate`,{method:'POST',headers:authHeaders(),body:JSON.stringify({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})})});
       const data=await res.json();
       if(!res.ok)throw new Error(data.error||'Generation failed');
       setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);loadProfiles(1);
@@ -226,6 +266,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const deleteProfile  = async id=>{if(!window.confirm('Delete this profile permanently?'))return;try{const res=await fetch(`${API}/${id}`,{method:'DELETE',headers:authHeaders()});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.message);}};
 
   const fp = p=>p?.full_profile||p||{};
+  const feedCap = feedLayer==='lalaverse'?200:443;
   const stats = { total:statusCounts.total||totalCount, generated:statusCounts.generated, finalized:statusCounts.finalized, crossed:statusCounts.crossed };
 
   const Pagination = ()=>{
@@ -249,8 +290,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:14}}>
           <div>
-            <div style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed</div>
-            <div style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — LalaVerse social ecosystem</div>
+            <div style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed <span style={{fontSize:12,fontWeight:600,color:C.pink,background:'#f9e4ec',padding:'2px 8px',borderRadius:4,marginLeft:6,verticalAlign:'middle',letterSpacing:'0.3px'}}>{protagonist.icon} {protagonist.context.name}</span></div>
+            <div style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — {protagonist.context.name === 'Lala' ? "Lala's inherited digital world" : "JustAWoman's real-world online ecosystem"}</div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {/* Protagonist switcher — hidden when embedded in WorldStudio */}
@@ -268,14 +309,28 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </button>
           </div>
         </div>
+        {/* Feed layer switcher */}
+        <div style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
+          <button onClick={()=>{setFeedLayer('real_world');setPage(1);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+            background:feedLayer==='real_world'?C.blue:'transparent',color:feedLayer==='real_world'?'#fff':C.inkLight,transition:'all 0.15s'}}>
+            JustAWoman's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='real_world'?`${stats.total}/${feedCap}`:''}</span>
+          </button>
+          <button onClick={()=>{setFeedLayer('lalaverse');setPage(1);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+            background:feedLayer==='lalaverse'?C.lavender:'transparent',color:feedLayer==='lalaverse'?'#fff':C.inkLight,transition:'all 0.15s'}}>
+            Lala's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${stats.total}/${feedCap}`:''}</span>
+          </button>
+        </div>
+
         {/* Stats */}
-        <div style={{display:'flex',gap:20}}>
-          {[['Profiles',stats.total,C.lavender],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
+        <div style={{display:'flex',gap:20,alignItems:'center'}}>
+          {[['Profiles',stats.total,stats.total>=feedCap?'#c0392b':stats.total>=(feedCap-23)?'#e67e22':feedLayer==='lalaverse'?C.lavender:C.blue],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
             <div key={label} style={{display:'flex',alignItems:'baseline',gap:6}}>
               <span style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{val||0}</span>
-              <span style={{fontSize:12,color:C.inkLight}}>{label}</span>
+              <span style={{fontSize:12,color:C.inkLight}}>{label==='Profiles'?`/ ${feedCap}`:label}</span>
             </div>
           ))}
+          {stats.total>=feedCap&&<span style={{fontSize:11,fontWeight:600,color:'#c0392b',background:'#fde8e8',padding:'2px 8px',borderRadius:4}}>Cap reached</span>}
+          {stats.total>=(feedCap-23)&&stats.total<feedCap&&<span style={{fontSize:11,fontWeight:600,color:'#e67e22',background:'#fef3e0',padding:'2px 8px',borderRadius:4}}>{feedCap-stats.total} remaining</span>}
         </div>
       </div>
 
@@ -330,13 +385,13 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
               <input value={vibe} onChange={e=>setVibe(e.target.value)} disabled={generating} placeholder="One sentence — who is this creator?" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}
                 onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&generateProfile()}/>
             </div>
-            <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()} style={{
+            <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()||(feedLayer==='lalaverse'&&!lvCity)} style={{
               padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:generating||!handle.trim()||!vibe.trim()?'not-allowed':'pointer',
-              background:generating||!handle.trim()||!vibe.trim()?C.border:C.lavender,
+              background:generating||!handle.trim()||!vibe.trim()?C.border:stats.total>=feedCap?'#c0392b':C.lavender,
               color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
               display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
             }}>
-              {generating?<><Spinner/> Generating…</>:'✦ Generate'}
+              {generating?<><Spinner/> Generating…</>:stats.total>=feedCap?'Generate anyway (cap exceeded)':'✦ Generate'}
             </button>
           </div>
 
@@ -354,6 +409,30 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                   <input value={advFields[key]} onChange={e=>setAdvFields(f=>({...f,[key]:e.target.value}))} disabled={generating} placeholder={ph} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font}}/>
                 </div>
               ))}
+            </div>
+          )}
+          {/* LalaVerse-specific fields */}
+          {feedLayer==='lalaverse'&&(
+            <div style={{marginTop:12,display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
+              <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:180}}>
+                <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>City</label>
+                <select value={lvCity} onChange={e=>setLvCity(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                  <option value="">Select city...</option>
+                  {LALAVERSE_CITIES.map(c=><option key={c.value} value={c.value}>{c.label} — {c.desc}</option>)}
+                </select>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:160}}>
+                <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>Lala's Relationship</label>
+                <select value={lvRelationship} onChange={e=>setLvRelationship(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                  {LALA_RELATIONSHIPS.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+                <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>Career Pressure</label>
+                <select value={lvPressure} onChange={e=>setLvPressure(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                  {CAREER_PRESSURES.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
             </div>
           )}
           {error && <div style={{color:C.pink,marginTop:8,fontSize:12}}>{error}</div>}
@@ -411,6 +490,29 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
           <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
             <Pagination/>
+            {/* JustAWoman's pinned record — Lala's Feed only */}
+            {feedLayer==='lalaverse'&&justAwomanProfile&&page===1&&!search&&(
+              <div style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${C.pink}`,marginBottom:16,overflow:'hidden',boxShadow:C.shadowMd}}>
+                <div style={{height:3,background:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
+                <div style={{padding:'14px 18px'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                    <div>
+                      <span style={{fontSize:16,fontWeight:700,color:C.ink}}>@justawoman</span>
+                      <span style={{fontSize:12,color:C.inkMid,marginLeft:8}}>{justAwomanProfile.display_name}</span>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:10,background:C.pinkLight,color:C.pink}}>Locked</span>
+                  </div>
+                  <div style={{fontSize:12,color:C.lavender,fontWeight:600,fontStyle:'italic',marginBottom:6}}>The one she doesn't know she's becoming</div>
+                  <div style={{fontSize:13,color:C.inkMid,lineHeight:1.6,marginBottom:10}}>{justAwomanProfile.content_persona}</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>mega</span>
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:'#fdf8e8',color:'#8a6010'}}>Peaking</span>
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>ahead</span>
+                    <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>multi-platform</span>
+                  </div>
+                </div>
+              </div>
+            )}
             {loading && <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:40,gap:10,color:C.inkLight}}><Spinner/> Loading profiles…</div>}
             {!loading&&profiles.length===0 && (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:60,gap:12,textAlign:'center'}}>
@@ -452,6 +554,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                         <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
                           <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
                           {(p.archetype||d.archetype)&&<span style={{fontSize:10,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
+                          {p.registry_character_id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#eef0fb',color:'#6366f1'}} title="Linked to registry character">Registry</span>}
                           {p.adult_content_present&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+</span>}
                         </div>
                         <div style={{fontSize:12,color:C.inkMid,lineHeight:1.5,marginBottom:8,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>

@@ -349,9 +349,35 @@ async function clearWaitingSession(passedModels, sessionId) {
   );
 }
 
+// -- JUSTAWOMAN SCROLL MOMENT (LalaVerse Feed pressure) --
+// When Lala's story position intersects with content from @justawoman's locked record,
+// surface it as a narrative pressure event. Reader knows. Lala doesn't.
+
+async function detectJustAwomanMoment(storyPosition, passedModels) {
+  const models = passedModels || getModels();
+  if (!models?.SocialProfile) return null;
+
+  const justawoman = await models.SocialProfile.findOne({
+    where: { is_justawoman_record: true },
+  });
+
+  if (!justawoman) return null;
+
+  return {
+    type: 'justawoman_scroll',
+    pressure_level: 'high',
+    description: "Lala's story position creates a natural moment to scroll past @justawoman.",
+    narrative_note: "Reader knows. Lala doesn't. Use deliberately.",
+    locked_record_id: justawoman.id,
+    locked_record_handle: justawoman.handle,
+    story_position: storyPosition,
+  };
+}
+
 module.exports = {
   checkAllThresholds,
   getWaitingSessions,
   clearWaitingSession,
+  detectJustAwomanMoment,
   WOUND_THRESHOLDS,
 };

@@ -427,8 +427,10 @@ function TabOnline({ character, feedProfile }) {
       {!hasFeed ? (
         <section className="cp-section">
           <div className="cp-empty-state">
-            <p className="cp-empty-label">No online presence</p>
-            <p className="cp-offline-note">This character exists off the grid</p>
+            <p className="cp-empty-label">No Feed profile</p>
+            <p className="cp-offline-note">
+              {character.feed_profile_id ? 'This character exists off the grid' : 'Cap was reached at creation — no Feed profile was auto-generated.'}
+            </p>
           </div>
         </section>
       ) : (
@@ -443,7 +445,14 @@ function TabOnline({ character, feedProfile }) {
                   <span className="cp-feed-handle">@{feedProfile.handle}</span>
                   <span className="cp-feed-display">{feedProfile.display_name}</span>
                   <span className="cp-feed-platform">{feedProfile.platform}</span>
+                  {feedProfile.registry_character_id && (
+                    <span className="cp-registry-badge" title="Linked to registry character" style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,background:'#eef0fb',color:'#6366f1',marginLeft:4}}>Registry</span>
+                  )}
                 </div>
+                <a href={`/feed?profile=${feedProfile.id}&layer=${feedProfile.feed_layer}`}
+                   style={{fontSize:12,fontWeight:600,color:'#6366f1',textDecoration:'none',marginLeft:'auto',whiteSpace:'nowrap'}}>
+                  View in Feed &rarr;
+                </a>
                 {stateCfg && (
                   <span className="cp-state-badge" style={{ background: stateCfg.bg, color: stateCfg.color }}>
                     {stateCfg.label}
