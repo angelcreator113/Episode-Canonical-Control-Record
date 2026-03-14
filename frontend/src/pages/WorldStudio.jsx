@@ -443,6 +443,8 @@ export default function WorldStudio() {
   useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
 
   /* ── Ecosystem generate / preview / confirm ────────────────────────── */
+  const [previewId, setPreviewId] = useState(null);
+
   const generatePreview = async () => {
     setGenerating(true);
     try {
@@ -456,6 +458,7 @@ export default function WorldStudio() {
         setPreviewChars(d.characters);
         setPreviewNotes(d.generation_notes || '');
         setPreviewSel(new Set(d.characters.map((_, i) => i)));
+        setPreviewId(d.preview_id || null);
         setShowPreview(true);
         if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
           new Notification('Ecosystem Generated', { body: `${d.characters.length} characters ready for review`, icon: '/favicon.ico' });
@@ -472,12 +475,13 @@ export default function WorldStudio() {
     try {
       const r = await fetch(`${API}/world/generate-ecosystem-confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characters: selected, generation_notes: previewNotes, world_tag: worldTag }),
+        body: JSON.stringify({ characters: selected, generation_notes: previewNotes, world_tag: worldTag, preview_id: previewId }),
       });
       const d = await r.json();
       if (d.characters) {
-        flash(`${d.count} characters committed`);
+        flash(`${d.count} characters committed · ${d.inter_relationships || 0} relationships seeded`);
         setShowPreview(false);
+        setPreviewId(null);
         loadCharacters();
       } else flash(d.error || 'Confirm failed', 'error');
     } catch (e) { flash(e.message, 'error'); }
