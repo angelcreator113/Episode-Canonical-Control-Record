@@ -320,6 +320,10 @@ body.page-story-engine .app-main-wrapper.full-screen .app-content {
   .se-page button, .se-page a, .se-page input, .se-page select, .se-page textarea {
     min-height: unset;
   }
+  /* Sidebar manages its own compact layout */
+  .ps-sidebar button, .ps-sidebar a {
+    min-height: unset;
+  }
 }
 
 /* Landscape Mobile */
