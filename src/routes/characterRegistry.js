@@ -644,47 +644,10 @@ router.post('/characters/:id/set-status', async (req, res) => {
     character.status = status;
     await character.save();
 
-    // Auto-promote to LalaVerse canon when finalized
-    if (status === 'finalized') {
-      const LALAVERSE_ID = 'a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e';
-      try {
-        const db = getModels();
-        const canonTier = ['special'].includes(character.role_type)
-          ? 'core_canon'
-          : ['pressure', 'mirror'].includes(character.role_type)
-          ? 'supporting_canon'
-          : 'minor_canon';
-
-        const existing = await db.UniverseCharacter?.findOne({
-          where: { registry_character_id: req.params.id, universe_id: LALAVERSE_ID },
-        });
-
-        // Only promote world characters (on_page) to LalaVerse canon
-        const isWorldCharacter = character.appearance_mode === 'on_page';
-
-        if (!existing && db.UniverseCharacter) {
-          if (isWorldCharacter) {
-            await db.UniverseCharacter.create({
-              universe_id:           LALAVERSE_ID,
-              registry_character_id: req.params.id,
-              name:                  character.selected_name || character.display_name,
-              type:                  character.role_type,
-              canon_tier:            canonTier,
-              role:                  character.description,
-              first_appeared:        new Date(),
-              status:                'active',
-              world_exists:          true,
-            });
-            console.log(`✓ World character ${character.display_name} promoted to LalaVerse canon`);
-          } else {
-            console.log(`⊘ ${character.display_name} not promoted — appearance_mode: ${character.appearance_mode} (not on_page)`);
-          }
-        }
-      } catch (promoteErr) {
-        // Log but don't fail the finalize
-        console.error('Auto-promote error (non-fatal):', promoteErr);
-      }
-    }
+    // NOTE: Finalization ONLY locks the record (HTTP 403 on future edits).
+    // Promotion to LalaVerse canon is a separate, deliberate author action
+    // via POST /characters/:charId/promote-to-canon.
+    // Interior Monologue characters do not auto-promote. The author gate is intentional.
 
     return res.json({ success: true, character });
   } catch (err) {
@@ -1285,6 +1248,12 @@ router.post('/registries/:registryId/backfill-all', async (req, res) => {
 
 /**
  * POST /characters/:id/deep-profile/generate
+ * DEPRECATED: This is the legacy 14-dimension anthropology system.
+ * The canonical system is the 10-dimension Character Depth Engine (de_* columns)
+ * served by /api/v1/character-depth routes. This endpoint is retained for
+ * backward compatibility but new integrations should use the Depth Engine.
+ *
+ * Returns a PREVIEW only — call POST /deep-profile/accept to persist.
  * Backfill: infer deep_profile from a character's existing profile fields.
  * For characters created before the deep_profile system existed.
  */
@@ -1404,14 +1373,15 @@ Return ONLY a JSON object matching this structure (include ALL 14 top-level dime
       }
     }
 
-    character.deep_profile = merged;
-    await character.save();
-
+    // Preview only — do NOT write to DB here.
+    // The author must explicitly call POST /deep-profile/accept to persist.
     return res.json({
       success: true,
       character_id: id,
       character_name: character.display_name,
-      deep_profile: merged,
+      proposed: merged,
+      saved: false,
+      message: 'Preview only — call POST /characters/:id/deep-profile/accept with { "proposed": <this object> } to save.',
       dimensions_filled: Object.keys(merged).filter(k => {
         const v = merged[k];
         return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
@@ -1425,6 +1395,7 @@ Return ONLY a JSON object matching this structure (include ALL 14 top-level dime
 
 /**
  * POST /characters/:id/deep-profile/writer-input
+ * DEPRECATED: Legacy 14-dimension system. See /api/v1/character-depth for canonical 10-dimension engine.
  * Accept free text from the writer, parse it into deep_profile dimensions via Claude,
  * return proposed additions for one-click accept.
  */
@@ -1487,6 +1458,7 @@ Parse the writer's text into the 14 deep_profile dimensions. Return ONLY a JSON 
 
 /**
  * POST /characters/:id/deep-profile/accept
+ * DEPRECATED: Legacy 14-dimension system. See /api/v1/character-depth for canonical 10-dimension engine.
  * Merge proposed deep_profile additions into the character's existing deep_profile.
  */
 router.post('/characters/:id/deep-profile/accept', async (req, res) => {
@@ -1539,7 +1511,9 @@ router.post('/characters/:id/deep-profile/accept', async (req, res) => {
 
 /**
  * POST /characters/bulk-deep-profile
+ * DEPRECATED: Legacy 14-dimension system. See /api/v1/character-depth for canonical 10-dimension engine.
  * Generate deep profiles for multiple characters sequentially.
+ * NOTE: This bulk endpoint writes directly to DB for operational convenience.
  * Body: { ids: [1,2,3] }
  */
 router.post('/characters/bulk-deep-profile', async (req, res) => {
