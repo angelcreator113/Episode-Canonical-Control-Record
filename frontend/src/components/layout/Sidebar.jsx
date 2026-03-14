@@ -45,6 +45,8 @@ const NAV = [
           { path: '/character-depth-engine',        label: 'Depth Engine'      },
           { path: '/world-locations',               label: 'Locations'         },
           { path: '/amber',                         label: 'Amber'             },
+          { path: '/universe?tab=world-state',      label: 'World State'       },
+          { path: '/universe?tab=tensions',         label: 'Tensions'          },
         ],
       },
       {
@@ -56,7 +58,6 @@ const NAV = [
           { path: '/world-studio',                  label: 'Characters'        },
           { path: '/world-studio?tab=feed',         label: 'The Feed'          },
           { path: '/world-studio?tab=relationships', label: 'Relationships'    },
-          { path: '/world-studio?tab=tensions',     label: 'Tensions'          },
         ],
       },
       { path: '/therapy/default', label: 'Therapy',    icon: '♡' },
