@@ -2,25 +2,17 @@
  * Service Worker — Offline story caching for LalaVerse
  *
  * Strategy:
- *   - App shell (HTML, CSS, JS, fonts) → cache-first
+ *   - Navigation (HTML) → network-first (always get fresh index.html)
+ *   - Hashed assets (/assets/*) → cache-first (content-hashed by Vite)
  *   - API calls → network-first (fall through to cache if offline)
  *   - Story content saved explicitly via postMessage from the app
  */
 
-const CACHE_NAME = 'lalaverse-v1';
+const CACHE_NAME = 'lalaverse-v2';
 const STORY_CACHE = 'lalaverse-stories-v1';
 
-// App shell files to pre-cache on install
-const APP_SHELL = [
-  '/',
-  '/index.html',
-];
-
-// ── Install: pre-cache app shell ───────────────────────────────────────
+// ── Install: skip waiting to activate immediately ──────────────────────
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
-  );
   self.skipWaiting();
 });
 
@@ -36,7 +28,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// ── Fetch: network-first for API, cache-first for static ──────────────
+// ── Fetch: network-first for HTML & API, cache-first for hashed assets ─
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -44,6 +36,20 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET and cross-origin
   if (request.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;
+
+  // Navigation requests (HTML pages): always network-first
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+          return res;
+        })
+        .catch(() => caches.match(request) || caches.match('/index.html'))
+    );
+    return;
+  }
 
   // API calls: network-first
   if (url.pathname.startsWith('/api/')) {
@@ -59,18 +65,32 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: cache-first
+  // Hashed static assets (/assets/*): cache-first (Vite content-hashes these)
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((res) => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+          }
+          return res;
+        });
+      })
+    );
+    return;
+  }
+
+  // Everything else: network-first
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((res) => {
-        if (res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(request, clone));
-        }
+    fetch(request)
+      .then((res) => {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((c) => c.put(request, clone));
         return res;
-      });
-    })
+      })
+      .catch(() => caches.match(request))
   );
 });
 
