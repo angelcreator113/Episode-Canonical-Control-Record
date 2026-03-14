@@ -245,12 +245,15 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
-    /* ── Section 10: Deep Profile (14-dimension character anthropology) ── */
+    /* ── Section 10: Deep Profile (DEPRECATED — legacy 14-dimension anthropology) ── */
+    /* The canonical depth system is the Character Depth Engine (de_* columns below).
+       deep_profile is retained for backward compatibility but the story engine
+       reads from de_* columns. New integrations should use /api/v1/character-depth. */
     deep_profile: {
       type: DataTypes.JSONB,
       allowNull: true,
       defaultValue: {},
-      comment: 'Accumulative character anthropology — grows through generation, scene revelation, and writer input',
+      comment: 'DEPRECATED: Legacy 14-dimension anthropology. Canonical system is de_* columns (10-dimension Depth Engine).',
     },
 
     /* ── Section 11: Registry Sync fields ── */
@@ -619,7 +622,11 @@ module.exports = (sequelize) => {
     years_posting: { type: DataTypes.INTEGER, allowNull: true },
 
     // Physical Presence & Voice
+    // TECH-015: physical_presence is social-perceptual only — how they take up space,
+    // what people notice before she speaks. No height, weight, or measurements.
     physical_presence: { type: DataTypes.TEXT, allowNull: true },
+    // NOTE: This is the demographics-layer TEXT voice signature (how demographics shape speech).
+    // Distinct from voice_signature (JSONB, Section 7) which captures dialogue patterns/structure.
     demographic_voice_signature: { type: DataTypes.TEXT, allowNull: true },
 
     // Online Presence
