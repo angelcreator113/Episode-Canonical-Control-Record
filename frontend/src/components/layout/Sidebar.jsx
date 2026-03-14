@@ -184,20 +184,20 @@ function Sidebar({ isOpen, onClose }) {
   return (
     <>
       {/* Mobile backdrop */}
-      {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
+      {isOpen && <div className="ps-sidebar-backdrop" onClick={onClose} />}
 
-      <aside className={`sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+      <aside className={`ps-sidebar ${isOpen ? 'ps-sidebar-open' : ''} ${collapsed ? 'ps-sidebar-collapsed' : ''}`}>
         {/* ── Logo / collapse toggle ── */}
-        <div className="sidebar-logo">
+        <div className="ps-sidebar-brand">
           {!collapsed && (
-            <span className="logo-text" onClick={() => go('/start')}>
-              PRIME<span className="logo-accent">◈</span>
+            <span className="ps-brand-mark" onClick={() => go('/start')}>
+              PRIME<span className="ps-brand-diamond">◈</span>
             </span>
           )}
-          <div className="logo-actions">
+          <div className="ps-brand-actions">
             {/* Desktop collapse toggle */}
             <button
-              className="collapse-btn"
+              className="ps-collapse-btn"
               onClick={() => setCollapsed(c => !c)}
               title={collapsed ? 'Expand' : 'Collapse'}
             >
@@ -206,7 +206,7 @@ function Sidebar({ isOpen, onClose }) {
             {/* Mobile close button */}
             {onClose && (
               <button
-                className="sidebar-close-btn"
+                className="ps-sidebar-close"
                 onClick={(e) => { e.stopPropagation(); onClose(); }}
                 aria-label="Close sidebar"
               >
@@ -217,23 +217,23 @@ function Sidebar({ isOpen, onClose }) {
         </div>
 
         {/* ── Navigation ── */}
-        <nav className="sidebar-nav">
+        <nav className="ps-nav">
           {/* Home */}
           <NavLink
             to="/"
             end
-            className={({ isActive: a }) => `nav-item ${a ? 'active' : ''}`}
+            className={({ isActive: a }) => `ps-nav-item ${a ? 'ps-nav-item-active' : ''}`}
             onClick={() => { if (onClose) onClose(); }}
             title={collapsed ? 'Home' : undefined}
           >
-            <span className="nav-icon">🏠</span>
-            {!collapsed && <span className="nav-label">Home</span>}
+            <span className="ps-nav-icon">🏠</span>
+            {!collapsed && <span className="ps-nav-label">Home</span>}
           </NavLink>
 
           {/* Zones */}
           {NAV.map(({ zone, items }) => (
-            <div className="nav-section" key={zone}>
-              {!collapsed && <div className="nav-section-label">{zone}</div>}
+            <div className="ps-zone" key={zone}>
+              {!collapsed && <div className="ps-zone-label">{zone}</div>}
 
               {items.map(item => {
                 // ── Expandable item with static children (Universe) ──
@@ -249,35 +249,35 @@ function Sidebar({ isOpen, onClose }) {
                   const groupActive = isActive(item.route) || childRoutes.some(r => isActive(r));
                   const toggleOnly = isStories; // Short Stories: toggle only, no navigate
                   return (
-                    <div key={item.route} className="nav-group">
+                    <div key={item.route} className="ps-item-group">
                       <div
-                        className={`nav-item ${groupActive ? 'active' : ''}`}
+                        className={`ps-nav-item ${groupActive ? 'ps-nav-item-active' : ''}`}
                         onClick={() => {
                           if (!toggleOnly) go(item.route);
                           setGroupOpen(o => !o);
                         }}
                         title={collapsed ? item.label : undefined}
                       >
-                        <span className="nav-icon">{item.icon}</span>
+                        <span className="ps-nav-icon">{item.icon}</span>
                         {!collapsed && (
                           <>
-                            <span className="nav-label">{item.label}</span>
-                            <span className={`chevron ${groupOpen ? 'open' : ''}`}>›</span>
+                            <span className="ps-nav-label">{item.label}</span>
+                            <span className={`ps-nav-chevron ${groupOpen ? 'ps-nav-chevron-open' : ''}`}>›</span>
                           </>
                         )}
                       </div>
 
                       {groupOpen && !collapsed && (
-                        <div className="nav-subgroup">
+                        <div className="ps-subnav">
                           {item.children.map(child => (
                             <NavLink
                               key={child.route}
                               to={child.route}
-                              className={({ isActive: a }) => `nav-subitem ${location.pathname + location.search === child.route ? 'active' : ''}`}
+                              className={({ isActive: a }) => `ps-subnav-item ${location.pathname + location.search === child.route ? 'ps-subnav-item-active' : ''}`}
                               onClick={() => { if (onClose) onClose(); }}
                             >
-                              <span className="sub-dot" />
-                              <span className="subitem-label">{child.label}</span>
+                              <span className="ps-sub-dot" />
+                              <span className="ps-subnav-label">{child.label}</span>
                             </NavLink>
                           ))}
                         </div>
@@ -290,46 +290,46 @@ function Sidebar({ isOpen, onClose }) {
                 if (item.expandable) {
                   const showsActive = isActive('/shows');
                   return (
-                    <div key={item.route} className="nav-group">
+                    <div key={item.route} className="ps-item-group">
                       <div
-                        className={`nav-item ${showsActive ? 'active' : ''}`}
+                        className={`ps-nav-item ${showsActive ? 'ps-nav-item-active' : ''}`}
                         onClick={() => {
                           go(item.route);
                           setShowsOpen(o => !o);
                         }}
                         title={collapsed ? item.label : undefined}
                       >
-                        <span className="nav-icon">{item.icon}</span>
+                        <span className="ps-nav-icon">{item.icon}</span>
                         {!collapsed && (
                           <>
-                            <span className="nav-label">{item.label}</span>
-                            <span className={`chevron ${showsOpen ? 'open' : ''}`}>›</span>
+                            <span className="ps-nav-label">{item.label}</span>
+                            <span className={`ps-nav-chevron ${showsOpen ? 'ps-nav-chevron-open' : ''}`}>›</span>
                           </>
                         )}
                       </div>
 
                       {/* Shows sub-list */}
                       {showsOpen && !collapsed && (
-                        <div className="nav-subgroup">
+                        <div className="ps-subnav">
                           {shows.length === 0 ? (
-                            <div className="sub-empty">No shows yet</div>
+                            <div className="ps-subnav-empty">No shows yet</div>
                           ) : (
                             shows.map(show => (
                               <NavLink
                                 key={show.id}
                                 to={`/shows/${show.id}`}
-                                className={({ isActive: a }) => `nav-subitem ${a ? 'active' : ''}`}
+                                className={({ isActive: a }) => `ps-subnav-item ${a ? 'ps-subnav-item-active' : ''}`}
                                 onClick={() => { if (onClose) onClose(); }}
                               >
-                                <span className="sub-dot" />
-                                <span className="subitem-label">{show.name}</span>
-                                <span className="subitem-count">{show.episodeCount}</span>
+                                <span className="ps-sub-dot" />
+                                <span className="ps-subnav-label">{show.name}</span>
+                                <span className="ps-subnav-count">{show.episodeCount}</span>
                               </NavLink>
                             ))
                           )}
                           <NavLink
                             to="/shows/create"
-                            className="sub-create"
+                            className="ps-subnav-create"
                             onClick={() => { if (onClose) onClose(); }}
                           >
                             + New Show
@@ -346,12 +346,12 @@ function Sidebar({ isOpen, onClose }) {
                     key={item.route}
                     to={item.route}
                     end={item.route === '/episodes'}
-                    className={({ isActive: a }) => `nav-item ${a ? 'active' : ''}`}
+                    className={({ isActive: a }) => `ps-nav-item ${a ? 'ps-nav-item-active' : ''}`}
                     onClick={() => { if (onClose) onClose(); }}
                     title={collapsed ? item.label : undefined}
                   >
-                    <span className="nav-icon">{item.icon}</span>
-                    {!collapsed && <span className="nav-label">{item.label}</span>}
+                    <span className="ps-nav-icon">{item.icon}</span>
+                    {!collapsed && <span className="ps-nav-label">{item.label}</span>}
                   </NavLink>
                 );
               })}
@@ -363,13 +363,13 @@ function Sidebar({ isOpen, onClose }) {
         <SidebarProgress showId={shows[0]?.id} collapsed={collapsed} />
 
         {/* ── Footer ── */}
-        <div className="sidebar-footer">
-          <div className="user-info" onClick={() => go('/settings')}>
-            <div className="user-avatar">{(user?.name || user?.email || 'U')[0].toUpperCase()}</div>
+        <div className="ps-user-footer">
+          <div className="ps-user-click" onClick={() => go('/settings')}>
+            <div className="ps-user-avatar">{(user?.name || user?.email || 'U')[0].toUpperCase()}</div>
             {!collapsed && (
-              <div className="user-details">
-                <div className="user-name">{user?.name || user?.email?.split('@')[0] || 'Creator'}</div>
-                <div className="user-status">Creator</div>
+              <div className="ps-user-info">
+                <div className="ps-user-name">{user?.name || user?.email?.split('@')[0] || 'Creator'}</div>
+                <div className="ps-user-role">Creator</div>
               </div>
             )}
           </div>

@@ -39,6 +39,13 @@
     min-width: unset;
   }
 
+  /* Sidebar manages its own compact layout — don't inflate touch targets */
+  .ps-sidebar button,
+  .ps-sidebar a {
+    min-height: unset;
+    min-width: unset;
+  }
+
   input[type="text"],
   input[type="email"],
   input[type="password"],
