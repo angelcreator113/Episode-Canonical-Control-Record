@@ -1463,6 +1463,10 @@ router.post('/world/continuations/:contId/approve', optionalAuth, async (req, re
  */
 router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) => {
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+    }
+
     const {
       world_tag = 'lalaverse',
       world_context = {},
@@ -1583,6 +1587,21 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       return res.status(400).json({ error: 'No characters to confirm' });
     }
 
+    // Validate required columns exist (migration may not have run)
+    const cols = await sequelize.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'world_characters'`,
+      { type: sequelize.QueryTypes.SELECT }
+    );
+    const colNames = new Set(cols.map(c => c.column_name));
+    const required = ['relationship_status', 'committed_to', 'moral_code', 'fidelity_pattern', 'sexuality', 'family_layer', 'origin_story', 'public_persona', 'private_reality'];
+    const missing = required.filter(c => !colNames.has(c));
+    if (missing.length) {
+      console.error(`generate-ecosystem-confirm: missing columns: ${missing.join(', ')}. Run: npx sequelize-cli db:migrate`);
+      return res.status(500).json({
+        error: `Database schema outdated — missing columns: ${missing.join(', ')}. Run migrations on the server.`,
+      });
+    }
+
     // Create batch record
     const batchId = uuidv4();
     await sequelize.query(
@@ -1683,7 +1702,12 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
     });
   } catch (err) {
     console.error('generate-ecosystem-confirm error:', err);
-    res.status(500).json({ error: err.message });
+    const detail = err.original?.message || err.parent?.message || '';
+    res.status(500).json({
+      error: err.message,
+      ...(detail && { detail }),
+      hint: detail.includes('column') ? 'Run migrations: npx sequelize-cli db:migrate' : undefined,
+    });
   }
 });
 
