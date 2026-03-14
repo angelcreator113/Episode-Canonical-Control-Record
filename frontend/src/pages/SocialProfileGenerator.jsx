@@ -249,8 +249,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:14}}>
           <div>
-            <div style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed</div>
-            <div style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — JustAWoman's real-world online ecosystem</div>
+            <div style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed <span style={{fontSize:12,fontWeight:600,color:C.pink,background:'#f9e4ec',padding:'2px 8px',borderRadius:4,marginLeft:6,verticalAlign:'middle',letterSpacing:'0.3px'}}>{protagonist.icon} {protagonist.context.name}</span></div>
+            <div style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — {protagonist.context.name === 'Lala' ? "Lala's inherited digital world" : "JustAWoman's real-world online ecosystem"}</div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {/* Protagonist switcher — hidden when embedded in WorldStudio */}
