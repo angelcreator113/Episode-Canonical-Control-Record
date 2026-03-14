@@ -15,7 +15,7 @@ const SCENE_PATTERNS = [
  * @param {string} scriptText - Raw script content
  * @returns {Array} Array of scene objects
  */
-export function parseScriptScenes(scriptText) {
+function parseScriptScenes(scriptText) {
   if (!scriptText) return [];
 
   const lines = scriptText.split('\n');
@@ -59,7 +59,7 @@ export function parseScriptScenes(scriptText) {
  * Estimate scene duration from script content
  * Rough estimate: 1 second per line of script
  */
-export function estimateSceneDuration(sceneText) {
+function estimateSceneDuration(sceneText) {
   if (!sceneText) return 60; // Default 1 minute
   
   const lines = sceneText.split('\n').filter(l => l.trim());
@@ -71,7 +71,7 @@ export function estimateSceneDuration(sceneText) {
 /**
  * Extract scene content between scene headers
  */
-export function extractSceneContent(scriptText, sceneNumber) {
+function extractSceneContent(scriptText, sceneNumber) {
   const lines = scriptText.split('\n');
   const scenes = parseScriptScenes(scriptText);
   
@@ -86,7 +86,7 @@ export function extractSceneContent(scriptText, sceneNumber) {
   return lines.slice(startLine, endLine).join('\n').trim();
 }
 
-export default {
+module.exports = {
   parseScriptScenes,
   estimateSceneDuration,
   extractSceneContent
