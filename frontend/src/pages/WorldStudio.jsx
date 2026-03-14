@@ -1,18 +1,13 @@
 /**
- * WorldStudio.jsx  v4.0 — Refactored to match Prime Studios design system
+ * WorldStudio.jsx  v5.0 — Three-tab restructure
  *
- * Changes from v3.1:
- *  - Header stripped: world picker + action buttons now live in a clean sub-bar
- *  - Stats bar redesigned to match Character Registry style
- *  - Sidebar search + filter pills match Character Registry patterns
- *  - Character cards redesigned: avatar initials, occupation subtitle, role badge
- *  - Detail pane tabs: Overview · Desire · Relationships · Depth · Demographics
- *  - Depth panel: reads de_* fields from character (populated via /character-depth)
- *  - Demographics panel: age, city, class, family, career
- *  - "Add Relationship" modal cleaned up
- *  - Preview modal grid: card-first layout matching Generate Ecosystem preview
- *  - Removed: duplicate registry tab (lives at /character-registry)
- *  - Added: breadcrumb, proper page header matching app frame
+ * Changes from v4.0:
+ *  - Three top-level creation tabs: Characters · Feed · Relationships
+ *  - World switcher (LalaVerse / Before Lala / All) moved inside Characters tab
+ *  - Relationships tab embeds RelationshipEngine filtered to current world
+ *  - Removed: Locations tab (moved to dedicated page)
+ *  - Characters tab retains full existing functionality unchanged
+ *  - Feed tab retains SocialProfileGenerator embed unchanged
  *
  * Styling: WorldStudio.css — light theme, pink/blue/lavender palette
  */
@@ -371,7 +366,7 @@ export default function WorldStudio() {
   const navigate = useNavigate();
 
   /* ── Top-level page tab ─────────────────────────────────────────────── */
-  const [pageTab, setPageTab] = useState('lalaverse');
+  const [pageTab, setPageTab] = useState('characters');
 
   /* ── World ─────────────────────────────────────────────────────────── */
   const [worldTag, setWorldTag] = useState('lalaverse');
@@ -410,12 +405,6 @@ export default function WorldStudio() {
   });
   const [savingRel, setSavingRel] = useState(false);
 
-  /* ── Locations / World State / Tensions ──────────────────────────── */
-  const [locations,       setLocations]       = useState([]);
-  const [locLoading,      setLocLoading]      = useState(false);
-  const [locForm,         setLocForm]         = useState({ name: '', description: '', location_type: 'interior', narrative_role: '' });
-  const [editLocId,       setEditLocId]       = useState(null);
-
   /* ── Toast ─────────────────────────────────────────────────────────── */
   const [toast, setToast] = useState(null);
   const flash = useCallback((msg, type = 'success') => {
@@ -423,57 +412,10 @@ export default function WorldStudio() {
     setTimeout(() => setToast(null), 3200);
   }, []);
 
-  /* ── World Tab Loaders ─────────────────────────────────────────────── */
-  const loadLocations = useCallback(async () => {
-    setLocLoading(true);
-    try { const r = await fetch(`${API}/world/locations`); const d = await r.json(); setLocations(d.locations || []); }
-    catch (e) { console.error('loadLocations', e); }
-    finally { setLocLoading(false); }
-  }, []);
-
-
-  const seedInfrastructure = useCallback(async () => {
-    try {
-      const r = await fetch(`${API}/world/locations/seed-infrastructure`, { method: 'POST' });
-      const d = await r.json();
-      flash(`Seeded ${d.created || 0} locations`);
-      loadLocations();
-    } catch (e) { flash('Seed failed', 'error'); }
-  }, [flash, loadLocations]);
-
-  const saveLocation = useCallback(async () => {
-    const method = editLocId ? 'PUT' : 'POST';
-    const url = editLocId ? `${API}/world/locations/${editLocId}` : `${API}/world/locations`;
-    try {
-      await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(locForm) });
-      flash(editLocId ? 'Location updated' : 'Location created');
-      setLocForm({ name: '', description: '', location_type: 'interior', narrative_role: '' });
-      setEditLocId(null);
-      loadLocations();
-    } catch (e) { flash('Save failed', 'error'); }
-  }, [editLocId, locForm, flash, loadLocations]);
-
-  const deleteLocation = useCallback(async (id) => {
-    try { await fetch(`${API}/world/locations/${id}`, { method: 'DELETE' }); flash('Location deleted'); loadLocations(); }
-    catch (e) { flash('Delete failed', 'error'); }
-  }, [flash, loadLocations]);
-
-
-  const createStoryFromChar = useCallback(async (charId) => {
-    try {
-      const r = await fetch(`${API}/world/create-story-task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_id: charId }) });
-      const d = await r.json();
-      if (d.task) navigate('/story-evaluation', { state: { task: d.task } });
-      else flash('Could not generate task', 'error');
-    } catch (e) { flash('Story task failed', 'error'); }
-  }, [navigate, flash]);
-
-
   /* ── Loaders ───────────────────────────────────────────────────────── */
   const loadCharacters = useCallback(async (tag) => {
     try {
-      // All Characters tab: fetch all worlds combined
-      const effectiveTag = tag || worldTag;
+      const effectiveTag = tag !== undefined ? tag : worldTag;
       const url = effectiveTag === 'all'
         ? `${API}/world/characters`
         : `${API}/world/characters?world_tag=${encodeURIComponent(effectiveTag)}`;
@@ -493,11 +435,9 @@ export default function WorldStudio() {
   }, []);
 
   useEffect(() => {
-    if (pageTab !== 'feed' && pageTab !== 'relationships') {
-      loadCharacters(worldTag);
-    }
+    loadCharacters(worldTag);
     setSelectedChar(null); setCharDetail(null); setEditMode(false); setCurrentPage(1);
-  }, [worldTag, pageTab]);
+  }, [worldTag]);
 
   useEffect(() => { setCurrentPage(1); }, [charSearch, charFilter]);
   useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
@@ -652,25 +592,18 @@ export default function WorldStudio() {
             <h1 className="ws4-page-title">World Studio</h1>
           </div>
 
-          {/* Top-level tabs — matches Character Registry pattern */}
+          {/* Top-level tabs — three creation flows */}
           <nav className="ws4-page-tabs">
             {[
-              { key: 'lalaverse',      label: 'LalaVerse',      icon: '✦' },
-              { key: 'before-lala',    label: 'Before Lala',    icon: '◈' },
-              { key: 'all-characters', label: 'All Characters', icon: '🌍' },
-              { key: 'relationships',  label: 'Relationships',  icon: '🔗' },
-              { key: 'locations',      label: 'Locations',      icon: '🏛' },
-              { key: 'feed',           label: 'The Feed',       icon: '📱' },
+              { key: 'characters',    label: 'Characters',    icon: '◈' },
+              { key: 'feed',          label: 'The Feed',      icon: '📱' },
+              { key: 'relationships', label: 'Relationships', icon: '🔗' },
             ].map(t => (
               <button
                 key={t.key}
                 className={`ws4-page-tab ${pageTab === t.key ? 'ws4-page-tab-active' : ''}`}
                 onClick={() => {
                   setPageTab(t.key);
-                  if (t.key === 'lalaverse')      setWorldTag('lalaverse');
-                  if (t.key === 'before-lala')    setWorldTag('book-1');
-                  if (t.key === 'all-characters') setWorldTag('all');
-                  if (t.key === 'locations')      loadLocations();
                   setSelectedChar(null);
                   setCharDetail(null);
                   setCharFilter('all');
@@ -682,15 +615,33 @@ export default function WorldStudio() {
             ))}
           </nav>
 
-          {/* Action buttons — only on world tabs */}
-          {(pageTab === 'lalaverse' || pageTab === 'before-lala' || pageTab === 'all-characters') && (
+          {/* Action buttons — Characters tab only */}
+          {pageTab === 'characters' && (
             <div className="ws4-header-actions">
+              {/* World switcher — now lives here, inside Characters tab */}
+              <div className="ws4-world-switcher">
+                {WORLD_OPTIONS.map(w => (
+                  <button
+                    key={w.tag}
+                    className={`ws4-world-btn ${worldTag === w.tag ? 'ws4-world-btn-active' : ''}`}
+                    onClick={() => { setWorldTag(w.tag); setSelectedChar(null); setCharDetail(null); setCharFilter('all'); }}
+                  >
+                    <span>{w.icon}</span> {w.label}
+                  </button>
+                ))}
+                <button
+                  className={`ws4-world-btn ${worldTag === 'all' ? 'ws4-world-btn-active' : ''}`}
+                  onClick={() => { setWorldTag('all'); setSelectedChar(null); setCharDetail(null); setCharFilter('all'); }}
+                >
+                  <span>⊞</span> All
+                </button>
+              </div>
               {draftCount > 0 && (
                 <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={bulkActivate} disabled={bulkActivating}>
                   {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
                 </button>
               )}
-              {(pageTab === 'lalaverse' || pageTab === 'before-lala') && (
+              {worldTag !== 'all' && (
                 <button className="ws4-btn ws4-btn-primary" onClick={generatePreview} disabled={generating}>
                   {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
                 </button>
@@ -709,70 +660,13 @@ export default function WorldStudio() {
 
       {/* ── RELATIONSHIPS TAB ───────────────────────────────────────── */}
       {pageTab === 'relationships' && (
-        <div className="ws4-feed-tab">
-          <RelationshipEngine />
+        <div className="ws4-relationships-tab">
+          <RelationshipEngine embedded={true} defaultWorldTag={worldTag} />
         </div>
       )}
 
-      {/* ── LOCATIONS TAB ───────────────────────────────────────────── */}
-      {pageTab === 'locations' && (
-        <div className="ws4-feed-tab" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>🏛 World Locations</h2>
-            <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={seedInfrastructure}>🌆 Seed Infrastructure</button>
-          </div>
-          {/* Create/Edit form */}
-          <div style={{ background: '#f8f7f4', borderRadius: 10, padding: 16, marginBottom: 20, border: '1px solid #e8e5de' }}>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>{editLocId ? '✎ Edit Location' : '+ New Location'}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <input className="ws4-input" placeholder="Name *" value={locForm.name} onChange={e => setLocForm(p => ({ ...p, name: e.target.value }))} />
-              <select className="ws4-select" value={locForm.location_type} onChange={e => setLocForm(p => ({ ...p, location_type: e.target.value }))}>
-                <option value="interior">Interior</option><option value="exterior">Exterior</option>
-                <option value="virtual">Virtual</option><option value="transitional">Transitional</option>
-              </select>
-              <input className="ws4-input" placeholder="Narrative Role" value={locForm.narrative_role} onChange={e => setLocForm(p => ({ ...p, narrative_role: e.target.value }))} />
-              <textarea className="ws4-input" placeholder="Description" rows={2} value={locForm.description} onChange={e => setLocForm(p => ({ ...p, description: e.target.value }))} style={{ resize: 'vertical' }} />
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={saveLocation} disabled={!locForm.name}>{editLocId ? 'Update' : 'Create'}</button>
-              {editLocId && <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => { setEditLocId(null); setLocForm({ name: '', description: '', location_type: 'interior', narrative_role: '' }); }}>Cancel</button>}
-            </div>
-          </div>
-          {/* Location list */}
-          {locLoading ? <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>Loading…</div> : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-              {locations.map(loc => (
-                <div key={loc.id} style={{ background: '#fff', borderRadius: 10, padding: 14, border: '1px solid #e8e5de' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{loc.name}</div>
-                      <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{loc.location_type}{loc.narrative_role ? ` · ${loc.narrative_role}` : ''}</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" style={{ fontSize: 11, padding: '2px 6px' }}
-                        onClick={() => { setEditLocId(loc.id); setLocForm({ name: loc.name, description: loc.description || '', location_type: loc.location_type || 'interior', narrative_role: loc.narrative_role || '' }); }}>✎</button>
-                      <button className="ws4-btn ws4-btn-danger ws4-btn-sm" style={{ fontSize: 11, padding: '2px 6px' }}
-                        onClick={() => deleteLocation(loc.id)}>✕</button>
-                    </div>
-                  </div>
-                  {loc.description && <div style={{ fontSize: 12, color: '#666', marginTop: 6, lineHeight: 1.4 }}>{loc.description}</div>}
-                  {loc.sensory_details && (
-                    <div style={{ fontSize: 11, color: '#999', marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {Object.entries(loc.sensory_details).filter(([,v]) => v).map(([k,v]) => (
-                        <span key={k} style={{ background: '#f0eee8', borderRadius: 4, padding: '1px 6px' }}>{k}: {v}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {locations.length === 0 && <div style={{ color: '#999', gridColumn: '1 / -1', textAlign: 'center', padding: 40 }}>No locations yet — seed infrastructure or create one above.</div>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── WORLD / CHARACTER TABS ──────────────────────────────────── */}
-      {pageTab !== 'feed' && pageTab !== 'relationships' && pageTab !== 'locations' && (
+      {/* ── CHARACTERS TAB ──────────────────────────────────────────── */}
+      {pageTab === 'characters' && (
       <>
 
       {/* ── STATS BAR ───────────────────────────────────────────────── */}
@@ -876,15 +770,21 @@ export default function WorldStudio() {
           {/* Empty state */}
           {characters.length === 0 && (
             <div className="ws4-empty-state">
-              <div className="ws4-empty-icon">{curWorld.icon}</div>
-              <div className="ws4-empty-title">Start your {curWorld.label} Ecosystem</div>
-              <div className="ws4-empty-body">
-                Generate a full cast of world characters with <strong>{curWorld.protagonist}</strong> as protagonist.
-                Preview them, select who stays, confirm to commit.
+              <div className="ws4-empty-icon">{curWorld?.icon || '⊞'}</div>
+              <div className="ws4-empty-title">
+                {worldTag === 'all' ? 'No characters yet' : `Start your ${curWorld?.label} Ecosystem`}
               </div>
-              <button className="ws4-btn ws4-btn-primary ws4-btn-lg" onClick={generatePreview} disabled={generating}>
-                {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
-              </button>
+              <div className="ws4-empty-body">
+                {worldTag === 'all'
+                  ? 'Select LalaVerse or Before Lala to generate your first ecosystem.'
+                  : `Generate a full cast of world characters with ${curWorld?.protagonist} as protagonist. Preview them, select who stays, confirm to commit.`
+                }
+              </div>
+              {worldTag !== 'all' && (
+                <button className="ws4-btn ws4-btn-primary ws4-btn-lg" onClick={generatePreview} disabled={generating}>
+                  {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
+                </button>
+              )}
             </div>
           )}
 
@@ -892,7 +792,7 @@ export default function WorldStudio() {
           {characters.length > 0 && !charDetail && (
             <div className="ws4-dashboard">
               <div className="ws4-dashboard-heading">
-                {curWorld.icon} {curWorld.label} — Ecosystem Overview
+                {worldTag === 'all' ? '⊞ All Worlds' : `${curWorld?.icon} ${curWorld?.label}`} — Ecosystem Overview
               </div>
               <div className="ws4-dash-label">Character Types</div>
               <div className="ws4-type-grid">
@@ -950,7 +850,6 @@ export default function WorldStudio() {
                         <button className="ws4-btn ws4-btn-ghost ws4-btn-sm ws4-btn-muted" onClick={() => archiveChar(charDetail.id)}>Archive</button>
                       )}
                       <button className="ws4-btn ws4-btn-danger ws4-btn-sm" onClick={() => deleteChar(charDetail.id)}>Delete</button>
-                      <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={() => createStoryFromChar(charDetail.id)}>✦ Create Story</button>
                     </>
                   ) : (
                     <>
@@ -1366,7 +1265,7 @@ export default function WorldStudio() {
       )}
 
       </>
-      ) /* end world/character tabs */}
+      ) /* end characters tab */}
 
       {/* Toast */}
       {toast && (
