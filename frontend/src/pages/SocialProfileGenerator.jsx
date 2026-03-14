@@ -1,6 +1,6 @@
 /**
  * SocialProfileGenerator.jsx — The Feed
- * Prime Studios · LalaVerse
+ * Prime Studios · JustAWoman's real-world online ecosystem
  *
  * Refactored for Prime Studios light theme:
  *   #d4789a (pink) · #7ab3d4 (blue) · #a889c8 (lavender)
@@ -250,7 +250,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
         <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:14}}>
           <div>
             <div style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed</div>
-            <div style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — LalaVerse social ecosystem</div>
+            <div style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — JustAWoman's real-world online ecosystem</div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {/* Protagonist switcher — hidden when embedded in WorldStudio */}
@@ -269,13 +269,15 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
           </div>
         </div>
         {/* Stats */}
-        <div style={{display:'flex',gap:20}}>
-          {[['Profiles',stats.total,C.lavender],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
+        <div style={{display:'flex',gap:20,alignItems:'center'}}>
+          {[['Profiles',stats.total,stats.total>=443?'#c0392b':stats.total>=420?'#e67e22':C.lavender],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
             <div key={label} style={{display:'flex',alignItems:'baseline',gap:6}}>
               <span style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{val||0}</span>
-              <span style={{fontSize:12,color:C.inkLight}}>{label}</span>
+              <span style={{fontSize:12,color:C.inkLight}}>{label==='Profiles'?`/ 443`:label}</span>
             </div>
           ))}
+          {stats.total>=443&&<span style={{fontSize:11,fontWeight:600,color:'#c0392b',background:'#fde8e8',padding:'2px 8px',borderRadius:4}}>Cap reached</span>}
+          {stats.total>=420&&stats.total<443&&<span style={{fontSize:11,fontWeight:600,color:'#e67e22',background:'#fef3e0',padding:'2px 8px',borderRadius:4}}>{443-stats.total} remaining</span>}
         </div>
       </div>
 

@@ -364,7 +364,7 @@ function TabShocks() {
 function TabMemory() {
   return (
     <div className="st-tab-content">
-      <p className="st-intro">Major events become part of LalaVerse history. The Feed has a memory, and that memory has power.</p>
+      <p className="st-intro">Major events become part of JustAWoman's online world history. The Feed has a memory, and that memory has power.</p>
       <div className="st-table-wrap">
         <table className="st-table">
           <thead>

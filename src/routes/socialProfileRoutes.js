@@ -213,8 +213,19 @@ router.post('/generate', optionalAuth, async (req, res) => {
   }
 
   const db = req.app.locals.db || require('../models');
+  const CREATOR_CAP = 443;
 
   try {
+    // Soft-cap check: warn (don't block) when approaching or exceeding 443
+    const currentCount = await db.SocialProfile.count();
+    if (currentCount >= CREATOR_CAP) {
+      res.set('X-Creator-Cap-Warning', `at_cap`);
+      res.set('X-Creator-Cap-Count', `${currentCount}/${CREATOR_CAP}`);
+    } else if (currentCount >= CREATOR_CAP - 23) {
+      res.set('X-Creator-Cap-Warning', `approaching`);
+      res.set('X-Creator-Cap-Count', `${currentCount}/${CREATOR_CAP}`);
+    }
+
     const response = await client.messages.create({
       model:      'claude-sonnet-4-20250514',
       max_tokens: 6000,
@@ -1091,13 +1102,19 @@ router.post('/:id/add-moment', optionalAuth, async (req, res) => {
 });
 
 // ── GET /:id/scene-context ───────────────────────────────────────────────────
-// Returns formatted profile for story engine injection
+// Returns formatted profile for story engine injection.
+// IMPORTANT: Only voice-safe fields are included. Author-knowledge fields
+// (from full_profile JSONB: blind_spot, actual_narrative, foreclosed_*,
+// justawoman_mirror, mirror_proposed_by_amber) are withheld here.
+// Those fields are available only to the evaluation agent via storyEvaluationRoutes.
+// See DEV-030: author-knowledge injection split.
 router.get('/:id/scene-context', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const p = await db.SocialProfile.findByPk(req.params.id);
     if (!p) return res.status(404).json({ error: 'Not found' });
 
+    // Voice-safe formatted context (no author-knowledge fields)
     const context = `
 SOCIAL PROFILE: ${p.handle} (${p.platform})
 Display name: ${p.display_name} · ${p.follower_count_approx} followers · ${p.content_category}
@@ -1122,7 +1139,38 @@ SAMPLE CAPTIONS:
 ${(p.sample_captions || []).map((c, i) => `${i + 1}. ${c}`).join('\n')}
     `.trim();
 
-    return res.json({ context, profile: p });
+    // Return voice-safe profile subset — strip author-knowledge and raw JSONB
+    const voiceProfile = {
+      id: p.id,
+      handle: p.handle,
+      platform: p.platform,
+      display_name: p.display_name,
+      follower_tier: p.follower_tier,
+      follower_count_approx: p.follower_count_approx,
+      content_category: p.content_category,
+      archetype: p.archetype,
+      content_persona: p.content_persona,
+      real_signal: p.real_signal,
+      posting_voice: p.posting_voice,
+      comment_energy: p.comment_energy,
+      adult_content_present: p.adult_content_present,
+      adult_content_type: p.adult_content_type,
+      adult_content_framing: p.adult_content_framing,
+      parasocial_function: p.parasocial_function,
+      emotional_activation: p.emotional_activation,
+      watch_reason: p.watch_reason,
+      what_it_costs_her: p.what_it_costs_her,
+      current_trajectory: p.current_trajectory,
+      trajectory_detail: p.trajectory_detail,
+      sample_captions: p.sample_captions,
+      pinned_post: p.pinned_post,
+      current_state: p.current_state,
+      geographic_base: p.geographic_base,
+      aesthetic_dna: p.aesthetic_dna,
+      collab_style: p.collab_style,
+    };
+
+    return res.json({ context, profile: voiceProfile });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
