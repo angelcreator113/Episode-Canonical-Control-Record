@@ -108,20 +108,31 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET /canvas — nodes + edges for SVG renderer
+// ?author_mode=true → include underground profiles (shown with ◎ indicator)
+// Default: excludes edges where either node is underground
 router.get('/canvas', async (req, res) => {
   const { FeedProfileRelationship, SocialProfile } = getModels(req);
+  const authorMode = req.query.author_mode === 'true';
   try {
     const relationships = await FeedProfileRelationship.findAll({
       include: [
-        { model: SocialProfile, as: 'influencerA', attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'archetype'] },
-        { model: SocialProfile, as: 'influencerB', attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'archetype'] },
+        { model: SocialProfile, as: 'influencerA', attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'archetype', 'visibility_tier'] },
+        { model: SocialProfile, as: 'influencerB', attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'archetype', 'visibility_tier'] },
       ],
     });
 
-    // Collect unique nodes
+    // Collect unique nodes, filtering underground unless author_mode
     const nodeMap = new Map();
-    for (const rel of relationships) {
+    const filteredRels = relationships.filter(rel => {
+      if (authorMode) return true;
+      const tierA = rel.influencerA?.visibility_tier || 'public';
+      const tierB = rel.influencerB?.visibility_tier || 'public';
+      return tierA !== 'underground' && tierB !== 'underground';
+    });
+
+    for (const rel of filteredRels) {
       if (rel.influencerA && !nodeMap.has(rel.influencerA.id)) {
+        const tier = rel.influencerA.visibility_tier || 'public';
         nodeMap.set(rel.influencerA.id, {
           id: rel.influencerA.id,
           handle: rel.influencerA.handle,
@@ -129,9 +140,12 @@ router.get('/canvas', async (req, res) => {
           platform: rel.influencerA.platform,
           state: rel.influencerA.current_state,
           archetype: rel.influencerA.archetype,
+          visibility_tier: tier,
+          is_underground: tier === 'underground',
         });
       }
       if (rel.influencerB && !nodeMap.has(rel.influencerB.id)) {
+        const tier = rel.influencerB.visibility_tier || 'public';
         nodeMap.set(rel.influencerB.id, {
           id: rel.influencerB.id,
           handle: rel.influencerB.handle,
@@ -139,11 +153,13 @@ router.get('/canvas', async (req, res) => {
           platform: rel.influencerB.platform,
           state: rel.influencerB.current_state,
           archetype: rel.influencerB.archetype,
+          visibility_tier: tier,
+          is_underground: tier === 'underground',
         });
       }
     }
 
-    const edges = relationships.map(r => ({
+    const edges = filteredRels.map(r => ({
       id: r.id,
       source: r.influencer_a_id,
       target: r.influencer_b_id,
@@ -152,7 +168,7 @@ router.get('/canvas', async (req, res) => {
       style: EDGE_STYLES[r.relationship_type] || EDGE_STYLES.orbit,
     }));
 
-    res.json({ nodes: Array.from(nodeMap.values()), edges });
+    res.json({ nodes: Array.from(nodeMap.values()), edges, author_mode: authorMode });
   } catch (err) {
     console.error('[FeedRelationships] GET /canvas error:', err);
     res.status(500).json({ error: err.message });
@@ -256,15 +272,23 @@ router.post('/auto-generate', async (req, res) => {
   }
 });
 
-// GET /profiles — list all social profiles for picker UI
+// GET /profiles — list social profiles for picker UI
+// ?author_mode=true → include underground profiles
+// Default: excludes underground
 router.get('/profiles', async (req, res) => {
   const { SocialProfile } = getModels(req);
+  const authorMode = req.query.author_mode === 'true';
   try {
+    const where = {};
+    if (!authorMode) {
+      where.visibility_tier = { [Op.or]: ['public', 'semi_private', null] };
+    }
     const profiles = await SocialProfile.findAll({
-      attributes: ['id', 'handle', 'display_name', 'platform', 'current_state'],
+      where,
+      attributes: ['id', 'handle', 'display_name', 'platform', 'current_state', 'visibility_tier'],
       order: [['handle', 'ASC']],
     });
-    res.json({ profiles });
+    res.json({ profiles, author_mode: authorMode });
   } catch (err) {
     console.error('[FeedRelationships] GET /profiles error:', err);
     res.status(500).json({ error: err.message });

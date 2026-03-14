@@ -1255,6 +1255,15 @@ try {
   console.error('✗ Failed to load Want Field routes:', e.message);
 }
 
+// Underground — visibility tier management for social profiles
+try {
+  const undergroundRoutes = require('./routes/undergroundRoutes');
+  app.use('/api/v1/social-profiles', undergroundRoutes);
+  console.log('✓ Underground routes loaded at /api/v1/social-profiles');
+} catch (e) {
+  console.error('✗ Failed to load Underground routes:', e.message);
+}
+
 // Feed Relationship Map — influencer-to-influencer
 try {
   const feedRelationshipRoutes = require('./routes/feedRelationshipRoutes');
