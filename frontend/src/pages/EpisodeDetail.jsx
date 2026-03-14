@@ -175,6 +175,7 @@ const EpisodeDetail = () => {
         setEpisodeScenes(data.data || []);
       } catch (err) {
         console.error('Failed to load episode scenes:', err);
+        toast.showError('Failed to load scenes');
       } finally {
         setLoadingScenes(false);
       }
@@ -194,6 +195,7 @@ const EpisodeDetail = () => {
         setEpisodeWardrobes(data.data || data.items || []);
       } catch (err) {
         console.error('Failed to load episode wardrobe:', err);
+        toast.showError('Failed to load wardrobe');
       }
     };
 
@@ -565,10 +567,15 @@ const EpisodeDetail = () => {
                   <span>Create Thumbnail</span>
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (window.confirm('Delete this episode? This cannot be undone.')) {
-                      // TODO: Implement delete
-                      console.log('Delete episode:', episode.id);
+                      try {
+                        await episodeService.deleteEpisode(episode.id);
+                        toast.showSuccess('Episode deleted');
+                        navigate('/episodes');
+                      } catch (err) {
+                        toast.showError(err.message || 'Failed to delete episode');
+                      }
                     }
                     setShowMoreActions(false);
                   }}

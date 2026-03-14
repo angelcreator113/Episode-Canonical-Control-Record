@@ -14,7 +14,7 @@
 const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
-const { optionalAuth } = require('../middleware/auth');
+const { optionalAuth, authenticateToken } = require('../middleware/auth');
 const db = require('../models');
 const { Op } = require('sequelize');
 
@@ -90,6 +90,46 @@ router.patch('/franchise-brain/entries/:id/activate', optionalAuth, async (req, 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UPDATE ENTRY — edit title, content, category, severity, always_inject
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/franchise-brain/entries/:id', optionalAuth, async (req, res) => {
+  const { title, content, category, severity, always_inject } = req.body;
+  try {
+    const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+    const updates = {};
+    if (title !== undefined) updates.title = title.trim();
+    if (content !== undefined) updates.content = content.trim();
+    if (category !== undefined) updates.category = category;
+    if (severity !== undefined) updates.severity = severity;
+    if (always_inject !== undefined) updates.always_inject = always_inject;
+
+    await entry.update(updates);
+    return res.json({ entry, message: 'Entry updated' });
+  } catch (err) {
+    console.error('Franchise brain update error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE ENTRY
+// ─────────────────────────────────────────────────────────────────────────────
+router.delete('/franchise-brain/entries/:id', optionalAuth, async (req, res) => {
+  try {
+    const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+    await entry.destroy();
+    return res.json({ message: 'Entry deleted' });
+  } catch (err) {
+    console.error('Franchise brain delete error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVE ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
 router.patch('/franchise-brain/entries/:id/archive', optionalAuth, async (req, res) => {
@@ -101,6 +141,92 @@ router.patch('/franchise-brain/entries/:id/archive', optionalAuth, async (req, r
     return res.json({ entry, message: 'Entry archived' });
   } catch (err) {
     console.error('Franchise brain archive error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNARCHIVE ENTRY — restore archived entry back to active
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/franchise-brain/entries/:id/unarchive', optionalAuth, async (req, res) => {
+  try {
+    const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    if (entry.status !== 'archived') return res.status(400).json({ error: 'Entry is not archived' });
+
+    await entry.update({ status: 'active' });
+    return res.json({ entry, message: 'Entry restored to active' });
+  } catch (err) {
+    console.error('Franchise brain unarchive error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AMBER ACTIVITY — summary of Amber's contributions + growth metrics
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/franchise-brain/amber-activity', optionalAuth, async (req, res) => {
+  try {
+    // Entries Amber has pushed/created
+    const amberEntries = await db.FranchiseKnowledge.findAll({
+      where: {
+        extracted_by: { [Op.in]: ['amber_push', 'amber_worlddev'] },
+      },
+      order: [['created_at', 'DESC']],
+      limit: 50,
+    });
+
+    // Growth metrics: count by status for Amber entries
+    const amberByStatus = {};
+    for (const e of amberEntries) {
+      amberByStatus[e.status] = (amberByStatus[e.status] || 0) + 1;
+    }
+
+    // Overall brain growth: count by category
+    const allEntries = await db.FranchiseKnowledge.findAll({
+      attributes: ['category', 'status'],
+    });
+    const byCategory = {};
+    const byStatus = {};
+    for (const e of allEntries) {
+      byCategory[e.category] = (byCategory[e.category] || 0) + 1;
+      byStatus[e.status] = (byStatus[e.status] || 0) + 1;
+    }
+
+    // Most injected entries (most used knowledge)
+    const mostInjected = await db.FranchiseKnowledge.findAll({
+      where: { injection_count: { [Op.gt]: 0 } },
+      order: [['injection_count', 'DESC']],
+      limit: 10,
+      attributes: ['id', 'title', 'category', 'injection_count', 'last_injected_at'],
+    });
+
+    // Recent activity (last 20 entries modified)
+    const recentActivity = await db.FranchiseKnowledge.findAll({
+      order: [['updated_at', 'DESC']],
+      limit: 20,
+      attributes: ['id', 'title', 'category', 'status', 'extracted_by', 'updated_at', 'created_at'],
+    });
+
+    return res.json({
+      amber: {
+        total_contributions: amberEntries.length,
+        by_status: amberByStatus,
+        recent_entries: amberEntries.slice(0, 10).map(e => ({
+          id: e.id, title: e.title, category: e.category, status: e.status,
+          extracted_by: e.extracted_by, created_at: e.created_at,
+        })),
+      },
+      growth: {
+        total_entries: allEntries.length,
+        by_category: byCategory,
+        by_status: byStatus,
+      },
+      most_injected: mostInjected,
+      recent_activity: recentActivity,
+    });
+  } catch (err) {
+    console.error('Amber activity error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -187,6 +313,20 @@ Respond ONLY in valid JSON:
       created.push(entry);
     }
 
+    // Store the full document for the Documents tab
+    if (db.BrainDocument) {
+      try {
+        await db.BrainDocument.create({
+          source_name: source_name || 'Untitled Document',
+          document_text: trimmed,
+          entries_created: created.length,
+          ingested_by: 'manual',
+        });
+      } catch (docErr) {
+        console.error('Failed to store brain document:', docErr.message);
+      }
+    }
+
     return res.json({
       entries_created: created.length,
       entries: created,
@@ -194,6 +334,39 @@ Respond ONLY in valid JSON:
     });
   } catch (err) {
     console.error('Franchise brain ingest error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENTS — list stored ingested documents
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/franchise-brain/documents', optionalAuth, async (req, res) => {
+  try {
+    if (!db.BrainDocument) {
+      return res.json({ documents: [], message: 'BrainDocument model not available — run migration' });
+    }
+    const documents = await db.BrainDocument.findAll({
+      order: [['created_at', 'DESC']],
+      limit: 100,
+    });
+    return res.json({ documents, count: documents.length });
+  } catch (err) {
+    console.error('Brain documents list error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/franchise-brain/documents/:id', optionalAuth, async (req, res) => {
+  try {
+    if (!db.BrainDocument) {
+      return res.status(404).json({ error: 'BrainDocument model not available' });
+    }
+    const doc = await db.BrainDocument.findByPk(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    return res.json({ document: doc });
+  } catch (err) {
+    console.error('Brain document fetch error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -263,6 +436,130 @@ Respond ONLY in valid JSON:
     return res.json(parsed);
   } catch (err) {
     console.error('Franchise guard error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUSH PAGE CONTENT TO BRAIN — doc page sends its data through ingest pipeline
+// ─────────────────────────────────────────────────────────────────────────────
+const PAGE_SOURCE_MAP = {
+  cultural_calendar:          'cultural-system-v2.0',
+  influencer_systems:         'influencer-systems-v1.0',
+  world_infrastructure:       'world-infrastructure-v1.0',
+  social_timeline:            'social-timeline-v1.0',
+  social_personality:         'social-personality-v1.0',
+  character_life_simulation:  'character-life-simulation-v1.0',
+  cultural_memory:            'cultural-memory-v1.0',
+  character_depth_engine:     'character-depth-engine-v1.0',
+};
+
+router.post('/franchise-brain/push-from-page', authenticateToken, async (req, res) => {
+  const { page_name, page_data } = req.body;
+
+  if (!page_name || !PAGE_SOURCE_MAP[page_name]) {
+    return res.status(400).json({ error: 'Invalid or missing page_name' });
+  }
+  if (!page_data || typeof page_data !== 'object' || Object.keys(page_data).length === 0) {
+    return res.status(400).json({ error: 'page_data is required and must be a non-empty object' });
+  }
+
+  const sourceDoc = PAGE_SOURCE_MAP[page_name];
+
+  // Serialize the page data into readable text for the AI ingester
+  let documentText = `SOURCE PAGE: ${page_name.replace(/_/g, ' ').toUpperCase()}\n\n`;
+  for (const [key, items] of Object.entries(page_data)) {
+    documentText += `=== ${key.replace(/_/g, ' ').toUpperCase()} ===\n`;
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        documentText += JSON.stringify(item, null, 2) + '\n\n';
+      }
+    } else {
+      documentText += JSON.stringify(items, null, 2) + '\n\n';
+    }
+  }
+
+  // Limit input size
+  const trimmed = documentText.slice(0, 50000);
+
+  try {
+    const prompt = `You are the Franchise Knowledge Extractor for Prime Studios (LalaVerse).
+
+Read this world-building page data and extract discrete knowledge entries that the writing AI must know when generating scenes. Each entry should be a single fact, rule, decision, or character truth.
+
+DOCUMENT:
+${trimmed}
+
+CATEGORIES (use exactly these values):
+- character: facts about specific characters
+- narrative: story structure or arc rules
+- locked_decision: decisions already made that cannot be changed
+- franchise_law: inviolable rules of the franchise
+- technical: platform/build facts
+- brand: brand voice, audience, or marketing rules
+- world: world-building facts
+
+SEVERITY:
+- critical: violating this breaks the franchise
+- important: should be followed but not catastrophic
+- context: nice to know, enriches output
+
+For each entry, provide:
+- title: short label (max 100 chars)
+- content: the full knowledge text
+- category: one of the categories above
+- severity: critical, important, or context
+- always_inject: true if this should be injected into EVERY prompt
+
+Respond ONLY in valid JSON:
+{
+  "entries": [
+    { "title": "...", "content": "...", "category": "...", "severity": "...", "always_inject": false }
+  ]
+}`;
+
+    const client = new Anthropic();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      system: 'You extract franchise knowledge into structured entries. Respond ONLY in valid JSON.',
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const raw = response.content[0].text.trim();
+    let parsed;
+    try {
+      const braceStart = raw.indexOf('{');
+      const braceEnd = raw.lastIndexOf('}');
+      parsed = JSON.parse(raw.substring(braceStart, braceEnd + 1));
+    } catch {
+      return res.status(500).json({ error: 'Failed to parse AI response' });
+    }
+
+    const created = [];
+    for (const e of (parsed.entries || [])) {
+      if (!e.title || !e.content) continue;
+      const entry = await db.FranchiseKnowledge.create({
+        title: String(e.title).slice(0, 200),
+        content: String(e.content),
+        category: e.category || 'world',
+        severity: e.severity || 'important',
+        always_inject: e.always_inject || false,
+        source_document: sourceDoc,
+        source_version: sourceDoc.split('-v')[1] || '1.0',
+        extracted_by: 'page_push',
+        status: 'pending_review',
+      });
+      created.push(entry);
+    }
+
+    return res.json({
+      entries_created: created.length,
+      entries: created,
+      message: `Pushed ${created.length} entries from ${page_name} — all pending review`,
+    });
+  } catch (err) {
+    console.error('Push-from-page error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

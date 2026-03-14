@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './CulturalCalendar.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList } from '../components/EditItemModal';
+import PushToBrain from '../components/PushToBrain';
 
 /* ═══════════════════════════════════════════════════════════════════════
    CulturalCalendar.jsx — LalaVerse Cultural & Social Systems v2.0
@@ -312,7 +313,10 @@ export default function CulturalCalendar() {
       <header className="cc-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>Cultural Calendar</h1>
-          {saving && <span className="eim-saving">Saving…</span>}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saving && <span className="eim-saving">Saving…</span>}
+            <PushToBrain pageName="cultural_calendar" data={data} />
+          </span>
         </div>
         <p>LalaVerse Cultural & Social Systems — franchise_law · always_inject</p>
         <nav className="cc-tabs">

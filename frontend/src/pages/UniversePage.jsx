@@ -22,9 +22,9 @@ import Wardrobe from './Wardrobe';
 import AssetLibrary from './AssetLibrary';
 import SocialImport from './SocialImport';
 import UniverseTabBar, { SHOW_TABS, STORY_TABS } from './UniverseTabBar';
-import StoryDashboard from './StoryDashboard';
-import FranchiseBrain from './FranchiseBrain';
-import WritingRhythm from './WritingRhythm';
+import StoryDashboard from '../components/StoryDashboard';
+import FranchiseBrain from '../components/FranchiseBrain';
+import WritingRhythm from '../components/WritingRhythm';
 import './UniversePage.css';
 
 function useWindowWidth() {

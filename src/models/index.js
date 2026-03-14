@@ -128,6 +128,8 @@ let AuthorNote; // Author Layer: polymorphic creative decision notes
 let PageContent; // Page Content: editable page data (JSONB)
 let AssetRole; // Asset role registry (semantic slots)
 let UniverseCharacter; // Universe-level promoted characters
+let BrainDocument; // Brain Documents: stores full ingested document text
+let AIUsageLog; // AI API cost/token tracking
 
 try {
   // Core models
@@ -305,6 +307,8 @@ try {
   // Upgrade tables — tech knowledge, session briefs, reviews, rhythm, goals, multi-product
   FranchiseKnowledge = require('./FranchiseKnowledge')(sequelize, DataTypes);
   FranchiseTechKnowledge = require('./FranchiseTechKnowledge')(sequelize, DataTypes);
+  BrainDocument = require('./BrainDocument')(sequelize, DataTypes);
+  AIUsageLog = require('./AIUsageLog')(sequelize, DataTypes);
   SessionBrief = require('./SessionBrief')(sequelize, DataTypes);
   PostGenerationReview = require('./PostGenerationReview')(sequelize, DataTypes);
   WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
@@ -490,6 +494,8 @@ const requiredModels = {
   PageContent,
   AssetRole,
   UniverseCharacter,
+  BrainDocument,
+  AIUsageLog,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1837,3 +1843,4 @@ module.exports.PageContent = PageContent;
 module.exports.AssetRole = AssetRole;
 module.exports.UniverseCharacter = UniverseCharacter;
 module.exports.SocialProfileRelationship = SocialProfileRelationship;
+module.exports.AIUsageLog = AIUsageLog;

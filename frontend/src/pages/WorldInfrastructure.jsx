@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './WorldInfrastructure.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import PushToBrain from '../components/PushToBrain';
 
 /* ═══════════════════════════════════════════════════
    DATA CONSTANTS — Doc 04 · v1.0
@@ -369,7 +370,10 @@ export default function WorldInfrastructure() {
       <header className="wi-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>World Infrastructure</h1>
-          {saving && <span className="eim-saving">Saving…</span>}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saving && <span className="eim-saving">Saving…</span>}
+            <PushToBrain pageName="world_infrastructure" data={data} />
+          </span>
         </div>
         <p>Cities · Universities · Corporations · 50 Legendary Influencers · The Loop — Doc 04 · v1.0</p>
         <nav className="wi-tabs">

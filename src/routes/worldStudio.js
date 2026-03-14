@@ -1864,4 +1864,359 @@ router.delete('/world/characters/:id/relationships/:relId', optionalAuth, async 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+/* ═══════════════════════════════════════════════════════════
+   WORLD LOCATIONS — CRUD for WorldLocation model
+   ═══════════════════════════════════════════════════════════ */
+
+// GET /world/locations — list all locations
+router.get('/world/locations', optionalAuth, async (req, res) => {
+  try {
+    const WorldLocation = models.WorldLocation;
+    if (!WorldLocation) {
+      const rows = await Q(req, 'SELECT * FROM world_locations ORDER BY name ASC LIMIT 200');
+      return res.json({ locations: rows });
+    }
+    const rows = await WorldLocation.findAll({ order: [['name', 'ASC']], limit: 200 });
+    res.json({ locations: rows });
+  } catch (err) { res.json({ locations: [] }); }
+});
+
+// POST /world/locations — create a location
+router.post('/world/locations', optionalAuth, async (req, res) => {
+  try {
+    const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const WorldLocation = models.WorldLocation;
+    if (WorldLocation) {
+      const loc = await WorldLocation.create({ name, slug, description, location_type: location_type || 'interior', sensory_details: sensory_details || {}, narrative_role, associated_characters: associated_characters || [], parent_location_id, metadata: metadata || {} });
+      return res.json({ location: loc });
+    }
+    const id = require('uuid').v4();
+    await sequelize.query(
+      `INSERT INTO world_locations (id, name, slug, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, created_at, updated_at)
+       VALUES (:id, :name, :slug, :desc, :lt, :sd::jsonb, :nr, :ac::jsonb, :plid, :meta::jsonb, NOW(), NOW())`,
+      { replacements: { id, name, slug, desc: description || null, lt: location_type || 'interior', sd: JSON.stringify(sensory_details || {}), nr: narrative_role || null, ac: JSON.stringify(associated_characters || []), plid: parent_location_id || null, meta: JSON.stringify(metadata || {}) } }
+    );
+    res.json({ location: { id, name, slug, description, location_type, sensory_details, narrative_role } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /world/locations/:id — update a location
+router.put('/world/locations/:id', optionalAuth, async (req, res) => {
+  try {
+    const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata'];
+    const WorldLocation = models.WorldLocation;
+    if (WorldLocation) {
+      const loc = await WorldLocation.findByPk(req.params.id);
+      if (!loc) return res.status(404).json({ error: 'Not found' });
+      const updates = {};
+      for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+      if (updates.name) updates.slug = updates.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      await loc.update(updates);
+      return res.json({ location: loc });
+    }
+    res.status(500).json({ error: 'WorldLocation model not available' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /world/locations/:id
+router.delete('/world/locations/:id', optionalAuth, async (req, res) => {
+  try {
+    const WorldLocation = models.WorldLocation;
+    if (WorldLocation) {
+      const loc = await WorldLocation.findByPk(req.params.id);
+      if (!loc) return res.status(404).json({ error: 'Not found' });
+      await loc.destroy();
+      return res.json({ deleted: true });
+    }
+    await sequelize.query('DELETE FROM world_locations WHERE id = :id', { replacements: { id: req.params.id } });
+    res.json({ deleted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /world/locations/seed-infrastructure — seed WorldLocation from hardcoded infrastructure
+router.post('/world/locations/seed-infrastructure', optionalAuth, async (req, res) => {
+  try {
+    const INFRA = [
+      { name: 'Velvet City', location_type: 'exterior', narrative_role: 'hub', description: 'The fashion capital — haute couture meets street culture.', sensory_details: { sight: 'Neon-lit runways reflected in rain-slicked cobblestones', sound: 'The click of heels on marble, camera shutters', smell: 'French perfume mixed with espresso', texture: 'Silk, sequins, velvet upholstery', atmosphere: 'Glamorous and competitive, beauty as currency' } },
+      { name: 'Glow District', location_type: 'exterior', narrative_role: 'hub', description: 'Beauty/wellness empire district — salons, labs, spas.', sensory_details: { sight: 'Pink-tinged lighting, glass storefronts with gold lettering', sound: 'Gentle spa music, bubbling serums', smell: 'Rose water, shea butter, botanical extracts', texture: 'Smooth marble counters, plush towels', atmosphere: 'Curated perfection hiding fierce competition' } },
+      { name: 'Pulse City', location_type: 'exterior', narrative_role: 'hub', description: 'Entertainment capital — music, TV, film studios.', sensory_details: { sight: 'Giant LED billboards, red carpet flash photography', sound: 'Bass drops, crowd cheers, camera drones', smell: 'Popcorn, fog machine haze, champagne', texture: 'Leather backstage couches, VIP wristbands', atmosphere: 'Electric and relentless, fame as oxygen' } },
+      { name: 'Creator Harbor', location_type: 'exterior', narrative_role: 'hub', description: 'Influencer culture district — studios, brand HQs, pop-ups.', sensory_details: { sight: 'Ring lights in every window, pastel-colored facades', sound: 'Notification pings, "Hey guys welcome back"', smell: 'Fresh merch packaging, coffee', texture: 'Phone screens, ring light warmth', atmosphere: 'Performative authenticity, everyone is always on' } },
+      { name: 'Horizon City', location_type: 'exterior', narrative_role: 'hub', description: 'Tech/startup district — innovation labs, venture capital.', sensory_details: { sight: 'Glass towers, holographic pitch decks, green energy grids', sound: 'Keyboard clicks, startup pitch bells, AI voice assistants', smell: 'New electronics, ozone, matcha lattes', texture: 'Smooth glass, ergonomic everything', atmosphere: 'Optimistic futurism, disruption worship' } },
+      { name: 'Velvet Academy', location_type: 'interior', narrative_role: 'sanctuary', description: 'Fashion design school — atelier workshops, fabric libraries.', sensory_details: { sight: 'Mannequins draped in student work, mood boards', sound: 'Sewing machines whirring, fabric scissors', smell: 'Fresh linen, dye chemicals, leather', texture: 'Raw silk, pattern paper, chalk dust', atmosphere: 'Creative pressure-cooker, mentorship and rivalry' } },
+      { name: 'Glow Institute', location_type: 'interior', narrative_role: 'sanctuary', description: 'Beauty science school — labs, formulation studios.', sensory_details: { sight: 'Chemical beakers with pink liquids, skin scan monitors', sound: 'Centrifuges humming, pH meter beeps', smell: 'Essential oils, lab-grade chemicals', texture: 'Latex gloves, smooth glass vials', atmosphere: 'Where art meets chemistry, innovation under pressure' } },
+      { name: 'Nova Studios', location_type: 'interior', narrative_role: 'battleground', description: 'Major entertainment production studio — sound stages, editing bays.', sensory_details: { sight: 'Soundstage lights, green screens, monitors everywhere', sound: 'Director\'s calls, playback speakers, walkie-talkies', smell: 'Gaffer tape, craft services coffee', texture: 'Heavy studio doors, camera rigs', atmosphere: 'High stakes, everyone replaceable, magic when it works' } },
+      { name: 'Dream Market Collective', location_type: 'interior', narrative_role: 'crossroads', description: 'Brand deal nexus — meeting rooms, negotiation suites.', sensory_details: { sight: 'Projector pitch decks, contract paperwork, brand logos', sound: 'Quiet conference room tension, pen clicks', smell: 'Fresh paper, perfume samples', texture: 'Mahogany tables, leather portfolios', atmosphere: 'Where art sells its soul — or makes its fortune' } },
+      { name: 'The Underground', location_type: 'interior', narrative_role: 'haven', description: 'Off-grid creative space — speakeasies, underground galleries, after-hours clubs.', sensory_details: { sight: 'Dim amber lighting, graffiti art, exposed brick', sound: 'Low bass, whispered conversations, jazz', smell: 'Candle wax, whiskey, oil paint', texture: 'Rough brick, velvet curtains, worn wooden stools', atmosphere: 'Raw and real — where people drop the performance' } },
+    ];
+    const WorldLocation = models.WorldLocation;
+    let created = 0;
+    for (const item of INFRA) {
+      const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const exists = WorldLocation
+        ? await WorldLocation.findOne({ where: { slug } })
+        : (await Q(req, 'SELECT id FROM world_locations WHERE slug = :slug LIMIT 1', { replacements: { slug } }))[0];
+      if (exists) continue;
+      if (WorldLocation) {
+        await WorldLocation.create({ ...item, slug });
+      } else {
+        const id = require('uuid').v4();
+        await sequelize.query(
+          `INSERT INTO world_locations (id, name, slug, description, location_type, sensory_details, narrative_role, created_at, updated_at)
+           VALUES (:id, :name, :slug, :desc, :lt, :sd::jsonb, :nr, NOW(), NOW())`,
+          { replacements: { id, name: item.name, slug, desc: item.description, lt: item.location_type, sd: JSON.stringify(item.sensory_details), nr: item.narrative_role } }
+        );
+      }
+      created++;
+    }
+    res.json({ seeded: created, total: INFRA.length, message: `Seeded ${created} new locations` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   WORLD STATE — CRUD for WorldStateSnapshot + WorldTimelineEvent
+   ═══════════════════════════════════════════════════════════ */
+
+// GET /world/state/snapshots
+router.get('/world/state/snapshots', optionalAuth, async (req, res) => {
+  try {
+    const WSS = models.WorldStateSnapshot;
+    if (!WSS) return res.json({ snapshots: [] });
+    const rows = await WSS.findAll({ order: [['timeline_position', 'DESC'], ['created_at', 'DESC']], limit: 50 });
+    res.json({ snapshots: rows });
+  } catch (err) { res.json({ snapshots: [] }); }
+});
+
+// POST /world/state/snapshots
+router.post('/world/state/snapshots', optionalAuth, async (req, res) => {
+  try {
+    const { snapshot_label, book_id, chapter_id, active_threads, world_facts, character_states, relationship_states, timeline_position } = req.body;
+    if (!snapshot_label) return res.status(400).json({ error: 'snapshot_label required' });
+    const WSS = models.WorldStateSnapshot;
+    if (!WSS) return res.status(500).json({ error: 'Model not available' });
+    const snap = await WSS.create({ snapshot_label, book_id, chapter_id, active_threads: active_threads || [], world_facts: world_facts || [], character_states: character_states || {}, relationship_states: relationship_states || {}, timeline_position: timeline_position || 0 });
+    res.json({ snapshot: snap });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /world/state/snapshots/:id
+router.put('/world/state/snapshots/:id', optionalAuth, async (req, res) => {
+  try {
+    const WSS = models.WorldStateSnapshot;
+    if (!WSS) return res.status(500).json({ error: 'Model not available' });
+    const snap = await WSS.findByPk(req.params.id);
+    if (!snap) return res.status(404).json({ error: 'Not found' });
+    const allowed = ['snapshot_label', 'book_id', 'chapter_id', 'active_threads', 'world_facts', 'character_states', 'relationship_states', 'timeline_position'];
+    const updates = {};
+    for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+    await snap.update(updates);
+    res.json({ snapshot: snap });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /world/state/snapshots/:id
+router.delete('/world/state/snapshots/:id', optionalAuth, async (req, res) => {
+  try {
+    const WSS = models.WorldStateSnapshot;
+    if (!WSS) return res.status(500).json({ error: 'Model not available' });
+    const snap = await WSS.findByPk(req.params.id);
+    if (!snap) return res.status(404).json({ error: 'Not found' });
+    await snap.destroy();
+    res.json({ deleted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /world/state/timeline — timeline events
+router.get('/world/state/timeline', optionalAuth, async (req, res) => {
+  try {
+    const WTE = models.WorldTimelineEvent;
+    if (!WTE) return res.json({ events: [] });
+    const where = {};
+    if (req.query.is_canon === 'true') where.is_canon = true;
+    if (req.query.event_type) where.event_type = req.query.event_type;
+    const rows = await WTE.findAll({ where, order: [['sort_order', 'DESC'], ['created_at', 'DESC']], limit: 100, include: models.WorldLocation ? [{ model: models.WorldLocation, as: 'location', attributes: ['id', 'name', 'location_type'] }] : [] });
+    res.json({ events: rows });
+  } catch (err) { res.json({ events: [] }); }
+});
+
+// POST /world/state/timeline — create timeline event
+router.post('/world/state/timeline', optionalAuth, async (req, res) => {
+  try {
+    const { event_name, event_description, story_date, sort_order, event_type, characters_involved, location_id, impact_level, consequences, is_canon } = req.body;
+    if (!event_name) return res.status(400).json({ error: 'event_name required' });
+    const WTE = models.WorldTimelineEvent;
+    if (!WTE) return res.status(500).json({ error: 'Model not available' });
+    const evt = await WTE.create({ event_name, event_description, story_date, sort_order: sort_order || 0, event_type: event_type || 'plot', characters_involved: characters_involved || [], location_id, impact_level: impact_level || 'minor', consequences: consequences || [], is_canon: is_canon !== false });
+
+    // #10 World → Calendar sync: auto-create StoryCalendarEvent if model available
+    try {
+      const SCE = models.StoryCalendarEvent;
+      if (SCE) {
+        await SCE.create({ title: event_name, event_type: event_type === 'world' ? 'world_event' : event_type === 'character' ? 'character_event' : 'story_event', start_datetime: story_date ? new Date(story_date) : new Date(), what_world_knows: event_description || '', what_only_we_know: (consequences || []).join('; '), logged_by: 'world_state' });
+      }
+    } catch (_) { /* calendar sync is best-effort */ }
+
+    res.json({ event: evt });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /world/state/timeline/:id
+router.put('/world/state/timeline/:id', optionalAuth, async (req, res) => {
+  try {
+    const WTE = models.WorldTimelineEvent;
+    if (!WTE) return res.status(500).json({ error: 'Model not available' });
+    const evt = await WTE.findByPk(req.params.id);
+    if (!evt) return res.status(404).json({ error: 'Not found' });
+    const allowed = ['event_name', 'event_description', 'story_date', 'sort_order', 'event_type', 'characters_involved', 'location_id', 'impact_level', 'consequences', 'is_canon'];
+    const updates = {};
+    for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+    await evt.update(updates);
+    res.json({ event: evt });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /world/state/timeline/:id
+router.delete('/world/state/timeline/:id', optionalAuth, async (req, res) => {
+  try {
+    const WTE = models.WorldTimelineEvent;
+    if (!WTE) return res.status(500).json({ error: 'Model not available' });
+    const evt = await WTE.findByPk(req.params.id);
+    if (!evt) return res.status(404).json({ error: 'Not found' });
+    await evt.destroy();
+    res.json({ deleted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   TENSION SCANNER — Find high-tension character pairs for story generation
+   ═══════════════════════════════════════════════════════════ */
+
+// GET /world/tension-scanner — character pairs with unresolved tension
+router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
+  try {
+    const rows = await Q(req,
+      `SELECT c.id, c.display_name, c.character_type, c.status, c.relationship_graph, c.world_tag
+       FROM world_characters c WHERE c.status = 'active'
+       ORDER BY c.display_name ASC`
+    );
+    const pairs = [];
+    const seen = new Set();
+    for (const char of rows) {
+      const graph = safeJson(char.relationship_graph);
+      for (const rel of graph) {
+        const tension = rel.tension_state || rel.tension_level || 'Stable';
+        const isHigh = ['Simmering', 'Explosive', 'Unresolved', 'High', 'high', 'simmering', 'explosive'].includes(tension);
+        if (!isHigh) continue;
+        const pairKey = [char.id, rel.related_character_id || rel.target_id].sort().join('|');
+        if (seen.has(pairKey)) continue;
+        seen.add(pairKey);
+        pairs.push({
+          char_a: { id: char.id, name: char.display_name, world_tag: char.world_tag },
+          char_b: { id: rel.related_character_id || rel.target_id, name: rel.related_character_name || rel.target_name },
+          tension_state: tension,
+          relationship_type: rel.relationship_type || 'unknown',
+          conflict_summary: rel.conflict_summary || rel.history_summary || '',
+          romantic: !!rel.is_romantic,
+        });
+      }
+    }
+    res.json({ pairs, count: pairs.length });
+  } catch (err) { res.json({ pairs: [], count: 0 }); }
+});
+
+// POST /world/create-story-task — generate a story task from a world character
+router.post('/world/create-story-task', optionalAuth, async (req, res) => {
+  try {
+    const { character_id } = req.body;
+    if (!character_id) return res.status(400).json({ error: 'character_id required' });
+    const [char] = await Q(req,
+      `SELECT id, display_name, character_key, character_type, world_tag, surface_want, real_want, arc_role, origin_story, relationship_graph, how_they_meet, dynamic
+       FROM world_characters WHERE id = :id`,
+      { replacements: { id: character_id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Character not found' });
+    const graph = safeJson(char.relationship_graph);
+    const keyRels = graph.slice(0, 3).map(r => `${r.related_character_name || 'unknown'} (${r.relationship_type || 'connected'})`).join(', ');
+    const task = {
+      title: `${char.display_name} — ${char.arc_role || char.character_type || 'Character'} Arc`,
+      description: [char.origin_story, char.how_they_meet, char.dynamic].filter(Boolean).join(' ').slice(0, 500),
+      story_type: char.character_type === 'protagonist' ? 'character_arc' : 'character_development',
+      world: char.world_tag || 'book-1',
+      characters: [char.character_key || char.display_name?.toLowerCase().replace(/\s+/g, '')],
+      surface_want: char.surface_want || '',
+      real_want: char.real_want || '',
+      key_relationships: keyRels,
+      source: 'world_studio',
+    };
+    res.json({ task });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /world/create-tension-proposal — generate story proposal from tension pair
+router.post('/world/create-tension-proposal', optionalAuth, async (req, res) => {
+  try {
+    const { char_a_name, char_b_name, tension_state, relationship_type, conflict_summary, romantic } = req.body;
+    if (!char_a_name || !char_b_name) return res.status(400).json({ error: 'char_a_name and char_b_name required' });
+    const proposal = {
+      scene_title: `${char_a_name} × ${char_b_name} — ${tension_state || 'Tension'} ${romantic ? '♡' : ''}`,
+      situation: conflict_summary || `Unresolved ${tension_state || 'tension'} between ${char_a_name} and ${char_b_name}`,
+      emotional_stakes: romantic ? 'Desire vs. safety, vulnerability' : 'Power, trust, or loyalty at stake',
+      internal_conflict: `Both characters want different things from this ${relationship_type || 'relationship'}`,
+      characters: [char_a_name.toLowerCase().replace(/\s+/g, ''), char_b_name.toLowerCase().replace(/\s+/g, '')],
+      tone: romantic ? 'intimate' : 'tense',
+      scene_type: romantic ? 'intimate_encounter' : 'confrontation',
+      source: 'tension_scanner',
+    };
+    res.json({ proposal });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /world/context-summary — auto-enrich world context for story generation
+router.get('/world/context-summary', optionalAuth, async (req, res) => {
+  try {
+    const WSS = models.WorldStateSnapshot;
+    const WL = models.WorldLocation;
+
+    // Latest snapshot facts
+    let facts = [], threads = [], snapshotLabel = '';
+    if (WSS) {
+      const snap = await WSS.findOne({ order: [['timeline_position', 'DESC'], ['created_at', 'DESC']] });
+      if (snap) {
+        facts = Array.isArray(snap.world_facts) ? snap.world_facts.slice(0, 8) : [];
+        threads = Array.isArray(snap.active_threads) ? snap.active_threads.slice(0, 6) : [];
+        snapshotLabel = snap.snapshot_label;
+      }
+    }
+
+    // Location names for picker
+    let locations = [];
+    if (WL) {
+      locations = await WL.findAll({ attributes: ['id', 'name', 'location_type', 'narrative_role'], order: [['name', 'ASC']], limit: 50 });
+    }
+
+    // Active thread count from StoryThread
+    let activeThreadCount = 0;
+    try {
+      const ST = models.StoryThread;
+      if (ST) activeThreadCount = await ST.count({ where: { status: 'active' } });
+    } catch (_) {}
+
+    // Tension pair count
+    let tensionCount = 0;
+    try {
+      const chars = await Q(req, `SELECT relationship_graph FROM world_characters WHERE status = 'active'`);
+      for (const c of chars) {
+        const graph = safeJson(c.relationship_graph);
+        for (const r of graph) {
+          const t = r.tension_state || r.tension_level || 'Stable';
+          if (['Simmering', 'Explosive', 'Unresolved', 'High', 'high', 'simmering', 'explosive'].includes(t)) tensionCount++;
+        }
+      }
+    } catch (_) {}
+
+    res.json({ facts, threads, snapshotLabel, locations, activeThreadCount, tensionCount: Math.floor(tensionCount / 2) });
+  } catch (err) { res.json({ facts: [], threads: [], locations: [], activeThreadCount: 0, tensionCount: 0 }); }
+});
+
 module.exports = router;

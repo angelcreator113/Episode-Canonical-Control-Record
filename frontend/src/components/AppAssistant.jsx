@@ -102,11 +102,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
   const inputRef = useRef(null);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--apa-trigger-size', '80px');
-    return () => document.documentElement.style.removeProperty('--apa-trigger-size');
-  }, []);
-
-  useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages, open]);
 
@@ -330,6 +325,24 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               )}
             </div>
             <div className="apa-panel-context">
+              {appContext.pageName && appContext.pageName !== appContext.currentView && (
+                <span className="apa-ctx-pill">{appContext.pageName}</span>
+              )}
+              {appContext.activeTab && (
+                <span className="apa-ctx-pill">tab: {appContext.activeTab}</span>
+              )}
+              {appContext.activeCharacterId && (
+                <span className="apa-ctx-pill">char: {appContext.activeCharacterId.slice(0, 8)}</span>
+              )}
+              {appContext.activeBookId && (
+                <span className="apa-ctx-pill">book: {appContext.activeBookId.slice(0, 8)}</span>
+              )}
+              {appContext.activeShowId && (
+                <span className="apa-ctx-pill">show: {appContext.activeShowId.slice(0, 8)}</span>
+              )}
+              {appContext.activeRegistryId && (
+                <span className="apa-ctx-pill">registry: {appContext.activeRegistryId.slice(0, 8)}</span>
+              )}
               {appContext.currentBook && (
                 <span className="apa-ctx-pill">{appContext.currentBook.title}</span>
               )}
@@ -357,6 +370,11 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 </svg>
               )}
               <span className="apa-voice-toggle__label">{voiceResponse ? 'voice on' : 'voice off'}</span>
+            </button>
+            <button className="apa-close" onClick={() => window.location.reload()} aria-label="Refresh page" title="Refresh page" style={{ marginLeft: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
             </button>
             <button className="apa-close" onClick={() => setOpen(false)} aria-label="Close">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

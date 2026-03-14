@@ -9,14 +9,26 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
-        // Force single React instance
+        // Force single React instance (including JSX runtime subpaths)
+        'react/jsx-runtime': path.resolve('./node_modules/react/jsx-runtime'),
+        'react/jsx-dev-runtime': path.resolve('./node_modules/react/jsx-dev-runtime'),
         react: path.resolve('./node_modules/react'),
-        'react-dom': path.resolve('./node_modules/react-dom')
+        'react-dom': path.resolve('./node_modules/react-dom'),
       }
+    },
+    optimizeDeps: {
+      include: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
     },
     server: {
       port: 5174,
+      hmr: {
+        host: 'localhost',
+        port: 5175,
+        clientPort: 5175,
+        protocol: 'ws',
+      },
       proxy: {
         '/api': {
           target: 'http://127.0.0.1:3002',

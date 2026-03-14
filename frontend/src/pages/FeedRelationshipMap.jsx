@@ -33,6 +33,18 @@ const EDGE_STYLES = {
   competitors:      { stroke: '#f97316', dash: null },
 };
 
+const REL_TYPES = [
+  { value: 'collab',          label: 'Collab' },
+  { value: 'beef',            label: 'Beef' },
+  { value: 'mentor',          label: 'Mentor' },
+  { value: 'competitors',     label: 'Competitors' },
+  { value: 'silent_alliance', label: 'Silent Alliance' },
+  { value: 'orbit',           label: 'Orbit' },
+  { value: 'public_shade',    label: 'Public Shade' },
+  { value: 'copy_cat',        label: 'Copycat' },
+  { value: 'former_friends',  label: 'Former Friends' },
+];
+
 const NODE_R = 28;
 const LEGEND_ITEMS = [
   { type: 'beef', label: 'Beef', color: '#ef4444', dash: true },
@@ -98,8 +110,20 @@ export default function FeedRelationshipMap() {
   const [selected, setSelected] = useState(null);
   const [entangled, setEntangled] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQ, setSearchQ] = useState('');
+  const [activeTypes, setActiveTypes] = useState(null); // null = all
+  const [showLabels, setShowLabels] = useState(true);
   const svgRef = useRef(null);
   const [dimensions, setDimensions] = useState({ w: 900, h: 600 });
+
+  // Create / auto-generate state
+  const [profiles, setProfiles] = useState([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formA, setFormA] = useState('');
+  const [formB, setFormB] = useState('');
+  const [formType, setFormType] = useState('collab');
+  const [generating, setGenerating] = useState(false);
+  const [createMsg, setCreateMsg] = useState(null);
 
   const loadCanvas = useCallback(async () => {
     try {
@@ -141,6 +165,50 @@ export default function FeedRelationshipMap() {
     }
   };
 
+  // Load profiles for dropdowns
+  const loadProfiles = useCallback(async () => {
+    try {
+      const res = await api.get('/api/v1/feed-relationships/profiles');
+      setProfiles(res.data || []);
+    } catch (err) {
+      console.warn('[FeedRelMap] profiles load error:', err.message);
+    }
+  }, []);
+
+  useEffect(() => { loadProfiles(); }, [loadProfiles]);
+
+  const handleCreate = async () => {
+    if (!formA || !formB || formA === formB) return;
+    setCreateMsg(null);
+    try {
+      await api.post('/api/v1/feed-relationships', {
+        influencer_a_id: Number(formA),
+        influencer_b_id: Number(formB),
+        relationship_type: formType,
+        is_public: true,
+      });
+      setCreateMsg('Relationship created');
+      setFormA(''); setFormB(''); setFormType('collab');
+      loadCanvas();
+    } catch (err) {
+      setCreateMsg(err.response?.data?.error || 'Create failed');
+    }
+  };
+
+  const handleAutoGenerate = async () => {
+    setGenerating(true);
+    setCreateMsg(null);
+    try {
+      const res = await api.post('/api/v1/feed-relationships/auto-generate');
+      setCreateMsg(res.data?.message || `${res.data?.created || 0} relationships generated`);
+      loadCanvas();
+    } catch (err) {
+      setCreateMsg(err.response?.data?.error || 'Auto-generate failed');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ marginBottom: 20 }}>
@@ -173,9 +241,25 @@ export default function FeedRelationshipMap() {
         background: '#fdf8fa',
         borderRadius: 8,
         border: '1px solid #f0e8ec',
+        alignItems: 'center',
       }}>
         {LEGEND_ITEMS.map(item => (
-          <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div
+            key={item.type}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+              opacity: !activeTypes || activeTypes.has(item.type) ? 1 : 0.35,
+            }}
+            onClick={() => {
+              setActiveTypes(prev => {
+                if (!prev) { const s = new Set([item.type]); return s; }
+                const s = new Set(prev);
+                if (s.has(item.type)) { s.delete(item.type); return s.size === 0 ? null : s; }
+                s.add(item.type);
+                return s;
+              });
+            }}
+          >
             <svg width={24} height={2}>
               <line
                 x1={0} y1={1} x2={24} y2={1}
@@ -189,7 +273,129 @@ export default function FeedRelationshipMap() {
             </span>
           </div>
         ))}
+        <span style={{ fontSize: 10, color: '#bbb', marginLeft: 'auto' }}>
+          {activeTypes ? `${activeTypes.size} filter${activeTypes.size !== 1 ? 's' : ''}` : 'all'}
+        </span>
       </div>
+
+      {/* Search + toggle bar */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center' }}>
+        <input
+          value={searchQ}
+          onChange={e => setSearchQ(e.target.value)}
+          placeholder="Search handles or names…"
+          style={{
+            flex: 1, maxWidth: 280, padding: '6px 12px', fontSize: 12,
+            border: '1px solid #e8d5e0', borderRadius: 6, outline: 'none',
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#888', cursor: 'pointer' }}>
+          <input type="checkbox" checked={showLabels} onChange={() => setShowLabels(v => !v)} />
+          Edge labels
+        </label>
+        {activeTypes && (
+          <button
+            onClick={() => setActiveTypes(null)}
+            style={{ padding: '4px 10px', fontSize: 11, border: '1px solid #e8d5e0', borderRadius: 6, background: '#fff', color: '#888', cursor: 'pointer' }}
+          >
+            Reset filters
+          </button>
+        )}
+      </div>
+
+      {/* Action bar */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center' }}>
+        <button
+          onClick={() => setCreateOpen(v => !v)}
+          style={{
+            padding: '6px 14px', fontSize: 12, fontWeight: 600,
+            border: '1px solid #d1d5db', borderRadius: 6,
+            background: createOpen ? '#f3f4f6' : '#fff', color: '#374151',
+            cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          {createOpen ? '✕ Close' : '+ Add Relationship'}
+        </button>
+        <button
+          onClick={handleAutoGenerate}
+          disabled={generating}
+          style={{
+            padding: '6px 14px', fontSize: 12, fontWeight: 600,
+            border: '1px solid #d1d5db', borderRadius: 6,
+            background: generating ? '#e5e7eb' : '#fff', color: '#374151',
+            cursor: generating ? 'not-allowed' : 'pointer',
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          {generating ? '⏳ Generating…' : '⚡ Auto-Generate'}
+        </button>
+        {createMsg && (
+          <span style={{ fontSize: 11, color: createMsg.includes('fail') ? '#dc2626' : '#16a34a', fontFamily: "'DM Sans', sans-serif" }}>
+            {createMsg}
+          </span>
+        )}
+      </div>
+
+      {/* Create relationship form */}
+      {createOpen && (
+        <div style={{
+          marginBottom: 16, padding: 16, background: '#f9fafb', border: '1px solid #e5e7eb',
+          borderRadius: 10, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Profile A</label>
+            <select
+              value={formA}
+              onChange={e => setFormA(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 6, minWidth: 180, background: '#fff' }}
+            >
+              <option value="">Select…</option>
+              {profiles.map(p => (
+                <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.platform}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Relationship</label>
+            <select
+              value={formType}
+              onChange={e => setFormType(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 6, minWidth: 140, background: '#fff' }}
+            >
+              {REL_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>Profile B</label>
+            <select
+              value={formB}
+              onChange={e => setFormB(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 6, minWidth: 180, background: '#fff' }}
+            >
+              <option value="">Select…</option>
+              {profiles.map(p => (
+                <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.platform}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleCreate}
+            disabled={!formA || !formB || formA === formB}
+            style={{
+              padding: '6px 18px', fontSize: 12, fontWeight: 600,
+              border: 'none', borderRadius: 6,
+              background: (!formA || !formB || formA === formB) ? '#d1d5db' : '#2563eb',
+              color: '#fff', cursor: (!formA || !formB || formA === formB) ? 'not-allowed' : 'pointer',
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            Create
+          </button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 16 }}>
         {/* SVG Canvas */}
@@ -223,34 +429,48 @@ export default function FeedRelationshipMap() {
                 </marker>
               </defs>
 
-              {/* Edges */}
-              {edges.map(edge => {
+              {/* Edges (filtered) */}
+              {edges.filter(e => !activeTypes || activeTypes.has(e.type)).map(edge => {
                 const a = nodes.find(n => n.id === edge.source);
                 const b = nodes.find(n => n.id === edge.target);
                 if (!a || !b) return null;
-                const style = EDGE_STYLES[edge.type] || EDGE_STYLES.orbit;
+                const st = EDGE_STYLES[edge.type] || EDGE_STYLES.orbit;
+                const mx = (a.x + b.x) / 2;
+                const my = (a.y + b.y) / 2;
+                // Dim edges not matching search
+                const q = searchQ.toLowerCase();
+                const matchesSearch = !q || (a.handle || '').toLowerCase().includes(q) || (b.handle || '').toLowerCase().includes(q)
+                  || (a.display_name || '').toLowerCase().includes(q) || (b.display_name || '').toLowerCase().includes(q);
                 return (
-                  <line
-                    key={edge.id}
-                    x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                    stroke={style.stroke}
-                    strokeWidth={1.5}
-                    strokeDasharray={style.dash || undefined}
-                    markerEnd={style.arrow ? 'url(#arrowhead)' : undefined}
-                    opacity={0.7}
-                  />
+                  <g key={edge.id} opacity={matchesSearch ? 0.7 : 0.15}>
+                    <line
+                      x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                      stroke={st.stroke}
+                      strokeWidth={1.5}
+                      strokeDasharray={st.dash || undefined}
+                      markerEnd={st.arrow ? 'url(#arrowhead)' : undefined}
+                    />
+                    {showLabels && (
+                      <text x={mx} y={my - 4} textAnchor="middle" fontSize={8} fontFamily="'DM Mono', monospace" fill={st.stroke} opacity={0.9}>
+                        {(edge.type || '').replace(/_/g, ' ')}
+                      </text>
+                    )}
+                  </g>
                 );
               })}
 
-              {/* Nodes */}
+              {/* Nodes (filtered) */}
               {nodes.map(node => {
                 const ringColor = STATE_RING[node.state] || '#ddd';
                 const isSelected = selected?.id === node.id;
+                const q = searchQ.toLowerCase();
+                const matchesSearch = !q || (node.handle || '').toLowerCase().includes(q) || (node.display_name || '').toLowerCase().includes(q);
                 return (
                   <g
                     key={node.id}
                     onClick={() => handleNodeClick(node)}
                     style={{ cursor: 'pointer' }}
+                    opacity={matchesSearch ? 1 : 0.2}
                   >
                     {/* State ring */}
                     <circle

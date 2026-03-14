@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './SocialPersonality.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import PushToBrain from '../components/PushToBrain';
 
 /* ══════════════════════════════════════════════
    Data Constants — Doc 06 · Social Personality v1.0
@@ -438,7 +439,10 @@ export default function SocialPersonality() {
       <header className="sp-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 className="sp-title">The Social Personality Engine</h1>
-          {saving && <span className="eim-saving">Saving…</span>}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saving && <span className="eim-saving">Saving…</span>}
+            <PushToBrain pageName="social_personality" data={data} />
+          </span>
         </div>
         <p className="sp-subtitle">Doc 06 · v1.0 · March 2026 — What characters post, how they react, and how they grow</p>
       </header>

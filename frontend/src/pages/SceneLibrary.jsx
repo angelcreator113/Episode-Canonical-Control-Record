@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import sceneLibraryService from '../services/sceneLibraryService';
+import showService from '../services/showService';
 import { normalizeSceneThumbnail } from '../utils/urlUtils';
 import './SceneLibrary.css';
 
@@ -27,6 +28,9 @@ const SceneLibrary = () => {
   const [dragActive, setDragActive] = useState(false);
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState(null);
   const [uploadThumbDataUrl, setUploadThumbDataUrl] = useState(null);
+
+  // Shows for filter
+  const [shows, setShows] = useState([]);
 
   // Pagination
   const [pagination, setPagination] = useState({
@@ -95,6 +99,13 @@ const SceneLibrary = () => {
   useEffect(() => {
     loadScenes();
   }, [loadScenes]);
+
+  // Load shows for filter
+  useEffect(() => {
+    showService.getAllShows()
+      .then(data => setShows(Array.isArray(data) ? data : data?.shows || []))
+      .catch(() => {});
+  }, []);
 
   // Handle file selection
   const handleFileSelect = async (e) => {
@@ -331,8 +342,9 @@ const SceneLibrary = () => {
             className="filter-select"
           >
             <option value="">All Shows</option>
-            <option value="show-1">Styling Adventures w Lala</option>
-            {/* TODO: Load shows dynamically */}
+            {shows.map(s => (
+              <option key={s.id} value={s.id}>{s.title || s.name}</option>
+            ))}
           </select>
         </div>
 

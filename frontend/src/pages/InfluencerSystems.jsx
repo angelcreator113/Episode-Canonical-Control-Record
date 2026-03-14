@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './InfluencerSystems.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import PushToBrain from '../components/PushToBrain';
 
 /* ═══════════════════════════════════════════════════════════════════════
    InfluencerSystems.jsx — Doc 03 · v1.0
@@ -279,7 +280,10 @@ export default function InfluencerSystems() {
       <header className="is-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>Influencer Systems & Mechanics</h1>
-          {saving && <span className="eim-saving">Saving…</span>}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saving && <span className="eim-saving">Saving…</span>}
+            <PushToBrain pageName="influencer_systems" data={data} />
+          </span>
         </div>
         <p>Doc 03 — franchise_law · always_inject — Archetypes, relationships, economy, trends, momentum, influence, legacy</p>
         <nav className="is-tabs">

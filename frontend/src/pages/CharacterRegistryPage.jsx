@@ -1742,8 +1742,69 @@ export default function CharacterRegistryPage() {
                   const ls = livingStates[c.id] || null;
                   const mom = MOMENTUM[ls?.momentum || 'dormant'];
                   const roleColor = ROLE_COLORS[c.role_type] || '#9a8c9e';
+                  // Arc Projection: fetch story counts for this character
+                  const ArcProjection = () => {
+                    const [proj, setProj] = React.useState(null);
+                    React.useEffect(() => {
+                      if (!c.character_key) return;
+                      fetch(`/api/v1/story-health/therapy-suggestions/${c.character_key}`)
+                        .then(r => r.json())
+                        .then(d => setProj(d))
+                        .catch(() => {});
+                    }, []);
+                    if (!proj) return null;
+                    const pct = Math.min(100, Math.round((proj.existingStoryCount / 50) * 100));
+                    const phases = [
+                      { label: 'Establishment', range: [1, 10], color: '#c9a84c' },
+                      { label: 'Pressure', range: [11, 25], color: '#d46070' },
+                      { label: 'Crisis', range: [26, 40], color: '#7b4ecf' },
+                      { label: 'Integration', range: [41, 50], color: '#3a9e5c' },
+                    ];
+                    // Determine current phase
+                    let currentPhase = phases[0].label;
+                    for (const p of phases) {
+                      if (proj.existingStoryCount >= p.range[0]) currentPhase = p.label;
+                    }
+                    return (
+                      <div className="cr-arc-projection" style={{ marginBottom: 16, padding: 14, borderRadius: 10, background: '#fafaf8', border: '1px solid #e8e5de' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, color: '#888' }}>Arc Projection</span>
+                          <span style={{ fontSize: 11, color: roleColor, fontWeight: 600 }}>{pct}% complete · {currentPhase}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 2, height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}>
+                          {phases.map(p => {
+                            const total = p.range[1] - p.range[0] + 1;
+                            return (
+                              <div key={p.label} style={{ flex: total, height: 8, background: p.color, opacity: proj.existingStoryCount >= p.range[0] ? 0.9 : 0.15 }} title={p.label} />
+                            );
+                          })}
+                        </div>
+                        <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#666' }}>
+                          <span>📖 {proj.existingStoryCount} stories</span>
+                          <span>⧖ {proj.activeThreadCount} threads</span>
+                          <span>⚡ {proj.tensionCount} tensions</span>
+                          {proj.therapyProfile && <span>🧠 {proj.therapyProfile.sessions_completed || 0} therapy sessions</span>}
+                        </div>
+                        {proj.suggestions?.length > 0 && (
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e8e5de' }}>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: '#999', textTransform: 'uppercase', marginBottom: 6 }}>Suggested Next</div>
+                            {proj.suggestions.slice(0, 3).map((s, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0', fontSize: 11, color: '#555' }}>
+                                <span style={{ color: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999', fontSize: 10 }}>●</span>
+                                <div>
+                                  <div style={{ fontWeight: 500 }}>{s.title}</div>
+                                  <div style={{ color: '#999', fontSize: 10 }}>{s.description}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
                   return (
                     <div className="cr-arc-tab">
+                      <ArcProjection />
                       {charArc?.summary && <p className="cr-arc-summary">{charArc.summary}</p>}
                       {charArc && (charArc.chapters || []).length > 0 ? (
                         <div className="cr-arc-strip">
@@ -3149,6 +3210,100 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
 
     /* ── RELATIONSHIPS ── */
     case 'relationships':
+      const RelGraph = ({ character, allCharacters }) => {
+        const svgRef = React.useRef(null);
+        const [nodes, setNodes] = React.useState([]);
+        const [links, setLinks] = React.useState([]);
+
+        React.useEffect(() => {
+          const rm = character.relationships_map;
+          if (!rm) return;
+          const centerName = character.character_name || character.full_name || 'Character';
+          const nodeMap = new Map();
+          const linkArr = [];
+          const typeColors = { support: '#4a9', familial: '#69b', pressure: '#c55', shadow: '#a5a', mirror: '#59a', romantic: '#d6a', transactional: '#a93', creation: '#7a7' };
+          const flatTypeColors = { allies: '#4a9', rivals: '#c55', mentors: '#59a', love_interests: '#d6a', business_partners: '#a93' };
+
+          nodeMap.set(centerName, { name: centerName, x: 240, y: 180, r: 28, color: 'var(--se-gold, #b0922e)', center: true });
+
+          if (Array.isArray(rm)) {
+            rm.forEach(r => {
+              const target = r.target || 'Unknown';
+              if (!nodeMap.has(target)) {
+                nodeMap.set(target, { name: target, x: 0, y: 0, r: 18, color: typeColors[r.type] || '#999' });
+              }
+              linkArr.push({ from: centerName, to: target, type: r.type || '', feels: r.feels || '', color: typeColors[r.type] || '#999' });
+            });
+          } else {
+            Object.entries(rm).forEach(([key, val]) => {
+              if (!val || key === 'dynamic_notes') return;
+              const names = String(val).split(',').map(s => s.trim()).filter(Boolean);
+              names.forEach(name => {
+                const cleanName = name.replace(/\s*\(.*?\)\s*$/, '');
+                if (!nodeMap.has(cleanName)) {
+                  nodeMap.set(cleanName, { name: cleanName, x: 0, y: 0, r: 18, color: flatTypeColors[key] || '#999' });
+                }
+                linkArr.push({ from: centerName, to: cleanName, type: key, feels: '', color: flatTypeColors[key] || '#999' });
+              });
+            });
+          }
+
+          // Position in a circle around center
+          const outer = [...nodeMap.values()].filter(n => !n.center);
+          const cx = 240, cy = 180, radius = 130;
+          outer.forEach((n, i) => {
+            const angle = (2 * Math.PI * i / outer.length) - Math.PI / 2;
+            n.x = cx + radius * Math.cos(angle);
+            n.y = cy + radius * Math.sin(angle);
+          });
+
+          setNodes([...nodeMap.values()]);
+          setLinks(linkArr);
+        }, [character]);
+
+        if (!nodes.length) return null;
+
+        const nodesByName = Object.fromEntries(nodes.map(n => [n.name, n]));
+        return (
+          <div style={{ margin: '16px 0', borderRadius: 12, background: '#faf8f4', border: '1px solid #e8e3da', overflow: 'hidden' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e3da', fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: '#8a8070', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              Relationship Web
+            </div>
+            <svg ref={svgRef} viewBox="0 0 480 360" style={{ width: '100%', maxHeight: 360 }}>
+              {links.map((l, i) => {
+                const from = nodesByName[l.from];
+                const to = nodesByName[l.to];
+                if (!from || !to) return null;
+                return (
+                  <g key={i}>
+                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+                      stroke={l.color} strokeWidth={2} opacity={0.5} />
+                    <text x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 6}
+                      textAnchor="middle" fill={l.color} fontSize={8} fontFamily="DM Sans, sans-serif"
+                      opacity={0.8}>
+                      {l.type.replace(/_/g, ' ')}
+                    </text>
+                  </g>
+                );
+              })}
+              {nodes.map((n, i) => (
+                <g key={i}>
+                  <circle cx={n.x} cy={n.y} r={n.r} fill={n.color} opacity={0.15} />
+                  <circle cx={n.x} cy={n.y} r={n.r} fill="none" stroke={n.color} strokeWidth={n.center ? 2.5 : 1.5} />
+                  <text x={n.x} y={n.y + n.r + 14} textAnchor="middle" fill="#4a4035"
+                    fontSize={n.center ? 11 : 10} fontFamily="'DM Sans', sans-serif" fontWeight={n.center ? 700 : 500}>
+                    {n.name.length > 16 ? n.name.slice(0, 15) + '…' : n.name}
+                  </text>
+                  {n.center && (
+                    <text x={n.x} y={n.y + 4} textAnchor="middle" fill={n.color} fontSize={16}>★</text>
+                  )}
+                </g>
+              ))}
+            </svg>
+          </div>
+        );
+      };
+
       return (
         <div className="cr-dossier-section">
           <div className="cr-dossier-section-header">
@@ -3176,19 +3331,22 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
           ) : (() => {
             const nrm = normalizeRelMap(c.relationships_map);
             return hasJsonData(nrm) ? (
-              <div className="cr-dossier-rel-grid">
-                <RelCard type="Allies" icon="🤝" value={jGet(nrm, 'allies')} />
-                <RelCard type="Rivals" icon="⚔" value={jGet(nrm, 'rivals')} />
-                <RelCard type="Mentors" icon="🏛" value={jGet(nrm, 'mentors')} />
-                <RelCard type="Love Interests" icon="♡" value={jGet(nrm, 'love_interests')} />
-                <RelCard type="Business" icon="💼" value={jGet(nrm, 'business_partners')} />
-                {jGet(nrm, 'dynamic_notes') && (
-                  <div className="cr-dossier-rel-card" style={{ gridColumn: '1 / -1' }}>
-                    <div className="cr-dossier-rel-type">Dynamic Notes</div>
-                    <div className="cr-dossier-rel-names">{jGet(nrm, 'dynamic_notes')}</div>
-                  </div>
-                )}
-              </div>
+              <>
+                <div className="cr-dossier-rel-grid">
+                  <RelCard type="Allies" icon="🤝" value={jGet(nrm, 'allies')} />
+                  <RelCard type="Rivals" icon="⚔" value={jGet(nrm, 'rivals')} />
+                  <RelCard type="Mentors" icon="🏛" value={jGet(nrm, 'mentors')} />
+                  <RelCard type="Love Interests" icon="♡" value={jGet(nrm, 'love_interests')} />
+                  <RelCard type="Business" icon="💼" value={jGet(nrm, 'business_partners')} />
+                  {jGet(nrm, 'dynamic_notes') && (
+                    <div className="cr-dossier-rel-card" style={{ gridColumn: '1 / -1' }}>
+                      <div className="cr-dossier-rel-type">Dynamic Notes</div>
+                      <div className="cr-dossier-rel-names">{jGet(nrm, 'dynamic_notes')}</div>
+                    </div>
+                  )}
+                </div>
+                <RelGraph character={c} allCharacters={characters} />
+              </>
             ) : null;
           })() || (
             <EmptyState label="Relationships" onEdit={() => startEdit(tab)} />

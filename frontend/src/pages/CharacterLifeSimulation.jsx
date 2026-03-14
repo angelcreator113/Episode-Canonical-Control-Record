@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './CharacterLifeSimulation.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import PushToBrain from '../components/PushToBrain';
 
 /* ═══════════════════════════════════════════════════════════════
    Character Life Simulation System — Doc 07 · v1.0
@@ -414,7 +415,10 @@ export default function CharacterLifeSimulation() {
       <header className="cls-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>Character Life Simulation</h1>
-          {saving && <span className="eim-saving">Saving…</span>}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saving && <span className="eim-saving">Saving…</span>}
+            <PushToBrain pageName="character_life_simulation" data={data} />
+          </span>
         </div>
         <p className="cls-subtitle">Doc 07 · v1.0 — How characters evolve through career stages, relationships, cities, and life events</p>
       </header>

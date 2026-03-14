@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import StoryReviewPanel from './StoryReviewPanel';
+import StoryReviewPanel from '../components/StoryReviewPanel';
 import WriteModeAIWriter from '../components/WriteModeAIWriter';
+import StoryHubNav from '../components/StoryHubNav';
 import './StoryEngine.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -422,6 +423,8 @@ function StoryPanel({
   const [editText, setEditText] = useState(story?.text || '');
   const [showAiSidebar, setShowAiSidebar] = useState(() => window.innerWidth <= 768);
   const [currentPage, setCurrentPage] = useState(0);
+  const [evalScore, setEvalScore] = useState(null);
+  const [activeThreads, setActiveThreads] = useState([]);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
@@ -481,6 +484,30 @@ function StoryPanel({
     }
     prevStoryRef.current = story?.story_number;
   }, [story, onToggleWriteMode]);
+
+  // Fetch evaluation score for current story
+  useEffect(() => {
+    setEvalScore(null);
+    if (!story?.id) return;
+    fetch(`${API_BASE}/memories/eval-stories/${story.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.evaluation?.overall_score != null) {
+          setEvalScore(d.evaluation);
+        }
+      })
+      .catch(() => {});
+  }, [story?.id]);
+
+  // Fetch active threads for this story's character
+  useEffect(() => {
+    setActiveThreads([]);
+    if (!story?.story_number || !selectedCharKey) return;
+    fetch(`${API_BASE}/story-health/threads-for-story/${story.story_number}?character_key=${encodeURIComponent(selectedCharKey)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.threads) setActiveThreads(d.threads); })
+      .catch(() => {});
+  }, [story?.story_number, selectedCharKey]);
 
   if (!story && !task) return (
     <div
@@ -647,8 +674,18 @@ function StoryPanel({
                 style={{ background: charColor }}
                 onClick={() => onApprove(story)}
               >
-                Approve
+                {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
               </button>
+              {evalScore && (
+                <div className="se-eval-badge" style={{
+                  fontSize: 10, padding: '3px 8px', borderRadius: 6,
+                  background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                  color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
+                  fontWeight: 600, marginLeft: -4,
+                }}>
+                  {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
+                </div>
+              )}
             </>
           )}
           {editing && (
@@ -696,6 +733,33 @@ function StoryPanel({
               <span className="se-conflict-desc">{c.description}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Thread Awareness — which threads this story could advance */}
+      {activeThreads.length > 0 && !editing && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 14px',
+          background: 'rgba(176,146,46,0.04)', borderBottom: '1px solid var(--se-border-light)',
+          fontSize: 11,
+        }}>
+          <span style={{ color: '#999', fontWeight: 600, marginRight: 4 }}>⧖ Active Threads:</span>
+          {activeThreads.slice(0, 5).map(t => (
+            <span key={t.id} style={{
+              padding: '2px 8px', borderRadius: 10,
+              background: t.thread_type === 'relationship' ? 'rgba(212,96,112,0.1)' :
+                          t.thread_type === 'mystery' ? 'rgba(123,78,207,0.1)' :
+                          'rgba(176,146,46,0.08)',
+              color: t.thread_type === 'relationship' ? '#d46070' :
+                     t.thread_type === 'mystery' ? '#7b4ecf' : '#8b7a2e',
+              fontWeight: 500,
+            }}>
+              {t.title}
+            </span>
+          ))}
+          {activeThreads.length > 5 && (
+            <span style={{ color: '#999' }}>+{activeThreads.length - 5} more</span>
+          )}
         </div>
       )}
 
@@ -865,6 +929,54 @@ function StoryPanel({
           {therapyLoading && <div className="se-therapy-loading">Extracting memories…</div>}
         </div>
       )}
+
+      {/* Therapy-informed story suggestions */}
+      {!editing && selectedCharKey && (() => {
+        const TherapySuggestions = () => {
+          const [suggestions, setSuggestions] = React.useState(null);
+          const [expanded, setExpanded] = React.useState(false);
+          React.useEffect(() => {
+            fetch(`${API_BASE}/story-health/therapy-suggestions/${selectedCharKey}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(d => setSuggestions(d))
+              .catch(() => {});
+          }, []);
+          if (!suggestions?.suggestions?.length) return null;
+          return (
+            <div style={{
+              margin: '0 14px 12px', padding: 12, borderRadius: 10,
+              background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)',
+            }}>
+              <div
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                onClick={() => setExpanded(e => !e)}
+              >
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed' }}>
+                  🧠 Story Suggestions ({suggestions.suggestions.length})
+                </span>
+                <span style={{ fontSize: 10, color: '#999' }}>{expanded ? '▾' : '▸'}</span>
+              </div>
+              {expanded && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {suggestions.suggestions.map((s, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, fontSize: 11, padding: '4px 0' }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: '50%', marginTop: 4, flexShrink: 0,
+                        background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
+                      }} />
+                      <div>
+                        <div style={{ fontWeight: 500, color: '#333' }}>{s.title}</div>
+                        <div style={{ color: '#888', fontSize: 10 }}>{s.description}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        };
+        return <TherapySuggestions />;
+      })()}
 
       {!editing && registryUpdate && (
         <div className="se-registry-update">
@@ -1570,6 +1682,7 @@ export default function StoryEngine() {
 
       {!readingMode && (
         <div className="se-topbar">
+          <StoryHubNav />
           <button className="se-btn-back" onClick={() => navigate('/')}>
             ← Home
           </button>
@@ -1610,6 +1723,59 @@ export default function StoryEngine() {
           />
         </div>
       )}
+
+      {/* Story Sparks — creative suggestions for this character */}
+      {!readingMode && selectedChar && (() => {
+        const StorySparks = () => {
+          const [sparks, setSparks] = React.useState([]);
+          const [open, setOpen] = React.useState(false);
+          const [loading, setLoading] = React.useState(false);
+
+          const loadSparks = () => {
+            if (sparks.length) { setOpen(!open); return; }
+            setOpen(true);
+            setLoading(true);
+            fetch(`/api/v1/story-health/story-sparks/${selectedChar}`)
+              .then(r => r.json())
+              .then(d => setSparks(d.sparks || []))
+              .catch(() => {})
+              .finally(() => setLoading(false));
+          };
+
+          return (
+            <div style={{ margin: '8px 16px 4px', fontFamily: "'DM Sans', sans-serif" }}>
+              <button onClick={loadSparks} style={{
+                background: 'none', border: '1px solid #e0dcd4', borderRadius: 8, padding: '8px 14px',
+                color: 'var(--se-gold, #b0922e)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 6, width: '100%'
+              }}>
+                <span>✨</span> Story Sparks
+                <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.6 }}>{open ? '▾' : '▸'}</span>
+              </button>
+              {open && (
+                <div style={{ marginTop: 8, padding: '0 4px' }}>
+                  {loading ? (
+                    <div style={{ color: '#9a9080', fontSize: 12, padding: 8 }}>Generating sparks…</div>
+                  ) : sparks.length === 0 ? (
+                    <div style={{ color: '#9a9080', fontSize: 12, padding: 8 }}>No sparks available yet</div>
+                  ) : sparks.map((s, i) => (
+                    <div key={i} style={{
+                      padding: '10px 12px', marginBottom: 6, background: '#faf8f4', borderRadius: 8,
+                      border: '1px solid #ebe6dd', fontSize: 13, lineHeight: 1.5, color: '#3a3226'
+                    }}>
+                      <div style={{ fontWeight: 600, color: 'var(--se-gold, #b0922e)', marginBottom: 4, fontSize: 12 }}>
+                        {s.type || 'Spark'}
+                      </div>
+                      {s.suggestion || s.title || JSON.stringify(s)}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        };
+        return <StorySparks />;
+      })()}
 
       <div className={`se-workspace${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
         {!readingMode && !writeMode && (

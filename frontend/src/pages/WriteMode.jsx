@@ -16,12 +16,12 @@ import WriteModeAIWriter from '../components/WriteModeAIWriter';
 // ── Merged from StorytellerPage ──
 import ScenesPanel from '../components/ScenesPanel';
 import BookStructurePanel from '../components/BookStructurePanel';
-import MemoryBankView from './MemoryBankView';
+import MemoryBankView from '../components/MemoryBankView';
 import LalaSceneDetection from '../components/LalaSceneDetection';
 import ExportPanel from '../components/ExportPanel';
-import NarrativeIntelligence from './NarrativeIntelligence';
-import { ContinuityGuard } from './ContinuityGuard';
-import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
+import NarrativeIntelligence from '../components/NarrativeIntelligence';
+import { ContinuityGuard } from '../components/ContinuityGuard';
+import { MemoryCard, MEMORY_STYLES } from '../components/MemoryConfirmation';
 
 
 import './WriteMode.css';

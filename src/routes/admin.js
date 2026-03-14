@@ -25,10 +25,16 @@ router.post('/query', authenticateToken, authorize(['admin']), queryLimiter, asy
     const { sql } = req.body;
     if (!sql) return res.status(400).json({ error: 'sql field required' });
 
-    // Only allow SELECT queries
+    // Only allow safe read-only SELECT queries
     const trimmed = sql.trim().toLowerCase();
     if (!trimmed.startsWith('select')) {
       return res.status(403).json({ error: 'Only SELECT queries allowed' });
+    }
+
+    // Block dangerous SQL patterns that could piggyback on SELECT
+    const forbidden = /;|\binsert\b|\bupdate\b|\bdelete\b|\bdrop\b|\balter\b|\bcreate\b|\btruncate\b|\bexec\b|\bexecute\b|\bgrant\b|\brevoke\b|\bcopy\b|\binto\s+outfile\b|\binto\s+dumpfile\b|\bload_file\b|\bpg_sleep\b|\bpg_read_file\b|\blo_import\b|\blo_export\b/i;
+    if (forbidden.test(sql)) {
+      return res.status(403).json({ error: 'Query contains forbidden keywords' });
     }
 
     const rows = await sequelize.query(sql, { type: sequelize.QueryTypes.SELECT });
@@ -39,7 +45,7 @@ router.post('/query', authenticateToken, authorize(['admin']), queryLimiter, asy
 });
 
 // Test route to create video_compositions table
-router.get('/create-video-compositions-table', async (req, res) => {
+router.get('/create-video-compositions-table', authenticateToken, authorize(['admin']), async (req, res) => {
   const pool = getPool();
   
   try {

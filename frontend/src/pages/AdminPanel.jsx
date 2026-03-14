@@ -33,53 +33,23 @@ const AdminPanel = () => {
     }
   }, [user, navigate]);
 
-  // Mock users data - in a real app, this would come from an API
+  // Load current user into the user list from auth context
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setLoading(true);
-        // Mock data for demonstration
-        const mockUsers = [
-          {
-            id: '50d117a5-3d96-43de-a2dc-2e5027c776a3',
-            username: 'admin',
-            email: 'admin@example.com',
-            role: 'admin',
-            created_at: '2024-01-01T00:00:00Z',
-          },
-          {
-            id: '60d227b5-3d96-43de-a2dc-2e5027c776a4',
-            username: 'editor',
-            email: 'editor@example.com',
-            role: 'editor',
-            created_at: '2024-01-02T00:00:00Z',
-          },
-          {
-            id: '70d337c5-3d96-43de-a2dc-2e5027c776a5',
-            username: 'viewer',
-            email: 'viewer@example.com',
-            role: 'viewer',
-            created_at: '2024-01-03T00:00:00Z',
-          },
-        ];
-        setUsers(mockUsers);
-      } catch (err) {
-        setError(err.message || 'Failed to fetch users');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUsers();
-  }, []);
+    if (user) {
+      setUsers([{
+        id: user.id || user.sub || 'current',
+        username: user.name || user.email?.split('@')[0] || 'admin',
+        email: user.email || '',
+        role: user.role?.toLowerCase() || 'admin',
+        created_at: new Date().toISOString(),
+      }]);
+    }
+  }, [user]);
 
   const handleRoleChange = async (userId, newRole) => {
     try {
       setError(null);
-      // In a real app, this would call an API endpoint
-      // await adminService.updateUserRole(userId, newRole);
-      
-      // Update local state for demo
+      // Update local state — persisted role changes require a User model + API
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
       );

@@ -8,6 +8,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import StoryHubNav from '../components/StoryHubNav';
 import './NovelAssembler.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -220,6 +221,11 @@ export default function NovelAssembler() {
   const [activeAssembly, setActiveAssembly] = useState(null);
   const [compiling, setCompiling] = useState(false);
 
+  // Social imports
+  const [socialImports, setSocialImports] = useState([]);
+  const [showImports, setShowImports] = useState(false);
+  const [importsLoading, setImportsLoading] = useState(false);
+
   const char = CHARACTERS[selectedChar];
 
   // Load stories + assemblies
@@ -246,11 +252,25 @@ export default function NovelAssembler() {
     }
   }, [selectedChar]);
 
+  const loadSocialImports = useCallback(async () => {
+    setImportsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/stories/social/character/${selectedChar}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSocialImports(data.imports || []);
+      }
+    } catch { /* ignore */ }
+    setImportsLoading(false);
+  }, [selectedChar]);
+
   useEffect(() => {
     loadData();
+    loadSocialImports();
     setActiveAssembly(null);
     setShowCreate(false);
-  }, [loadData]);
+    setShowImports(false);
+  }, [loadData, loadSocialImports]);
 
   function toggleStoryId(id) {
     setSelectedStoryIds(prev =>
@@ -321,6 +341,7 @@ export default function NovelAssembler() {
 
   return (
     <div className="na-page">
+      <div style={{ padding: '10px 16px 0' }}><StoryHubNav /></div>
       {/* Top bar */}
       <div className="na-topbar">
         <button className="na-btn-back" onClick={() => navigate('/')}>← Home</button>
@@ -328,6 +349,14 @@ export default function NovelAssembler() {
         <div className="na-topbar-stats">
           <span>{approvedStories.length} approved stories</span>
           <span>{assemblies.length} assemblies</span>
+          {socialImports.length > 0 && (
+            <button
+              onClick={() => setShowImports(!showImports)}
+              style={{ padding: '3px 10px', fontSize: 11, cursor: 'pointer', borderRadius: 12, border: `1px solid ${showImports ? char?.color : '#e8e0d0'}`, background: showImports ? `${char?.color}15` : 'transparent', color: showImports ? char?.color : '#777' }}
+            >
+              📱 {socialImports.length} imports
+            </button>
+          )}
         </div>
       </div>
 
@@ -493,6 +522,33 @@ export default function NovelAssembler() {
                       <div className="na-preview-text">
                         {activeAssembly.compiled_text.slice(0, 2000)}
                         {activeAssembly.compiled_text.length > 2000 && '…'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Social Imports Panel */}
+                  {showImports && socialImports.length > 0 && (
+                    <div style={{ marginTop: 16, padding: 14, background: '#faf8f4', border: '1px solid #e8e0d0', borderRadius: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#2c2c2c', marginBottom: 10 }}>📱 Social Imports ({socialImports.length})</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                        {socialImports.map(imp => (
+                          <div key={imp.id} style={{ padding: '10px 12px', background: '#fff', border: '1px solid #e8e0d0', borderRadius: 8, fontSize: 12 }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: char?.color }}>{imp.platform}</span>
+                              {imp.lala_detected && <span style={{ fontSize: 9, padding: '1px 6px', background: '#d6338415', color: '#d63384', borderRadius: 8 }}>Lala detected</span>}
+                              <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 8, background: imp.canon_status === 'approved' ? '#6ec9a015' : '#c9a96e15', color: imp.canon_status === 'approved' ? '#6ec9a0' : '#c9a96e' }}>{imp.canon_status}</span>
+                            </div>
+                            <div style={{ color: '#2c2c2c', lineHeight: 1.5 }}>{imp.raw_content?.slice(0, 200)}{(imp.raw_content?.length || 0) > 200 ? '…' : ''}</div>
+                            {imp.detected_voice && <div style={{ fontSize: 10, color: '#777', marginTop: 4 }}>Voice: {imp.detected_voice}</div>}
+                            {imp.emotional_tags?.length > 0 && (
+                              <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                                {imp.emotional_tags.map((tag, i) => (
+                                  <span key={i} style={{ fontSize: 9, padding: '1px 6px', background: '#9e6ec915', borderRadius: 4, color: '#9e6ec9' }}>{tag}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
