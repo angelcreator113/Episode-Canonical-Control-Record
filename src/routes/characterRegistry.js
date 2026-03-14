@@ -9,6 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
+const { autoCreateFeedProfile } = require('../services/feedAutoGeneration');
 
 /* ------------------------------------------------------------------ */
 /*  Lazy model loader                                                  */
@@ -227,7 +228,35 @@ router.post('/registries/:id/characters', async (req, res) => {
       sort_order: sort_order ?? count,
     });
 
-    return res.status(201).json({ success: true, character });
+    // Auto-create Feed profile from registry character
+    const feedLayer = req.body.feed_layer || 'real_world';
+    const db = getModels();
+    let feedResult = { feedProfile: null, skipped: false };
+    try {
+      feedResult = await autoCreateFeedProfile(db, character, feedLayer, {
+        city: req.body.city || null,
+        platform: req.body.platform_primary || null,
+        vibe_sentence: req.body.vibe_sentence || null,
+      });
+      if (feedResult.feedProfile) {
+        await character.update({ feed_profile_id: feedResult.feedProfile.id });
+      }
+    } catch (feedErr) {
+      console.error('[CharacterRegistry] Feed auto-create failed (non-blocking):', feedErr.message);
+    }
+
+    return res.status(201).json({
+      success: true,
+      character,
+      feedProfile: feedResult.feedProfile || null,
+      feedProfileSkipped: feedResult.skipped || false,
+      ...(feedResult.skipped && {
+        feedSkipReason: feedResult.reason,
+        feedCap: feedResult.cap,
+        feedCurrent: feedResult.current,
+        message: `Feed cap reached (${feedResult.current}/${feedResult.cap}). Registry character saved. Create Feed profile manually when space is available.`,
+      }),
+    });
   } catch (err) {
     console.error('[CharacterRegistry] POST characters error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -837,7 +866,19 @@ router.post('/characters/:charId/promote-to-canon', async (req, res) => {
       status:         'active',
     });
 
-    res.json({ promoted: true, universe_character_id: universeChar.id });
+    // Link existing Feed profile if one was auto-created
+    const existingFeedProfile = character.feed_profile_id
+      ? await db.SocialProfile?.findByPk(character.feed_profile_id)
+      : null;
+
+    res.json({
+      promoted: true,
+      universe_character_id: universeChar.id,
+      feedProfile: existingFeedProfile || null,
+      feedProfileNote: !existingFeedProfile
+        ? 'No Feed profile — cap was reached at character creation. Create manually.'
+        : null,
+    });
   } catch (err) {
     console.error('POST /promote-to-canon error:', err);
     res.status(500).json({ error: err.message });

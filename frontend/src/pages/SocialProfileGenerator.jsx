@@ -554,6 +554,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                         <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
                           <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
                           {(p.archetype||d.archetype)&&<span style={{fontSize:10,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
+                          {p.registry_character_id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#eef0fb',color:'#6366f1'}} title="Linked to registry character">Registry</span>}
                           {p.adult_content_present&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+</span>}
                         </div>
                         <div style={{fontSize:12,color:C.inkMid,lineHeight:1.5,marginBottom:8,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>

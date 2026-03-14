@@ -395,4 +395,34 @@ async function _callClaude(prompt, maxTokens = 600) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// FEED PROFILE SYNC
+// When registry character fields that map to Feed profile fields change,
+// push the update to the linked SocialProfile.
+// ══════════════════════════════════════════════════════════════════════
+
+const SYNCABLE_TO_FEED = ['follower_tier', 'current_state'];
+
+async function syncFeedProfileFromRegistry(characterId, updatedFields, models) {
+  try {
+    const relevantUpdate = {};
+    for (const key of Object.keys(updatedFields)) {
+      if (SYNCABLE_TO_FEED.includes(key)) {
+        relevantUpdate[key] = updatedFields[key];
+      }
+    }
+    if (!Object.keys(relevantUpdate).length) return;
+
+    await models.SocialProfile.update(relevantUpdate, {
+      where: { registry_character_id: characterId },
+    });
+
+    console.log(`[registrySync] Feed profile synced for character ${characterId}:`, Object.keys(relevantUpdate));
+  } catch (err) {
+    console.error('[registrySync] syncFeedProfileFromRegistry error:', err.message);
+  }
+}
+
+registrySync.syncFeedProfileFromRegistry = syncFeedProfileFromRegistry;
+
 module.exports = registrySync;

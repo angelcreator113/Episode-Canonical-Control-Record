@@ -58,7 +58,7 @@ module.exports = (sequelize, DataTypes) => {
     crossing_trigger:      { type: DataTypes.TEXT, allowNull: true },
     crossing_mechanism:    { type: DataTypes.TEXT, allowNull: true },
     crossed_at:            { type: DataTypes.DATE, allowNull: true },
-    registry_character_id: { type: DataTypes.INTEGER, allowNull: true },
+    registry_character_id: { type: DataTypes.UUID, allowNull: true },
 
     // ── Enhanced dataset fields ──────────────────────────────────────────────
     post_frequency:        { type: DataTypes.STRING(100), allowNull: true },   // e.g. "3-4x/day", "weekly drops"
