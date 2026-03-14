@@ -25,6 +25,7 @@ import UniverseTabBar, { SHOW_TABS, STORY_TABS } from './UniverseTabBar';
 import StoryDashboard from '../components/StoryDashboard';
 import FranchiseBrain from '../components/FranchiseBrain';
 import WritingRhythm from '../components/WritingRhythm';
+import WorldStateTensions from '../components/WorldStateTensions';
 import './UniversePage.css';
 
 function useWindowWidth() {
@@ -194,6 +195,12 @@ export default function UniversePage() {
         )}
         {activeTab === 'writing-rhythm' && (
           <WritingRhythm />
+        )}
+        {activeTab === 'world-state' && (
+          <WorldStateTensions activeSubTab="world-state" />
+        )}
+        {activeTab === 'tensions' && (
+          <WorldStateTensions activeSubTab="tensions" />
         )}
       </div>
 

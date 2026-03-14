@@ -415,14 +415,6 @@ export default function WorldStudio() {
   const [locLoading,      setLocLoading]      = useState(false);
   const [locForm,         setLocForm]         = useState({ name: '', description: '', location_type: 'interior', narrative_role: '' });
   const [editLocId,       setEditLocId]       = useState(null);
-  const [snapshots,       setSnapshots]       = useState([]);
-  const [snapLoading,     setSnapLoading]     = useState(false);
-  const [snapForm,        setSnapForm]        = useState({ snapshot_label: '', world_facts: '', active_threads: '' });
-  const [timelineEvents,  setTimelineEvents]  = useState([]);
-  const [tlLoading,       setTlLoading]       = useState(false);
-  const [tlForm,          setTlForm]          = useState({ event_name: '', event_description: '', event_type: 'plot', impact_level: 'moderate', story_date: '' });
-  const [tensionPairs,    setTensionPairs]    = useState([]);
-  const [tensionLoading,  setTensionLoading]  = useState(false);
 
   /* ── Toast ─────────────────────────────────────────────────────────── */
   const [toast, setToast] = useState(null);
@@ -439,26 +431,6 @@ export default function WorldStudio() {
     finally { setLocLoading(false); }
   }, []);
 
-  const loadSnapshots = useCallback(async () => {
-    setSnapLoading(true);
-    try { const r = await fetch(`${API}/world/state/snapshots`); const d = await r.json(); setSnapshots(d.snapshots || []); }
-    catch (e) { console.error('loadSnapshots', e); }
-    finally { setSnapLoading(false); }
-  }, []);
-
-  const loadTimeline = useCallback(async () => {
-    setTlLoading(true);
-    try { const r = await fetch(`${API}/world/state/timeline`); const d = await r.json(); setTimelineEvents(d.events || []); }
-    catch (e) { console.error('loadTimeline', e); }
-    finally { setTlLoading(false); }
-  }, []);
-
-  const loadTensions = useCallback(async () => {
-    setTensionLoading(true);
-    try { const r = await fetch(`${API}/world/tension-scanner`); const d = await r.json(); setTensionPairs(d.pairs || []); }
-    catch (e) { console.error('loadTensions', e); }
-    finally { setTensionLoading(false); }
-  }, []);
 
   const seedInfrastructure = useCallback(async () => {
     try {
@@ -486,33 +458,6 @@ export default function WorldStudio() {
     catch (e) { flash('Delete failed', 'error'); }
   }, [flash, loadLocations]);
 
-  const saveSnapshot = useCallback(async () => {
-    const body = {
-      snapshot_label: snapForm.snapshot_label,
-      world_facts: snapForm.world_facts ? snapForm.world_facts.split('\n').filter(Boolean) : [],
-      active_threads: snapForm.active_threads ? snapForm.active_threads.split('\n').filter(Boolean) : [],
-    };
-    try {
-      await fetch(`${API}/world/state/snapshots`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      flash('Snapshot saved');
-      setSnapForm({ snapshot_label: '', world_facts: '', active_threads: '' });
-      loadSnapshots();
-    } catch (e) { flash('Save failed', 'error'); }
-  }, [snapForm, flash, loadSnapshots]);
-
-  const saveTimelineEvent = useCallback(async () => {
-    try {
-      await fetch(`${API}/world/state/timeline`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tlForm) });
-      flash('Timeline event created');
-      setTlForm({ event_name: '', event_description: '', event_type: 'plot', impact_level: 'moderate', story_date: '' });
-      loadTimeline();
-    } catch (e) { flash('Save failed', 'error'); }
-  }, [tlForm, flash, loadTimeline]);
-
-  const deleteTimelineEvent = useCallback(async (id) => {
-    try { await fetch(`${API}/world/state/timeline/${id}`, { method: 'DELETE' }); flash('Event deleted'); loadTimeline(); }
-    catch (e) { flash('Delete failed', 'error'); }
-  }, [flash, loadTimeline]);
 
   const createStoryFromChar = useCallback(async (charId) => {
     try {
@@ -523,14 +468,6 @@ export default function WorldStudio() {
     } catch (e) { flash('Story task failed', 'error'); }
   }, [navigate, flash]);
 
-  const proposeTensionScene = useCallback(async (pair) => {
-    try {
-      const r = await fetch(`${API}/world/create-tension-proposal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ char_a_id: pair.char_a_id, char_b_id: pair.char_b_id }) });
-      const d = await r.json();
-      if (d.proposal) navigate('/story-evaluation', { state: { sceneProposal: d.proposal } });
-      else flash('Could not generate proposal', 'error');
-    } catch (e) { flash('Proposal failed', 'error'); }
-  }, [navigate, flash]);
 
   /* ── Loaders ───────────────────────────────────────────────────────── */
   const loadCharacters = useCallback(async (tag) => {
@@ -723,8 +660,6 @@ export default function WorldStudio() {
               { key: 'all-characters', label: 'All Characters', icon: '🌍' },
               { key: 'relationships',  label: 'Relationships',  icon: '🔗' },
               { key: 'locations',      label: 'Locations',      icon: '🏛' },
-              { key: 'world-state',    label: 'World State',    icon: '📜' },
-              { key: 'tensions',       label: 'Tensions',       icon: '⚡' },
               { key: 'feed',           label: 'The Feed',       icon: '📱' },
             ].map(t => (
               <button
@@ -736,8 +671,6 @@ export default function WorldStudio() {
                   if (t.key === 'before-lala')    setWorldTag('book-1');
                   if (t.key === 'all-characters') setWorldTag('all');
                   if (t.key === 'locations')      loadLocations();
-                  if (t.key === 'world-state')    { loadSnapshots(); loadTimeline(); }
-                  if (t.key === 'tensions')       loadTensions();
                   setSelectedChar(null);
                   setCharDetail(null);
                   setCharFilter('all');
@@ -838,118 +771,8 @@ export default function WorldStudio() {
         </div>
       )}
 
-      {/* ── WORLD STATE TAB ─────────────────────────────────────────── */}
-      {pageTab === 'world-state' && (
-        <div className="ws4-feed-tab" style={{ padding: 20 }}>
-          <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>📜 World State</h2>
-
-          {/* Snapshots section */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>State Snapshots</h3>
-            <div style={{ background: '#f8f7f4', borderRadius: 10, padding: 14, marginBottom: 14, border: '1px solid #e8e5de' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
-                <input className="ws4-input" placeholder="Snapshot Label *" value={snapForm.snapshot_label} onChange={e => setSnapForm(p => ({ ...p, snapshot_label: e.target.value }))} />
-                <textarea className="ws4-input" placeholder="World Facts (one per line)" rows={3} value={snapForm.world_facts} onChange={e => setSnapForm(p => ({ ...p, world_facts: e.target.value }))} style={{ resize: 'vertical' }} />
-                <textarea className="ws4-input" placeholder="Active Threads (one per line)" rows={2} value={snapForm.active_threads} onChange={e => setSnapForm(p => ({ ...p, active_threads: e.target.value }))} style={{ resize: 'vertical' }} />
-              </div>
-              <button className="ws4-btn ws4-btn-primary ws4-btn-sm" style={{ marginTop: 8 }} onClick={saveSnapshot} disabled={!snapForm.snapshot_label}>Save Snapshot</button>
-            </div>
-            {snapLoading ? <div style={{ color: '#999', textAlign: 'center' }}>Loading…</div> : snapshots.map(s => (
-              <div key={s.id} style={{ background: '#fff', borderRadius: 10, padding: 14, border: '1px solid #e8e5de', marginBottom: 10 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{s.snapshot_label}</div>
-                <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Position: {s.timeline_position || '—'}</div>
-                {s.world_facts?.length > 0 && (
-                  <div style={{ marginTop: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}>Facts: </span>
-                    {s.world_facts.map((f, i) => <span key={i} style={{ fontSize: 11, background: '#f0eee8', borderRadius: 4, padding: '1px 6px', marginRight: 4 }}>{f}</span>)}
-                  </div>
-                )}
-                {s.active_threads?.length > 0 && (
-                  <div style={{ marginTop: 4 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}>Threads: </span>
-                    {s.active_threads.map((t, i) => <span key={i} style={{ fontSize: 11, background: '#e8edf5', borderRadius: 4, padding: '1px 6px', marginRight: 4 }}>{t}</span>)}
-                  </div>
-                )}
-              </div>
-            ))}
-            {!snapLoading && snapshots.length === 0 && <div style={{ color: '#999', textAlign: 'center', padding: 20 }}>No snapshots yet</div>}
-          </div>
-
-          {/* Timeline section */}
-          <div>
-            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Timeline Events</h3>
-            <div style={{ background: '#f8f7f4', borderRadius: 10, padding: 14, marginBottom: 14, border: '1px solid #e8e5de' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <input className="ws4-input" placeholder="Event Name *" value={tlForm.event_name} onChange={e => setTlForm(p => ({ ...p, event_name: e.target.value }))} />
-                <input className="ws4-input" placeholder="Story Date (e.g. Year 2, Month 3)" value={tlForm.story_date} onChange={e => setTlForm(p => ({ ...p, story_date: e.target.value }))} />
-                <select className="ws4-select" value={tlForm.event_type} onChange={e => setTlForm(p => ({ ...p, event_type: e.target.value }))}>
-                  <option value="plot">Plot</option><option value="backstory">Backstory</option>
-                  <option value="world">World</option><option value="character">Character</option><option value="relationship">Relationship</option>
-                </select>
-                <select className="ws4-select" value={tlForm.impact_level} onChange={e => setTlForm(p => ({ ...p, impact_level: e.target.value }))}>
-                  <option value="minor">Minor</option><option value="moderate">Moderate</option>
-                  <option value="major">Major</option><option value="catastrophic">Catastrophic</option>
-                </select>
-              </div>
-              <textarea className="ws4-input" placeholder="Event Description" rows={2} value={tlForm.event_description} onChange={e => setTlForm(p => ({ ...p, event_description: e.target.value }))} style={{ resize: 'vertical', marginTop: 8, width: '100%' }} />
-              <button className="ws4-btn ws4-btn-primary ws4-btn-sm" style={{ marginTop: 8 }} onClick={saveTimelineEvent} disabled={!tlForm.event_name}>Add Event</button>
-            </div>
-            {tlLoading ? <div style={{ color: '#999', textAlign: 'center' }}>Loading…</div> : timelineEvents.map(ev => (
-              <div key={ev.id} style={{ background: '#fff', borderRadius: 10, padding: 14, border: '1px solid #e8e5de', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>
-                    {ev.impact_level === 'catastrophic' ? '🔥' : ev.impact_level === 'major' ? '⚠️' : '•'} {ev.event_name}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#888' }}>{ev.event_type} · {ev.impact_level}{ev.story_date ? ` · ${ev.story_date}` : ''}</div>
-                  {ev.event_description && <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{ev.event_description}</div>}
-                  {ev.WorldLocation && <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>📍 {ev.WorldLocation.name}</div>}
-                </div>
-                <button className="ws4-btn ws4-btn-danger ws4-btn-sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => deleteTimelineEvent(ev.id)}>✕</button>
-              </div>
-            ))}
-            {!tlLoading && timelineEvents.length === 0 && <div style={{ color: '#999', textAlign: 'center', padding: 20 }}>No timeline events yet</div>}
-          </div>
-        </div>
-      )}
-
-      {/* ── TENSIONS TAB ────────────────────────────────────────────── */}
-      {pageTab === 'tensions' && (
-        <div className="ws4-feed-tab" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>⚡ Character Tension Scanner</h2>
-            <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={loadTensions} disabled={tensionLoading}>
-              {tensionLoading ? '⏳ Scanning…' : '🔄 Rescan'}
-            </button>
-          </div>
-          {tensionLoading ? <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>Scanning tensions…</div> : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-              {tensionPairs.map((p, i) => (
-                <div key={i} style={{ background: '#fff', borderRadius: 10, padding: 16, border: '1px solid #e8e5de' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>
-                      {p.char_a_name} <span style={{ color: '#c44', fontSize: 12 }}>⚡</span> {p.char_b_name}
-                    </div>
-                    <span style={{
-                      fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, textTransform: 'uppercase',
-                      background: p.tension_state === 'Explosive' ? '#fee' : p.tension_state === 'Simmering' ? '#fff3e0' : '#f5f5f5',
-                      color: p.tension_state === 'Explosive' ? '#c44' : p.tension_state === 'Simmering' ? '#e65100' : '#666',
-                    }}>{p.tension_state}</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{p.relationship_type}{p.is_romantic ? ' · 💕 Romantic' : ''}</div>
-                  {p.conflict_summary && <div style={{ fontSize: 12, color: '#666', marginTop: 6, lineHeight: 1.4 }}>{p.conflict_summary}</div>}
-                  <button className="ws4-btn ws4-btn-primary ws4-btn-sm" style={{ marginTop: 10 }} onClick={() => proposeTensionScene(p)}>
-                    ✦ Propose Scene
-                  </button>
-                </div>
-              ))}
-              {tensionPairs.length === 0 && <div style={{ color: '#999', gridColumn: '1 / -1', textAlign: 'center', padding: 40 }}>No high-tension pairs found. Increase relationship tension states to populate this scanner.</div>}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── WORLD / CHARACTER TABS ──────────────────────────────────── */}
-      {pageTab !== 'feed' && pageTab !== 'relationships' && pageTab !== 'locations' && pageTab !== 'world-state' && pageTab !== 'tensions' && (
+      {pageTab !== 'feed' && pageTab !== 'relationships' && pageTab !== 'locations' && (
       <>
 
       {/* ── STATS BAR ───────────────────────────────────────────────── */}

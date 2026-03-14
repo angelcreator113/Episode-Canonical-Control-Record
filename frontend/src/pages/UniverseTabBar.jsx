@@ -23,6 +23,8 @@ export const SHOW_TABS = [
   { key: 'production',     label: 'Production',    icon: '▨' },
   { key: 'wardrobe',       label: 'Wardrobe',      icon: '△' },
   { key: 'assets',         label: 'Assets',        icon: '□' },
+  { key: 'world-state',    label: 'World State',   icon: '📜' },
+  { key: 'tensions',       label: 'Tensions',      icon: '⚡' },
 ];
 
 export const STORY_TABS = [

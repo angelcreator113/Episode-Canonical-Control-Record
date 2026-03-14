@@ -110,8 +110,11 @@
   gap: 0;
 }
 
-.ps-nav::-webkit-scrollbar { width: 3px; }
-.ps-nav::-webkit-scrollbar-thumb { background: var(--ps-border); border-radius: 2px; }
+.ps-nav::-webkit-scrollbar { width: 10px; }
+.ps-nav::-webkit-scrollbar-track { background: transparent; }
+.ps-nav::-webkit-scrollbar-thumb { background: var(--ps-border); border-radius: 5px; min-height: 40px; }
+.ps-nav::-webkit-scrollbar-thumb:hover { background: #999; }
+.ps-nav { scrollbar-width: auto; scrollbar-color: var(--ps-border) transparent; }
 
 /* ── ZONE ────────────────────────────────────────────────────────────── */
 .ps-zone {
