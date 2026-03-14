@@ -75,6 +75,16 @@ const BookToWriteRedirect = () => {
 const CharacterRegistryPage = lazy(() => import('./pages/CharacterRegistryPage'));
 const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
 const UniversePage = lazy(() => import('./pages/UniversePage'));
+const SeriesPage = lazy(() => import('./pages/SeriesPage'));
+const UniverseProductionPage = lazy(() => import('./pages/UniverseProductionPage'));
+const UniverseSocialImportPage = lazy(() => import('./pages/UniverseSocialImportPage'));
+const UniverseWardrobePage = lazy(() => import('./pages/UniverseWardrobePage'));
+const UniverseAssetsPage = lazy(() => import('./pages/UniverseAssetsPage'));
+const UniverseWorldStatePage = lazy(() => import('./pages/UniverseWorldStatePage'));
+const UniverseTensionsPage = lazy(() => import('./pages/UniverseTensionsPage'));
+const StoryDashboardPage = lazy(() => import('./pages/StoryDashboardPage'));
+const FranchiseBrainPage = lazy(() => import('./pages/FranchiseBrainPage'));
+const WritingRhythmPage = lazy(() => import('./pages/WritingRhythmPage'));
 const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
 const RelationshipEngine = lazy(() => import('./pages/RelationshipEngine'));
@@ -271,11 +281,21 @@ function AppContent() {
           
           {/* Universe */}
           <Route path="/universe" element={<UniversePage />} />
-          
+          <Route path="/universe/social-import" element={<UniverseSocialImportPage />} />
+          <Route path="/universe/series" element={<SeriesPage />} />
+          <Route path="/universe/production" element={<UniverseProductionPage />} />
+          <Route path="/universe/wardrobe" element={<UniverseWardrobePage />} />
+          <Route path="/universe/assets" element={<UniverseAssetsPage />} />
+          <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
+          <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
+          <Route path="/universe/story-dashboard" element={<StoryDashboardPage />} />
+          <Route path="/universe/knowledge" element={<FranchiseBrainPage />} />
+          <Route path="/universe/writing-rhythm" element={<WritingRhythmPage />} />
+
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
           
-          {/* Episodes — listing redirects to Universe Production tab */}
-          <Route path="/episodes" element={<Navigate to="/universe?tab=production" replace />} />
+          {/* Episodes — listing redirects to Universe Production page */}
+          <Route path="/episodes" element={<Navigate to="/universe/production" replace />} />
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
@@ -448,11 +468,11 @@ function AppContent() {
           <Route path="/pressure" element={<NarrativePressureDashboard />} />
           <Route path="/feed-relationships" element={<FeedRelationshipMap />} />
           
-          {/* PNOS Social Import Pipeline — redirects to Universe tab */}
-          <Route path="/social-import" element={<Navigate to="/universe?tab=social-import" replace />} />
+          {/* PNOS Social Import Pipeline — redirects to Universe page */}
+          <Route path="/social-import" element={<Navigate to="/universe/social-import" replace />} />
 
-          {/* Franchise Brain — redirects to Universe */}
-          <Route path="/franchise-brain" element={<Navigate to="/universe?tab=knowledge" replace />} />
+          {/* Franchise Brain — redirects to Universe page */}
+          <Route path="/franchise-brain" element={<Navigate to="/universe/knowledge" replace />} />
           
           {/* PNOS Novel Assembler */}
           <Route path="/assembler" element={<NovelAssembler />} />
@@ -523,6 +543,16 @@ function AppContent() {
           const pageNames = {
             '/': 'Home Dashboard',
             '/universe': 'Universe Hub',
+            '/universe/social-import': 'Social Import',
+            '/universe/series': 'Series',
+            '/universe/production': 'Production',
+            '/universe/wardrobe': 'Wardrobe',
+            '/universe/assets': 'Assets',
+            '/universe/world-state': 'World State',
+            '/universe/tensions': 'Tensions',
+            '/universe/story-dashboard': 'Story Dashboard',
+            '/universe/knowledge': 'Franchise Brain',
+            '/universe/writing-rhythm': 'Writing Rhythm',
             '/character-registry': 'Character Registry',
             '/relationships': 'Relationship Engine',
             '/continuity': 'Continuity Engine',

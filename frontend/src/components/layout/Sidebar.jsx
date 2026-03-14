@@ -17,9 +17,16 @@ const NAV = [
     items: [
       { icon: '◈',  label: 'Universe',             route: '/universe',
         children: [
-          { icon: '✦', label: 'Story Dashboard', route: '/universe?tab=story-dashboard' },
-          { icon: '⬡', label: 'Franchise Brain',  route: '/universe?tab=knowledge' },
-          { icon: '◇', label: 'Writing Rhythm',  route: '/universe?tab=writing-rhythm' },
+          { icon: '▦', label: 'Social Import',    route: '/universe/social-import' },
+          { icon: '◧', label: 'Series',           route: '/universe/series' },
+          { icon: '▨', label: 'Production',       route: '/universe/production' },
+          { icon: '△', label: 'Wardrobe',         route: '/universe/wardrobe' },
+          { icon: '□', label: 'Assets',            route: '/universe/assets' },
+          { icon: '📜', label: 'World State',      route: '/universe/world-state' },
+          { icon: '⚡', label: 'Tensions',         route: '/universe/tensions' },
+          { icon: '✦', label: 'Story Dashboard',  route: '/universe/story-dashboard' },
+          { icon: '⬡', label: 'Franchise Brain',  route: '/universe/knowledge' },
+          { icon: '◇', label: 'Writing Rhythm',   route: '/universe/writing-rhythm' },
         ],
       },
       { icon: '✦',  label: 'World Studio',         route: '/world-studio',
@@ -141,12 +148,12 @@ function Sidebar({ isOpen, onClose }) {
     if (location.pathname.startsWith('/shows/')) setShowsOpen(true);
   }, [location.pathname]);
 
-  // Auto-expand Universe sub-nav when on a story-side tab
+  // Auto-expand Universe sub-nav when on a /universe/* sub-page
   useEffect(() => {
-    if (location.pathname === '/universe' && ['story-dashboard','knowledge','writing-rhythm'].includes(new URLSearchParams(location.search).get('tab'))) {
+    if (location.pathname.startsWith('/universe/') || location.pathname === '/universe') {
       setUniverseOpen(true);
     }
-  }, [location.pathname, location.search]);
+  }, [location.pathname]);
 
   // Auto-expand Create World sub-nav when on character-registry or relationships
   useEffect(() => {
