@@ -118,6 +118,28 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM('public','semi_private','underground'),
       defaultValue: 'public',
     },
+
+    /* ── LalaVerse Feed layer ── */
+    feed_layer: {
+      type: DataTypes.ENUM('real_world', 'lalaverse'),
+      defaultValue: 'real_world',
+      allowNull: false,
+    },
+    city: {
+      type: DataTypes.ENUM('nova_prime', 'velour_city', 'the_drift', 'solenne', 'cascade_row'),
+      allowNull: true,
+    },
+    lala_relationship: {
+      type: DataTypes.ENUM('direct', 'aware', 'one_sided', 'mutual_unaware', 'competitive', 'justawoman'),
+      allowNull: true,
+    },
+    career_pressure: {
+      type: DataTypes.ENUM('ahead', 'level', 'behind', 'different_lane'),
+      allowNull: true,
+    },
+    mirror_profile_id: { type: DataTypes.INTEGER, allowNull: true },   // AUTHOR_ONLY — real_world counterpart
+    is_justawoman_record: { type: DataTypes.BOOLEAN, defaultValue: false },
+    lalaverse_cap_exempt:  { type: DataTypes.BOOLEAN, defaultValue: false },
   }, {
     sequelize,
     modelName:  'SocialProfile',

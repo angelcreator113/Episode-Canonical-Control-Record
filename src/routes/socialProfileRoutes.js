@@ -25,6 +25,40 @@ try {
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// ── Feed caps ─────────────────────────────────────────────────────────────────
+const FEED_CAPS = { real_world: 443, lalaverse: 200 };
+
+async function checkFeedCap(db, layer) {
+  const cap = FEED_CAPS[layer] || 443;
+  const count = await db.SocialProfile.count({
+    where: { feed_layer: layer, lalaverse_cap_exempt: false },
+  });
+  return { count, cap, remaining: cap - count, atCap: count >= cap };
+}
+
+// ── JustAWoman record guard ──────────────────────────────────────────────────
+function guardJustAWomanRecord(req, res, next) {
+  const db = req.app.locals.db || require('../models');
+  db.SocialProfile.findByPk(req.params.id).then(profile => {
+    if (profile?.is_justawoman_record) {
+      return res.status(403).json({
+        error: 'This record is locked',
+        message: "JustAWoman's LalaVerse profile is hand-authored and permanently locked.",
+      });
+    }
+    next();
+  }).catch(next);
+}
+
+// ── LalaVerse city culture ───────────────────────────────────────────────────
+const CITY_CULTURE = {
+  nova_prime:   'High fashion, aspirational, image-first. Polished curators dominate. Brand deals are currency.',
+  velour_city:  'Music, nightlife, culture. Chaos creators and community builders. Authenticity is the brand.',
+  the_drift:    'Underground, countercultural, anti-algorithm. Messy transparents and watchers. Fame is suspicious.',
+  solenne:      'Luxury, slow content, soft life. Soft life archetype and overnight rises. Aesthetics over metrics.',
+  cascade_row:  'Commerce, hustle, explicitly paid. Industry peers and cautionary tales. ROI is the language.',
+};
+
 // ── Generation prompt ─────────────────────────────────────────────────────────
 function buildGenerationPrompt(handle, platform, vibe_sentence, characterContext, advancedContext) {
   // Default to JustAWoman (Book 1) if no character context provided
@@ -205,31 +239,56 @@ Respond ONLY in valid JSON:
 
 // ── POST /generate ───────────────────────────────────────────────────────────
 // Three inputs + optional advanced context → full profile generated
+// Supports feed_layer: 'real_world' (default) or 'lalaverse'
 router.post('/generate', optionalAuth, async (req, res) => {
-  const { handle, platform, vibe_sentence, series_id, character_context, character_key, advanced_context } = req.body;
+  const {
+    handle, platform, vibe_sentence, series_id,
+    character_context, character_key, advanced_context,
+    feed_layer, city, lala_relationship, career_pressure,
+  } = req.body;
 
   if (!handle || !platform || !vibe_sentence) {
     return res.status(400).json({ error: 'handle, platform, and vibe_sentence are required' });
   }
 
+  const layer = feed_layer || 'real_world';
+  if (layer === 'lalaverse' && !city) {
+    return res.status(400).json({ error: 'city is required for LalaVerse Feed profiles' });
+  }
+
   const db = req.app.locals.db || require('../models');
-  const CREATOR_CAP = 443;
 
   try {
-    // Soft-cap check: warn (don't block) when approaching or exceeding 443
-    const currentCount = await db.SocialProfile.count();
-    if (currentCount >= CREATOR_CAP) {
-      res.set('X-Creator-Cap-Warning', `at_cap`);
-      res.set('X-Creator-Cap-Count', `${currentCount}/${CREATOR_CAP}`);
-    } else if (currentCount >= CREATOR_CAP - 23) {
-      res.set('X-Creator-Cap-Warning', `approaching`);
-      res.set('X-Creator-Cap-Count', `${currentCount}/${CREATOR_CAP}`);
+    // Layer-aware cap check
+    const capCheck = await checkFeedCap(db, layer);
+    if (capCheck.atCap) {
+      return res.status(400).json({
+        error: `${layer === 'lalaverse' ? 'LalaVerse Feed' : 'Feed'} capacity reached`,
+        current: capCheck.count,
+        cap: capCheck.cap,
+      });
+    }
+    res.set('X-Creator-Cap-Count', `${capCheck.count}/${capCheck.cap}`);
+    if (capCheck.remaining <= 23) {
+      res.set('X-Creator-Cap-Warning', 'approaching');
+    }
+
+    // Build prompt — inject LalaVerse city culture context when applicable
+    let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context);
+    if (layer === 'lalaverse' && city) {
+      prompt += `\n\nLALAVERSE CONTEXT:
+This creator lives in ${city.replace(/_/g, ' ')} — ${CITY_CULTURE[city] || ''}
+Generate a profile that feels native to that city's creator culture.
+Lala's relationship to this creator: ${lala_relationship || 'mutual_unaware'}.
+Career position relative to Lala: ${career_pressure || 'level'}.
+Do not reference JustAWoman or the real world in any generated content.
+Lala does not know she was built. The world she lives in feels complete and self-contained.`;
     }
 
     const response = await client.messages.create({
       model:      'claude-sonnet-4-20250514',
       max_tokens: 6000,
-      messages:   [{ role: 'user', content: buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context) }],
+      messages:   [{ role: 'user', content: prompt }],
     });
 
     let generated;
@@ -293,6 +352,11 @@ router.post('/generate', optionalAuth, async (req, res) => {
       controversy_history:   generated.controversy_history || [],
       collab_style:          generated.collab_style,
       influencer_tier_detail:generated.influencer_tier_detail,
+      // LalaVerse layer fields
+      feed_layer:            layer,
+      city:                  layer === 'lalaverse' ? city : null,
+      lala_relationship:     layer === 'lalaverse' ? (lala_relationship || 'mutual_unaware') : null,
+      career_pressure:       layer === 'lalaverse' ? (career_pressure || 'level') : null,
     });
 
     // Auto-assign ALL characters as followers based on intelligent follow engine
@@ -714,13 +778,14 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
 router.get('/', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { Op } = require('sequelize');
-  const { series_id, archetype, status, platform, page, limit, search, sort } = req.query;
+  const { series_id, archetype, status, platform, page, limit, search, sort, feed_layer } = req.query;
   try {
     const where = {};
-    if (series_id) where.series_id = series_id;
-    if (archetype) where.archetype = archetype;
-    if (status)    where.status    = status;
-    if (platform)  where.platform  = platform;
+    if (series_id)  where.series_id  = series_id;
+    if (archetype)  where.archetype  = archetype;
+    if (status)     where.status     = status;
+    if (platform)   where.platform   = platform;
+    if (feed_layer) where.feed_layer = feed_layer;
     if (search) {
       where[Op.or] = [
         { handle: { [Op.iLike]: `%${search}%` } },
@@ -755,9 +820,10 @@ router.get('/', optionalAuth, async (req, res) => {
       }] : [],
     });
 
-    // Count totals by status (unfiltered) for header stats
+    // Count totals by status (unfiltered by status, but respecting layer) for header stats
     const baseWhere = {};
-    if (series_id) baseWhere.series_id = series_id;
+    if (series_id)  baseWhere.series_id  = series_id;
+    if (feed_layer) baseWhere.feed_layer = feed_layer;
     const statusCounts = await db.SocialProfile.findAll({
       where: baseWhere,
       attributes: [
@@ -958,7 +1024,7 @@ router.delete('/:id/followers/:characterKey', optionalAuth, async (req, res) => 
 });
 
 // ── POST /:id/finalize ──────────────────────────────────────────────────────
-router.post('/:id/finalize', optionalAuth, async (req, res) => {
+router.post('/:id/finalize', optionalAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -972,7 +1038,7 @@ router.post('/:id/finalize', optionalAuth, async (req, res) => {
 
 // ── POST /:id/cross ─────────────────────────────────────────────────────────
 // Promotes a social profile into a world character — auto-creates RegistryCharacter
-router.post('/:id/cross', optionalAuth, async (req, res) => {
+router.post('/:id/cross', optionalAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { crossing_note, registry_id } = req.body;
   try {
@@ -1043,7 +1109,7 @@ router.post('/:id/cross', optionalAuth, async (req, res) => {
 
 // ── PUT /:id ─────────────────────────────────────────────────────────────────
 // Update editable fields on a profile
-router.put('/:id', optionalAuth, async (req, res) => {
+router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1074,7 +1140,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
 
 // ── DELETE /:id ──────────────────────────────────────────────────────────────
 // Permanently delete a profile
-router.delete('/:id', optionalAuth, async (req, res) => {
+router.delete('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
