@@ -672,7 +672,7 @@ export default function WorldStudio() {
     loadSavedPreviews();
   };
 
-  useEffect(() => { if (pageTab === 'characters' && !selectedChar) { loadBatches(); loadSavedPreviews(); } }, [pageTab, selectedChar]);
+  useEffect(() => { if (!selectedChar) { loadBatches(); loadSavedPreviews(); } }, [selectedChar]);
 
   /* ── Compare loader ──────────────────────────────────────────────── */
   useEffect(() => {
