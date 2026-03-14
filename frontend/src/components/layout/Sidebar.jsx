@@ -16,26 +16,42 @@ const NAV = [
     zone: 'WORLD',
     items: [
       { icon: '◈',  label: 'Universe',             route: '/universe',
-        children: [
-          { icon: '▦', label: 'Social Import',      route: '/universe/social-import' },
-          { icon: '◧', label: 'Series',             route: '/universe/series' },
-          { icon: '▨', label: 'Production',         route: '/universe/production' },
-          { icon: '△', label: 'Wardrobe',           route: '/universe/wardrobe' },
-          { icon: '□', label: 'Assets',              route: '/universe/assets' },
-          { icon: '📜', label: 'World State',        route: '/universe/world-state' },
-          { icon: '📅', label: 'Cultural Calendar',  route: '/cultural-calendar' },
-          { icon: '⭐', label: 'Influencer Systems', route: '/influencer-systems' },
-          { icon: '🏗️', label: 'Infrastructure',     route: '/world-infrastructure' },
-          { icon: '📱', label: 'Social Timeline',    route: '/social-timeline' },
-          { icon: '🧠', label: 'Social Personality', route: '/social-personality' },
-          { icon: '🎭', label: 'Life Simulation',    route: '/character-life-simulation' },
-          { icon: '📜', label: 'Cultural Memory',    route: '/cultural-memory' },
-          { icon: '💎', label: 'Depth Engine',       route: '/character-depth-engine' },
-          { icon: '📍', label: 'World Locations',    route: '/world-locations' },
-          { icon: '🟠', label: 'Amber',              route: '/amber' },
-          { icon: '✦', label: 'Story Dashboard',    route: '/universe/story-dashboard' },
-          { icon: '⬡', label: 'Franchise Brain',    route: '/universe/knowledge' },
-          { icon: '◇', label: 'Writing Rhythm',     route: '/universe/writing-rhythm' },
+        groups: [
+          { heading: 'Production',
+            children: [
+              { icon: '◧', label: 'Series',             route: '/universe/series' },
+              { icon: '▨', label: 'Production',         route: '/universe/production' },
+              { icon: '△', label: 'Wardrobe',           route: '/universe/wardrobe' },
+              { icon: '□', label: 'Assets',              route: '/universe/assets' },
+            ],
+          },
+          { heading: 'World Building',
+            children: [
+              { icon: '📜', label: 'World State',        route: '/universe/world-state' },
+              { icon: '📍', label: 'World Locations',    route: '/world-locations' },
+              { icon: '📅', label: 'Cultural Calendar',  route: '/cultural-calendar' },
+              { icon: '📜', label: 'Cultural Memory',    route: '/cultural-memory' },
+              { icon: '🏗️', label: 'Infrastructure',     route: '/world-infrastructure' },
+              { icon: '⭐', label: 'Influencer Systems', route: '/influencer-systems' },
+            ],
+          },
+          { heading: 'Characters',
+            children: [
+              { icon: '▦', label: 'Social Import',      route: '/universe/social-import' },
+              { icon: '📱', label: 'Social Timeline',    route: '/social-timeline' },
+              { icon: '🧠', label: 'Social Personality', route: '/social-personality' },
+              { icon: '🎭', label: 'Life Simulation',    route: '/character-life-simulation' },
+              { icon: '💎', label: 'Depth Engine',       route: '/character-depth-engine' },
+              { icon: '🟠', label: 'Amber',              route: '/amber' },
+            ],
+          },
+          { heading: 'Story Tools',
+            children: [
+              { icon: '✦', label: 'Story Dashboard',    route: '/universe/story-dashboard' },
+              { icon: '⬡', label: 'Franchise Brain',    route: '/universe/knowledge' },
+              { icon: '◇', label: 'Writing Rhythm',     route: '/universe/writing-rhythm' },
+            ],
+          },
         ],
       },
       { icon: '✦',  label: 'World Studio',         route: '/world-studio',
@@ -243,15 +259,61 @@ function Sidebar({ isOpen, onClose }) {
               {!collapsed && <div className="ps-zone-label">{zone}</div>}
 
               {items.map(item => {
-                // ── Expandable item with static children (Universe) ──
+                // ── Expandable item with grouped children (Universe) ──
+                if (item.groups) {
+                  const allChildren = item.groups.flatMap(g => g.children);
+                  const allRoutes = allChildren.map(c => c.route);
+                  const groupActive = isActive(item.route) || allRoutes.some(r => isActive(r));
+                  const groupOpen = universeOpen;
+                  const setGroupOpen = setUniverseOpen;
+                  return (
+                    <div key={item.route} className="ps-item-group">
+                      <div
+                        className={`ps-nav-item ${groupActive ? 'ps-nav-item-active' : ''}`}
+                        onClick={() => { go(item.route); setGroupOpen(o => !o); }}
+                        title={collapsed ? item.label : undefined}
+                      >
+                        <span className="ps-nav-icon">{item.icon}</span>
+                        {!collapsed && (
+                          <>
+                            <span className="ps-nav-label">{item.label}</span>
+                            <span className={`ps-nav-chevron ${groupOpen ? 'ps-nav-chevron-open' : ''}`}>›</span>
+                          </>
+                        )}
+                      </div>
+
+                      {groupOpen && !collapsed && (
+                        <div className="ps-subnav">
+                          {item.groups.map(group => (
+                            <div key={group.heading} className="ps-subnav-group">
+                              <div className="ps-subnav-heading">{group.heading}</div>
+                              {group.children.map(child => (
+                                <NavLink
+                                  key={child.route}
+                                  to={child.route}
+                                  className={({ isActive: a }) => `ps-subnav-item ${location.pathname + location.search === child.route ? 'ps-subnav-item-active' : ''}`}
+                                  onClick={() => { if (onClose) onClose(); }}
+                                >
+                                  <span className="ps-sub-dot" />
+                                  <span className="ps-subnav-label">{child.label}</span>
+                                </NavLink>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // ── Expandable item with flat children ──
                 if (item.children) {
-                  const isUniverse = item.route === '/universe';
                   const isWorld = item.route === '/world-studio';
                   const isStories = item.route === '/story-engine';
                   const isCfo = item.route === '/cfo';
                   const isAdmin = item.route === '/admin';
-                  const groupOpen = isUniverse ? universeOpen : isWorld ? worldOpen : isStories ? storiesOpen : isCfo ? cfoOpen : isAdmin ? adminOpen : false;
-                  const setGroupOpen = isUniverse ? setUniverseOpen : isWorld ? setWorldOpen : isStories ? setStoriesOpen : isCfo ? setCfoOpen : isAdmin ? setAdminOpen : () => {};
+                  const groupOpen = isWorld ? worldOpen : isStories ? storiesOpen : isCfo ? cfoOpen : isAdmin ? adminOpen : false;
+                  const setGroupOpen = isWorld ? setWorldOpen : isStories ? setStoriesOpen : isCfo ? setCfoOpen : isAdmin ? setAdminOpen : () => {};
                   const childRoutes = item.children.map(c => c.route);
                   const groupActive = isActive(item.route) || childRoutes.some(r => isActive(r));
                   const toggleOnly = isStories; // Short Stories: toggle only, no navigate
