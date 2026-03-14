@@ -23,7 +23,6 @@ const NAV = [
           { icon: '△', label: 'Wardrobe',         route: '/universe/wardrobe' },
           { icon: '□', label: 'Assets',            route: '/universe/assets' },
           { icon: '📜', label: 'World State',      route: '/universe/world-state' },
-          { icon: '⚡', label: 'Tensions',         route: '/universe/tensions' },
           { icon: '✦', label: 'Story Dashboard',  route: '/universe/story-dashboard' },
           { icon: '⬡', label: 'Franchise Brain',  route: '/universe/knowledge' },
           { icon: '◇', label: 'Writing Rhythm',   route: '/universe/writing-rhythm' },
