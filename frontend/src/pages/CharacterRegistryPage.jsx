@@ -420,9 +420,10 @@ export default function CharacterRegistryPage() {
     setGeneratingId(charId);
     try {
       const charName = character.selected_name || character.display_name || 'Character';
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const res = await fetch('/api/v1/memories/generate-living-state', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: 'include',
         body: JSON.stringify({
           character_id: charId,
@@ -554,9 +555,10 @@ export default function CharacterRegistryPage() {
     if (!activeChar) return;
     setGeneratingArc(true);
     try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const res = await fetch('/api/v1/memories/generate-character-arc', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: 'include',
         body: JSON.stringify({
           character_id: activeChar.id,
@@ -1623,7 +1625,8 @@ export default function CharacterRegistryPage() {
                 {(() => {
                   const hasData = (val) => val && typeof val === 'object' && Object.values(val).some(v => v && v !== '');
                   let dossierFilled = 0;
-                  const dossierTotal = 15; // 8 essence + 7 JSONB sections
+                  const dossierTotal = 25; // 8 essence + 7 JSONB sections + 10 depth dimensions
+                  // Essence Profile (8)
                   if (c.core_fear)           dossierFilled++;
                   if (c.core_desire)         dossierFilled++;
                   if (c.core_wound)          dossierFilled++;
@@ -1632,6 +1635,7 @@ export default function CharacterRegistryPage() {
                   if (c.character_archetype) dossierFilled++;
                   if (c.signature_trait)     dossierFilled++;
                   if (c.emotional_baseline)  dossierFilled++;
+                  // JSONB Sections (7)
                   if (hasData(c.career_status))      dossierFilled++;
                   if (hasData(c.aesthetic_dna))       dossierFilled++;
                   if (hasData(c.voice_signature))     dossierFilled++;
@@ -1639,6 +1643,17 @@ export default function CharacterRegistryPage() {
                   if (hasData(c.evolution_tracking))  dossierFilled++;
                   if (hasData(c.living_context))      dossierFilled++;
                   if (hasData(c.relationships_map))   dossierFilled++;
+                  // Depth Engine dimensions (10)
+                  if (c.de_body_relationship)         dossierFilled++;
+                  if (c.de_money_behavior)            dossierFilled++;
+                  if (c.de_time_orientation)           dossierFilled++;
+                  if (c.de_world_belief)              dossierFilled++;
+                  if (c.de_self_narrative_origin)      dossierFilled++;
+                  if (c.de_blind_spot_category || c.de_blind_spot) dossierFilled++;
+                  if (c.de_change_capacity)           dossierFilled++;
+                  if (c.de_operative_cosmology)       dossierFilled++;
+                  if (c.de_foreclosed_possibilities)  dossierFilled++;
+                  if (c.de_joy_trigger)               dossierFilled++;
                   if (dossierFilled === 0) return null;
                   return (
                     <div className={`cr-dossier-profile-badge ${dossierFilled >= dossierTotal ? 'complete' : ''}`}
@@ -1853,6 +1868,17 @@ export default function CharacterRegistryPage() {
                       <ArcProjection />
                       {charArc?.summary && <p className="cr-arc-summary">{charArc.summary}</p>}
                       {charArc && (charArc.chapters || []).length > 0 ? (
+                        <>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                          <button
+                            className="cr-btn-outline"
+                            style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: generatingArc ? '#999' : '#6850c8' }}
+                            onClick={generateArc}
+                            disabled={generatingArc}
+                          >
+                            {generatingArc ? '⟳ Regenerating…' : '⟳ Regenerate Arc'}
+                          </button>
+                        </div>
                         <div className="cr-arc-strip">
                           {(charArc.chapters || []).map((ch, i) => (
                             <React.Fragment key={i}>
@@ -1876,6 +1902,7 @@ export default function CharacterRegistryPage() {
                             </React.Fragment>
                           ))}
                         </div>
+                        </>
                       ) : !charArc ? (
                         <div className="cr-dossier-empty">
                           <div className="cr-dossier-empty-icon">📈</div>
@@ -3023,12 +3050,25 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     </div>
   ) : null;
 
-  const sectionHeader = (title) => (
+  const sectionHeader = (title, opts = {}) => (
     <div className="cr-dossier-section-header">
       <span className="cr-dossier-section-title">{title}</span>
-      {!editing && (
-        <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)} title="Edit this section">✎</button>
-      )}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {opts.generateComponent && !editing && opts.generateComponent}
+        {opts.onGenerate && !editing && (
+          <button
+            className="cr-btn-outline"
+            style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: opts.generating ? '#999' : '#6850c8' }}
+            onClick={opts.onGenerate}
+            disabled={opts.generating}
+          >
+            {opts.generating ? '⟳ Generating…' : '✦ Generate'}
+          </button>
+        )}
+        {!editing && (
+          <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)} title="Edit this section">✎</button>
+        )}
+      </div>
     </div>
   );
 
@@ -3321,6 +3361,19 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   ))}
                 </div>
               )}
+
+              {/* Depth Engine cross-reference */}
+              {(c.de_body_relationship || c.de_self_narrative_origin || c.de_change_capacity) && (
+                <div style={{ background: 'rgba(104,80,200,0.08)', border: '1px solid rgba(104,80,200,0.2)', borderRadius: 8, padding: '10px 14px', marginTop: 16, fontSize: 12 }}>
+                  <div style={{ color: '#8b7ad8', fontWeight: 600, marginBottom: 4 }}>Depth Engine Dimensions</div>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', color: '#b0a8d0' }}>
+                    {c.de_self_narrative_origin && <span><strong>Self-Narrative:</strong> {c.de_self_narrative_origin}</span>}
+                    {c.de_change_capacity && <span><strong>Change Capacity:</strong> {c.de_change_capacity}</span>}
+                    {c.de_body_relationship && <span><strong>Body:</strong> {c.de_body_relationship?.replace('_', ' ')}</span>}
+                  </div>
+                  <div style={{ marginTop: 6, color: '#777', fontSize: 11 }}>See the Depth Engine tab for full dimensional analysis</div>
+                </div>
+              )}
             </>
             );
           })()}
@@ -3331,7 +3384,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'aesthetic':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Aesthetic DNA')}
+          {sectionHeader('Aesthetic DNA', { generateComponent: <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} /> })}
           {editControls}
           {editing ? (
             <>
@@ -3363,7 +3416,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'career':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Career & Status')}
+          {sectionHeader('Career & Status', { generateComponent: <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} /> })}
           {editControls}
           {editing ? (
             <>
@@ -3491,7 +3544,8 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
         <div className="cr-dossier-section">
           <div className="cr-dossier-section-header">
             <span className="cr-dossier-section-title">Relationships</span>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {!editing && <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} />}
               <a href="/relationships" className="cr-btn-outline" style={{ textDecoration: 'none', fontSize: 12, padding: '4px 10px' }}>
                 🕸 View Web
               </a>
@@ -3541,7 +3595,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'story':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Story Presence')}
+          {sectionHeader('Story Presence', { generateComponent: <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} /> })}
           {editControls}
           {editing ? (
             <>
@@ -3585,7 +3639,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'voice':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Voice Profile')}
+          {sectionHeader('Voice Profile', { generateComponent: <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} /> })}
           {editControls}
           {editing ? (
             <>
@@ -3760,6 +3814,17 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
             </>
           ) : (c.de_body_relationship || c.de_money_behavior || c.de_time_orientation || c.de_world_belief || c.de_self_narrative_origin || c.de_change_capacity || c.de_operative_cosmology || c.de_joy_trigger) ? (
             <>
+              {/* Psychology cross-reference */}
+              {(c.core_wound || c.mask_persona || c.core_fear) && (
+                <div style={{ background: 'rgba(104,80,200,0.08)', border: '1px solid rgba(104,80,200,0.2)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12 }}>
+                  <div style={{ color: '#8b7ad8', fontWeight: 600, marginBottom: 4 }}>From Psychology Profile</div>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', color: '#b0a8d0' }}>
+                    {c.core_wound && <span><strong>Wound:</strong> {c.core_wound}</span>}
+                    {c.mask_persona && <span><strong>Mask:</strong> {c.mask_persona}</span>}
+                    {c.core_fear && <span><strong>Fear:</strong> {c.core_fear}</span>}
+                  </div>
+                </div>
+              )}
               {/* Body */}
               {(c.de_body_relationship || c.de_body_history) && (
                 <>
@@ -3865,9 +3930,19 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
                     <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Foreclosed Possibility</span>
                   </div>
-                  <DRow label="Foreclosed" value={Array.isArray(c.de_foreclosed_possibilities) ? c.de_foreclosed_possibilities.join(', ') : c.de_foreclosed_possibilities} />
-                  <DRow label="Origins" value={Array.isArray(c.de_foreclosure_origins) ? c.de_foreclosure_origins.join(', ') : c.de_foreclosure_origins} />
-                  <DRow label="Crack Conditions" value={Array.isArray(c.de_crack_conditions) ? c.de_crack_conditions.join(', ') : c.de_crack_conditions} />
+                  {(typeof c.de_foreclosed_possibilities === 'object' && !Array.isArray(c.de_foreclosed_possibilities))
+                    ? <JsonbDisplay value={c.de_foreclosed_possibilities} label="Foreclosed" />
+                    : <DRow label="Foreclosed" value={Array.isArray(c.de_foreclosed_possibilities) ? c.de_foreclosed_possibilities.join(', ') : c.de_foreclosed_possibilities} />
+                  }
+                  {(typeof c.de_foreclosure_origins === 'object' && !Array.isArray(c.de_foreclosure_origins))
+                    ? <JsonbDisplay value={c.de_foreclosure_origins} label="Origins" />
+                    : <DRow label="Origins" value={Array.isArray(c.de_foreclosure_origins) ? c.de_foreclosure_origins.join(', ') : c.de_foreclosure_origins} />
+                  }
+                  {c.de_foreclosure_visibility && <JsonbDisplay value={c.de_foreclosure_visibility} label="Visibility" />}
+                  {(typeof c.de_crack_conditions === 'object' && !Array.isArray(c.de_crack_conditions))
+                    ? <JsonbDisplay value={c.de_crack_conditions} label="Crack Conditions" />
+                    : <DRow label="Crack Conditions" value={Array.isArray(c.de_crack_conditions) ? c.de_crack_conditions.join(', ') : c.de_crack_conditions} />
+                  }
                 </>
               )}
               {/* Joy */}
@@ -3886,7 +3961,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               )}
             </>
           ) : (
-            <EmptyState label="Depth Engine" onEdit={() => startEdit(tab)} />
+            <DepthEngineEmptyState characterId={c.id} registryCharId={c.id} onEdit={() => startEdit(tab)} onRefresh={onRefresh} />
           )}
         </div>
       );
@@ -3900,6 +3975,189 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
   }
 }
 
+
+/* ================================================================
+   SECTION GENERATE BUTTON — inline AI generate for individual dossier sections
+   ================================================================ */
+function SectionGenerateButton({ characterId, onRefresh }) {
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const resp = await fetch(`/api/v1/character-registry/characters/${characterId}/backfill-sections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      const data = await resp.json();
+      if (data.success && onRefresh) setTimeout(() => onRefresh(), 500);
+    } catch (err) {
+      console.error('Section generate error:', err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <button
+      className="cr-btn-outline"
+      style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: generating ? '#999' : '#6850c8' }}
+      onClick={handleGenerate}
+      disabled={generating}
+    >
+      {generating ? '⟳ Generating…' : '✦ Generate'}
+    </button>
+  );
+}
+
+/* ================================================================
+   DEPTH ENGINE EMPTY STATE — shown when all de_* fields are empty
+   ================================================================ */
+function DepthEngineEmptyState({ characterId, onEdit, onRefresh }) {
+  const [generating, setGenerating] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const res = await fetch(`/api/v1/character-depth/${characterId}/generate`, {
+        method: 'POST', headers,
+      });
+      const data = await res.json();
+      if (res.ok && data.proposed) {
+        setPreview(data.proposed);
+      } else {
+        setError(data.error || 'Generation failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const res = await fetch(`/api/v1/character-depth/${characterId}/confirm`, {
+        method: 'POST', headers, body: JSON.stringify({ proposed: preview }),
+      });
+      if (res.ok) {
+        setPreview(null);
+        if (onRefresh) setTimeout(() => onRefresh(), 500);
+      } else {
+        setError('Confirm failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  if (preview) {
+    const dims = Object.entries(preview).filter(([, v]) => v !== null && v !== undefined && v !== '');
+    return (
+      <div style={{ padding: 16 }}>
+        <div style={{ fontSize: 13, color: '#6850c8', fontWeight: 600, marginBottom: 12 }}>
+          Preview: {dims.length} depth fields generated
+        </div>
+        <div style={{ maxHeight: 300, overflow: 'auto', fontSize: 12, color: '#555', marginBottom: 12 }}>
+          {dims.slice(0, 15).map(([k, v]) => (
+            <div key={k} style={{ marginBottom: 4 }}>
+              <strong style={{ color: '#4a4035' }}>{k.replace(/^de_/, '').replace(/_/g, ' ')}:</strong>{' '}
+              {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+            </div>
+          ))}
+          {dims.length > 15 && <div style={{ color: '#999' }}>…and {dims.length - 15} more</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => setPreview(null)}
+            style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 13 }}>
+            Discard
+          </button>
+          <button onClick={handleConfirm}
+            style={{ padding: '8px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Confirm & Save
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cr-dossier-empty" style={{ textAlign: 'center', padding: '28px 16px' }}>
+      <div className="cr-dossier-empty-icon" style={{ fontSize: 32, marginBottom: 8 }}>🧬</div>
+      <p className="cr-dossier-empty-text" style={{ marginBottom: 4 }}>No depth engine data yet.</p>
+      <p style={{ fontSize: 12, color: '#999', marginBottom: 16 }}>
+        10 dimensions: Body, Money, Time, Luck, Self-Narrative, Blind Spot, Change, Cosmology, Foreclosed, Joy
+      </p>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button className="cr-dossier-empty-btn" onClick={onEdit}>
+          ✎ Add Manually
+        </button>
+        <button
+          disabled={generating}
+          onClick={handleGenerate}
+          style={{
+            padding: '8px 20px', background: generating ? '#ddd' : '#6850c8', color: '#fff',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            opacity: generating ? 0.6 : 1,
+          }}
+        >
+          {generating ? '⟳ Generating all 10 dimensions…' : '✦ Auto-Generate with AI'}
+        </button>
+      </div>
+      {error && <div style={{ fontSize: 12, color: '#c43a2a', marginTop: 10 }}>Error: {error}</div>}
+    </div>
+  );
+}
+
+/* ================================================================
+   JSONB DISPLAY HELPER — renders objects/arrays safely, never [object Object]
+   ================================================================ */
+function JsonbDisplay({ value, label }) {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    return (
+      <div className="cr-dossier-row">
+        <span className="cr-dossier-row-label">{label}</span>
+        <span className="cr-dossier-row-value">
+          <ul style={{ margin: 0, paddingLeft: 16, listStyle: 'disc' }}>
+            {value.map((item, i) => (
+              <li key={i} style={{ fontSize: 13, marginBottom: 2 }}>
+                {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+              </li>
+            ))}
+          </ul>
+        </span>
+      </div>
+    );
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).filter(([, v]) => v !== null && v !== undefined && v !== '');
+    if (entries.length === 0) return null;
+    return (
+      <div className="cr-dossier-row" style={{ flexDirection: 'column', gap: 4 }}>
+        <span className="cr-dossier-row-label">{label}</span>
+        <div style={{ paddingLeft: 4 }}>
+          {entries.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', gap: 8, fontSize: 12, marginBottom: 3 }}>
+              <span style={{ color: '#999', minWidth: 80 }}>{k.replace(/_/g, ' ')}</span>
+              <span style={{ color: '#4a4035' }}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
 
 /* ================================================================
    PSYCHOLOGY EMPTY STATE — shown when all essence fields are empty
