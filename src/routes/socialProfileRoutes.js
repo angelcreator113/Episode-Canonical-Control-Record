@@ -491,10 +491,11 @@ const CHARACTER_FOLLOW_PROFILES = {
 
 /**
  * Compute follow probability for a character against a generated profile.
+ * Accepts hardcoded profiles (CHARACTER_FOLLOW_PROFILES) or dynamic DB profiles.
  * Returns { probability, motivation, influence_type, influence_level, follow_context, emotional_reaction }
  */
-function computeFollowScore(characterKey, profileData) {
-  const charProfile = CHARACTER_FOLLOW_PROFILES[characterKey];
+function computeFollowScore(characterKey, profileData, dynamicProfile) {
+  const charProfile = dynamicProfile || CHARACTER_FOLLOW_PROFILES[characterKey];
   if (!charProfile) return null;
 
   const d = profileData; // shorthand for the generated/saved profile data
@@ -656,12 +657,12 @@ async function autoAssignAllFollowers(db, profileId, profileData) {
   if (!db.SocialProfileFollower) return [];
   const results = [];
 
+  // ── 1. Evaluate hardcoded protagonist profiles (justawoman, lala) ────
   for (const [charKey, charProfile] of Object.entries(CHARACTER_FOLLOW_PROFILES)) {
     try {
       const evaluation = computeFollowScore(charKey, profileData);
       if (!evaluation) continue;
 
-      // Check if this character would follow
       if (evaluation.probability >= charProfile.base_follow_threshold) {
         const [follower, created] = await db.SocialProfileFollower.findOrCreate({
           where: { social_profile_id: profileId, character_key: charKey },
@@ -699,6 +700,67 @@ async function autoAssignAllFollowers(db, profileId, profileData) {
       }
     } catch (e) {
       console.warn(`Auto-follow failed for ${charKey}:`, e.message);
+    }
+  }
+
+  // ── 2. Evaluate dynamic DB follow profiles (all other characters) ────
+  if (db.CharacterFollowProfile) {
+    try {
+      const dbProfiles = await db.CharacterFollowProfile.findAll();
+      for (const dbp of dbProfiles) {
+        // Skip if already evaluated via hardcoded profiles
+        if (CHARACTER_FOLLOW_PROFILES[dbp.character_key]) continue;
+
+        try {
+          // Convert DB profile to the format computeFollowScore expects
+          const charProfile = {
+            name: dbp.character_name,
+            category_affinity: dbp.category_affinity || {},
+            archetype_affinity: dbp.archetype_affinity || {},
+            motivation_weights: dbp.motivation_weights || {},
+            drama_bonus: dbp.drama_bonus ?? 0.05,
+            adult_penalty: dbp.adult_penalty ?? -0.10,
+            same_platform_bonus: dbp.same_platform_bonus || {},
+            follower_tier_affinity: dbp.follower_tier_affinity || { micro: 0.60, mid: 0.70, macro: 0.75, mega: 0.65 },
+            base_follow_threshold: dbp.base_follow_threshold ?? 0.35,
+          };
+
+          const evaluation = computeFollowScore(dbp.character_key, profileData, charProfile);
+          if (!evaluation) continue;
+
+          if (evaluation.probability >= charProfile.base_follow_threshold) {
+            const [follower, created] = await db.SocialProfileFollower.findOrCreate({
+              where: { social_profile_id: profileId, character_key: dbp.character_key },
+              defaults: {
+                character_name: dbp.character_name,
+                follow_context: evaluation.follow_context,
+                emotional_reaction: evaluation.emotional_reaction,
+                influence_type: evaluation.influence_type,
+                influence_level: evaluation.influence_level,
+                follow_motivation: evaluation.motivation,
+                follow_probability: Math.round(evaluation.probability * 100) / 100,
+                auto_generated: true,
+                discovered_in: 'Auto-follow engine — dynamic character profile',
+              },
+            });
+            results.push({
+              character_key: dbp.character_key,
+              character_name: dbp.character_name,
+              followed: true,
+              created,
+              probability: evaluation.probability,
+              motivation: evaluation.motivation,
+              influence_type: evaluation.influence_type,
+              influence_level: evaluation.influence_level,
+              source: 'dynamic',
+            });
+          }
+        } catch (e) {
+          console.warn(`Auto-follow failed for dynamic ${dbp.character_key}:`, e.message);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load dynamic follow profiles:', e.message);
     }
   }
 
@@ -1559,6 +1621,40 @@ router.get('/follow-engine/stats', optionalAuth, async (req, res) => {
       col: 'social_profile_id',
     });
 
+    // Merge hardcoded + dynamic profiles for the response
+    const characterProfilesMap = Object.fromEntries(
+      Object.entries(CHARACTER_FOLLOW_PROFILES).map(([k, v]) => [k, {
+        name: v.name,
+        threshold: v.base_follow_threshold,
+        source: 'hardcoded',
+        top_categories: Object.entries(v.category_affinity)
+          .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cat, w]) => ({ category: cat, weight: w })),
+        top_archetypes: Object.entries(v.archetype_affinity)
+          .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([arch, w]) => ({ archetype: arch, weight: w })),
+      }])
+    );
+
+    // Add dynamic profiles from DB
+    if (db.CharacterFollowProfile) {
+      try {
+        const dbProfiles = await db.CharacterFollowProfile.findAll();
+        for (const dbp of dbProfiles) {
+          if (characterProfilesMap[dbp.character_key]) continue; // skip hardcoded dupes
+          characterProfilesMap[dbp.character_key] = {
+            name: dbp.character_name,
+            threshold: dbp.base_follow_threshold,
+            source: 'dynamic',
+            consumption_style: dbp.consumption_style,
+            has_social_presence: dbp.has_social_presence,
+            top_categories: Object.entries(dbp.category_affinity || {})
+              .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cat, w]) => ({ category: cat, weight: w })),
+            top_archetypes: Object.entries(dbp.archetype_affinity || {})
+              .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([arch, w]) => ({ archetype: arch, weight: w })),
+          };
+        }
+      } catch (e) { /* CharacterFollowProfile table may not exist yet */ }
+    }
+
     return res.json({
       total_profiles: totalProfiles,
       followed_profiles: followedProfiles,
@@ -1567,16 +1663,7 @@ router.get('/follow-engine/stats', optionalAuth, async (req, res) => {
       motivation_breakdown: motivationBreakdown,
       influence_breakdown: influenceBreakdown,
       avg_influence: avgInfluence,
-      character_profiles: Object.fromEntries(
-        Object.entries(CHARACTER_FOLLOW_PROFILES).map(([k, v]) => [k, {
-          name: v.name,
-          threshold: v.base_follow_threshold,
-          top_categories: Object.entries(v.category_affinity)
-            .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cat, w]) => ({ category: cat, weight: w })),
-          top_archetypes: Object.entries(v.archetype_affinity)
-            .sort((a, b) => b[1] - a[1]).slice(0, 5).map(([arch, w]) => ({ archetype: arch, weight: w })),
-        }])
-      ),
+      character_profiles: characterProfilesMap,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
