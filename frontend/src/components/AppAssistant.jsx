@@ -109,6 +109,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
   const restartCountRef  = useRef(0);
   const voiceSupported   = !!SpeechRecognition;
 
+  // Refs to break circular dependency: send → resume → startRecSession → send
+  const startRecSessionRef      = useRef(null);
+  const resumeListeningAfterReplyRef = useRef(null);
+
   // Voice-response toggle
   const [voiceResponse, setVoiceResponse] = useState(() => {
     try { return localStorage.getItem('amber-voice-response') !== '0'; } catch { return true; }
@@ -210,8 +214,8 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           action: data.action, nextBestAction: data.nextBestAction || null,
           error: !!data.error,
         }]);
-        if (forceVoice || voiceResponse) speak(reply, resumeListeningAfterReply);
-        else resumeListeningAfterReply();
+        if (forceVoice || voiceResponse) speak(reply, () => resumeListeningAfterReplyRef.current?.());
+        else resumeListeningAfterReplyRef.current?.();
         if (data.navigate && onNavigate) setTimeout(() => onNavigate(data.navigate), 400);
         if (data.refresh && onRefresh) onRefresh(data.refresh);
         return;
@@ -259,8 +263,8 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         error: !!metadata.error,
       }]);
 
-      if (forceVoice || voiceResponse) speak(fullReply, resumeListeningAfterReply);
-      else resumeListeningAfterReply();
+      if (forceVoice || voiceResponse) speak(fullReply, () => resumeListeningAfterReplyRef.current?.());
+      else resumeListeningAfterReplyRef.current?.();
       if (metadata.navigate && onNavigate) setTimeout(() => onNavigate(metadata.navigate), 400);
       if (metadata.refresh && onRefresh) onRefresh(metadata.refresh);
 
@@ -286,7 +290,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       abortRef.current = null;
       inputRef.current?.focus();
     }
-  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse, streamText, resumeListeningAfterReply]);
+  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse, streamText]);
 
   // ── Stop generating ───────────────────────────────────────────────────
   const stopGenerating = useCallback(() => {
@@ -396,18 +400,15 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     }
   }, [conversing, startRecSession]);
 
-  // Resume listening after Amber finishes speaking
-  // Uses a ref to break circular dependency: send → resume → startRecSession → send
-  const startRecSessionRef = useRef(null);
+  // Keep refs current — breaks the circular dep chain
   startRecSessionRef.current = startRecSession;
-
-  const resumeListeningAfterReply = useCallback(() => {
+  resumeListeningAfterReplyRef.current = () => {
     if (!wantListeningRef.current || !voiceSupported) return;
     restartCountRef.current = 0;
     setTimeout(() => {
       if (wantListeningRef.current) startRecSessionRef.current?.();
     }, RESUME_DELAY_MS);
-  }, [voiceSupported]);
+  };
 
   // Cleanup on unmount
   useEffect(() => {
