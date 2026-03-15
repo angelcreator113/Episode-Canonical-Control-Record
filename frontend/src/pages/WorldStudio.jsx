@@ -857,8 +857,8 @@ export default function WorldStudio() {
                       body: JSON.stringify({ world_tag: worldTag }),
                     });
                     const data = await resp.json();
-                    showToast?.(`Synced ${data.synced}/${data.total} to registry`);
-                  } catch (e) { showToast?.(`Sync error: ${e.message}`); }
+                    flash(`Synced ${data.synced}/${data.total} to registry`);
+                  } catch (e) { flash(`Sync error: ${e.message}`); }
                 }}>
                   🔄 Sync All to Registry
                 </button>
@@ -1376,8 +1376,8 @@ export default function WorldStudio() {
                               try {
                                 const resp = await fetch(`/api/world/characters/${charDetail.id}/re-sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                                 const data = await resp.json();
-                                if (data.synced) { showToast?.('Registry synced'); } else { showToast?.(`Sync failed: ${data.error}`); }
-                              } catch (e) { showToast?.(`Sync error: ${e.message}`); }
+                                if (data.synced) { flash('Registry synced'); } else { flash(`Sync failed: ${data.error}`); }
+                              } catch (e) { flash(`Sync error: ${e.message}`); }
                             }}>
                             🔄 Sync to Registry
                           </button>
