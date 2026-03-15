@@ -155,10 +155,15 @@ function DepthPanel({ registryCharId, onRefresh }) {
     setTimeout(() => setFlash(null), 3000);
   };
 
-  // Load saved depth data from registry_characters
+  // Load saved depth data from registry_characters (reset all transient state on switch)
   useEffect(() => {
     if (!registryCharId) return;
     setLoaded(false);
+    setPreview(null);
+    setFlash(null);
+    setGenerating(false);
+    setGenDim(null);
+    setConfirming(false);
     fetch(`${API}/character-depth/${registryCharId}`)
       .then(r => r.json())
       .then(d => { setDepthData(d.depth || {}); setLoaded(true); })
@@ -486,10 +491,11 @@ export default function WorldStudio() {
   useEffect(() => {
     loadCharacters(worldTag);
     setSelectedChar(null); setCharDetail(null); setEditMode(false); setCurrentPage(1);
+    setCompareChar(null); setActiveScene(null);
   }, [worldTag]);
 
   useEffect(() => { setCurrentPage(1); }, [charSearch, charFilter]);
-  useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
+  useEffect(() => { if (selectedChar) { loadCharDetail(selectedChar); setActiveScene(null); } }, [selectedChar]);
 
   /* ── Ecosystem generate / preview / confirm ────────────────────────── */
   const [previewId, setPreviewId] = useState(null);
@@ -617,9 +623,12 @@ export default function WorldStudio() {
   };
 
   const deleteRelationship = async (relId) => {
-    await fetch(`${API}/world/characters/${selectedChar}/relationships/${relId}`, { method: 'DELETE' });
-    flash('Relationship removed');
-    loadCharDetail(selectedChar);
+    try {
+      const r = await fetch(`${API}/world/characters/${selectedChar}/relationships/${relId}`, { method: 'DELETE' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Delete failed', 'error'); return; }
+      flash('Relationship removed');
+      loadCharDetail(selectedChar);
+    } catch (e) { flash(e.message, 'error'); }
   };
 
   /* ── Scene loaders & actions ──────────────────────────────────────── */
