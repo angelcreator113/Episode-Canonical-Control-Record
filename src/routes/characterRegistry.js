@@ -1325,6 +1325,35 @@ router.post('/characters/:id/generate-section', async (req, res) => {
     if (hasData(character.story_presence))     known.story_presence = character.story_presence;
     if (hasData(character.deep_profile))       known.deep_profile_summary = character.deep_profile;
 
+    // Pull in world character data for richer context (if linked)
+    if (character.world_character_id) {
+      try {
+        const sequelize = db.sequelize || require('../models').sequelize;
+        const [wc] = await sequelize.query(
+          `SELECT * FROM world_characters WHERE id = :id LIMIT 1`,
+          { replacements: { id: character.world_character_id }, type: sequelize.QueryTypes.SELECT }
+        );
+        if (wc) {
+          known.world_character = {
+            occupation: wc.occupation, age_range: wc.age_range, world_location: wc.world_location,
+            aesthetic: wc.aesthetic, signature: wc.signature, dynamic: wc.dynamic,
+            surface_want: wc.surface_want, real_want: wc.real_want,
+            moral_code: wc.moral_code, fidelity_pattern: wc.fidelity_pattern,
+            origin_story: wc.origin_story, public_persona: wc.public_persona,
+            private_reality: wc.private_reality, how_they_meet: wc.how_they_meet,
+            attracted_to: wc.attracted_to, how_they_love: wc.how_they_love,
+            speech_pattern: wc.speech_pattern, vocabulary_tone: wc.vocabulary_tone,
+            catchphrases: wc.catchphrases, internal_monologue_style: wc.internal_monologue_style,
+            color_palette: wc.color_palette, signature_silhouette: wc.signature_silhouette,
+            signature_accessories: wc.signature_accessories, glam_energy: wc.glam_energy,
+            career_goal: wc.career_goal, core_fear: wc.core_fear,
+            character_archetype: wc.character_archetype, emotional_baseline: wc.emotional_baseline,
+            at_their_best: wc.at_their_best, at_their_worst: wc.at_their_worst,
+          };
+        }
+      } catch (_) { /* world_characters table may not exist in all environments */ }
+    }
+
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const charName = known.display_name || known.selected_name || 'this character';

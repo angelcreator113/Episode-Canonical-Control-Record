@@ -195,6 +195,70 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
+    // Dossier-aligned essence fields
+    core_fear: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    character_archetype: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    emotional_baseline: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    at_their_best: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    at_their_worst: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+
+    // Dossier-aligned aesthetic fields
+    color_palette: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    signature_silhouette: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    signature_accessories: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    glam_energy: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+
+    // Dossier-aligned voice fields
+    speech_pattern: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    vocabulary_tone: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    catchphrases: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    internal_monologue_style: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+
+    // Dossier-aligned career field
+    career_goal: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+
     // World tag (which world/layer this character belongs to)
     world_tag: {
       type: DataTypes.STRING(100),
