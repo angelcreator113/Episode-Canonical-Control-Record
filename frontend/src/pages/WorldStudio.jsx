@@ -848,6 +848,21 @@ export default function WorldStudio() {
                   {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
                 </button>
               )}
+              {worldTag !== 'all' && characters.length > 0 && (
+                <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={async () => {
+                  try {
+                    const resp = await fetch('/api/world/characters/bulk-re-sync', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ world_tag: worldTag }),
+                    });
+                    const data = await resp.json();
+                    showToast?.(`Synced ${data.synced}/${data.total} to registry`);
+                  } catch (e) { showToast?.(`Sync error: ${e.message}`); }
+                }}>
+                  🔄 Sync All to Registry
+                </button>
+              )}
               {worldTag !== 'all' && (
                 <button className="ws4-btn ws4-btn-primary" onClick={generatePreview} disabled={generating}>
                   {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
@@ -1275,6 +1290,77 @@ export default function WorldStudio() {
 
                         {charDetail.arc_role && <FieldCard label="Arc Role" value={charDetail.arc_role} />}
 
+                        {/* Essence Profile */}
+                        {(charDetail.character_archetype || charDetail.emotional_baseline || charDetail.core_fear || charDetail.at_their_best || charDetail.at_their_worst) && (
+                          <>
+                            <SectionLabel color="gold">Essence</SectionLabel>
+                            <div className="ws4-moral-grid">
+                              {charDetail.character_archetype && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Archetype</div>
+                                  <div className="ws4-moral-value">{charDetail.character_archetype}</div>
+                                </div>
+                              )}
+                              {charDetail.emotional_baseline && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Emotional Baseline</div>
+                                  <div className="ws4-moral-value">{charDetail.emotional_baseline}</div>
+                                </div>
+                              )}
+                              {charDetail.core_fear && (
+                                <div className="ws4-moral-card ws4-moral-card-wide">
+                                  <div className="ws4-moral-label">Core Fear</div>
+                                  <div className="ws4-moral-value">{charDetail.core_fear}</div>
+                                </div>
+                              )}
+                            </div>
+                            {charDetail.at_their_best && <FieldCard label="At Their Best" value={charDetail.at_their_best} />}
+                            {charDetail.at_their_worst && <FieldCard label="At Their Worst" value={charDetail.at_their_worst} dimmed />}
+                          </>
+                        )}
+
+                        {/* Aesthetic DNA */}
+                        {(charDetail.color_palette || charDetail.signature_silhouette || charDetail.signature_accessories || charDetail.glam_energy) && (
+                          <>
+                            <SectionLabel color="rose">Aesthetic DNA</SectionLabel>
+                            <div className="ws4-moral-grid">
+                              {charDetail.glam_energy && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Glam Energy</div>
+                                  <div className="ws4-moral-value">{charDetail.glam_energy}</div>
+                                </div>
+                              )}
+                              {charDetail.color_palette && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Color Palette</div>
+                                  <div className="ws4-moral-value">{charDetail.color_palette}</div>
+                                </div>
+                              )}
+                            </div>
+                            {charDetail.signature_silhouette && <FieldCard label="Signature Silhouette" value={charDetail.signature_silhouette} />}
+                            {charDetail.signature_accessories && <FieldCard label="Signature Accessories" value={charDetail.signature_accessories} />}
+                          </>
+                        )}
+
+                        {/* Voice Signature */}
+                        {(charDetail.speech_pattern || charDetail.vocabulary_tone || charDetail.catchphrases || charDetail.internal_monologue_style) && (
+                          <>
+                            <SectionLabel>Voice</SectionLabel>
+                            {charDetail.speech_pattern && <FieldCard label="Speech Pattern" value={charDetail.speech_pattern} />}
+                            {charDetail.vocabulary_tone && <FieldCard label="Vocabulary Tone" value={charDetail.vocabulary_tone} />}
+                            {charDetail.catchphrases && <FieldCard label="Catchphrases" value={charDetail.catchphrases} />}
+                            {charDetail.internal_monologue_style && <FieldCard label="Internal Monologue" value={charDetail.internal_monologue_style} dimmed />}
+                          </>
+                        )}
+
+                        {/* Career */}
+                        {charDetail.career_goal && (
+                          <>
+                            <SectionLabel color="gold">Career</SectionLabel>
+                            <FieldCard label="Career Goal" value={charDetail.career_goal} />
+                          </>
+                        )}
+
                         <div className="ws4-overview-links">
                           <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={() => navigate('/relationships')}>
                             🔗 Relationship Map
@@ -1285,6 +1371,16 @@ export default function WorldStudio() {
                               📋 Registry Entry
                             </button>
                           )}
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                            onClick={async () => {
+                              try {
+                                const resp = await fetch(`/api/world/characters/${charDetail.id}/re-sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                                const data = await resp.json();
+                                if (data.synced) { showToast?.('Registry synced'); } else { showToast?.(`Sync failed: ${data.error}`); }
+                              } catch (e) { showToast?.(`Sync error: ${e.message}`); }
+                            }}>
+                            🔄 Sync to Registry
+                          </button>
                         </div>
                       </div>
                     )}
@@ -1512,6 +1608,24 @@ export default function WorldStudio() {
                     { key: 'what_lala_feels',          label: `What ${curWorld.protagonist} Feels`,  long: true },
                     { key: 'moral_code',               label: 'Moral Code',                         long: true },
                     { key: 'exit_reason',              label: 'Exit Reason',                        long: true },
+                    // Dossier-aligned essence fields
+                    { key: 'core_fear',                label: 'Core Fear',                          long: true },
+                    { key: 'character_archetype',      label: 'Archetype' },
+                    { key: 'emotional_baseline',       label: 'Emotional Baseline' },
+                    { key: 'at_their_best',            label: 'At Their Best',                      long: true },
+                    { key: 'at_their_worst',           label: 'At Their Worst',                     long: true },
+                    // Aesthetic DNA
+                    { key: 'color_palette',            label: 'Color Palette' },
+                    { key: 'signature_silhouette',     label: 'Signature Silhouette',               long: true },
+                    { key: 'signature_accessories',    label: 'Signature Accessories',              long: true },
+                    { key: 'glam_energy',              label: 'Glam Energy' },
+                    // Voice
+                    { key: 'speech_pattern',           label: 'Speech Pattern',                     long: true },
+                    { key: 'vocabulary_tone',          label: 'Vocabulary Tone',                    long: true },
+                    { key: 'catchphrases',             label: 'Catchphrases',                       long: true },
+                    { key: 'internal_monologue_style', label: 'Internal Monologue Style',           long: true },
+                    // Career
+                    { key: 'career_goal',              label: 'Career Goal',                        long: true },
                   ].map(f => (
                     <div key={f.key} className="ws4-edit-row">
                       <label className="ws4-edit-label">{f.label}</label>

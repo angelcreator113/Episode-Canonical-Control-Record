@@ -233,9 +233,9 @@ function areSexuallyCompatible(a, b) {
   // Bisexual/pansexual/queer/fluid are compatible with anyone
   const flex = ['bisexual', 'pansexual', 'queer', 'fluid'];
   if (flex.includes(sA) || flex.includes(sB)) return true;
-  // Non-binary/agender: compatible with anyone who isn't strictly straight
+  // Non-binary/agender: compatible unless BOTH are strictly straight
   if (['non_binary', 'agender'].includes(gA) || ['non_binary', 'agender'].includes(gB)) {
-    return sA !== 'straight' || sB !== 'straight';
+    return !(sA === 'straight' && sB === 'straight');
   }
   // With explicit gender: check actual compatibility
   if (gA && gB) {
@@ -784,13 +784,14 @@ async function backfillRelationshipsMap(seededPairs) {
       }
       const map = charRels.get(self.registry_character_id);
       const entry = other.name;
-      if (['romantic_tension', 'affair', 'forbidden_attraction', 'ex_reconnection'].includes(relType)) {
+      const rt = relType.toLowerCase();
+      if (/roman|love|affair|attract|triangle|blurred|office romance|complicated history|old vs new|competing/i.test(relType)) {
         map.love_interests.push(entry);
-      } else if (['professional_rivalry', 'creative_rivalry', 'status_competition'].includes(relType)) {
+      } else if (/rival|pressure|politics|competition/i.test(relType)) {
         map.rivals.push(entry);
-      } else if (['mentorship', 'guidance', 'apprenticeship'].includes(relType)) {
+      } else if (/mentor|guidance|apprentice/i.test(relType)) {
         map.mentors.push(entry);
-      } else if (['collaboration', 'professional_alliance'].includes(relType)) {
+      } else if (/collab|partner|ally|creative partner|professional ally/i.test(relType)) {
         map.business_partners.push(entry);
       } else {
         map.allies.push(entry);
@@ -854,8 +855,9 @@ router.post('/world/generate-ecosystem', optionalAuth, async (req, res) => {
       show_id,
       world_tag = 'lalaverse',
       world_context = {},
-      character_count = 8,
+      character_count: rawCount = 8,
     } = req.body;
+    const character_count = Math.max(3, Math.min(20, parseInt(rawCount, 10) || 8));
 
     const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
     const series_label = req.body.series_label || wCfg.series_label;
@@ -868,11 +870,11 @@ router.post('/world/generate-ecosystem', optionalAuth, async (req, res) => {
       protagonist    = wCfg.protagonist,
     } = world_context;
 
-    // Fetch existing world characters to avoid duplication
+    // Fetch existing world characters in this world to avoid duplication
     const existing = await Q(req, `
       SELECT name, character_type, occupation FROM world_characters
-      WHERE status != 'archived' ORDER BY created_at DESC LIMIT 20
-    `);
+      WHERE status != 'archived' AND world_tag = :world_tag ORDER BY created_at DESC
+    `, { replacements: { world_tag } });
 
     const result = await claude(
       wCfg.system_prompt,
@@ -1876,22 +1878,41 @@ The career stage shapes her voice. ${careerVoice[career_stage] || careerVoice.ea
 
 PROTAGONIST: ${charA.name}
 ${charA.aesthetic ? `Aesthetic: ${charA.aesthetic}` : ''}
+${charA.emotional_baseline ? `Emotional baseline: ${charA.emotional_baseline}` : ''}
+${charA.at_their_best ? `At their best: ${charA.at_their_best}` : ''}
+${charA.at_their_worst ? `At their worst: ${charA.at_their_worst}` : ''}
 ${charA.intimate_style ? `In intimate moments: ${charA.intimate_style}` : ''}
 ${charA.what_lala_feels ? `What she feels with this person: ${charA.what_lala_feels}` : ''}
 ${charA.dynamic ? `Their dynamic: ${charA.dynamic}` : ''}
 ${charA.fidelity_pattern ? `Fidelity pattern: ${charA.fidelity_pattern}` : ''}
 ${charA.relationship_status ? `Relationship status: ${charA.relationship_status}${charA.committed_to ? ` (committed to ${charA.committed_to})` : ''}` : ''}
 ${charA.moral_code ? `Moral code: ${charA.moral_code}` : ''}
+${charA.core_fear ? `Core fear: ${charA.core_fear}` : ''}
+${charA.speech_pattern ? `Speech pattern: ${charA.speech_pattern}` : ''}
+${charA.vocabulary_tone ? `Vocabulary tone: ${charA.vocabulary_tone}` : ''}
+${charA.catchphrases ? `Verbal habits: ${charA.catchphrases}` : ''}
+${charA.internal_monologue_style ? `Inner monologue style: ${charA.internal_monologue_style}` : ''}
 
 ${charB ? `OTHER CHARACTER: ${charB.name}
 ${charB.aesthetic ? `Aesthetic: ${charB.aesthetic}` : ''}
+${charB.color_palette ? `Color palette: ${charB.color_palette}` : ''}
+${charB.signature_silhouette ? `Signature look: ${charB.signature_silhouette}` : ''}
+${charB.signature_accessories ? `Signature accessories: ${charB.signature_accessories}` : ''}
+${charB.emotional_baseline ? `Emotional baseline: ${charB.emotional_baseline}` : ''}
+${charB.at_their_best ? `At their best: ${charB.at_their_best}` : ''}
+${charB.at_their_worst ? `At their worst: ${charB.at_their_worst}` : ''}
 ${charB.intimate_style ? `In intimate moments: ${charB.intimate_style}` : ''}
 ${charB.intimate_dynamic ? `Their dynamic: ${charB.intimate_dynamic}` : ''}
 ${charB.surface_want ? `What they want: ${charB.surface_want}` : ''}
 ${charB.real_want ? `What they'd never admit: ${charB.real_want}` : ''}
+${charB.core_fear ? `Core fear: ${charB.core_fear}` : ''}
 ${charB.fidelity_pattern ? `Fidelity pattern: ${charB.fidelity_pattern}` : ''}
 ${charB.relationship_status ? `Relationship status: ${charB.relationship_status}${charB.committed_to ? ` (committed to ${charB.committed_to})` : ''}` : ''}
-${charB.moral_code ? `Moral code: ${charB.moral_code}` : ''}` : 'OTHER CHARACTER: Unknown — this is a first encounter'}
+${charB.moral_code ? `Moral code: ${charB.moral_code}` : ''}
+${charB.speech_pattern ? `Speech pattern: ${charB.speech_pattern}` : ''}
+${charB.vocabulary_tone ? `Vocabulary tone: ${charB.vocabulary_tone}` : ''}
+${charB.catchphrases ? `Verbal habits: ${charB.catchphrases}` : ''}
+${charB.how_they_love ? `How they love: ${charB.how_they_love}` : ''}` : 'OTHER CHARACTER: Unknown — this is a first encounter'}
 
 SCENE TYPE: ${scene_type}
 LOCATION: ${location || 'a private space in LalaVerse'}
@@ -2325,8 +2346,9 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
     const {
       world_tag = 'lalaverse',
       world_context = {},
-      character_count = 8,
+      character_count: rawCount = 8,
     } = req.body;
+    const character_count = Math.max(3, Math.min(20, parseInt(rawCount, 10) || 8));
 
     const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
     const series_label = req.body.series_label || wCfg.series_label;
@@ -2339,11 +2361,11 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
       protagonist  = wCfg.protagonist,
     } = world_context;
 
-    // Fetch ALL active characters to avoid duplication (not just last 20)
+    // Fetch active characters in this world to avoid duplication
     const existing = await Q(req, `
       SELECT name, character_type, occupation FROM world_characters
-      WHERE status != 'archived' ORDER BY created_at DESC
-    `);
+      WHERE status != 'archived' AND world_tag = :world_tag ORDER BY created_at DESC
+    `, { replacements: { world_tag } });
 
     // Adaptive token limit: ~1600 tokens per character (40+ fields + JSON overhead)
     const tokenLimit = Math.max(8000, Math.min(20000, character_count * 1600 + 2000));
