@@ -503,6 +503,8 @@ router.put('/characters/:id', express.json(), async (req, res) => {
       'operative_cosmology_v2', 'cosmology_vs_stated_religion',
       'foreclosed_category', 'foreclosure_origin', 'foreclosure_vs_stated_want',
       'joy_source', 'joy_accessibility', 'joy_vs_ambition',
+      // Intimate eligibility
+      'intimate_eligible',
     ];
     allowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     await character.save();
