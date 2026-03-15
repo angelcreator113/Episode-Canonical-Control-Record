@@ -1309,6 +1309,15 @@ try {
   console.error('✗ Failed to load Page Content routes:', e.message);
 }
 
+// Texture Layer — automated story texture generators (inner thought, conflict, body, post, bleed)
+try {
+  const textureLayerRoutes = require('./routes/textureLayerRoutes');
+  app.use('/api/v1/texture-layer', textureLayerRoutes);
+  console.log('✓ Texture Layer routes loaded at /api/v1/texture-layer');
+} catch (e) {
+  console.error('✗ Failed to load Texture Layer routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({

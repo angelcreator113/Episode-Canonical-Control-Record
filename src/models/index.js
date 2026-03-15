@@ -132,6 +132,7 @@ let WorldCharacter; // LalaVerse world characters (real people in Lala's world)
 let BrainDocument; // Brain Documents: stores full ingested document text
 let AIUsageLog; // AI API cost/token tracking
 let CharacterArc; // Arc tracking: wound clock, stakes, visibility, David silence
+let StoryTexture; // Texture layer: inner thought, conflict, body narrator, private moment, post, bleed
 
 try {
   // Core models
@@ -314,6 +315,9 @@ try {
 
   // Arc Tracking model (wound clock, stakes, visibility, David silence)
   CharacterArc = require('./CharacterArc')(sequelize);
+
+  // Texture Layer model (inner thought, conflict, body narrator, private moment, post, bleed)
+  StoryTexture = require('./StoryTexture')(sequelize);
 
   SessionBrief = require('./SessionBrief')(sequelize, DataTypes);
   PostGenerationReview = require('./PostGenerationReview')(sequelize, DataTypes);
@@ -505,6 +509,7 @@ const requiredModels = {
   BrainDocument,
   AIUsageLog,
   CharacterArc,
+  StoryTexture,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1861,3 +1866,4 @@ module.exports.WorldCharacter = WorldCharacter;
 module.exports.SocialProfileRelationship = SocialProfileRelationship;
 module.exports.AIUsageLog = AIUsageLog;
 module.exports.CharacterArc = CharacterArc;
+module.exports.StoryTexture = StoryTexture;
