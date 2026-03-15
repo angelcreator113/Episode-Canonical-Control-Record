@@ -50,13 +50,13 @@ const NAV = [
               { icon: '✦', label: 'Story Dashboard',    route: '/universe/story-dashboard' },
               { icon: '⬡', label: 'Franchise Brain',    route: '/universe/knowledge' },
               { icon: '◇', label: 'Writing Rhythm',     route: '/universe/writing-rhythm' },
+              { icon: '🔥', label: 'Book Scene Studio',  route: '/scene-studio' },
             ],
           },
         ],
       },
       { icon: '✦',  label: 'World Studio',         route: '/world-studio',
         children: [
-          { icon: '🔥', label: 'Book Scene Studio',  route: '/scene-studio' },
           { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
         ],
       },
@@ -156,6 +156,7 @@ function Sidebar({ isOpen, onClose }) {
   const [cfoOpen, setCfoOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [collapsedZones, setCollapsedZones] = useState({});
 
   // Auto-expand Shows sub-nav when on a /shows/* route
   useEffect(() => {
@@ -164,14 +165,14 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Universe sub-nav when on a /universe/* sub-page or world-building route
   useEffect(() => {
-    if (location.pathname.startsWith('/universe') || ['/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations', '/amber'].some(p => location.pathname.startsWith(p))) {
+    if (location.pathname.startsWith('/universe') || ['/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations', '/amber', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
       setUniverseOpen(true);
     }
   }, [location.pathname]);
 
   // Auto-expand World Studio sub-nav
   useEffect(() => {
-    if (['/world-studio', '/character-registry', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
+    if (['/world-studio', '/character-registry'].some(p => location.pathname.startsWith(p))) {
       setWorldOpen(true);
     }
   }, [location.pathname]);
@@ -254,11 +255,21 @@ function Sidebar({ isOpen, onClose }) {
           </NavLink>
 
           {/* Zones */}
-          {NAV.map(({ zone, items }) => (
+          {NAV.map(({ zone, items }) => {
+            const zoneCollapsed = collapsedZones[zone];
+            return (
             <div className="ps-zone" key={zone}>
-              {!collapsed && <div className="ps-zone-label">{zone}</div>}
+              {!collapsed && (
+                <div
+                  className="ps-zone-label ps-zone-label-toggle"
+                  onClick={() => setCollapsedZones(prev => ({ ...prev, [zone]: !prev[zone] }))}
+                >
+                  <span>{zone}</span>
+                  <span className={`ps-zone-chevron ${zoneCollapsed ? '' : 'ps-zone-chevron-open'}`}>›</span>
+                </div>
+              )}
 
-              {items.map(item => {
+              {!zoneCollapsed && items.map(item => {
                 // ── Expandable item with grouped children (Universe) ──
                 if (item.groups) {
                   const allChildren = item.groups.flatMap(g => g.children);
@@ -425,7 +436,8 @@ function Sidebar({ isOpen, onClose }) {
                 );
               })}
             </div>
-          ))}
+          );
+          })}
         </nav>
 
         {/* ── Setup Progress ── */}
