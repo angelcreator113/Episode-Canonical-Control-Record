@@ -1925,9 +1925,12 @@ export default function CharacterRegistryPage() {
                   <div className="cr-threads-tab">
                     <div className="cr-threads-header">
                       <h4>Plot Threads</h4>
-                      <button className="cr-btn-outline" onClick={() => { setShowNewThread(true); setEditingThreadId(null); setThreadForm({ title: '', description: '', status: 'open', source: '' }); }}>
-                        + New Thread
-                      </button>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <SectionRegenerateButton characterId={c.id} section="plot_threads" onRefresh={() => { if (activeRegistry?.id) fetchRegistry(activeRegistry.id); }} label="✦ Auto-Generate" />
+                        <button className="cr-btn-outline" onClick={() => { setShowNewThread(true); setEditingThreadId(null); setThreadForm({ title: '', description: '', status: 'open', source: '' }); }}>
+                          + New Thread
+                        </button>
+                      </div>
                     </div>
 
                     {/* New / Edit Thread Form */}
@@ -2019,18 +2022,23 @@ export default function CharacterRegistryPage() {
 
                 /* ── Dilemma Tab ── */
                 : dossierTab === 'dilemma' ? (
-                  <CharacterDilemmaEngine
-                    character={{
-                      id: c.id,
-                      name: c.display_name || c.name,
-                      character_type: c.character_type || 'pressure',
-                      role: c.role || c.subtitle || '',
-                      story_context: c.story_presence?.current_story_status || '',
-                    }}
-                    onProfileBuilt={() => {
-                      if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
-                    }}
-                  />
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                      <SectionRegenerateButton characterId={c.id} section="dilemma" onRefresh={() => { if (activeRegistry?.id) fetchRegistry(activeRegistry.id); }} label="✦ Auto-Generate Dilemma" />
+                    </div>
+                    <CharacterDilemmaEngine
+                      character={{
+                        id: c.id,
+                        name: c.display_name || c.name,
+                        character_type: c.character_type || 'pressure',
+                        role: c.role || c.subtitle || '',
+                        story_context: c.story_presence?.current_story_status || '',
+                      }}
+                      onProfileBuilt={() => {
+                        if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+                      }}
+                    />
+                  </div>
                 ) : (
                   renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile }, characters, () => { if (activeRegistry?.id) fetchRegistry(activeRegistry.id); })
                 )}
@@ -3144,7 +3152,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'demographics':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Demographics')}
+          {sectionHeader('Demographics', { generateComponent: <SectionRegenerateButton characterId={c.id} section="demographics" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3260,7 +3268,14 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               )}
             </>
           ) : (
-            <EmptyState label="Demographics" onEdit={() => startEdit(tab)} />
+            <div className="cr-dossier-empty">
+              <div className="cr-dossier-empty-icon">👤</div>
+              <p className="cr-dossier-empty-text">No demographics data yet.</p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button className="cr-dossier-empty-btn" onClick={() => startEdit(tab)}>✎ Add Manually</button>
+                <SectionRegenerateButton characterId={c.id} section="demographics" onRefresh={onRefresh} label="✦ Auto-Generate with AI" />
+              </div>
+            </div>
           )}
         </div>
       );
@@ -3384,7 +3399,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'aesthetic':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Aesthetic DNA', { generateComponent: <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} /> })}
+          {sectionHeader('Aesthetic DNA', { generateComponent: <SectionRegenerateButton characterId={c.id} section="aesthetic_dna" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3416,7 +3431,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'career':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Career & Status', { generateComponent: <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} /> })}
+          {sectionHeader('Career & Status', { generateComponent: <SectionRegenerateButton characterId={c.id} section="career_status" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3545,7 +3560,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
           <div className="cr-dossier-section-header">
             <span className="cr-dossier-section-title">Relationships</span>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {!editing && <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} />}
+              {!editing && <SectionRegenerateButton characterId={c.id} section="relationships_map" onRefresh={onRefresh} label="✦ Generate" />}
               <a href="/relationships" className="cr-btn-outline" style={{ textDecoration: 'none', fontSize: 12, padding: '4px 10px' }}>
                 🕸 View Web
               </a>
@@ -3595,7 +3610,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'story':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Story Presence', { generateComponent: <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} /> })}
+          {sectionHeader('Story Presence', { generateComponent: <SectionRegenerateButton characterId={c.id} section="story_presence" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3639,7 +3654,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'voice':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Voice Profile', { generateComponent: <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} /> })}
+          {sectionHeader('Voice Profile', { generateComponent: <SectionRegenerateButton characterId={c.id} section="voice_signature" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3670,7 +3685,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'death':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Death Tracking')}
+          {sectionHeader('Death Tracking', { generateComponent: <SectionRegenerateButton characterId={c.id} section="death" onRefresh={onRefresh} label="✦ Generate Death" /> })}
           {editControls}
           {editing ? (
             <>
@@ -4007,6 +4022,43 @@ function SectionGenerateButton({ characterId, onRefresh }) {
       disabled={generating}
     >
       {generating ? '⟳ Generating…' : '✦ Generate'}
+    </button>
+  );
+}
+
+/* ================================================================
+   SECTION REGENERATE BUTTON — per-section AI generate/regenerate via generate-section endpoint
+   Supports: demographics, death, dilemma, plot_threads, career_status, aesthetic_dna, etc.
+   ================================================================ */
+function SectionRegenerateButton({ characterId, section, onRefresh, label }) {
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const resp = await fetch(`/api/v1/character-registry/characters/${characterId}/generate-section`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ section }),
+      });
+      const data = await resp.json();
+      if (data.success && onRefresh) setTimeout(() => onRefresh(), 500);
+    } catch (err) {
+      console.error(`Section generate (${section}) error:`, err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <button
+      className="cr-btn-outline"
+      style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: generating ? '#999' : '#6850c8' }}
+      onClick={handleGenerate}
+      disabled={generating}
+    >
+      {generating ? '⟳ Generating…' : (label || '⟳ Regenerate')}
     </button>
   );
 }
