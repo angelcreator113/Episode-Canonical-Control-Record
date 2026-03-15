@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 const API = '/api/v1';
 
 const authHeaders = () => {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

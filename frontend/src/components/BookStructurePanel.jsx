@@ -36,7 +36,7 @@ const toRoman = (n) => {
 
 /* ── Helper: auth headers ── */
 const authHeaders = () => {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

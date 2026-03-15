@@ -226,6 +226,26 @@ router.post('/registries/:id/characters', async (req, res) => {
       personality_matrix: personality_matrix || null,
       extra_fields: extra_fields || null,
       sort_order: sort_order ?? count,
+
+      // Demographics defaults (pass-through from body or null)
+      gender: req.body.gender || null,
+      pronouns: req.body.pronouns || null,
+      age: req.body.age || null,
+      ethnicity: req.body.ethnicity || null,
+      species: req.body.species || 'human',
+      nationality: req.body.nationality || null,
+
+      // Death tracking defaults
+      is_alive: req.body.is_alive !== undefined ? req.body.is_alive : true,
+      intimate_eligible: req.body.intimate_eligible || false,
+
+      // Section skeletons — initialize JSONB sections so they exist
+      aesthetic_dna: req.body.aesthetic_dna || {},
+      career_status: req.body.career_status || {},
+      relationships_map: req.body.relationships_map || {},
+      story_presence: req.body.story_presence || {},
+      voice_signature: req.body.voice_signature || {},
+      evolution_tracking: req.body.evolution_tracking || {},
     });
 
     // Auto-create Feed profile from registry character
@@ -505,6 +525,29 @@ router.put('/characters/:id', express.json(), async (req, res) => {
       'joy_source', 'joy_accessibility', 'joy_vs_ambition',
       // Intimate eligibility
       'intimate_eligible',
+      // Death Tracking
+      'is_alive', 'death_date', 'death_cause', 'death_impact',
+      // Demographics
+      'gender', 'pronouns', 'age', 'birth_year', 'ethnicity', 'species',
+      'cultural_background', 'nationality', 'first_language',
+      'hometown', 'current_city', 'city_migration_history',
+      'class_origin', 'current_class', 'class_mobility_direction',
+      'family_structure', 'parents_status', 'sibling_position', 'sibling_count',
+      'relationship_status', 'has_children', 'children_ages',
+      'education_experience', 'career_history', 'years_posting',
+      'physical_presence', 'demographic_voice_signature',
+      'platform_primary', 'follower_tier',
+      // Character Depth Engine v2 (de_* fields)
+      'de_body_relationship', 'de_body_currency', 'de_body_control', 'de_body_comfort', 'de_body_history',
+      'de_money_behavior', 'de_money_origin_class', 'de_money_current_class', 'de_class_gap_direction', 'de_money_wound',
+      'de_time_orientation', 'de_time_wound',
+      'de_world_belief', 'de_circumstance_advantages', 'de_circumstance_disadvantages', 'de_luck_interpretation', 'de_circumstance_wound',
+      'de_self_narrative_origin', 'de_self_narrative_turning_point', 'de_self_narrative_villain', 'de_actual_narrative_gap', 'de_therapy_target',
+      'de_blind_spot_category', 'de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition',
+      'de_change_capacity', 'de_change_capacity_score', 'de_change_condition', 'de_change_witness', 'de_arc_function',
+      'de_operative_cosmology', 'de_stated_religion', 'de_cosmology_conflict', 'de_meaning_making_style',
+      'de_foreclosed_possibilities', 'de_foreclosure_origins', 'de_foreclosure_visibility', 'de_crack_conditions',
+      'de_joy_trigger', 'de_joy_body_location', 'de_joy_origin', 'de_forbidden_joy', 'de_joy_threat_response', 'de_joy_current_access',
     ];
     allowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     await character.save();
@@ -726,6 +769,7 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
         personality: 'Calm, protective, grounded. Not the villain. Says "you already have everything" meaning safety, not ceiling.',
         status: 'draft',
         sort_order: 1,
+        intimate_eligible: true,
       },
       {
         character_key: 'comparison-creator',
@@ -799,11 +843,23 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
       },
     ];
 
+    // Skeleton defaults for JSONB sections so dossier tabs are never empty
+    const sectionDefaults = {
+      aesthetic_dna: {},
+      career_status: {},
+      relationships_map: {},
+      story_presence: {},
+      voice_signature: {},
+      evolution_tracking: {},
+      is_alive: true,
+      species: 'human',
+    };
+
     const created = [];
     for (const c of seedCharacters) {
       const [record, wasCreated] = await RegistryCharacter.findOrCreate({
         where: { registry_id: registry.id, character_key: c.character_key },
-        defaults: { ...c, registry_id: registry.id },
+        defaults: { ...sectionDefaults, ...c, registry_id: registry.id },
       });
       created.push(record);
     }
@@ -816,6 +872,75 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
     return res.json({ success: true, registry: full, seeded: created.length });
   } catch (err) {
     console.error('[CharacterRegistry] seed-book1 error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /registries/:id/backfill-sections
+ * Backfill existing characters with skeleton JSONB sections and
+ * set intimate_eligible based on role_label / extra_fields / relationships.
+ */
+router.post('/registries/:id/backfill-sections', async (req, res) => {
+  try {
+    const { CharacterRegistry, RegistryCharacter } = getModels();
+    const registry = await CharacterRegistry.findByPk(req.params.id, {
+      include: [{ model: RegistryCharacter, as: 'characters' }],
+    });
+    if (!registry) return res.status(404).json({ success: false, error: 'Registry not found' });
+
+    const intimateRoles = ['love_interest', 'one_night_stand', 'partner', 'spouse', 'temptation', 'ex'];
+    const intimateKeywords = /husband|wife|spouse|partner|lover|romantic|love.interest|ex-|boyfriend|girlfriend/i;
+
+    let updated = 0;
+    for (const c of registry.characters) {
+      const updates = {};
+
+      // Initialize empty JSONB sections
+      if (!c.aesthetic_dna || (typeof c.aesthetic_dna === 'object' && Object.keys(c.aesthetic_dna).length === 0 && c.aesthetic_dna.constructor === Object)) {
+        // Keep existing if has data, otherwise ensure it exists
+      }
+      if (c.aesthetic_dna === null) updates.aesthetic_dna = {};
+      if (c.career_status === null) updates.career_status = {};
+      if (c.relationships_map === null) updates.relationships_map = {};
+      if (c.story_presence === null) updates.story_presence = {};
+      if (c.voice_signature === null) updates.voice_signature = {};
+      if (c.evolution_tracking === null) updates.evolution_tracking = {};
+      if (c.species === null) updates.species = 'human';
+      if (c.is_alive === null) updates.is_alive = true;
+
+      // Set intimate_eligible based on role_label, character_key, or extra_fields
+      if (!c.intimate_eligible) {
+        const roleLabel = (c.role_label || '').toLowerCase();
+        const charKey = (c.character_key || '').toLowerCase();
+        const displayName = (c.display_name || '').toLowerCase();
+        const extra = typeof c.extra_fields === 'string' ? JSON.parse(c.extra_fields || '{}') : (c.extra_fields || {});
+
+        if (
+          intimateRoles.includes(roleLabel) ||
+          intimateKeywords.test(roleLabel) ||
+          intimateKeywords.test(charKey) ||
+          intimateKeywords.test(displayName) ||
+          extra.intimate_eligible === true
+        ) {
+          updates.intimate_eligible = true;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await c.update(updates);
+        updated++;
+      }
+    }
+
+    // Reload
+    const full = await CharacterRegistry.findByPk(registry.id, {
+      include: [{ model: RegistryCharacter, as: 'characters' }],
+    });
+
+    return res.json({ success: true, registry: full, updated, message: `${updated} character(s) backfilled` });
+  } catch (err) {
+    console.error('[CharacterRegistry] backfill-sections error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -986,8 +1111,20 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
     if (!hasData(character.story_presence))       emptySections.push('story_presence');
     if (!hasData(character.evolution_tracking))   emptySections.push('evolution_tracking');
     if (!hasData(character.living_context))       emptySections.push('living_context');
+    if (!hasData(character.relationships_map))    emptySections.push('relationships_map');
 
-    if (emptySections.length === 0) {
+    // Essence Profile fields (Section 2) — individual columns, not JSONB
+    const essenceFields = [];
+    if (!character.core_fear)            essenceFields.push('core_fear');
+    if (!character.core_desire)          essenceFields.push('core_desire');
+    if (!character.core_wound)           essenceFields.push('core_wound');
+    if (!character.mask_persona)         essenceFields.push('mask_persona');
+    if (!character.truth_persona)        essenceFields.push('truth_persona');
+    if (!character.character_archetype)  essenceFields.push('character_archetype');
+    if (!character.signature_trait)      essenceFields.push('signature_trait');
+    if (!character.emotional_baseline)   essenceFields.push('emotional_baseline');
+
+    if (emptySections.length === 0 && essenceFields.length === 0) {
       return res.json({ success: true, message: 'All sections already populated', filled: [] });
     }
 
@@ -1017,12 +1154,28 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
       story_presence: `{ "appears_in_books": "which books/worlds", "appears_in_shows": "which shows", "appears_in_series": "which series", "current_story_status": "what triggers their entrance into a story", "unresolved_threads": "story types they're suited for", "future_potential": "Yes or No — can they introduce new characters" }`,
       evolution_tracking: `{ "version_history": "what just happened — recent event that changed something", "era_changes": "where they are in their arc right now", "personality_shifts": "what they are avoiding — the thing they know they need to face" }`,
       living_context: `{ "active_pressures": "what is pressing on them right now", "support_network": "who holds them up and what it costs", "home_environment": "what daily domestic life looks like", "relationship_to_deadlines": "how they relate to time pressure", "financial_reality": "actual financial situation — specific", "current_season": "the emotional season they are in" }`,
+      relationships_map: `{ "allies": "names and nature of alliances — who has their back and why", "rivals": "names and nature of rivalries — professional or personal", "mentors": "who shaped them — living or dead, present or absent", "love_interests": "current or past — who they wanted or want", "business_partners": "professional relationships that matter", "dynamic_notes": "the most important tension or unresolved dynamic" }`,
     };
 
     const sectionsToFill = emptySections.map(s => `"${s}": ${sectionSchemas[s]}`).join(',\n');
 
+    // Essence Profile field descriptions for AI generation
+    const essenceDescriptions = {
+      core_fear: '"core_fear": "the deepest fear driving their behavior — not surface anxiety but the existential threat"',
+      core_desire: '"core_desire": "what they want most — the real want beneath the stated want"',
+      core_wound: '"core_wound": "the formative injury — what happened that made them who they are"',
+      mask_persona: '"mask_persona": "who they pretend to be — the version the world sees"',
+      truth_persona: '"truth_persona": "who they actually are — the version only intimates see"',
+      character_archetype: '"character_archetype": "one of: Strategist, Dreamer, Performer, Caretaker, Rebel, Observer, Builder, Seeker"',
+      signature_trait: '"signature_trait": "the one behavior that makes them unmistakable — not a quality, a specific thing they do"',
+      emotional_baseline: '"emotional_baseline": "their default emotional register when nothing is happening — confident, guarded, restless, warm, watchful, etc."',
+    };
+    const essenceToFill = essenceFields.map(f => essenceDescriptions[f]).join(',\n');
+
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const allFieldsToFill = [sectionsToFill, essenceToFill].filter(Boolean).join(',\n');
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -1032,11 +1185,12 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
 Here is everything currently known about this character:
 ${JSON.stringify(known, null, 2)}
 
-Generate ONLY the following empty sections. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
+Generate ONLY the following empty fields. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
+${essenceFields.length ? 'For essence fields (core_fear, core_wound, mask_persona, etc.): return a single string value, not an object.' : ''}
 
 Return ONLY valid JSON with these keys:
 {
-${sectionsToFill}
+${allFieldsToFill}
 }`,
       messages: [{ role: 'user', content: `Fill in the missing sections for ${known.display_name || 'this character'}.` }],
     });
@@ -1046,7 +1200,7 @@ ${sectionsToFill}
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse Claude response' });
     const generated = JSON.parse(jsonMatch[0]);
 
-    // Apply each generated section
+    // Apply each generated JSONB section
     const filled = [];
     for (const section of emptySections) {
       if (generated[section] && typeof generated[section] === 'object') {
@@ -1057,6 +1211,14 @@ ${sectionsToFill}
         }
         character[section] = clean;
         filled.push(section);
+      }
+    }
+
+    // Apply each generated essence field (string columns)
+    for (const field of essenceFields) {
+      if (generated[field] && typeof generated[field] === 'string') {
+        character[field] = generated[field];
+        filled.push(field);
       }
     }
 
@@ -1120,6 +1282,252 @@ ${sectionsToFill}
     });
   } catch (err) {
     console.error('[CharacterRegistry] POST /backfill-sections error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /characters/:id/generate-section
+ * Generate (or regenerate) a specific dossier section via AI.
+ * Body: { section: 'demographics' | 'death' | 'dilemma' | 'plot_threads' | 'career_status' | ... }
+ * Unlike backfill-sections, this overwrites existing data for the requested section.
+ */
+router.post('/characters/:id/generate-section', async (req, res) => {
+  const { id } = req.params;
+  const { section } = req.body;
+  const db = getModels();
+
+  if (!section) return res.status(400).json({ error: 'Missing "section" in request body' });
+
+  try {
+    const character = await db.RegistryCharacter.findByPk(id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+
+    // Gather known context
+    const known = {};
+    const contextFields = [
+      'display_name','selected_name','subtitle','role_type','role_label',
+      'description','core_belief','core_wound','core_desire','core_fear',
+      'hidden_want','mask_persona','truth_persona','personality',
+      'signature_trait','emotional_baseline','pressure_type','pressure_quote',
+      'character_archetype','writer_notes','ethnicity','gender','age',
+      'nationality','hometown','current_city','class_origin','current_class',
+      'family_structure','relationship_status','profession','species',
+    ];
+    for (const f of contextFields) {
+      if (character[f]) known[f] = character[f];
+    }
+    const hasData = (val) => val && typeof val === 'object' && Object.values(val).some(v => v && v !== '');
+    if (hasData(character.career_status))     known.career_status = character.career_status;
+    if (hasData(character.aesthetic_dna))      known.aesthetic_dna = character.aesthetic_dna;
+    if (hasData(character.voice_signature))    known.voice_signature = character.voice_signature;
+    if (hasData(character.relationships_map))  known.relationships_map = character.relationships_map;
+    if (hasData(character.story_presence))     known.story_presence = character.story_presence;
+    if (hasData(character.deep_profile))       known.deep_profile_summary = character.deep_profile;
+
+    // Pull in world character data for richer context (if linked)
+    if (character.world_character_id) {
+      try {
+        const sequelize = db.sequelize || require('../models').sequelize;
+        const [wc] = await sequelize.query(
+          `SELECT * FROM world_characters WHERE id = :id LIMIT 1`,
+          { replacements: { id: character.world_character_id }, type: sequelize.QueryTypes.SELECT }
+        );
+        if (wc) {
+          known.world_character = {
+            occupation: wc.occupation, age_range: wc.age_range, world_location: wc.world_location,
+            aesthetic: wc.aesthetic, signature: wc.signature, dynamic: wc.dynamic,
+            surface_want: wc.surface_want, real_want: wc.real_want,
+            moral_code: wc.moral_code, fidelity_pattern: wc.fidelity_pattern,
+            origin_story: wc.origin_story, public_persona: wc.public_persona,
+            private_reality: wc.private_reality, how_they_meet: wc.how_they_meet,
+            attracted_to: wc.attracted_to, how_they_love: wc.how_they_love,
+            speech_pattern: wc.speech_pattern, vocabulary_tone: wc.vocabulary_tone,
+            catchphrases: wc.catchphrases, internal_monologue_style: wc.internal_monologue_style,
+            color_palette: wc.color_palette, signature_silhouette: wc.signature_silhouette,
+            signature_accessories: wc.signature_accessories, glam_energy: wc.glam_energy,
+            career_goal: wc.career_goal, core_fear: wc.core_fear,
+            character_archetype: wc.character_archetype, emotional_baseline: wc.emotional_baseline,
+            at_their_best: wc.at_their_best, at_their_worst: wc.at_their_worst,
+          };
+        }
+      } catch (_) { /* world_characters table may not exist in all environments */ }
+    }
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const charName = known.display_name || known.selected_name || 'this character';
+
+    // Section-specific schemas and prompts
+    const sectionConfigs = {
+      demographics: {
+        prompt: `Generate demographics for ${charName}. Infer from their personality, career, aesthetic, and story context. Be specific and culturally grounded.`,
+        schema: `{
+  "gender": "their gender identity",
+  "pronouns": "their pronouns",
+  "age": "their age as a number or range",
+  "birth_year": "inferred birth year",
+  "ethnicity": "their ethnic background",
+  "cultural_background": "their cultural context",
+  "nationality": "their nationality",
+  "first_language": "their first language",
+  "hometown": "where they grew up",
+  "current_city": "where they live now",
+  "city_migration_history": "how they got from hometown to current city",
+  "class_origin": "their class background (working class, middle class, upper middle, wealthy)",
+  "current_class": "their current class position",
+  "class_mobility_direction": "upward, downward, or stable",
+  "family_structure": "nuclear, single parent, extended, chosen, etc.",
+  "parents_status": "together, divorced, deceased, estranged, etc.",
+  "sibling_position": "eldest, middle, youngest, only child",
+  "sibling_count": "number of siblings",
+  "relationship_status": "single, married, divorced, complicated, etc.",
+  "has_children": false,
+  "children_ages": "",
+  "education_experience": "their educational background",
+  "career_history": "career trajectory before current role",
+  "physical_presence": "how they take up space — what people notice before they speak",
+  "demographic_voice_signature": "how their demographics shape their speech",
+  "platform_primary": "their main social media platform (Instagram, Twitter, TikTok, etc.)",
+  "follower_tier": "nano, micro, mid-tier, macro, mega"
+}`,
+        apply: (generated) => {
+          const fields = ['gender','pronouns','age','birth_year','ethnicity','cultural_background',
+            'nationality','first_language','hometown','current_city','city_migration_history',
+            'class_origin','current_class','class_mobility_direction','family_structure',
+            'parents_status','sibling_position','sibling_count','relationship_status',
+            'has_children','children_ages','education_experience','career_history',
+            'physical_presence','demographic_voice_signature','platform_primary','follower_tier'];
+          const updated = [];
+          for (const f of fields) {
+            if (generated[f] !== null && generated[f] !== undefined && generated[f] !== '') {
+              character[f] = generated[f];
+              updated.push(f);
+            }
+          }
+          return updated;
+        },
+      },
+      death: {
+        prompt: `Generate a compelling, narratively meaningful death for ${charName}. Consider their wound, role in the story, and thematic significance. The death should feel inevitable in hindsight.`,
+        schema: `{
+  "death_date": "narrative date of death (e.g. 'Winter 2025' or 'Episode 12')",
+  "death_cause": "how they died — be specific and literary, not clinical",
+  "death_impact": "2-3 sentences on how their death changes the story and affects other characters"
+}`,
+        apply: (generated) => {
+          const updated = [];
+          character.is_alive = false;
+          updated.push('is_alive');
+          if (generated.death_date)   { character.death_date = generated.death_date; updated.push('death_date'); }
+          if (generated.death_cause)  { character.death_cause = generated.death_cause; updated.push('death_cause'); }
+          if (generated.death_impact) { character.death_impact = generated.death_impact; updated.push('death_impact'); }
+          return updated;
+        },
+      },
+      dilemma: {
+        prompt: `Generate a central moral dilemma for ${charName}. This should be a choice between two defensible options — both costly. The dilemma should emerge from their core wound and desire. Also generate 2-3 supporting scenario dilemmas.`,
+        schema: `{
+  "central_dilemma": "the core moral tension that defines this character — a sentence framing the impossible choice",
+  "option_a": "first choice — what they could do and what it costs",
+  "option_b": "second choice — what they could do and what it costs",
+  "stakes": "what happens if they don't choose at all",
+  "scenarios": [
+    { "situation": "a specific scenario triggering this dilemma", "pressure": "what forces the choice", "reveal": "what their choice reveals about them" }
+  ]
+}`,
+        apply: (generated) => {
+          const ef = character.extra_fields || {};
+          ef.dilemma = generated;
+          character.extra_fields = { ...ef };
+          return ['extra_fields.dilemma'];
+        },
+      },
+      plot_threads: {
+        prompt: `Generate 3-5 compelling plot threads for ${charName}. Each thread should be a specific unresolved situation that could activate in a story. Consider their relationships, wound, career, and current arc.`,
+        schema: `[
+  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }
+]`,
+        apply: (generated) => {
+          const threads = (Array.isArray(generated) ? generated : generated.threads || []).map((t, i) => ({
+            id: `pt-${Date.now()}-${i}`,
+            title: t.thread || t.title || '',
+            description: t.activation_condition || t.description || '',
+            status: t.status || 'open',
+            source: 'ai-generated',
+          }));
+          const ef = character.extra_fields || {};
+          ef.plot_threads = threads;
+          character.extra_fields = { ...ef };
+          return ['plot_threads'];
+        },
+      },
+      // JSONB section regeneration (overwrites existing)
+      career_status: {
+        prompt: `Generate career and professional status for ${charName}. Be specific to their world and ambitions.`,
+        schema: `{ "profession": "their job title", "career_goal": "what success means to them", "reputation_level": "how the world sees their career", "brand_relationships": "professional affiliations", "financial_status": "their financial reality", "public_recognition": "level of public awareness", "ongoing_arc": "current career tension" }`,
+        apply: (generated) => { character.career_status = generated; return ['career_status']; },
+      },
+      aesthetic_dna: {
+        prompt: `Generate aesthetic DNA for ${charName}. Define their visual identity and style.`,
+        schema: `{ "era_aesthetic": "style era/vibe", "color_palette": "their visual color world", "signature_silhouette": "specific physical style details", "signature_accessories": "the object always near them", "glam_energy": "how a room changes when they enter", "visual_evolution_notes": "how their look has changed" }`,
+        apply: (generated) => { character.aesthetic_dna = generated; return ['aesthetic_dna']; },
+      },
+      voice_signature: {
+        prompt: `Generate voice profile for ${charName}. Define how they speak and communicate.`,
+        schema: `{ "speech_pattern": "how they speak — rhythm, vocabulary, register", "vocabulary_tone": "a sentence that could only be theirs", "catchphrases": "recurring phrases or verbal tics", "internal_monologue_style": "how their inner voice sounds", "emotional_reactivity": "how they respond when emotions hit" }`,
+        apply: (generated) => { character.voice_signature = generated; return ['voice_signature']; },
+      },
+      story_presence: {
+        prompt: `Generate story presence data for ${charName}. Define how they exist in the narrative.`,
+        schema: `{ "appears_in_books": "which books/worlds", "appears_in_shows": "which shows", "appears_in_series": "which series", "current_story_status": "what triggers their entrance", "unresolved_threads": "story types they're suited for", "future_potential": "can they introduce new characters" }`,
+        apply: (generated) => { character.story_presence = generated; return ['story_presence']; },
+      },
+      relationships_map: {
+        prompt: `Generate relationships map for ${charName}. Define their social network and key dynamics.`,
+        schema: `{ "allies": "names and nature of alliances", "rivals": "names and nature of rivalries", "mentors": "who shaped them", "love_interests": "current or past", "business_partners": "professional relationships", "dynamic_notes": "the most important tension" }`,
+        apply: (generated) => { character.relationships_map = generated; return ['relationships_map']; },
+      },
+    };
+
+    const config = sectionConfigs[section];
+    if (!config) {
+      return res.status(400).json({ error: `Unknown section: ${section}. Valid: ${Object.keys(sectionConfigs).join(', ')}` });
+    }
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      system: `You are filling in a specific profile section for a character in the LalaVerse franchise.
+
+Here is everything currently known about this character:
+${JSON.stringify(known, null, 2)}
+
+Generate the requested section. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
+
+Return ONLY valid JSON matching this schema:
+${config.schema}`,
+      messages: [{ role: 'user', content: config.prompt }],
+    });
+
+    const raw = response.content[0].text;
+    const jsonMatch = raw.match(/[\[{][\s\S]*[\]}]/);
+    if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse AI response' });
+    const generated = JSON.parse(jsonMatch[0]);
+
+    const updated = config.apply(generated);
+    await character.save();
+
+    return res.json({
+      success: true,
+      section,
+      character_id: id,
+      character_name: charName,
+      updated,
+      generated,
+    });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST /generate-section error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

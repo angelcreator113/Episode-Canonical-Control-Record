@@ -67,18 +67,18 @@ const FIDELITY_LABELS = {
   already_has: { label: 'Already Has', color: '#fb923c' },
 };
 
-/* ── Depth dimension config ──────────────────────────────────────────── */
+/* ── Depth dimension config (must match backend DE_FIELDS / DIMENSION_FIELDS) ── */
 const DEPTH_DIMS = [
-  { key: 'joy',         label: 'The Experience of Joy',      fields: ['de_joy_source','de_joy_accessibility','de_joy_vs_ambition'],      color: 'gold' },
-  { key: 'body',        label: 'The Body',                   fields: ['de_body_relationship','de_body_history','de_body_currency','de_body_control_pattern'], color: 'pink' },
-  { key: 'money',       label: 'Money as Behavior',          fields: ['de_money_behavior_pattern','de_money_behavior_note'],              color: 'blue' },
-  { key: 'time',        label: 'Time Orientation',           fields: ['de_time_orientation_v2','de_time_orientation_note'],               color: 'lav' },
-  { key: 'change',      label: 'Change Capacity',            fields: ['de_change_capacity_v2','de_change_conditions','de_change_blocker'], color: 'blue' },
-  { key: 'luck',        label: 'Luck & Circumstance',        fields: ['de_circumstance_advantages','de_circumstance_disadvantages','de_luck_belief','de_luck_belief_vs_stated'], color: 'gold' },
-  { key: 'narrative',   label: 'Self vs Actual Narrative',   fields: ['de_self_narrative','de_actual_narrative','de_narrative_gap_type'],  color: 'pink', authorOnly: true },
-  { key: 'blind_spot',  label: 'Blind Spot',                 fields: ['de_blind_spot','de_blind_spot_category'],                         color: 'lav',  authorOnly: true },
-  { key: 'cosmology',   label: 'Operative Cosmology',        fields: ['de_operative_cosmology_v2','de_cosmology_vs_stated_religion'],      color: 'gold' },
-  { key: 'foreclosed',  label: 'Foreclosed Possibility',     fields: ['de_foreclosed_category','de_foreclosure_origin','de_foreclosure_vs_stated_want'], color: 'pink', authorOnly: true },
+  { key: 'joy',         label: 'The Experience of Joy',      fields: ['de_joy_trigger','de_joy_body_location','de_joy_origin','de_forbidden_joy','de_joy_threat_response','de_joy_current_access'], color: 'gold' },
+  { key: 'body',        label: 'The Body',                   fields: ['de_body_relationship','de_body_currency','de_body_control','de_body_comfort','de_body_history'], color: 'pink' },
+  { key: 'money',       label: 'Money as Behavior',          fields: ['de_money_behavior','de_money_origin_class','de_money_current_class','de_class_gap_direction','de_money_wound'], color: 'blue' },
+  { key: 'time',        label: 'Time Orientation',           fields: ['de_time_orientation','de_time_wound'],                              color: 'lav' },
+  { key: 'change',      label: 'Change Capacity',            fields: ['de_change_capacity','de_change_capacity_score','de_change_condition','de_change_witness','de_arc_function'], color: 'blue' },
+  { key: 'luck',        label: 'Luck & Circumstance',        fields: ['de_world_belief','de_circumstance_advantages','de_circumstance_disadvantages','de_luck_interpretation','de_circumstance_wound'], color: 'gold' },
+  { key: 'narrative',   label: 'Self vs Actual Narrative',   fields: ['de_self_narrative_origin','de_self_narrative_turning_point','de_self_narrative_villain','de_actual_narrative_gap','de_therapy_target'], color: 'pink', authorOnly: true },
+  { key: 'blindspot',   label: 'Blind Spot',                 fields: ['de_blind_spot_category','de_blind_spot','de_blind_spot_evidence','de_blind_spot_crack_condition'], color: 'lav',  authorOnly: true },
+  { key: 'cosmology',   label: 'Operative Cosmology',        fields: ['de_operative_cosmology','de_stated_religion','de_cosmology_conflict','de_meaning_making_style'], color: 'gold' },
+  { key: 'foreclosed',  label: 'Foreclosed Possibility',     fields: ['de_foreclosed_possibilities','de_foreclosure_origins','de_foreclosure_visibility','de_crack_conditions'], color: 'pink', authorOnly: true },
 ];
 
 /* ── Small helpers ──────────────────────────────────────────────────── */
@@ -141,24 +141,49 @@ function SectionLabel({ children, color = '' }) {
 /* ═══════════════════════════════════════════════════════════════════════
    DEPTH PANEL
 ═══════════════════════════════════════════════════════════════════════ */
-function DepthPanel({ charDetail, charId, onRefresh }) {
+function DepthPanel({ registryCharId, onRefresh }) {
+  const [depthData, setDepthData]   = useState({});
   const [generating, setGenerating] = useState(false);
   const [genDim, setGenDim]         = useState(null);
   const [preview, setPreview]       = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [flash, setFlash]           = useState(null);
+  const [loaded, setLoaded]         = useState(false);
 
   const showFlash = (msg, type = 'success') => {
     setFlash({ msg, type });
     setTimeout(() => setFlash(null), 3000);
   };
 
+  // Load saved depth data from registry_characters (reset all transient state on switch)
+  useEffect(() => {
+    if (!registryCharId) return;
+    setLoaded(false);
+    setPreview(null);
+    setFlash(null);
+    setGenerating(false);
+    setGenDim(null);
+    setConfirming(false);
+    fetch(`${API}/character-depth/${registryCharId}`)
+      .then(r => r.json())
+      .then(d => { setDepthData(d.depth || {}); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, [registryCharId]);
+
+  if (!registryCharId) {
+    return (
+      <div className="ws4-depth-panel">
+        <div className="ws4-depth-empty">This character has no registry entry. Activate the character first to enable depth generation.</div>
+      </div>
+    );
+  }
+
   const generateAll = async () => {
     setGenerating(true);
     try {
-      const r = await fetch(`${API}/character-depth/${charId}/generate`, { method: 'POST' });
+      const r = await fetch(`${API}/character-depth/${registryCharId}/generate`, { method: 'POST' });
       const d = await r.json();
-      if (d.depth) { setPreview(d.depth); }
+      if (d.proposed) { setPreview(d.proposed); }
       else showFlash(d.error || 'Generation failed', 'error');
     } catch (e) { showFlash(e.message, 'error'); }
     finally { setGenerating(false); }
@@ -167,9 +192,9 @@ function DepthPanel({ charDetail, charId, onRefresh }) {
   const generateDim = async (dim) => {
     setGenDim(dim);
     try {
-      const r = await fetch(`${API}/character-depth/${charId}/generate/${dim}`, { method: 'POST' });
+      const r = await fetch(`${API}/character-depth/${registryCharId}/generate/${dim}`, { method: 'POST' });
       const d = await r.json();
-      if (d.depth) setPreview(d.depth);
+      if (d.proposed) setPreview(prev => ({ ...prev, ...d.proposed }));
       else showFlash(d.error || 'Generation failed', 'error');
     } catch (e) { showFlash(e.message, 'error'); }
     finally { setGenDim(null); }
@@ -179,13 +204,14 @@ function DepthPanel({ charDetail, charId, onRefresh }) {
     if (!preview) return;
     setConfirming(true);
     try {
-      const r = await fetch(`${API}/character-depth/${charId}/confirm`, {
+      const r = await fetch(`${API}/character-depth/${registryCharId}/confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ depth: preview }),
+        body: JSON.stringify({ proposed: preview }),
       });
       const d = await r.json();
       if (d.success) {
         showFlash('Depth profile saved');
+        setDepthData(d.depth || {});
         setPreview(null);
         onRefresh();
       } else showFlash(d.error || 'Confirm failed', 'error');
@@ -193,8 +219,8 @@ function DepthPanel({ charDetail, charId, onRefresh }) {
     finally { setConfirming(false); }
   };
 
-  const source = preview || charDetail;
-  const hasAnyDepth = DEPTH_DIMS.some(d => d.fields.some(f => charDetail?.[f]));
+  const source = preview || depthData;
+  const hasAnyDepth = loaded && DEPTH_DIMS.some(d => d.fields.some(f => depthData?.[f]));
 
   return (
     <div className="ws4-depth-panel">
@@ -246,12 +272,13 @@ function DepthPanel({ charDetail, charId, onRefresh }) {
               <div className="ws4-depth-fields">
                 {dim.fields.map(f => {
                   const val = source?.[f];
-                  if (!val) return null;
-                  const label = f.replace(/^de_/, '').replace(/_v2$/, '').replace(/_/g, ' ');
+                  if (val === null || val === undefined) return null;
+                  const label = f.replace(/^de_/, '').replace(/_/g, ' ');
+                  const display = typeof val === 'object' ? JSON.stringify(val) : String(val);
                   return (
                     <div key={f} className="ws4-depth-field">
                       <span className="ws4-depth-field-label">{label}</span>
-                      <span className="ws4-depth-field-value">{val}</span>
+                      <span className="ws4-depth-field-value">{display}</span>
                     </div>
                   );
                 })}
@@ -464,10 +491,11 @@ export default function WorldStudio() {
   useEffect(() => {
     loadCharacters(worldTag);
     setSelectedChar(null); setCharDetail(null); setEditMode(false); setCurrentPage(1);
+    setCompareChar(null); setActiveScene(null);
   }, [worldTag]);
 
   useEffect(() => { setCurrentPage(1); }, [charSearch, charFilter]);
-  useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
+  useEffect(() => { if (selectedChar) { loadCharDetail(selectedChar); setActiveScene(null); } }, [selectedChar]);
 
   /* ── Ecosystem generate / preview / confirm ────────────────────────── */
   const [previewId, setPreviewId] = useState(null);
@@ -517,23 +545,32 @@ export default function WorldStudio() {
 
   /* ── Character actions ─────────────────────────────────────────────── */
   const activateChar = async (id) => {
-    await fetch(`${API}/world/characters/${id}/activate`, { method: 'POST' });
-    flash('Character activated');
-    loadCharacters();
-    if (selectedChar === id) loadCharDetail(id);
+    try {
+      const r = await fetch(`${API}/world/characters/${id}/activate`, { method: 'POST' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Activate failed', 'error'); return; }
+      flash('Character activated');
+      loadCharacters();
+      if (selectedChar === id) loadCharDetail(id);
+    } catch (e) { flash(e.message, 'error'); }
   };
 
   const archiveChar = async (id) => {
-    await fetch(`${API}/world/characters/${id}/archive`, { method: 'POST' });
-    flash('Character archived');
-    setSelectedChar(null); setCharDetail(null); loadCharacters();
+    try {
+      const r = await fetch(`${API}/world/characters/${id}/archive`, { method: 'POST' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Archive failed', 'error'); return; }
+      flash('Character archived');
+      setSelectedChar(null); setCharDetail(null); loadCharacters();
+    } catch (e) { flash(e.message, 'error'); }
   };
 
   const deleteChar = async (id) => {
     if (!window.confirm('Delete this character permanently?')) return;
-    await fetch(`${API}/world/characters/${id}`, { method: 'DELETE' });
-    flash('Character deleted');
-    setSelectedChar(null); setCharDetail(null); loadCharacters();
+    try {
+      const r = await fetch(`${API}/world/characters/${id}`, { method: 'DELETE' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Delete failed', 'error'); return; }
+      flash('Character deleted');
+      setSelectedChar(null); setCharDetail(null); loadCharacters();
+    } catch (e) { flash(e.message, 'error'); }
   };
 
   const saveCharEdit = async () => {
@@ -586,9 +623,12 @@ export default function WorldStudio() {
   };
 
   const deleteRelationship = async (relId) => {
-    await fetch(`${API}/world/characters/${selectedChar}/relationships/${relId}`, { method: 'DELETE' });
-    flash('Relationship removed');
-    loadCharDetail(selectedChar);
+    try {
+      const r = await fetch(`${API}/world/characters/${selectedChar}/relationships/${relId}`, { method: 'DELETE' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Delete failed', 'error'); return; }
+      flash('Relationship removed');
+      loadCharDetail(selectedChar);
+    } catch (e) { flash(e.message, 'error'); }
   };
 
   /* ── Scene loaders & actions ──────────────────────────────────────── */
@@ -618,8 +658,11 @@ export default function WorldStudio() {
     try {
       const r = await fetch(`${API}/world/scenes/${sceneId}/approve`, { method: 'POST' });
       const d = await r.json();
-      if (d.scene) { flash('Scene approved & written to StoryTeller'); setActiveScene(d.scene); if (selectedChar) loadCharScenes(selectedChar); }
-      else flash(d.error || 'Approve failed', 'error');
+      if (d.approved) {
+        flash('Scene approved & written to StoryTeller');
+        if (activeScene?.id === sceneId) setActiveScene({ ...activeScene, status: 'approved' });
+        if (selectedChar) loadCharScenes(selectedChar);
+      } else flash(d.error || 'Approve failed', 'error');
     } catch (e) { flash(e.message, 'error'); }
   };
 
@@ -630,9 +673,9 @@ export default function WorldStudio() {
     if (selectedChar) loadCharScenes(selectedChar);
   };
 
-  // Load scenes when switching to scenes detail tab
+  // Load scenes when switching to scenes or evolution detail tab
   useEffect(() => {
-    if (detailTab === 'scenes' && selectedChar) loadCharScenes(selectedChar);
+    if ((detailTab === 'scenes' || detailTab === 'evolution') && selectedChar) loadCharScenes(selectedChar);
   }, [detailTab, selectedChar]);
 
   /* ── Batch & Saved Preview loaders ────────────────────────────────── */
@@ -742,11 +785,13 @@ export default function WorldStudio() {
   const uniqueTypes = [...new Set(characters.map(c => c.character_type).filter(Boolean))];
   const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
   const paged       = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const relGraph    = charDetail ? (
-    typeof charDetail.relationship_graph === 'string'
-      ? JSON.parse(charDetail.relationship_graph || '[]')
-      : (charDetail.relationship_graph || [])
-  ) : [];
+  const relGraph    = charDetail ? (() => {
+    try {
+      return typeof charDetail.relationship_graph === 'string'
+        ? JSON.parse(charDetail.relationship_graph || '[]')
+        : (charDetail.relationship_graph || []);
+    } catch { return []; }
+  })() : [];
   const draftCount  = characters.filter(c => c.status === 'draft').length;
 
   /* ── Render ────────────────────────────────────────────────────────── */
@@ -801,6 +846,21 @@ export default function WorldStudio() {
               {draftCount > 0 && (
                 <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={bulkActivate} disabled={bulkActivating}>
                   {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
+                </button>
+              )}
+              {worldTag !== 'all' && characters.length > 0 && (
+                <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={async () => {
+                  try {
+                    const resp = await fetch('/api/world/characters/bulk-re-sync', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ world_tag: worldTag }),
+                    });
+                    const data = await resp.json();
+                    showToast?.(`Synced ${data.synced}/${data.total} to registry`);
+                  } catch (e) { showToast?.(`Sync error: ${e.message}`); }
+                }}>
+                  🔄 Sync All to Registry
                 </button>
               )}
               {worldTag !== 'all' && (
@@ -996,10 +1056,13 @@ export default function WorldStudio() {
                 <>
                   <div className="ws4-dash-label">Relationship Web</div>
                   <div className="ws4-rel-web">
-                    {characters.filter(c => c.relationship_graph && (
-                      typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : c.relationship_graph
-                    ).length > 0).slice(0, 12).map(c => {
-                      const rels = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []);
+                    {characters.map(c => {
+                      let rels;
+                      try { rels = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []); }
+                      catch { rels = []; }
+                      return { ...c, _rels: rels };
+                    }).filter(c => c._rels.length > 0).slice(0, 12).map(c => {
+                      const rels = c._rels;
                       return (
                         <div key={c.id} className="ws4-rel-web-node" onClick={() => { setSelectedChar(c.id); }}>
                           <div className="ws4-rel-web-name">{c.name}</div>
@@ -1081,7 +1144,14 @@ export default function WorldStudio() {
                         {deepening ? '⏳' : '🧠'} Deepen
                       </button>
                       <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => exportCharacter(charDetail)}>↗ Export</button>
-                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => setCompareChar(compareChar ? null : charDetail.id)}>
+                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => {
+                        if (compareChar) { setCompareChar(null); }
+                        else {
+                          const other = characters.find(c => c.id !== charDetail.id);
+                          if (other) setCompareChar(other.id);
+                          else flash('Need at least two characters to compare', 'error');
+                        }
+                      }}>
                         {compareChar ? '✕ Close Compare' : '⇄ Compare'}
                       </button>
                       {charDetail.status !== 'archived' && (
@@ -1220,6 +1290,77 @@ export default function WorldStudio() {
 
                         {charDetail.arc_role && <FieldCard label="Arc Role" value={charDetail.arc_role} />}
 
+                        {/* Essence Profile */}
+                        {(charDetail.character_archetype || charDetail.emotional_baseline || charDetail.core_fear || charDetail.at_their_best || charDetail.at_their_worst) && (
+                          <>
+                            <SectionLabel color="gold">Essence</SectionLabel>
+                            <div className="ws4-moral-grid">
+                              {charDetail.character_archetype && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Archetype</div>
+                                  <div className="ws4-moral-value">{charDetail.character_archetype}</div>
+                                </div>
+                              )}
+                              {charDetail.emotional_baseline && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Emotional Baseline</div>
+                                  <div className="ws4-moral-value">{charDetail.emotional_baseline}</div>
+                                </div>
+                              )}
+                              {charDetail.core_fear && (
+                                <div className="ws4-moral-card ws4-moral-card-wide">
+                                  <div className="ws4-moral-label">Core Fear</div>
+                                  <div className="ws4-moral-value">{charDetail.core_fear}</div>
+                                </div>
+                              )}
+                            </div>
+                            {charDetail.at_their_best && <FieldCard label="At Their Best" value={charDetail.at_their_best} />}
+                            {charDetail.at_their_worst && <FieldCard label="At Their Worst" value={charDetail.at_their_worst} dimmed />}
+                          </>
+                        )}
+
+                        {/* Aesthetic DNA */}
+                        {(charDetail.color_palette || charDetail.signature_silhouette || charDetail.signature_accessories || charDetail.glam_energy) && (
+                          <>
+                            <SectionLabel color="rose">Aesthetic DNA</SectionLabel>
+                            <div className="ws4-moral-grid">
+                              {charDetail.glam_energy && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Glam Energy</div>
+                                  <div className="ws4-moral-value">{charDetail.glam_energy}</div>
+                                </div>
+                              )}
+                              {charDetail.color_palette && (
+                                <div className="ws4-moral-card">
+                                  <div className="ws4-moral-label">Color Palette</div>
+                                  <div className="ws4-moral-value">{charDetail.color_palette}</div>
+                                </div>
+                              )}
+                            </div>
+                            {charDetail.signature_silhouette && <FieldCard label="Signature Silhouette" value={charDetail.signature_silhouette} />}
+                            {charDetail.signature_accessories && <FieldCard label="Signature Accessories" value={charDetail.signature_accessories} />}
+                          </>
+                        )}
+
+                        {/* Voice Signature */}
+                        {(charDetail.speech_pattern || charDetail.vocabulary_tone || charDetail.catchphrases || charDetail.internal_monologue_style) && (
+                          <>
+                            <SectionLabel>Voice</SectionLabel>
+                            {charDetail.speech_pattern && <FieldCard label="Speech Pattern" value={charDetail.speech_pattern} />}
+                            {charDetail.vocabulary_tone && <FieldCard label="Vocabulary Tone" value={charDetail.vocabulary_tone} />}
+                            {charDetail.catchphrases && <FieldCard label="Catchphrases" value={charDetail.catchphrases} />}
+                            {charDetail.internal_monologue_style && <FieldCard label="Internal Monologue" value={charDetail.internal_monologue_style} dimmed />}
+                          </>
+                        )}
+
+                        {/* Career */}
+                        {charDetail.career_goal && (
+                          <>
+                            <SectionLabel color="gold">Career</SectionLabel>
+                            <FieldCard label="Career Goal" value={charDetail.career_goal} />
+                          </>
+                        )}
+
                         <div className="ws4-overview-links">
                           <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={() => navigate('/relationships')}>
                             🔗 Relationship Map
@@ -1230,6 +1371,16 @@ export default function WorldStudio() {
                               📋 Registry Entry
                             </button>
                           )}
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                            onClick={async () => {
+                              try {
+                                const resp = await fetch(`/api/world/characters/${charDetail.id}/re-sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                                const data = await resp.json();
+                                if (data.synced) { showToast?.('Registry synced'); } else { showToast?.(`Sync failed: ${data.error}`); }
+                              } catch (e) { showToast?.(`Sync error: ${e.message}`); }
+                            }}>
+                            🔄 Sync to Registry
+                          </button>
                         </div>
                       </div>
                     )}
@@ -1265,7 +1416,10 @@ export default function WorldStudio() {
                       <div className="ws4-relationships">
                         <div className="ws4-rel-header">
                           <span className="ws4-rel-count">{relGraph.length} relationship{relGraph.length !== 1 ? 's' : ''}</span>
-                          <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => setShowAddRel(true)}>+ Add</button>
+                          <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => {
+                            setRelForm(p => ({ ...p, series_layer: worldTag, related_character_id: '', related_character_name: '', history_summary: '', conflict_summary: '', family_role: '' }));
+                            setShowAddRel(true);
+                          }}>+ Add</button>
                         </div>
 
                         {relGraph.length === 0 ? (
@@ -1308,8 +1462,7 @@ export default function WorldStudio() {
                     {/* ── DEPTH ────────────────────────────────────── */}
                     {detailTab === 'depth' && (
                       <DepthPanel
-                        charDetail={charDetail}
-                        charId={selectedChar}
+                        registryCharId={charDetail?.registry_character_id}
                         onRefresh={() => loadCharDetail(selectedChar)}
                       />
                     )}
@@ -1455,6 +1608,24 @@ export default function WorldStudio() {
                     { key: 'what_lala_feels',          label: `What ${curWorld.protagonist} Feels`,  long: true },
                     { key: 'moral_code',               label: 'Moral Code',                         long: true },
                     { key: 'exit_reason',              label: 'Exit Reason',                        long: true },
+                    // Dossier-aligned essence fields
+                    { key: 'core_fear',                label: 'Core Fear',                          long: true },
+                    { key: 'character_archetype',      label: 'Archetype' },
+                    { key: 'emotional_baseline',       label: 'Emotional Baseline' },
+                    { key: 'at_their_best',            label: 'At Their Best',                      long: true },
+                    { key: 'at_their_worst',           label: 'At Their Worst',                     long: true },
+                    // Aesthetic DNA
+                    { key: 'color_palette',            label: 'Color Palette' },
+                    { key: 'signature_silhouette',     label: 'Signature Silhouette',               long: true },
+                    { key: 'signature_accessories',    label: 'Signature Accessories',              long: true },
+                    { key: 'glam_energy',              label: 'Glam Energy' },
+                    // Voice
+                    { key: 'speech_pattern',           label: 'Speech Pattern',                     long: true },
+                    { key: 'vocabulary_tone',          label: 'Vocabulary Tone',                    long: true },
+                    { key: 'catchphrases',             label: 'Catchphrases',                       long: true },
+                    { key: 'internal_monologue_style', label: 'Internal Monologue Style',           long: true },
+                    // Career
+                    { key: 'career_goal',              label: 'Career Goal',                        long: true },
                   ].map(f => (
                     <div key={f.key} className="ws4-edit-row">
                       <label className="ws4-edit-label">{f.label}</label>

@@ -318,6 +318,23 @@ export default function CharacterRegistryPage() {
       if (data.success) {
         setActiveRegistry(data.registry);
         setRegistries(prev => prev.map(r => r.id === id ? data.registry : r));
+
+        // Auto-backfill: ensure all characters have JSONB skeletons + intimate_eligible flags
+        // Fire-and-forget — silent, no UI impact unless characters were updated
+        fetch(`${API}/registries/${id}/backfill-sections`, { method: 'POST' })
+          .then(r => r.json())
+          .then(bf => {
+            if (bf.success && bf.updated > 0) {
+              // Refresh to pick up backfilled data
+              fetch(`${API}/registries/${id}`).then(r2 => r2.json()).then(d2 => {
+                if (d2.success) {
+                  setActiveRegistry(d2.registry);
+                  setRegistries(prev => prev.map(r => r.id === id ? d2.registry : r));
+                }
+              });
+            }
+          })
+          .catch(() => { /* silent */ });
       }
     } catch (e) {
       console.error('Failed to fetch registry', e);
@@ -403,9 +420,10 @@ export default function CharacterRegistryPage() {
     setGeneratingId(charId);
     try {
       const charName = character.selected_name || character.display_name || 'Character';
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const res = await fetch('/api/v1/memories/generate-living-state', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: 'include',
         body: JSON.stringify({
           character_id: charId,
@@ -537,9 +555,10 @@ export default function CharacterRegistryPage() {
     if (!activeChar) return;
     setGeneratingArc(true);
     try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const res = await fetch('/api/v1/memories/generate-character-arc', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: 'include',
         body: JSON.stringify({
           character_id: activeChar.id,
@@ -1603,6 +1622,48 @@ export default function CharacterRegistryPage() {
                     </div>
                   );
                 })()}
+                {(() => {
+                  const hasData = (val) => val && typeof val === 'object' && Object.values(val).some(v => v && v !== '');
+                  let dossierFilled = 0;
+                  const dossierTotal = 25; // 8 essence + 7 JSONB sections + 10 depth dimensions
+                  // Essence Profile (8)
+                  if (c.core_fear)           dossierFilled++;
+                  if (c.core_desire)         dossierFilled++;
+                  if (c.core_wound)          dossierFilled++;
+                  if (c.mask_persona)        dossierFilled++;
+                  if (c.truth_persona)       dossierFilled++;
+                  if (c.character_archetype) dossierFilled++;
+                  if (c.signature_trait)     dossierFilled++;
+                  if (c.emotional_baseline)  dossierFilled++;
+                  // JSONB Sections (7)
+                  if (hasData(c.career_status))      dossierFilled++;
+                  if (hasData(c.aesthetic_dna))       dossierFilled++;
+                  if (hasData(c.voice_signature))     dossierFilled++;
+                  if (hasData(c.story_presence))      dossierFilled++;
+                  if (hasData(c.evolution_tracking))  dossierFilled++;
+                  if (hasData(c.living_context))      dossierFilled++;
+                  if (hasData(c.relationships_map))   dossierFilled++;
+                  // Depth Engine dimensions (10)
+                  if (c.de_body_relationship)         dossierFilled++;
+                  if (c.de_money_behavior)            dossierFilled++;
+                  if (c.de_time_orientation)           dossierFilled++;
+                  if (c.de_world_belief)              dossierFilled++;
+                  if (c.de_self_narrative_origin)      dossierFilled++;
+                  if (c.de_blind_spot_category || c.de_blind_spot) dossierFilled++;
+                  if (c.de_change_capacity)           dossierFilled++;
+                  if (c.de_operative_cosmology)       dossierFilled++;
+                  if (c.de_foreclosed_possibilities)  dossierFilled++;
+                  if (c.de_joy_trigger)               dossierFilled++;
+                  if (dossierFilled === 0) return null;
+                  return (
+                    <div className={`cr-dossier-profile-badge ${dossierFilled >= dossierTotal ? 'complete' : ''}`}
+                      style={{ background: dossierFilled >= dossierTotal ? 'rgba(100,80,200,0.12)' : 'rgba(100,80,200,0.06)',
+                               color: dossierFilled >= dossierTotal ? '#6850c8' : '#8a8070' }}>
+                      <span className="cr-dossier-profile-badge-icon">📋</span>
+                      {dossierFilled >= dossierTotal ? 'Dossier Complete' : `Dossier ${dossierFilled}/${dossierTotal}`}
+                    </div>
+                  );
+                })()}
 
                 {/* Relationship Quick View */}
                 {c.relationships_map && (() => {
@@ -1807,6 +1868,17 @@ export default function CharacterRegistryPage() {
                       <ArcProjection />
                       {charArc?.summary && <p className="cr-arc-summary">{charArc.summary}</p>}
                       {charArc && (charArc.chapters || []).length > 0 ? (
+                        <>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                          <button
+                            className="cr-btn-outline"
+                            style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: generatingArc ? '#999' : '#6850c8' }}
+                            onClick={generateArc}
+                            disabled={generatingArc}
+                          >
+                            {generatingArc ? '⟳ Regenerating…' : '⟳ Regenerate Arc'}
+                          </button>
+                        </div>
                         <div className="cr-arc-strip">
                           {(charArc.chapters || []).map((ch, i) => (
                             <React.Fragment key={i}>
@@ -1830,6 +1902,7 @@ export default function CharacterRegistryPage() {
                             </React.Fragment>
                           ))}
                         </div>
+                        </>
                       ) : !charArc ? (
                         <div className="cr-dossier-empty">
                           <div className="cr-dossier-empty-icon">📈</div>
@@ -1852,9 +1925,12 @@ export default function CharacterRegistryPage() {
                   <div className="cr-threads-tab">
                     <div className="cr-threads-header">
                       <h4>Plot Threads</h4>
-                      <button className="cr-btn-outline" onClick={() => { setShowNewThread(true); setEditingThreadId(null); setThreadForm({ title: '', description: '', status: 'open', source: '' }); }}>
-                        + New Thread
-                      </button>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <SectionRegenerateButton characterId={c.id} section="plot_threads" onRefresh={() => { if (activeRegistry?.id) fetchRegistry(activeRegistry.id); }} label="✦ Auto-Generate" />
+                        <button className="cr-btn-outline" onClick={() => { setShowNewThread(true); setEditingThreadId(null); setThreadForm({ title: '', description: '', status: 'open', source: '' }); }}>
+                          + New Thread
+                        </button>
+                      </div>
                     </div>
 
                     {/* New / Edit Thread Form */}
@@ -1946,20 +2022,25 @@ export default function CharacterRegistryPage() {
 
                 /* ── Dilemma Tab ── */
                 : dossierTab === 'dilemma' ? (
-                  <CharacterDilemmaEngine
-                    character={{
-                      id: c.id,
-                      name: c.display_name || c.name,
-                      character_type: c.character_type || 'pressure',
-                      role: c.role || c.subtitle || '',
-                      story_context: c.story_presence?.current_story_status || '',
-                    }}
-                    onProfileBuilt={() => {
-                      if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
-                    }}
-                  />
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                      <SectionRegenerateButton characterId={c.id} section="dilemma" onRefresh={() => { if (activeRegistry?.id) fetchRegistry(activeRegistry.id); }} label="✦ Auto-Generate Dilemma" />
+                    </div>
+                    <CharacterDilemmaEngine
+                      character={{
+                        id: c.id,
+                        name: c.display_name || c.name,
+                        character_type: c.character_type || 'pressure',
+                        role: c.role || c.subtitle || '',
+                        story_context: c.story_presence?.current_story_status || '',
+                      }}
+                      onProfileBuilt={() => {
+                        if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+                      }}
+                    />
+                  </div>
                 ) : (
-                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile }, characters)
+                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile }, characters, () => { if (activeRegistry?.id) fetchRegistry(activeRegistry.id); })
                 )}
               </div>
             </div>
@@ -2965,7 +3046,7 @@ function Toast({ msg, type, onClose }) {
 /* ================================================================
    DOSSIER TAB CONTENT
    ================================================================ */
-function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, ai, characters) {
+function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, ai, characters, onRefresh) {
   const editing = editSection === tab;
 
   const editControls = editing ? (
@@ -2977,12 +3058,25 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     </div>
   ) : null;
 
-  const sectionHeader = (title) => (
+  const sectionHeader = (title, opts = {}) => (
     <div className="cr-dossier-section-header">
       <span className="cr-dossier-section-title">{title}</span>
-      {!editing && (
-        <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)} title="Edit this section">✎</button>
-      )}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {opts.generateComponent && !editing && opts.generateComponent}
+        {opts.onGenerate && !editing && (
+          <button
+            className="cr-btn-outline"
+            style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: opts.generating ? '#999' : '#6850c8' }}
+            onClick={opts.onGenerate}
+            disabled={opts.generating}
+          >
+            {opts.generating ? '⟳ Generating…' : '✦ Generate'}
+          </button>
+        )}
+        {!editing && (
+          <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)} title="Edit this section">✎</button>
+        )}
+      </div>
     </div>
   );
 
@@ -3048,8 +3142,140 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               {jGet(c.story_presence, 'unresolved_threads') && (
                 <DRow label="Unresolved Threads" value={jGet(c.story_presence, 'unresolved_threads')} />
               )}
-              <BackfillBanner character={c} />
+              <BackfillBanner character={c} onRefresh={onRefresh} />
             </>
+          )}
+        </div>
+      );
+
+    /* ── DEMOGRAPHICS ── */
+    case 'demographics':
+      return (
+        <div className="cr-dossier-section">
+          {sectionHeader('Demographics', { generateComponent: <SectionRegenerateButton characterId={c.id} section="demographics" onRefresh={onRefresh} label="✦ Generate" /> })}
+          {editControls}
+          {editing ? (
+            <>
+              <EField label="Gender" value={form.gender} onChange={v => F('gender', v)} placeholder="e.g. Female, Non-binary" />
+              <EField label="Pronouns" value={form.pronouns} onChange={v => F('pronouns', v)} placeholder="e.g. she/her, they/them" />
+              <EField label="Age" value={form.age} onChange={v => F('age', v)} placeholder="e.g. 28" />
+              <EField label="Birth Year" value={form.birth_year} onChange={v => F('birth_year', v)} placeholder="e.g. 1996" />
+              <EField label="Ethnicity" value={form.ethnicity} onChange={v => F('ethnicity', v)} />
+              <EField label="Species" value={form.species} onChange={v => F('species', v)} placeholder="Default: human" />
+              <EField label="Cultural Background" value={form.cultural_background} onChange={v => F('cultural_background', v)} />
+              <EField label="Nationality" value={form.nationality} onChange={v => F('nationality', v)} />
+              <EField label="First Language" value={form.first_language} onChange={v => F('first_language', v)} />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Geography</span>
+              </div>
+              <EField label="Hometown" value={form.hometown} onChange={v => F('hometown', v)} />
+              <EField label="Current City" value={form.current_city} onChange={v => F('current_city', v)} />
+              <EArea label="Migration History" value={form.city_migration_history} onChange={v => F('city_migration_history', v)} rows={2} />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Class</span>
+              </div>
+              <EField label="Class Origin" value={form.class_origin} onChange={v => F('class_origin', v)} placeholder="e.g. Working class, Upper middle" />
+              <EField label="Current Class" value={form.current_class} onChange={v => F('current_class', v)} />
+              <EField label="Mobility Direction" value={form.class_mobility_direction} onChange={v => F('class_mobility_direction', v)} placeholder="e.g. Upward, Stable, Downward" />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Family</span>
+              </div>
+              <EField label="Family Structure" value={form.family_structure} onChange={v => F('family_structure', v)} placeholder="e.g. Nuclear, Single parent, Extended" />
+              <EField label="Parents Status" value={form.parents_status} onChange={v => F('parents_status', v)} placeholder="e.g. Together, Divorced, Deceased" />
+              <EField label="Sibling Position" value={form.sibling_position} onChange={v => F('sibling_position', v)} placeholder="e.g. Eldest, Middle, Only child" />
+              <EField label="Sibling Count" value={form.sibling_count} onChange={v => F('sibling_count', v)} placeholder="Number" />
+              <EField label="Relationship Status" value={form.relationship_status} onChange={v => F('relationship_status', v)} placeholder="e.g. Single, Married, Complicated" />
+              <EToggle label="Has Children" value={form.has_children} onChange={v => F('has_children', v)} />
+              {form.has_children && <EField label="Children Ages" value={form.children_ages} onChange={v => F('children_ages', v)} />}
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Education & Career</span>
+              </div>
+              <EArea label="Education" value={form.education_experience} onChange={v => F('education_experience', v)} rows={2} />
+              <EArea label="Career History" value={form.career_history} onChange={v => F('career_history', v)} rows={2} />
+              <EField label="Years Active" value={form.years_posting} onChange={v => F('years_posting', v)} />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Presence</span>
+              </div>
+              <EArea label="Physical Presence" value={form.physical_presence} onChange={v => F('physical_presence', v)} rows={2} placeholder="How they take up space — what people notice before they speak" />
+              <EArea label="Demographic Voice Signature" value={form.demographic_voice_signature} onChange={v => F('demographic_voice_signature', v)} rows={2} placeholder="How demographics shape their speech patterns" />
+              <EField label="Primary Platform" value={form.platform_primary} onChange={v => F('platform_primary', v)} placeholder="e.g. Instagram, Twitter" />
+              <EField label="Follower Tier" value={form.follower_tier} onChange={v => F('follower_tier', v)} placeholder="e.g. Micro, Mid-tier, Mega" />
+            </>
+          ) : (c.gender || c.age || c.ethnicity || c.nationality || c.hometown || c.current_city || c.family_structure) ? (
+            <>
+              <DRow label="Gender" value={c.gender} />
+              <DRow label="Pronouns" value={c.pronouns} />
+              <DRow label="Age" value={c.age} />
+              <DRow label="Birth Year" value={c.birth_year} />
+              <DRow label="Ethnicity" value={c.ethnicity} />
+              {c.species && c.species !== 'human' && <DRow label="Species" value={c.species} />}
+              <DRow label="Cultural Background" value={c.cultural_background} />
+              <DRow label="Nationality" value={c.nationality} />
+              <DRow label="First Language" value={c.first_language} />
+              {(c.hometown || c.current_city || c.city_migration_history) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Geography</span>
+                  </div>
+                  <DRow label="Hometown" value={c.hometown} />
+                  <DRow label="Current City" value={c.current_city} />
+                  <DRow label="Migration History" value={c.city_migration_history} />
+                </>
+              )}
+              {(c.class_origin || c.current_class) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Class</span>
+                  </div>
+                  <DRow label="Origin" value={c.class_origin} />
+                  <DRow label="Current" value={c.current_class} />
+                  <DRow label="Mobility" value={c.class_mobility_direction} accent />
+                </>
+              )}
+              {(c.family_structure || c.relationship_status) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Family</span>
+                  </div>
+                  <DRow label="Family Structure" value={c.family_structure} />
+                  <DRow label="Parents" value={c.parents_status} />
+                  <DRow label="Sibling Position" value={c.sibling_position} />
+                  <DRow label="Siblings" value={c.sibling_count} />
+                  <DRow label="Relationship Status" value={c.relationship_status} accent />
+                  {c.has_children && <DRow label="Children Ages" value={c.children_ages || 'Yes'} />}
+                </>
+              )}
+              {(c.education_experience || c.career_history) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Education & Career</span>
+                  </div>
+                  <DRow label="Education" value={c.education_experience} />
+                  <DRow label="Career History" value={c.career_history} />
+                  <DRow label="Years Active" value={c.years_posting} />
+                </>
+              )}
+              {(c.physical_presence || c.platform_primary) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Presence</span>
+                  </div>
+                  <DRow label="Physical Presence" value={c.physical_presence} />
+                  <DRow label="Voice Signature" value={c.demographic_voice_signature} />
+                  <DRow label="Platform" value={c.platform_primary} />
+                  <DRow label="Follower Tier" value={c.follower_tier} />
+                </>
+              )}
+            </>
+          ) : (
+            <div className="cr-dossier-empty">
+              <div className="cr-dossier-empty-icon">👤</div>
+              <p className="cr-dossier-empty-text">No demographics data yet.</p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button className="cr-dossier-empty-btn" onClick={() => startEdit(tab)}>✎ Add Manually</button>
+                <SectionRegenerateButton characterId={c.id} section="demographics" onRefresh={onRefresh} label="✦ Auto-Generate with AI" />
+              </div>
+            </div>
           )}
         </div>
       );
@@ -3075,7 +3301,14 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EArea label="Emotional Function" value={form.emotional_function} onChange={v => F('emotional_function', v)} rows={2} placeholder="The role they serve emotionally in the story" />
               <EField label="Wound Depth" value={form.wound_depth} onChange={v => F('wound_depth', v)} placeholder="0–10 scale" />
             </>
-          ) : (
+          ) : (() => {
+            const hasEssence = c.core_desire || c.core_fear || c.core_wound || c.mask_persona || c.truth_persona || c.character_archetype || c.signature_trait || c.emotional_baseline;
+            if (!hasEssence && !c.belief_pressured && !c.emotional_function && !c.personality) {
+              return (
+                <PsychologyEmptyState characterId={c.id} onEdit={() => startEdit(tab)} onRefresh={onRefresh} />
+              );
+            }
+            return (
             <>
               {/* Triad */}
               {(c.core_desire || c.core_fear || c.core_wound) && (
@@ -3143,8 +3376,22 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   ))}
                 </div>
               )}
+
+              {/* Depth Engine cross-reference */}
+              {(c.de_body_relationship || c.de_self_narrative_origin || c.de_change_capacity) && (
+                <div style={{ background: 'rgba(104,80,200,0.08)', border: '1px solid rgba(104,80,200,0.2)', borderRadius: 8, padding: '10px 14px', marginTop: 16, fontSize: 12 }}>
+                  <div style={{ color: '#8b7ad8', fontWeight: 600, marginBottom: 4 }}>Depth Engine Dimensions</div>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', color: '#b0a8d0' }}>
+                    {c.de_self_narrative_origin && <span><strong>Self-Narrative:</strong> {c.de_self_narrative_origin}</span>}
+                    {c.de_change_capacity && <span><strong>Change Capacity:</strong> {c.de_change_capacity}</span>}
+                    {c.de_body_relationship && <span><strong>Body:</strong> {c.de_body_relationship?.replace('_', ' ')}</span>}
+                  </div>
+                  <div style={{ marginTop: 6, color: '#777', fontSize: 11 }}>See the Depth Engine tab for full dimensional analysis</div>
+                </div>
+              )}
             </>
-          )}
+            );
+          })()}
         </div>
       );
 
@@ -3152,7 +3399,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'aesthetic':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Aesthetic DNA')}
+          {sectionHeader('Aesthetic DNA', { generateComponent: <SectionRegenerateButton characterId={c.id} section="aesthetic_dna" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3184,7 +3431,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'career':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Career & Status')}
+          {sectionHeader('Career & Status', { generateComponent: <SectionRegenerateButton characterId={c.id} section="career_status" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3312,7 +3559,8 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
         <div className="cr-dossier-section">
           <div className="cr-dossier-section-header">
             <span className="cr-dossier-section-title">Relationships</span>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {!editing && <SectionRegenerateButton characterId={c.id} section="relationships_map" onRefresh={onRefresh} label="✦ Generate" />}
               <a href="/relationships" className="cr-btn-outline" style={{ textDecoration: 'none', fontSize: 12, padding: '4px 10px' }}>
                 🕸 View Web
               </a>
@@ -3362,7 +3610,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'story':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Story Presence')}
+          {sectionHeader('Story Presence', { generateComponent: <SectionRegenerateButton characterId={c.id} section="story_presence" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3406,7 +3654,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'voice':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Voice Profile')}
+          {sectionHeader('Voice Profile', { generateComponent: <SectionRegenerateButton characterId={c.id} section="voice_signature" onRefresh={onRefresh} label="✦ Generate" /> })}
           {editControls}
           {editing ? (
             <>
@@ -3433,9 +3681,305 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
         </div>
       );
 
-    /* ── DEEP PROFILE ── */
-    case 'deep':
-      return <DeepProfileTab character={c} />;
+    /* ── DEATH TRACKING ── */
+    case 'death':
+      return (
+        <div className="cr-dossier-section">
+          {sectionHeader('Death Tracking', { generateComponent: <SectionRegenerateButton characterId={c.id} section="death" onRefresh={onRefresh} label="✦ Generate Death" /> })}
+          {editControls}
+          {editing ? (
+            <>
+              <EToggle label="Character is Alive" value={form.is_alive} onChange={v => F('is_alive', v)} />
+              {!form.is_alive && (
+                <>
+                  <EField label="Date of Death" value={form.death_date} onChange={v => F('death_date', v)} placeholder="YYYY-MM-DD or narrative date" />
+                  <EArea label="Cause of Death" value={form.death_cause} onChange={v => F('death_cause', v)} rows={3} placeholder="How did they die?" />
+                  <EArea label="Death Impact" value={form.death_impact} onChange={v => F('death_impact', v)} rows={3} placeholder="Impact on the story and other characters" />
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <DRow label="Status" value={c.is_alive === false ? 'Deceased' : 'Alive'} accent />
+              {c.is_alive === false && (
+                <>
+                  <DRow label="Date of Death" value={c.death_date} />
+                  <DRow label="Cause" value={c.death_cause} />
+                  <DRow label="Impact" value={c.death_impact} />
+                </>
+              )}
+            </>
+          )}
+        </div>
+      );
+
+    /* ── DEPTH ENGINE ── */
+    case 'depth':
+      return (
+        <div className="cr-dossier-section">
+          {sectionHeader('Depth Engine')}
+          {editControls}
+          {editing ? (
+            <>
+              {/* Body */}
+              <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 12, paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>1. Body</span>
+              </div>
+              <ESelect label="Body Relationship" value={form.de_body_relationship} onChange={v => F('de_body_relationship', v)}
+                options={[{value:'currency',label:'Currency'},{value:'discipline',label:'Discipline'},{value:'burden',label:'Burden'},{value:'stranger',label:'Stranger'},{value:'home',label:'Home'},{value:'evidence',label:'Evidence'}]} allowEmpty />
+              <EField label="Body Currency (1-10)" value={form.de_body_currency} onChange={v => F('de_body_currency', v)} placeholder="1-10" />
+              <EField label="Body Control (1-10)" value={form.de_body_control} onChange={v => F('de_body_control', v)} placeholder="1-10" />
+              <EField label="Body Comfort (1-10)" value={form.de_body_comfort} onChange={v => F('de_body_comfort', v)} placeholder="1-10" />
+              <EArea label="Body History" value={form.de_body_history} onChange={v => F('de_body_history', v)} rows={2} />
+
+              {/* Money */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>2. Money & Class</span>
+              </div>
+              <ESelect label="Money Behavior" value={form.de_money_behavior} onChange={v => F('de_money_behavior', v)}
+                options={[{value:'hoarder',label:'Hoarder'},{value:'compulsive_giver',label:'Compulsive Giver'},{value:'spend_to_feel',label:'Spend to Feel'},{value:'deprivation_guilt',label:'Deprivation Guilt'},{value:'control',label:'Control'},{value:'performs_wealth',label:'Performs Wealth'},{value:'performs_poverty',label:'Performs Poverty'}]} allowEmpty />
+              <ESelect label="Origin Class" value={form.de_money_origin_class} onChange={v => F('de_money_origin_class', v)}
+                options={[{value:'poverty',label:'Poverty'},{value:'working_class',label:'Working Class'},{value:'middle_class',label:'Middle Class'},{value:'upper_middle',label:'Upper Middle'},{value:'wealthy',label:'Wealthy'},{value:'ultra_wealthy',label:'Ultra Wealthy'}]} allowEmpty />
+              <ESelect label="Current Class" value={form.de_money_current_class} onChange={v => F('de_money_current_class', v)}
+                options={[{value:'poverty',label:'Poverty'},{value:'working_class',label:'Working Class'},{value:'middle_class',label:'Middle Class'},{value:'upper_middle',label:'Upper Middle'},{value:'wealthy',label:'Wealthy'},{value:'ultra_wealthy',label:'Ultra Wealthy'}]} allowEmpty />
+              <ESelect label="Class Gap Direction" value={form.de_class_gap_direction} onChange={v => F('de_class_gap_direction', v)}
+                options={[{value:'up',label:'Up'},{value:'down',label:'Down'},{value:'stable',label:'Stable'}]} allowEmpty />
+              <EArea label="Money Wound" value={form.de_money_wound} onChange={v => F('de_money_wound', v)} rows={2} />
+
+              {/* Time */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>3. Time</span>
+              </div>
+              <ESelect label="Time Orientation" value={form.de_time_orientation} onChange={v => F('de_time_orientation', v)}
+                options={[{value:'past_anchored',label:'Past Anchored'},{value:'future_oriented',label:'Future Oriented'},{value:'present_impulsive',label:'Present Impulsive'},{value:'perpetual_waiter',label:'Perpetual Waiter'},{value:'cyclical',label:'Cyclical'}]} allowEmpty />
+              <EArea label="Time Wound" value={form.de_time_wound} onChange={v => F('de_time_wound', v)} rows={2} />
+
+              {/* Luck & Circumstance */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>4. Luck & Circumstance</span>
+              </div>
+              <ESelect label="World Belief" value={form.de_world_belief} onChange={v => F('de_world_belief', v)}
+                options={[{value:'random',label:'Random'},{value:'rigged',label:'Rigged'},{value:'effort',label:'Effort'},{value:'divine',label:'Divine'},{value:'strategy',label:'Strategy'}]} allowEmpty />
+              <EArea label="Advantages" value={form.de_circumstance_advantages} onChange={v => F('de_circumstance_advantages', v)} rows={2} />
+              <EArea label="Disadvantages" value={form.de_circumstance_disadvantages} onChange={v => F('de_circumstance_disadvantages', v)} rows={2} />
+              <EField label="Luck Interpretation (1-10)" value={form.de_luck_interpretation} onChange={v => F('de_luck_interpretation', v)} placeholder="1-10" />
+              <EArea label="Circumstance Wound" value={form.de_circumstance_wound} onChange={v => F('de_circumstance_wound', v)} rows={2} />
+
+              {/* Self-Narrative */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>5. Self-Narrative</span>
+              </div>
+              <EArea label="Origin Story (as they tell it)" value={form.de_self_narrative_origin} onChange={v => F('de_self_narrative_origin', v)} rows={2} />
+              <EArea label="Turning Point" value={form.de_self_narrative_turning_point} onChange={v => F('de_self_narrative_turning_point', v)} rows={2} />
+              <EArea label="Villain (in their story)" value={form.de_self_narrative_villain} onChange={v => F('de_self_narrative_villain', v)} rows={2} />
+              <EArea label="Actual Narrative Gap (Author Only)" value={form.de_actual_narrative_gap} onChange={v => F('de_actual_narrative_gap', v)} rows={2} placeholder="The truth they can't see" />
+              <EArea label="Therapy Target" value={form.de_therapy_target} onChange={v => F('de_therapy_target', v)} rows={2} />
+
+              {/* Blind Spot */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>6. Blind Spot</span>
+              </div>
+              <ESelect label="Blind Spot Category" value={form.de_blind_spot_category} onChange={v => F('de_blind_spot_category', v)}
+                options={[{value:'impact',label:'Impact'},{value:'pattern',label:'Pattern'},{value:'motivation',label:'Motivation'},{value:'strength',label:'Strength'},{value:'wound',label:'Wound'}]} allowEmpty />
+              <EArea label="Blind Spot (Author Only)" value={form.de_blind_spot} onChange={v => F('de_blind_spot', v)} rows={2} />
+              <EArea label="Evidence (Author Only)" value={form.de_blind_spot_evidence} onChange={v => F('de_blind_spot_evidence', v)} rows={2} />
+              <EArea label="Crack Condition (Author Only)" value={form.de_blind_spot_crack_condition} onChange={v => F('de_blind_spot_crack_condition', v)} rows={2} />
+
+              {/* Change Capacity */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>7. Change Capacity</span>
+              </div>
+              <ESelect label="Change Capacity" value={form.de_change_capacity} onChange={v => F('de_change_capacity', v)}
+                options={[{value:'highly_rigid',label:'Highly Rigid'},{value:'conditionally_open',label:'Conditionally Open'},{value:'cyclically_mobile',label:'Cyclically Mobile'},{value:'highly_fluid',label:'Highly Fluid'},{value:'fixed_by_choice',label:'Fixed by Choice'}]} allowEmpty />
+              <EField label="Capacity Score (1-10)" value={form.de_change_capacity_score} onChange={v => F('de_change_capacity_score', v)} placeholder="1-10" />
+              <EArea label="Change Condition" value={form.de_change_condition} onChange={v => F('de_change_condition', v)} rows={2} placeholder="What would have to happen" />
+              <EArea label="Change Witness" value={form.de_change_witness} onChange={v => F('de_change_witness', v)} rows={2} placeholder="Who would need to see it" />
+              <ESelect label="Arc Function" value={form.de_arc_function} onChange={v => F('de_arc_function', v)}
+                options={[{value:'arc',label:'Arc (changes)'},{value:'fixed',label:'Fixed (stays the same)'},{value:'both',label:'Both'}]} allowEmpty />
+
+              {/* Operative Cosmology */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>8. Cosmology</span>
+              </div>
+              <ESelect label="Operative Cosmology" value={form.de_operative_cosmology} onChange={v => F('de_operative_cosmology', v)}
+                options={[{value:'deserving',label:'Deserving'},{value:'contractual',label:'Contractual'},{value:'indifferent',label:'Indifferent'},{value:'relational',label:'Relational'},{value:'authored',label:'Authored'}]} allowEmpty />
+              <EField label="Stated Religion" value={form.de_stated_religion} onChange={v => F('de_stated_religion', v)} />
+              <EArea label="Cosmology Conflict" value={form.de_cosmology_conflict} onChange={v => F('de_cosmology_conflict', v)} rows={2} placeholder="Gap between stated belief and operative worldview" />
+              <EArea label="Meaning-Making Style" value={form.de_meaning_making_style} onChange={v => F('de_meaning_making_style', v)} rows={2} />
+
+              {/* Foreclosed Possibility */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>9. Foreclosed Possibility</span>
+              </div>
+              <EArea label="Foreclosed Possibilities" value={form.de_foreclosed_possibilities} onChange={v => F('de_foreclosed_possibilities', v)} rows={2} placeholder="What they've decided is impossible for them (comma-separated)" />
+              <EArea label="Foreclosure Origins" value={form.de_foreclosure_origins} onChange={v => F('de_foreclosure_origins', v)} rows={2} placeholder="Where each foreclosure came from" />
+              <EArea label="Crack Conditions" value={form.de_crack_conditions} onChange={v => F('de_crack_conditions', v)} rows={2} placeholder="What could reopen these doors" />
+
+              {/* Joy */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>10. Joy</span>
+              </div>
+              <EArea label="Joy Trigger" value={form.de_joy_trigger} onChange={v => F('de_joy_trigger', v)} rows={2} placeholder="What actually makes them feel joy" />
+              <EField label="Body Location" value={form.de_joy_body_location} onChange={v => F('de_joy_body_location', v)} placeholder="Where they feel joy physically" />
+              <EArea label="Joy Origin" value={form.de_joy_origin} onChange={v => F('de_joy_origin', v)} rows={2} placeholder="Where this capacity came from" />
+              <EArea label="Forbidden Joy" value={form.de_forbidden_joy} onChange={v => F('de_forbidden_joy', v)} rows={2} placeholder="Joy they won't allow themselves" />
+              <ESelect label="Joy Threat Response" value={form.de_joy_threat_response} onChange={v => F('de_joy_threat_response', v)}
+                options={[{value:'fight',label:'Fight'},{value:'grieve',label:'Grieve'},{value:'deny',label:'Deny'}]} allowEmpty />
+              <EField label="Current Access (1-10)" value={form.de_joy_current_access} onChange={v => F('de_joy_current_access', v)} placeholder="1-10" />
+            </>
+          ) : (c.de_body_relationship || c.de_money_behavior || c.de_time_orientation || c.de_world_belief || c.de_self_narrative_origin || c.de_change_capacity || c.de_operative_cosmology || c.de_joy_trigger) ? (
+            <>
+              {/* Psychology cross-reference */}
+              {(c.core_wound || c.mask_persona || c.core_fear) && (
+                <div style={{ background: 'rgba(104,80,200,0.08)', border: '1px solid rgba(104,80,200,0.2)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12 }}>
+                  <div style={{ color: '#8b7ad8', fontWeight: 600, marginBottom: 4 }}>From Psychology Profile</div>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', color: '#b0a8d0' }}>
+                    {c.core_wound && <span><strong>Wound:</strong> {c.core_wound}</span>}
+                    {c.mask_persona && <span><strong>Mask:</strong> {c.mask_persona}</span>}
+                    {c.core_fear && <span><strong>Fear:</strong> {c.core_fear}</span>}
+                  </div>
+                </div>
+              )}
+              {/* Body */}
+              {(c.de_body_relationship || c.de_body_history) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 12, paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Body</span>
+                  </div>
+                  <DRow label="Relationship" value={c.de_body_relationship?.replace('_', ' ')} accent />
+                  {c.de_body_currency != null && <DRow label="Currency" value={`${c.de_body_currency}/10`} />}
+                  {c.de_body_control != null && <DRow label="Control" value={`${c.de_body_control}/10`} />}
+                  {c.de_body_comfort != null && <DRow label="Comfort" value={`${c.de_body_comfort}/10`} />}
+                  <DRow label="History" value={c.de_body_history} />
+                </>
+              )}
+              {/* Money */}
+              {(c.de_money_behavior || c.de_money_origin_class) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Money & Class</span>
+                  </div>
+                  <DRow label="Behavior" value={c.de_money_behavior?.replace(/_/g, ' ')} accent />
+                  <DRow label="Origin" value={c.de_money_origin_class?.replace(/_/g, ' ')} />
+                  <DRow label="Current" value={c.de_money_current_class?.replace(/_/g, ' ')} />
+                  <DRow label="Gap Direction" value={c.de_class_gap_direction} accent />
+                  <DRow label="Money Wound" value={c.de_money_wound} />
+                </>
+              )}
+              {/* Time */}
+              {(c.de_time_orientation || c.de_time_wound) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Time</span>
+                  </div>
+                  <DRow label="Orientation" value={c.de_time_orientation?.replace(/_/g, ' ')} accent />
+                  <DRow label="Time Wound" value={c.de_time_wound} />
+                </>
+              )}
+              {/* Luck & Circumstance */}
+              {(c.de_world_belief || c.de_circumstance_advantages) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Luck & Circumstance</span>
+                  </div>
+                  <DRow label="World Belief" value={c.de_world_belief} accent />
+                  <DRow label="Advantages" value={c.de_circumstance_advantages} />
+                  <DRow label="Disadvantages" value={c.de_circumstance_disadvantages} />
+                  {c.de_luck_interpretation != null && <DRow label="Luck Interpretation" value={`${c.de_luck_interpretation}/10`} />}
+                  <DRow label="Wound" value={c.de_circumstance_wound} />
+                </>
+              )}
+              {/* Self-Narrative */}
+              {(c.de_self_narrative_origin || c.de_therapy_target) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Self-Narrative</span>
+                  </div>
+                  <DRow label="Origin Story" value={c.de_self_narrative_origin} />
+                  <DRow label="Turning Point" value={c.de_self_narrative_turning_point} />
+                  <DRow label="Villain" value={c.de_self_narrative_villain} />
+                  <DRow label="Narrative Gap" value={c.de_actual_narrative_gap} accent />
+                  <DRow label="Therapy Target" value={c.de_therapy_target} />
+                </>
+              )}
+              {/* Blind Spot */}
+              {(c.de_blind_spot_category || c.de_blind_spot) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Blind Spot</span>
+                  </div>
+                  <DRow label="Category" value={c.de_blind_spot_category} accent />
+                  <DRow label="Blind Spot" value={c.de_blind_spot} />
+                  <DRow label="Evidence" value={c.de_blind_spot_evidence} />
+                  <DRow label="Crack Condition" value={c.de_blind_spot_crack_condition} />
+                </>
+              )}
+              {/* Change */}
+              {(c.de_change_capacity || c.de_arc_function) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Change Capacity</span>
+                  </div>
+                  <DRow label="Capacity" value={c.de_change_capacity?.replace(/_/g, ' ')} accent />
+                  {c.de_change_capacity_score != null && <DRow label="Score" value={`${c.de_change_capacity_score}/10`} />}
+                  <DRow label="Condition" value={c.de_change_condition} />
+                  <DRow label="Witness" value={c.de_change_witness} />
+                  <DRow label="Arc Function" value={c.de_arc_function} accent />
+                </>
+              )}
+              {/* Cosmology */}
+              {(c.de_operative_cosmology || c.de_stated_religion) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Cosmology</span>
+                  </div>
+                  <DRow label="Operative Cosmology" value={c.de_operative_cosmology} accent />
+                  <DRow label="Stated Religion" value={c.de_stated_religion} />
+                  <DRow label="Conflict" value={c.de_cosmology_conflict} />
+                  <DRow label="Meaning-Making" value={c.de_meaning_making_style} />
+                </>
+              )}
+              {/* Foreclosed */}
+              {(c.de_foreclosed_possibilities) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Foreclosed Possibility</span>
+                  </div>
+                  {(typeof c.de_foreclosed_possibilities === 'object' && !Array.isArray(c.de_foreclosed_possibilities))
+                    ? <JsonbDisplay value={c.de_foreclosed_possibilities} label="Foreclosed" />
+                    : <DRow label="Foreclosed" value={Array.isArray(c.de_foreclosed_possibilities) ? c.de_foreclosed_possibilities.join(', ') : c.de_foreclosed_possibilities} />
+                  }
+                  {(typeof c.de_foreclosure_origins === 'object' && !Array.isArray(c.de_foreclosure_origins))
+                    ? <JsonbDisplay value={c.de_foreclosure_origins} label="Origins" />
+                    : <DRow label="Origins" value={Array.isArray(c.de_foreclosure_origins) ? c.de_foreclosure_origins.join(', ') : c.de_foreclosure_origins} />
+                  }
+                  {c.de_foreclosure_visibility && <JsonbDisplay value={c.de_foreclosure_visibility} label="Visibility" />}
+                  {(typeof c.de_crack_conditions === 'object' && !Array.isArray(c.de_crack_conditions))
+                    ? <JsonbDisplay value={c.de_crack_conditions} label="Crack Conditions" />
+                    : <DRow label="Crack Conditions" value={Array.isArray(c.de_crack_conditions) ? c.de_crack_conditions.join(', ') : c.de_crack_conditions} />
+                  }
+                </>
+              )}
+              {/* Joy */}
+              {(c.de_joy_trigger || c.de_forbidden_joy) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Joy</span>
+                  </div>
+                  <DRow label="Trigger" value={c.de_joy_trigger} />
+                  <DRow label="Body Location" value={c.de_joy_body_location} />
+                  <DRow label="Origin" value={c.de_joy_origin} />
+                  <DRow label="Forbidden Joy" value={c.de_forbidden_joy} accent />
+                  <DRow label="Threat Response" value={c.de_joy_threat_response} />
+                  {c.de_joy_current_access != null && <DRow label="Current Access" value={`${c.de_joy_current_access}/10`} />}
+                </>
+              )}
+            </>
+          ) : (
+            <DepthEngineEmptyState characterId={c.id} registryCharId={c.id} onEdit={() => startEdit(tab)} onRefresh={onRefresh} />
+          )}
+        </div>
+      );
 
     /* ── AI WRITER ── */
     case 'ai':
@@ -3448,35 +3992,337 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
 
 
 /* ================================================================
-   BACKFILL BANNER — fills empty JSONB sections from existing data
+   SECTION GENERATE BUTTON — inline AI generate for individual dossier sections
    ================================================================ */
-function BackfillBanner({ character }) {
+function SectionGenerateButton({ characterId, onRefresh }) {
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const resp = await fetch(`/api/v1/character-registry/characters/${characterId}/backfill-sections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      const data = await resp.json();
+      if (data.success && onRefresh) setTimeout(() => onRefresh(), 500);
+    } catch (err) {
+      console.error('Section generate error:', err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <button
+      className="cr-btn-outline"
+      style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: generating ? '#999' : '#6850c8' }}
+      onClick={handleGenerate}
+      disabled={generating}
+    >
+      {generating ? '⟳ Generating…' : '✦ Generate'}
+    </button>
+  );
+}
+
+/* ================================================================
+   SECTION REGENERATE BUTTON — per-section AI generate/regenerate via generate-section endpoint
+   Supports: demographics, death, dilemma, plot_threads, career_status, aesthetic_dna, etc.
+   ================================================================ */
+function SectionRegenerateButton({ characterId, section, onRefresh, label }) {
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const resp = await fetch(`/api/v1/character-registry/characters/${characterId}/generate-section`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ section }),
+      });
+      const data = await resp.json();
+      if (data.success && onRefresh) setTimeout(() => onRefresh(), 500);
+    } catch (err) {
+      console.error(`Section generate (${section}) error:`, err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <button
+      className="cr-btn-outline"
+      style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: generating ? '#999' : '#6850c8' }}
+      onClick={handleGenerate}
+      disabled={generating}
+    >
+      {generating ? '⟳ Generating…' : (label || '⟳ Regenerate')}
+    </button>
+  );
+}
+
+/* ================================================================
+   DEPTH ENGINE EMPTY STATE — shown when all de_* fields are empty
+   ================================================================ */
+function DepthEngineEmptyState({ characterId, onEdit, onRefresh }) {
+  const [generating, setGenerating] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const res = await fetch(`/api/v1/character-depth/${characterId}/generate`, {
+        method: 'POST', headers,
+      });
+      const data = await res.json();
+      if (res.ok && data.proposed) {
+        setPreview(data.proposed);
+      } else {
+        setError(data.error || 'Generation failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const res = await fetch(`/api/v1/character-depth/${characterId}/confirm`, {
+        method: 'POST', headers, body: JSON.stringify({ proposed: preview }),
+      });
+      if (res.ok) {
+        setPreview(null);
+        if (onRefresh) setTimeout(() => onRefresh(), 500);
+      } else {
+        setError('Confirm failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  if (preview) {
+    const dims = Object.entries(preview).filter(([, v]) => v !== null && v !== undefined && v !== '');
+    return (
+      <div style={{ padding: 16 }}>
+        <div style={{ fontSize: 13, color: '#6850c8', fontWeight: 600, marginBottom: 12 }}>
+          Preview: {dims.length} depth fields generated
+        </div>
+        <div style={{ maxHeight: 300, overflow: 'auto', fontSize: 12, color: '#555', marginBottom: 12 }}>
+          {dims.slice(0, 15).map(([k, v]) => (
+            <div key={k} style={{ marginBottom: 4 }}>
+              <strong style={{ color: '#4a4035' }}>{k.replace(/^de_/, '').replace(/_/g, ' ')}:</strong>{' '}
+              {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+            </div>
+          ))}
+          {dims.length > 15 && <div style={{ color: '#999' }}>…and {dims.length - 15} more</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => setPreview(null)}
+            style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 13 }}>
+            Discard
+          </button>
+          <button onClick={handleConfirm}
+            style={{ padding: '8px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Confirm & Save
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cr-dossier-empty" style={{ textAlign: 'center', padding: '28px 16px' }}>
+      <div className="cr-dossier-empty-icon" style={{ fontSize: 32, marginBottom: 8 }}>🧬</div>
+      <p className="cr-dossier-empty-text" style={{ marginBottom: 4 }}>No depth engine data yet.</p>
+      <p style={{ fontSize: 12, color: '#999', marginBottom: 16 }}>
+        10 dimensions: Body, Money, Time, Luck, Self-Narrative, Blind Spot, Change, Cosmology, Foreclosed, Joy
+      </p>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button className="cr-dossier-empty-btn" onClick={onEdit}>
+          ✎ Add Manually
+        </button>
+        <button
+          disabled={generating}
+          onClick={handleGenerate}
+          style={{
+            padding: '8px 20px', background: generating ? '#ddd' : '#6850c8', color: '#fff',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            opacity: generating ? 0.6 : 1,
+          }}
+        >
+          {generating ? '⟳ Generating all 10 dimensions…' : '✦ Auto-Generate with AI'}
+        </button>
+      </div>
+      {error && <div style={{ fontSize: 12, color: '#c43a2a', marginTop: 10 }}>Error: {error}</div>}
+    </div>
+  );
+}
+
+/* ================================================================
+   JSONB DISPLAY HELPER — renders objects/arrays safely, never [object Object]
+   ================================================================ */
+function JsonbDisplay({ value, label }) {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    return (
+      <div className="cr-dossier-row">
+        <span className="cr-dossier-row-label">{label}</span>
+        <span className="cr-dossier-row-value">
+          <ul style={{ margin: 0, paddingLeft: 16, listStyle: 'disc' }}>
+            {value.map((item, i) => (
+              <li key={i} style={{ fontSize: 13, marginBottom: 2 }}>
+                {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+              </li>
+            ))}
+          </ul>
+        </span>
+      </div>
+    );
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).filter(([, v]) => v !== null && v !== undefined && v !== '');
+    if (entries.length === 0) return null;
+    return (
+      <div className="cr-dossier-row" style={{ flexDirection: 'column', gap: 4 }}>
+        <span className="cr-dossier-row-label">{label}</span>
+        <div style={{ paddingLeft: 4 }}>
+          {entries.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', gap: 8, fontSize: 12, marginBottom: 3 }}>
+              <span style={{ color: '#999', minWidth: 80 }}>{k.replace(/_/g, ' ')}</span>
+              <span style={{ color: '#4a4035' }}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+/* ================================================================
+   PSYCHOLOGY EMPTY STATE — shown when all essence fields are empty
+   ================================================================ */
+function PsychologyEmptyState({ characterId, onEdit, onRefresh }) {
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const resp = await fetch(`/api/v1/character-registry/characters/${characterId}/backfill-sections`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await resp.json();
+      if (data.success) {
+        if (onRefresh) setTimeout(() => onRefresh(), 500);
+      } else {
+        setError(data.error || 'Generation failed');
+      }
+    } catch (err) {
+      setError(err.message || 'Network error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="cr-dossier-empty" style={{ textAlign: 'center', padding: '28px 16px' }}>
+      <div className="cr-dossier-empty-icon" style={{ fontSize: 32, marginBottom: 8 }}>🧠</div>
+      <p className="cr-dossier-empty-text" style={{ marginBottom: 4 }}>No psychology data yet.</p>
+      <p style={{ fontSize: 12, color: '#999', marginBottom: 16 }}>
+        Essence Profile: desire, fear, wound, mask, truth, archetype, trait, baseline
+      </p>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button className="cr-dossier-empty-btn" onClick={onEdit}>
+          ✎ Add Manually
+        </button>
+        <button
+          disabled={generating}
+          onClick={handleGenerate}
+          style={{
+            padding: '8px 20px', background: generating ? '#ddd' : '#6850c8', color: '#fff',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            opacity: generating ? 0.6 : 1,
+          }}
+        >
+          {generating ? '⟳ Generating…' : '✦ Auto-Generate with AI'}
+        </button>
+      </div>
+      {error && (
+        <div style={{ fontSize: 12, color: '#c43a2a', marginTop: 10 }}>
+          Error: {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================================================
+   BACKFILL BANNER — fills empty JSONB sections + essence fields
+   ================================================================ */
+function BackfillBanner({ character, onRefresh }) {
   const [filling, setFilling] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
   const hasData = (val) => val && typeof val === 'object' && Object.values(val).some(v => v && v !== '');
   const emptySections = [];
-  if (!hasData(character.career_status))     emptySections.push('Career');
-  if (!hasData(character.aesthetic_dna))      emptySections.push('Aesthetic DNA');
-  if (!hasData(character.voice_signature))    emptySections.push('Voice');
-  if (!hasData(character.story_presence))     emptySections.push('Story Presence');
-  if (!hasData(character.evolution_tracking)) emptySections.push('Evolution');
-  if (!hasData(character.living_context))     emptySections.push('Living Context');
+  if (!hasData(character.career_status))      emptySections.push('Career');
+  if (!hasData(character.aesthetic_dna))       emptySections.push('Aesthetic DNA');
+  if (!hasData(character.voice_signature))     emptySections.push('Voice');
+  if (!hasData(character.story_presence))      emptySections.push('Story Presence');
+  if (!hasData(character.evolution_tracking))  emptySections.push('Evolution');
+  if (!hasData(character.living_context))      emptySections.push('Living Context');
+  if (!hasData(character.relationships_map))   emptySections.push('Relationships');
 
-  if (emptySections.length === 0) return null;
+  // Check essence profile fields
+  const emptyEssence = [];
+  if (!character.core_fear)           emptyEssence.push('Core Fear');
+  if (!character.core_desire)         emptyEssence.push('Core Desire');
+  if (!character.core_wound)          emptyEssence.push('Core Wound');
+  if (!character.mask_persona)        emptyEssence.push('Mask Persona');
+  if (!character.truth_persona)       emptyEssence.push('Truth Persona');
+  if (!character.character_archetype) emptyEssence.push('Archetype');
+  if (!character.signature_trait)     emptyEssence.push('Signature Trait');
+  if (!character.emotional_baseline)  emptyEssence.push('Emotional Baseline');
+
+  const totalEmpty = emptySections.length + emptyEssence.length;
+  if (totalEmpty === 0) return null;
 
   return (
     <div style={{ marginTop: 20, padding: 14, background: 'rgba(100,80,200,0.04)', border: '1px dashed rgba(100,80,200,0.25)', borderRadius: 8 }}>
       <div style={{ fontSize: 13, color: '#6850c8', marginBottom: 6, fontWeight: 600 }}>
-        {emptySections.length} empty section{emptySections.length > 1 ? 's' : ''} detected
+        {totalEmpty} empty field{totalEmpty > 1 ? 's' : ''} detected
       </div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
-        {emptySections.join(' · ')}
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>
+        {emptySections.length > 0 && <span>Sections: {emptySections.join(' · ')}</span>}
       </div>
+      {emptyEssence.length > 0 && (
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
+          Essence: {emptyEssence.join(' · ')}
+        </div>
+      )}
       {result ? (
         <div style={{ fontSize: 12, color: '#4a9a6a', fontWeight: 600 }}>
-          ✓ Filled {result.filled.length} section{result.filled.length !== 1 ? 's' : ''} — refresh to see updates
+          ✓ Filled {result.filled.length} field{result.filled.length !== 1 ? 's' : ''}
         </div>
       ) : (
         <>
@@ -3486,12 +4332,18 @@ function BackfillBanner({ character }) {
               setFilling(true);
               setError(null);
               try {
+                const token = localStorage.getItem('authToken') || localStorage.getItem('token');
                 const resp = await fetch(`/api/v1/character-registry/characters/${character.id}/backfill-sections`, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
                 });
                 const data = await resp.json();
                 if (data.success) {
                   setResult(data);
+                  if (onRefresh) setTimeout(() => onRefresh(), 500);
                 } else {
                   setError(data.error || 'Backfill failed');
                 }
@@ -3508,7 +4360,7 @@ function BackfillBanner({ character }) {
               opacity: filling ? 0.6 : 1,
             }}
           >
-            {filling ? '⟳ Filling sections…' : '✦ Auto-fill Empty Sections from Dossier'}
+            {filling ? '⟳ Filling sections & essence…' : '✦ Auto-fill Empty Sections & Essence'}
           </button>
           {error && (
             <div style={{ fontSize: 12, color: '#c43a2a', marginTop: 8 }}>
@@ -3558,8 +4410,13 @@ function BulkBackfillButton({ registryId, characterCount, onDone }) {
             setRunning(true);
             setError(null);
             try {
+              const token = localStorage.getItem('authToken') || localStorage.getItem('token');
               const resp = await fetch(`/api/v1/character-registry/registries/${registryId}/backfill-all`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
               });
               const data = await resp.json();
               if (data.success) {
@@ -4389,6 +5246,92 @@ function buildFormForTab(tabKey, c) {
         internal_monologue_style: jGet(c.voice_signature, 'internal_monologue_style'),
         emotional_reactivity:     jGet(c.voice_signature, 'emotional_reactivity'),
       };
+    case 'demographics':
+      return {
+        gender:                    c.gender || '',
+        pronouns:                  c.pronouns || '',
+        age:                       c.age || '',
+        birth_year:                c.birth_year || '',
+        ethnicity:                 c.ethnicity || '',
+        species:                   c.species || '',
+        cultural_background:       c.cultural_background || '',
+        nationality:               c.nationality || '',
+        first_language:            c.first_language || '',
+        hometown:                  c.hometown || '',
+        current_city:              c.current_city || '',
+        city_migration_history:    c.city_migration_history || '',
+        class_origin:              c.class_origin || '',
+        current_class:             c.current_class || '',
+        class_mobility_direction:  c.class_mobility_direction || '',
+        family_structure:          c.family_structure || '',
+        parents_status:            c.parents_status || '',
+        sibling_position:          c.sibling_position || '',
+        sibling_count:             c.sibling_count || '',
+        relationship_status:       c.relationship_status || '',
+        has_children:              !!c.has_children,
+        children_ages:             c.children_ages || '',
+        education_experience:      c.education_experience || '',
+        career_history:            c.career_history || '',
+        years_posting:             c.years_posting || '',
+        physical_presence:         c.physical_presence || '',
+        demographic_voice_signature: c.demographic_voice_signature || '',
+        platform_primary:          c.platform_primary || '',
+        follower_tier:             c.follower_tier || '',
+      };
+    case 'death':
+      return {
+        is_alive:     c.is_alive !== false,
+        death_date:   c.death_date || '',
+        death_cause:  c.death_cause || '',
+        death_impact: c.death_impact || '',
+      };
+    case 'depth':
+      return {
+        de_body_relationship:        c.de_body_relationship || '',
+        de_body_currency:            c.de_body_currency ?? '',
+        de_body_control:             c.de_body_control ?? '',
+        de_body_comfort:             c.de_body_comfort ?? '',
+        de_body_history:             c.de_body_history || '',
+        de_money_behavior:           c.de_money_behavior || '',
+        de_money_origin_class:       c.de_money_origin_class || '',
+        de_money_current_class:      c.de_money_current_class || '',
+        de_class_gap_direction:      c.de_class_gap_direction || '',
+        de_money_wound:              c.de_money_wound || '',
+        de_time_orientation:         c.de_time_orientation || '',
+        de_time_wound:               c.de_time_wound || '',
+        de_world_belief:             c.de_world_belief || '',
+        de_circumstance_advantages:  c.de_circumstance_advantages || '',
+        de_circumstance_disadvantages: c.de_circumstance_disadvantages || '',
+        de_luck_interpretation:      c.de_luck_interpretation ?? '',
+        de_circumstance_wound:       c.de_circumstance_wound || '',
+        de_self_narrative_origin:    c.de_self_narrative_origin || '',
+        de_self_narrative_turning_point: c.de_self_narrative_turning_point || '',
+        de_self_narrative_villain:   c.de_self_narrative_villain || '',
+        de_actual_narrative_gap:     c.de_actual_narrative_gap || '',
+        de_therapy_target:           c.de_therapy_target || '',
+        de_blind_spot_category:      c.de_blind_spot_category || '',
+        de_blind_spot:               c.de_blind_spot || '',
+        de_blind_spot_evidence:      c.de_blind_spot_evidence || '',
+        de_blind_spot_crack_condition: c.de_blind_spot_crack_condition || '',
+        de_change_capacity:          c.de_change_capacity || '',
+        de_change_capacity_score:    c.de_change_capacity_score ?? '',
+        de_change_condition:         c.de_change_condition || '',
+        de_change_witness:           c.de_change_witness || '',
+        de_arc_function:             c.de_arc_function || '',
+        de_operative_cosmology:      c.de_operative_cosmology || '',
+        de_stated_religion:          c.de_stated_religion || '',
+        de_cosmology_conflict:       c.de_cosmology_conflict || '',
+        de_meaning_making_style:     c.de_meaning_making_style || '',
+        de_foreclosed_possibilities: Array.isArray(c.de_foreclosed_possibilities) ? c.de_foreclosed_possibilities.join(', ') : (c.de_foreclosed_possibilities || ''),
+        de_foreclosure_origins:      Array.isArray(c.de_foreclosure_origins) ? c.de_foreclosure_origins.join(', ') : (c.de_foreclosure_origins || ''),
+        de_crack_conditions:         Array.isArray(c.de_crack_conditions) ? c.de_crack_conditions.join(', ') : (c.de_crack_conditions || ''),
+        de_joy_trigger:              c.de_joy_trigger || '',
+        de_joy_body_location:        c.de_joy_body_location || '',
+        de_joy_origin:               c.de_joy_origin || '',
+        de_forbidden_joy:            c.de_forbidden_joy || '',
+        de_joy_threat_response:      c.de_joy_threat_response || '',
+        de_joy_current_access:       c.de_joy_current_access ?? '',
+      };
     default:
       return {};
   }
@@ -4482,6 +5425,95 @@ function buildPayloadForTab(tabKey, form) {
           emotional_reactivity:     form.emotional_reactivity,
         },
       };
+    case 'demographics':
+      return {
+        gender:                    form.gender || null,
+        pronouns:                  form.pronouns || null,
+        age:                       form.age ? parseInt(form.age, 10) || null : null,
+        birth_year:                form.birth_year ? parseInt(form.birth_year, 10) || null : null,
+        ethnicity:                 form.ethnicity || null,
+        species:                   form.species || null,
+        cultural_background:       form.cultural_background || null,
+        nationality:               form.nationality || null,
+        first_language:            form.first_language || null,
+        hometown:                  form.hometown || null,
+        current_city:              form.current_city || null,
+        city_migration_history:    form.city_migration_history || null,
+        class_origin:              form.class_origin || null,
+        current_class:             form.current_class || null,
+        class_mobility_direction:  form.class_mobility_direction || null,
+        family_structure:          form.family_structure || null,
+        parents_status:            form.parents_status || null,
+        sibling_position:          form.sibling_position || null,
+        sibling_count:             form.sibling_count ? parseInt(form.sibling_count, 10) || null : null,
+        relationship_status:       form.relationship_status || null,
+        has_children:              !!form.has_children,
+        children_ages:             form.children_ages || null,
+        education_experience:      form.education_experience || null,
+        career_history:            form.career_history || null,
+        years_posting:             form.years_posting ? parseInt(form.years_posting, 10) || null : null,
+        physical_presence:         form.physical_presence || null,
+        demographic_voice_signature: form.demographic_voice_signature || null,
+        platform_primary:          form.platform_primary || null,
+        follower_tier:             form.follower_tier || null,
+      };
+    case 'death':
+      return {
+        is_alive:     !!form.is_alive,
+        death_date:   form.death_date || null,
+        death_cause:  form.death_cause || null,
+        death_impact: form.death_impact || null,
+      };
+    case 'depth': {
+      const toInt = v => v !== '' && v != null ? parseInt(v, 10) || null : null;
+      const toArr = v => typeof v === 'string' ? v.split(',').map(s => s.trim()).filter(Boolean) : (v || null);
+      return {
+        de_body_relationship:        form.de_body_relationship || null,
+        de_body_currency:            toInt(form.de_body_currency),
+        de_body_control:             toInt(form.de_body_control),
+        de_body_comfort:             toInt(form.de_body_comfort),
+        de_body_history:             form.de_body_history || null,
+        de_money_behavior:           form.de_money_behavior || null,
+        de_money_origin_class:       form.de_money_origin_class || null,
+        de_money_current_class:      form.de_money_current_class || null,
+        de_class_gap_direction:      form.de_class_gap_direction || null,
+        de_money_wound:              form.de_money_wound || null,
+        de_time_orientation:         form.de_time_orientation || null,
+        de_time_wound:               form.de_time_wound || null,
+        de_world_belief:             form.de_world_belief || null,
+        de_circumstance_advantages:  form.de_circumstance_advantages || null,
+        de_circumstance_disadvantages: form.de_circumstance_disadvantages || null,
+        de_luck_interpretation:      toInt(form.de_luck_interpretation),
+        de_circumstance_wound:       form.de_circumstance_wound || null,
+        de_self_narrative_origin:    form.de_self_narrative_origin || null,
+        de_self_narrative_turning_point: form.de_self_narrative_turning_point || null,
+        de_self_narrative_villain:   form.de_self_narrative_villain || null,
+        de_actual_narrative_gap:     form.de_actual_narrative_gap || null,
+        de_therapy_target:           form.de_therapy_target || null,
+        de_blind_spot_category:      form.de_blind_spot_category || null,
+        de_blind_spot:               form.de_blind_spot || null,
+        de_blind_spot_evidence:      form.de_blind_spot_evidence || null,
+        de_blind_spot_crack_condition: form.de_blind_spot_crack_condition || null,
+        de_change_capacity:          form.de_change_capacity || null,
+        de_change_capacity_score:    toInt(form.de_change_capacity_score),
+        de_change_condition:         form.de_change_condition || null,
+        de_change_witness:           form.de_change_witness || null,
+        de_arc_function:             form.de_arc_function || null,
+        de_operative_cosmology:      form.de_operative_cosmology || null,
+        de_stated_religion:          form.de_stated_religion || null,
+        de_cosmology_conflict:       form.de_cosmology_conflict || null,
+        de_meaning_making_style:     form.de_meaning_making_style || null,
+        de_foreclosed_possibilities: toArr(form.de_foreclosed_possibilities),
+        de_foreclosure_origins:      toArr(form.de_foreclosure_origins),
+        de_crack_conditions:         toArr(form.de_crack_conditions),
+        de_joy_trigger:              form.de_joy_trigger || null,
+        de_joy_body_location:        form.de_joy_body_location || null,
+        de_joy_origin:               form.de_joy_origin || null,
+        de_forbidden_joy:            form.de_forbidden_joy || null,
+        de_joy_threat_response:      form.de_joy_threat_response || null,
+        de_joy_current_access:       toInt(form.de_joy_current_access),
+      };
+    }
     default:
       return form;
   }

@@ -935,10 +935,11 @@ router.post('/commit', optionalAuth, async (req, res) => {
       status: 'draft',
 
       // Psychology
-      core_desire: c.surface_want || '',
-      core_fear: c.real_want || '',
+      core_desire: c.real_want || c.surface_want || '',
       core_wound: c.origin_story || '',
-      signature_trait: c.aesthetic || '',
+      signature_trait: c.signature_quote || c.aesthetic || '',
+      mask_persona: c.public_persona || '',
+      truth_persona: c.private_reality || '',
       description: c.occupation || '',
 
       // JSONB
@@ -995,6 +996,9 @@ router.post('/commit', optionalAuth, async (req, res) => {
       demographic_voice_signature: c.demographic_voice_signature || null,
       platform_primary: c.platform_primary || null,
       follower_tier: c.follower_tier || null,
+
+      // Intimate eligibility — set on the actual boolean column
+      intimate_eligible: intimateEligible,
     };
 
     const newChar = await db.RegistryCharacter.create(characterData);
@@ -1040,16 +1044,8 @@ router.post('/commit', optionalAuth, async (req, res) => {
           wcData.what_lala_feels = c.intimate_profile.what_she_withholds || null;
         }
 
-        const [wc] = await db.sequelize.query(
-          `INSERT INTO world_characters (id, ${Object.keys(wcData).join(', ')}, created_at, updated_at)
-           VALUES (gen_random_uuid(), ${Object.keys(wcData).map((_, i) => `$${i + 1}`).join(', ')}, NOW(), NOW())
-           RETURNING id`,
-          {
-            bind: Object.values(wcData),
-            type: db.sequelize.QueryTypes.INSERT,
-          }
-        );
-        worldCharId = wc?.[0]?.id || null;
+        const wcRecord = await db.WorldCharacter.create(wcData);
+        worldCharId = wcRecord?.id || null;
 
         // Update registry character with world_character_id cross-link
         if (worldCharId) {

@@ -59,7 +59,7 @@ const AuditLog = () => {
       if (filters.endDate) params.append('endDate', filters.endDate);
 
       const response = await fetch(`/api/v1/audit-logs?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem('authToken') || localStorage.getItem('token')}` },
       });
 
       if (!response.ok) {

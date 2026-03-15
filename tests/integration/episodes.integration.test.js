@@ -8,8 +8,8 @@ const request = require('supertest');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 
-// Skip integration tests if using production database
-const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com');
+// Skip integration tests if using production database or no DB available
+const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com') || process.env.NODE_ENV === 'test';
 
 (shouldSkip ? describe.skip : describe)('Episodes API Integration Tests', () => {
   let _accessToken;

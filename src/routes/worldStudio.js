@@ -78,6 +78,34 @@ function safeJson(val, fallback = []) {
   try { return JSON.parse(val); } catch { return fallback; }
 }
 
+// ── Utility helpers ──────────────────────────────────────────────────────
+
+/** Parse "late 20s" → 28, "early 30s" → 32, "mid 40s" → 45, "20s" → 25 */
+function parseAgeRange(ageRange) {
+  if (!ageRange) return null;
+  const s = ageRange.toLowerCase().trim();
+  const numMatch = s.match(/(\d+)/);
+  if (!numMatch) return null;
+  const base = parseInt(numMatch[1], 10);
+  if (s.includes('late'))  return base + 8;
+  if (s.includes('early')) return base + 2;
+  if (s.includes('mid'))   return base + 5;
+  // bare "20s", "30s" etc → midpoint
+  if (s.match(/\d+s/))     return base + 5;
+  return base;
+}
+
+/** Derive pronouns from gender */
+function derivePronouns(gender) {
+  if (!gender) return null;
+  const g = gender.toLowerCase().trim();
+  if (g === 'male')       return 'he/him';
+  if (g === 'female')     return 'she/her';
+  if (g === 'non_binary' || g === 'non-binary' || g === 'nonbinary') return 'they/them';
+  if (g === 'agender')    return 'they/them';
+  return null;
+}
+
 // ── Registry sync helpers ──────────────────────────────────────────────────
 // Map World Studio character types → Registry role_type enum
 const ROLE_MAP = {
@@ -205,9 +233,9 @@ function areSexuallyCompatible(a, b) {
   // Bisexual/pansexual/queer/fluid are compatible with anyone
   const flex = ['bisexual', 'pansexual', 'queer', 'fluid'];
   if (flex.includes(sA) || flex.includes(sB)) return true;
-  // Non-binary/agender: compatible with anyone who isn't strictly straight
+  // Non-binary/agender: compatible unless BOTH are strictly straight
   if (['non_binary', 'agender'].includes(gA) || ['non_binary', 'agender'].includes(gB)) {
-    return sA !== 'straight' || sB !== 'straight';
+    return !(sA === 'straight' && sB === 'straight');
   }
   // With explicit gender: check actual compatibility
   if (gA && gB) {
@@ -421,18 +449,24 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
     `INSERT INTO registry_characters
        (id, registry_id, character_key, display_name, selected_name, subtitle,
         role_type, role_label, appearance_mode, status,
-        core_desire, core_fear, signature_trait, description,
+        core_desire, core_fear, core_wound, mask_persona, truth_persona,
+        character_archetype, signature_trait, emotional_baseline, description,
         personality_matrix, aesthetic_dna, career_status,
         relationships_map, voice_signature, story_presence,
         evolution_tracking, extra_fields, name_options,
+        gender, pronouns, age, sexuality, relationship_status, hometown, current_city,
+        physical_presence,
         world_character_id, sort_order, created_at, updated_at)
      VALUES
        (:id, :registry_id, :char_key, :display_name, :selected_name, :subtitle,
         :role_type, :role_label, 'on_page', 'draft',
-        :core_desire, :core_fear, :signature_trait, :description,
+        :core_desire, :core_fear, :core_wound, :mask_persona, :truth_persona,
+        :character_archetype, :signature_trait, :emotional_baseline, :description,
         :personality_matrix, :aesthetic_dna, :career_status,
         :relationships_map, :voice_signature, :story_presence,
         :evolution_tracking, :extra_fields, :name_options,
+        :gender, :pronouns, :age, :sexuality, :relationship_status, :hometown, :current_city,
+        :physical_presence,
         :world_char_id, 0, NOW(), NOW())`,
     {
       replacements: {
@@ -444,25 +478,41 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
         subtitle: [c.age_range, c.occupation].filter(Boolean).join(' · ') || null,
         role_type: roleType,
         role_label: c.character_type || null,
-        core_desire: c.surface_want || null,
-        core_fear: c.real_want || null,
+        // Essence Profile — corrected semantic mappings
+        core_desire: c.real_want || null,                    // what they'd never admit wanting
+        core_fear: c.core_fear || null,                      // new prompt field
+        core_wound: c.desire_they_wont_admit || null,        // the complicating private desire
+        mask_persona: c.public_persona || null,              // how the world sees them
+        truth_persona: c.private_reality || null,            // what only close people know
+        character_archetype: c.character_archetype || null,   // new prompt field
         signature_trait: c.signature || null,
+        emotional_baseline: c.emotional_baseline || null,     // new prompt field
         description: [c.occupation, c.dynamic].filter(Boolean).join('. ') || null,
 
         personality_matrix: JSON.stringify({
-          core_wound: null, desire_line: c.surface_want || null,
-          fear_line: c.real_want || null, coping_mechanism: null,
-          self_deception: null, at_their_best: null, at_their_worst: null,
+          core_wound: c.desire_they_wont_admit || null,
+          desire_line: c.real_want || null,
+          fear_line: c.core_fear || null,
+          coping_mechanism: c.moral_code || null,
+          self_deception: c.surface_want || null,
+          at_their_best: c.at_their_best || null,
+          at_their_worst: c.at_their_worst || null,
         }),
         aesthetic_dna: JSON.stringify({
-          era_aesthetic: c.aesthetic || null, color_palette: null,
-          signature_silhouette: null, signature_accessories: null,
-          glam_energy: null, visual_evolution_notes: null,
+          era_aesthetic: c.aesthetic || null,
+          color_palette: c.color_palette || null,              // new prompt field
+          signature_silhouette: c.signature_silhouette || null, // new prompt field
+          signature_accessories: c.signature_accessories || null, // new prompt field
+          glam_energy: c.glam_energy || null,                  // new prompt field
+          visual_evolution_notes: null,
         }),
         career_status: JSON.stringify({
-          profession: c.occupation || null, career_goal: c.surface_want || null,
-          reputation_level: null, brand_relationships: null,
-          financial_status: null, public_recognition: null,
+          profession: c.occupation || null,
+          career_goal: c.career_goal || null,                  // new prompt field
+          reputation_level: null,
+          brand_relationships: null,
+          financial_status: null,
+          public_recognition: c.public_persona || null,
           ongoing_arc: c.arc_role || null,
         }),
         relationships_map: JSON.stringify({
@@ -471,11 +521,15 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
           dynamic_notes: c.dynamic || null,
           tension_type: c.tension_type || null,
           what_they_want_from_lala: c.what_they_want_from_lala || null,
+          attracted_to: c.attracted_to || null,
+          how_they_love: c.how_they_love || null,
         }),
         voice_signature: JSON.stringify({
-          speech_pattern: null, vocabulary_tone: null,
-          catchphrases: c.signature || null,
-          internal_monologue_style: null, emotional_reactivity: null,
+          speech_pattern: c.speech_pattern || null,
+          vocabulary_tone: c.vocabulary_tone || null,
+          catchphrases: c.catchphrases || null,
+          internal_monologue_style: c.internal_monologue_style || null,
+          emotional_reactivity: c.how_they_love || null,
         }),
         story_presence: JSON.stringify({
           appears_in_books: worldTag,
@@ -491,13 +545,25 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
         extra_fields: JSON.stringify({
           source: 'world_studio',
           world_character_id: worldCharId,
-          sexuality: c.sexuality || null,
           intimate_eligible: c.intimate_eligible || false,
           intimate_style: c.intimate_style || null,
           intimate_dynamic: c.intimate_dynamic || null,
           what_lala_feels: c.what_lala_feels || null,
+          moral_code: c.moral_code || null,
+          fidelity_pattern: c.fidelity_pattern || null,
+          committed_to: c.committed_to || null,
+          career_echo_connection: c.career_echo_connection || false,
         }),
         name_options: JSON.stringify([c.name]),
+        // Demographics layer
+        gender: c.gender || null,
+        pronouns: derivePronouns(c.gender),
+        age: parseAgeRange(c.age_range),
+        sexuality: c.sexuality || null,
+        relationship_status: c.relationship_status || null,
+        hometown: c.origin_story || null,
+        current_city: c.world_location || null,
+        physical_presence: c.aesthetic || null,
         world_char_id: worldCharId,
       },
       type: sequelize.QueryTypes.INSERT,
@@ -612,6 +678,7 @@ async function syncRelationships(rcId, c, registryId, protagonistName = null) {
 async function seedInterCharacterRelationships(characters, registryId, maxPairs = 5) {
   let created = 0;
   const pairs = [];
+  const seeded = [];
 
   // Build all possible pairs from INTER_CHAR_PAIRINGS rules
   for (let i = 0; i < characters.length; i++) {
@@ -688,11 +755,77 @@ async function seedInterCharacterRelationships(characters, registryId, maxPairs 
       );
       console.log(`seedInterChar: Created ${relType} candidate ${relId} (${a.name} ↔ ${b.name})`);
       created++;
+      seeded.push({ a, b, relType, connMode });
     } catch (err) {
       console.error(`seedInterChar error (${a.name} ↔ ${b.name}):`, err.message);
     }
   }
+
+  // Backfill relationships_map JSONB on registry characters with seeded data
+  if (seeded.length > 0) {
+    await backfillRelationshipsMap(seeded);
+  }
+
   return created;
+}
+
+/**
+ * After seeding inter-character relationships, update the relationships_map JSONB
+ * on each registry character with categorized relationship data.
+ */
+async function backfillRelationshipsMap(seededPairs) {
+  // Group relationships by registry character
+  const charRels = new Map(); // registry_character_id → { allies: [], rivals: [], mentors: [], love_interests: [] }
+  for (const { a, b, relType } of seededPairs) {
+    for (const [self, other] of [[a, b], [b, a]]) {
+      if (!self.registry_character_id) continue;
+      if (!charRels.has(self.registry_character_id)) {
+        charRels.set(self.registry_character_id, { allies: [], rivals: [], mentors: [], love_interests: [], business_partners: [] });
+      }
+      const map = charRels.get(self.registry_character_id);
+      const entry = other.name;
+      const rt = relType.toLowerCase();
+      if (/roman|love|affair|attract|triangle|blurred|office romance|complicated history|old vs new|competing/i.test(relType)) {
+        map.love_interests.push(entry);
+      } else if (/rival|pressure|politics|competition/i.test(relType)) {
+        map.rivals.push(entry);
+      } else if (/mentor|guidance|apprentice/i.test(relType)) {
+        map.mentors.push(entry);
+      } else if (/collab|partner|ally|creative partner|professional ally/i.test(relType)) {
+        map.business_partners.push(entry);
+      } else {
+        map.allies.push(entry);
+      }
+    }
+  }
+
+  // Merge into existing relationships_map on each registry character
+  for (const [rcId, rels] of charRels) {
+    try {
+      const [existing] = await sequelize.query(
+        'SELECT relationships_map FROM registry_characters WHERE id = :id',
+        { replacements: { id: rcId }, type: sequelize.QueryTypes.SELECT }
+      );
+      const current = (existing?.relationships_map && typeof existing.relationships_map === 'object')
+        ? existing.relationships_map : {};
+
+      const merged = {
+        ...current,
+        allies: [...new Set([...(current.allies || []), ...rels.allies])].filter(Boolean) || null,
+        rivals: [...new Set([...(current.rivals || []), ...rels.rivals])].filter(Boolean) || null,
+        mentors: [...new Set([...(current.mentors || []), ...rels.mentors])].filter(Boolean) || null,
+        love_interests: [...new Set([...(current.love_interests || []), ...rels.love_interests])].filter(Boolean) || null,
+        business_partners: [...new Set([...(current.business_partners || []), ...rels.business_partners])].filter(Boolean) || null,
+      };
+
+      await sequelize.query(
+        'UPDATE registry_characters SET relationships_map = :map, updated_at = NOW() WHERE id = :id',
+        { replacements: { id: rcId, map: JSON.stringify(merged) }, type: sequelize.QueryTypes.UPDATE }
+      );
+    } catch (err) {
+      console.error(`backfillRelationshipsMap error for ${rcId}:`, err.message);
+    }
+  }
 }
 
 // Variable scene length logic based on relationship depth and type
@@ -722,8 +855,9 @@ router.post('/world/generate-ecosystem', optionalAuth, async (req, res) => {
       show_id,
       world_tag = 'lalaverse',
       world_context = {},
-      character_count = 8,
+      character_count: rawCount = 8,
     } = req.body;
+    const character_count = Math.max(3, Math.min(20, parseInt(rawCount, 10) || 8));
 
     const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
     const series_label = req.body.series_label || wCfg.series_label;
@@ -736,11 +870,11 @@ router.post('/world/generate-ecosystem', optionalAuth, async (req, res) => {
       protagonist    = wCfg.protagonist,
     } = world_context;
 
-    // Fetch existing world characters to avoid duplication
+    // Fetch existing world characters in this world to avoid duplication
     const existing = await Q(req, `
       SELECT name, character_type, occupation FROM world_characters
-      WHERE status != 'archived' ORDER BY created_at DESC LIMIT 20
-    `);
+      WHERE status != 'archived' AND world_tag = :world_tag ORDER BY created_at DESC
+    `, { replacements: { world_tag } });
 
     const result = await claude(
       wCfg.system_prompt,
@@ -763,24 +897,39 @@ Return JSON only:
   "characters": [
     {
       "name": "full name",
+      "gender": "male|female|non_binary|agender — explicit gender for relationship compatibility",
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
       "world_location": "where they exist in ${wCfg.title}",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant",
+      "character_archetype": "Strategist|Dreamer|Performer|Guardian|Rebel|Visionary|Healer|Trickster|Sage|Creator — their core archetype",
+      "emotional_baseline": "calm|volatile|guarded|warm|anxious|detached|intense|playful — their default emotional register",
+      "at_their_best": "one sentence — who they are when everything aligns",
+      "at_their_worst": "one sentence — who they become when cornered or broken",
       "relationship_status": "single|dating|engaged|married|divorced|separated|its_complicated — their actual status, not what they tell people",
       "committed_to": "name of the person they're committed to (another character or offscreen person), or null if single",
       "moral_code": "1-2 sentences about their personal ethics — what lines they won't cross, or what lines they pretend they won't cross",
       "fidelity_pattern": "faithful_tested|faithful_untested|emotionally_unfaithful|physically_unfaithful|serial_cheater|loyal_until_broken|would_never|already_has — how they behave when commitment meets temptation",
       "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
+      "core_fear": "the thing they're most afraid of — distinct from what they want",
       "aesthetic": "how they look, dress, move — specific and visual",
+      "color_palette": "2-3 signature colors that define their visual identity (e.g. 'matte black, champagne gold, oxblood')",
+      "signature_silhouette": "their signature clothing shape (e.g. 'oversized blazers over slip dresses')",
+      "signature_accessories": "1-2 items they're known for (e.g. 'thin gold chain, vintage watch')",
+      "glam_energy": "Minimal|Maximal|Editorial — their beauty/grooming intensity",
       "signature": "the one thing about them that is unforgettable",
       "surface_want": "what they'd tell you they want",
       "real_want": "what they'd never admit",
+      "career_goal": "their specific professional ambition — distinct from surface_want",
       "what_they_want_from_lala": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
       "dynamic": "the texture of their connection with ${protagonist}",
       "tension_type": "romantic|professional|creative|power|unspoken|moral|fidelity|temptation|betrayal|guilt",
+      "speech_pattern": "how they talk — sentence structure, pace, verbal tics (e.g. 'clipped sentences, never asks questions, uses silence as punctuation')",
+      "vocabulary_tone": "the register and flavor of their language (e.g. 'corporate polish masking street vernacular')",
+      "catchphrases": "1-2 signature phrases or verbal habits they repeat (e.g. 'honestly though...', 'that's not my problem')",
+      "internal_monologue_style": "how their inner thoughts sound — formal, fragmented, poetic, anxious, detached, etc.",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
       "what_lala_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
@@ -798,7 +947,7 @@ Return JSON only:
   ],
   "generation_notes": "brief note on ecosystem logic — who connects to who, what tensions exist, which characters test each other's loyalty/fidelity, who argues, who stays, who leaves"
 }`,
-      10000
+      16000
     );
 
     const parsed = parseJSON(result);
@@ -817,66 +966,48 @@ Return JSON only:
     // Insert each character + sync to registry
     const registryId = await findOrCreateRegistryForWorld(req, world_tag);
     const inserted = [];
+    const WorldCharacter = req.app.locals.db?.WorldCharacter || require('../models').WorldCharacter;
     for (const c of parsed.characters) {
-      const charId = uuidv4();
-      await sequelize.query(
-        `INSERT INTO world_characters
-           (id, batch_id, name, age_range, occupation, world_location, character_type,
-            sexuality, intimate_eligible, aesthetic, signature,
-            surface_want, real_want, what_they_want_from_lala,
-            how_they_meet, dynamic, tension_type,
-            intimate_style, intimate_dynamic, what_lala_feels,
-            arc_role, exit_reason, career_echo_connection,
-            attracted_to, how_they_love, desire_they_wont_admit,
-            relationship_graph, family_layer, origin_story,
-            public_persona, private_reality,
-            relationship_status, committed_to, moral_code, fidelity_pattern,
-            status, current_tension, created_at, updated_at)
-         VALUES
-           (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
-            :sexuality, :intimate_eligible, :aesthetic, :signature,
-            :surface_want, :real_want, :what_from_lala,
-            :how_meet, :dynamic, :tension_type,
-            :intimate_style, :intimate_dynamic, :what_lala_feels,
-            :arc_role, :exit_reason, :career_echo,
-            :attracted_to, :how_they_love, :desire_they_wont_admit,
-            :relationship_graph, :family_layer, :origin_story,
-            :public_persona, :private_reality,
-            :relationship_status, :committed_to, :moral_code, :fidelity_pattern,
-            'draft', 'Stable', NOW(), NOW())`,
-        {
-          replacements: {
-            id: charId, batch_id: batchId,
-            name: c.name, age_range: c.age_range || null, occupation: c.occupation || null,
-            world_location: c.world_location || null, char_type: c.character_type,
-            sexuality: c.sexuality || null,
-            intimate_eligible: c.intimate_eligible || false,
-            aesthetic: c.aesthetic || null, signature: c.signature || null,
-            surface_want: c.surface_want || null, real_want: c.real_want || null,
-            what_from_lala: c.what_they_want_from_lala || null,
-            how_meet: c.how_they_meet || null, dynamic: c.dynamic || null,
-            tension_type: c.tension_type || null,
-            intimate_style: c.intimate_style || null, intimate_dynamic: c.intimate_dynamic || null,
-            what_lala_feels: c.what_lala_feels || null,
-            arc_role: c.arc_role || null, exit_reason: c.exit_reason || null,
-            career_echo: c.career_echo_connection || false,
-            attracted_to: c.attracted_to || null,
-            how_they_love: c.how_they_love || null,
-            desire_they_wont_admit: c.desire_they_wont_admit || null,
-            relationship_graph: JSON.stringify(c.relationship_graph || []),
-            family_layer: c.family_layer || null,
-            origin_story: c.origin_story || null,
-            public_persona: c.public_persona || null,
-            private_reality: c.private_reality || null,
-            relationship_status: c.relationship_status || null,
-            committed_to: c.committed_to || null,
-            moral_code: c.moral_code || null,
-            fidelity_pattern: c.fidelity_pattern || null,
-            world_tag: world_tag,
-          },
-          type: sequelize.QueryTypes.INSERT,
-        }
-      );
+      const wcRecord = await WorldCharacter.create({
+        batch_id: batchId,
+        name: c.name,
+        gender: c.gender || null,
+        age_range: c.age_range || null,
+        occupation: c.occupation || null,
+        world_location: c.world_location || null,
+        character_type: c.character_type,
+        sexuality: c.sexuality || null,
+        intimate_eligible: c.intimate_eligible || false,
+        aesthetic: c.aesthetic || null,
+        signature: c.signature || null,
+        surface_want: c.surface_want || null,
+        real_want: c.real_want || null,
+        what_they_want_from_lala: c.what_they_want_from_lala || null,
+        how_they_meet: c.how_they_meet || null,
+        dynamic: c.dynamic || null,
+        tension_type: c.tension_type || null,
+        intimate_style: c.intimate_style || null,
+        intimate_dynamic: c.intimate_dynamic || null,
+        what_lala_feels: c.what_lala_feels || null,
+        arc_role: c.arc_role || null,
+        exit_reason: c.exit_reason || null,
+        career_echo_connection: c.career_echo_connection || false,
+        attracted_to: c.attracted_to || null,
+        how_they_love: c.how_they_love || null,
+        desire_they_wont_admit: c.desire_they_wont_admit || null,
+        relationship_graph: c.relationship_graph || [],
+        family_layer: c.family_layer || null,
+        origin_story: c.origin_story || null,
+        public_persona: c.public_persona || null,
+        private_reality: c.private_reality || null,
+        relationship_status: c.relationship_status || null,
+        committed_to: c.committed_to || null,
+        moral_code: c.moral_code || null,
+        fidelity_pattern: c.fidelity_pattern || null,
+        world_tag: world_tag,
+        status: 'draft',
+      });
+      const charId = wcRecord.id;
 
       // Sync to canonical registry
       const rcId = await syncToRegistry(req, charId, c, registryId, world_tag, wCfg.protagonist);
@@ -946,7 +1077,12 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
       'intimate_dynamic','what_lala_feels','arc_role','exit_reason','current_tension','status',
       'attracted_to','how_they_love','desire_they_wont_admit','relationship_graph',
       'family_layer','origin_story','public_persona','private_reality',
-      'gender','ethnicity','species','is_alive','death_date','death_cause','death_impact'];
+      'gender','ethnicity','species','is_alive','death_date','death_cause','death_impact',
+      'character_type','intimate_eligible','relationship_status','committed_to','moral_code','fidelity_pattern',
+      // Dossier-aligned fields
+      'core_fear','character_archetype','emotional_baseline','at_their_best','at_their_worst',
+      'color_palette','signature_silhouette','signature_accessories','glam_energy',
+      'speech_pattern','vocabulary_tone','catchphrases','internal_monologue_style','career_goal'];
     const updates = [];
     const rep = { id: req.params.id };
     fields.forEach(f => {
@@ -956,7 +1092,98 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
     updates.push('updated_at = NOW()');
     await sequelize.query(`UPDATE world_characters SET ${updates.join(', ')} WHERE id = :id`, { replacements: rep, type: sequelize.QueryTypes.UPDATE });
     const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
-    res.json({ character: char });
+
+    // Auto re-sync to registry if linked
+    let registrySynced = false;
+    try {
+      const [rc] = await Q(req,
+        'SELECT id FROM registry_characters WHERE world_character_id = :id',
+        { replacements: { id: req.params.id } }
+      );
+      if (rc) {
+        const roleType = ROLE_MAP[char.character_type] || 'special';
+        await sequelize.query(
+          `UPDATE registry_characters SET
+            display_name = :name, subtitle = :subtitle,
+            role_type = :role_type, role_label = :role_label,
+            core_desire = :core_desire, core_fear = :core_fear,
+            core_wound = :core_wound, mask_persona = :mask_persona, truth_persona = :truth_persona,
+            character_archetype = :character_archetype, signature_trait = :signature_trait,
+            emotional_baseline = :emotional_baseline, description = :description,
+            personality_matrix = :personality_matrix, aesthetic_dna = :aesthetic_dna,
+            career_status = :career_status, voice_signature = :voice_signature,
+            gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
+            relationship_status = :relationship_status,
+            hometown = :hometown, current_city = :current_city,
+            physical_presence = :physical_presence,
+            updated_at = NOW()
+          WHERE id = :rc_id`,
+          {
+            replacements: {
+              rc_id: rc.id,
+              name: char.name,
+              subtitle: [char.age_range, char.occupation].filter(Boolean).join(' · ') || null,
+              role_type: roleType,
+              role_label: char.character_type || null,
+              core_desire: char.real_want || null,
+              core_fear: char.core_fear || null,
+              core_wound: char.desire_they_wont_admit || null,
+              mask_persona: char.public_persona || null,
+              truth_persona: char.private_reality || null,
+              character_archetype: char.character_archetype || null,
+              signature_trait: char.signature || null,
+              emotional_baseline: char.emotional_baseline || null,
+              description: [char.occupation, char.dynamic].filter(Boolean).join('. ') || null,
+              personality_matrix: JSON.stringify({
+                core_wound: char.desire_they_wont_admit || null,
+                desire_line: char.real_want || null,
+                fear_line: char.core_fear || null,
+                coping_mechanism: char.moral_code || null,
+                self_deception: char.surface_want || null,
+                at_their_best: char.at_their_best || null,
+                at_their_worst: char.at_their_worst || null,
+              }),
+              aesthetic_dna: JSON.stringify({
+                era_aesthetic: char.aesthetic || null,
+                color_palette: char.color_palette || null,
+                signature_silhouette: char.signature_silhouette || null,
+                signature_accessories: char.signature_accessories || null,
+                glam_energy: char.glam_energy || null,
+                visual_evolution_notes: null,
+              }),
+              career_status: JSON.stringify({
+                profession: char.occupation || null,
+                career_goal: char.career_goal || null,
+                reputation_level: null, brand_relationships: null, financial_status: null,
+                public_recognition: char.public_persona || null,
+                ongoing_arc: char.arc_role || null,
+              }),
+              voice_signature: JSON.stringify({
+                speech_pattern: char.speech_pattern || null,
+                vocabulary_tone: char.vocabulary_tone || null,
+                catchphrases: char.catchphrases || null,
+                internal_monologue_style: char.internal_monologue_style || null,
+                emotional_reactivity: char.how_they_love || null,
+              }),
+              gender: char.gender || null,
+              pronouns: derivePronouns(char.gender),
+              age: parseAgeRange(char.age_range),
+              sexuality: char.sexuality || null,
+              relationship_status: char.relationship_status || null,
+              hometown: char.origin_story || null,
+              current_city: char.world_location || null,
+              physical_presence: char.aesthetic || null,
+            },
+            type: sequelize.QueryTypes.UPDATE,
+          }
+        );
+        registrySynced = true;
+      }
+    } catch (syncErr) {
+      console.error('PUT re-sync error:', syncErr.message);
+    }
+
+    res.json({ character: char, registry_synced: registrySynced });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -999,12 +1226,59 @@ router.post('/world/characters/:id/deepen', optionalAuth, async (req, res) => {
 
     const wCfg = WORLD_CONFIGS[char.world_tag] || WORLD_CONFIGS['lalaverse'];
 
-    // Identify empty fields to fill
-    const fillable = ['origin_story','public_persona','private_reality','moral_code','fidelity_pattern',
-      'attracted_to','how_they_love','desire_they_wont_admit','intimate_style','intimate_dynamic','what_lala_feels',
-      'aesthetic','arc_role','exit_reason','how_they_meet','dynamic'];
+    // Identify empty fields to fill — includes all dossier-aligned fields
+    const fillable = [
+      // Core narrative
+      'origin_story','public_persona','private_reality','moral_code','fidelity_pattern',
+      'attracted_to','how_they_love','desire_they_wont_admit','aesthetic','arc_role',
+      'exit_reason','how_they_meet','dynamic',
+      // Intimate (only for eligible)
+      ...(char.intimate_eligible ? ['intimate_style','intimate_dynamic','what_lala_feels'] : []),
+      // Dossier essence fields
+      'core_fear','character_archetype','emotional_baseline','at_their_best','at_their_worst',
+      // Aesthetic DNA
+      'color_palette','signature_silhouette','signature_accessories','glam_energy',
+      // Voice
+      'speech_pattern','vocabulary_tone','catchphrases','internal_monologue_style',
+      // Career
+      'career_goal',
+    ];
     const missing = fillable.filter(f => !char[f]);
     if (missing.length === 0) return res.json({ character: char, deepened: false, message: 'All fields already filled' });
+
+    // Field descriptions for Claude
+    const fieldDescriptions = {
+      origin_story: 'where they came from before the protagonist\'s world',
+      public_persona: 'how the world sees them',
+      private_reality: 'what only close people know',
+      moral_code: '1-2 sentences about their personal ethics',
+      fidelity_pattern: 'faithful_tested|faithful_untested|emotionally_unfaithful|physically_unfaithful|serial_cheater|loyal_until_broken|would_never|already_has',
+      attracted_to: 'who they actually pursue — specific, not a label',
+      how_they_love: 'their connection pattern (e.g. avoidant until she isn\'t, then fully in)',
+      desire_they_wont_admit: 'the private desire that complicates everything',
+      aesthetic: 'how they look, dress, move — specific and visual',
+      arc_role: 'how this character changes the protagonist\'s trajectory',
+      exit_reason: 'how or why they leave, or null if they stay',
+      how_they_meet: 'the specific scenario — not generic',
+      dynamic: 'the texture of their connection with the protagonist',
+      intimate_style: 'how they are in intimate moments',
+      intimate_dynamic: 'the specific dynamic between them',
+      what_lala_feels: 'what the protagonist physically and emotionally experiences with this person',
+      core_fear: 'the thing they\'re most afraid of — distinct from what they want',
+      character_archetype: 'Strategist|Dreamer|Performer|Guardian|Rebel|Visionary|Healer|Trickster|Sage|Creator',
+      emotional_baseline: 'calm|volatile|guarded|warm|anxious|detached|intense|playful',
+      at_their_best: 'one sentence — who they are when everything aligns',
+      at_their_worst: 'one sentence — who they become when cornered or broken',
+      color_palette: '2-3 signature colors (e.g. matte black, champagne gold, oxblood)',
+      signature_silhouette: 'their signature clothing shape (e.g. oversized blazers over slip dresses)',
+      signature_accessories: '1-2 items they\'re known for',
+      glam_energy: 'Minimal|Maximal|Editorial',
+      speech_pattern: 'how they talk — sentence structure, pace, verbal tics',
+      vocabulary_tone: 'the register and flavor of their language',
+      catchphrases: '1-2 signature phrases or verbal habits they repeat',
+      internal_monologue_style: 'how their inner thoughts sound — formal, fragmented, poetic, anxious, etc.',
+      career_goal: 'their specific professional ambition',
+    };
 
     const result = await claude(
       wCfg.system_prompt,
@@ -1012,28 +1286,33 @@ router.post('/world/characters/:id/deepen', optionalAuth, async (req, res) => {
 
 CHARACTER: ${char.name}
 Type: ${char.character_type}
+Gender: ${char.gender || 'unknown'}
 Occupation: ${char.occupation || 'unknown'}
 Age: ${char.age_range || 'unknown'}
 Sexuality: ${char.sexuality || 'unknown'}
+Relationship status: ${char.relationship_status || 'unknown'}
 Existing aesthetic: ${char.aesthetic || 'none'}
 Existing dynamic: ${char.dynamic || 'none'}
+Existing signature: ${char.signature || 'none'}
+Surface want: ${char.surface_want || 'none'}
+Real want: ${char.real_want || 'none'}
 Intimate eligible: ${char.intimate_eligible}
 
 MISSING FIELDS TO FILL:
-${missing.map(f => `- ${f}`).join('\n')}
+${missing.map(f => `- ${f}: ${fieldDescriptions[f] || f}`).join('\n')}
 
 Return JSON only — an object with ONLY the missing field keys and their values. Be specific, vivid, and true to this character's type.`,
-      4000
+      6000
     );
 
     const parsed = parseJSON(result);
     if (!parsed) return res.status(500).json({ error: 'Deepen failed — Claude returned unparseable response' });
 
-    // Update only the fields that were missing
+    // Update only the fields that were missing and got generated
     const updates = [];
     const replacements = { id: req.params.id };
     for (const field of missing) {
-      if (parsed[field]) {
+      if (parsed[field] !== undefined && parsed[field] !== null) {
         updates.push(`${field} = :${field}`);
         replacements[field] = parsed[field];
       }
@@ -1045,11 +1324,364 @@ Return JSON only — an object with ONLY the missing field keys and their values
       );
     }
 
+    // Auto re-sync to registry so dossier stays current
     const [updated] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
-    res.json({ character: updated, deepened: true, fields_filled: updates.length });
+    let registrySynced = false;
+    try {
+      const [rc] = await Q(req,
+        'SELECT id, registry_id FROM registry_characters WHERE world_character_id = :id',
+        { replacements: { id: req.params.id } }
+      );
+      if (rc) {
+        const wCfgSync = WORLD_CONFIGS[updated.world_tag] || WORLD_CONFIGS['lalaverse'];
+        const roleType = ROLE_MAP[updated.character_type] || 'special';
+        await sequelize.query(
+          `UPDATE registry_characters SET
+            display_name = :display_name, subtitle = :subtitle,
+            role_type = :role_type, role_label = :role_label,
+            core_desire = :core_desire, core_fear = :core_fear,
+            core_wound = :core_wound, mask_persona = :mask_persona, truth_persona = :truth_persona,
+            character_archetype = :character_archetype, signature_trait = :signature_trait,
+            emotional_baseline = :emotional_baseline, description = :description,
+            personality_matrix = :personality_matrix, aesthetic_dna = :aesthetic_dna,
+            career_status = :career_status, voice_signature = :voice_signature,
+            extra_fields = :extra_fields,
+            gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
+            relationship_status = :relationship_status,
+            hometown = :hometown, current_city = :current_city,
+            physical_presence = :physical_presence,
+            updated_at = NOW()
+          WHERE id = :rc_id`,
+          {
+            replacements: {
+              rc_id: rc.id,
+              display_name: updated.name,
+              subtitle: [updated.age_range, updated.occupation].filter(Boolean).join(' · ') || null,
+              role_type: roleType,
+              role_label: updated.character_type || null,
+              core_desire: updated.real_want || null,
+              core_fear: updated.core_fear || null,
+              core_wound: updated.desire_they_wont_admit || null,
+              mask_persona: updated.public_persona || null,
+              truth_persona: updated.private_reality || null,
+              character_archetype: updated.character_archetype || null,
+              signature_trait: updated.signature || null,
+              emotional_baseline: updated.emotional_baseline || null,
+              description: [updated.occupation, updated.dynamic].filter(Boolean).join('. ') || null,
+              personality_matrix: JSON.stringify({
+                core_wound: updated.desire_they_wont_admit || null,
+                desire_line: updated.real_want || null,
+                fear_line: updated.core_fear || null,
+                coping_mechanism: updated.moral_code || null,
+                self_deception: updated.surface_want || null,
+                at_their_best: updated.at_their_best || null,
+                at_their_worst: updated.at_their_worst || null,
+              }),
+              aesthetic_dna: JSON.stringify({
+                era_aesthetic: updated.aesthetic || null,
+                color_palette: updated.color_palette || null,
+                signature_silhouette: updated.signature_silhouette || null,
+                signature_accessories: updated.signature_accessories || null,
+                glam_energy: updated.glam_energy || null,
+                visual_evolution_notes: null,
+              }),
+              career_status: JSON.stringify({
+                profession: updated.occupation || null,
+                career_goal: updated.career_goal || null,
+                reputation_level: null, brand_relationships: null, financial_status: null,
+                public_recognition: updated.public_persona || null,
+                ongoing_arc: updated.arc_role || null,
+              }),
+              voice_signature: JSON.stringify({
+                speech_pattern: updated.speech_pattern || null,
+                vocabulary_tone: updated.vocabulary_tone || null,
+                catchphrases: updated.catchphrases || null,
+                internal_monologue_style: updated.internal_monologue_style || null,
+                emotional_reactivity: updated.how_they_love || null,
+              }),
+              extra_fields: JSON.stringify({
+                source: 'world_studio',
+                world_character_id: req.params.id,
+                intimate_eligible: updated.intimate_eligible || false,
+                intimate_style: updated.intimate_style || null,
+                intimate_dynamic: updated.intimate_dynamic || null,
+                what_lala_feels: updated.what_lala_feels || null,
+                moral_code: updated.moral_code || null,
+                fidelity_pattern: updated.fidelity_pattern || null,
+                committed_to: updated.committed_to || null,
+                career_echo_connection: updated.career_echo_connection || false,
+              }),
+              gender: updated.gender || null,
+              pronouns: derivePronouns(updated.gender),
+              age: parseAgeRange(updated.age_range),
+              sexuality: updated.sexuality || null,
+              relationship_status: updated.relationship_status || null,
+              hometown: updated.origin_story || null,
+              current_city: updated.world_location || null,
+              physical_presence: updated.aesthetic || null,
+            },
+            type: sequelize.QueryTypes.UPDATE,
+          }
+        );
+        registrySynced = true;
+      }
+    } catch (syncErr) {
+      console.error('deepen re-sync error:', syncErr.message);
+    }
+
+    res.json({ character: updated, deepened: true, fields_filled: updates.length, registry_synced: registrySynced });
   } catch (err) {
     console.error('deepen error:', err.message);
     res.status(err.aiStatus || 500).json({ error: err.message });
+  }
+});
+
+// POST /world/characters/:id/re-sync
+// Push current world character data back into its linked registry character
+router.post('/world/characters/:id/re-sync', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
+    if (!char) return res.status(404).json({ error: 'Character not found' });
+
+    const [rc] = await Q(req,
+      'SELECT id, registry_id FROM registry_characters WHERE world_character_id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!rc) return res.status(404).json({ error: 'No linked registry character found — was this character synced?' });
+
+    const wCfg = WORLD_CONFIGS[char.world_tag] || WORLD_CONFIGS['lalaverse'];
+    const roleType = ROLE_MAP[char.character_type] || 'special';
+
+    await sequelize.query(
+      `UPDATE registry_characters SET
+        display_name = :display_name, selected_name = :selected_name,
+        subtitle = :subtitle, role_type = :role_type, role_label = :role_label,
+        core_desire = :core_desire, core_fear = :core_fear,
+        core_wound = :core_wound, mask_persona = :mask_persona, truth_persona = :truth_persona,
+        signature_trait = :signature_trait, description = :description,
+        personality_matrix = :personality_matrix, aesthetic_dna = :aesthetic_dna,
+        career_status = :career_status, relationships_map = :relationships_map,
+        voice_signature = :voice_signature, story_presence = :story_presence,
+        evolution_tracking = :evolution_tracking, extra_fields = :extra_fields,
+        gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
+        relationship_status = :relationship_status,
+        hometown = :hometown, current_city = :current_city,
+        physical_presence = :physical_presence,
+        updated_at = NOW()
+      WHERE id = :rc_id`,
+      {
+        replacements: {
+          rc_id: rc.id,
+          display_name: char.name,
+          selected_name: char.name,
+          subtitle: [char.age_range, char.occupation].filter(Boolean).join(' · ') || null,
+          role_type: roleType,
+          role_label: char.character_type || null,
+          core_desire: char.real_want || null,
+          core_fear: null,
+          core_wound: char.desire_they_wont_admit || null,
+          mask_persona: char.public_persona || null,
+          truth_persona: char.private_reality || null,
+          signature_trait: char.signature || null,
+          description: [char.occupation, char.dynamic].filter(Boolean).join('. ') || null,
+          personality_matrix: JSON.stringify({
+            core_wound: char.desire_they_wont_admit || null,
+            desire_line: char.real_want || null,
+            fear_line: null,
+            coping_mechanism: char.moral_code || null,
+            self_deception: char.surface_want || null,
+            at_their_best: null,
+            at_their_worst: null,
+          }),
+          aesthetic_dna: JSON.stringify({
+            era_aesthetic: char.aesthetic || null,
+            color_palette: null, signature_silhouette: null,
+            signature_accessories: null, glam_energy: null,
+            visual_evolution_notes: null,
+          }),
+          career_status: JSON.stringify({
+            profession: char.occupation || null, career_goal: null,
+            reputation_level: null, brand_relationships: null,
+            financial_status: null, public_recognition: char.public_persona || null,
+            ongoing_arc: char.arc_role || null,
+          }),
+          relationships_map: JSON.stringify({
+            allies: null, rivals: null, mentors: null,
+            love_interests: null, business_partners: null,
+            dynamic_notes: char.dynamic || null,
+            tension_type: char.tension_type || null,
+            what_they_want_from_lala: char.what_they_want_from_lala || null,
+            attracted_to: char.attracted_to || null,
+            how_they_love: char.how_they_love || null,
+          }),
+          voice_signature: JSON.stringify({
+            speech_pattern: null, vocabulary_tone: null,
+            catchphrases: null, internal_monologue_style: null,
+            emotional_reactivity: char.how_they_love || null,
+          }),
+          story_presence: JSON.stringify({
+            appears_in_books: char.world_tag,
+            current_story_status: char.how_they_meet || null,
+            unresolved_threads: null,
+            future_potential: char.exit_reason ? 'Will exit' : 'Yes',
+          }),
+          evolution_tracking: JSON.stringify({
+            version_history: null,
+            era_changes: char.world_location || null,
+            personality_shifts: null,
+          }),
+          extra_fields: JSON.stringify({
+            source: 'world_studio',
+            world_character_id: req.params.id,
+            intimate_eligible: char.intimate_eligible || false,
+            intimate_style: char.intimate_style || null,
+            intimate_dynamic: char.intimate_dynamic || null,
+            what_lala_feels: char.what_lala_feels || null,
+            moral_code: char.moral_code || null,
+            fidelity_pattern: char.fidelity_pattern || null,
+            committed_to: char.committed_to || null,
+            career_echo_connection: char.career_echo_connection || false,
+          }),
+          gender: char.gender || null,
+          pronouns: derivePronouns(char.gender),
+          age: parseAgeRange(char.age_range),
+          sexuality: char.sexuality || null,
+          relationship_status: char.relationship_status || null,
+          hometown: char.origin_story || null,
+          current_city: char.world_location || null,
+          physical_presence: char.aesthetic || null,
+        },
+        type: sequelize.QueryTypes.UPDATE,
+      }
+    );
+
+    const [updated] = await Q(req, 'SELECT * FROM registry_characters WHERE id = :id', { replacements: { id: rc.id } });
+    res.json({ synced: true, registry_character: updated });
+  } catch (err) {
+    console.error('re-sync error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /world/characters/bulk-re-sync
+// Re-sync all active world characters to their linked registry entries
+router.post('/world/characters/bulk-re-sync', optionalAuth, async (req, res) => {
+  try {
+    const { world_tag = 'lalaverse' } = req.body;
+    const chars = await Q(req,
+      `SELECT wc.*, rc.id AS rc_id FROM world_characters wc
+       JOIN registry_characters rc ON rc.world_character_id = wc.id
+       WHERE wc.status != 'archived' AND wc.world_tag = :world_tag`,
+      { replacements: { world_tag } }
+    );
+
+    if (!chars.length) {
+      return res.json({ synced: 0, message: 'No linked characters found to re-sync' });
+    }
+
+    let synced = 0;
+    const errors = [];
+    for (const char of chars) {
+      try {
+        const roleType = ROLE_MAP[char.character_type] || 'special';
+        await sequelize.query(
+          `UPDATE registry_characters SET
+            display_name = :name, subtitle = :subtitle,
+            role_type = :role_type, role_label = :role_label,
+            core_desire = :core_desire, core_fear = :core_fear,
+            core_wound = :core_wound, mask_persona = :mask_persona, truth_persona = :truth_persona,
+            character_archetype = :character_archetype, signature_trait = :signature_trait,
+            emotional_baseline = :emotional_baseline, description = :description,
+            personality_matrix = :personality_matrix, aesthetic_dna = :aesthetic_dna,
+            career_status = :career_status, voice_signature = :voice_signature,
+            extra_fields = :extra_fields,
+            gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
+            relationship_status = :relationship_status,
+            hometown = :hometown, current_city = :current_city,
+            physical_presence = :physical_presence,
+            updated_at = NOW()
+          WHERE id = :rc_id`,
+          {
+            replacements: {
+              rc_id: char.rc_id,
+              name: char.name,
+              subtitle: [char.age_range, char.occupation].filter(Boolean).join(' · ') || null,
+              role_type: roleType,
+              role_label: char.character_type || null,
+              core_desire: char.real_want || null,
+              core_fear: char.core_fear || null,
+              core_wound: char.desire_they_wont_admit || null,
+              mask_persona: char.public_persona || null,
+              truth_persona: char.private_reality || null,
+              character_archetype: char.character_archetype || null,
+              signature_trait: char.signature || null,
+              emotional_baseline: char.emotional_baseline || null,
+              description: [char.occupation, char.dynamic].filter(Boolean).join('. ') || null,
+              personality_matrix: JSON.stringify({
+                core_wound: char.desire_they_wont_admit || null,
+                desire_line: char.real_want || null,
+                fear_line: char.core_fear || null,
+                coping_mechanism: char.moral_code || null,
+                self_deception: char.surface_want || null,
+                at_their_best: char.at_their_best || null,
+                at_their_worst: char.at_their_worst || null,
+              }),
+              aesthetic_dna: JSON.stringify({
+                era_aesthetic: char.aesthetic || null,
+                color_palette: char.color_palette || null,
+                signature_silhouette: char.signature_silhouette || null,
+                signature_accessories: char.signature_accessories || null,
+                glam_energy: char.glam_energy || null,
+                visual_evolution_notes: null,
+              }),
+              career_status: JSON.stringify({
+                profession: char.occupation || null,
+                career_goal: char.career_goal || null,
+                reputation_level: null, brand_relationships: null, financial_status: null,
+                public_recognition: char.public_persona || null,
+                ongoing_arc: char.arc_role || null,
+              }),
+              voice_signature: JSON.stringify({
+                speech_pattern: char.speech_pattern || null,
+                vocabulary_tone: char.vocabulary_tone || null,
+                catchphrases: char.catchphrases || null,
+                internal_monologue_style: char.internal_monologue_style || null,
+                emotional_reactivity: char.how_they_love || null,
+              }),
+              extra_fields: JSON.stringify({
+                source: 'world_studio',
+                world_character_id: char.id,
+                intimate_eligible: char.intimate_eligible || false,
+                intimate_style: char.intimate_style || null,
+                intimate_dynamic: char.intimate_dynamic || null,
+                what_lala_feels: char.what_lala_feels || null,
+                moral_code: char.moral_code || null,
+                fidelity_pattern: char.fidelity_pattern || null,
+                committed_to: char.committed_to || null,
+                career_echo_connection: char.career_echo_connection || false,
+              }),
+              gender: char.gender || null,
+              pronouns: derivePronouns(char.gender),
+              age: parseAgeRange(char.age_range),
+              sexuality: char.sexuality || null,
+              relationship_status: char.relationship_status || null,
+              hometown: char.origin_story || null,
+              current_city: char.world_location || null,
+              physical_presence: char.aesthetic || null,
+            },
+            type: sequelize.QueryTypes.UPDATE,
+          }
+        );
+        synced++;
+      } catch (err) {
+        errors.push({ name: char.name, error: err.message });
+      }
+    }
+
+    res.json({ synced, total: chars.length, errors: errors.length ? errors : undefined });
+  } catch (err) {
+    console.error('bulk-re-sync error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1246,22 +1878,41 @@ The career stage shapes her voice. ${careerVoice[career_stage] || careerVoice.ea
 
 PROTAGONIST: ${charA.name}
 ${charA.aesthetic ? `Aesthetic: ${charA.aesthetic}` : ''}
+${charA.emotional_baseline ? `Emotional baseline: ${charA.emotional_baseline}` : ''}
+${charA.at_their_best ? `At their best: ${charA.at_their_best}` : ''}
+${charA.at_their_worst ? `At their worst: ${charA.at_their_worst}` : ''}
 ${charA.intimate_style ? `In intimate moments: ${charA.intimate_style}` : ''}
 ${charA.what_lala_feels ? `What she feels with this person: ${charA.what_lala_feels}` : ''}
 ${charA.dynamic ? `Their dynamic: ${charA.dynamic}` : ''}
 ${charA.fidelity_pattern ? `Fidelity pattern: ${charA.fidelity_pattern}` : ''}
 ${charA.relationship_status ? `Relationship status: ${charA.relationship_status}${charA.committed_to ? ` (committed to ${charA.committed_to})` : ''}` : ''}
 ${charA.moral_code ? `Moral code: ${charA.moral_code}` : ''}
+${charA.core_fear ? `Core fear: ${charA.core_fear}` : ''}
+${charA.speech_pattern ? `Speech pattern: ${charA.speech_pattern}` : ''}
+${charA.vocabulary_tone ? `Vocabulary tone: ${charA.vocabulary_tone}` : ''}
+${charA.catchphrases ? `Verbal habits: ${charA.catchphrases}` : ''}
+${charA.internal_monologue_style ? `Inner monologue style: ${charA.internal_monologue_style}` : ''}
 
 ${charB ? `OTHER CHARACTER: ${charB.name}
 ${charB.aesthetic ? `Aesthetic: ${charB.aesthetic}` : ''}
+${charB.color_palette ? `Color palette: ${charB.color_palette}` : ''}
+${charB.signature_silhouette ? `Signature look: ${charB.signature_silhouette}` : ''}
+${charB.signature_accessories ? `Signature accessories: ${charB.signature_accessories}` : ''}
+${charB.emotional_baseline ? `Emotional baseline: ${charB.emotional_baseline}` : ''}
+${charB.at_their_best ? `At their best: ${charB.at_their_best}` : ''}
+${charB.at_their_worst ? `At their worst: ${charB.at_their_worst}` : ''}
 ${charB.intimate_style ? `In intimate moments: ${charB.intimate_style}` : ''}
 ${charB.intimate_dynamic ? `Their dynamic: ${charB.intimate_dynamic}` : ''}
 ${charB.surface_want ? `What they want: ${charB.surface_want}` : ''}
 ${charB.real_want ? `What they'd never admit: ${charB.real_want}` : ''}
+${charB.core_fear ? `Core fear: ${charB.core_fear}` : ''}
 ${charB.fidelity_pattern ? `Fidelity pattern: ${charB.fidelity_pattern}` : ''}
 ${charB.relationship_status ? `Relationship status: ${charB.relationship_status}${charB.committed_to ? ` (committed to ${charB.committed_to})` : ''}` : ''}
-${charB.moral_code ? `Moral code: ${charB.moral_code}` : ''}` : 'OTHER CHARACTER: Unknown — this is a first encounter'}
+${charB.moral_code ? `Moral code: ${charB.moral_code}` : ''}
+${charB.speech_pattern ? `Speech pattern: ${charB.speech_pattern}` : ''}
+${charB.vocabulary_tone ? `Vocabulary tone: ${charB.vocabulary_tone}` : ''}
+${charB.catchphrases ? `Verbal habits: ${charB.catchphrases}` : ''}
+${charB.how_they_love ? `How they love: ${charB.how_they_love}` : ''}` : 'OTHER CHARACTER: Unknown — this is a first encounter'}
 
 SCENE TYPE: ${scene_type}
 LOCATION: ${location || 'a private space in LalaVerse'}
@@ -1695,8 +2346,9 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
     const {
       world_tag = 'lalaverse',
       world_context = {},
-      character_count = 8,
+      character_count: rawCount = 8,
     } = req.body;
+    const character_count = Math.max(3, Math.min(20, parseInt(rawCount, 10) || 8));
 
     const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
     const series_label = req.body.series_label || wCfg.series_label;
@@ -1709,14 +2361,14 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
       protagonist  = wCfg.protagonist,
     } = world_context;
 
-    // Fetch ALL active characters to avoid duplication (not just last 20)
+    // Fetch active characters in this world to avoid duplication
     const existing = await Q(req, `
       SELECT name, character_type, occupation FROM world_characters
-      WHERE status != 'archived' ORDER BY created_at DESC
-    `);
+      WHERE status != 'archived' AND world_tag = :world_tag ORDER BY created_at DESC
+    `, { replacements: { world_tag } });
 
-    // Adaptive token limit: ~1200 tokens per character (31 fields + JSON overhead)
-    const tokenLimit = Math.max(6000, Math.min(16000, character_count * 1200 + 2000));
+    // Adaptive token limit: ~1600 tokens per character (40+ fields + JSON overhead)
+    const tokenLimit = Math.max(8000, Math.min(20000, character_count * 1600 + 2000));
 
     const result = await claude(
       wCfg.system_prompt,
@@ -1746,20 +2398,34 @@ Return JSON only:
       "occupation": "specific job/role",
       "world_location": "where they exist in ${wCfg.title}",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant|friend|coworker",
+      "character_archetype": "Strategist|Dreamer|Performer|Guardian|Rebel|Visionary|Healer|Trickster|Sage|Creator — their core archetype",
+      "emotional_baseline": "calm|volatile|guarded|warm|anxious|detached|intense|playful — their default emotional register",
+      "at_their_best": "one sentence — who they are when everything aligns",
+      "at_their_worst": "one sentence — who they become when cornered or broken",
       "relationship_status": "single|dating|engaged|married|divorced|separated|its_complicated — their actual status, not what they tell people",
       "committed_to": "name of the person they're committed to (another character or offscreen person), or null if single",
       "moral_code": "1-2 sentences about their personal ethics — what lines they won't cross, or what lines they pretend they won't cross",
       "fidelity_pattern": "faithful_tested|faithful_untested|emotionally_unfaithful|physically_unfaithful|serial_cheater|loyal_until_broken|would_never|already_has — how they behave when commitment meets temptation",
       "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
+      "core_fear": "the thing they're most afraid of — distinct from what they want",
       "aesthetic": "how they look, dress, move — specific and visual",
+      "color_palette": "2-3 signature colors that define their visual identity (e.g. 'matte black, champagne gold, oxblood')",
+      "signature_silhouette": "their signature clothing shape (e.g. 'oversized blazers over slip dresses')",
+      "signature_accessories": "1-2 items they're known for (e.g. 'thin gold chain, vintage watch')",
+      "glam_energy": "Minimal|Maximal|Editorial — their beauty/grooming intensity",
       "signature": "the one thing about them that is unforgettable",
       "surface_want": "what they'd tell you they want",
       "real_want": "what they'd never admit",
+      "career_goal": "their specific professional ambition — distinct from surface_want",
       "what_they_want_from_protagonist": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
       "dynamic": "the texture of their connection with ${protagonist}",
       "tension_type": "romantic|professional|creative|power|unspoken|moral|fidelity|temptation|betrayal|guilt",
+      "speech_pattern": "how they talk — sentence structure, pace, verbal tics (e.g. 'clipped sentences, never asks questions, uses silence as punctuation')",
+      "vocabulary_tone": "the register and flavor of their language (e.g. 'corporate polish masking street vernacular')",
+      "catchphrases": "1-2 signature phrases or verbal habits they repeat (e.g. 'honestly though...', 'that's not my problem')",
+      "internal_monologue_style": "how their inner thoughts sound — formal, fragmented, poetic, anxious, detached, etc.",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
       "what_protagonist_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
@@ -1903,68 +2569,48 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
     // Insert each character + sync to registry (all within transaction)
     const registryId = await findOrCreateRegistryForWorld(req, world_tag);
     const inserted = [];
+    const WorldCharacter = req.app.locals.db?.WorldCharacter || require('../models').WorldCharacter;
     for (const c of characters) {
-      const charId = uuidv4();
-      await sequelize.query(
-        `INSERT INTO world_characters
-           (id, batch_id, name, gender, age_range, occupation, world_location, character_type,
-            sexuality, intimate_eligible, aesthetic, signature,
-            surface_want, real_want, what_they_want_from_lala,
-            how_they_meet, dynamic, tension_type,
-            intimate_style, intimate_dynamic, what_lala_feels,
-            arc_role, exit_reason, career_echo_connection,
-            attracted_to, how_they_love, desire_they_wont_admit,
-            relationship_graph, family_layer, origin_story,
-            public_persona, private_reality,
-            relationship_status, committed_to, moral_code, fidelity_pattern,
-            world_tag, status, current_tension, created_at, updated_at)
-         VALUES
-           (:id, :batch_id, :name, :gender, :age_range, :occupation, :world_location, :char_type,
-            :sexuality, :intimate_eligible, :aesthetic, :signature,
-            :surface_want, :real_want, :what_from_lala,
-            :how_meet, :dynamic, :tension_type,
-            :intimate_style, :intimate_dynamic, :what_lala_feels,
-            :arc_role, :exit_reason, :career_echo,
-            :attracted_to, :how_they_love, :desire_they_wont_admit,
-            :relationship_graph, :family_layer, :origin_story,
-            :public_persona, :private_reality,
-            :relationship_status, :committed_to, :moral_code, :fidelity_pattern,
-            :world_tag, 'draft', 'Stable', NOW(), NOW())`,
-        {
-          replacements: {
-            id: charId, batch_id: batchId,
-            name: c.name, gender: c.gender || null,
-            age_range: c.age_range || null, occupation: c.occupation || null,
-            world_location: c.world_location || null, char_type: c.character_type,
-            sexuality: c.sexuality || null,
-            intimate_eligible: c.intimate_eligible || false,
-            aesthetic: c.aesthetic || null, signature: c.signature || null,
-            surface_want: c.surface_want || null, real_want: c.real_want || null,
-            what_from_lala: c.what_they_want_from_lala || null,
-            how_meet: c.how_they_meet || null, dynamic: c.dynamic || null,
-            tension_type: c.tension_type || null,
-            intimate_style: c.intimate_style || null, intimate_dynamic: c.intimate_dynamic || null,
-            what_lala_feels: c.what_lala_feels || null,
-            arc_role: c.arc_role || null, exit_reason: c.exit_reason || null,
-            career_echo: c.career_echo_connection || false,
-            attracted_to: c.attracted_to || null,
-            how_they_love: c.how_they_love || null,
-            desire_they_wont_admit: c.desire_they_wont_admit || null,
-            relationship_graph: JSON.stringify(c.relationship_graph || []),
-            family_layer: c.family_layer || null,
-            origin_story: c.origin_story || null,
-            public_persona: c.public_persona || null,
-            private_reality: c.private_reality || null,
-            relationship_status: c.relationship_status || null,
-            committed_to: c.committed_to || null,
-            moral_code: c.moral_code || null,
-            fidelity_pattern: c.fidelity_pattern || null,
-            world_tag: world_tag,
-          },
-          type: sequelize.QueryTypes.INSERT,
-          transaction: t,
-        }
-      );
+      const wcRecord = await WorldCharacter.create({
+        batch_id: batchId,
+        name: c.name,
+        gender: c.gender || null,
+        age_range: c.age_range || null,
+        occupation: c.occupation || null,
+        world_location: c.world_location || null,
+        character_type: c.character_type,
+        sexuality: c.sexuality || null,
+        intimate_eligible: c.intimate_eligible || false,
+        aesthetic: c.aesthetic || null,
+        signature: c.signature || null,
+        surface_want: c.surface_want || null,
+        real_want: c.real_want || null,
+        what_they_want_from_lala: c.what_they_want_from_lala || null,
+        how_they_meet: c.how_they_meet || null,
+        dynamic: c.dynamic || null,
+        tension_type: c.tension_type || null,
+        intimate_style: c.intimate_style || null,
+        intimate_dynamic: c.intimate_dynamic || null,
+        what_lala_feels: c.what_lala_feels || null,
+        arc_role: c.arc_role || null,
+        exit_reason: c.exit_reason || null,
+        career_echo_connection: c.career_echo_connection || false,
+        attracted_to: c.attracted_to || null,
+        how_they_love: c.how_they_love || null,
+        desire_they_wont_admit: c.desire_they_wont_admit || null,
+        relationship_graph: c.relationship_graph || [],
+        family_layer: c.family_layer || null,
+        origin_story: c.origin_story || null,
+        public_persona: c.public_persona || null,
+        private_reality: c.private_reality || null,
+        relationship_status: c.relationship_status || null,
+        committed_to: c.committed_to || null,
+        moral_code: c.moral_code || null,
+        fidelity_pattern: c.fidelity_pattern || null,
+        world_tag: world_tag,
+        status: 'draft',
+      }, { transaction: t });
+      const charId = wcRecord.id;
 
       // Sync to canonical registry (pass protagonist name for correct lookup)
       const rcId = await syncToRegistry(req, charId, c, registryId, world_tag, wCfg.protagonist);

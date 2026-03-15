@@ -128,6 +128,7 @@ let AuthorNote; // Author Layer: polymorphic creative decision notes
 let PageContent; // Page Content: editable page data (JSONB)
 let AssetRole; // Asset role registry (semantic slots)
 let UniverseCharacter; // Universe-level promoted characters
+let WorldCharacter; // LalaVerse world characters (real people in Lala's world)
 let BrainDocument; // Brain Documents: stores full ingested document text
 let AIUsageLog; // AI API cost/token tracking
 let CharacterArc; // Arc tracking: wound clock, stakes, visibility, David silence
@@ -364,6 +365,7 @@ try {
   PageContent = require('./PageContent')(sequelize, DataTypes);
   AssetRole = require('./AssetRole')(sequelize, DataTypes);
   UniverseCharacter = require('./UniverseCharacter')(sequelize, DataTypes);
+  WorldCharacter = require('./WorldCharacter')(sequelize, DataTypes);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -499,6 +501,7 @@ const requiredModels = {
   PageContent,
   AssetRole,
   UniverseCharacter,
+  WorldCharacter,
   BrainDocument,
   AIUsageLog,
   CharacterArc,
@@ -704,6 +707,9 @@ if (AuthorNote && AuthorNote.associate) {
 }
 if (UniverseCharacter && UniverseCharacter.associate) {
   UniverseCharacter.associate(requiredModels);
+}
+if (WorldCharacter && WorldCharacter.associate) {
+  WorldCharacter.associate(requiredModels);
 }
 if (EditMap && EditMap.associate) {
   EditMap.associate(requiredModels);
@@ -1851,6 +1857,7 @@ module.exports.AuthorNote = AuthorNote;
 module.exports.PageContent = PageContent;
 module.exports.AssetRole = AssetRole;
 module.exports.UniverseCharacter = UniverseCharacter;
+module.exports.WorldCharacter = WorldCharacter;
 module.exports.SocialProfileRelationship = SocialProfileRelationship;
 module.exports.AIUsageLog = AIUsageLog;
 module.exports.CharacterArc = CharacterArc;

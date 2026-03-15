@@ -311,6 +311,10 @@ router.post('/confirm', optionalAuth, async (req, res) => {
             central_conflict: extracted.central_conflict,
           }),
           name_options: JSON.stringify([extracted.protagonist_name]),
+          // Section skeletons
+          aesthetic_dna: {}, career_status: {}, relationships_map: {},
+          story_presence: {}, voice_signature: {}, evolution_tracking: {},
+          species: 'human', is_alive: true,
         });
         built.protagonist_id = protagonist.id;
         built.protagonist_name = protagonist.display_name || protagonist.selected_name;
@@ -341,6 +345,10 @@ router.post('/confirm', optionalAuth, async (req, res) => {
           status:          'draft',
           writer_notes: JSON.stringify({ onboarding_seed: true }),
           name_options: JSON.stringify([seed.name]),
+          // Section skeletons
+          aesthetic_dna: {}, career_status: {}, relationships_map: {},
+          story_presence: {}, voice_signature: {}, evolution_tracking: {},
+          species: 'human', is_alive: true,
         });
         built.cast_shells.push({
           id: char.id,

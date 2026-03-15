@@ -16,7 +16,7 @@ export default function PushToBrain({ pageName, data }) {
     setPushing(true);
     setResult(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const res = await fetch(`${API}/franchise-brain/push-from-page`, {
         method: 'POST',
         headers: {

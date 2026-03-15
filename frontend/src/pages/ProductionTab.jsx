@@ -168,7 +168,7 @@ export default function ProductionTab({ shows, universeId, onChanged, showToast,
   useEffect(() => {
     if (!showId) { setEpisodes([]); return; }
     setLoadingEps(true);
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
     fetch(`/api/v1/episodes?show_id=${showId}&limit=100`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
