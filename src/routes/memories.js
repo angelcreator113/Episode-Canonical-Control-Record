@@ -9204,7 +9204,7 @@ Relationship Mapping:
   - read_relationships, propose_relationship
 
 Feed Awareness:
-  - read_feed, read_feed_relationships
+  - read_feed, read_feed_relationships, read_character_follows
 
 Memory Mining:
   - propose_memories

@@ -35,6 +35,19 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
+// ── GET /character-follows/tensions/:charA/:charB — detect follow tensions ───
+// (Must be before /:characterKey to avoid "tensions" matching as a characterKey)
+router.get('/tensions/:charA/:charB', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+
+  try {
+    const tensions = await detectFollowTensions(db, req.params.charA, req.params.charB);
+    return res.json(tensions);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /character-follows/:characterKey — single profile detail ─────────────
 router.get('/:characterKey', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
@@ -179,18 +192,6 @@ router.get('/:characterKey/influence-context', optionalAuth, async (req, res) =>
       includeSharedWith: req.query.shared_with || null,
     });
     return res.json({ character_key: req.params.characterKey, context });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// ── GET /character-follows/tensions/:charA/:charB — detect follow tensions ───
-router.get('/tensions/:charA/:charB', optionalAuth, async (req, res) => {
-  const db = req.app.locals.db || require('../models');
-
-  try {
-    const tensions = await detectFollowTensions(db, req.params.charA, req.params.charB);
-    return res.json(tensions);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

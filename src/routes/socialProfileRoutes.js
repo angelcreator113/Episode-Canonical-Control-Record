@@ -1526,6 +1526,26 @@ router.get('/follow-engine/evaluate/:id', optionalAuth, async (req, res) => {
     for (const charKey of Object.keys(CHARACTER_FOLLOW_PROFILES)) {
       evaluations[charKey] = computeFollowScore(charKey, profileData);
     }
+    // Also evaluate dynamic DB profiles
+    if (db.CharacterFollowProfile) {
+      try {
+        const dbProfiles = await db.CharacterFollowProfile.findAll();
+        for (const dbp of dbProfiles) {
+          if (CHARACTER_FOLLOW_PROFILES[dbp.character_key]) continue;
+          const dynProfile = {
+            category_affinity: dbp.category_affinity || {},
+            archetype_affinity: dbp.archetype_affinity || {},
+            motivation_weights: dbp.motivation_weights || {},
+            drama_bonus: dbp.drama_bonus || 0,
+            adult_penalty: dbp.adult_penalty || 0,
+            same_platform_bonus: dbp.same_platform_bonus || {},
+            follower_tier_affinity: dbp.follower_tier_affinity || {},
+            base_follow_threshold: dbp.base_follow_threshold || 0.45,
+          };
+          evaluations[dbp.character_key] = computeFollowScore(dbp.character_key, profileData, dynProfile);
+        }
+      } catch (e) { /* CharacterFollowProfile table may not exist yet */ }
+    }
 
     return res.json({ profile_id: profile.id, handle: profile.handle, evaluations });
   } catch (err) {
@@ -1555,10 +1575,30 @@ router.post('/follow-engine/run', optionalAuth, async (req, res) => {
       };
 
       if (dry_run) {
-        // Just evaluate, don't write
+        // Evaluate hardcoded + dynamic profiles
         const evals = {};
         for (const charKey of Object.keys(CHARACTER_FOLLOW_PROFILES)) {
           evals[charKey] = computeFollowScore(charKey, profileData);
+        }
+        // Also evaluate dynamic DB profiles
+        if (db.CharacterFollowProfile) {
+          try {
+            const dbProfiles = await db.CharacterFollowProfile.findAll();
+            for (const dbp of dbProfiles) {
+              if (CHARACTER_FOLLOW_PROFILES[dbp.character_key]) continue;
+              const dynProfile = {
+                category_affinity: dbp.category_affinity || {},
+                archetype_affinity: dbp.archetype_affinity || {},
+                motivation_weights: dbp.motivation_weights || {},
+                drama_bonus: dbp.drama_bonus || 0,
+                adult_penalty: dbp.adult_penalty || 0,
+                same_platform_bonus: dbp.same_platform_bonus || {},
+                follower_tier_affinity: dbp.follower_tier_affinity || {},
+                base_follow_threshold: dbp.base_follow_threshold || 0.45,
+              };
+              evals[dbp.character_key] = computeFollowScore(dbp.character_key, profileData, dynProfile);
+            }
+          } catch (e) { /* CharacterFollowProfile table may not exist yet */ }
         }
         results.details.push({ profile_id: profile.id, handle: profile.handle, evaluations: evals });
       } else {
