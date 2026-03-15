@@ -844,42 +844,56 @@ router.get('/', optionalAuth, async (req, res) => {
     if (archetype)  where.archetype  = archetype;
     if (status)     where.status     = status;
     if (platform)   where.platform   = platform;
+    // Track crossover IDs for lalaverse feeds (real_world profiles Lala follows)
+    let crossoverIds = [];
     if (feed_layer) {
       if (feed_layer === 'lalaverse' && db.SocialProfileFollower) {
-        // Include lalaverse profiles + real_world profiles that Lala follows
-        const { Op: opInner } = require('sequelize');
         const lalaFollowedIds = await db.SocialProfileFollower.findAll({
           attributes: ['social_profile_id'],
           where: { character_key: 'lala' },
           raw: true,
         }).then(rows => rows.map(r => r.social_profile_id));
 
-        // Find which of those are real_world profiles
-        const crossoverIds = lalaFollowedIds.length > 0
+        crossoverIds = lalaFollowedIds.length > 0
           ? await db.SocialProfile.findAll({
               attributes: ['id'],
-              where: { id: { [opInner.in]: lalaFollowedIds }, feed_layer: 'real_world' },
+              where: { id: { [Op.in]: lalaFollowedIds }, feed_layer: 'real_world' },
               raw: true,
             }).then(rows => rows.map(r => r.id))
           : [];
+      }
+    }
 
-        if (crossoverIds.length > 0) {
-          where[Op.or] = [
+    // Build layer + search conditions using Op.and to avoid Op.or conflicts
+    const conditions = [];
+
+    // Layer condition (lalaverse includes crossover profiles)
+    if (feed_layer) {
+      if (crossoverIds.length > 0) {
+        conditions.push({
+          [Op.or]: [
             { feed_layer: 'lalaverse' },
             { id: { [Op.in]: crossoverIds } },
-          ];
-        } else {
-          where.feed_layer = feed_layer;
-        }
+          ],
+        });
       } else {
         where.feed_layer = feed_layer;
       }
     }
+
+    // Search condition
     if (search) {
-      where[Op.or] = [
-        { handle: { [Op.iLike]: `%${search}%` } },
-        { display_name: { [Op.iLike]: `%${search}%` } },
-      ];
+      conditions.push({
+        [Op.or]: [
+          { handle: { [Op.iLike]: `%${search}%` } },
+          { display_name: { [Op.iLike]: `%${search}%` } },
+        ],
+      });
+    }
+
+    // Merge conditions into where using Op.and
+    if (conditions.length > 0) {
+      where[Op.and] = conditions;
     }
 
     // Sorting
@@ -928,10 +942,8 @@ router.get('/', optionalAuth, async (req, res) => {
       counts[row.status] = parseInt(row.count, 10);
     }
 
-    // Count crossover profiles (real_world profiles Lala follows) shown in this result set
-    const crossoverCount = (feed_layer === 'lalaverse')
-      ? rows.filter(r => r.feed_layer === 'real_world').length
-      : 0;
+    // Count total crossover profiles (real_world profiles Lala follows), not just current page
+    const crossoverCount = crossoverIds.length;
 
     return res.json({
       profiles: rows,
