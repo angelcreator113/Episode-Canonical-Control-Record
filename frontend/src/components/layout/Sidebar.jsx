@@ -158,6 +158,7 @@ function Sidebar({ isOpen, onClose }) {
   const [adminOpen, setAdminOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [collapsedZones, setCollapsedZones] = useState({});
+  const [collapsedGroups, setCollapsedGroups] = useState({});
 
   // Auto-expand Shows sub-nav when on a /shows/* route
   useEffect(() => {
@@ -296,22 +297,32 @@ function Sidebar({ isOpen, onClose }) {
 
                       {groupOpen && !collapsed && (
                         <div className="ps-subnav">
-                          {item.groups.map(group => (
-                            <div key={group.heading} className="ps-subnav-group">
-                              <div className="ps-subnav-heading">{group.heading}</div>
-                              {group.children.map(child => (
-                                <NavLink
-                                  key={child.route}
-                                  to={child.route}
-                                  className={({ isActive: a }) => `ps-subnav-item ${location.pathname + location.search === child.route ? 'ps-subnav-item-active' : ''}`}
-                                  onClick={() => { if (onClose) onClose(); }}
+                          {item.groups.map(group => {
+                            const gKey = group.heading;
+                            const gCollapsed = collapsedGroups[gKey];
+                            return (
+                              <div key={gKey} className="ps-subnav-group">
+                                <div
+                                  className="ps-subnav-heading ps-subnav-heading-toggle"
+                                  onClick={() => setCollapsedGroups(prev => ({ ...prev, [gKey]: !prev[gKey] }))}
                                 >
-                                  <span className="ps-sub-dot" />
-                                  <span className="ps-subnav-label">{child.label}</span>
-                                </NavLink>
-                              ))}
-                            </div>
-                          ))}
+                                  <span>{gKey}</span>
+                                  <span className={`ps-subnav-heading-chevron ${gCollapsed ? '' : 'ps-subnav-heading-chevron-open'}`}>›</span>
+                                </div>
+                                {!gCollapsed && group.children.map(child => (
+                                  <NavLink
+                                    key={child.route}
+                                    to={child.route}
+                                    className={({ isActive: a }) => `ps-subnav-item ${location.pathname + location.search === child.route ? 'ps-subnav-item-active' : ''}`}
+                                    onClick={() => { if (onClose) onClose(); }}
+                                  >
+                                    <span className="ps-sub-dot" />
+                                    <span className="ps-subnav-label">{child.label}</span>
+                                  </NavLink>
+                                ))}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

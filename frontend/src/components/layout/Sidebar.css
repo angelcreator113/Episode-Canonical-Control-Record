@@ -449,6 +449,28 @@
   padding: 8px 10px 3px;
 }
 
+.ps-subnav-heading-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.12s;
+}
+
+.ps-subnav-heading-toggle:hover {
+  color: var(--ps-text-mid);
+}
+
+.ps-subnav-heading-chevron {
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+
+.ps-subnav-heading-chevron-open {
+  transform: rotate(90deg);
+}
+
 .ps-subnav-group:first-child .ps-subnav-heading {
   padding-top: 2px;
 }
