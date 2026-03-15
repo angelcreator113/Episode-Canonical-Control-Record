@@ -782,7 +782,37 @@ router.get('/', optionalAuth, async (req, res) => {
     if (archetype)  where.archetype  = archetype;
     if (status)     where.status     = status;
     if (platform)   where.platform   = platform;
-    if (feed_layer) where.feed_layer = feed_layer;
+    if (feed_layer) {
+      if (feed_layer === 'lalaverse' && db.SocialProfileFollower) {
+        // Include lalaverse profiles + real_world profiles that Lala follows
+        const { Op: opInner } = require('sequelize');
+        const lalaFollowedIds = await db.SocialProfileFollower.findAll({
+          attributes: ['social_profile_id'],
+          where: { character_key: 'lala' },
+          raw: true,
+        }).then(rows => rows.map(r => r.social_profile_id));
+
+        // Find which of those are real_world profiles
+        const crossoverIds = lalaFollowedIds.length > 0
+          ? await db.SocialProfile.findAll({
+              attributes: ['id'],
+              where: { id: { [opInner.in]: lalaFollowedIds }, feed_layer: 'real_world' },
+              raw: true,
+            }).then(rows => rows.map(r => r.id))
+          : [];
+
+        if (crossoverIds.length > 0) {
+          where[Op.or] = [
+            { feed_layer: 'lalaverse' },
+            { id: { [Op.in]: crossoverIds } },
+          ];
+        } else {
+          where.feed_layer = feed_layer;
+        }
+      } else {
+        where.feed_layer = feed_layer;
+      }
+    }
     if (search) {
       where[Op.or] = [
         { handle: { [Op.iLike]: `%${search}%` } },
@@ -818,6 +848,7 @@ router.get('/', optionalAuth, async (req, res) => {
     });
 
     // Count totals by status (unfiltered by status, but respecting layer) for header stats
+    // Use only the native layer for cap/stats (crossover profiles don't count against lalaverse cap)
     const baseWhere = {};
     if (series_id)  baseWhere.series_id  = series_id;
     if (feed_layer) baseWhere.feed_layer = feed_layer;
@@ -835,6 +866,11 @@ router.get('/', optionalAuth, async (req, res) => {
       counts[row.status] = parseInt(row.count, 10);
     }
 
+    // Count crossover profiles (real_world profiles Lala follows) shown in this result set
+    const crossoverCount = (feed_layer === 'lalaverse')
+      ? rows.filter(r => r.feed_layer === 'real_world').length
+      : 0;
+
     return res.json({
       profiles: rows,
       pagination: {
@@ -850,6 +886,7 @@ router.get('/', optionalAuth, async (req, res) => {
         crossed: counts.crossed || 0,
         archived: counts.archived || 0,
       },
+      crossoverCount,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

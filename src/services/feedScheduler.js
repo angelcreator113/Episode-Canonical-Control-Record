@@ -98,19 +98,17 @@ async function autoFillAgent(db) {
     if (remaining <= 0) continue;
 
     const toCreate = Math.min(remaining, schedulerConfig.batch_size);
-    findings.push({ level: 'info', msg: `${layer}: generating ${toCreate} profiles` });
+    findings.push({ level: 'info', msg: `${layer}: generating ${toCreate} profiles via AI sparks` });
 
-    for (let i = 0; i < toCreate; i++) {
-      try {
-        const spark = generateCreatorSpark(layer);
-        const profile = await generateAndSaveProfile(db, spark, layer);
-        if (profile) {
-          created++;
-          findings.push({ level: 'success', msg: `Created @${profile.handle} (${layer})` });
-        }
-      } catch (err) {
-        findings.push({ level: 'error', msg: `Fill failed: ${err.message}` });
-      }
+    // Use AI-powered smart sparks instead of random word combos
+    const result = await autoGenerateBatch(db, layer, toCreate);
+    created += result.created.length;
+
+    for (const p of result.created) {
+      findings.push({ level: 'success', msg: `Created @${p.handle} (${layer})` });
+    }
+    for (const e of result.errors) {
+      findings.push({ level: 'error', msg: `Fill failed for ${e.spark}: ${e.error}` });
     }
   }
 
@@ -119,53 +117,199 @@ async function autoFillAgent(db) {
 
 /**
  * Generate a creative spark for a new profile — the 3-field input the AI needs.
+ * (Legacy random fallback — used when AI spark generation is unavailable)
  */
 function generateCreatorSpark(layer) {
   const platform = PLATFORMS[Math.floor(Math.random() * PLATFORMS.length)];
   const archetype = ARCHETYPES[Math.floor(Math.random() * ARCHETYPES.length)];
   const tier = FOLLOWER_TIERS[Math.floor(Math.random() * FOLLOWER_TIERS.length)];
 
-  // Generate a realistic handle
-  const prefixes = [
-    'thee', 'just', 'real', 'its', 'not', 'lil', 'big', 'miss', 'king',
-    'baby', 'that', 'your', 'her', 'his', 'the', 'im', 'idk',
-  ];
-  const roots = [
-    'goddess', 'queen', 'bad', 'soft', 'pretty', 'rich', 'broke', 'tired',
-    'healing', 'growing', 'vibing', 'toxic', 'blessed', 'messy', 'woke',
-    'extra', 'basic', 'booked', 'busy', 'unbothered', 'chosen', 'built',
-  ];
-  const suffixes = [
-    'era', 'szn', 'life', 'diaries', 'chronicles', 'files', 'club',
-    'gang', 'society', 'world', 'page', 'official', 'tv', 'pod',
-  ];
+  const prefixes = ['thee','just','real','its','not','lil','big','miss','king','baby','that','your','her','his','the','im','idk'];
+  const roots = ['goddess','queen','bad','soft','pretty','rich','broke','tired','healing','growing','vibing','toxic','blessed','messy','woke','extra','basic','booked','busy','unbothered','chosen','built'];
+  const suffixes = ['era','szn','life','diaries','chronicles','files','club','gang','society','world','page','official','tv','pod'];
   const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
   const root = roots[Math.floor(Math.random() * roots.length)];
-  const suffix = Math.random() > 0.5
-    ? suffixes[Math.floor(Math.random() * suffixes.length)]
-    : String(Math.floor(Math.random() * 900) + 100);
+  const suffix = Math.random() > 0.5 ? suffixes[Math.floor(Math.random() * suffixes.length)] : String(Math.floor(Math.random() * 900) + 100);
   const handle = `@${prefix}${root}${suffix}`;
 
-  // Vibe sentence templates
   const vibes = [
     `${tier} ${platform} creator. ${archetype.replace(/_/g, ' ')} energy. Posts like they have something to prove.`,
     `A ${tier}-tier ${archetype.replace(/_/g, ' ')} on ${platform}. Curates chaos and calls it content.`,
     `${platform} ${archetype.replace(/_/g, ' ')}. ${tier} following. The kind of creator you watch alone at night.`,
-    `${tier} ${platform} presence. ${archetype.replace(/_/g, ' ')} archetype. Everyone in the comment section is projecting.`,
-    `Rising ${platform} voice. ${archetype.replace(/_/g, ' ')}. The algorithm keeps pushing them and no one knows why.`,
-    `${tier} creator on ${platform}. ${archetype.replace(/_/g, ' ')} coded. Their brand deals tell a story their content won't.`,
   ];
   const vibe_sentence = vibes[Math.floor(Math.random() * vibes.length)];
 
   const spark = { handle, platform, vibe_sentence, archetype, follower_tier: tier };
-
   if (layer === 'lalaverse') {
     spark.city = LALAVERSE_CITIES[Math.floor(Math.random() * LALAVERSE_CITIES.length)];
     spark.lala_relationship = ['direct', 'competitive', 'aware', 'mutual_unaware'][Math.floor(Math.random() * 4)];
     spark.career_pressure = ['ahead', 'level', 'behind', 'different_lane'][Math.floor(Math.random() * 4)];
   }
-
   return spark;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AI-POWERED SPARK GENERATOR — Replaces manual form input
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Use Claude to generate diverse, unique creator sparks based on what
+ * already exists in the feed. This is what makes the form unnecessary.
+ */
+async function generateSmartSparks(db, layer, count = 5) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  // Sample existing profiles for diversity awareness
+  const existing = await db.SocialProfile.findAll({
+    where: { feed_layer: layer },
+    attributes: ['handle', 'platform', 'archetype', 'content_category', 'follower_tier', 'geographic_base', 'age_range'],
+    order: [['createdAt', 'DESC']],
+    limit: 80,
+  });
+
+  const existingHandles = existing.map(p => p.handle).join(', ');
+  const existingArchetypes = {};
+  const existingPlatforms = {};
+  const existingCategories = {};
+  const existingTiers = {};
+  for (const p of existing) {
+    if (p.archetype) existingArchetypes[p.archetype] = (existingArchetypes[p.archetype] || 0) + 1;
+    if (p.platform) existingPlatforms[p.platform] = (existingPlatforms[p.platform] || 0) + 1;
+    if (p.content_category) existingCategories[p.content_category] = (existingCategories[p.content_category] || 0) + 1;
+    if (p.follower_tier) existingTiers[p.follower_tier] = (existingTiers[p.follower_tier] || 0) + 1;
+  }
+
+  const layerContext = layer === 'lalaverse'
+    ? `These creators live in the LALAVERSE — a constructed digital reality Lala believes is real.
+Cities: ${Object.entries(CITY_CULTURE).map(([k, v]) => `${k}: ${v}`).join('\n')}
+For each spark, include: city (one of: ${LALAVERSE_CITIES.join(', ')}), lala_relationship (direct|competitive|aware|mutual_unaware|one_sided), career_pressure (ahead|level|behind|different_lane).`
+    : `These creators exist in JustAWoman's real-world feed — the parasocial ecosystem she watches, follows, envies, and obsesses over.
+JustAWoman is a Black woman, mother, wife, content creator in fashion/beauty/lifestyle. She does everything right and the right room has not found her yet. She wants to be legendary.
+She posts for women. Men show up with their wallets and something in her responds. She watches certain creators alone, at night, and does not tell her husband.`;
+
+  const prompt = `You are designing the social media feed for a novel. Generate exactly ${count} unique creator sparks — each one a seed for a full AI-generated social media profile.
+
+LAYER: ${layer === 'lalaverse' ? 'LalaVerse (Book 2)' : "JustAWoman's Feed (Book 1)"}
+${layerContext}
+
+EXISTING FEED COMPOSITION (${existing.length} profiles):
+- Handles already used: ${existingHandles || 'none yet'}
+- Archetype distribution: ${JSON.stringify(existingArchetypes)}
+- Platform distribution: ${JSON.stringify(existingPlatforms)}
+- Category distribution: ${JSON.stringify(existingCategories)}
+- Tier distribution: ${JSON.stringify(existingTiers)}
+
+VALID VALUES:
+- platform: instagram, tiktok, youtube, twitter, onlyfans
+- archetype: polished_curator, messy_transparent, soft_life, explicitly_paid, overnight_rise, cautionary, the_peer, the_watcher, chaos_creator, community_builder
+- follower_tier: micro, mid, macro, mega
+
+REQUIREMENTS:
+1. Each creator must feel like a REAL person with a specific story, wound, contradiction, or tension
+2. Handles should feel authentic to each platform's culture (not generic word combos)
+3. Diversify across archetypes, platforms, tiers, demographics, content niches, and geographic bases
+4. Fill GAPS in the existing distribution — if there are too many Instagram polished_curators, generate TikTok chaos_creators instead
+5. Vibe sentences should be specific, evocative, and narratively charged — not generic templates
+6. Include advanced_context hints (location, follower range, relationship drama, aesthetic, revenue) where they add narrative depth
+7. Each creator should have parasocial potential — why would the protagonist keep watching?
+
+Return a JSON array of exactly ${count} objects:
+[
+  {
+    "handle": "@realhandle",
+    "platform": "instagram",
+    "vibe_sentence": "Specific, evocative one-sentence description of who this creator is and why they matter.",
+    "archetype": "polished_curator",
+    "follower_tier": "mid",
+    "advanced_context": {
+      "location_hint": "specific city",
+      "follower_hint": "range like 45K-80K",
+      "relationship_hint": "optional relationship detail",
+      "drama_hint": "optional controversy or tension",
+      "aesthetic_hint": "visual style keywords",
+      "revenue_hint": "how they make money"
+    }${layer === 'lalaverse' ? ',\n    "city": "nova_prime",\n    "lala_relationship": "aware",\n    "career_pressure": "ahead"' : ''}
+  }
+]
+
+Return ONLY the JSON array. No markdown, no explanation.`;
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4000,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  let sparks;
+  try {
+    sparks = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+  } catch {
+    throw new Error('AI spark generation failed to parse');
+  }
+
+  if (!Array.isArray(sparks) || sparks.length === 0) {
+    throw new Error('AI returned no sparks');
+  }
+
+  // Deduplicate against existing handles
+  const existingSet = new Set(existing.map(p => p.handle?.toLowerCase()));
+  sparks = sparks.filter(s => !existingSet.has(s.handle?.toLowerCase()));
+
+  return sparks;
+}
+
+/**
+ * Auto-generate a batch of profiles using AI-powered sparks.
+ * This is the main entry point for fully automated profile creation.
+ * Returns { created: [...profiles], errors: [...messages] }
+ */
+async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) {
+  const created = [];
+  const errors = [];
+
+  // Check cap
+  const cap = FEED_CAPS[layer];
+  const currentCount = await db.SocialProfile.count({
+    where: { feed_layer: layer, lalaverse_cap_exempt: false },
+  });
+  const remaining = cap - currentCount;
+  const toCreate = Math.min(count, remaining > 0 ? remaining : count); // allow over-cap if forced
+
+  // Generate smart sparks
+  let sparks;
+  try {
+    sparks = await generateSmartSparks(db, layer, toCreate);
+  } catch (err) {
+    // Fallback to random sparks if AI generation fails
+    console.log(`[FeedScheduler] Smart spark generation failed, using fallback: ${err.message}`);
+    sparks = [];
+    for (let i = 0; i < toCreate; i++) {
+      sparks.push(generateCreatorSpark(layer));
+    }
+  }
+
+  // Generate full profiles from sparks
+  for (let i = 0; i < sparks.length; i++) {
+    try {
+      if (progressCallback) {
+        progressCallback({ current: i + 1, total: sparks.length, spark: sparks[i], status: 'generating' });
+      }
+      const profile = await generateAndSaveProfile(db, sparks[i], layer);
+      if (profile) {
+        created.push(profile);
+        if (progressCallback) {
+          progressCallback({ current: i + 1, total: sparks.length, profile, status: 'created' });
+        }
+      }
+    } catch (err) {
+      errors.push({ spark: sparks[i]?.handle || `spark_${i}`, error: err.message });
+      if (progressCallback) {
+        progressCallback({ current: i + 1, total: sparks.length, error: err.message, status: 'error' });
+      }
+    }
+  }
+
+  return { created, errors, sparks_generated: sparks.length };
 }
 
 /**
@@ -599,5 +743,7 @@ module.exports = {
   runManualCycle,
   setDb,
   generateCreatorSpark,
+  generateSmartSparks,
   generateAndSaveProfile,
+  autoGenerateBatch,
 };
