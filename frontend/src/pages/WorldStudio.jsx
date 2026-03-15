@@ -649,8 +649,11 @@ export default function WorldStudio() {
     try {
       const r = await fetch(`${API}/world/scenes/${sceneId}/approve`, { method: 'POST' });
       const d = await r.json();
-      if (d.scene) { flash('Scene approved & written to StoryTeller'); setActiveScene(d.scene); if (selectedChar) loadCharScenes(selectedChar); }
-      else flash(d.error || 'Approve failed', 'error');
+      if (d.approved) {
+        flash('Scene approved & written to StoryTeller');
+        if (activeScene?.id === sceneId) setActiveScene({ ...activeScene, status: 'approved' });
+        if (selectedChar) loadCharScenes(selectedChar);
+      } else flash(d.error || 'Approve failed', 'error');
     } catch (e) { flash(e.message, 'error'); }
   };
 
@@ -661,9 +664,9 @@ export default function WorldStudio() {
     if (selectedChar) loadCharScenes(selectedChar);
   };
 
-  // Load scenes when switching to scenes detail tab
+  // Load scenes when switching to scenes or evolution detail tab
   useEffect(() => {
-    if (detailTab === 'scenes' && selectedChar) loadCharScenes(selectedChar);
+    if ((detailTab === 'scenes' || detailTab === 'evolution') && selectedChar) loadCharScenes(selectedChar);
   }, [detailTab, selectedChar]);
 
   /* ── Batch & Saved Preview loaders ────────────────────────────────── */
@@ -773,11 +776,13 @@ export default function WorldStudio() {
   const uniqueTypes = [...new Set(characters.map(c => c.character_type).filter(Boolean))];
   const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
   const paged       = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const relGraph    = charDetail ? (
-    typeof charDetail.relationship_graph === 'string'
-      ? JSON.parse(charDetail.relationship_graph || '[]')
-      : (charDetail.relationship_graph || [])
-  ) : [];
+  const relGraph    = charDetail ? (() => {
+    try {
+      return typeof charDetail.relationship_graph === 'string'
+        ? JSON.parse(charDetail.relationship_graph || '[]')
+        : (charDetail.relationship_graph || []);
+    } catch { return []; }
+  })() : [];
   const draftCount  = characters.filter(c => c.status === 'draft').length;
 
   /* ── Render ────────────────────────────────────────────────────────── */
@@ -1027,10 +1032,13 @@ export default function WorldStudio() {
                 <>
                   <div className="ws4-dash-label">Relationship Web</div>
                   <div className="ws4-rel-web">
-                    {characters.filter(c => c.relationship_graph && (
-                      typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : c.relationship_graph
-                    ).length > 0).slice(0, 12).map(c => {
-                      const rels = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []);
+                    {characters.map(c => {
+                      let rels;
+                      try { rels = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []); }
+                      catch { rels = []; }
+                      return { ...c, _rels: rels };
+                    }).filter(c => c._rels.length > 0).slice(0, 12).map(c => {
+                      const rels = c._rels;
                       return (
                         <div key={c.id} className="ws4-rel-web-node" onClick={() => { setSelectedChar(c.id); }}>
                           <div className="ws4-rel-web-name">{c.name}</div>
@@ -1112,7 +1120,14 @@ export default function WorldStudio() {
                         {deepening ? '⏳' : '🧠'} Deepen
                       </button>
                       <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => exportCharacter(charDetail)}>↗ Export</button>
-                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => setCompareChar(compareChar ? null : charDetail.id)}>
+                      <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => {
+                        if (compareChar) { setCompareChar(null); }
+                        else {
+                          const other = characters.find(c => c.id !== charDetail.id);
+                          if (other) setCompareChar(other.id);
+                          else flash('Need at least two characters to compare', 'error');
+                        }
+                      }}>
                         {compareChar ? '✕ Close Compare' : '⇄ Compare'}
                       </button>
                       {charDetail.status !== 'archived' && (
@@ -1296,7 +1311,10 @@ export default function WorldStudio() {
                       <div className="ws4-relationships">
                         <div className="ws4-rel-header">
                           <span className="ws4-rel-count">{relGraph.length} relationship{relGraph.length !== 1 ? 's' : ''}</span>
-                          <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => setShowAddRel(true)}>+ Add</button>
+                          <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={() => {
+                            setRelForm(p => ({ ...p, series_layer: worldTag, related_character_id: '', related_character_name: '', history_summary: '', conflict_summary: '', family_role: '' }));
+                            setShowAddRel(true);
+                          }}>+ Add</button>
                         </div>
 
                         {relGraph.length === 0 ? (
