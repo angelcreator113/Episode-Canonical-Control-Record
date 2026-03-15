@@ -47,6 +47,9 @@ const TYPES = {
 /* ── Detail tabs ─────────────────────────────────────────────────────── */
 const DETAIL_TABS = [
   { key: 'overview',      label: 'Overview' },
+  { key: 'essence',       label: 'Essence' },
+  { key: 'aesthetic',     label: 'Aesthetic' },
+  { key: 'voice',         label: 'Voice' },
   { key: 'desire',        label: 'Desire' },
   { key: 'relationships', label: 'Relationships' },
   { key: 'scenes',        label: 'Scenes' },
@@ -779,7 +782,11 @@ export default function WorldStudio() {
   /* ── Derived ───────────────────────────────────────────────────────── */
   const filtered = characters.filter(c => {
     if (charFilter !== 'all' && c.character_type !== charFilter) return false;
-    if (charSearch && !(c.name || '').toLowerCase().includes(charSearch.toLowerCase())) return false;
+    if (charSearch) {
+      const q = charSearch.toLowerCase();
+      const fields = [c.name, c.occupation, c.character_archetype, c.aesthetic, c.glam_energy, c.fidelity_pattern?.replace(/_/g, ' ')];
+      if (!fields.some(f => (f || '').toLowerCase().includes(q))) return false;
+    }
     return true;
   });
   const uniqueTypes = [...new Set(characters.map(c => c.character_type).filter(Boolean))];
@@ -805,6 +812,8 @@ export default function WorldStudio() {
             <div className="ws4-breadcrumb">
               <span className="ws4-breadcrumb-link" onClick={() => navigate('/')}>Home</span>
               <span className="ws4-breadcrumb-sep">/</span>
+              <span className="ws4-breadcrumb-link" onClick={() => navigate('/universe')}>Universe</span>
+              <span className="ws4-breadcrumb-sep">/</span>
               <span className="ws4-breadcrumb-current">World Studio</span>
             </div>
             <h1 className="ws4-page-title">World Studio</h1>
@@ -813,9 +822,12 @@ export default function WorldStudio() {
           {/* Quick-nav to related pages */}
           <nav className="ws4-page-tabs">
             {[
+              { label: 'Universe',         icon: '◈', route: '/universe' },
+              { label: 'World State',      icon: '📜', route: '/universe/world-state' },
               { label: 'Book Scene Studio', icon: '🔥', route: '/scene-studio' },
-              { label: 'The Feed',       icon: '📱', route: '/feed' },
-              { label: 'Relationships',  icon: '🔗', route: '/relationships' },
+              { label: 'The Feed',         icon: '📱', route: '/feed' },
+              { label: 'Relationships',    icon: '🔗', route: '/relationships' },
+              { label: 'Registry',         icon: '📋', route: '/character-registry' },
             ].map(t => (
               <button key={t.route} className="ws4-page-tab" onClick={() => navigate(t.route)}>
                 <span className="ws4-page-tab-icon">{t.icon}</span>
@@ -861,6 +873,21 @@ export default function WorldStudio() {
                   } catch (e) { flash(`Sync error: ${e.message}`); }
                 }}>
                   🔄 Sync All to Registry
+                </button>
+              )}
+              {worldTag !== 'all' && characters.length > 1 && (
+                <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={async () => {
+                  try {
+                    const resp = await fetch('/api/world/characters/seed-cross-batch', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ world_tag: worldTag }),
+                    });
+                    const data = await resp.json();
+                    flash(`Seeded ${data.seeded} cross-batch relationships (${data.total_candidates} candidates)`);
+                  } catch (e) { flash(`Seed error: ${e.message}`, 'error'); }
+                }}>
+                  🔗 Seed Cross-Batch
                 </button>
               )}
               {worldTag !== 'all' && (
@@ -1289,11 +1316,45 @@ export default function WorldStudio() {
                         )}
 
                         {charDetail.arc_role && <FieldCard label="Arc Role" value={charDetail.arc_role} />}
+                        {charDetail.career_goal && <FieldCard label="Career Goal" value={charDetail.career_goal} />}
 
-                        {/* Essence Profile */}
-                        {(charDetail.character_archetype || charDetail.emotional_baseline || charDetail.core_fear || charDetail.at_their_best || charDetail.at_their_worst) && (
+                        <div className="ws4-overview-links">
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={() => navigate('/relationships')}>
+                            🔗 Relationship Map
+                          </button>
+                          {charDetail.registry_character_id && (
+                            <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                              onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}>
+                              📋 Registry Entry
+                            </button>
+                          )}
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                            onClick={async () => {
+                              try {
+                                const resp = await fetch(`/api/world/characters/${charDetail.id}/re-sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                                const data = await resp.json();
+                                if (data.synced) { flash('Registry synced'); } else { flash(`Sync failed: ${data.error}`); }
+                              } catch (e) { flash(`Sync error: ${e.message}`); }
+                            }}>
+                            🔄 Sync to Registry
+                          </button>
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                            onClick={() => window.open(`/api/world/characters/${charDetail.id}/export`, '_blank')}>
+                            📥 Export Dossier
+                          </button>
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                            onClick={() => navigate(`/universe?highlight_character=${charDetail.name}`)}>
+                            ◈ View in Universe
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── ESSENCE ──────────────────────────────────── */}
+                    {detailTab === 'essence' && (
+                      <div className="ws4-overview">
+                        {(charDetail.character_archetype || charDetail.emotional_baseline || charDetail.core_fear) ? (
                           <>
-                            <SectionLabel color="gold">Essence</SectionLabel>
                             <div className="ws4-moral-grid">
                               {charDetail.character_archetype && (
                                 <div className="ws4-moral-card">
@@ -1316,13 +1377,20 @@ export default function WorldStudio() {
                             </div>
                             {charDetail.at_their_best && <FieldCard label="At Their Best" value={charDetail.at_their_best} />}
                             {charDetail.at_their_worst && <FieldCard label="At Their Worst" value={charDetail.at_their_worst} dimmed />}
+                            {charDetail.signature && <FieldCard label="Signature Trait" value={charDetail.signature} />}
                           </>
+                        ) : (
+                          <div className="ws4-tab-empty">No essence data yet. Use 🧠 Deepen to generate.</div>
                         )}
+                      </div>
+                    )}
 
-                        {/* Aesthetic DNA */}
-                        {(charDetail.color_palette || charDetail.signature_silhouette || charDetail.signature_accessories || charDetail.glam_energy) && (
+                    {/* ── AESTHETIC ────────────────────────────────── */}
+                    {detailTab === 'aesthetic' && (
+                      <div className="ws4-overview">
+                        {(charDetail.aesthetic || charDetail.color_palette || charDetail.glam_energy) ? (
                           <>
-                            <SectionLabel color="rose">Aesthetic DNA</SectionLabel>
+                            {charDetail.aesthetic && <FieldCard label="Aesthetic" value={charDetail.aesthetic} />}
                             <div className="ws4-moral-grid">
                               {charDetail.glam_energy && (
                                 <div className="ws4-moral-card">
@@ -1340,48 +1408,25 @@ export default function WorldStudio() {
                             {charDetail.signature_silhouette && <FieldCard label="Signature Silhouette" value={charDetail.signature_silhouette} />}
                             {charDetail.signature_accessories && <FieldCard label="Signature Accessories" value={charDetail.signature_accessories} />}
                           </>
+                        ) : (
+                          <div className="ws4-tab-empty">No aesthetic data yet. Use 🧠 Deepen to generate.</div>
                         )}
+                      </div>
+                    )}
 
-                        {/* Voice Signature */}
-                        {(charDetail.speech_pattern || charDetail.vocabulary_tone || charDetail.catchphrases || charDetail.internal_monologue_style) && (
+                    {/* ── VOICE ────────────────────────────────────── */}
+                    {detailTab === 'voice' && (
+                      <div className="ws4-overview">
+                        {(charDetail.speech_pattern || charDetail.vocabulary_tone || charDetail.catchphrases) ? (
                           <>
-                            <SectionLabel>Voice</SectionLabel>
                             {charDetail.speech_pattern && <FieldCard label="Speech Pattern" value={charDetail.speech_pattern} />}
                             {charDetail.vocabulary_tone && <FieldCard label="Vocabulary Tone" value={charDetail.vocabulary_tone} />}
                             {charDetail.catchphrases && <FieldCard label="Catchphrases" value={charDetail.catchphrases} />}
                             {charDetail.internal_monologue_style && <FieldCard label="Internal Monologue" value={charDetail.internal_monologue_style} dimmed />}
                           </>
+                        ) : (
+                          <div className="ws4-tab-empty">No voice data yet. Use 🧠 Deepen to generate.</div>
                         )}
-
-                        {/* Career */}
-                        {charDetail.career_goal && (
-                          <>
-                            <SectionLabel color="gold">Career</SectionLabel>
-                            <FieldCard label="Career Goal" value={charDetail.career_goal} />
-                          </>
-                        )}
-
-                        <div className="ws4-overview-links">
-                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={() => navigate('/relationships')}>
-                            🔗 Relationship Map
-                          </button>
-                          {charDetail.registry_character_id && (
-                            <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
-                              onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}>
-                              📋 Registry Entry
-                            </button>
-                          )}
-                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
-                            onClick={async () => {
-                              try {
-                                const resp = await fetch(`/api/world/characters/${charDetail.id}/re-sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-                                const data = await resp.json();
-                                if (data.synced) { flash('Registry synced'); } else { flash(`Sync failed: ${data.error}`); }
-                              } catch (e) { flash(`Sync error: ${e.message}`); }
-                            }}>
-                            🔄 Sync to Registry
-                          </button>
-                        </div>
                       </div>
                     )}
 

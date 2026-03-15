@@ -46,24 +46,34 @@ const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes
 async function claude(system, user, maxTokens = 4000) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client    = new Anthropic();
-  try {
-    const msg = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: 'user', content: user }],
-    });
-    if (msg.stop_reason === 'max_tokens') {
-      console.warn(`Claude response truncated (max_tokens=${maxTokens}). Consider increasing limit.`);
+  const maxRetries = 3;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const msg = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: 'user', content: user }],
+      });
+      if (msg.stop_reason === 'max_tokens') {
+        console.warn(`Claude response truncated (max_tokens=${maxTokens}). Consider increasing limit.`);
+      }
+      return msg.content[0]?.text || '';
+    } catch (aiErr) {
+      const status = aiErr?.status;
+      const errMsg = String(aiErr?.error?.error?.message || aiErr?.message || aiErr);
+      // Retry on 429 (rate limit) or 529 (overloaded) with exponential backoff
+      if ((status === 429 || status === 529) && attempt < maxRetries) {
+        const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+        console.warn(`Claude API ${status} (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms…`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      console.error('Claude API error:', errMsg);
+      const err = new Error(errMsg);
+      err.aiStatus = status || (errMsg.includes('credit balance') ? 402 : errMsg.includes('rate') ? 429 : 502);
+      throw err;
     }
-    return msg.content[0]?.text || '';
-  } catch (aiErr) {
-    const errMsg = String(aiErr?.error?.error?.message || aiErr?.message || aiErr);
-    console.error('Claude API error:', errMsg);
-    // Re-throw with status info so callers can return proper HTTP codes
-    const err = new Error(errMsg);
-    err.aiStatus = aiErr?.status || (errMsg.includes('credit balance') ? 402 : errMsg.includes('rate') ? 429 : 502);
-    throw err;
   }
 }
 
@@ -219,6 +229,12 @@ const INTER_CHAR_PAIRINGS = [
   ['coworker',       'love_interest',   'Office Romance',      'Professional', 'simmering',  true],
   ['coworker',       'friend',          'Work Friends',        'IRL',          'calm',       false],
   ['coworker',       'antagonist',      'Office Politics',     'Professional', 'volatile',   false],
+  // Recurring character pairings
+  ['recurring',      'love_interest',   'Recurring Chemistry', 'IRL',          'simmering',  true],
+  ['recurring',      'rival',           'Recurring Friction',  'IRL',          'simmering',  false],
+  ['recurring',      'friend',          'Familiar Face',       'IRL',          'calm',       false],
+  ['recurring',      'coworker',        'Regular Crossover',   'Professional', 'calm',       false],
+  ['recurring',      'recurring',       'Parallel Lives',      'IRL',          'calm',       false],
 ];
 
 // Gender-aware sexuality compatibility for romantic pairings
@@ -273,19 +289,31 @@ function checkPreviewRateLimit(ip) {
 
 // Server-side preview cache (keyed by preview_id, expires after 10 min)
 const previewCache = new Map();
-function storePreview(previewId, data) {
-  previewCache.set(previewId, { data, expires: Date.now() + 10 * 60_000 });
+function storePreview(previewId, data, ownerId = null) {
+  previewCache.set(previewId, { data, ownerId, expires: Date.now() + 10 * 60_000 });
   // Cleanup expired entries
   for (const [k, v] of previewCache) {
     if (Date.now() > v.expires) previewCache.delete(k);
   }
   // Also persist to DB so it survives page navigation & server restarts
-  persistPreviewToDB(previewId, data).catch(err => console.error('preview persist error:', err.message));
+  persistPreviewToDB(previewId, data, ownerId).catch(err => console.error('preview persist error:', err.message));
 }
-function getPreview(previewId) {
+
+// Background cleanup: purge expired in-memory previews every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [k, v] of previewCache) {
+    if (now > v.expires) { previewCache.delete(k); cleaned++; }
+  }
+  if (cleaned > 0) console.log(`preview-cache cleanup: purged ${cleaned} expired entries`);
+}, 5 * 60_000);
+function getPreview(previewId, requesterId = null) {
   const entry = previewCache.get(previewId);
   if (!entry) return null;
   if (Date.now() > entry.expires) { previewCache.delete(previewId); return null; }
+  // Owner check: if preview has an owner and requester doesn't match, deny
+  if (entry.ownerId && requesterId && entry.ownerId !== requesterId) return null;
   return entry.data;
 }
 
@@ -305,7 +333,7 @@ async function ensurePreviewsTable() {
   `).catch(() => {});
 }
 let previewsTableReady = false;
-async function persistPreviewToDB(previewId, data) {
+async function persistPreviewToDB(previewId, data, ownerId = null) {
   if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
   await sequelize.query(`
     INSERT INTO ecosystem_previews (preview_id, world_tag, characters, generation_notes, status)
@@ -321,6 +349,20 @@ async function persistPreviewToDB(previewId, data) {
     type: sequelize.QueryTypes.INSERT,
   });
 }
+
+// Cleanup orphaned previews older than 1 hour (fire once on startup, then hourly)
+async function cleanupOrphanedPreviews() {
+  try {
+    await ensurePreviewsTable();
+    const [result] = await sequelize.query(
+      `DELETE FROM ecosystem_previews WHERE status = 'pending' AND created_at < NOW() - INTERVAL '1 hour' RETURNING preview_id`,
+      { type: sequelize.QueryTypes.SELECT }
+    ).catch(() => [[]]);
+    if (result?.preview_id) console.log('Cleaned orphaned preview:', result.preview_id);
+  } catch (_) {}
+}
+setTimeout(cleanupOrphanedPreviews, 10_000); // 10s after startup
+setInterval(cleanupOrphanedPreviews, 60 * 60_000); // then hourly
 
 /**
  * Find (or create) a registry for the given world tag so generated characters
@@ -529,7 +571,7 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
           vocabulary_tone: c.vocabulary_tone || null,
           catchphrases: c.catchphrases || null,
           internal_monologue_style: c.internal_monologue_style || null,
-          emotional_reactivity: c.how_they_love || null,
+          emotional_reactivity: c.emotional_baseline || null,
         }),
         story_presence: JSON.stringify({
           appears_in_books: worldTag,
@@ -2479,11 +2521,12 @@ Return JSON only:
 
     // Persist preview server-side so it survives browser refresh
     const previewId = uuidv4();
+    const ownerId = req.user?.id || req.ip || null;
     storePreview(previewId, {
       characters: parsed.characters,
       generation_notes: parsed.generation_notes || '',
       world_tag,
-    });
+    }, ownerId);
 
     res.json({
       preview_id: previewId,
@@ -2643,6 +2686,14 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
     });
   } catch (err) {
     await t.rollback();
+    // Clean up orphaned preview on rollback
+    if (preview_id) {
+      previewCache.delete(preview_id);
+      sequelize.query(
+        `UPDATE ecosystem_previews SET status = 'failed', updated_at = NOW() WHERE preview_id = :pid`,
+        { replacements: { pid: preview_id }, type: sequelize.QueryTypes.UPDATE }
+      ).catch(() => {});
+    }
     console.error('generate-ecosystem-confirm error:', err);
     const detail = err.original?.message || err.parent?.message || '';
     res.status(500).json({
@@ -2651,6 +2702,147 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       hint: detail.includes('column') ? 'Run migrations: npx sequelize-cli db:migrate' : undefined,
     });
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CROSS-BATCH RELATIONSHIP SEEDING
+// ══════════════════════════════════════════════════════════════════════════════
+
+// POST /world/characters/seed-cross-batch — seed relationships across existing batches
+router.post('/world/characters/seed-cross-batch', optionalAuth, async (req, res) => {
+  try {
+    const { world_tag = 'lalaverse', max_pairs = 10 } = req.body;
+    // Fetch all active characters in this world that have registry IDs
+    const characters = await Q(req, `
+      SELECT id, name, character_type, sexuality, gender, dynamic,
+             registry_character_id, batch_id
+      FROM world_characters
+      WHERE world_tag = :world_tag AND status = 'active' AND registry_character_id IS NOT NULL
+      ORDER BY created_at ASC
+    `, { replacements: { world_tag } });
+
+    if (characters.length < 2) return res.json({ seeded: 0, message: 'Need at least 2 active characters' });
+
+    // Only pair characters from DIFFERENT batches
+    const crossBatchChars = [];
+    const batches = [...new Set(characters.map(c => c.batch_id).filter(Boolean))];
+    if (batches.length < 2) return res.json({ seeded: 0, message: 'Need characters from at least 2 batches' });
+
+    // Build cross-batch pairs
+    const pairs = [];
+    for (let i = 0; i < characters.length; i++) {
+      for (let j = i + 1; j < characters.length; j++) {
+        const a = characters[i], b = characters[j];
+        if (a.batch_id === b.batch_id) continue; // same batch — skip
+        const rule = INTER_CHAR_PAIRINGS.find(
+          ([tA, tB]) => (a.character_type === tA && b.character_type === tB) ||
+                        (a.character_type === tB && b.character_type === tA)
+        );
+        if (rule) {
+          const isRomantic = rule[5];
+          if (isRomantic && !areSexuallyCompatible(a, b)) continue;
+          pairs.push({ a, b, rule });
+        }
+      }
+    }
+    pairs.sort((x, y) => {
+      const tensionRank = { volatile: 0, simmering: 1, calm: 2 };
+      return (tensionRank[x.rule[4]] ?? 2) - (tensionRank[y.rule[4]] ?? 2);
+    });
+
+    let seeded = 0;
+    for (const { a, b, rule } of pairs.slice(0, Math.min(max_pairs, 20))) {
+      const [, , relType, connMode, tension] = rule;
+      try {
+        const [existing] = await sequelize.query(
+          `SELECT id FROM character_relationships
+           WHERE (character_id_a = :idA AND character_id_b = :idB)
+              OR (character_id_a = :idB AND character_id_b = :idA) LIMIT 1`,
+          { replacements: { idA: a.registry_character_id, idB: b.registry_character_id }, type: sequelize.QueryTypes.SELECT }
+        );
+        if (existing) continue;
+        const relId = uuidv4();
+        await sequelize.query(
+          `INSERT INTO character_relationships
+             (id, character_id_a, character_id_b, relationship_type,
+              connection_mode, lala_connection, status, situation,
+              tension_state, notes, confirmed, created_at, updated_at)
+           VALUES (:id, :a, :b, :rel, :conn, 'independent', 'Active',
+                   :sit, :tension, :notes, false, NOW(), NOW())`,
+          { replacements: {
+            id: relId, a: a.registry_character_id, b: b.registry_character_id,
+            rel: relType, conn: connMode,
+            sit: [a.dynamic, b.dynamic].filter(Boolean).join(' / ') || null,
+            tension, notes: `Cross-batch: ${a.name} ↔ ${b.name}`,
+          }, type: sequelize.QueryTypes.INSERT }
+        );
+        seeded++;
+      } catch (e) { console.error('cross-batch seed error:', e.message); }
+    }
+    res.json({ seeded, total_candidates: pairs.length, batches: batches.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXPORT CHARACTER DOSSIER
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /world/characters/:id/export — export full character dossier as JSON
+router.get('/world/characters/:id/export', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT * FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    // Build structured dossier
+    const dossier = {
+      meta: { exported_at: new Date().toISOString(), world_tag: char.world_tag, source: 'world_studio' },
+      identity: {
+        name: char.name, age_range: char.age_range, gender: char.gender,
+        occupation: char.occupation, character_type: char.character_type,
+        world_location: char.world_location,
+      },
+      essence: {
+        character_archetype: char.character_archetype, emotional_baseline: char.emotional_baseline,
+        core_fear: char.core_fear, at_their_best: char.at_their_best, at_their_worst: char.at_their_worst,
+        signature: char.signature,
+      },
+      desires: {
+        surface_want: char.surface_want, real_want: char.real_want,
+        what_they_want_from_protagonist: char.what_they_want_from_lala,
+        attracted_to: char.attracted_to, how_they_love: char.how_they_love,
+        desire_they_wont_admit: char.desire_they_wont_admit,
+      },
+      moral_profile: {
+        moral_code: char.moral_code, fidelity_pattern: char.fidelity_pattern,
+        relationship_status: char.relationship_status, committed_to: char.committed_to,
+        sexuality: char.sexuality,
+      },
+      aesthetic_dna: {
+        aesthetic: char.aesthetic, color_palette: char.color_palette,
+        signature_silhouette: char.signature_silhouette,
+        signature_accessories: char.signature_accessories, glam_energy: char.glam_energy,
+      },
+      voice: {
+        speech_pattern: char.speech_pattern, vocabulary_tone: char.vocabulary_tone,
+        catchphrases: char.catchphrases, internal_monologue_style: char.internal_monologue_style,
+      },
+      story: {
+        how_they_meet: char.how_they_meet, dynamic: char.dynamic,
+        origin_story: char.origin_story, public_persona: char.public_persona,
+        private_reality: char.private_reality, arc_role: char.arc_role,
+        career_goal: char.career_goal,
+      },
+      intimate: {
+        intimate_eligible: char.intimate_eligible, intimate_style: char.intimate_style,
+        intimate_dynamic: char.intimate_dynamic, what_protagonist_feels: char.what_lala_feels,
+      },
+    };
+    res.setHeader('Content-Disposition', `attachment; filename="${char.name.replace(/[^a-zA-Z0-9]/g, '_')}_dossier.json"`);
+    res.json(dossier);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
