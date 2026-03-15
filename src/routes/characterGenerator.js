@@ -1043,16 +1043,8 @@ router.post('/commit', optionalAuth, async (req, res) => {
           wcData.what_lala_feels = c.intimate_profile.what_she_withholds || null;
         }
 
-        const [wc] = await db.sequelize.query(
-          `INSERT INTO world_characters (id, ${Object.keys(wcData).join(', ')}, created_at, updated_at)
-           VALUES (gen_random_uuid(), ${Object.keys(wcData).map((_, i) => `$${i + 1}`).join(', ')}, NOW(), NOW())
-           RETURNING id`,
-          {
-            bind: Object.values(wcData),
-            type: db.sequelize.QueryTypes.INSERT,
-          }
-        );
-        worldCharId = wc?.[0]?.id || null;
+        const wcRecord = await db.WorldCharacter.create(wcData);
+        worldCharId = wcRecord?.id || null;
 
         // Update registry character with world_character_id cross-link
         if (worldCharId) {
