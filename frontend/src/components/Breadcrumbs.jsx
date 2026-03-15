@@ -34,6 +34,7 @@ const ROUTE_LABELS = {
   'settings': 'Settings',
   'world-studio': 'World Studio',
   'scene-studio': 'Scene Studio',
+  'texture-review': 'Texture Review',
   'search': 'Search',
   'analytics': 'Analytics',
   'decisions': 'Decisions',

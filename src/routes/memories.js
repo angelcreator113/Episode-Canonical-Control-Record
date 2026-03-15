@@ -5042,11 +5042,11 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
 
   } catch (err) {
     console.error('Assistant stream error:', err);
-    const isAuthError = err.status === 401 || err.message?.includes('API key');
+    const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
     res.write(`data: ${JSON.stringify({
       type:  'error',
       reply: isAuthError
-        ? "I can't connect to my brain right now — the API key may be missing or expired."
+        ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
         : "Hmm, that didn't work — try again or rephrase it for me.",
       error: err.message,
     })}\n\n`);

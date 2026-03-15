@@ -1043,6 +1043,7 @@ export default function StoryEngine() {
   const [registryUpdate, setRegistryUpdate] = useState(null);
   const [savingForLater, setSavingForLater] = useState(false);
   const [amberNotification, setAmberNotification] = useState(null);
+  const [amberTextureNotes, setAmberTextureNotes] = useState(null);
 
   const [showStats, setShowStats] = useState(false);
   const [readingMode, setReadingMode] = useState(false);
@@ -1556,6 +1557,42 @@ export default function StoryEngine() {
       });
     } catch (e) {
       console.error('arc tracking update error:', e);
+    }
+
+    // Texture layer generation — fires after arc tracking
+    try {
+      const textureRes = await fetch(`${API_BASE}/texture-layer/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          story: {
+            story_number: story.story_number,
+            title:        story.title,
+            text:         story.text,
+            phase:        story.phase,
+            story_type:   story.story_type,
+          },
+          character_key:      selectedChar,
+          characters_present: tasks
+            .find(t => t.story_number === story.story_number)
+            ?.characters_present || [],
+          registry_id: char?.registry_id || null,
+        }),
+      });
+
+      if (textureRes.ok) {
+        const textureData = await textureRes.json();
+        if (textureData.texture?.amber_notes?.length) {
+          setAmberTextureNotes({
+            story_number: story.story_number,
+            story_title:  story.title,
+            notes:        textureData.texture.amber_notes,
+            texture_id:   textureData.texture.id,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('texture layer generation error:', e);
     }
 
     // Scene eligibility check
@@ -2134,6 +2171,103 @@ export default function StoryEngine() {
               }}
             >
               Skip
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Amber texture notification — texture layer notes after story approval */}
+      {amberTextureNotes && (
+        <div style={{
+          position: 'fixed',
+          bottom: amberNotification ? 220 : 24,
+          right: 24,
+          width: 360,
+          background: '#fff',
+          border: '1px solid #e8dcf5',
+          borderRadius: 14,
+          boxShadow: '0 8px 32px rgba(168,137,200,0.18)',
+          padding: '16px 18px',
+          zIndex: 499,
+          animation: 'ws-slide-up 0.22s ease',
+          maxHeight: '60vh',
+          overflowY: 'auto',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #d4789a, #a889c8)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, color: '#fff', fontWeight: 700,
+            }}>A</div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Amber read Story {amberTextureNotes.story_number}</div>
+              <div style={{ fontSize: 10, color: '#9999b3' }}>"{amberTextureNotes.story_title}"</div>
+            </div>
+            <button
+              onClick={() => setAmberTextureNotes(null)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none',
+                cursor: 'pointer', color: '#9999b3', fontSize: 16 }}
+            >&times;</button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {amberTextureNotes.notes.map((note, i) => (
+              <div key={i} style={{
+                padding: '10px 12px',
+                background: note.type === 'warning'   ? '#fdf0f4' :
+                            note.type === 'contradiction' ? '#f6f1fc' :
+                            note.type === 'opportunity' ? '#f0f8fd' :
+                            '#fafafa',
+                borderRadius: 8,
+                border: `1px solid ${
+                  note.type === 'warning'   ? '#f5dce6' :
+                  note.type === 'contradiction' ? '#e8dcf5' :
+                  note.type === 'opportunity' ? '#daeef9' :
+                  '#f2eef8'
+                }`,
+              }}>
+                <div style={{
+                  fontSize: 9, fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.06em',
+                  color: note.type === 'warning'   ? '#d4789a' :
+                         note.type === 'contradiction' ? '#a889c8' :
+                         note.type === 'opportunity' ? '#7ab3d4' :
+                         '#9999b3',
+                  marginBottom: 4,
+                }}>{note.type}</div>
+                <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>
+                  {note.note}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button
+              onClick={() => {
+                navigate(`/texture-review/${amberTextureNotes.story_number}?char=${selectedChar}`);
+                setAmberTextureNotes(null);
+              }}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 8,
+                background: '#a889c8', color: '#fff',
+                border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600,
+              }}
+            >
+              Review Texture
+            </button>
+            <button
+              onClick={() => setAmberTextureNotes(null)}
+              style={{
+                padding: '8px 14px', borderRadius: 8,
+                background: 'transparent', color: '#9999b3',
+                border: '1px solid #e8e0f0', cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Later
             </button>
           </div>
         </div>

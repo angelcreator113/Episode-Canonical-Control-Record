@@ -129,6 +129,7 @@ const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
 const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
 const WorldLocations = lazy(() => import('./pages/WorldLocations'));
 const ShowBrain = lazy(() => import('./pages/ShowBrain'));
+const TextureReviewPage = lazy(() => import('./pages/TextureReviewPage'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -431,6 +432,9 @@ function AppContent() {
 
           {/* PNOS Story Engine — 50-Story Arc System */}
           <Route path="/story-engine" element={<StoryEngine />} />
+
+          {/* Texture Review — confirm/reject texture layers per story */}
+          <Route path="/texture-review/:storyNumber" element={<TextureReviewPage />} />
 
           {/* PNOS Story Evaluation Engine — Multi-voice generation + editorial scoring */}
           <Route path="/story-evaluation" element={<StoryEvaluationEngine />} />

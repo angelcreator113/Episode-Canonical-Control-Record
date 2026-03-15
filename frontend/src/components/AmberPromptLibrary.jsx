@@ -286,6 +286,14 @@ export default function AmberPromptLibrary({ onSelect }) {
           overflow-y: auto;
           padding: 8px 0;
           background: #fdf8fa;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(212,120,154,0.25) transparent;
+        }
+        .apl-nav::-webkit-scrollbar { width: 3px; }
+        .apl-nav::-webkit-scrollbar-track { background: transparent; }
+        .apl-nav::-webkit-scrollbar-thumb {
+          background: rgba(212,120,154,0.25);
+          border-radius: 3px;
         }
         .apl-nav-item {
           display: flex;
@@ -321,8 +329,17 @@ export default function AmberPromptLibrary({ onSelect }) {
           min-width: 0;
           overflow-y: auto;
           overflow-x: hidden;
-          padding: 12px 16px 20px;
+          padding: 12px 16px 32px;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(212,120,154,0.25) transparent;
         }
+        .apl-prompts::-webkit-scrollbar { width: 4px; }
+        .apl-prompts::-webkit-scrollbar-track { background: transparent; }
+        .apl-prompts::-webkit-scrollbar-thumb {
+          background: rgba(212,120,154,0.25);
+          border-radius: 4px;
+        }
+        .apl-prompts::-webkit-scrollbar-thumb:hover { background: rgba(212,120,154,0.45); }
         .apl-category-label {
           font-size: 11px;
           font-weight: 600;
@@ -338,16 +355,16 @@ export default function AmberPromptLibrary({ onSelect }) {
           padding: 0;
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 8px;
         }
         .apl-prompt-btn {
           width: 100%;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 12px;
-          padding: 10px 14px;
-          background: #fdf8fa;
+          gap: 14px;
+          padding: 11px 14px;
+          background: #fff;
           border: 1px solid #f0e4ea;
           border-radius: 10px;
           cursor: pointer;
@@ -357,7 +374,7 @@ export default function AmberPromptLibrary({ onSelect }) {
           overflow: hidden;
         }
         .apl-prompt-btn:hover {
-          background: #fff;
+          background: #fdf8fa;
           border-color: #d4789a;
           box-shadow: 0 2px 8px rgba(212,120,154,0.10);
         }
@@ -368,22 +385,27 @@ export default function AmberPromptLibrary({ onSelect }) {
         .apl-prompt-text {
           font-size: 12.5px;
           color: #3d2030;
-          line-height: 1.45;
+          line-height: 1.5;
           font-family: system-ui, sans-serif;
           min-width: 0;
           word-wrap: break-word;
           overflow-wrap: break-word;
+          flex: 1;
         }
         .apl-prompt-action {
-          font-size: 10px;
-          color: #d4789a;
+          font-size: 9px;
+          color: #c09aaa;
           font-family: system-ui, sans-serif;
           font-weight: 600;
           white-space: nowrap;
           flex-shrink: 0;
-          letter-spacing: 0.03em;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          opacity: 0;
+          transition: opacity 0.15s;
         }
-        .apl-prompt-btn.copied .apl-prompt-action { color: #a889c8; }
+        .apl-prompt-btn:hover .apl-prompt-action { opacity: 1; color: #d4789a; }
+        .apl-prompt-btn.copied .apl-prompt-action { opacity: 1; color: #a889c8; }
 
         /* ── Embedded inside AppAssistant panel ─────────────────────── */
         .apa-panel .apl-trigger {
@@ -415,7 +437,7 @@ export default function AmberPromptLibrary({ onSelect }) {
           left: 0;
           width: auto;
           max-width: 100%;
-          max-height: 50vh;
+          max-height: min(60vh, calc(100% - 70px));
           z-index: 10;
           border-radius: 12px 12px 0 0;
           box-shadow: 0 -4px 20px rgba(0,0,0,0.10);
