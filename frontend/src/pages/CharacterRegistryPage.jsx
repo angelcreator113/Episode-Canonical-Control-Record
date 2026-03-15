@@ -3011,6 +3011,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EField label="Job Options" value={form.job_options} onChange={v => F('job_options', v)} placeholder="Considered professions" />
               <EField label="Creator" value={form.creator} onChange={v => F('creator', v)} />
               <EArea label="Writer Notes" value={form.writer_notes} onChange={v => F('writer_notes', v)} rows={3} placeholder="Private notes for the writer…" />
+              <EToggle label="Intimate Scene Eligible" value={form.intimate_eligible} onChange={v => F('intimate_eligible', v)} description="Allow this character in intimate scenes" />
             </>
           ) : (
             <>
@@ -3037,6 +3038,9 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   <span className="cr-dossier-writer-notes-label">✎ Writer Notes</span>
                   <WriterNotesDisplay notes={c.writer_notes} />
                 </div>
+              )}
+              {c.intimate_eligible && (
+                <DRow label="Intimate Eligible" value="Yes" accent />
               )}
               {jGet(c.story_presence, 'current_story_status') && (
                 <DRow label="Current Arc" value={jGet(c.story_presence, 'current_story_status')} accent />
@@ -4286,6 +4290,19 @@ function ESelect({ label, value, onChange, options, allowEmpty }) {
   );
 }
 
+function EToggle({ label, value, onChange, description }) {
+  return (
+    <div className="cr-edit-field" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <label className="cr-edit-label" style={{ marginBottom: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)}
+          style={{ width: 16, height: 16, accentColor: 'var(--se-gold, #b0922e)' }} />
+        {label}
+      </label>
+      {description && <span style={{ fontSize: 12, color: 'var(--ink-muted, #888)' }}>{description}</span>}
+    </div>
+  );
+}
+
 
 /* ================================================================
    FORM ↔ DATA HELPERS
@@ -4307,8 +4324,9 @@ function buildFormForTab(tabKey, c) {
         pressure_type:    c.pressure_type || '',
         pressure_quote:   c.pressure_quote || '',
         job_options:      c.job_options || '',
-        creator:          c.creator || '',
-        writer_notes:     c.writer_notes || '',
+        creator:            c.creator || '',
+        writer_notes:       c.writer_notes || '',
+        intimate_eligible:  !!c.intimate_eligible,
       };
     case 'psychology':
       return {
@@ -4391,8 +4409,9 @@ function buildPayloadForTab(tabKey, form) {
         pressure_type:    form.pressure_type,
         pressure_quote:   form.pressure_quote,
         job_options:      form.job_options,
-        creator:          form.creator,
-        writer_notes:     form.writer_notes,
+        creator:            form.creator,
+        writer_notes:       form.writer_notes,
+        intimate_eligible:  !!form.intimate_eligible,
       };
     case 'psychology':
       return {
