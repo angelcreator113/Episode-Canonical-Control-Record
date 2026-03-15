@@ -226,6 +226,26 @@ router.post('/registries/:id/characters', async (req, res) => {
       personality_matrix: personality_matrix || null,
       extra_fields: extra_fields || null,
       sort_order: sort_order ?? count,
+
+      // Demographics defaults (pass-through from body or null)
+      gender: req.body.gender || null,
+      pronouns: req.body.pronouns || null,
+      age: req.body.age || null,
+      ethnicity: req.body.ethnicity || null,
+      species: req.body.species || 'human',
+      nationality: req.body.nationality || null,
+
+      // Death tracking defaults
+      is_alive: req.body.is_alive !== undefined ? req.body.is_alive : true,
+      intimate_eligible: req.body.intimate_eligible || false,
+
+      // Section skeletons — initialize JSONB sections so they exist
+      aesthetic_dna: req.body.aesthetic_dna || {},
+      career_status: req.body.career_status || {},
+      relationships_map: req.body.relationships_map || {},
+      story_presence: req.body.story_presence || {},
+      voice_signature: req.body.voice_signature || {},
+      evolution_tracking: req.body.evolution_tracking || {},
     });
 
     // Auto-create Feed profile from registry character
@@ -749,6 +769,7 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
         personality: 'Calm, protective, grounded. Not the villain. Says "you already have everything" meaning safety, not ceiling.',
         status: 'draft',
         sort_order: 1,
+        intimate_eligible: true,
       },
       {
         character_key: 'comparison-creator',
@@ -822,11 +843,23 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
       },
     ];
 
+    // Skeleton defaults for JSONB sections so dossier tabs are never empty
+    const sectionDefaults = {
+      aesthetic_dna: {},
+      career_status: {},
+      relationships_map: {},
+      story_presence: {},
+      voice_signature: {},
+      evolution_tracking: {},
+      is_alive: true,
+      species: 'human',
+    };
+
     const created = [];
     for (const c of seedCharacters) {
       const [record, wasCreated] = await RegistryCharacter.findOrCreate({
         where: { registry_id: registry.id, character_key: c.character_key },
-        defaults: { ...c, registry_id: registry.id },
+        defaults: { ...sectionDefaults, ...c, registry_id: registry.id },
       });
       created.push(record);
     }
@@ -839,6 +872,75 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
     return res.json({ success: true, registry: full, seeded: created.length });
   } catch (err) {
     console.error('[CharacterRegistry] seed-book1 error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /registries/:id/backfill-sections
+ * Backfill existing characters with skeleton JSONB sections and
+ * set intimate_eligible based on role_label / extra_fields / relationships.
+ */
+router.post('/registries/:id/backfill-sections', async (req, res) => {
+  try {
+    const { CharacterRegistry, RegistryCharacter } = getModels();
+    const registry = await CharacterRegistry.findByPk(req.params.id, {
+      include: [{ model: RegistryCharacter, as: 'characters' }],
+    });
+    if (!registry) return res.status(404).json({ success: false, error: 'Registry not found' });
+
+    const intimateRoles = ['love_interest', 'one_night_stand', 'partner', 'spouse', 'temptation', 'ex'];
+    const intimateKeywords = /husband|wife|spouse|partner|lover|romantic|love.interest|ex-|boyfriend|girlfriend/i;
+
+    let updated = 0;
+    for (const c of registry.characters) {
+      const updates = {};
+
+      // Initialize empty JSONB sections
+      if (!c.aesthetic_dna || (typeof c.aesthetic_dna === 'object' && Object.keys(c.aesthetic_dna).length === 0 && c.aesthetic_dna.constructor === Object)) {
+        // Keep existing if has data, otherwise ensure it exists
+      }
+      if (c.aesthetic_dna === null) updates.aesthetic_dna = {};
+      if (c.career_status === null) updates.career_status = {};
+      if (c.relationships_map === null) updates.relationships_map = {};
+      if (c.story_presence === null) updates.story_presence = {};
+      if (c.voice_signature === null) updates.voice_signature = {};
+      if (c.evolution_tracking === null) updates.evolution_tracking = {};
+      if (c.species === null) updates.species = 'human';
+      if (c.is_alive === null) updates.is_alive = true;
+
+      // Set intimate_eligible based on role_label, character_key, or extra_fields
+      if (!c.intimate_eligible) {
+        const roleLabel = (c.role_label || '').toLowerCase();
+        const charKey = (c.character_key || '').toLowerCase();
+        const displayName = (c.display_name || '').toLowerCase();
+        const extra = typeof c.extra_fields === 'string' ? JSON.parse(c.extra_fields || '{}') : (c.extra_fields || {});
+
+        if (
+          intimateRoles.includes(roleLabel) ||
+          intimateKeywords.test(roleLabel) ||
+          intimateKeywords.test(charKey) ||
+          intimateKeywords.test(displayName) ||
+          extra.intimate_eligible === true
+        ) {
+          updates.intimate_eligible = true;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await c.update(updates);
+        updated++;
+      }
+    }
+
+    // Reload
+    const full = await CharacterRegistry.findByPk(registry.id, {
+      include: [{ model: RegistryCharacter, as: 'characters' }],
+    });
+
+    return res.json({ success: true, registry: full, updated, message: `${updated} character(s) backfilled` });
+  } catch (err) {
+    console.error('[CharacterRegistry] backfill-sections error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

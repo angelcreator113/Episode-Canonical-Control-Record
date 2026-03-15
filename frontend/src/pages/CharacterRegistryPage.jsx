@@ -318,6 +318,23 @@ export default function CharacterRegistryPage() {
       if (data.success) {
         setActiveRegistry(data.registry);
         setRegistries(prev => prev.map(r => r.id === id ? data.registry : r));
+
+        // Auto-backfill: ensure all characters have JSONB skeletons + intimate_eligible flags
+        // Fire-and-forget — silent, no UI impact unless characters were updated
+        fetch(`${API}/registries/${id}/backfill-sections`, { method: 'POST' })
+          .then(r => r.json())
+          .then(bf => {
+            if (bf.success && bf.updated > 0) {
+              // Refresh to pick up backfilled data
+              fetch(`${API}/registries/${id}`).then(r2 => r2.json()).then(d2 => {
+                if (d2.success) {
+                  setActiveRegistry(d2.registry);
+                  setRegistries(prev => prev.map(r => r.id === id ? d2.registry : r));
+                }
+              });
+            }
+          })
+          .catch(() => { /* silent */ });
       }
     } catch (e) {
       console.error('Failed to fetch registry', e);

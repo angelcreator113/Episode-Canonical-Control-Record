@@ -995,6 +995,9 @@ router.post('/commit', optionalAuth, async (req, res) => {
       demographic_voice_signature: c.demographic_voice_signature || null,
       platform_primary: c.platform_primary || null,
       follower_tier: c.follower_tier || null,
+
+      // Intimate eligibility — set on the actual boolean column
+      intimate_eligible: intimateEligible,
     };
 
     const newChar = await db.RegistryCharacter.create(characterData);
