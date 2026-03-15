@@ -1,42 +1,47 @@
 /**
  * AppAssistant.jsx
  * Global AI assistant — bottom-right corner, always visible.
- * Sends every message with current app context so Claude knows
- * where you are and what's active.
- *
- * v2 — Voice input (STT) added via Web Speech API.
- * Push-to-talk: hold mic button → speak → release → Amber responds in voice.
- * Falls back gracefully if browser doesn't support SpeechRecognition.
- *
- * TTS: ElevenLabs via /api/v1/memories/assistant-speak (backend proxies to ElevenLabs).
- * The browser's speechSynthesis is NOT used — Amber's voice is ElevenLabs only.
+ * v3 — Streaming responses, expandable panel, clear chat, timestamps,
+ *       copy message, stop generating, Escape to close, scroll-to-bottom.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import AmberPromptLibrary from './AmberPromptLibrary';
 import './AppAssistant.css';
 
-const API = '/api/v1/memories/assistant-command';
+const API        = '/api/v1/memories/assistant-command';
+const STREAM_API = '/api/v1/memories/assistant-command-stream';
 
-// ─── Lightweight inline markdown → HTML (bold, italic, code, links) ──────────
+// ─── Lightweight inline markdown → HTML (bold, italic, code) ────────────────
 function renderMarkdown(text) {
   if (!text) return text;
   const escaped = text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const html = escaped
+  return escaped
     .replace(/`([^`]+)`/g, '<code style="background:#f3f0f8;padding:1px 5px;border-radius:4px;font-size:11px">$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br/>');
-  return html;
+}
+
+// ─── Relative time helper ───────────────────────────────────────────────────
+function timeAgo(ts) {
+  if (!ts) return '';
+  const secs = Math.floor((Date.now() - ts) / 1000);
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ago`;
 }
 
 const GREETING = {
   role: 'assistant',
   text: "hey it's amber. whatever you're working on rn — characters, the book, the feed, navigation — just tell me and i'll pull it up. i've been watching the world while you were gone.",
+  ts: Date.now(),
 };
 
-// ─── Speech Recognition singleton ────────────────────────────────────────────
+// ─── Speech Recognition singleton ──────────────────────────────────────────
 const SpeechRecognition =
   typeof window !== 'undefined' &&
   (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -44,58 +49,41 @@ const SpeechRecognition =
 function createRecognizer() {
   if (!SpeechRecognition) return null;
   const r = new SpeechRecognition();
-  r.continuous      = false;   // stop after first pause
-  r.interimResults  = true;    // show live transcript while speaking
-  r.lang            = 'en-US';
+  r.continuous     = false;
+  r.interimResults = true;
+  r.lang           = 'en-US';
   return r;
 }
 
-// ─── TTS via ElevenLabs (backend proxy) ──────────────────────────────────────
-// Backend route: POST /api/v1/memories/assistant-speak
-// Body: { text: string }
-// Returns: audio/mpeg stream — we create a Blob URL and play it.
+// ─── TTS via ElevenLabs (backend proxy) ────────────────────────────────────
 const SPEAK_API = '/api/v1/memories/assistant-speak';
-
 let currentAudio = null;
 
 async function speak(text) {
   if (!text) return;
   try {
-    // Stop any currently playing audio
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio = null;
-    }
-
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     const res = await fetch(SPEAK_API, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ text }),
+      body: JSON.stringify({ text }),
     });
-
-    if (!res.ok) {
-      console.warn('ElevenLabs TTS failed:', res.status);
-      return;
-    }
-
+    if (!res.ok) { console.warn('TTS failed:', res.status); return; }
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
-
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      currentAudio = null;
-    };
-
+    audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; };
     await audio.play();
   } catch (err) {
     console.warn('TTS error:', err);
   }
 }
 
+
 export default function AppAssistant({ appContext = {}, onNavigate, onRefresh }) {
   const [open,       setOpen]       = useState(false);
+  const [expanded,   setExpanded]   = useState(false);
   const [messages,   setMessages]   = useState(() => {
     try {
       const saved = sessionStorage.getItem('amber-chat');
@@ -105,42 +93,81 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
   });
   const [input,      setInput]      = useState('');
   const [sending,    setSending]    = useState(false);
+  const [streamText, setStreamText] = useState('');
 
-  // ── Voice state ─────────────────────────────────────────────────────────
+  // Voice state
   const [listening,      setListening]      = useState(false);
   const [liveTranscript, setLiveTranscript] = useState('');
   const recognizerRef  = useRef(null);
   const voiceSupported = !!SpeechRecognition;
 
-  // ── Voice-response toggle — Amber speaks ALL replies when on ────────────
+  // Voice-response toggle
   const [voiceResponse, setVoiceResponse] = useState(() => {
     try { return localStorage.getItem('amber-voice-response') !== '0'; } catch { return true; }
   });
 
-  const chatRef  = useRef(null);
-  const inputRef = useRef(null);
+  // Scroll-to-bottom state
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
+  const chatRef    = useRef(null);
+  const inputRef   = useRef(null);
+  const abortRef   = useRef(null);
+
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
-  }, [messages, open]);
+  }, [messages, open, streamText]);
 
   // Persist chat to sessionStorage
   useEffect(() => {
     try { sessionStorage.setItem('amber-chat', JSON.stringify(messages)); } catch { /* ignore */ }
   }, [messages]);
 
+  // Focus input when opening
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 120);
   }, [open]);
 
-  // ── Core send (handles both text and voice-triggered messages) ───────────
+  // ── Escape key closes panel ──────────────────────────────────────────────
+  useEffect(() => {
+    function handleGlobalKey(e) {
+      if (e.key === 'Escape' && open) {
+        e.preventDefault();
+        setOpen(false);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        setOpen(prev => !prev);
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKey);
+    return () => window.removeEventListener('keydown', handleGlobalKey);
+  }, [open]);
+
+  // ── Scroll detection for jump-to-bottom ──────────────────────────────────
+  useEffect(() => {
+    const el = chatRef.current;
+    if (!el) return;
+    function onScroll() {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollBtn(distFromBottom > 80);
+    }
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [open]);
+
+  // ── Streaming send ─────────────────────────────────────────────────────
   const send = useCallback(async (text, { forceVoice = false } = {}) => {
     if (!text?.trim() || sending) return;
 
-    const userMsg = { role: 'user', text: text.trim() };
+    const userMsg = { role: 'user', text: text.trim(), ts: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setSending(true);
+    setStreamText('');
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const body = {
@@ -150,112 +177,155 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       };
       if (forceVoice) body._voiceTriggered = true;
 
-      const res = await fetch(API, {
-        method:  'POST',
+      const res = await fetch(STREAM_API, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
+        body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
-      const data = await res.json();
-
-      if (data.error) {
-        setMessages(prev => [...prev, {
-          role:  'assistant',
-          text:  data.reply || `Something went wrong: ${data.error}`,
-          error: true,
-        }]);
-      } else {
+      if (!res.ok || !res.body) {
+        // Fall back to non-streaming endpoint
+        const fallback = await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await fallback.json();
         const reply = data.reply || 'Done.';
         setMessages(prev => [...prev, {
-          role:           'assistant',
-          text:           reply,
-          action:         data.action,
-          nextBestAction: data.nextBestAction || null,
+          role: 'assistant', text: reply, ts: Date.now(),
+          action: data.action, nextBestAction: data.nextBestAction || null,
+          error: !!data.error,
         }]);
-        // Speak reply when voice-response is enabled or voice-triggered
         if (forceVoice || voiceResponse) speak(reply);
+        if (data.navigate && onNavigate) setTimeout(() => onNavigate(data.navigate), 400);
+        if (data.refresh && onRefresh) onRefresh(data.refresh);
+        return;
       }
 
-      if (data.navigate && onNavigate) setTimeout(() => onNavigate(data.navigate), 400);
-      if (data.refresh  && onRefresh)  onRefresh(data.refresh);
+      // SSE streaming
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullReply = '';
+      let metadata = {};
 
-    } catch {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'token') {
+              fullReply += event.text;
+              setStreamText(fullReply);
+            } else if (event.type === 'done') {
+              metadata = event;
+              fullReply = event.reply || fullReply;
+            } else if (event.type === 'error') {
+              fullReply = event.reply || event.error;
+              metadata = { error: true };
+            }
+          } catch { /* skip malformed lines */ }
+        }
+      }
+
+      // Commit final message
+      setStreamText('');
       setMessages(prev => [...prev, {
-        role:  'assistant',
-        text:  "Can't reach Amber right now. Check your connection and try again.",
+        role: 'assistant', text: fullReply, ts: Date.now(),
+        action: metadata.action || null,
+        nextBestAction: metadata.nextBestAction || null,
+        error: !!metadata.error,
+      }]);
+
+      if (forceVoice || voiceResponse) speak(fullReply);
+      if (metadata.navigate && onNavigate) setTimeout(() => onNavigate(metadata.navigate), 400);
+      if (metadata.refresh && onRefresh) onRefresh(metadata.refresh);
+
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // User stopped generation — commit what we have
+        if (streamText) {
+          setMessages(prev => [...prev, {
+            role: 'assistant', text: streamText + ' [stopped]', ts: Date.now(),
+          }]);
+        }
+        setStreamText('');
+        return;
+      }
+      setStreamText('');
+      setMessages(prev => [...prev, {
+        role: 'assistant', ts: Date.now(),
+        text: "Can't reach Amber right now. Check your connection and try again.",
         error: true,
       }]);
     } finally {
       setSending(false);
+      abortRef.current = null;
       inputRef.current?.focus();
     }
-  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse]);
+  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse, streamText]);
 
-  // ── Voice: start listening ───────────────────────────────────────────────
+  // ── Stop generating ───────────────────────────────────────────────────
+  const stopGenerating = useCallback(() => {
+    if (abortRef.current) abortRef.current.abort();
+  }, []);
+
+  // ── Clear chat ────────────────────────────────────────────────────────
+  const clearChat = useCallback(() => {
+    setMessages([{ ...GREETING, ts: Date.now() }]);
+    setStreamText('');
+    try { sessionStorage.removeItem('amber-chat'); } catch { /* ignore */ }
+  }, []);
+
+  // ── Copy message ──────────────────────────────────────────────────────
+  const [copiedIdx, setCopiedIdx] = useState(null);
+  const copyMessage = useCallback(async (text, idx) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 1500);
+    } catch { /* clipboard may not be available */ }
+  }, []);
+
+  // ── Voice: start listening ────────────────────────────────────────────
   const startListening = useCallback(() => {
     if (!voiceSupported || listening || sending) return;
-
     const rec = createRecognizer();
     if (!rec) return;
-
     recognizerRef.current = rec;
-
-    rec.onstart = () => {
-      setListening(true);
-      setLiveTranscript('');
-    };
-
+    rec.onstart = () => { setListening(true); setLiveTranscript(''); };
     rec.onresult = (e) => {
-      let interim = '';
-      let final   = '';
+      let interim = '', final = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
         if (e.results[i].isFinal) final += t;
         else interim += t;
       }
       setLiveTranscript(final || interim);
-
       if (final) {
-        // Final result came in — fire immediately
         setListening(false);
         setLiveTranscript('');
         rec.stop();
         send(final.trim(), { forceVoice: true });
       }
     };
-
-    rec.onerror = (e) => {
-      console.warn('SpeechRecognition error:', e.error);
-      setListening(false);
-      setLiveTranscript('');
-    };
-
-    rec.onend = () => {
-      setListening(false);
-    };
-
+    rec.onerror = () => { setListening(false); setLiveTranscript(''); };
+    rec.onend = () => setListening(false);
     rec.start();
   }, [voiceSupported, listening, sending, send]);
 
-  // ── Voice: stop listening early (release before final) ──────────────────
   const stopListening = useCallback(() => {
-    if (recognizerRef.current) {
-      recognizerRef.current.stop();
-      recognizerRef.current = null;
-    }
+    if (recognizerRef.current) { recognizerRef.current.stop(); recognizerRef.current = null; }
     setListening(false);
-  }, []);
-
-  // Keyboard shortcut: Ctrl+Shift+A (or Cmd+Shift+A) toggles Amber
-  useEffect(() => {
-    function handleGlobalKey(e) {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
-        e.preventDefault();
-        setOpen(prev => !prev);
-      }
-    }
-    window.addEventListener('keydown', handleGlobalKey);
-    return () => window.removeEventListener('keydown', handleGlobalKey);
   }, []);
 
   // Cleanup on unmount
@@ -263,14 +333,12 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     return () => {
       if (recognizerRef.current) recognizerRef.current.stop();
       if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+      if (abortRef.current) abortRef.current.abort();
     };
   }, []);
 
   const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send(input);
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); }
   };
 
   const hasUnread = !open && messages.length > 1;
@@ -284,6 +352,12 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     });
   }, []);
 
+  const scrollToBottom = () => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  };
+
+  const panelClass = `apa-panel${expanded ? ' apa-panel--expanded' : ''}`;
+
   return (
     <div className={`apa-root${open ? ' open' : ''}`}>
 
@@ -292,16 +366,14 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       )}
 
       {open && (
-        <div className="apa-panel">
+        <div className={panelClass}>
           <div className="apa-panel-header">
             <div className="apa-panel-title">
               <svg className="apa-panel-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
               Amber
-              {listening && (
-                <span className="apa-listening-badge">● listening</span>
-              )}
+              {listening && <span className="apa-listening-badge">● listening</span>}
             </div>
             <div className="apa-panel-context">
               {appContext.pageName && appContext.pageName !== appContext.currentView && (
@@ -329,6 +401,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 <span className="apa-ctx-pill">{appContext.currentChapter.title}</span>
               )}
             </div>
+
             <button
               className={`apa-voice-toggle${voiceResponse ? ' apa-voice-toggle--on' : ''}`}
               onClick={toggleVoiceResponse}
@@ -350,12 +423,42 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               )}
               <span className="apa-voice-toggle__label">{voiceResponse ? 'voice on' : 'voice off'}</span>
             </button>
-            <button className="apa-close" onClick={() => window.location.reload()} aria-label="Refresh page" title="Refresh page" style={{ marginLeft: 0 }}>
+
+            {/* Expand / collapse */}
+            <button
+              className="apa-close"
+              onClick={() => setExpanded(e => !e)}
+              aria-label={expanded ? 'Collapse' : 'Expand'}
+              title={expanded ? 'Collapse panel' : 'Expand to full screen'}
+              style={{ marginLeft: 0 }}
+            >
+              {expanded ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
+                  <line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                  <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+                </svg>
+              )}
+            </button>
+
+            {/* Clear chat */}
+            <button
+              className="apa-close"
+              onClick={clearChat}
+              aria-label="Clear chat"
+              title="Clear conversation"
+              style={{ marginLeft: 0 }}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
               </svg>
             </button>
-            <button className="apa-close" onClick={() => setOpen(false)} aria-label="Close">
+
+            <button className="apa-close" onClick={() => setOpen(false)} aria-label="Close" title="Close (Esc)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -379,25 +482,43 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                     <p className="apa-msg-text">{msg.text}</p>
                   )}
                   {msg.nextBestAction && (
-                    <p className="apa-msg-nba">→ {msg.nextBestAction}</p>
+                    <p className="apa-msg-nba">{'\u2192'} {msg.nextBestAction}</p>
                   )}
-                  {msg.action && !msg.error && (
-                    <span className="apa-msg-tag">{msg.action.replace(/_/g, ' ')}</span>
-                  )}
+                  <div className="apa-msg-meta">
+                    {msg.ts && <span className="apa-msg-time">{timeAgo(msg.ts)}</span>}
+                    {msg.action && !msg.error && (
+                      <span className="apa-msg-tag">{msg.action.replace(/_/g, ' ')}</span>
+                    )}
+                    {msg.role === 'assistant' && !msg.error && i > 0 && (
+                      <button
+                        className="apa-msg-copy"
+                        onClick={() => copyMessage(msg.text, i)}
+                        title="Copy message"
+                      >
+                        {copiedIdx === i ? '\u2713' : '\u2398'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
 
-            {/* Live transcript bubble — shows while speaking */}
-            {listening && liveTranscript && (
-              <div className="apa-msg apa-msg--user apa-msg--live">
+            {/* Streaming text — shown while Amber is typing */}
+            {sending && streamText && (
+              <div className="apa-msg apa-msg--assistant">
+                <span className="apa-msg-avatar">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                </span>
                 <div className="apa-msg-body">
-                  <p className="apa-msg-text">{liveTranscript}</p>
+                  <p className="apa-msg-text" dangerouslySetInnerHTML={{ __html: renderMarkdown(streamText) }} />
                 </div>
               </div>
             )}
 
-            {sending && (
+            {/* Thinking dots — shown before any tokens arrive */}
+            {sending && !streamText && (
               <div className="apa-msg apa-msg--assistant">
                 <span className="apa-msg-avatar">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -409,7 +530,23 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 </div>
               </div>
             )}
+
+            {/* Live transcript bubble — voice input */}
+            {listening && liveTranscript && (
+              <div className="apa-msg apa-msg--user apa-msg--live">
+                <div className="apa-msg-body">
+                  <p className="apa-msg-text">{liveTranscript}</p>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Scroll-to-bottom indicator */}
+          {showScrollBtn && (
+            <button className="apa-scroll-bottom" onClick={scrollToBottom} title="Jump to latest">
+              {'\u2193'}
+            </button>
+          )}
 
           {messages.length === 1 && (
             <div className="apa-quick-cmds">
@@ -426,9 +563,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
             </div>
           )}
 
-          <AmberPromptLibrary onSelect={(text) => {
-            send(text);
-          }} />
+          <AmberPromptLibrary onSelect={(text) => send(text)} />
 
           <div className="apa-input-row">
             <textarea
@@ -442,8 +577,22 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               disabled={sending || listening}
             />
 
+            {/* Stop button — shown while streaming */}
+            {sending && (
+              <button
+                className="apa-stop"
+                onClick={stopGenerating}
+                aria-label="Stop generating"
+                title="Stop generating"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            )}
+
             {/* Mic button — only renders if browser supports STT */}
-            {voiceSupported && (
+            {voiceSupported && !sending && (
               <button
                 className={`apa-mic${listening ? ' apa-mic--active' : ''}`}
                 onMouseDown={startListening}
@@ -455,7 +604,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 title={listening ? 'Release to send' : 'Hold to speak'}
               >
                 {listening ? (
-                  /* Waveform icon while active */
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <line x1="12" y1="2"  x2="12" y2="22" />
                     <line x1="7"  y1="6"  x2="7"  y2="18" />
@@ -464,7 +612,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                     <line x1="21" y1="10" x2="21" y2="14" />
                   </svg>
                 ) : (
-                  /* Mic icon at rest */
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="9" y="2" width="6" height="11" rx="3" />
                     <path d="M5 10a7 7 0 0 0 14 0" />
@@ -475,22 +622,24 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               </button>
             )}
 
-            <button
-              className="apa-send"
-              onClick={() => send(input)}
-              disabled={sending || !input.trim() || listening}
-              aria-label="Send"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="19" x2="12" y2="5" />
-                <polyline points="5 12 12 5 19 12" />
-              </svg>
-            </button>
+            {!sending && (
+              <button
+                className="apa-send"
+                onClick={() => send(input)}
+                disabled={!input.trim() || listening}
+                aria-label="Send"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5" />
+                  <polyline points="5 12 12 5 19 12" />
+                </svg>
+              </button>
+            )}
           </div>
 
           {/* Voice hint — shown once, below input */}
           {voiceSupported && messages.length === 1 && (
-            <p className="apa-voice-hint">Hold the mic to speak. Amber will talk back.</p>
+            <p className="apa-voice-hint">Hold the mic to speak. Amber will talk back. Press Esc to close.</p>
           )}
         </div>
       )}
@@ -499,7 +648,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         <button
           className="apa-trigger"
           onClick={() => setOpen(true)}
-          title="Talk to Amber"
+          title="Talk to Amber (Ctrl+Shift+A)"
           aria-label="Talk to Amber"
         >
           <span className="apa-trigger-letter">A</span>

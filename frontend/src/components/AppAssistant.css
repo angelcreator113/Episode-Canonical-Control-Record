@@ -567,3 +567,111 @@
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
+
+/* ── Expanded (full-screen) panel ───────────────────────────────── */
+
+.apa-panel--expanded {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  z-index: 10000;
+  border-radius: 16px;
+  animation: none;
+}
+
+.apa-panel--expanded .apa-messages {
+  max-height: none;
+}
+
+.apa-panel--expanded .apa-msg-body {
+  max-width: 70%;
+}
+
+/* ── Message meta row (timestamp + action tag + copy) ───────────── */
+
+.apa-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.apa-msg-time {
+  font-size: 9px;
+  color: #b0b0b0;
+  letter-spacing: 0.02em;
+}
+
+.apa-msg-copy {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #c0b8c8;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.apa-msg:hover .apa-msg-copy {
+  opacity: 1;
+}
+
+.apa-msg-copy:hover {
+  color: #c4607e;
+}
+
+/* ── Stop generating button ─────────────────────────────────────── */
+
+.apa-stop {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fef2f2;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.apa-stop:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+/* ── Scroll-to-bottom button ─────────────────────────────────────── */
+
+.apa-scroll-bottom {
+  position: absolute;
+  bottom: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: white;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: background 0.15s, color 0.15s;
+  z-index: 2;
+}
+
+.apa-scroll-bottom:hover {
+  background: #fdf2f5;
+  color: #c4607e;
+}
