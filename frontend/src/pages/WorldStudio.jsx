@@ -867,13 +867,6 @@ export default function WorldStudio() {
         {/* Row 1: Title + World Switcher + Primary Action */}
         <div className="ws4-header-row">
           <div className="ws4-header-title-block">
-            <div className="ws4-breadcrumb">
-              <span className="ws4-breadcrumb-link" onClick={() => navigate('/')}>Home</span>
-              <span className="ws4-breadcrumb-sep">/</span>
-              <span className="ws4-breadcrumb-link" onClick={() => navigate('/universe')}>Universe</span>
-              <span className="ws4-breadcrumb-sep">/</span>
-              <span className="ws4-breadcrumb-current">World Studio</span>
-            </div>
             <h1 className="ws4-page-title">World Studio</h1>
           </div>
 
