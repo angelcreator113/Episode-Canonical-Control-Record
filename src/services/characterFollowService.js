@@ -133,6 +133,7 @@ async function generateFollowProfile(character) {
     messages: [{ role: 'user', content: prompt }],
   });
 
+  if (!response.content?.[0]?.text) throw new Error('Empty or invalid response from Claude');
   const text = response.content[0].text;
 
   // Extract JSON from response

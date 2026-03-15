@@ -468,6 +468,7 @@ function CharacterFollowsTab({ characterKey, characterName }) {
   const [followData, setFollowData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState(null);
 
   const API = '/api/v1/character-follows';
   const getToken = () => localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -476,25 +477,31 @@ function CharacterFollowsTab({ characterKey, characterName }) {
   useEffect(() => {
     if (!characterKey) return;
     setLoading(true);
+    setError(null);
     fetch(`${API}/${characterKey}`, { headers: headers() })
       .then(r => r.ok ? r.json() : null)
       .then(d => { setFollowData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((e) => { setError('Failed to load follow data'); setLoading(false); });
   }, [characterKey]);
 
   const generateProfile = async () => {
     setGenerating(true);
+    setError(null);
     try {
       const res = await fetch(`${API}/generate/${characterKey}`, { method: 'POST', headers: headers() });
       if (res.ok) {
         const refreshRes = await fetch(`${API}/${characterKey}`, { headers: headers() });
         if (refreshRes.ok) setFollowData(await refreshRes.json());
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error || 'Failed to generate follow profile');
       }
-    } catch { /* ignore */ }
+    } catch { setError('Network error generating follow profile'); }
     setGenerating(false);
   };
 
   if (loading) return <div className="ws4-tab-empty">Loading follow data…</div>;
+  if (error) return <div className="ws4-tab-empty" style={{color:'#c0392b'}}>{error}</div>;
 
   const profile = followData?.profile;
   const follows = followData?.follows || [];

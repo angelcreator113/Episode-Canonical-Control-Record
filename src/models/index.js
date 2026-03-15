@@ -675,6 +675,12 @@ if (SocialProfileFollower && SocialProfileFollower.associate) {
 if (CharacterFollowProfile && CharacterFollowProfile.associate) {
   CharacterFollowProfile.associate(requiredModels);
 }
+if (RegistryCharacter && CharacterFollowProfile) {
+  RegistryCharacter.hasMany(CharacterFollowProfile, {
+    foreignKey: 'registry_character_id',
+    as: 'followProfiles',
+  });
+}
 
 // SocialProfile ↔ SocialProfileRelationship associations are defined
 // inside SocialProfile.associate() and SocialProfileRelationship.associate()

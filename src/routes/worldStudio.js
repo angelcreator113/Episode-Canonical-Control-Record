@@ -1081,7 +1081,10 @@ router.get('/world/characters', optionalAuth, async (req, res) => {
     if (intimate_eligible) { where += ` AND intimate_eligible = ${intimate_eligible === 'true'}`; }
 
     const characters = await Q(req,
-      `SELECT * FROM world_characters ${where} ORDER BY character_type, name`,
+      `SELECT wc.*, rc.character_key
+       FROM world_characters wc
+       LEFT JOIN registry_characters rc ON rc.id = wc.registry_character_id
+       ${where} ORDER BY wc.character_type, wc.name`,
       { replacements: rep }
     );
     res.json({ characters, count: characters.length });
