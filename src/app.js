@@ -597,6 +597,13 @@ app.use('/api/v1/design-agent', designAgentRoutes);
 const { startScheduler: startCFO } = require('./services/cfoAgent');
 startCFO(6);
 
+// Feed Scheduler routes + startup (auto-fills both Feed layers every 4 hours)
+const feedSchedulerRoutes = trackRouteLoad('feedScheduler', () => require('./routes/feedSchedulerRoutes'));
+app.use('/api/v1/feed-scheduler', feedSchedulerRoutes);
+const { startScheduler: startFeedScheduler, setDb: setFeedDb } = require('./services/feedScheduler');
+setFeedDb(db);
+startFeedScheduler(4, db);
+
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
 app.use('/api/v1/search', searchRoutes);

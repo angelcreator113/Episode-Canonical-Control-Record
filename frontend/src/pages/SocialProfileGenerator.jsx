@@ -168,6 +168,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [sceneContext,setSceneContext] = useState(null);
   const [exporting,setExporting] = useState(false);
   const [followStats,setFollowStats] = useState(null);
+  // Feed Automation
+  const [autoStatus,setAutoStatus] = useState(null);
+  const [autoHistory,setAutoHistory] = useState([]);
+  const [autoRunning,setAutoRunning] = useState(false);
+  const [layerStatus,setLayerStatus] = useState(null);
   // LalaVerse Feed layer
   const [feedLayer,setFeedLayer] = useState('real_world');
   const [lvCity,setLvCity]       = useState('');
@@ -341,6 +346,58 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       const res=await fetch(`${API}/follow-engine/stats`,{headers:authHeaders()});
       const data=await res.json();
       setFollowStats(data);
+    }catch{}
+  };
+
+  // ── Feed Automation helpers ──────────────────────────────────────────
+  const SCHED_API = '/api/v1/feed-scheduler';
+  const loadAutoStatus = async ()=>{
+    try{
+      const [statusRes,histRes,layerRes]=await Promise.all([
+        fetch(`${SCHED_API}/status`,{headers:authHeaders()}),
+        fetch(`${SCHED_API}/history?limit=5`,{headers:authHeaders()}),
+        fetch(`${SCHED_API}/layer-status`,{headers:authHeaders()}),
+      ]);
+      setAutoStatus(await statusRes.json());
+      const hd=await histRes.json();
+      setAutoHistory(hd.history||[]);
+      setLayerStatus((await layerRes.json()).layers||null);
+    }catch{}
+  };
+
+  const toggleScheduler = async (action)=>{
+    try{
+      await fetch(`${SCHED_API}/${action}`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()}});
+      await loadAutoStatus();
+    }catch{}
+  };
+
+  const runAutoNow = async ()=>{
+    setAutoRunning(true);
+    try{
+      await fetch(`${SCHED_API}/run-now`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()}});
+      await loadAutoStatus();
+      await loadProfiles();
+      showToast('Automation cycle complete','success');
+    }catch(e){showToast('Cycle failed: '+e.message,'error');}
+    finally{setAutoRunning(false);}
+  };
+
+  const fillOneProfile = async (layer)=>{
+    setAutoRunning(true);
+    try{
+      const res=await fetch(`${SCHED_API}/fill-one`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:layer})});
+      const data=await res.json();
+      if(data.profile){showToast(`Created @${data.profile.handle}`,'success');await loadProfiles();await loadAutoStatus();}
+      else showToast(data.error||'Failed','error');
+    }catch(e){showToast(e.message,'error');}
+    finally{setAutoRunning(false);}
+  };
+
+  const updateAutoConfig = async (updates)=>{
+    try{
+      await fetch(`${SCHED_API}/config`,{method:'PUT',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify(updates)});
+      await loadAutoStatus();
     }catch{}
   };
 
@@ -538,8 +595,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </div>
             {/* View mode switcher */}
             <div style={{display:'flex',gap:2,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:2,border:`1px solid ${C.border}`,marginLeft:8}}>
-              {[['grid','Grid'],['timeline','Timeline'],['follows','Follows']].map(([k,l])=>(
-                <button key={k} onClick={()=>{setFeedView(k);if(k==='follows')loadFollowStats();}} style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
+              {[['grid','Grid'],['timeline','Timeline'],['follows','Follows'],['automation','Automation']].map(([k,l])=>(
+                <button key={k} onClick={()=>{setFeedView(k);if(k==='follows')loadFollowStats();if(k==='automation')loadAutoStatus();}} style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
                   background:feedView===k?C.lavender:'transparent',color:feedView===k?'#fff':C.inkLight,transition:'all 0.15s'}}>
                   {l}
                 </button>
@@ -846,6 +903,148 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                     );
                   })}
                 </div>
+              </div>
+            )}
+            {/* ── AUTOMATION VIEW — scheduler controls ── */}
+            {feedView==='automation' && (
+              <div style={{maxWidth:900,margin:'0 auto'}}>
+                {/* Scheduler Status */}
+                <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+                    <div style={{fontSize:16,fontWeight:700,color:C.ink}}>Feed Automation</div>
+                    <div style={{display:'flex',gap:8}}>
+                      <button onClick={()=>toggleScheduler(autoStatus?.running?'stop':'start')} style={{padding:'6px 16px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',border:'none',background:autoStatus?.running?'#ef4444':'#22c55e',color:'#fff'}}>
+                        {autoStatus?.running?'Stop Scheduler':'Start Scheduler'}
+                      </button>
+                      <button onClick={runAutoNow} disabled={autoRunning} style={{padding:'6px 16px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.lavender}`,background:'transparent',color:C.lavender,opacity:autoRunning?0.5:1}}>
+                        {autoRunning?'Running…':'Run Cycle Now'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Status indicators */}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginBottom:16}}>
+                    <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:autoStatus?.running?'#eef7ec':'#fde8e8',border:`1px solid ${autoStatus?.running?'#c3e6cb':'#f5c6cb'}`}}>
+                      <div style={{fontSize:18,fontWeight:700,color:autoStatus?.running?'#22c55e':'#ef4444'}}>{autoStatus?.running?'Active':'Stopped'}</div>
+                      <div style={{fontSize:11,color:C.inkLight}}>Scheduler</div>
+                    </div>
+                    <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                      <div style={{fontSize:18,fontWeight:700,color:C.lavender}}>{autoStatus?.interval_hours||4}h</div>
+                      <div style={{fontSize:11,color:C.inkLight}}>Interval</div>
+                    </div>
+                    <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                      <div style={{fontSize:18,fontWeight:700,color:C.blue}}>{autoStatus?.history_count||0}</div>
+                      <div style={{fontSize:11,color:C.inkLight}}>Runs Logged</div>
+                    </div>
+                    {autoStatus?.last_run&&(
+                      <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:12,fontWeight:700,color:C.ink}}>{new Date(autoStatus.last_run).toLocaleString()}</div>
+                        <div style={{fontSize:11,color:C.inkLight}}>Last Run</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Layer fill status */}
+                  {layerStatus&&(
+                    <div style={{marginBottom:16}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Layer Fill Status</div>
+                      {Object.entries(layerStatus).map(([layer,ls])=>(
+                        <div key={layer} style={{marginBottom:10}}>
+                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                            <span style={{fontSize:12,fontWeight:700,color:C.ink}}>{layer==='real_world'?"JustAWoman's Feed":"Lala's Feed"}</span>
+                            <span style={{fontSize:12,color:C.inkLight}}>{ls.total}/{ls.cap} ({ls.fill_pct}%)</span>
+                          </div>
+                          <div style={{height:8,borderRadius:4,background:C.surfaceAlt,border:`1px solid ${C.border}`,overflow:'hidden'}}>
+                            <div style={{height:'100%',borderRadius:4,background:layer==='real_world'?C.blue:C.lavender,width:`${ls.fill_pct}%`,transition:'width 0.3s'}}/>
+                          </div>
+                          <div style={{display:'flex',gap:12,marginTop:4}}>
+                            <span style={{fontSize:10,color:C.inkLight}}>Generated: {ls.breakdown?.generated||0}</span>
+                            <span style={{fontSize:10,color:C.inkLight}}>Finalized: {ls.breakdown?.finalized||0}</span>
+                            <span style={{fontSize:10,color:C.inkLight}}>Crossed: {ls.breakdown?.crossed||0}</span>
+                            <button onClick={()=>fillOneProfile(layer)} disabled={autoRunning||ls.remaining<=0} style={{fontSize:10,color:C.lavender,background:'transparent',border:'none',cursor:'pointer',fontWeight:700,marginLeft:'auto',opacity:autoRunning?0.5:1}}>
+                              + Fill One
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Sub-agent toggles */}
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Sub-Agents</div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
+                      {[
+                        {key:'auto_fill_enabled',label:'Auto-Fill',desc:'Generate profiles to fill caps'},
+                        {key:'auto_finalize_enabled',label:'Auto-Finalize',desc:'Lock high-relevance profiles'},
+                        {key:'auto_relate_enabled',label:'Auto-Relate',desc:'Link relationships automatically'},
+                        {key:'auto_follow_enabled',label:'Auto-Follow',desc:'Assign followers to new profiles'},
+                        {key:'auto_cross_enabled',label:'Auto-Cross',desc:'Flag profiles ready for crossing'},
+                      ].map(a=>{
+                        const enabled=autoStatus?.config?.[a.key]!==false;
+                        return (
+                          <div key={a.key} onClick={()=>updateAutoConfig({[a.key]:!enabled})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:C.radiusSm,background:enabled?'#eef7ec':C.surfaceAlt,border:`1px solid ${enabled?'#c3e6cb':C.border}`,cursor:'pointer',transition:'all 0.15s'}}>
+                            <div style={{width:14,height:14,borderRadius:3,background:enabled?'#22c55e':C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff'}}>{enabled?'✓':''}</div>
+                            <div>
+                              <div style={{fontSize:12,fontWeight:700,color:C.ink}}>{a.label}</div>
+                              <div style={{fontSize:10,color:C.inkLight}}>{a.desc}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Config sliders */}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:12}}>
+                    <div>
+                      <label style={{fontSize:11,fontWeight:700,color:C.inkLight}}>Batch Size (per run)</label>
+                      <select value={autoStatus?.config?.batch_size||5} onChange={e=>updateAutoConfig({batch_size:Number(e.target.value)})} style={{width:'100%',padding:'6px 10px',marginTop:4,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}}>
+                        {[1,2,3,5,8,10,15,20].map(n=><option key={n} value={n}>{n} profiles</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{fontSize:11,fontWeight:700,color:C.inkLight}}>Finalize Threshold</label>
+                      <select value={autoStatus?.config?.finalize_threshold||7} onChange={e=>updateAutoConfig({finalize_threshold:Number(e.target.value)})} style={{width:'100%',padding:'6px 10px',marginTop:4,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}}>
+                        {[5,6,7,8,9,10].map(n=><option key={n} value={n}>Relevance &ge; {n}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{fontSize:11,fontWeight:700,color:C.inkLight}}>Cross Threshold</label>
+                      <select value={autoStatus?.config?.cross_threshold||9} onChange={e=>updateAutoConfig({cross_threshold:Number(e.target.value)})} style={{width:'100%',padding:'6px 10px',marginTop:4,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}}>
+                        {[7,8,9,10].map(n=><option key={n} value={n}>Relevance &ge; {n}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Run History */}
+                {autoHistory.length>0&&(
+                  <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
+                    <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Recent Runs</div>
+                    {autoHistory.map((run,i)=>(
+                      <div key={i} style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,marginBottom:8}}>
+                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                          <span style={{fontSize:12,fontWeight:700,color:C.ink}}>{new Date(run.ran_at).toLocaleString()}</span>
+                          <span style={{fontSize:11,color:C.inkLight}}>{run.duration_ms}ms</span>
+                        </div>
+                        <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                          <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#eef7ec',color:'#22c55e'}}>+{run.summary?.profiles_created||0} created</span>
+                          <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{run.summary?.profiles_finalized||0} finalized</span>
+                          <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{run.summary?.relationships_created||0} linked</span>
+                          <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{run.summary?.profiles_flagged||0} crossing-ready</span>
+                          {run.errors>0&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#fde8e8',color:'#ef4444'}}>{run.errors} errors</span>}
+                        </div>
+                        {run.layer_status&&(
+                          <div style={{display:'flex',gap:16,marginTop:6}}>
+                            <span style={{fontSize:10,color:C.inkLight}}>Real World: {run.layer_status.real_world?.count}/{run.layer_status.real_world?.cap}</span>
+                            <span style={{fontSize:10,color:C.inkLight}}>LalaVerse: {run.layer_status.lalaverse?.count}/{run.layer_status.lalaverse?.cap}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <Pagination/>
