@@ -248,13 +248,14 @@ async function runDiagnosticScan(trigger = 'manual') {
     { name: 'route_health',               fn: checkRouteHealth           },
   ];
 
-  for (const check of checks) {
-    try {
-      const results = await check.fn();
-      allFindings.push(...results);
-      checksRun.push({ name: check.name, findings: results.length, ok: true });
-    } catch (err) {
-      checksRun.push({ name: check.name, ok: false, error: err.message });
+  const results = await Promise.allSettled(checks.map(c => c.fn()));
+  for (let i = 0; i < checks.length; i++) {
+    const result = results[i];
+    if (result.status === 'fulfilled') {
+      allFindings.push(...result.value);
+      checksRun.push({ name: checks[i].name, findings: result.value.length, ok: true });
+    } else {
+      checksRun.push({ name: checks[i].name, ok: false, error: result.reason?.message });
     }
   }
 

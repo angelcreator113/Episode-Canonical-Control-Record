@@ -265,6 +265,12 @@ export default function AmberCommandCenter() {
   const [loading,    setLoading]    = useState(true);
   const [scanResult, setScanResult] = useState(null);
   const [filter,     setFilter]     = useState('active');
+  const [toast,      setToast]      = useState(null);
+
+  function showToast(msg, isError = false) {
+    setToast({ msg, isError });
+    setTimeout(() => setToast(null), 4000);
+  }
 
   const loadFindings = useCallback(async () => {
     try {
@@ -312,20 +318,37 @@ export default function AmberCommandCenter() {
   }
 
   async function approveFinding(id) {
-    await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/approve`, { method: 'POST' });
-    await loadFindings();
+    try {
+      const res = await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/approve`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+      await loadFindings();
+    } catch (err) {
+      showToast(`Approve failed: ${err.message}`, true);
+    }
   }
 
   async function executeFinding(id) {
     setExecuting(id);
-    await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/execute`, { method: 'POST' });
-    await loadFindings();
-    setExecuting(null);
+    try {
+      const res = await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/execute`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+      showToast('Fix applied via Claude Code');
+      await loadFindings();
+    } catch (err) {
+      showToast(`Execution failed: ${err.message}`, true);
+    } finally {
+      setExecuting(null);
+    }
   }
 
   async function dismissFinding(id) {
-    await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/dismiss`, { method: 'POST' });
-    await loadFindings();
+    try {
+      const res = await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/dismiss`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+      await loadFindings();
+    } catch (err) {
+      showToast(`Dismiss failed: ${err.message}`, true);
+    }
   }
 
   const active    = findings.filter(f => ['detected', 'surfaced', 'approved', 'executing'].includes(f.status));
@@ -469,6 +492,21 @@ export default function AmberCommandCenter() {
           ) : (
             tasks.map(t => <TaskCard key={t.id} task={t} />)
           )}
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
+          padding: '12px 20px', borderRadius: '10px',
+          background: toast.isError ? '#fdf0f0' : '#f0f7ee',
+          border: `1px solid ${toast.isError ? '#d47878' : '#78b89a'}`,
+          color: toast.isError ? '#d47878' : '#5a8a50',
+          fontSize: '13px', fontWeight: '500',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+        }}>
+          {toast.msg}
         </div>
       )}
 
