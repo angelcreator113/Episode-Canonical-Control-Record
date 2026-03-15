@@ -421,18 +421,24 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
     `INSERT INTO registry_characters
        (id, registry_id, character_key, display_name, selected_name, subtitle,
         role_type, role_label, appearance_mode, status,
-        core_desire, core_fear, signature_trait, description,
+        core_desire, core_fear, core_wound, mask_persona, truth_persona,
+        character_archetype, signature_trait, emotional_baseline, description,
         personality_matrix, aesthetic_dna, career_status,
         relationships_map, voice_signature, story_presence,
         evolution_tracking, extra_fields, name_options,
+        gender, age, sexuality, relationship_status, hometown, current_city,
+        physical_presence,
         world_character_id, sort_order, created_at, updated_at)
      VALUES
        (:id, :registry_id, :char_key, :display_name, :selected_name, :subtitle,
         :role_type, :role_label, 'on_page', 'draft',
-        :core_desire, :core_fear, :signature_trait, :description,
+        :core_desire, :core_fear, :core_wound, :mask_persona, :truth_persona,
+        :character_archetype, :signature_trait, :emotional_baseline, :description,
         :personality_matrix, :aesthetic_dna, :career_status,
         :relationships_map, :voice_signature, :story_presence,
         :evolution_tracking, :extra_fields, :name_options,
+        :gender, :age, :sexuality, :relationship_status, :hometown, :current_city,
+        :physical_presence,
         :world_char_id, 0, NOW(), NOW())`,
     {
       replacements: {
@@ -444,25 +450,41 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
         subtitle: [c.age_range, c.occupation].filter(Boolean).join(' · ') || null,
         role_type: roleType,
         role_label: c.character_type || null,
-        core_desire: c.surface_want || null,
-        core_fear: c.real_want || null,
+        // Essence Profile — corrected semantic mappings
+        core_desire: c.real_want || null,                    // what they'd never admit wanting
+        core_fear: c.core_fear || null,                      // new prompt field
+        core_wound: c.desire_they_wont_admit || null,        // the complicating private desire
+        mask_persona: c.public_persona || null,              // how the world sees them
+        truth_persona: c.private_reality || null,            // what only close people know
+        character_archetype: c.character_archetype || null,   // new prompt field
         signature_trait: c.signature || null,
+        emotional_baseline: c.emotional_baseline || null,     // new prompt field
         description: [c.occupation, c.dynamic].filter(Boolean).join('. ') || null,
 
         personality_matrix: JSON.stringify({
-          core_wound: null, desire_line: c.surface_want || null,
-          fear_line: c.real_want || null, coping_mechanism: null,
-          self_deception: null, at_their_best: null, at_their_worst: null,
+          core_wound: c.desire_they_wont_admit || null,
+          desire_line: c.real_want || null,
+          fear_line: c.core_fear || null,
+          coping_mechanism: c.moral_code || null,
+          self_deception: c.surface_want || null,   // what they tell themselves they want
+          at_their_best: null,
+          at_their_worst: null,
         }),
         aesthetic_dna: JSON.stringify({
-          era_aesthetic: c.aesthetic || null, color_palette: null,
-          signature_silhouette: null, signature_accessories: null,
-          glam_energy: null, visual_evolution_notes: null,
+          era_aesthetic: c.aesthetic || null,
+          color_palette: c.color_palette || null,              // new prompt field
+          signature_silhouette: c.signature_silhouette || null, // new prompt field
+          signature_accessories: c.signature_accessories || null, // new prompt field
+          glam_energy: c.glam_energy || null,                  // new prompt field
+          visual_evolution_notes: null,
         }),
         career_status: JSON.stringify({
-          profession: c.occupation || null, career_goal: c.surface_want || null,
-          reputation_level: null, brand_relationships: null,
-          financial_status: null, public_recognition: null,
+          profession: c.occupation || null,
+          career_goal: c.career_goal || null,                  // new prompt field
+          reputation_level: null,
+          brand_relationships: null,
+          financial_status: null,
+          public_recognition: c.public_persona || null,
           ongoing_arc: c.arc_role || null,
         }),
         relationships_map: JSON.stringify({
@@ -471,11 +493,15 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
           dynamic_notes: c.dynamic || null,
           tension_type: c.tension_type || null,
           what_they_want_from_lala: c.what_they_want_from_lala || null,
+          attracted_to: c.attracted_to || null,
+          how_they_love: c.how_they_love || null,
         }),
         voice_signature: JSON.stringify({
-          speech_pattern: null, vocabulary_tone: null,
-          catchphrases: c.signature || null,
-          internal_monologue_style: null, emotional_reactivity: null,
+          speech_pattern: c.speech_pattern || null,              // new prompt field
+          vocabulary_tone: c.vocabulary_tone || null,            // new prompt field
+          catchphrases: null,
+          internal_monologue_style: null,
+          emotional_reactivity: c.how_they_love || null,
         }),
         story_presence: JSON.stringify({
           appears_in_books: worldTag,
@@ -491,13 +517,24 @@ async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalav
         extra_fields: JSON.stringify({
           source: 'world_studio',
           world_character_id: worldCharId,
-          sexuality: c.sexuality || null,
           intimate_eligible: c.intimate_eligible || false,
           intimate_style: c.intimate_style || null,
           intimate_dynamic: c.intimate_dynamic || null,
           what_lala_feels: c.what_lala_feels || null,
+          moral_code: c.moral_code || null,
+          fidelity_pattern: c.fidelity_pattern || null,
+          committed_to: c.committed_to || null,
+          career_echo_connection: c.career_echo_connection || false,
         }),
         name_options: JSON.stringify([c.name]),
+        // Demographics layer
+        gender: c.gender || null,
+        age: c.age_range ? parseInt(c.age_range.replace(/\D/g, '')) || null : null,
+        sexuality: c.sexuality || null,
+        relationship_status: c.relationship_status || null,
+        hometown: c.origin_story || null,
+        current_city: c.world_location || null,
+        physical_presence: c.aesthetic || null,
         world_char_id: worldCharId,
       },
       type: sequelize.QueryTypes.INSERT,
@@ -763,24 +800,35 @@ Return JSON only:
   "characters": [
     {
       "name": "full name",
+      "gender": "male|female|non_binary|agender — explicit gender for relationship compatibility",
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
       "world_location": "where they exist in ${wCfg.title}",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant",
+      "character_archetype": "Strategist|Dreamer|Performer|Guardian|Rebel|Visionary|Healer|Trickster|Sage|Creator — their core archetype",
+      "emotional_baseline": "calm|volatile|guarded|warm|anxious|detached|intense|playful — their default emotional register",
       "relationship_status": "single|dating|engaged|married|divorced|separated|its_complicated — their actual status, not what they tell people",
       "committed_to": "name of the person they're committed to (another character or offscreen person), or null if single",
       "moral_code": "1-2 sentences about their personal ethics — what lines they won't cross, or what lines they pretend they won't cross",
       "fidelity_pattern": "faithful_tested|faithful_untested|emotionally_unfaithful|physically_unfaithful|serial_cheater|loyal_until_broken|would_never|already_has — how they behave when commitment meets temptation",
       "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
+      "core_fear": "the thing they're most afraid of — distinct from what they want",
       "aesthetic": "how they look, dress, move — specific and visual",
+      "color_palette": "2-3 signature colors that define their visual identity (e.g. 'matte black, champagne gold, oxblood')",
+      "signature_silhouette": "their signature clothing shape (e.g. 'oversized blazers over slip dresses')",
+      "signature_accessories": "1-2 items they're known for (e.g. 'thin gold chain, vintage watch')",
+      "glam_energy": "Minimal|Maximal|Editorial — their beauty/grooming intensity",
       "signature": "the one thing about them that is unforgettable",
       "surface_want": "what they'd tell you they want",
       "real_want": "what they'd never admit",
+      "career_goal": "their specific professional ambition — distinct from surface_want",
       "what_they_want_from_lala": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
       "dynamic": "the texture of their connection with ${protagonist}",
       "tension_type": "romantic|professional|creative|power|unspoken|moral|fidelity|temptation|betrayal|guilt",
+      "speech_pattern": "how they talk — sentence structure, pace, verbal tics (e.g. 'clipped sentences, never asks questions, uses silence as punctuation')",
+      "vocabulary_tone": "the register and flavor of their language (e.g. 'corporate polish masking street vernacular')",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
       "what_lala_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
@@ -798,7 +846,7 @@ Return JSON only:
   ],
   "generation_notes": "brief note on ecosystem logic — who connects to who, what tensions exist, which characters test each other's loyalty/fidelity, who argues, who stays, who leaves"
 }`,
-      10000
+      14000
     );
 
     const parsed = parseJSON(result);
@@ -822,6 +870,7 @@ Return JSON only:
       const wcRecord = await WorldCharacter.create({
         batch_id: batchId,
         name: c.name,
+        gender: c.gender || null,
         age_range: c.age_range || null,
         occupation: c.occupation || null,
         world_location: c.world_location || null,
@@ -1697,8 +1746,8 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
       WHERE status != 'archived' ORDER BY created_at DESC
     `);
 
-    // Adaptive token limit: ~1200 tokens per character (31 fields + JSON overhead)
-    const tokenLimit = Math.max(6000, Math.min(16000, character_count * 1200 + 2000));
+    // Adaptive token limit: ~1600 tokens per character (40+ fields + JSON overhead)
+    const tokenLimit = Math.max(8000, Math.min(20000, character_count * 1600 + 2000));
 
     const result = await claude(
       wCfg.system_prompt,
@@ -1728,20 +1777,30 @@ Return JSON only:
       "occupation": "specific job/role",
       "world_location": "where they exist in ${wCfg.title}",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant|friend|coworker",
+      "character_archetype": "Strategist|Dreamer|Performer|Guardian|Rebel|Visionary|Healer|Trickster|Sage|Creator — their core archetype",
+      "emotional_baseline": "calm|volatile|guarded|warm|anxious|detached|intense|playful — their default emotional register",
       "relationship_status": "single|dating|engaged|married|divorced|separated|its_complicated — their actual status, not what they tell people",
       "committed_to": "name of the person they're committed to (another character or offscreen person), or null if single",
       "moral_code": "1-2 sentences about their personal ethics — what lines they won't cross, or what lines they pretend they won't cross",
       "fidelity_pattern": "faithful_tested|faithful_untested|emotionally_unfaithful|physically_unfaithful|serial_cheater|loyal_until_broken|would_never|already_has — how they behave when commitment meets temptation",
       "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
+      "core_fear": "the thing they're most afraid of — distinct from what they want",
       "aesthetic": "how they look, dress, move — specific and visual",
+      "color_palette": "2-3 signature colors that define their visual identity (e.g. 'matte black, champagne gold, oxblood')",
+      "signature_silhouette": "their signature clothing shape (e.g. 'oversized blazers over slip dresses')",
+      "signature_accessories": "1-2 items they're known for (e.g. 'thin gold chain, vintage watch')",
+      "glam_energy": "Minimal|Maximal|Editorial — their beauty/grooming intensity",
       "signature": "the one thing about them that is unforgettable",
       "surface_want": "what they'd tell you they want",
       "real_want": "what they'd never admit",
+      "career_goal": "their specific professional ambition — distinct from surface_want",
       "what_they_want_from_protagonist": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
       "dynamic": "the texture of their connection with ${protagonist}",
       "tension_type": "romantic|professional|creative|power|unspoken|moral|fidelity|temptation|betrayal|guilt",
+      "speech_pattern": "how they talk — sentence structure, pace, verbal tics (e.g. 'clipped sentences, never asks questions, uses silence as punctuation')",
+      "vocabulary_tone": "the register and flavor of their language (e.g. 'corporate polish masking street vernacular')",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
       "what_protagonist_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
