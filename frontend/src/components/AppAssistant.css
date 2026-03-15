@@ -417,12 +417,16 @@
   cursor: not-allowed;
 }
 
-/* Active state — holding the mic */
+/* Active state — conversation mode on */
 .apa-mic.apa-mic--active {
   background: #c4607e;
   border-color: #c4607e;
   color: #fff;
   box-shadow: 0 0 0 4px rgba(196, 96, 126, 0.25);
+}
+
+/* Listening state — actively hearing audio */
+.apa-mic.apa-mic--active.apa-mic--listening {
   animation: apa-mic-pulse 1.2s ease-in-out infinite;
 }
 

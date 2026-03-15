@@ -55,12 +55,15 @@ function createRecognizer() {
   return r;
 }
 
+// How long to wait after Amber finishes speaking before resuming mic
+const RESUME_DELAY_MS = 600;
+
 // ─── TTS via ElevenLabs (backend proxy) ────────────────────────────────────
 const SPEAK_API = '/api/v1/memories/assistant-speak';
 let currentAudio = null;
 
-async function speak(text) {
-  if (!text) return;
+async function speak(text, onDone) {
+  if (!text) { onDone?.(); return; }
   try {
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     const res = await fetch(SPEAK_API, {
@@ -68,15 +71,17 @@ async function speak(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
-    if (!res.ok) { console.warn('TTS failed:', res.status); return; }
+    if (!res.ok) { console.warn('TTS failed:', res.status); onDone?.(); return; }
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
-    audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; };
+    audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; onDone?.(); };
+    audio.onerror = () => { currentAudio = null; onDone?.(); };
     await audio.play();
   } catch (err) {
     console.warn('TTS error:', err);
+    onDone?.();
   }
 }
 
@@ -95,11 +100,14 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
   const [sending,    setSending]    = useState(false);
   const [streamText, setStreamText] = useState('');
 
-  // Voice state
+  // Voice state — conversation mode (toggle, not push-to-talk)
   const [listening,      setListening]      = useState(false);
   const [liveTranscript, setLiveTranscript] = useState('');
-  const recognizerRef  = useRef(null);
-  const voiceSupported = !!SpeechRecognition;
+  const [conversing,     setConversing]     = useState(false); // conversation mode active
+  const recognizerRef    = useRef(null);
+  const wantListeningRef = useRef(false);
+  const restartCountRef  = useRef(0);
+  const voiceSupported   = !!SpeechRecognition;
 
   // Voice-response toggle
   const [voiceResponse, setVoiceResponse] = useState(() => {
@@ -133,6 +141,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     function handleGlobalKey(e) {
       if (e.key === 'Escape' && open) {
         e.preventDefault();
+        wantListeningRef.current = false;
+        setConversing(false);
+        if (recognizerRef.current) { try { recognizerRef.current.stop(); } catch {} }
+        setListening(false);
         setOpen(false);
       }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
@@ -198,7 +210,8 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           action: data.action, nextBestAction: data.nextBestAction || null,
           error: !!data.error,
         }]);
-        if (forceVoice || voiceResponse) speak(reply);
+        if (forceVoice || voiceResponse) speak(reply, resumeListeningAfterReply);
+        else resumeListeningAfterReply();
         if (data.navigate && onNavigate) setTimeout(() => onNavigate(data.navigate), 400);
         if (data.refresh && onRefresh) onRefresh(data.refresh);
         return;
@@ -246,7 +259,8 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         error: !!metadata.error,
       }]);
 
-      if (forceVoice || voiceResponse) speak(fullReply);
+      if (forceVoice || voiceResponse) speak(fullReply, resumeListeningAfterReply);
+      else resumeListeningAfterReply();
       if (metadata.navigate && onNavigate) setTimeout(() => onNavigate(metadata.navigate), 400);
       if (metadata.refresh && onRefresh) onRefresh(metadata.refresh);
 
@@ -272,7 +286,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       abortRef.current = null;
       inputRef.current?.focus();
     }
-  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse, streamText]);
+  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse, streamText, resumeListeningAfterReply]);
 
   // ── Stop generating ───────────────────────────────────────────────────
   const stopGenerating = useCallback(() => {
@@ -296,42 +310,110 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     } catch { /* clipboard may not be available */ }
   }, []);
 
-  // ── Voice: start listening ────────────────────────────────────────────
-  const startListening = useCallback(() => {
-    if (!voiceSupported || listening || sending) return;
+  // ── Voice: conversation mode — click once, keep talking ──────────────
+  const startRecSession = useCallback(() => {
     const rec = createRecognizer();
     if (!rec) return;
+
+    if (recognizerRef.current) {
+      try { recognizerRef.current.onend = null; recognizerRef.current.abort(); } catch {}
+    }
     recognizerRef.current = rec;
+    let committed = false;
+
     rec.onstart = () => { setListening(true); setLiveTranscript(''); };
+
     rec.onresult = (e) => {
-      let interim = '', final = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += t;
-        else interim += t;
-      }
-      setLiveTranscript(final || interim);
-      if (final) {
+      if (committed) return;
+      const last = e.results[e.results.length - 1];
+      if (last.isFinal) {
+        const text = last[0].transcript.trim();
+        committed = true;
         setListening(false);
         setLiveTranscript('');
-        rec.stop();
-        send(final.trim(), { forceVoice: true });
+        if (text) send(text, { forceVoice: true });
+      } else {
+        setLiveTranscript(last[0].transcript);
       }
+      restartCountRef.current = 0;
     };
-    rec.onerror = () => { setListening(false); setLiveTranscript(''); };
-    rec.onend = () => setListening(false);
-    rec.start();
-  }, [voiceSupported, listening, sending, send]);
 
-  const stopListening = useCallback(() => {
-    if (recognizerRef.current) { recognizerRef.current.stop(); recognizerRef.current = null; }
-    setListening(false);
-  }, []);
+    rec.onerror = (e) => {
+      if (wantListeningRef.current && (e.error === 'no-speech' || e.error === 'aborted')) {
+        return; // will auto-restart via onend
+      }
+      wantListeningRef.current = false;
+      setConversing(false);
+      setListening(false);
+      setLiveTranscript('');
+    };
+
+    rec.onend = () => {
+      if (wantListeningRef.current) {
+        restartCountRef.current++;
+        if (restartCountRef.current > 20) {
+          wantListeningRef.current = false;
+          setConversing(false);
+          setListening(false);
+          return;
+        }
+        setTimeout(() => {
+          if (wantListeningRef.current) {
+            try { startRecSession(); } catch {
+              wantListeningRef.current = false;
+              setConversing(false);
+              setListening(false);
+            }
+          }
+        }, 120);
+        return;
+      }
+      setListening(false);
+    };
+
+    rec.start();
+    setListening(true);
+  }, [send]);
+
+  // Toggle conversation mode on/off
+  const toggleConversation = useCallback(() => {
+    if (conversing) {
+      // Stop conversation mode
+      wantListeningRef.current = false;
+      setConversing(false);
+      if (recognizerRef.current) {
+        try { recognizerRef.current.stop(); } catch {}
+        recognizerRef.current = null;
+      }
+      setListening(false);
+      setLiveTranscript('');
+    } else {
+      // Start conversation mode
+      wantListeningRef.current = true;
+      restartCountRef.current = 0;
+      setConversing(true);
+      startRecSession();
+    }
+  }, [conversing, startRecSession]);
+
+  // Resume listening after Amber finishes speaking
+  // Uses a ref to break circular dependency: send → resume → startRecSession → send
+  const startRecSessionRef = useRef(null);
+  startRecSessionRef.current = startRecSession;
+
+  const resumeListeningAfterReply = useCallback(() => {
+    if (!wantListeningRef.current || !voiceSupported) return;
+    restartCountRef.current = 0;
+    setTimeout(() => {
+      if (wantListeningRef.current) startRecSessionRef.current?.();
+    }, RESUME_DELAY_MS);
+  }, [voiceSupported]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (recognizerRef.current) recognizerRef.current.stop();
+      wantListeningRef.current = false;
+      if (recognizerRef.current) { try { recognizerRef.current.stop(); } catch {} }
       if (currentAudio) { currentAudio.pause(); currentAudio = null; }
       if (abortRef.current) abortRef.current.abort();
     };
@@ -373,7 +455,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
               Amber
-              {listening && <span className="apa-listening-badge">● listening</span>}
+              {conversing && <span className="apa-listening-badge">{listening ? '● listening' : '● conversing'}</span>}
             </div>
             <div className="apa-panel-context">
               {appContext.pageName && appContext.pageName !== appContext.currentView && (
@@ -572,9 +654,9 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={listening ? 'Listening...' : 'Tell me what to do...'}
+              placeholder={conversing ? (listening ? 'Listening...' : 'Amber is thinking...') : 'Tell me what to do...'}
               rows={2}
-              disabled={sending || listening}
+              disabled={sending || conversing}
             />
 
             {/* Stop button — shown while streaming */}
@@ -591,19 +673,16 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               </button>
             )}
 
-            {/* Mic button — only renders if browser supports STT */}
+            {/* Mic button — click to toggle conversation mode */}
             {voiceSupported && !sending && (
               <button
-                className={`apa-mic${listening ? ' apa-mic--active' : ''}`}
-                onMouseDown={startListening}
-                onMouseUp={stopListening}
-                onTouchStart={(e) => { e.preventDefault(); startListening(); }}
-                onTouchEnd={(e)   => { e.preventDefault(); stopListening();  }}
+                className={`apa-mic${conversing ? ' apa-mic--active' : ''}${listening ? ' apa-mic--listening' : ''}`}
+                onClick={toggleConversation}
                 disabled={sending}
-                aria-label={listening ? 'Release to send' : 'Hold to speak'}
-                title={listening ? 'Release to send' : 'Hold to speak'}
+                aria-label={conversing ? 'End conversation' : 'Start conversation'}
+                title={conversing ? 'Click to end conversation' : 'Click to start voice conversation'}
               >
-                {listening ? (
+                {conversing ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <line x1="12" y1="2"  x2="12" y2="22" />
                     <line x1="7"  y1="6"  x2="7"  y2="18" />
@@ -626,7 +705,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               <button
                 className="apa-send"
                 onClick={() => send(input)}
-                disabled={!input.trim() || listening}
+                disabled={!input.trim() || conversing}
                 aria-label="Send"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -639,7 +718,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
 
           {/* Voice hint — shown once, below input */}
           {voiceSupported && messages.length === 1 && (
-            <p className="apa-voice-hint">Hold the mic to speak. Amber will talk back. Press Esc to close.</p>
+            <p className="apa-voice-hint">Click the mic to start a conversation. Amber listens, replies, then listens again. Click to stop.</p>
           )}
         </div>
       )}
