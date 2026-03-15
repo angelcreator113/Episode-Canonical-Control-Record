@@ -1212,7 +1212,18 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
     if (!character.signature_trait)      essenceFields.push('signature_trait');
     if (!character.emotional_baseline)   essenceFields.push('emotional_baseline');
 
-    if (emptySections.length === 0 && essenceFields.length === 0) {
+    // Demographics fields — individual columns tracked by completeness
+    const demoFields = [];
+    if (!character.gender)         demoFields.push('gender');
+    if (!character.age)            demoFields.push('age');
+    if (!character.ethnicity)      demoFields.push('ethnicity');
+    if (!character.hometown)       demoFields.push('hometown');
+    if (!character.current_city)   demoFields.push('current_city');
+    if (!character.class_origin)   demoFields.push('class_origin');
+    if (!character.pronouns)       demoFields.push('pronouns');
+    if (!character.nationality)    demoFields.push('nationality');
+
+    if (emptySections.length === 0 && essenceFields.length === 0 && demoFields.length === 0) {
       return res.json({ success: true, message: 'All sections already populated', filled: [] });
     }
 
@@ -1260,13 +1271,26 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
     };
     const essenceToFill = essenceFields.map(f => essenceDescriptions[f]).join(',\n');
 
+    // Demographics field descriptions for AI generation
+    const demoDescriptions = {
+      gender: '"gender": "e.g. Female, Male, Non-binary"',
+      age: '"age": "their current age as a number"',
+      ethnicity: '"ethnicity": "their ethnic background"',
+      hometown: '"hometown": "where they grew up"',
+      current_city: '"current_city": "where they live now"',
+      class_origin: '"class_origin": "e.g. Working class, Middle class, Upper class"',
+      pronouns: '"pronouns": "e.g. she/her, he/him, they/them"',
+      nationality: '"nationality": "their country of origin or citizenship"',
+    };
+    const demoToFill = demoFields.map(f => demoDescriptions[f]).join(',\n');
+
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const allFieldsToFill = [sectionsToFill, essenceToFill].filter(Boolean).join(',\n');
+    const allFieldsToFill = [sectionsToFill, essenceToFill, demoToFill].filter(Boolean).join(',\n');
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are filling in missing profile sections for an existing character in the LalaVerse franchise.
 
@@ -1310,6 +1334,21 @@ ${allFieldsToFill}
       }
     }
 
+    // Apply each generated demographics field
+    for (const field of demoFields) {
+      const val = generated[field];
+      if (val !== null && val !== undefined && val !== '') {
+        // age is an integer column
+        if (field === 'age') {
+          const parsed = parseInt(val, 10);
+          if (!isNaN(parsed)) { character[field] = parsed; filled.push(field); }
+        } else if (typeof val === 'string') {
+          character[field] = val;
+          filled.push(field);
+        }
+      }
+    }
+
     await character.save();
 
     // Also normalize relationships_map if it's in array format
@@ -1336,7 +1375,7 @@ ${allFieldsToFill}
     if (!ef.plot_threads || !ef.plot_threads.length) {
       try {
         const threadResp = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1500,
           system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
           messages: [{ role: 'user', content: `Generate plot threads for ${known.display_name || 'this character'}.` }],
@@ -1584,7 +1623,7 @@ router.post('/characters/:id/generate-section', async (req, res) => {
     }
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3000,
       system: `You are filling in a specific profile section for a character in the LalaVerse franchise.
 
@@ -1684,7 +1723,7 @@ router.post('/registries/:registryId/backfill-all', async (req, res) => {
 
       try {
         const response = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 4000,
           system: `You are filling in missing profile sections for an existing character in the LalaVerse franchise.\n\nHere is everything currently known about this character:\n${JSON.stringify(known, null, 2)}\n\nGenerate ONLY the following empty sections. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.\n\nReturn ONLY valid JSON with these keys:\n{\n${sectionsToFill}\n}`,
           messages: [{ role: 'user', content: `Fill in the missing sections for ${known.display_name || 'this character'}.` }],
@@ -1737,7 +1776,7 @@ router.post('/registries/:registryId/backfill-all', async (req, res) => {
         if (!ef.plot_threads || !ef.plot_threads.length) {
           try {
             const threadResp = await anthropic.messages.create({
-              model: 'claude-sonnet-4-20250514',
+              model: 'claude-sonnet-4-6',
               max_tokens: 1500,
               system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
               messages: [{ role: 'user', content: `Generate plot threads for ${known.display_name || 'this character'}.` }],
@@ -1859,7 +1898,7 @@ router.post('/characters/:id/deep-profile/generate', async (req, res) => {
       : '';
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 6000,
       system: `You are generating a 14-dimension deep character anthropology for an existing character.
 
@@ -1959,7 +1998,7 @@ router.post('/characters/:id/deep-profile/writer-input', async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: `You are parsing a writer's free-text notes about a character into the structured deep_profile format.
 
@@ -2099,7 +2138,7 @@ router.post('/characters/bulk-deep-profile', async (req, res) => {
       })) { if (v !== null && v !== undefined && v !== '') dossier[k] = v; }
 
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 6000,
         system: `You are generating a 14-dimension deep character anthropology.
 Character data: ${JSON.stringify(dossier, null, 2)}
@@ -2170,7 +2209,7 @@ router.post('/characters/:id/writer-paragraph/generate', async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       system: `You are writing a rich, literary character paragraph for a writer's reference.
 
@@ -2242,7 +2281,7 @@ router.post('/characters/bulk-writer-paragraph', async (req, res) => {
       });
 
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         system: `You are writing a rich, literary character paragraph for a writer's reference.
 CHARACTER: ${JSON.stringify(charData, null, 2)}

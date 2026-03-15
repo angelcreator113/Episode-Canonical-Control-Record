@@ -310,8 +310,19 @@ router.post('/speak', optionalAuth, speakLimiter, async (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
 
-  // Cap at 500 chars to control ElevenLabs costs
-  const capped = text.slice(0, 500);
+  // Cap at 500 chars to control ElevenLabs costs — break at sentence boundary
+  let capped = text;
+  if (text.length > 500) {
+    // Find the last sentence-ending punctuation before the 500-char limit
+    const truncated = text.slice(0, 500);
+    const lastSentence = Math.max(
+      truncated.lastIndexOf('. '),
+      truncated.lastIndexOf('? '),
+      truncated.lastIndexOf('! '),
+      truncated.lastIndexOf('.\n'),
+    );
+    capped = lastSentence > 100 ? truncated.slice(0, lastSentence + 1) : truncated;
+  }
 
   try {
     const audio = await synthesizeSpeech(capped);

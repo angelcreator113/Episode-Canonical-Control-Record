@@ -4101,33 +4101,51 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
    ================================================================ */
 function SectionGenerateButton({ characterId, onRefresh }) {
   const [generating, setGenerating] = useState(false);
+  const [status, setStatus] = useState(null); // 'success' | 'error' | 'empty' | null
 
   const handleGenerate = async () => {
     setGenerating(true);
+    setStatus(null);
     try {
       const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const resp = await fetch(`/api/v1/character-registry/characters/${characterId}/backfill-sections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
       const data = await resp.json();
-      if (data.success && onRefresh) setTimeout(() => onRefresh(), 500);
+      if (data.filled && data.filled.length > 0) {
+        setStatus('success');
+        if (onRefresh) setTimeout(() => onRefresh(), 500);
+      } else {
+        setStatus('empty');
+      }
     } catch (err) {
       console.error('Section generate error:', err);
+      setStatus('error');
     } finally {
       setGenerating(false);
+      setTimeout(() => setStatus(null), 4000);
     }
   };
 
   return (
-    <button
-      className="cr-btn-outline"
-      style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: generating ? '#999' : '#6850c8' }}
-      onClick={handleGenerate}
-      disabled={generating}
-    >
-      {generating ? '⟳ Generating…' : '✦ Generate'}
-    </button>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <button
+        className="cr-btn-outline"
+        style={{ fontSize: 11, padding: '3px 10px', borderColor: '#6850c8', color: generating ? '#999' : '#6850c8' }}
+        onClick={handleGenerate}
+        disabled={generating}
+      >
+        {generating ? '⟳ Generating…' : '✦ Generate'}
+      </button>
+      {status === 'success' && <span style={{ fontSize: 10, color: '#5dab62', fontWeight: 600 }}>✓ Fields filled</span>}
+      {status === 'empty' && <span style={{ fontSize: 10, color: '#c9a84c', fontWeight: 600 }}>All sections populated</span>}
+      {status === 'error' && <span style={{ fontSize: 10, color: '#d46070', fontWeight: 600 }}>Generation failed</span>}
+    </span>
   );
 }
 

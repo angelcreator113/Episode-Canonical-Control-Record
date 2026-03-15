@@ -32,6 +32,8 @@ const ROUTE_LABELS = {
   'template-studio': 'Template Studio',
   'assets': 'Asset Library',
   'settings': 'Settings',
+  'world-studio': 'World Studio',
+  'scene-studio': 'Scene Studio',
   'search': 'Search',
   'analytics': 'Analytics',
   'decisions': 'Decisions',
