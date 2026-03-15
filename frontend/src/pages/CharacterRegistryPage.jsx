@@ -3054,6 +3054,131 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
         </div>
       );
 
+    /* ── DEMOGRAPHICS ── */
+    case 'demographics':
+      return (
+        <div className="cr-dossier-section">
+          {sectionHeader('Demographics')}
+          {editControls}
+          {editing ? (
+            <>
+              <EField label="Gender" value={form.gender} onChange={v => F('gender', v)} placeholder="e.g. Female, Non-binary" />
+              <EField label="Pronouns" value={form.pronouns} onChange={v => F('pronouns', v)} placeholder="e.g. she/her, they/them" />
+              <EField label="Age" value={form.age} onChange={v => F('age', v)} placeholder="e.g. 28" />
+              <EField label="Birth Year" value={form.birth_year} onChange={v => F('birth_year', v)} placeholder="e.g. 1996" />
+              <EField label="Ethnicity" value={form.ethnicity} onChange={v => F('ethnicity', v)} />
+              <EField label="Species" value={form.species} onChange={v => F('species', v)} placeholder="Default: human" />
+              <EField label="Cultural Background" value={form.cultural_background} onChange={v => F('cultural_background', v)} />
+              <EField label="Nationality" value={form.nationality} onChange={v => F('nationality', v)} />
+              <EField label="First Language" value={form.first_language} onChange={v => F('first_language', v)} />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Geography</span>
+              </div>
+              <EField label="Hometown" value={form.hometown} onChange={v => F('hometown', v)} />
+              <EField label="Current City" value={form.current_city} onChange={v => F('current_city', v)} />
+              <EArea label="Migration History" value={form.city_migration_history} onChange={v => F('city_migration_history', v)} rows={2} />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Class</span>
+              </div>
+              <EField label="Class Origin" value={form.class_origin} onChange={v => F('class_origin', v)} placeholder="e.g. Working class, Upper middle" />
+              <EField label="Current Class" value={form.current_class} onChange={v => F('current_class', v)} />
+              <EField label="Mobility Direction" value={form.class_mobility_direction} onChange={v => F('class_mobility_direction', v)} placeholder="e.g. Upward, Stable, Downward" />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Family</span>
+              </div>
+              <EField label="Family Structure" value={form.family_structure} onChange={v => F('family_structure', v)} placeholder="e.g. Nuclear, Single parent, Extended" />
+              <EField label="Parents Status" value={form.parents_status} onChange={v => F('parents_status', v)} placeholder="e.g. Together, Divorced, Deceased" />
+              <EField label="Sibling Position" value={form.sibling_position} onChange={v => F('sibling_position', v)} placeholder="e.g. Eldest, Middle, Only child" />
+              <EField label="Sibling Count" value={form.sibling_count} onChange={v => F('sibling_count', v)} placeholder="Number" />
+              <EField label="Relationship Status" value={form.relationship_status} onChange={v => F('relationship_status', v)} placeholder="e.g. Single, Married, Complicated" />
+              <EToggle label="Has Children" value={form.has_children} onChange={v => F('has_children', v)} />
+              {form.has_children && <EField label="Children Ages" value={form.children_ages} onChange={v => F('children_ages', v)} />}
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Education & Career</span>
+              </div>
+              <EArea label="Education" value={form.education_experience} onChange={v => F('education_experience', v)} rows={2} />
+              <EArea label="Career History" value={form.career_history} onChange={v => F('career_history', v)} rows={2} />
+              <EField label="Years Active" value={form.years_posting} onChange={v => F('years_posting', v)} />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Presence</span>
+              </div>
+              <EArea label="Physical Presence" value={form.physical_presence} onChange={v => F('physical_presence', v)} rows={2} placeholder="How they take up space — what people notice before they speak" />
+              <EArea label="Demographic Voice Signature" value={form.demographic_voice_signature} onChange={v => F('demographic_voice_signature', v)} rows={2} placeholder="How demographics shape their speech patterns" />
+              <EField label="Primary Platform" value={form.platform_primary} onChange={v => F('platform_primary', v)} placeholder="e.g. Instagram, Twitter" />
+              <EField label="Follower Tier" value={form.follower_tier} onChange={v => F('follower_tier', v)} placeholder="e.g. Micro, Mid-tier, Mega" />
+            </>
+          ) : (c.gender || c.age || c.ethnicity || c.nationality || c.hometown || c.current_city || c.family_structure) ? (
+            <>
+              <DRow label="Gender" value={c.gender} />
+              <DRow label="Pronouns" value={c.pronouns} />
+              <DRow label="Age" value={c.age} />
+              <DRow label="Birth Year" value={c.birth_year} />
+              <DRow label="Ethnicity" value={c.ethnicity} />
+              {c.species && c.species !== 'human' && <DRow label="Species" value={c.species} />}
+              <DRow label="Cultural Background" value={c.cultural_background} />
+              <DRow label="Nationality" value={c.nationality} />
+              <DRow label="First Language" value={c.first_language} />
+              {(c.hometown || c.current_city || c.city_migration_history) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Geography</span>
+                  </div>
+                  <DRow label="Hometown" value={c.hometown} />
+                  <DRow label="Current City" value={c.current_city} />
+                  <DRow label="Migration History" value={c.city_migration_history} />
+                </>
+              )}
+              {(c.class_origin || c.current_class) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Class</span>
+                  </div>
+                  <DRow label="Origin" value={c.class_origin} />
+                  <DRow label="Current" value={c.current_class} />
+                  <DRow label="Mobility" value={c.class_mobility_direction} accent />
+                </>
+              )}
+              {(c.family_structure || c.relationship_status) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Family</span>
+                  </div>
+                  <DRow label="Family Structure" value={c.family_structure} />
+                  <DRow label="Parents" value={c.parents_status} />
+                  <DRow label="Sibling Position" value={c.sibling_position} />
+                  <DRow label="Siblings" value={c.sibling_count} />
+                  <DRow label="Relationship Status" value={c.relationship_status} accent />
+                  {c.has_children && <DRow label="Children Ages" value={c.children_ages || 'Yes'} />}
+                </>
+              )}
+              {(c.education_experience || c.career_history) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Education & Career</span>
+                  </div>
+                  <DRow label="Education" value={c.education_experience} />
+                  <DRow label="Career History" value={c.career_history} />
+                  <DRow label="Years Active" value={c.years_posting} />
+                </>
+              )}
+              {(c.physical_presence || c.platform_primary) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Presence</span>
+                  </div>
+                  <DRow label="Physical Presence" value={c.physical_presence} />
+                  <DRow label="Voice Signature" value={c.demographic_voice_signature} />
+                  <DRow label="Platform" value={c.platform_primary} />
+                  <DRow label="Follower Tier" value={c.follower_tier} />
+                </>
+              )}
+            </>
+          ) : (
+            <EmptyState label="Demographics" onEdit={() => startEdit(tab)} />
+          )}
+        </div>
+      );
+
     /* ── PSYCHOLOGY ── */
     case 'psychology':
       return (
@@ -3433,9 +3558,284 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
         </div>
       );
 
-    /* ── DEEP PROFILE ── */
-    case 'deep':
-      return <DeepProfileTab character={c} />;
+    /* ── DEATH TRACKING ── */
+    case 'death':
+      return (
+        <div className="cr-dossier-section">
+          {sectionHeader('Death Tracking')}
+          {editControls}
+          {editing ? (
+            <>
+              <EToggle label="Character is Alive" value={form.is_alive} onChange={v => F('is_alive', v)} />
+              {!form.is_alive && (
+                <>
+                  <EField label="Date of Death" value={form.death_date} onChange={v => F('death_date', v)} placeholder="YYYY-MM-DD or narrative date" />
+                  <EArea label="Cause of Death" value={form.death_cause} onChange={v => F('death_cause', v)} rows={3} placeholder="How did they die?" />
+                  <EArea label="Death Impact" value={form.death_impact} onChange={v => F('death_impact', v)} rows={3} placeholder="Impact on the story and other characters" />
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <DRow label="Status" value={c.is_alive === false ? 'Deceased' : 'Alive'} accent />
+              {c.is_alive === false && (
+                <>
+                  <DRow label="Date of Death" value={c.death_date} />
+                  <DRow label="Cause" value={c.death_cause} />
+                  <DRow label="Impact" value={c.death_impact} />
+                </>
+              )}
+            </>
+          )}
+        </div>
+      );
+
+    /* ── DEPTH ENGINE ── */
+    case 'depth':
+      return (
+        <div className="cr-dossier-section">
+          {sectionHeader('Depth Engine')}
+          {editControls}
+          {editing ? (
+            <>
+              {/* Body */}
+              <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 12, paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>1. Body</span>
+              </div>
+              <ESelect label="Body Relationship" value={form.de_body_relationship} onChange={v => F('de_body_relationship', v)}
+                options={[{value:'currency',label:'Currency'},{value:'discipline',label:'Discipline'},{value:'burden',label:'Burden'},{value:'stranger',label:'Stranger'},{value:'home',label:'Home'},{value:'evidence',label:'Evidence'}]} allowEmpty />
+              <EField label="Body Currency (1-10)" value={form.de_body_currency} onChange={v => F('de_body_currency', v)} placeholder="1-10" />
+              <EField label="Body Control (1-10)" value={form.de_body_control} onChange={v => F('de_body_control', v)} placeholder="1-10" />
+              <EField label="Body Comfort (1-10)" value={form.de_body_comfort} onChange={v => F('de_body_comfort', v)} placeholder="1-10" />
+              <EArea label="Body History" value={form.de_body_history} onChange={v => F('de_body_history', v)} rows={2} />
+
+              {/* Money */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>2. Money & Class</span>
+              </div>
+              <ESelect label="Money Behavior" value={form.de_money_behavior} onChange={v => F('de_money_behavior', v)}
+                options={[{value:'hoarder',label:'Hoarder'},{value:'compulsive_giver',label:'Compulsive Giver'},{value:'spend_to_feel',label:'Spend to Feel'},{value:'deprivation_guilt',label:'Deprivation Guilt'},{value:'control',label:'Control'},{value:'performs_wealth',label:'Performs Wealth'},{value:'performs_poverty',label:'Performs Poverty'}]} allowEmpty />
+              <ESelect label="Origin Class" value={form.de_money_origin_class} onChange={v => F('de_money_origin_class', v)}
+                options={[{value:'poverty',label:'Poverty'},{value:'working_class',label:'Working Class'},{value:'middle_class',label:'Middle Class'},{value:'upper_middle',label:'Upper Middle'},{value:'wealthy',label:'Wealthy'},{value:'ultra_wealthy',label:'Ultra Wealthy'}]} allowEmpty />
+              <ESelect label="Current Class" value={form.de_money_current_class} onChange={v => F('de_money_current_class', v)}
+                options={[{value:'poverty',label:'Poverty'},{value:'working_class',label:'Working Class'},{value:'middle_class',label:'Middle Class'},{value:'upper_middle',label:'Upper Middle'},{value:'wealthy',label:'Wealthy'},{value:'ultra_wealthy',label:'Ultra Wealthy'}]} allowEmpty />
+              <ESelect label="Class Gap Direction" value={form.de_class_gap_direction} onChange={v => F('de_class_gap_direction', v)}
+                options={[{value:'up',label:'Up'},{value:'down',label:'Down'},{value:'stable',label:'Stable'}]} allowEmpty />
+              <EArea label="Money Wound" value={form.de_money_wound} onChange={v => F('de_money_wound', v)} rows={2} />
+
+              {/* Time */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>3. Time</span>
+              </div>
+              <ESelect label="Time Orientation" value={form.de_time_orientation} onChange={v => F('de_time_orientation', v)}
+                options={[{value:'past_anchored',label:'Past Anchored'},{value:'future_oriented',label:'Future Oriented'},{value:'present_impulsive',label:'Present Impulsive'},{value:'perpetual_waiter',label:'Perpetual Waiter'},{value:'cyclical',label:'Cyclical'}]} allowEmpty />
+              <EArea label="Time Wound" value={form.de_time_wound} onChange={v => F('de_time_wound', v)} rows={2} />
+
+              {/* Luck & Circumstance */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>4. Luck & Circumstance</span>
+              </div>
+              <ESelect label="World Belief" value={form.de_world_belief} onChange={v => F('de_world_belief', v)}
+                options={[{value:'random',label:'Random'},{value:'rigged',label:'Rigged'},{value:'effort',label:'Effort'},{value:'divine',label:'Divine'},{value:'strategy',label:'Strategy'}]} allowEmpty />
+              <EArea label="Advantages" value={form.de_circumstance_advantages} onChange={v => F('de_circumstance_advantages', v)} rows={2} />
+              <EArea label="Disadvantages" value={form.de_circumstance_disadvantages} onChange={v => F('de_circumstance_disadvantages', v)} rows={2} />
+              <EField label="Luck Interpretation (1-10)" value={form.de_luck_interpretation} onChange={v => F('de_luck_interpretation', v)} placeholder="1-10" />
+              <EArea label="Circumstance Wound" value={form.de_circumstance_wound} onChange={v => F('de_circumstance_wound', v)} rows={2} />
+
+              {/* Self-Narrative */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>5. Self-Narrative</span>
+              </div>
+              <EArea label="Origin Story (as they tell it)" value={form.de_self_narrative_origin} onChange={v => F('de_self_narrative_origin', v)} rows={2} />
+              <EArea label="Turning Point" value={form.de_self_narrative_turning_point} onChange={v => F('de_self_narrative_turning_point', v)} rows={2} />
+              <EArea label="Villain (in their story)" value={form.de_self_narrative_villain} onChange={v => F('de_self_narrative_villain', v)} rows={2} />
+              <EArea label="Actual Narrative Gap (Author Only)" value={form.de_actual_narrative_gap} onChange={v => F('de_actual_narrative_gap', v)} rows={2} placeholder="The truth they can't see" />
+              <EArea label="Therapy Target" value={form.de_therapy_target} onChange={v => F('de_therapy_target', v)} rows={2} />
+
+              {/* Blind Spot */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>6. Blind Spot</span>
+              </div>
+              <ESelect label="Blind Spot Category" value={form.de_blind_spot_category} onChange={v => F('de_blind_spot_category', v)}
+                options={[{value:'impact',label:'Impact'},{value:'pattern',label:'Pattern'},{value:'motivation',label:'Motivation'},{value:'strength',label:'Strength'},{value:'wound',label:'Wound'}]} allowEmpty />
+              <EArea label="Blind Spot (Author Only)" value={form.de_blind_spot} onChange={v => F('de_blind_spot', v)} rows={2} />
+              <EArea label="Evidence (Author Only)" value={form.de_blind_spot_evidence} onChange={v => F('de_blind_spot_evidence', v)} rows={2} />
+              <EArea label="Crack Condition (Author Only)" value={form.de_blind_spot_crack_condition} onChange={v => F('de_blind_spot_crack_condition', v)} rows={2} />
+
+              {/* Change Capacity */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>7. Change Capacity</span>
+              </div>
+              <ESelect label="Change Capacity" value={form.de_change_capacity} onChange={v => F('de_change_capacity', v)}
+                options={[{value:'highly_rigid',label:'Highly Rigid'},{value:'conditionally_open',label:'Conditionally Open'},{value:'cyclically_mobile',label:'Cyclically Mobile'},{value:'highly_fluid',label:'Highly Fluid'},{value:'fixed_by_choice',label:'Fixed by Choice'}]} allowEmpty />
+              <EField label="Capacity Score (1-10)" value={form.de_change_capacity_score} onChange={v => F('de_change_capacity_score', v)} placeholder="1-10" />
+              <EArea label="Change Condition" value={form.de_change_condition} onChange={v => F('de_change_condition', v)} rows={2} placeholder="What would have to happen" />
+              <EArea label="Change Witness" value={form.de_change_witness} onChange={v => F('de_change_witness', v)} rows={2} placeholder="Who would need to see it" />
+              <ESelect label="Arc Function" value={form.de_arc_function} onChange={v => F('de_arc_function', v)}
+                options={[{value:'arc',label:'Arc (changes)'},{value:'fixed',label:'Fixed (stays the same)'},{value:'both',label:'Both'}]} allowEmpty />
+
+              {/* Operative Cosmology */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>8. Cosmology</span>
+              </div>
+              <ESelect label="Operative Cosmology" value={form.de_operative_cosmology} onChange={v => F('de_operative_cosmology', v)}
+                options={[{value:'deserving',label:'Deserving'},{value:'contractual',label:'Contractual'},{value:'indifferent',label:'Indifferent'},{value:'relational',label:'Relational'},{value:'authored',label:'Authored'}]} allowEmpty />
+              <EField label="Stated Religion" value={form.de_stated_religion} onChange={v => F('de_stated_religion', v)} />
+              <EArea label="Cosmology Conflict" value={form.de_cosmology_conflict} onChange={v => F('de_cosmology_conflict', v)} rows={2} placeholder="Gap between stated belief and operative worldview" />
+              <EArea label="Meaning-Making Style" value={form.de_meaning_making_style} onChange={v => F('de_meaning_making_style', v)} rows={2} />
+
+              {/* Foreclosed Possibility */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>9. Foreclosed Possibility</span>
+              </div>
+              <EArea label="Foreclosed Possibilities" value={form.de_foreclosed_possibilities} onChange={v => F('de_foreclosed_possibilities', v)} rows={2} placeholder="What they've decided is impossible for them (comma-separated)" />
+              <EArea label="Foreclosure Origins" value={form.de_foreclosure_origins} onChange={v => F('de_foreclosure_origins', v)} rows={2} placeholder="Where each foreclosure came from" />
+              <EArea label="Crack Conditions" value={form.de_crack_conditions} onChange={v => F('de_crack_conditions', v)} rows={2} placeholder="What could reopen these doors" />
+
+              {/* Joy */}
+              <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>10. Joy</span>
+              </div>
+              <EArea label="Joy Trigger" value={form.de_joy_trigger} onChange={v => F('de_joy_trigger', v)} rows={2} placeholder="What actually makes them feel joy" />
+              <EField label="Body Location" value={form.de_joy_body_location} onChange={v => F('de_joy_body_location', v)} placeholder="Where they feel joy physically" />
+              <EArea label="Joy Origin" value={form.de_joy_origin} onChange={v => F('de_joy_origin', v)} rows={2} placeholder="Where this capacity came from" />
+              <EArea label="Forbidden Joy" value={form.de_forbidden_joy} onChange={v => F('de_forbidden_joy', v)} rows={2} placeholder="Joy they won't allow themselves" />
+              <ESelect label="Joy Threat Response" value={form.de_joy_threat_response} onChange={v => F('de_joy_threat_response', v)}
+                options={[{value:'fight',label:'Fight'},{value:'grieve',label:'Grieve'},{value:'deny',label:'Deny'}]} allowEmpty />
+              <EField label="Current Access (1-10)" value={form.de_joy_current_access} onChange={v => F('de_joy_current_access', v)} placeholder="1-10" />
+            </>
+          ) : (c.de_body_relationship || c.de_money_behavior || c.de_time_orientation || c.de_world_belief || c.de_self_narrative_origin || c.de_change_capacity || c.de_operative_cosmology || c.de_joy_trigger) ? (
+            <>
+              {/* Body */}
+              {(c.de_body_relationship || c.de_body_history) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', marginBottom: 12, paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Body</span>
+                  </div>
+                  <DRow label="Relationship" value={c.de_body_relationship?.replace('_', ' ')} accent />
+                  {c.de_body_currency != null && <DRow label="Currency" value={`${c.de_body_currency}/10`} />}
+                  {c.de_body_control != null && <DRow label="Control" value={`${c.de_body_control}/10`} />}
+                  {c.de_body_comfort != null && <DRow label="Comfort" value={`${c.de_body_comfort}/10`} />}
+                  <DRow label="History" value={c.de_body_history} />
+                </>
+              )}
+              {/* Money */}
+              {(c.de_money_behavior || c.de_money_origin_class) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Money & Class</span>
+                  </div>
+                  <DRow label="Behavior" value={c.de_money_behavior?.replace(/_/g, ' ')} accent />
+                  <DRow label="Origin" value={c.de_money_origin_class?.replace(/_/g, ' ')} />
+                  <DRow label="Current" value={c.de_money_current_class?.replace(/_/g, ' ')} />
+                  <DRow label="Gap Direction" value={c.de_class_gap_direction} accent />
+                  <DRow label="Money Wound" value={c.de_money_wound} />
+                </>
+              )}
+              {/* Time */}
+              {(c.de_time_orientation || c.de_time_wound) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Time</span>
+                  </div>
+                  <DRow label="Orientation" value={c.de_time_orientation?.replace(/_/g, ' ')} accent />
+                  <DRow label="Time Wound" value={c.de_time_wound} />
+                </>
+              )}
+              {/* Luck & Circumstance */}
+              {(c.de_world_belief || c.de_circumstance_advantages) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Luck & Circumstance</span>
+                  </div>
+                  <DRow label="World Belief" value={c.de_world_belief} accent />
+                  <DRow label="Advantages" value={c.de_circumstance_advantages} />
+                  <DRow label="Disadvantages" value={c.de_circumstance_disadvantages} />
+                  {c.de_luck_interpretation != null && <DRow label="Luck Interpretation" value={`${c.de_luck_interpretation}/10`} />}
+                  <DRow label="Wound" value={c.de_circumstance_wound} />
+                </>
+              )}
+              {/* Self-Narrative */}
+              {(c.de_self_narrative_origin || c.de_therapy_target) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Self-Narrative</span>
+                  </div>
+                  <DRow label="Origin Story" value={c.de_self_narrative_origin} />
+                  <DRow label="Turning Point" value={c.de_self_narrative_turning_point} />
+                  <DRow label="Villain" value={c.de_self_narrative_villain} />
+                  <DRow label="Narrative Gap" value={c.de_actual_narrative_gap} accent />
+                  <DRow label="Therapy Target" value={c.de_therapy_target} />
+                </>
+              )}
+              {/* Blind Spot */}
+              {(c.de_blind_spot_category || c.de_blind_spot) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Blind Spot</span>
+                  </div>
+                  <DRow label="Category" value={c.de_blind_spot_category} accent />
+                  <DRow label="Blind Spot" value={c.de_blind_spot} />
+                  <DRow label="Evidence" value={c.de_blind_spot_evidence} />
+                  <DRow label="Crack Condition" value={c.de_blind_spot_crack_condition} />
+                </>
+              )}
+              {/* Change */}
+              {(c.de_change_capacity || c.de_arc_function) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Change Capacity</span>
+                  </div>
+                  <DRow label="Capacity" value={c.de_change_capacity?.replace(/_/g, ' ')} accent />
+                  {c.de_change_capacity_score != null && <DRow label="Score" value={`${c.de_change_capacity_score}/10`} />}
+                  <DRow label="Condition" value={c.de_change_condition} />
+                  <DRow label="Witness" value={c.de_change_witness} />
+                  <DRow label="Arc Function" value={c.de_arc_function} accent />
+                </>
+              )}
+              {/* Cosmology */}
+              {(c.de_operative_cosmology || c.de_stated_religion) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Cosmology</span>
+                  </div>
+                  <DRow label="Operative Cosmology" value={c.de_operative_cosmology} accent />
+                  <DRow label="Stated Religion" value={c.de_stated_religion} />
+                  <DRow label="Conflict" value={c.de_cosmology_conflict} />
+                  <DRow label="Meaning-Making" value={c.de_meaning_making_style} />
+                </>
+              )}
+              {/* Foreclosed */}
+              {(c.de_foreclosed_possibilities) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Foreclosed Possibility</span>
+                  </div>
+                  <DRow label="Foreclosed" value={Array.isArray(c.de_foreclosed_possibilities) ? c.de_foreclosed_possibilities.join(', ') : c.de_foreclosed_possibilities} />
+                  <DRow label="Origins" value={Array.isArray(c.de_foreclosure_origins) ? c.de_foreclosure_origins.join(', ') : c.de_foreclosure_origins} />
+                  <DRow label="Crack Conditions" value={Array.isArray(c.de_crack_conditions) ? c.de_crack_conditions.join(', ') : c.de_crack_conditions} />
+                </>
+              )}
+              {/* Joy */}
+              {(c.de_joy_trigger || c.de_forbidden_joy) && (
+                <>
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 12px', paddingBottom: 4 }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13, fontWeight: 600 }}>Joy</span>
+                  </div>
+                  <DRow label="Trigger" value={c.de_joy_trigger} />
+                  <DRow label="Body Location" value={c.de_joy_body_location} />
+                  <DRow label="Origin" value={c.de_joy_origin} />
+                  <DRow label="Forbidden Joy" value={c.de_forbidden_joy} accent />
+                  <DRow label="Threat Response" value={c.de_joy_threat_response} />
+                  {c.de_joy_current_access != null && <DRow label="Current Access" value={`${c.de_joy_current_access}/10`} />}
+                </>
+              )}
+            </>
+          ) : (
+            <EmptyState label="Depth Engine" onEdit={() => startEdit(tab)} />
+          )}
+        </div>
+      );
 
     /* ── AI WRITER ── */
     case 'ai':
@@ -4389,6 +4789,92 @@ function buildFormForTab(tabKey, c) {
         internal_monologue_style: jGet(c.voice_signature, 'internal_monologue_style'),
         emotional_reactivity:     jGet(c.voice_signature, 'emotional_reactivity'),
       };
+    case 'demographics':
+      return {
+        gender:                    c.gender || '',
+        pronouns:                  c.pronouns || '',
+        age:                       c.age || '',
+        birth_year:                c.birth_year || '',
+        ethnicity:                 c.ethnicity || '',
+        species:                   c.species || '',
+        cultural_background:       c.cultural_background || '',
+        nationality:               c.nationality || '',
+        first_language:            c.first_language || '',
+        hometown:                  c.hometown || '',
+        current_city:              c.current_city || '',
+        city_migration_history:    c.city_migration_history || '',
+        class_origin:              c.class_origin || '',
+        current_class:             c.current_class || '',
+        class_mobility_direction:  c.class_mobility_direction || '',
+        family_structure:          c.family_structure || '',
+        parents_status:            c.parents_status || '',
+        sibling_position:          c.sibling_position || '',
+        sibling_count:             c.sibling_count || '',
+        relationship_status:       c.relationship_status || '',
+        has_children:              !!c.has_children,
+        children_ages:             c.children_ages || '',
+        education_experience:      c.education_experience || '',
+        career_history:            c.career_history || '',
+        years_posting:             c.years_posting || '',
+        physical_presence:         c.physical_presence || '',
+        demographic_voice_signature: c.demographic_voice_signature || '',
+        platform_primary:          c.platform_primary || '',
+        follower_tier:             c.follower_tier || '',
+      };
+    case 'death':
+      return {
+        is_alive:     c.is_alive !== false,
+        death_date:   c.death_date || '',
+        death_cause:  c.death_cause || '',
+        death_impact: c.death_impact || '',
+      };
+    case 'depth':
+      return {
+        de_body_relationship:        c.de_body_relationship || '',
+        de_body_currency:            c.de_body_currency ?? '',
+        de_body_control:             c.de_body_control ?? '',
+        de_body_comfort:             c.de_body_comfort ?? '',
+        de_body_history:             c.de_body_history || '',
+        de_money_behavior:           c.de_money_behavior || '',
+        de_money_origin_class:       c.de_money_origin_class || '',
+        de_money_current_class:      c.de_money_current_class || '',
+        de_class_gap_direction:      c.de_class_gap_direction || '',
+        de_money_wound:              c.de_money_wound || '',
+        de_time_orientation:         c.de_time_orientation || '',
+        de_time_wound:               c.de_time_wound || '',
+        de_world_belief:             c.de_world_belief || '',
+        de_circumstance_advantages:  c.de_circumstance_advantages || '',
+        de_circumstance_disadvantages: c.de_circumstance_disadvantages || '',
+        de_luck_interpretation:      c.de_luck_interpretation ?? '',
+        de_circumstance_wound:       c.de_circumstance_wound || '',
+        de_self_narrative_origin:    c.de_self_narrative_origin || '',
+        de_self_narrative_turning_point: c.de_self_narrative_turning_point || '',
+        de_self_narrative_villain:   c.de_self_narrative_villain || '',
+        de_actual_narrative_gap:     c.de_actual_narrative_gap || '',
+        de_therapy_target:           c.de_therapy_target || '',
+        de_blind_spot_category:      c.de_blind_spot_category || '',
+        de_blind_spot:               c.de_blind_spot || '',
+        de_blind_spot_evidence:      c.de_blind_spot_evidence || '',
+        de_blind_spot_crack_condition: c.de_blind_spot_crack_condition || '',
+        de_change_capacity:          c.de_change_capacity || '',
+        de_change_capacity_score:    c.de_change_capacity_score ?? '',
+        de_change_condition:         c.de_change_condition || '',
+        de_change_witness:           c.de_change_witness || '',
+        de_arc_function:             c.de_arc_function || '',
+        de_operative_cosmology:      c.de_operative_cosmology || '',
+        de_stated_religion:          c.de_stated_religion || '',
+        de_cosmology_conflict:       c.de_cosmology_conflict || '',
+        de_meaning_making_style:     c.de_meaning_making_style || '',
+        de_foreclosed_possibilities: Array.isArray(c.de_foreclosed_possibilities) ? c.de_foreclosed_possibilities.join(', ') : (c.de_foreclosed_possibilities || ''),
+        de_foreclosure_origins:      Array.isArray(c.de_foreclosure_origins) ? c.de_foreclosure_origins.join(', ') : (c.de_foreclosure_origins || ''),
+        de_crack_conditions:         Array.isArray(c.de_crack_conditions) ? c.de_crack_conditions.join(', ') : (c.de_crack_conditions || ''),
+        de_joy_trigger:              c.de_joy_trigger || '',
+        de_joy_body_location:        c.de_joy_body_location || '',
+        de_joy_origin:               c.de_joy_origin || '',
+        de_forbidden_joy:            c.de_forbidden_joy || '',
+        de_joy_threat_response:      c.de_joy_threat_response || '',
+        de_joy_current_access:       c.de_joy_current_access ?? '',
+      };
     default:
       return {};
   }
@@ -4482,6 +4968,95 @@ function buildPayloadForTab(tabKey, form) {
           emotional_reactivity:     form.emotional_reactivity,
         },
       };
+    case 'demographics':
+      return {
+        gender:                    form.gender || null,
+        pronouns:                  form.pronouns || null,
+        age:                       form.age ? parseInt(form.age, 10) || null : null,
+        birth_year:                form.birth_year ? parseInt(form.birth_year, 10) || null : null,
+        ethnicity:                 form.ethnicity || null,
+        species:                   form.species || null,
+        cultural_background:       form.cultural_background || null,
+        nationality:               form.nationality || null,
+        first_language:            form.first_language || null,
+        hometown:                  form.hometown || null,
+        current_city:              form.current_city || null,
+        city_migration_history:    form.city_migration_history || null,
+        class_origin:              form.class_origin || null,
+        current_class:             form.current_class || null,
+        class_mobility_direction:  form.class_mobility_direction || null,
+        family_structure:          form.family_structure || null,
+        parents_status:            form.parents_status || null,
+        sibling_position:          form.sibling_position || null,
+        sibling_count:             form.sibling_count ? parseInt(form.sibling_count, 10) || null : null,
+        relationship_status:       form.relationship_status || null,
+        has_children:              !!form.has_children,
+        children_ages:             form.children_ages || null,
+        education_experience:      form.education_experience || null,
+        career_history:            form.career_history || null,
+        years_posting:             form.years_posting ? parseInt(form.years_posting, 10) || null : null,
+        physical_presence:         form.physical_presence || null,
+        demographic_voice_signature: form.demographic_voice_signature || null,
+        platform_primary:          form.platform_primary || null,
+        follower_tier:             form.follower_tier || null,
+      };
+    case 'death':
+      return {
+        is_alive:     !!form.is_alive,
+        death_date:   form.death_date || null,
+        death_cause:  form.death_cause || null,
+        death_impact: form.death_impact || null,
+      };
+    case 'depth': {
+      const toInt = v => v !== '' && v != null ? parseInt(v, 10) || null : null;
+      const toArr = v => typeof v === 'string' ? v.split(',').map(s => s.trim()).filter(Boolean) : (v || null);
+      return {
+        de_body_relationship:        form.de_body_relationship || null,
+        de_body_currency:            toInt(form.de_body_currency),
+        de_body_control:             toInt(form.de_body_control),
+        de_body_comfort:             toInt(form.de_body_comfort),
+        de_body_history:             form.de_body_history || null,
+        de_money_behavior:           form.de_money_behavior || null,
+        de_money_origin_class:       form.de_money_origin_class || null,
+        de_money_current_class:      form.de_money_current_class || null,
+        de_class_gap_direction:      form.de_class_gap_direction || null,
+        de_money_wound:              form.de_money_wound || null,
+        de_time_orientation:         form.de_time_orientation || null,
+        de_time_wound:               form.de_time_wound || null,
+        de_world_belief:             form.de_world_belief || null,
+        de_circumstance_advantages:  form.de_circumstance_advantages || null,
+        de_circumstance_disadvantages: form.de_circumstance_disadvantages || null,
+        de_luck_interpretation:      toInt(form.de_luck_interpretation),
+        de_circumstance_wound:       form.de_circumstance_wound || null,
+        de_self_narrative_origin:    form.de_self_narrative_origin || null,
+        de_self_narrative_turning_point: form.de_self_narrative_turning_point || null,
+        de_self_narrative_villain:   form.de_self_narrative_villain || null,
+        de_actual_narrative_gap:     form.de_actual_narrative_gap || null,
+        de_therapy_target:           form.de_therapy_target || null,
+        de_blind_spot_category:      form.de_blind_spot_category || null,
+        de_blind_spot:               form.de_blind_spot || null,
+        de_blind_spot_evidence:      form.de_blind_spot_evidence || null,
+        de_blind_spot_crack_condition: form.de_blind_spot_crack_condition || null,
+        de_change_capacity:          form.de_change_capacity || null,
+        de_change_capacity_score:    toInt(form.de_change_capacity_score),
+        de_change_condition:         form.de_change_condition || null,
+        de_change_witness:           form.de_change_witness || null,
+        de_arc_function:             form.de_arc_function || null,
+        de_operative_cosmology:      form.de_operative_cosmology || null,
+        de_stated_religion:          form.de_stated_religion || null,
+        de_cosmology_conflict:       form.de_cosmology_conflict || null,
+        de_meaning_making_style:     form.de_meaning_making_style || null,
+        de_foreclosed_possibilities: toArr(form.de_foreclosed_possibilities),
+        de_foreclosure_origins:      toArr(form.de_foreclosure_origins),
+        de_crack_conditions:         toArr(form.de_crack_conditions),
+        de_joy_trigger:              form.de_joy_trigger || null,
+        de_joy_body_location:        form.de_joy_body_location || null,
+        de_joy_origin:               form.de_joy_origin || null,
+        de_forbidden_joy:            form.de_forbidden_joy || null,
+        de_joy_threat_response:      form.de_joy_threat_response || null,
+        de_joy_current_access:       toInt(form.de_joy_current_access),
+      };
+    }
     default:
       return form;
   }

@@ -76,6 +76,7 @@ export const WORLD_LABELS = {
 
 export const DOSSIER_TABS = [
   { key: 'overview',      label: 'Overview' },
+  { key: 'demographics',  label: 'Demographics' },
   { key: 'living',        label: '✦ Living State' },
   { key: 'arc',           label: 'Arc Timeline' },
   { key: 'threads',       label: 'Plot Threads' },
@@ -85,8 +86,9 @@ export const DOSSIER_TABS = [
   { key: 'relationships', label: 'Relationships' },
   { key: 'story',         label: 'Story Presence' },
   { key: 'voice',         label: 'Voice' },
+  { key: 'death',         label: 'Death Tracking' },
   { key: 'dilemma',       label: 'Dilemma' },
-  { key: 'deep',          label: '🧬 Deep Profile' },
+  { key: 'depth',         label: '🧬 Depth Engine' },
   { key: 'ai',            label: '✦ AI Writer' },
 ];
 

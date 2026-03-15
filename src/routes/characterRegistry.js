@@ -505,6 +505,29 @@ router.put('/characters/:id', express.json(), async (req, res) => {
       'joy_source', 'joy_accessibility', 'joy_vs_ambition',
       // Intimate eligibility
       'intimate_eligible',
+      // Death Tracking
+      'is_alive', 'death_date', 'death_cause', 'death_impact',
+      // Demographics
+      'gender', 'pronouns', 'age', 'birth_year', 'ethnicity', 'species',
+      'cultural_background', 'nationality', 'first_language',
+      'hometown', 'current_city', 'city_migration_history',
+      'class_origin', 'current_class', 'class_mobility_direction',
+      'family_structure', 'parents_status', 'sibling_position', 'sibling_count',
+      'relationship_status', 'has_children', 'children_ages',
+      'education_experience', 'career_history', 'years_posting',
+      'physical_presence', 'demographic_voice_signature',
+      'platform_primary', 'follower_tier',
+      // Character Depth Engine v2 (de_* fields)
+      'de_body_relationship', 'de_body_currency', 'de_body_control', 'de_body_comfort', 'de_body_history',
+      'de_money_behavior', 'de_money_origin_class', 'de_money_current_class', 'de_class_gap_direction', 'de_money_wound',
+      'de_time_orientation', 'de_time_wound',
+      'de_world_belief', 'de_circumstance_advantages', 'de_circumstance_disadvantages', 'de_luck_interpretation', 'de_circumstance_wound',
+      'de_self_narrative_origin', 'de_self_narrative_turning_point', 'de_self_narrative_villain', 'de_actual_narrative_gap', 'de_therapy_target',
+      'de_blind_spot_category', 'de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition',
+      'de_change_capacity', 'de_change_capacity_score', 'de_change_condition', 'de_change_witness', 'de_arc_function',
+      'de_operative_cosmology', 'de_stated_religion', 'de_cosmology_conflict', 'de_meaning_making_style',
+      'de_foreclosed_possibilities', 'de_foreclosure_origins', 'de_foreclosure_visibility', 'de_crack_conditions',
+      'de_joy_trigger', 'de_joy_body_location', 'de_joy_origin', 'de_forbidden_joy', 'de_joy_threat_response', 'de_joy_current_access',
     ];
     allowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     await character.save();
