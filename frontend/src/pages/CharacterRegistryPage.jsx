@@ -1665,6 +1665,29 @@ export default function CharacterRegistryPage() {
                   );
                 })()}
 
+                {/* Sync Status & World Studio Link */}
+                {(() => {
+                  const ef = typeof c.extra_fields === 'string' ? JSON.parse(c.extra_fields || '{}') : (c.extra_fields || {});
+                  const worldCharId = c.world_character_id || ef.world_character_id;
+                  const isFromWS = ef.source === 'world_studio' || !!worldCharId;
+                  if (!isFromWS) return null;
+                  return (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '6px 0' }}>
+                      <span style={{ fontSize: 11, background: 'rgba(212,165,116,0.15)', color: '#b8926a', padding: '2px 8px', borderRadius: 4 }}>
+                        ✦ Synced from World Studio
+                      </span>
+                      {worldCharId && (
+                        <a href={`/world-studio?highlight=${worldCharId}`}
+                          style={{ fontSize: 11, color: '#8b7ad8', textDecoration: 'none', padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(139,122,216,0.3)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(139,122,216,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                          ↗ View in World Studio
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Relationship Quick View */}
                 {c.relationships_map && (() => {
                   const nrm = normalizeRelMap(c.relationships_map) || {};
@@ -3378,13 +3401,18 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               )}
 
               {/* Depth Engine cross-reference */}
-              {(c.de_body_relationship || c.de_self_narrative_origin || c.de_change_capacity) && (
+              {(c.de_body_relationship || c.de_self_narrative_origin || c.de_change_capacity || c.de_money_behavior || c.de_time_orientation) && (
                 <div style={{ background: 'rgba(104,80,200,0.08)', border: '1px solid rgba(104,80,200,0.2)', borderRadius: 8, padding: '10px 14px', marginTop: 16, fontSize: 12 }}>
                   <div style={{ color: '#8b7ad8', fontWeight: 600, marginBottom: 4 }}>Depth Engine Dimensions</div>
                   <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', color: '#b0a8d0' }}>
+                    {c.de_body_relationship && <span><strong>Body:</strong> {c.de_body_relationship?.replace(/_/g, ' ')}</span>}
+                    {c.de_money_behavior && <span><strong>Money:</strong> {c.de_money_behavior?.replace(/_/g, ' ')}</span>}
+                    {c.de_time_orientation && <span><strong>Time:</strong> {c.de_time_orientation?.replace(/_/g, ' ')}</span>}
+                    {c.de_world_belief && <span><strong>World Belief:</strong> {c.de_world_belief}</span>}
                     {c.de_self_narrative_origin && <span><strong>Self-Narrative:</strong> {c.de_self_narrative_origin}</span>}
-                    {c.de_change_capacity && <span><strong>Change Capacity:</strong> {c.de_change_capacity}</span>}
-                    {c.de_body_relationship && <span><strong>Body:</strong> {c.de_body_relationship?.replace('_', ' ')}</span>}
+                    {c.de_change_capacity && <span><strong>Change:</strong> {c.de_change_capacity?.replace(/_/g, ' ')}</span>}
+                    {c.de_operative_cosmology && <span><strong>Cosmology:</strong> {c.de_operative_cosmology}</span>}
+                    {c.de_joy_trigger && <span><strong>Joy:</strong> {c.de_joy_trigger}</span>}
                   </div>
                   <div style={{ marginTop: 6, color: '#777', fontSize: 11 }}>See the Depth Engine tab for full dimensional analysis</div>
                 </div>

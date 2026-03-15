@@ -33,11 +33,16 @@ function getModels() {
 router.get('/registries', async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
-    const registries = await CharacterRegistry.findAll({
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const offset = parseInt(req.query.offset, 10) || 0;
+    const { count, rows: registries } = await CharacterRegistry.findAndCountAll({
       include: [{ model: RegistryCharacter, as: 'characters', attributes: ['id', 'character_key', 'status', 'role_type', 'display_name', 'icon', 'sort_order'] }],
       order: [['created_at', 'DESC']],
+      limit,
+      offset,
+      distinct: true,
     });
-    return res.json({ success: true, registries });
+    return res.json({ success: true, registries, total: count, limit, offset });
   } catch (err) {
     console.error('[CharacterRegistry] GET /registries error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -230,10 +235,28 @@ router.post('/registries/:id/characters', async (req, res) => {
       // Demographics defaults (pass-through from body or null)
       gender: req.body.gender || null,
       pronouns: req.body.pronouns || null,
+      sexuality: req.body.sexuality || null,
       age: req.body.age || null,
+      birth_year: req.body.birth_year || null,
       ethnicity: req.body.ethnicity || null,
       species: req.body.species || 'human',
       nationality: req.body.nationality || null,
+      first_language: req.body.first_language || null,
+      cultural_background: req.body.cultural_background || null,
+      hometown: req.body.hometown || null,
+      current_city: req.body.current_city || null,
+      relationship_status: req.body.relationship_status || null,
+
+      // Essence profile
+      core_desire: req.body.core_desire || null,
+      core_fear: req.body.core_fear || null,
+      core_wound: req.body.core_wound || null,
+      hidden_want: req.body.hidden_want || null,
+      mask_persona: req.body.mask_persona || null,
+      truth_persona: req.body.truth_persona || null,
+      character_archetype: req.body.character_archetype || null,
+      signature_trait: req.body.signature_trait || null,
+      emotional_baseline: req.body.emotional_baseline || null,
 
       // Death tracking defaults
       is_alive: req.body.is_alive !== undefined ? req.body.is_alive : true,
@@ -246,6 +269,7 @@ router.post('/registries/:id/characters', async (req, res) => {
       story_presence: req.body.story_presence || {},
       voice_signature: req.body.voice_signature || {},
       evolution_tracking: req.body.evolution_tracking || {},
+      living_context: req.body.living_context || {},
     });
 
     // Auto-create Feed profile from registry character
@@ -497,6 +521,12 @@ router.put('/characters/:id', express.json(), async (req, res) => {
     const character = await RegistryCharacter.findByPk(req.params.id);
     if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
 
+    // Author-only fields — only writable by authenticated authors
+    const AUTHOR_ONLY = [
+      'de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition',
+      'de_actual_narrative_gap',
+    ];
+
     const allowed = [
       'character_key', 'icon', 'display_name', 'subtitle', 'role_type', 'role_label',
       'appearance_mode', 'status', 'core_belief', 'pressure_type', 'pressure_quote',
@@ -505,21 +535,29 @@ router.put('/characters/:id', express.json(), async (req, res) => {
       // Section 1: Core Identity
       'canon_tier', 'first_appearance', 'era_introduced', 'creator',
       // Section 2: Essence Profile
-      'core_desire', 'core_fear', 'core_wound', 'mask_persona',
+      'core_desire', 'core_fear', 'core_wound', 'hidden_want', 'mask_persona',
       'truth_persona', 'character_archetype', 'signature_trait', 'emotional_baseline',
-      // Sections 3-8: JSONB
+      // Sections 3-9: JSONB
       'aesthetic_dna', 'career_status', 'relationships_map',
       'story_presence', 'voice_signature', 'evolution_tracking',
-      // Section 9: Registry Sync fields
+      'living_context', 'deep_profile',
+      // Registry Sync fields
       'wound_depth', 'belief_pressured', 'emotional_function', 'writer_notes',
-      // Section 9-13: Character Depth Engine
+      // Therapy
+      'therapy_primary_defense', 'therapy_emotional_state', 'therapy_baseline',
+      // Character Generation v2
+      'depth_level', 'want_architecture', 'wound', 'the_mask', 'living_state',
+      'triggers', 'blind_spot', 'change_capacity', 'self_narrative',
+      'operative_cosmology', 'foreclosed_possibility', 'experience_of_joy',
+      'time_orientation', 'dilemma', 'prose_overview',
+      // Character Depth Engine v1
       'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
       'money_behavior_pattern', 'money_behavior_note',
       'time_orientation_v2', 'time_orientation_note',
       'change_capacity_v2', 'change_conditions', 'change_blocker',
       'circumstance_advantages', 'circumstance_disadvantages', 'luck_belief', 'luck_belief_vs_stated',
-      'self_narrative', 'actual_narrative', 'narrative_gap_type',
-      'blind_spot', 'blind_spot_category', 'blind_spot_visible_to',
+      'actual_narrative', 'narrative_gap_type',
+      'blind_spot_category', 'blind_spot_visible_to',
       'operative_cosmology_v2', 'cosmology_vs_stated_religion',
       'foreclosed_category', 'foreclosure_origin', 'foreclosure_vs_stated_want',
       'joy_source', 'joy_accessibility', 'joy_vs_ambition',
@@ -528,7 +566,7 @@ router.put('/characters/:id', express.json(), async (req, res) => {
       // Death Tracking
       'is_alive', 'death_date', 'death_cause', 'death_impact',
       // Demographics
-      'gender', 'pronouns', 'age', 'birth_year', 'ethnicity', 'species',
+      'gender', 'pronouns', 'sexuality', 'age', 'birth_year', 'ethnicity', 'species',
       'cultural_background', 'nationality', 'first_language',
       'hometown', 'current_city', 'city_migration_history',
       'class_origin', 'current_class', 'class_mobility_direction',
@@ -549,7 +587,36 @@ router.put('/characters/:id', express.json(), async (req, res) => {
       'de_foreclosed_possibilities', 'de_foreclosure_origins', 'de_foreclosure_visibility', 'de_crack_conditions',
       'de_joy_trigger', 'de_joy_body_location', 'de_joy_origin', 'de_forbidden_joy', 'de_joy_threat_response', 'de_joy_current_access',
     ];
-    allowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
+
+    // ENUM validation
+    const ENUMS = {
+      role_type: ['protagonist', 'pressure', 'mirror', 'support', 'shadow', 'special'],
+      appearance_mode: ['on_page', 'composite', 'observed', 'invisible', 'brief'],
+      status: ['draft', 'accepted', 'declined', 'finalized'],
+      depth_level: ['sparked', 'breathing', 'active', 'alive'],
+    };
+    for (const [field, vals] of Object.entries(ENUMS)) {
+      if (req.body[field] !== undefined && !vals.includes(req.body[field])) {
+        return res.status(400).json({ success: false, error: `${field} must be one of: ${vals.join(', ')}` });
+      }
+    }
+
+    // Bounds check on numeric fields
+    const BOUNDS = { de_body_currency: [0, 100], de_body_control: [0, 100], de_body_comfort: [0, 100], de_luck_interpretation: [0, 100], de_change_capacity_score: [0, 100], de_joy_current_access: [0, 100], wound_depth: [0, 10] };
+    for (const [field, [min, max]] of Object.entries(BOUNDS)) {
+      if (req.body[field] !== undefined) {
+        const v = Number(req.body[field]);
+        if (isNaN(v) || v < min || v > max) {
+          return res.status(400).json({ success: false, error: `${field} must be between ${min} and ${max}` });
+        }
+      }
+    }
+
+    // Filter author-only fields for non-author requests
+    const isAuthor = req.user?.role === 'author' || req.user?.role === 'admin';
+    const filteredAllowed = isAuthor ? allowed : allowed.filter(f => !AUTHOR_ONLY.includes(f));
+
+    filteredAllowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     await character.save();
 
     return res.json({ success: true, character });
@@ -586,6 +653,9 @@ router.post('/characters/bulk-delete', async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
     }
+    if (ids.length > 100) {
+      return res.status(400).json({ success: false, error: 'Maximum 100 characters per bulk operation' });
+    }
     const { RegistryCharacter } = getModels();
     const { Op } = require('sequelize');
     const deleted = await RegistryCharacter.destroy({ where: { id: { [Op.in]: ids } } });
@@ -605,6 +675,9 @@ router.post('/characters/bulk-status', async (req, res) => {
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    }
+    if (ids.length > 100) {
+      return res.status(400).json({ success: false, error: 'Maximum 100 characters per bulk operation' });
     }
     const validStatuses = ['draft', 'accepted', 'finalized', 'declined'];
     if (!validStatuses.includes(status)) {
@@ -628,6 +701,9 @@ router.post('/characters/bulk-move', async (req, res) => {
     const { ids, registryId } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    }
+    if (ids.length > 100) {
+      return res.status(400).json({ success: false, error: 'Maximum 100 characters per bulk operation' });
     }
     if (!registryId) {
       return res.status(400).json({ success: false, error: 'registryId is required' });
@@ -654,7 +730,7 @@ router.post('/characters/:id/clone', async (req, res) => {
     if (!original) return res.status(404).json({ success: false, error: 'Character not found' });
 
     const data = original.toJSON();
-    // Remove unique fields
+    // Remove unique/identity fields
     delete data.id;
     delete data.created_at;
     delete data.updated_at;
@@ -665,6 +741,12 @@ router.post('/characters/:id/clone', async (req, res) => {
     data.status = 'draft';
     data.selected_name = null;
     data.sort_order = (data.sort_order || 0) + 1;
+    // Clear data that belongs to the original character's story, not a clone
+    data.relationships_map = {};
+    data.evolution_tracking = {};
+    data.story_presence = {};
+    data.world_character_id = null;
+    data.feed_profile_id = null;
 
     const clone = await RegistryCharacter.create(data);
     return res.json({ success: true, character: clone, message: 'Character cloned' });
@@ -893,6 +975,7 @@ router.post('/registries/:id/backfill-sections', async (req, res) => {
     const intimateKeywords = /husband|wife|spouse|partner|lover|romantic|love.interest|ex-|boyfriend|girlfriend/i;
 
     let updated = 0;
+    const updateBatch = [];
     for (const c of registry.characters) {
       const updates = {};
 
@@ -928,9 +1011,14 @@ router.post('/registries/:id/backfill-sections', async (req, res) => {
       }
 
       if (Object.keys(updates).length > 0) {
-        await c.update(updates);
+        updateBatch.push({ id: c.id, updates });
         updated++;
       }
+    }
+
+    // Batch update instead of N+1 individual saves
+    for (const { id, updates: upd } of updateBatch) {
+      await RegistryCharacter.update(upd, { where: { id } });
     }
 
     // Reload
