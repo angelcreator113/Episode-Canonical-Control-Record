@@ -287,13 +287,13 @@ export default function AmberPromptLibrary({ onSelect }) {
           padding: 8px 0;
           background: #fdf8fa;
           scrollbar-width: thin;
-          scrollbar-color: #e8d5dd transparent;
+          scrollbar-color: rgba(212,120,154,0.25) transparent;
         }
-        .apl-nav::-webkit-scrollbar { width: 4px; }
+        .apl-nav::-webkit-scrollbar { width: 3px; }
         .apl-nav::-webkit-scrollbar-track { background: transparent; }
         .apl-nav::-webkit-scrollbar-thumb {
-          background: #e8d5dd;
-          border-radius: 2px;
+          background: rgba(212,120,154,0.25);
+          border-radius: 3px;
         }
         .apl-nav-item {
           display: flex;
@@ -329,17 +329,17 @@ export default function AmberPromptLibrary({ onSelect }) {
           min-width: 0;
           overflow-y: auto;
           overflow-x: hidden;
-          padding: 12px 16px 24px;
+          padding: 12px 16px 32px;
           scrollbar-width: thin;
-          scrollbar-color: #e8d5dd transparent;
+          scrollbar-color: rgba(212,120,154,0.25) transparent;
         }
-        .apl-prompts::-webkit-scrollbar { width: 5px; }
+        .apl-prompts::-webkit-scrollbar { width: 4px; }
         .apl-prompts::-webkit-scrollbar-track { background: transparent; }
         .apl-prompts::-webkit-scrollbar-thumb {
-          background: #e8d5dd;
-          border-radius: 3px;
+          background: rgba(212,120,154,0.25);
+          border-radius: 4px;
         }
-        .apl-prompts::-webkit-scrollbar-thumb:hover { background: #d4789a; }
+        .apl-prompts::-webkit-scrollbar-thumb:hover { background: rgba(212,120,154,0.45); }
         .apl-category-label {
           font-size: 11px;
           font-weight: 600;
@@ -437,7 +437,7 @@ export default function AmberPromptLibrary({ onSelect }) {
           left: 0;
           width: auto;
           max-width: 100%;
-          max-height: 60vh;
+          max-height: min(60vh, calc(100% - 70px));
           z-index: 10;
           border-radius: 12px 12px 0 0;
           box-shadow: 0 -4px 20px rgba(0,0,0,0.10);
