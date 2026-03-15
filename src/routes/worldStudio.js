@@ -1146,7 +1146,7 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
         const roleType = ROLE_MAP[char.character_type] || 'special';
         await sequelize.query(
           `UPDATE registry_characters SET
-            display_name = :name, subtitle = :subtitle,
+            display_name = :name, selected_name = :selected_name, subtitle = :subtitle,
             role_type = :role_type, role_label = :role_label,
             core_desire = :core_desire, core_fear = :core_fear,
             core_wound = :core_wound, mask_persona = :mask_persona, truth_persona = :truth_persona,
@@ -1155,7 +1155,7 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
             personality_matrix = :personality_matrix, aesthetic_dna = :aesthetic_dna,
             career_status = :career_status, relationships_map = :relationships_map,
             voice_signature = :voice_signature, story_presence = :story_presence,
-            evolution_tracking = :evolution_tracking,
+            evolution_tracking = :evolution_tracking, extra_fields = :extra_fields,
             gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
             relationship_status = :relationship_status,
             hometown = :hometown, current_city = :current_city,
@@ -1166,6 +1166,7 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
             replacements: {
               rc_id: rc.id,
               name: char.name,
+              selected_name: char.name,
               subtitle: [char.age_range, char.occupation].filter(Boolean).join(' · ') || null,
               role_type: roleType,
               role_label: char.character_type || null,
@@ -1228,6 +1229,18 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
                 version_history: null,
                 era_changes: char.world_location || null,
                 personality_shifts: null,
+              }),
+              extra_fields: JSON.stringify({
+                source: 'world_studio',
+                world_character_id: req.params.id,
+                intimate_eligible: char.intimate_eligible || false,
+                intimate_style: char.intimate_style || null,
+                intimate_dynamic: char.intimate_dynamic || null,
+                what_lala_feels: char.what_lala_feels || null,
+                moral_code: char.moral_code || null,
+                fidelity_pattern: char.fidelity_pattern || null,
+                committed_to: char.committed_to || null,
+                career_echo_connection: char.career_echo_connection || false,
               }),
               gender: char.gender || null,
               pronouns: derivePronouns(char.gender),
@@ -1401,7 +1414,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
         const roleType = ROLE_MAP[updated.character_type] || 'special';
         await sequelize.query(
           `UPDATE registry_characters SET
-            display_name = :display_name, subtitle = :subtitle,
+            display_name = :display_name, selected_name = :selected_name, subtitle = :subtitle,
             role_type = :role_type, role_label = :role_label,
             core_desire = :core_desire, core_fear = :core_fear,
             core_wound = :core_wound, mask_persona = :mask_persona, truth_persona = :truth_persona,
@@ -1421,6 +1434,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
             replacements: {
               rc_id: rc.id,
               display_name: updated.name,
+              selected_name: updated.name,
               subtitle: [updated.age_range, updated.occupation].filter(Boolean).join(' · ') || null,
               role_type: roleType,
               role_label: updated.character_type || null,
@@ -1679,7 +1693,7 @@ router.post('/world/characters/bulk-re-sync', optionalAuth, async (req, res) => 
         const roleType = ROLE_MAP[char.character_type] || 'special';
         await sequelize.query(
           `UPDATE registry_characters SET
-            display_name = :name, subtitle = :subtitle,
+            display_name = :name, selected_name = :selected_name, subtitle = :subtitle,
             role_type = :role_type, role_label = :role_label,
             core_desire = :core_desire, core_fear = :core_fear,
             core_wound = :core_wound, mask_persona = :mask_persona, truth_persona = :truth_persona,
@@ -1699,6 +1713,7 @@ router.post('/world/characters/bulk-re-sync', optionalAuth, async (req, res) => 
             replacements: {
               rc_id: char.rc_id,
               name: char.name,
+              selected_name: char.name,
               subtitle: [char.age_range, char.occupation].filter(Boolean).join(' · ') || null,
               role_type: roleType,
               role_label: char.character_type || null,
