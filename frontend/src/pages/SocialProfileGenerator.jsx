@@ -1024,6 +1024,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                               </span>
                             );
                           })}
+                          {/* Show count of additional dynamic character followers */}
+                          {(()=>{const protagonistKeys=new Set(PROTAGONISTS.map(p=>p.key));const dynFollowers=followers.filter(f=>!protagonistKeys.has(f.character_key));return dynFollowers.length>0?(
+                            <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#e8f5e9',color:'#2e7d32',fontWeight:600}}>+{dynFollowers.length} more</span>
+                          ):null;})()}
                         </div>
                         <span style={{fontSize:10,fontWeight:700,color:C.lavender}}>✦{p.lala_relevance_score??0}</span>
                       </div>
@@ -1420,6 +1424,14 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                   </button>
                 );
               })}
+              {/* Dynamic character followers (not protagonists) */}
+              {(()=>{const protagonistKeys=new Set(PROTAGONISTS.map(p=>p.key));const dynFollowers=followers.filter(f=>!protagonistKeys.has(f.character_key));return dynFollowers.map(f=>(
+                <span key={f.character_key} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,
+                  border:`1.5px solid ${C.border}`,background:'#e8f5e9',color:'#2e7d32',display:'inline-flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:14}}>👤</span> {f.character_name||f.character_key} follows
+                  {f.follow_probability!=null&&<span style={{fontSize:10,opacity:0.7}}>{Math.round(f.follow_probability*100)}%</span>}
+                </span>
+              ));})()}
             </div>
             {followers.length>0&&(
               <div style={{display:'flex',flexDirection:'column',gap:6}}>

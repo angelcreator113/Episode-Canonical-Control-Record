@@ -1096,6 +1096,17 @@ router.get('/world/characters/:id', optionalAuth, async (req, res) => {
     const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
     if (!char) return res.status(404).json({ error: 'Character not found' });
 
+    // Resolve character_key from linked registry character
+    if (char.registry_character_id && !char.character_key) {
+      try {
+        const [reg] = await Q(req,
+          'SELECT character_key FROM registry_characters WHERE id = :rid',
+          { replacements: { rid: char.registry_character_id } }
+        );
+        if (reg) char.character_key = reg.character_key;
+      } catch (_) { /* registry lookup failed, non-critical */ }
+    }
+
     // Fetch their scenes
     const scenes = await Q(req,
       `SELECT id, scene_type, intensity, status, word_count, created_at

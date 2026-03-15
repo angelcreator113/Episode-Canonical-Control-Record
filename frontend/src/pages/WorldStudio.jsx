@@ -1916,7 +1916,9 @@ export default function WorldStudio() {
 
                     {/* ── FOLLOWS — what this character watches online ── */}
                     {detailTab === 'follows' && (
-                      <CharacterFollowsTab characterKey={charDetail.character_key} characterName={charDetail.name || charDetail.display_name} />
+                      charDetail.character_key
+                        ? <CharacterFollowsTab characterKey={charDetail.character_key} characterName={charDetail.name || charDetail.display_name} />
+                        : <div style={{padding:24,textAlign:'center',color:'#8a8a9a',fontSize:13}}>This character has no registry link — follow profiles require a character_key from the Character Registry.</div>
                     )}
 
                     {/* ── EVOLUTION TIMELINE ──────────────────────── */}
