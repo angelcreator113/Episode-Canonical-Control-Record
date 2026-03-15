@@ -75,8 +75,8 @@ const NAV = [
           { icon: '🧠', label: 'Narrative Control',   route: '/narrative-control' },
         ],
       },
-      { icon: '�', label: 'Storyteller',      route: '/storyteller' },
-      { icon: '�🔥', label: 'Pressure',        route: '/pressure' },
+      { icon: '✦', label: 'Storyteller',      route: '/storyteller' },
+      { icon: '🔥', label: 'Pressure',        route: '/pressure' },
       { icon: '🕸️', label: 'Feed Map',         route: '/feed-relationships' },
       { icon: '▶',  label: 'Novel Session',   route: '/start' },
       { icon: '📰', label: 'Press',            route: '/press' },
@@ -99,15 +99,15 @@ const NAV = [
     items: [
       { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
       { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
-      { icon: '�️', label: 'Assets',          route: '/assets' },
-      { icon: '�👗', label: 'Wardrobe',        route: '/wardrobe' },
+      { icon: '📂', label: 'Assets',          route: '/assets' },
+      { icon: '👗', label: 'Wardrobe',        route: '/wardrobe' },
       { icon: '📦', label: 'Compositions',    route: '/library' },
     ],
   },
   {
     zone: 'MANAGE',
     items: [
-      { icon: '�', label: 'CFO Agent',       route: '/cfo',
+      { icon: '💵', label: 'CFO Agent',       route: '/cfo',
         children: [
           { icon: '📊', label: 'Analytics',     route: '/analytics/decisions' },
           { icon: '💰', label: 'AI Costs',      route: '/ai-costs' },
