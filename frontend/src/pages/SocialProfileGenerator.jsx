@@ -145,6 +145,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [totalPages,setTotalPages] = useState(1);
   const [totalCount,setTotalCount] = useState(0);
   const [statusCounts,setStatusCounts] = useState({total:0,generated:0,finalized:0,crossed:0,archived:0});
+  const [crossoverCount,setCrossoverCount] = useState(0);
   const PAGE_SIZE = 24;
   const [search,setSearch]       = useState('');
   const [sortBy,setSortBy]       = useState('score');
@@ -203,6 +204,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       setProfiles(data.profiles||[]);
       if(data.pagination){setTotalPages(data.pagination.totalPages||1);setTotalCount(data.pagination.total||0);}
       if(data.statusCounts)setStatusCounts(data.statusCounts);
+      setCrossoverCount(data.crossoverCount||0);
     } catch(err){setError(err.message);}
     finally{setLoading(false);}
   },[filterStatus,search,sortBy,page,feedLayer]);
@@ -497,6 +499,12 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
           ))}
           {stats.total>=feedCap&&<span style={{fontSize:11,fontWeight:600,color:'#c0392b',background:'#fde8e8',padding:'2px 8px',borderRadius:4}}>Cap reached</span>}
           {stats.total>=(feedCap-23)&&stats.total<feedCap&&<span style={{fontSize:11,fontWeight:600,color:'#e67e22',background:'#fef3e0',padding:'2px 8px',borderRadius:4}}>{feedCap-stats.total} remaining</span>}
+          {feedLayer==='lalaverse'&&crossoverCount>0&&(
+            <div style={{display:'flex',alignItems:'baseline',gap:6,marginLeft:8,paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
+              <span style={{fontSize:22,fontWeight:700,color:C.blue,lineHeight:1}}>{crossoverCount}</span>
+              <span style={{fontSize:12,color:C.inkLight}}>◈ Following</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -807,8 +815,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                   const lc=lalaClass(score);
                   return (
                     <div key={p.id} onClick={()=>bulkMode?toggleSelect(p.id):setSelected(selected?.id===p.id?null:p)}
-                      style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${isActive?C.lavender:isChecked?C.lavender+'80':C.border}`,cursor:'pointer',overflow:'hidden',boxShadow:isActive?C.shadowMd:C.shadow,transition:'all 0.15s',position:'relative'}}>
-                      <div style={{height:3,background:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
+                      style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${isActive?C.lavender:isChecked?C.lavender+'80':(feedLayer==='lalaverse'&&p.feed_layer==='real_world')?C.blue+'60':C.border}`,cursor:'pointer',overflow:'hidden',boxShadow:isActive?C.shadowMd:C.shadow,transition:'all 0.15s',position:'relative'}}>
+                      <div style={{height:3,background:(feedLayer==='lalaverse'&&p.feed_layer==='real_world')?`linear-gradient(90deg,${C.blue},${C.lavender})`:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
                       {bulkMode && (
                         <div style={{position:'absolute',top:10,right:10,width:20,height:20,borderRadius:5,border:`2px solid ${isChecked?C.lavender:C.border}`,background:isChecked?C.lavender:C.surface,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700}}>
                           {isChecked?'✓':''}
@@ -828,6 +836,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                           {(p.archetype||d.archetype)&&<span style={{fontSize:10,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
                           {p.registry_character_id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#eef0fb',color:'#6366f1'}} title="Linked to registry character">Registry</span>}
                           {p.adult_content_present&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+</span>}
+                          {feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}} title="From JustAWoman's Feed — Lala follows this account">◈ Following</span>}
                         </div>
                         <div style={{fontSize:12,color:C.inkMid,lineHeight:1.5,marginBottom:8,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
                           {p.content_persona||d.content_persona||p.vibe_sentence}
@@ -885,7 +894,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                             <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>setSelected(p)}>{p.display_name||d.display_name||p.handle}</span>
                             {sc&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:sc.bg,color:sc.color}}>{sc.label}</span>}
                           </div>
-                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {p.platform} · {p.follower_count_approx||d.follower_count_approx}</div>
+                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {p.platform} · {p.follower_count_approx||d.follower_count_approx}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
                         </div>
                         <span style={{fontSize:10,fontWeight:700,color:score>=7?C.lavender:score>=4?C.blue:C.inkLight}}>✦{score}</span>
                       </div>
@@ -1310,6 +1319,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
               <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
               {(p.archetype||d.archetype)&&<span style={{fontSize:11,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
               {p.adult_content_present&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+ Content</span>}
+              {p.feed_layer==='real_world'&&followers.some(f=>f.character_key==='lala')&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ From JustAWoman's Feed — Lala follows</span>}
             </div>
           </div>
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:C.inkLight,lineHeight:1,flexShrink:0}}>×</button>
