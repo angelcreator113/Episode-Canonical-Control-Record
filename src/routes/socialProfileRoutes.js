@@ -950,6 +950,38 @@ router.post('/bulk/delete', optionalAuth, async (req, res) => {
   }
 });
 
+// ── GET /export ──────────────────────────────────────────────────────────
+// Export profiles as JSON or CSV (must be before /:id to avoid route conflict)
+router.get('/export', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { format, feed_layer, status } = req.query;
+  try {
+    const where = {};
+    if (feed_layer) where.feed_layer = feed_layer;
+    if (status) where.status = status;
+
+    const profiles = await db.SocialProfile.findAll({ where, order: [['created_at', 'DESC']] });
+
+    if (format === 'csv') {
+      const headers = ['handle', 'platform', 'display_name', 'archetype', 'follower_tier', 'follower_count_approx', 'content_category', 'geographic_base', 'age_range', 'current_trajectory', 'lala_relevance_score', 'status', 'feed_layer'];
+      const csvRows = [headers.join(',')];
+      for (const p of profiles) {
+        csvRows.push(headers.map(h => {
+          const val = p[h] ?? '';
+          return `"${String(val).replace(/"/g, '""')}"`;
+        }).join(','));
+      }
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="feed-profiles.csv"');
+      return res.send(csvRows.join('\n'));
+    }
+
+    return res.json({ profiles, count: profiles.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /:id ─────────────────────────────────────────────────────────────────
 router.get('/:id', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
@@ -1130,6 +1162,142 @@ router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
 
     await profile.update(updates);
     return res.json({ profile });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /:id/regenerate ──────────────────────────────────────────────────
+// Re-generate a profile using the same handle/platform/vibe (or overrides)
+router.post('/:id/regenerate', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+
+    const handle = req.body.handle || profile.handle;
+    const platform = req.body.platform || profile.platform;
+    const vibe_sentence = req.body.vibe_sentence || profile.vibe_sentence;
+    const character_context = req.body.character_context || null;
+    const advanced_context = req.body.advanced_context || null;
+
+    const layer = profile.feed_layer || 'real_world';
+    let prompt = buildGenerationPrompt(handle, platform, vibe_sentence, character_context, advanced_context);
+    if (layer === 'lalaverse' && profile.city) {
+      prompt += `\n\nLALAVERSE CONTEXT:
+This creator lives in ${(profile.city || '').replace(/_/g, ' ')} — ${CITY_CULTURE[profile.city] || ''}
+Generate a profile that feels native to that city's creator culture.
+Lala's relationship to this creator: ${profile.lala_relationship || 'mutual_unaware'}.
+Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
+    }
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 6000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    let generated;
+    try {
+      generated = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+    } catch {
+      return res.status(500).json({ error: 'Regeneration failed to parse. Try again.' });
+    }
+
+    await profile.update({
+      vibe_sentence,
+      full_profile: generated,
+      generation_model: 'claude-sonnet-4-20250514',
+      display_name: generated.display_name,
+      follower_tier: generated.follower_tier,
+      follower_count_approx: generated.follower_count_approx,
+      content_category: generated.content_category,
+      archetype: generated.archetype,
+      content_persona: generated.content_persona,
+      real_signal: generated.real_signal,
+      posting_voice: generated.posting_voice,
+      comment_energy: generated.comment_energy,
+      adult_content_present: generated.adult_content_present || false,
+      adult_content_type: generated.adult_content_type,
+      adult_content_framing: generated.adult_content_framing,
+      parasocial_function: generated.parasocial_function,
+      emotional_activation: generated.emotional_activation,
+      watch_reason: generated.watch_reason,
+      what_it_costs_her: generated.what_it_costs_her,
+      current_trajectory: generated.current_trajectory,
+      trajectory_detail: generated.trajectory_detail,
+      moment_log: generated.moment_log || [],
+      sample_captions: generated.sample_captions || [],
+      sample_comments: generated.sample_comments || [],
+      pinned_post: generated.pinned_post,
+      lala_relevance_score: generated.lala_relevance_score || 0,
+      lala_relevance_reason: generated.lala_relevance_reason,
+      book_relevance: generated.book_relevance || [],
+      crossing_trigger: generated.crossing_trigger,
+      crossing_mechanism: generated.crossing_mechanism,
+      post_frequency: generated.post_frequency,
+      engagement_rate: generated.engagement_rate,
+      platform_metrics: generated.platform_metrics || {},
+      geographic_base: generated.geographic_base,
+      geographic_cluster: generated.geographic_cluster,
+      age_range: generated.age_range,
+      relationship_status: generated.relationship_status,
+      known_associates: generated.known_associates || [],
+      revenue_streams: generated.revenue_streams || [],
+      brand_partnerships: generated.brand_partnerships || [],
+      audience_demographics: generated.audience_demographics || {},
+      aesthetic_dna: generated.aesthetic_dna || {},
+      controversy_history: generated.controversy_history || [],
+      collab_style: generated.collab_style,
+      influencer_tier_detail: generated.influencer_tier_detail,
+    });
+
+    const fullProfile = await db.SocialProfile.findByPk(profile.id, {
+      include: db.SocialProfileFollower ? [{ model: db.SocialProfileFollower, as: 'followers' }] : [],
+    });
+
+    return res.json({ profile: fullProfile || profile, regenerated: true });
+  } catch (err) {
+    console.error('Social profile regeneration error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /:id/crossing-preview ───────────────────────────────────────────
+// Preview what the crossing would create without actually creating it
+router.post('/:id/crossing-preview', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+    if (profile.status === 'crossed') return res.status(409).json({ error: 'Already crossed.' });
+
+    const charKey = profile.handle.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const preview = {
+      character_key: charKey,
+      display_name: profile.display_name || profile.handle,
+      icon: '\uD83D\uDCF1',
+      role_type: 'pressure',
+      status: 'accepted',
+      core_desire: profile.parasocial_function || null,
+      core_wound: profile.what_it_costs_her || null,
+      description: `Social media creator (${profile.platform}). ${profile.content_persona || ''}`.trim(),
+      personality: profile.real_signal || null,
+      metadata: {
+        source: 'social_profile_crossing',
+        social_profile_id: profile.id,
+        platform: profile.platform,
+        archetype: profile.archetype,
+        follower_tier: profile.follower_tier,
+      },
+      timeline_event: {
+        event_name: `${profile.display_name || profile.handle} crosses into the story world`,
+        event_description: `Social media creator ${profile.handle} (${profile.platform}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${profile.crossing_trigger || 'story need'}`,
+        impact_level: profile.lala_relevance_score >= 7 ? 'major' : 'moderate',
+      },
+    };
+
+    return res.json({ preview, profile_id: profile.id });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

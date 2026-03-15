@@ -55,6 +55,31 @@
   border-bottom: 1px solid var(--ws4-border);
 }
 
+/* ── Studio top-level tabs ─────────────────────────────────────────── */
+.ws4-studio-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  background: var(--ws4-surface);
+  border-bottom: 1px solid var(--ws4-border);
+}
+.ws4-studio-tab {
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ws4-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.ws4-studio-tab:hover { color: var(--ws4-text); }
+.ws4-studio-tab--active {
+  color: var(--ws4-pink);
+  border-bottom-color: var(--ws4-pink);
+}
+
 .ws4-header-row {
   display: flex;
   align-items: center;

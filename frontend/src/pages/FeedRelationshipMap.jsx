@@ -116,6 +116,14 @@ export default function FeedRelationshipMap() {
   const svgRef = useRef(null);
   const [dimensions, setDimensions] = useState({ w: 900, h: 600 });
 
+  // Zoom & pan state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const [ripplesMsg, setRipplesMsg] = useState(null);
+  const [generatingRipples, setGeneratingRipples] = useState(false);
+
   // Create / auto-generate state
   const [profiles, setProfiles] = useState([]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -207,6 +215,74 @@ export default function FeedRelationshipMap() {
     } finally {
       setGenerating(false);
     }
+  };
+
+  // Zoom handlers
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setZoom(z => Math.min(3, Math.max(0.3, z + delta)));
+  }, []);
+
+  const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0) return; // left click only
+    setIsPanning(true);
+    panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+  }, [pan]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isPanning) return;
+    setPan({
+      x: panStart.current.panX + (e.clientX - panStart.current.x),
+      y: panStart.current.panY + (e.clientY - panStart.current.y),
+    });
+  }, [isPanning]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
+  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
+  // Generate ripples for selected relationship
+  const generateRipples = async (relId) => {
+    setGeneratingRipples(true);
+    setRipplesMsg(null);
+    try {
+      const res = await api.post(`/api/v1/feed-relationships/${relId}/generate-ripples`);
+      const flags = res.data?.flags || [];
+      if (flags.length === 0) {
+        setRipplesMsg('No characters caught in the middle.');
+      } else {
+        setRipplesMsg(`${flags.length} character(s) caught in the middle:\n${flags.map(f => `- ${f.character_name}: ${f.flag}`).join('\n')}`);
+      }
+    } catch (err) {
+      setRipplesMsg(err.response?.data?.error || 'Ripple generation failed');
+    } finally {
+      setGeneratingRipples(false);
+    }
+  };
+
+  // Export relationship map as PNG
+  const exportMapPNG = () => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    canvas.width = dimensions.w * 2;
+    canvas.height = dimensions.h * 2;
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const a = document.createElement('a');
+      a.download = 'feed-relationship-map.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
   };
 
   return (
@@ -330,6 +406,17 @@ export default function FeedRelationshipMap() {
         >
           {generating ? '⏳ Generating…' : '⚡ Auto-Generate'}
         </button>
+        <button
+          onClick={exportMapPNG}
+          style={{
+            padding: '6px 14px', fontSize: 12, fontWeight: 600,
+            border: '1px solid #d1d5db', borderRadius: 6,
+            background: '#fff', color: '#374151',
+            cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+          }}
+        >
+          Export PNG
+        </button>
         {createMsg && (
           <span style={{ fontSize: 11, color: createMsg.includes('fail') ? '#dc2626' : '#16a34a', fontFamily: "'DM Sans', sans-serif" }}>
             {createMsg}
@@ -416,12 +503,25 @@ export default function FeedRelationshipMap() {
               No feed relationships yet. Create relationships between social profiles to see the map.
             </div>
           ) : (
+            <>
+            {/* Zoom controls */}
+            <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, zIndex: 10 }}>
+              <button onClick={() => setZoom(z => Math.min(3, z + 0.2))} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e8d5e0', background: '#fff', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+              <button onClick={() => setZoom(z => Math.max(0.3, z - 0.2))} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e8d5e0', background: '#fff', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+              <button onClick={resetView} style={{ height: 28, padding: '0 8px', borderRadius: 6, border: '1px solid #e8d5e0', background: '#fff', cursor: 'pointer', fontSize: 10, fontFamily: "'DM Sans', sans-serif" }}>Reset</button>
+              <span style={{ fontSize: 10, color: '#888', alignSelf: 'center', marginLeft: 4, fontFamily: "'DM Mono', monospace" }}>{Math.round(zoom * 100)}%</span>
+            </div>
             <svg
               ref={svgRef}
               width={dimensions.w}
               height={dimensions.h}
               viewBox={`0 0 ${dimensions.w} ${dimensions.h}`}
-              style={{ display: 'block' }}
+              style={{ display: 'block', cursor: isPanning ? 'grabbing' : 'grab' }}
+              onWheel={handleWheel}
+              onMouseDown={(e) => { if (e.target === svgRef.current || e.target.tagName === 'svg') handleMouseDown(e); }}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
             >
               <defs>
                 <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
@@ -429,6 +529,7 @@ export default function FeedRelationshipMap() {
                 </marker>
               </defs>
 
+              <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
               {/* Edges (filtered) */}
               {edges.filter(e => !activeTypes || activeTypes.has(e.type)).map(edge => {
                 const a = nodes.find(n => n.id === edge.source);
@@ -510,7 +611,9 @@ export default function FeedRelationshipMap() {
                   </g>
                 );
               })}
+              </g>
             </svg>
+            </>
           )}
         </div>
 
@@ -570,6 +673,7 @@ export default function FeedRelationshipMap() {
               .map(e => {
                 const otherId = e.source === selected.id ? e.target : e.source;
                 const other = nodes.find(n => n.id === otherId);
+                const isConflict = ['beef', 'former_friends', 'public_shade'].includes(e.type);
                 return (
                   <div key={e.id} style={{
                     display: 'flex',
@@ -592,10 +696,39 @@ export default function FeedRelationshipMap() {
                     }}>
                       {e.type?.replace(/_/g, ' ')}
                     </span>
+                    {isConflict && (
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); generateRipples(e.id); }}
+                        disabled={generatingRipples}
+                        title="Find characters caught in the middle"
+                        style={{
+                          fontSize: 9, padding: '1px 6px', borderRadius: 4,
+                          border: '1px solid #f59e0b44', background: '#fdf8e8',
+                          color: '#8a6010', cursor: 'pointer', fontWeight: 600,
+                          fontFamily: "'DM Sans', sans-serif",
+                        }}
+                      >
+                        Ripples
+                      </button>
+                    )}
                   </div>
                 );
               })
             }
+            {ripplesMsg && (
+              <div style={{
+                marginTop: 8, padding: '8px 10px', borderRadius: 6,
+                background: '#fdf8e8', border: '1px solid #f0d89044',
+                fontSize: 11, color: '#8a6010', lineHeight: 1.5,
+                whiteSpace: 'pre-wrap',
+              }}>
+                {ripplesMsg}
+                <button onClick={() => setRipplesMsg(null)} style={{
+                  float: 'right', background: 'none', border: 'none',
+                  color: '#8a6010', cursor: 'pointer', fontSize: 12,
+                }}>✕</button>
+              </div>
+            )}
 
             {/* Entangled characters */}
             {entangled.length > 0 && (

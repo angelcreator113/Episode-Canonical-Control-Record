@@ -1277,8 +1277,8 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
       age: '"age": "their current age as a number"',
       ethnicity: '"ethnicity": "their ethnic background"',
       hometown: '"hometown": "where they grew up"',
-      current_city: '"current_city": "where they live now"',
-      class_origin: '"class_origin": "e.g. Working class, Middle class, Upper class"',
+      current_city: '"current_city": "ENUM — must be one of: nova_prime, velour_city, the_drift, solenne, cascade_row, outside_lalaverse, unknown"',
+      class_origin: '"class_origin": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown"',
       pronouns: '"pronouns": "e.g. she/her, he/him, they/them"',
       nationality: '"nationality": "their country of origin or citizenship"',
     };
@@ -1335,6 +1335,11 @@ ${allFieldsToFill}
     }
 
     // Apply each generated demographics field
+    const ENUM_VALUES = {
+      current_city: ['nova_prime','velour_city','the_drift','solenne','cascade_row','outside_lalaverse','unknown'],
+      class_origin: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
+      current_class: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
+    };
     for (const field of demoFields) {
       const val = generated[field];
       if (val !== null && val !== undefined && val !== '') {
@@ -1343,6 +1348,11 @@ ${allFieldsToFill}
           const parsed = parseInt(val, 10);
           if (!isNaN(parsed)) { character[field] = parsed; filled.push(field); }
         } else if (typeof val === 'string') {
+          // Validate enum fields — skip if value not in allowed set
+          if (ENUM_VALUES[field] && !ENUM_VALUES[field].includes(val)) {
+            console.warn(`[Backfill] Skipping invalid enum value for ${field}: "${val}"`);
+            continue;
+          }
           character[field] = val;
           filled.push(field);
         }
@@ -1499,10 +1509,10 @@ router.post('/characters/:id/generate-section', async (req, res) => {
   "nationality": "their nationality",
   "first_language": "their first language",
   "hometown": "where they grew up",
-  "current_city": "where they live now",
+  "current_city": "ENUM — must be one of: nova_prime, velour_city, the_drift, solenne, cascade_row, outside_lalaverse, unknown",
   "city_migration_history": "how they got from hometown to current city",
-  "class_origin": "their class background (working class, middle class, upper middle, wealthy)",
-  "current_class": "their current class position",
+  "class_origin": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown",
+  "current_class": "ENUM — must be one of: poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money, unknown",
   "class_mobility_direction": "upward, downward, or stable",
   "family_structure": "nuclear, single parent, extended, chosen, etc.",
   "parents_status": "together, divorced, deceased, estranged, etc.",
@@ -1519,6 +1529,11 @@ router.post('/characters/:id/generate-section', async (req, res) => {
   "follower_tier": "nano, micro, mid-tier, macro, mega"
 }`,
         apply: (generated) => {
+          const DEMO_ENUMS = {
+            current_city: ['nova_prime','velour_city','the_drift','solenne','cascade_row','outside_lalaverse','unknown'],
+            class_origin: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
+            current_class: ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'],
+          };
           const fields = ['gender','pronouns','age','birth_year','ethnicity','cultural_background',
             'nationality','first_language','hometown','current_city','city_migration_history',
             'class_origin','current_class','class_mobility_direction','family_structure',
@@ -1528,6 +1543,7 @@ router.post('/characters/:id/generate-section', async (req, res) => {
           const updated = [];
           for (const f of fields) {
             if (generated[f] !== null && generated[f] !== undefined && generated[f] !== '') {
+              if (DEMO_ENUMS[f] && !DEMO_ENUMS[f].includes(generated[f])) continue;
               character[f] = generated[f];
               updated.push(f);
             }

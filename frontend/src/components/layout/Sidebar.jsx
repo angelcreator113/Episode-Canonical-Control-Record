@@ -58,9 +58,9 @@ const NAV = [
       { icon: '✦',  label: 'World Studio',         route: '/world-studio',
         children: [
           { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
+          { icon: '🔗', label: 'Relationship Engine', route: '/world-studio?tab=relationships' },
         ],
       },
-      { icon: '🔗', label: 'Relationship Engine', route: '/relationships' },
       { icon: '💭', label: 'Therapy',              route: '/therapy/default' },
     ],
   },

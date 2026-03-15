@@ -59,7 +59,7 @@ function createRecognizer() {
 const RESUME_DELAY_MS = 600;
 
 // ─── TTS via ElevenLabs (backend proxy) ────────────────────────────────────
-const SPEAK_API = '/api/v1/memories/assistant-speak';
+const SPEAK_API = '/api/v1/amber/speak';
 let currentAudio = null;
 
 async function speak(text, onDone) {
