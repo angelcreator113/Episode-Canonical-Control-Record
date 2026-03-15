@@ -1153,7 +1153,9 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
             character_archetype = :character_archetype, signature_trait = :signature_trait,
             emotional_baseline = :emotional_baseline, description = :description,
             personality_matrix = :personality_matrix, aesthetic_dna = :aesthetic_dna,
-            career_status = :career_status, voice_signature = :voice_signature,
+            career_status = :career_status, relationships_map = :relationships_map,
+            voice_signature = :voice_signature, story_presence = :story_presence,
+            evolution_tracking = :evolution_tracking,
             gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
             relationship_status = :relationship_status,
             hometown = :hometown, current_city = :current_city,
@@ -1200,12 +1202,32 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
                 public_recognition: char.public_persona || null,
                 ongoing_arc: char.arc_role || null,
               }),
+              relationships_map: JSON.stringify({
+                allies: null, rivals: null, mentors: null,
+                love_interests: null, business_partners: null,
+                dynamic_notes: char.dynamic || null,
+                tension_type: char.tension_type || null,
+                what_they_want_from_lala: char.what_they_want_from_lala || null,
+                attracted_to: char.attracted_to || null,
+                how_they_love: char.how_they_love || null,
+              }),
               voice_signature: JSON.stringify({
                 speech_pattern: char.speech_pattern || null,
                 vocabulary_tone: char.vocabulary_tone || null,
                 catchphrases: char.catchphrases || null,
                 internal_monologue_style: char.internal_monologue_style || null,
                 emotional_reactivity: char.emotional_baseline || null,
+              }),
+              story_presence: JSON.stringify({
+                appears_in_books: char.world_tag,
+                current_story_status: char.how_they_meet || null,
+                unresolved_threads: null,
+                future_potential: char.exit_reason ? 'Will exit' : 'Yes',
+              }),
+              evolution_tracking: JSON.stringify({
+                version_history: null,
+                era_changes: char.world_location || null,
+                personality_shifts: null,
               }),
               gender: char.gender || null,
               pronouns: derivePronouns(char.gender),
@@ -1386,8 +1408,9 @@ Return JSON only — an object with ONLY the missing field keys and their values
             character_archetype = :character_archetype, signature_trait = :signature_trait,
             emotional_baseline = :emotional_baseline, description = :description,
             personality_matrix = :personality_matrix, aesthetic_dna = :aesthetic_dna,
-            career_status = :career_status, voice_signature = :voice_signature,
-            extra_fields = :extra_fields,
+            career_status = :career_status, relationships_map = :relationships_map,
+            voice_signature = :voice_signature, story_presence = :story_presence,
+            evolution_tracking = :evolution_tracking, extra_fields = :extra_fields,
             gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
             relationship_status = :relationship_status,
             hometown = :hometown, current_city = :current_city,
@@ -1434,12 +1457,32 @@ Return JSON only — an object with ONLY the missing field keys and their values
                 public_recognition: updated.public_persona || null,
                 ongoing_arc: updated.arc_role || null,
               }),
+              relationships_map: JSON.stringify({
+                allies: null, rivals: null, mentors: null,
+                love_interests: null, business_partners: null,
+                dynamic_notes: updated.dynamic || null,
+                tension_type: updated.tension_type || null,
+                what_they_want_from_lala: updated.what_they_want_from_lala || null,
+                attracted_to: updated.attracted_to || null,
+                how_they_love: updated.how_they_love || null,
+              }),
               voice_signature: JSON.stringify({
                 speech_pattern: updated.speech_pattern || null,
                 vocabulary_tone: updated.vocabulary_tone || null,
                 catchphrases: updated.catchphrases || null,
                 internal_monologue_style: updated.internal_monologue_style || null,
                 emotional_reactivity: updated.emotional_baseline || null,
+              }),
+              story_presence: JSON.stringify({
+                appears_in_books: updated.world_tag,
+                current_story_status: updated.how_they_meet || null,
+                unresolved_threads: null,
+                future_potential: updated.exit_reason ? 'Will exit' : 'Yes',
+              }),
+              evolution_tracking: JSON.stringify({
+                version_history: null,
+                era_changes: updated.world_location || null,
+                personality_shifts: null,
               }),
               extra_fields: JSON.stringify({
                 source: 'world_studio',
@@ -1643,8 +1686,9 @@ router.post('/world/characters/bulk-re-sync', optionalAuth, async (req, res) => 
             character_archetype = :character_archetype, signature_trait = :signature_trait,
             emotional_baseline = :emotional_baseline, description = :description,
             personality_matrix = :personality_matrix, aesthetic_dna = :aesthetic_dna,
-            career_status = :career_status, voice_signature = :voice_signature,
-            extra_fields = :extra_fields,
+            career_status = :career_status, relationships_map = :relationships_map,
+            voice_signature = :voice_signature, story_presence = :story_presence,
+            evolution_tracking = :evolution_tracking, extra_fields = :extra_fields,
             gender = :gender, pronouns = :pronouns, age = :age, sexuality = :sexuality,
             relationship_status = :relationship_status,
             hometown = :hometown, current_city = :current_city,
@@ -1691,12 +1735,32 @@ router.post('/world/characters/bulk-re-sync', optionalAuth, async (req, res) => 
                 public_recognition: char.public_persona || null,
                 ongoing_arc: char.arc_role || null,
               }),
+              relationships_map: JSON.stringify({
+                allies: null, rivals: null, mentors: null,
+                love_interests: null, business_partners: null,
+                dynamic_notes: char.dynamic || null,
+                tension_type: char.tension_type || null,
+                what_they_want_from_lala: char.what_they_want_from_lala || null,
+                attracted_to: char.attracted_to || null,
+                how_they_love: char.how_they_love || null,
+              }),
               voice_signature: JSON.stringify({
                 speech_pattern: char.speech_pattern || null,
                 vocabulary_tone: char.vocabulary_tone || null,
                 catchphrases: char.catchphrases || null,
                 internal_monologue_style: char.internal_monologue_style || null,
                 emotional_reactivity: char.emotional_baseline || null,
+              }),
+              story_presence: JSON.stringify({
+                appears_in_books: char.world_tag,
+                current_story_status: char.how_they_meet || null,
+                unresolved_threads: null,
+                future_potential: char.exit_reason ? 'Will exit' : 'Yes',
+              }),
+              evolution_tracking: JSON.stringify({
+                version_history: null,
+                era_changes: char.world_location || null,
+                personality_shifts: null,
               }),
               extra_fields: JSON.stringify({
                 source: 'world_studio',
@@ -2664,7 +2728,13 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       const charId = wcRecord.id;
 
       // Sync to canonical registry (pass protagonist name for correct lookup)
-      const rcId = await syncToRegistry(req, charId, c, registryId, world_tag, wCfg.protagonist);
+      let rcId = null;
+      try {
+        rcId = await syncToRegistry(req, charId, c, registryId, world_tag, wCfg.protagonist);
+      } catch (syncErr) {
+        console.error(`syncToRegistry failed for ${c.name}:`, syncErr.message);
+        // Non-fatal: character is still created in world_characters, registry link can be retried via re-sync
+      }
       inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
