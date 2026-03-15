@@ -1620,6 +1620,35 @@ export default function CharacterRegistryPage() {
                     </div>
                   );
                 })()}
+                {(() => {
+                  const hasData = (val) => val && typeof val === 'object' && Object.values(val).some(v => v && v !== '');
+                  let dossierFilled = 0;
+                  const dossierTotal = 15; // 8 essence + 7 JSONB sections
+                  if (c.core_fear)           dossierFilled++;
+                  if (c.core_desire)         dossierFilled++;
+                  if (c.core_wound)          dossierFilled++;
+                  if (c.mask_persona)        dossierFilled++;
+                  if (c.truth_persona)       dossierFilled++;
+                  if (c.character_archetype) dossierFilled++;
+                  if (c.signature_trait)     dossierFilled++;
+                  if (c.emotional_baseline)  dossierFilled++;
+                  if (hasData(c.career_status))      dossierFilled++;
+                  if (hasData(c.aesthetic_dna))       dossierFilled++;
+                  if (hasData(c.voice_signature))     dossierFilled++;
+                  if (hasData(c.story_presence))      dossierFilled++;
+                  if (hasData(c.evolution_tracking))  dossierFilled++;
+                  if (hasData(c.living_context))      dossierFilled++;
+                  if (hasData(c.relationships_map))   dossierFilled++;
+                  if (dossierFilled === 0) return null;
+                  return (
+                    <div className={`cr-dossier-profile-badge ${dossierFilled >= dossierTotal ? 'complete' : ''}`}
+                      style={{ background: dossierFilled >= dossierTotal ? 'rgba(100,80,200,0.12)' : 'rgba(100,80,200,0.06)',
+                               color: dossierFilled >= dossierTotal ? '#6850c8' : '#8a8070' }}>
+                      <span className="cr-dossier-profile-badge-icon">📋</span>
+                      {dossierFilled >= dossierTotal ? 'Dossier Complete' : `Dossier ${dossierFilled}/${dossierTotal}`}
+                    </div>
+                  );
+                })()}
 
                 {/* Relationship Quick View */}
                 {c.relationships_map && (() => {
@@ -1976,7 +2005,7 @@ export default function CharacterRegistryPage() {
                     }}
                   />
                 ) : (
-                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile }, characters)
+                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile }, characters, () => { if (activeRegistry?.id) fetchRegistry(activeRegistry.id); })
                 )}
               </div>
             </div>
@@ -2982,7 +3011,7 @@ function Toast({ msg, type, onClose }) {
 /* ================================================================
    DOSSIER TAB CONTENT
    ================================================================ */
-function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, ai, characters) {
+function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, ai, characters, onRefresh) {
   const editing = editSection === tab;
 
   const editControls = editing ? (
@@ -3065,7 +3094,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               {jGet(c.story_presence, 'unresolved_threads') && (
                 <DRow label="Unresolved Threads" value={jGet(c.story_presence, 'unresolved_threads')} />
               )}
-              <BackfillBanner character={c} />
+              <BackfillBanner character={c} onRefresh={onRefresh} />
             </>
           )}
         </div>
@@ -3217,7 +3246,14 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EArea label="Emotional Function" value={form.emotional_function} onChange={v => F('emotional_function', v)} rows={2} placeholder="The role they serve emotionally in the story" />
               <EField label="Wound Depth" value={form.wound_depth} onChange={v => F('wound_depth', v)} placeholder="0–10 scale" />
             </>
-          ) : (
+          ) : (() => {
+            const hasEssence = c.core_desire || c.core_fear || c.core_wound || c.mask_persona || c.truth_persona || c.character_archetype || c.signature_trait || c.emotional_baseline;
+            if (!hasEssence && !c.belief_pressured && !c.emotional_function && !c.personality) {
+              return (
+                <PsychologyEmptyState characterId={c.id} onEdit={() => startEdit(tab)} onRefresh={onRefresh} />
+              );
+            }
+            return (
             <>
               {/* Triad */}
               {(c.core_desire || c.core_fear || c.core_wound) && (
@@ -3286,7 +3322,8 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                 </div>
               )}
             </>
-          )}
+            );
+          })()}
         </div>
       );
 
@@ -3865,35 +3902,117 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
 
 
 /* ================================================================
-   BACKFILL BANNER — fills empty JSONB sections from existing data
+   PSYCHOLOGY EMPTY STATE — shown when all essence fields are empty
    ================================================================ */
-function BackfillBanner({ character }) {
+function PsychologyEmptyState({ characterId, onEdit, onRefresh }) {
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const resp = await fetch(`/api/v1/character-registry/characters/${characterId}/backfill-sections`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await resp.json();
+      if (data.success) {
+        if (onRefresh) setTimeout(() => onRefresh(), 500);
+      } else {
+        setError(data.error || 'Generation failed');
+      }
+    } catch (err) {
+      setError(err.message || 'Network error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="cr-dossier-empty" style={{ textAlign: 'center', padding: '28px 16px' }}>
+      <div className="cr-dossier-empty-icon" style={{ fontSize: 32, marginBottom: 8 }}>🧠</div>
+      <p className="cr-dossier-empty-text" style={{ marginBottom: 4 }}>No psychology data yet.</p>
+      <p style={{ fontSize: 12, color: '#999', marginBottom: 16 }}>
+        Essence Profile: desire, fear, wound, mask, truth, archetype, trait, baseline
+      </p>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button className="cr-dossier-empty-btn" onClick={onEdit}>
+          ✎ Add Manually
+        </button>
+        <button
+          disabled={generating}
+          onClick={handleGenerate}
+          style={{
+            padding: '8px 20px', background: generating ? '#ddd' : '#6850c8', color: '#fff',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            opacity: generating ? 0.6 : 1,
+          }}
+        >
+          {generating ? '⟳ Generating…' : '✦ Auto-Generate with AI'}
+        </button>
+      </div>
+      {error && (
+        <div style={{ fontSize: 12, color: '#c43a2a', marginTop: 10 }}>
+          Error: {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================================================
+   BACKFILL BANNER — fills empty JSONB sections + essence fields
+   ================================================================ */
+function BackfillBanner({ character, onRefresh }) {
   const [filling, setFilling] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
   const hasData = (val) => val && typeof val === 'object' && Object.values(val).some(v => v && v !== '');
   const emptySections = [];
-  if (!hasData(character.career_status))     emptySections.push('Career');
-  if (!hasData(character.aesthetic_dna))      emptySections.push('Aesthetic DNA');
-  if (!hasData(character.voice_signature))    emptySections.push('Voice');
-  if (!hasData(character.story_presence))     emptySections.push('Story Presence');
-  if (!hasData(character.evolution_tracking)) emptySections.push('Evolution');
-  if (!hasData(character.living_context))     emptySections.push('Living Context');
+  if (!hasData(character.career_status))      emptySections.push('Career');
+  if (!hasData(character.aesthetic_dna))       emptySections.push('Aesthetic DNA');
+  if (!hasData(character.voice_signature))     emptySections.push('Voice');
+  if (!hasData(character.story_presence))      emptySections.push('Story Presence');
+  if (!hasData(character.evolution_tracking))  emptySections.push('Evolution');
+  if (!hasData(character.living_context))      emptySections.push('Living Context');
+  if (!hasData(character.relationships_map))   emptySections.push('Relationships');
 
-  if (emptySections.length === 0) return null;
+  // Check essence profile fields
+  const emptyEssence = [];
+  if (!character.core_fear)           emptyEssence.push('Core Fear');
+  if (!character.core_desire)         emptyEssence.push('Core Desire');
+  if (!character.core_wound)          emptyEssence.push('Core Wound');
+  if (!character.mask_persona)        emptyEssence.push('Mask Persona');
+  if (!character.truth_persona)       emptyEssence.push('Truth Persona');
+  if (!character.character_archetype) emptyEssence.push('Archetype');
+  if (!character.signature_trait)     emptyEssence.push('Signature Trait');
+  if (!character.emotional_baseline)  emptyEssence.push('Emotional Baseline');
+
+  const totalEmpty = emptySections.length + emptyEssence.length;
+  if (totalEmpty === 0) return null;
 
   return (
     <div style={{ marginTop: 20, padding: 14, background: 'rgba(100,80,200,0.04)', border: '1px dashed rgba(100,80,200,0.25)', borderRadius: 8 }}>
       <div style={{ fontSize: 13, color: '#6850c8', marginBottom: 6, fontWeight: 600 }}>
-        {emptySections.length} empty section{emptySections.length > 1 ? 's' : ''} detected
+        {totalEmpty} empty field{totalEmpty > 1 ? 's' : ''} detected
       </div>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
-        {emptySections.join(' · ')}
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>
+        {emptySections.length > 0 && <span>Sections: {emptySections.join(' · ')}</span>}
       </div>
+      {emptyEssence.length > 0 && (
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
+          Essence: {emptyEssence.join(' · ')}
+        </div>
+      )}
       {result ? (
         <div style={{ fontSize: 12, color: '#4a9a6a', fontWeight: 600 }}>
-          ✓ Filled {result.filled.length} section{result.filled.length !== 1 ? 's' : ''} — refresh to see updates
+          ✓ Filled {result.filled.length} field{result.filled.length !== 1 ? 's' : ''}
         </div>
       ) : (
         <>
@@ -3903,12 +4022,18 @@ function BackfillBanner({ character }) {
               setFilling(true);
               setError(null);
               try {
+                const token = localStorage.getItem('authToken') || localStorage.getItem('token');
                 const resp = await fetch(`/api/v1/character-registry/characters/${character.id}/backfill-sections`, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
                 });
                 const data = await resp.json();
                 if (data.success) {
                   setResult(data);
+                  if (onRefresh) setTimeout(() => onRefresh(), 500);
                 } else {
                   setError(data.error || 'Backfill failed');
                 }
@@ -3925,7 +4050,7 @@ function BackfillBanner({ character }) {
               opacity: filling ? 0.6 : 1,
             }}
           >
-            {filling ? '⟳ Filling sections…' : '✦ Auto-fill Empty Sections from Dossier'}
+            {filling ? '⟳ Filling sections & essence…' : '✦ Auto-fill Empty Sections & Essence'}
           </button>
           {error && (
             <div style={{ fontSize: 12, color: '#c43a2a', marginTop: 8 }}>
@@ -3975,8 +4100,13 @@ function BulkBackfillButton({ registryId, characterCount, onDone }) {
             setRunning(true);
             setError(null);
             try {
+              const token = localStorage.getItem('authToken') || localStorage.getItem('token');
               const resp = await fetch(`/api/v1/character-registry/registries/${registryId}/backfill-all`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
               });
               const data = await resp.json();
               if (data.success) {
