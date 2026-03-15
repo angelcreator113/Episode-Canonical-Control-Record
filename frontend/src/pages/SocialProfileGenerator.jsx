@@ -465,7 +465,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             {/* Protagonist switcher — hidden when embedded in WorldStudio */}
             {!embedded && <div style={{display:'flex',gap:4,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`}}>
               {PROTAGONISTS.map(p=>(
-                <button key={p.key} onClick={()=>setProtagonist(p)} style={{padding:'5px 12px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+                <button key={p.key} onClick={()=>{setProtagonist(p);setFeedLayer(p.key==='lala'?'lalaverse':'real_world');setPage(1);}} style={{padding:'5px 12px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
                   background:protagonist.key===p.key?C.lavender:'transparent',
                   color:protagonist.key===p.key?'#fff':C.inkLight,transition:'all 0.15s'}}>
                   {p.icon} {p.label}
@@ -479,11 +479,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
         </div>
         {/* Feed layer switcher */}
         <div style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
-          <button onClick={()=>{setFeedLayer('real_world');setPage(1);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+          <button onClick={()=>{setFeedLayer('real_world');setPage(1);setProtagonist(PROTAGONISTS[0]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='real_world'?C.blue:'transparent',color:feedLayer==='real_world'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             JustAWoman's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='real_world'?`${stats.total}/${feedCap}`:''}</span>
           </button>
-          <button onClick={()=>{setFeedLayer('lalaverse');setPage(1);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+          <button onClick={()=>{setFeedLayer('lalaverse');setPage(1);setProtagonist(PROTAGONISTS[1]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='lalaverse'?C.lavender:'transparent',color:feedLayer==='lalaverse'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             Lala's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${stats.total}/${feedCap}`:''}</span>
           </button>
