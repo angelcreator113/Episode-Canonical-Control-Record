@@ -5911,6 +5911,48 @@ Respond ONLY in valid JSON:
         return { replyAppend: `\nThe Feed (${profiles.length} profiles):\n${summary}` };
       }
 
+      // ── Character Follow Influence — what characters watch and why ────
+      case 'read_character_follows': {
+        const charKey = args?.character_key || args?.characterKey;
+        if (!charKey) return { replyAppend: '\nSpecify a character_key to see their follows.' };
+
+        const charFollows = await sequelize.query(
+          `SELECT spf.character_key, spf.follow_motivation, spf.influence_type,
+                  spf.influence_level, spf.follow_context, spf.emotional_reaction,
+                  sp.handle, sp.display_name, sp.platform, sp.content_category, sp.archetype
+           FROM social_profile_followers spf
+           JOIN social_profiles sp ON sp.id = spf.social_profile_id
+           WHERE spf.character_key = :charKey
+           ORDER BY spf.influence_level DESC
+           LIMIT 20`,
+          { replacements: { charKey }, type: sequelize.QueryTypes.SELECT }
+        );
+
+        if (charFollows.length === 0) {
+          return { replyAppend: `\n${charKey} does not follow anyone in the feed yet.` };
+        }
+
+        // Try to get consumption context
+        let consumptionLine = '';
+        try {
+          const [cfp] = await sequelize.query(
+            `SELECT consumption_context, consumption_style FROM character_follow_profiles WHERE character_key = :charKey LIMIT 1`,
+            { replacements: { charKey }, type: sequelize.QueryTypes.SELECT }
+          );
+          if (cfp?.consumption_context) consumptionLine = `\n${cfp.consumption_context}\n`;
+        } catch { /* table may not exist yet */ }
+
+        const summary = charFollows.map(f => {
+          const influence = f.influence_level >= 8 ? 'DEEP' : f.influence_level >= 5 ? 'REGULAR' : 'CASUAL';
+          let line = `[${influence}] @${f.handle} (${f.platform}, ${f.content_category || f.archetype || 'mixed'})`;
+          if (f.follow_context) line += `\n  ${f.follow_context}`;
+          if (f.emotional_reaction) line += `\n  ${f.emotional_reaction}`;
+          return line;
+        }).join('\n');
+
+        return { replyAppend: `\n${charKey} follows ${charFollows.length} creators:${consumptionLine}\n${summary}` };
+      }
+
       case 'read_feed_relationships': {
         const feedRels = await sequelize.query(
           `SELECT fr.id, fr.relationship_type, fr.is_public, fr.notes,
@@ -7848,6 +7890,55 @@ const SE_STORY_TYPES = [
   { type: 'wrong_win',  label: 'Wrong Win',  description: 'Character succeeds at exactly the wrong moment. Gets what she wanted. It costs something unexpected.' },
 ];
 
+// ── Load follow influence context for story injection ──────────────────────────
+async function loadFollowInfluence(characterKey) {
+  try {
+    const { SocialProfileFollower, SocialProfile, CharacterFollowProfile } = require('../models');
+    if (!SocialProfileFollower || !SocialProfile) return null;
+
+    const follows = await SocialProfileFollower.findAll({
+      where: { character_key: characterKey },
+      include: [{
+        model: SocialProfile,
+        as: 'socialProfile',
+        attributes: ['handle', 'platform', 'content_category', 'archetype', 'content_persona'],
+      }],
+      order: [['influence_level', 'DESC']],
+      limit: 8,
+    });
+
+    if (follows.length === 0) return null;
+
+    // Get consumption context if available
+    let consumptionLine = '';
+    if (CharacterFollowProfile) {
+      const cfp = await CharacterFollowProfile.findOne({
+        where: { character_key: characterKey },
+        attributes: ['consumption_context', 'consumption_style'],
+      });
+      if (cfp?.consumption_context) consumptionLine = cfp.consumption_context + '\n';
+    }
+
+    const lines = follows.map(f => {
+      const p = f.socialProfile;
+      if (!p) return null;
+      const intensity = f.influence_level >= 8 ? 'deeply influenced by'
+        : f.influence_level >= 5 ? 'regularly watches'
+        : 'aware of';
+      let line = `- ${intensity} @${p.handle} (${p.platform}, ${p.content_category || p.archetype || 'mixed'})`;
+      if (f.follow_context) line += ` — ${f.follow_context}`;
+      return line;
+    }).filter(Boolean);
+
+    return `SOCIAL MEDIA CONSUMPTION — What ${characterKey} watches online (this shapes their worldview, aspirations, and insecurities — reference naturally, never explain):
+${consumptionLine}${lines.join('\n')}
+
+These influences are atmospheric. Characters don't announce who they follow — but what they watch shapes what they say, what they want, and what they compare themselves to. A creator's phrase might echo in dialogue. A lifestyle they've been watching might color a desire. Use this the way real social media use works: ambient, persistent, quietly shaping.`;
+  } catch (e) {
+    return null;
+  }
+}
+
 // ─── In-memory cache for story engine task arcs ───────────────────────────────
 const seTaskArcCache = new Map();
 
@@ -8156,7 +8247,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     }
 
     // Load all context in parallel for speed
-    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony] = await Promise.all([
+    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence] = await Promise.all([
       loadCharacterProfile(characterKey),
       loadStoryMemories(characterKey),
       loadWorldState(characterKey, dna.world),
@@ -8167,6 +8258,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
       loadProseStyleAnchor(characterKey),
       loadDialogueVoiceCards(characterKey),
       loadDramaticIrony(characterKey),
+      loadFollowInfluence(characterKey),
     ]);
 
     const profileSection = dbProfile
@@ -8183,6 +8275,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
       : '';
     const voiceCardsSection = voiceCards ? `\n\n${voiceCards}` : '';
     const ironySection = dramaticIrony ? `\n\n${dramaticIrony}` : '';
+    const followSection = followInfluence ? `\n\n${followInfluence}` : '';
 
     const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
@@ -8197,7 +8290,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${ironySection}
+Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${ironySection}${followSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -9111,7 +9204,7 @@ Relationship Mapping:
   - read_relationships, propose_relationship
 
 Feed Awareness:
-  - read_feed, read_feed_relationships
+  - read_feed, read_feed_relationships, read_character_follows
 
 Memory Mining:
   - propose_memories

@@ -465,7 +465,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             {/* Protagonist switcher — hidden when embedded in WorldStudio */}
             {!embedded && <div style={{display:'flex',gap:4,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`}}>
               {PROTAGONISTS.map(p=>(
-                <button key={p.key} onClick={()=>setProtagonist(p)} style={{padding:'5px 12px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+                <button key={p.key} onClick={()=>{setProtagonist(p);setFeedLayer(p.key==='lala'?'lalaverse':'real_world');setPage(1);}} style={{padding:'5px 12px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
                   background:protagonist.key===p.key?C.lavender:'transparent',
                   color:protagonist.key===p.key?'#fff':C.inkLight,transition:'all 0.15s'}}>
                   {p.icon} {p.label}
@@ -479,11 +479,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
         </div>
         {/* Feed layer switcher */}
         <div style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
-          <button onClick={()=>{setFeedLayer('real_world');setPage(1);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+          <button onClick={()=>{setFeedLayer('real_world');setPage(1);setProtagonist(PROTAGONISTS[0]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='real_world'?C.blue:'transparent',color:feedLayer==='real_world'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             JustAWoman's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='real_world'?`${stats.total}/${feedCap}`:''}</span>
           </button>
-          <button onClick={()=>{setFeedLayer('lalaverse');setPage(1);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
+          <button onClick={()=>{setFeedLayer('lalaverse');setPage(1);setProtagonist(PROTAGONISTS[1]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='lalaverse'?C.lavender:'transparent',color:feedLayer==='lalaverse'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             Lala's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${stats.total}/${feedCap}`:''}</span>
           </button>
@@ -1024,6 +1024,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                               </span>
                             );
                           })}
+                          {/* Show count of additional dynamic character followers */}
+                          {(()=>{const protagonistKeys=new Set(PROTAGONISTS.map(p=>p.key));const dynFollowers=followers.filter(f=>!protagonistKeys.has(f.character_key));return dynFollowers.length>0?(
+                            <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#e8f5e9',color:'#2e7d32',fontWeight:600}}>+{dynFollowers.length} more</span>
+                          ):null;})()}
                         </div>
                         <span style={{fontSize:10,fontWeight:700,color:C.lavender}}>✦{p.lala_relevance_score??0}</span>
                       </div>
@@ -1420,6 +1424,14 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                   </button>
                 );
               })}
+              {/* Dynamic character followers (not protagonists) */}
+              {(()=>{const protagonistKeys=new Set(PROTAGONISTS.map(p=>p.key));const dynFollowers=followers.filter(f=>!protagonistKeys.has(f.character_key));return dynFollowers.map(f=>(
+                <span key={f.character_key} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,
+                  border:`1.5px solid ${C.border}`,background:'#e8f5e9',color:'#2e7d32',display:'inline-flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:14}}>👤</span> {f.character_name||f.character_key} follows
+                  {f.follow_probability!=null&&<span style={{fontSize:10,opacity:0.7}}>{Math.round(f.follow_probability*100)}%</span>}
+                </span>
+              ));})()}
             </div>
             {followers.length>0&&(
               <div style={{display:'flex',flexDirection:'column',gap:6}}>

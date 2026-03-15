@@ -12,20 +12,21 @@ try {
   optionalAuth = (req, res, next) => next();
 }
 
-const db = require('../models/index');
-
 // ── GET /arc-tracking/:characterKey — Full arc tracking data ─────────
 router.get('/arc-tracking/:characterKey', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
   try {
-    const context = await buildArcContext(db, req.params.characterKey);
+    const characterKey = req.params.characterKey;
+
+    const context = await buildArcContext(db, characterKey);
     if (!context) return res.status(404).json({ error: 'No arc found' });
 
     // Pull story-by-story data for visualization
-    const stories = await db.StorytellerStory.findAll({
-      where: { character_key: req.params.characterKey, status: 'approved' },
+    const stories = db.StorytellerStory ? await db.StorytellerStory.findAll({
+      where: { character_key: characterKey, status: 'approved' },
       attributes: ['story_number', 'phase', 'story_type', 'created_at'],
       order: [['story_number', 'ASC']],
-    });
+    }) : [];
 
     const arcPoints = stories.map(s => ({
       story_number: s.story_number,
@@ -42,6 +43,7 @@ router.get('/arc-tracking/:characterKey', optionalAuth, async (req, res) => {
 
 // ── POST /arc-tracking/update — Update arc after story approval ──────
 router.post('/arc-tracking/update', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
   try {
     const { character_key, story_number, story_type, phase, phone_appeared } = req.body;
     if (!character_key) return res.status(400).json({ error: 'character_key is required' });
@@ -62,6 +64,7 @@ router.post('/arc-tracking/update', optionalAuth, async (req, res) => {
 
 // ── POST /world/scenes/check-eligibility — Scene eligibility check ───
 router.post('/world/scenes/check-eligibility', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
   try {
     const { story_id, character_key, story_text, story_type, story_number, characters_present } = req.body;
     if (!character_key) return res.status(400).json({ error: 'character_key is required' });

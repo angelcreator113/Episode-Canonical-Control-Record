@@ -1081,7 +1081,10 @@ router.get('/world/characters', optionalAuth, async (req, res) => {
     if (intimate_eligible) { where += ` AND intimate_eligible = ${intimate_eligible === 'true'}`; }
 
     const characters = await Q(req,
-      `SELECT * FROM world_characters ${where} ORDER BY character_type, name`,
+      `SELECT wc.*, rc.character_key
+       FROM world_characters wc
+       LEFT JOIN registry_characters rc ON rc.id = wc.registry_character_id
+       ${where} ORDER BY wc.character_type, wc.name`,
       { replacements: rep }
     );
     res.json({ characters, count: characters.length });
@@ -1095,6 +1098,17 @@ router.get('/world/characters/:id', optionalAuth, async (req, res) => {
   try {
     const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
     if (!char) return res.status(404).json({ error: 'Character not found' });
+
+    // Resolve character_key from linked registry character
+    if (char.registry_character_id && !char.character_key) {
+      try {
+        const [reg] = await Q(req,
+          'SELECT character_key FROM registry_characters WHERE id = :rid',
+          { replacements: { rid: char.registry_character_id } }
+        );
+        if (reg) char.character_key = reg.character_key;
+      } catch (_) { /* registry lookup failed, non-critical */ }
+    }
 
     // Fetch their scenes
     const scenes = await Q(req,

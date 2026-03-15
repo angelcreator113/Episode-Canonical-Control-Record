@@ -10,6 +10,10 @@ const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
 const { autoCreateFeedProfile } = require('../services/feedAutoGeneration');
+let createFollowProfileFromDNA;
+try {
+  ({ createFollowProfileFromDNA } = require('../services/characterFollowService'));
+} catch { /* characterFollowService not available yet */ }
 
 /* ------------------------------------------------------------------ */
 /*  Lazy model loader                                                  */
@@ -289,11 +293,23 @@ router.post('/registries/:id/characters', async (req, res) => {
       console.error('[CharacterRegistry] Feed auto-create failed (non-blocking):', feedErr.message);
     }
 
+    // Auto-generate follow profile from character DNA (non-blocking)
+    let followProfileResult = null;
+    if (createFollowProfileFromDNA && db.CharacterFollowProfile) {
+      try {
+        const fpResult = await createFollowProfileFromDNA(db, character.character_key);
+        followProfileResult = { created: fpResult.created, character_key: character.character_key };
+      } catch (fpErr) {
+        console.error('[CharacterRegistry] Follow profile auto-create failed (non-blocking):', fpErr.message);
+      }
+    }
+
     return res.status(201).json({
       success: true,
       character,
       feedProfile: feedResult.feedProfile || null,
       feedProfileSkipped: feedResult.skipped || false,
+      followProfile: followProfileResult,
       ...(feedResult.skipped && {
         feedSkipReason: feedResult.reason,
         feedCap: feedResult.cap,

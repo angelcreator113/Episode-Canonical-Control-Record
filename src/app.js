@@ -933,6 +933,15 @@ try {
   console.error('✗ Failed to load Story Evaluation routes:', e.message);
 }
 
+// Character Follow Profiles (consumer follow engine for all characters)
+try {
+  const characterFollowRoutes = require('./routes/characterFollowRoutes');
+  app.use('/api/v1/character-follows', characterFollowRoutes);
+  console.log('✓ Character Follow routes loaded at /api/v1/character-follows');
+} catch (e) {
+  console.error('✗ Failed to load Character Follow routes:', e.message);
+}
+
 // Arc Tracking routes (wound clock, stakes, visibility, scene eligibility)
 try {
   const arcTrackingRoutes = require('./routes/arcTrackingRoutes');

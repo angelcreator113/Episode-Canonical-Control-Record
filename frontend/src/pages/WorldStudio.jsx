@@ -60,6 +60,7 @@ const DETAIL_TAB_GROUPS = [
     { key: 'desire',        label: 'Desire',        icon: '♡' },
     { key: 'relationships', label: 'Relationships', icon: '⇄' },
     { key: 'scenes',        label: 'Scenes',        icon: '▶' },
+    { key: 'follows',       label: 'Follows',       icon: '◈' },
   ]},
   { group: 'Data', tabs: [
     { key: 'depth',        label: 'Depth',        icon: '◉' },
@@ -456,6 +457,178 @@ function DemographicsPanel({ charDetail }) {
           Demographics not yet generated. Run generate-batch to populate all demographic fields automatically.
         </div>
       )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHARACTER FOLLOWS TAB — what this character watches online
+═══════════════════════════════════════════════════════════════════════ */
+function CharacterFollowsTab({ characterKey, characterName }) {
+  const [followData, setFollowData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState(null);
+
+  const API = '/api/v1/character-follows';
+  const getToken = () => localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
+  const headers = () => { const t = getToken(); return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }; };
+
+  useEffect(() => {
+    if (!characterKey) return;
+    setLoading(true);
+    setError(null);
+    fetch(`${API}/${characterKey}`, { headers: headers() })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setFollowData(d); setLoading(false); })
+      .catch((e) => { setError('Failed to load follow data'); setLoading(false); });
+  }, [characterKey]);
+
+  const generateProfile = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/generate/${characterKey}`, { method: 'POST', headers: headers() });
+      if (res.ok) {
+        const refreshRes = await fetch(`${API}/${characterKey}`, { headers: headers() });
+        if (refreshRes.ok) setFollowData(await refreshRes.json());
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error || 'Failed to generate follow profile');
+      }
+    } catch { setError('Network error generating follow profile'); }
+    setGenerating(false);
+  };
+
+  if (loading) return <div className="ws4-tab-empty">Loading follow data…</div>;
+  if (error) return <div className="ws4-tab-empty" style={{color:'#c0392b'}}>{error}</div>;
+
+  const profile = followData?.profile;
+  const follows = followData?.follows || [];
+  const INFLUENCE_LABELS = { mirror: 'Mirror', aspiration: 'Aspiration', escape: 'Escape', authority: 'Authority', obsession: 'Obsession' };
+  const MOTIVATION_LABELS = { identity: 'Identity', aspiration: 'Aspiration', entertainment: 'Entertainment', information: 'Information', parasocial: 'Parasocial' };
+  const STYLE_LABELS = { late_night_scroller: 'Late-night scroller', passive_observer: 'Passive observer', active_engager: 'Active engager', hate_watcher: 'Hate-watcher', study_mode: 'Study mode', share_with_friends: 'Shares with friends' };
+
+  if (!profile) {
+    return (
+      <div className="ws4-tab-empty">
+        <div style={{ marginBottom: 8 }}>No follow profile yet for {characterName}.</div>
+        <div style={{ fontSize: 12, color: '#9999b3', marginBottom: 16 }}>Generate a follow profile from this character's DNA to determine what kind of social media content they consume and why.</div>
+        <button className="ws4-btn ws4-btn-primary ws4-btn-sm" onClick={generateProfile} disabled={generating}>
+          {generating ? 'Generating…' : '◈ Generate Follow Profile'}
+        </button>
+      </div>
+    );
+  }
+
+  const topCats = Object.entries(profile.category_affinity || {}).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const topArchs = Object.entries(profile.archetype_affinity || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Consumption context */}
+      {profile.consumption_context && (
+        <div style={{ padding: '12px 14px', background: '#f6f1fc', borderRadius: 8, border: '1px solid #e8dcf5' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#a889c8', marginBottom: 4 }}>
+            How they scroll {profile.consumption_style && `· ${STYLE_LABELS[profile.consumption_style] || profile.consumption_style}`}
+          </div>
+          <div style={{ fontSize: 12, color: '#5a5a7a', lineHeight: 1.6, fontStyle: 'italic' }}>
+            {profile.consumption_context}
+          </div>
+        </div>
+      )}
+
+      {/* Social presence badge */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Badge variant={profile.has_social_presence ? 'primary' : 'draft'}>
+          {profile.has_social_presence ? 'Posts online' : 'Consumer only'}
+        </Badge>
+        <span style={{ fontSize: 11, color: '#9999b3' }}>Threshold: {Math.round((profile.base_follow_threshold || 0.35) * 100)}%</span>
+        {profile.generated_from_dna && <Badge variant="default">AI-generated</Badge>}
+        {profile.hand_tuned && <Badge variant="intimate">Hand-tuned</Badge>}
+      </div>
+
+      {/* Top affinities */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9999b3', marginBottom: 6 }}>Content Affinity</div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {topCats.map(([cat, w]) => (
+            <span key={cat} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: w >= 0.7 ? '#e8dcf5' : '#f2eef8', color: w >= 0.7 ? '#7c3aed' : '#9999b3', fontWeight: w >= 0.7 ? 700 : 500 }}>
+              {cat} {Math.round(w * 100)}%
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9999b3', marginBottom: 6 }}>Archetype Affinity</div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {topArchs.map(([arch, w]) => (
+            <span key={arch} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, background: w >= 0.7 ? '#dbeafe' : '#f0f4f8', color: w >= 0.7 ? '#2563eb' : '#9999b3', fontWeight: w >= 0.7 ? 700 : 500 }}>
+              {arch.replace(/_/g, ' ')} {Math.round(w * 100)}%
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Motivation weights */}
+      {profile.motivation_weights && Object.keys(profile.motivation_weights).length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9999b3', marginBottom: 6 }}>Follow Motivations</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {Object.entries(profile.motivation_weights).sort((a, b) => b[1] - a[1]).map(([m, w]) => (
+              <div key={m} style={{ flex: 1, textAlign: 'center', padding: '6px 4px', borderRadius: 6, background: '#f2eef8' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#a889c8' }}>{Math.round(w * 100)}%</div>
+                <div style={{ fontSize: 9, color: '#9999b3', textTransform: 'uppercase' }}>{MOTIVATION_LABELS[m] || m}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Actual follows */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9999b3', marginBottom: 6 }}>
+          Following ({follows.length} creator{follows.length !== 1 ? 's' : ''})
+        </div>
+        {follows.length === 0 ? (
+          <div style={{ fontSize: 12, color: '#9999b3', fontStyle: 'italic' }}>No follows yet — they'll be assigned as feed profiles are generated.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {follows.map(f => {
+              const p = f.socialProfile || {};
+              return (
+                <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#fafafa', borderRadius: 8, border: '1px solid #f0eef4' }}>
+                  <div style={{ width: 6, height: 28, borderRadius: 3, background: f.influence_level >= 8 ? '#a889c8' : f.influence_level >= 5 ? '#7ab3d4' : '#ddd', flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>
+                      @{p.handle || '?'} <span style={{ fontWeight: 400, color: '#9999b3' }}>{p.platform}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#5a5a7a', lineHeight: 1.4 }}>{f.follow_context || ''}</div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#a889c8' }}>{INFLUENCE_LABELS[f.influence_type] || f.influence_type}</div>
+                    <div style={{ fontSize: 10, color: '#9999b3' }}>{f.influence_level}/10</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Generation reasoning */}
+      {profile.generation_reasoning && (
+        <div style={{ padding: '10px 14px', background: '#f9f9fb', borderRadius: 8, border: '1px solid #f0eef4' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9999b3', marginBottom: 4 }}>Why this profile</div>
+          <div style={{ fontSize: 11, color: '#5a5a7a', lineHeight: 1.5 }}>{profile.generation_reasoning}</div>
+        </div>
+      )}
+
+      {/* Regenerate button */}
+      <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={generateProfile} disabled={generating} style={{ alignSelf: 'flex-start' }}>
+        {generating ? 'Regenerating…' : '↻ Regenerate Follow Profile'}
+      </button>
     </div>
   );
 }
@@ -1746,6 +1919,13 @@ export default function WorldStudio() {
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {/* ── FOLLOWS — what this character watches online ── */}
+                    {detailTab === 'follows' && (
+                      charDetail.character_key
+                        ? <CharacterFollowsTab characterKey={charDetail.character_key} characterName={charDetail.name || charDetail.display_name} />
+                        : <div style={{padding:24,textAlign:'center',color:'#8a8a9a',fontSize:13}}>This character has no registry link — follow profiles require a character_key from the Character Registry.</div>
                     )}
 
                     {/* ── EVOLUTION TIMELINE ──────────────────────── */}

@@ -101,6 +101,7 @@ let ManuscriptMetadata; // Novel Intelligence: book metadata cascade
 let BrainFingerprint; // Novel Intelligence: brain dedup fingerprints
 let SocialProfile; // The Feed: social media creator profiles
 let SocialProfileFollower; // The Feed: character-follows-profile join table
+let CharacterFollowProfile; // Consumer follow system: character consumption affinities
 let SocialProfileRelationship; // The Feed: creator-to-creator relationships (drama, collabs, couples)
 let CharacterEntanglement; // Entanglement Layer: character ↔ influencer links
 let EntanglementEvent; // Entanglement Layer: ripple log — state changes + content events
@@ -334,6 +335,7 @@ try {
   // The Feed: Social Profile Generator
   SocialProfile = require('./SocialProfile')(sequelize, DataTypes);
   SocialProfileFollower = require('./SocialProfileFollower')(sequelize, DataTypes);
+  CharacterFollowProfile = require('./CharacterFollowProfile')(sequelize, DataTypes);
   SocialProfileRelationship = require('./SocialProfileRelationship')(sequelize, DataTypes);
   CharacterEntanglement = require('./CharacterEntanglement')(sequelize, DataTypes);
   EntanglementEvent = require('./EntanglementEvent')(sequelize, DataTypes);
@@ -478,6 +480,7 @@ const requiredModels = {
   BrainFingerprint,
   SocialProfile,
   SocialProfileFollower,
+  CharacterFollowProfile,
   SocialProfileRelationship,
   CharacterEntanglement,
   EntanglementEvent,
@@ -668,6 +671,15 @@ SocialProfile.hasMany(SocialProfileFollower, {
 });
 if (SocialProfileFollower && SocialProfileFollower.associate) {
   SocialProfileFollower.associate(requiredModels);
+}
+if (CharacterFollowProfile && CharacterFollowProfile.associate) {
+  CharacterFollowProfile.associate(requiredModels);
+}
+if (RegistryCharacter && CharacterFollowProfile) {
+  RegistryCharacter.hasMany(CharacterFollowProfile, {
+    foreignKey: 'registry_character_id',
+    as: 'followProfiles',
+  });
 }
 
 // SocialProfile ↔ SocialProfileRelationship associations are defined
@@ -1836,6 +1848,7 @@ module.exports.ManuscriptMetadata = ManuscriptMetadata;
 module.exports.BrainFingerprint = BrainFingerprint;
 module.exports.SocialProfile = SocialProfile;
 module.exports.SocialProfileFollower = SocialProfileFollower;
+module.exports.CharacterFollowProfile = CharacterFollowProfile;
 module.exports.CharacterEntanglement = CharacterEntanglement;
 module.exports.EntanglementEvent = EntanglementEvent;
 module.exports.EntanglementUnfollow = EntanglementUnfollow;
