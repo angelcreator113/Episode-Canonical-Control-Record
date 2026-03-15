@@ -806,3 +806,5 @@ async function processJobInBackground(jobId, concurrency = 3) {
 }
 
 module.exports = router;
+module.exports.notifyJobSSE = notifyJobSSE;
+module.exports.jobSSEClients = jobSSEClients;

@@ -197,6 +197,149 @@ router.post('/auto-generate', optionalAuth, async (req, res) => {
   }
 });
 
+// ── POST /auto-generate-job ──────────────────────────────────────────────────
+// Background auto-generation — returns immediately with a job ID so the user
+// can navigate away and generation continues server-side.
+// Progress is tracked via the existing bulk-job SSE infrastructure.
+router.post('/auto-generate-job', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || req.app.get('models') || require('../models');
+  const layer = req.body.feed_layer || 'real_world';
+  const count = Math.min(parseInt(req.body.count) || 5, 20);
+
+  if (!db || !db.BulkImportJob) {
+    return res.status(500).json({ error: 'BulkImportJob model not available — run migration first' });
+  }
+
+  try {
+    // Create a job record so progress is persisted in the DB
+    const job = await db.BulkImportJob.create({
+      status: 'pending',
+      total: count,
+      completed: 0,
+      failed: 0,
+      candidates: [], // will be populated with generated sparks
+      results: [],
+      character_context: { auto_generate: true, feed_layer: layer },
+      character_key: `auto-gen-${layer}`,
+    });
+
+    // Process in background — completely decoupled from this HTTP response
+    processAutoGenInBackground(job.id, db, layer, count);
+
+    return res.json({
+      job_id: job.id,
+      status: 'pending',
+      total: count,
+      message: `Auto-generate job #${job.id} queued. ${count} profiles will be generated in the background.`,
+    });
+  } catch (err) {
+    console.error('[FeedScheduler] Auto-generate-job error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Background auto-generation processor ────────────────────────────────────
+// Runs autoGenerateBatch server-side, updating the BulkImportJob record and
+// pushing SSE events so the frontend can track progress (even after reconnect).
+function processAutoGenInBackground(jobId, db, layer, count) {
+  // Import the SSE notifier from bulk routes (if available) or use a no-op
+  let notifyJobSSE;
+  try {
+    const bulkRoutes = require('./socialProfileBulkRoutes');
+    notifyJobSSE = bulkRoutes.notifyJobSSE || (() => {});
+  } catch {
+    notifyJobSSE = () => {};
+  }
+
+  setImmediate(async () => {
+    let job;
+    try {
+      job = await db.BulkImportJob.findByPk(jobId);
+      if (!job || job.status !== 'pending') return;
+
+      await job.update({ status: 'processing', started_at: new Date() });
+      notifyJobSSE(jobId, 'started', { job_id: jobId, total: count });
+
+      const created = [];
+      const errors = [];
+
+      const result = await autoGenerateBatch(db, layer, count, async (progress) => {
+        // Update DB on each profile so progress survives page navigation
+        if (progress.status === 'created' && progress.profile) {
+          created.push({
+            handle: progress.profile.handle,
+            platform: progress.profile.platform,
+            status: 'success',
+            profile_id: progress.profile.id,
+          });
+        } else if (progress.status === 'error') {
+          errors.push({ error: progress.error });
+        }
+
+        const completedCount = created.length;
+        const failedCount = errors.length;
+
+        await job.update({
+          completed: completedCount,
+          failed: failedCount,
+          total: progress.total || count,
+        });
+
+        // Push SSE event (same format as bulk import)
+        if (progress.status === 'created') {
+          notifyJobSSE(jobId, 'profile_complete', {
+            completed: completedCount,
+            failed: failedCount,
+            total: progress.total || count,
+            spark: progress.spark,
+          });
+        } else if (progress.status === 'error') {
+          notifyJobSSE(jobId, 'profile_failed', {
+            completed: completedCount,
+            failed: failedCount,
+            total: progress.total || count,
+            error: progress.error,
+          });
+        } else if (progress.status === 'generating') {
+          notifyJobSSE(jobId, 'profile_generating', {
+            current: progress.current,
+            total: progress.total || count,
+            spark: progress.spark,
+          });
+        }
+      });
+
+      await job.update({
+        status: 'completed',
+        completed: result.created.length,
+        failed: result.errors.length,
+        results: created,
+        completed_at: new Date(),
+      });
+
+      notifyJobSSE(jobId, 'done', {
+        job_id: jobId,
+        status: 'completed',
+        completed: result.created.length,
+        failed: result.errors.length,
+        total: count,
+      });
+
+      console.log(`✅ Auto-generate job #${jobId} completed: ${result.created.length} created, ${result.errors.length} errors`);
+    } catch (err) {
+      console.error(`❌ Auto-generate job #${jobId} fatal error:`, err.message);
+      if (job) {
+        await job.update({
+          status: 'failed',
+          error_message: err.message,
+          completed_at: new Date(),
+        }).catch(() => {});
+      }
+      notifyJobSSE(jobId, 'error', { job_id: jobId, error: err.message });
+    }
+  });
+}
+
 // ── POST /preview-sparks ────────────────────────────────────────────────────
 // Preview what the AI would generate without actually creating profiles.
 router.post('/preview-sparks', optionalAuth, async (req, res) => {

@@ -408,33 +408,16 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     }catch{}
   };
 
-  // ── Auto-Generate (replaces manual spark form) ──────────────────────
+  // ── Auto-Generate (background job — continues even if you leave the page) ──
   const runAutoGenerate = async ()=>{
     setAutoGenRunning(true);setAutoGenProgress({current:0,total:autoGenCount,status:'starting',created:[]});setError(null);
     try{
-      const res=await fetch(`${SCHED_API}/auto-generate`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:feedLayer,count:autoGenCount,stream:true})});
-      const reader=res.body.getReader();const decoder=new TextDecoder();let buffer='';
-      const created=[];
-      while(true){
-        const{done,value}=await reader.read();if(done)break;
-        buffer+=decoder.decode(value,{stream:true});
-        const lines=buffer.split('\n');buffer=lines.pop()||'';
-        for(const line of lines){
-          if(!line.startsWith('data: '))continue;
-          try{
-            const evt=JSON.parse(line.slice(6));
-            if(evt.type==='progress'){
-              if(evt.status==='created'&&evt.profile)created.push(evt.profile);
-              setAutoGenProgress({current:evt.current,total:evt.total,status:evt.status,created:[...created],spark:evt.spark,error:evt.error});
-            }else if(evt.type==='done'){
-              setAutoGenProgress({current:evt.created,total:evt.created+evt.errors,status:'done',created:[...created],sparks_generated:evt.sparks_generated});
-            }else if(evt.type==='error'){
-              setError(evt.error);
-            }
-          }catch{}
-        }
-      }
-      await loadProfiles();showToast(`Auto-generated ${created.length} creator(s)`,'success');
+      const res=await fetch(`${SCHED_API}/auto-generate-job`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:feedLayer,count:autoGenCount})});
+      const data=await res.json();
+      if(!res.ok){throw new Error(data.error||'Failed to start auto-generation');}
+      // Track via the existing bulk-job SSE infrastructure
+      startJobPolling(data.job_id);
+      showToast(`Auto-generating ${autoGenCount} profile(s) in background — you can leave this page`,'success');
     }catch(err){setError(err.message);}
     finally{setAutoGenRunning(false);}
   };
