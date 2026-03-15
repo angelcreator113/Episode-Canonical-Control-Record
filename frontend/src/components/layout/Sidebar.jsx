@@ -78,7 +78,6 @@ const NAV = [
       },
       { icon: '✦', label: 'Storyteller',      route: '/storyteller' },
       { icon: '🔥', label: 'Pressure',        route: '/pressure' },
-      { icon: '🕸️', label: 'Feed Map',         route: '/feed-relationships' },
       { icon: '▶',  label: 'Novel Session',   route: '/start' },
       { icon: '📰', label: 'Press',            route: '/press' },
     ],

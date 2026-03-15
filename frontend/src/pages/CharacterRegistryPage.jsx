@@ -15,6 +15,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import SocialProfileGenerator from './SocialProfileGenerator';
+import FeedRelationshipMap from './FeedRelationshipMap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterDilemmaEngine from '../components/CharacterDilemmaEngine';
@@ -240,6 +241,7 @@ export default function CharacterRegistryPage() {
 
   // Feed mode — The Feed (parasocial creator profiles)
   const [feedMode, setFeedMode]             = useState(false);
+  const [feedMapMode, setFeedMapMode]       = useState(false);
 
   // World mode — flat view of ALL characters across registries
   const [worldMode, setWorldMode]           = useState(false);
@@ -1371,10 +1373,17 @@ export default function CharacterRegistryPage() {
   // Enter/exit feed mode
   const enterFeedMode = useCallback(() => {
     setWorldMode(false);
+    setFeedMapMode(false);
     setFeedMode(true);
   }, []);
   const exitFeedMode = useCallback(() => {
     setFeedMode(false);
+    setFeedMapMode(false);
+  }, []);
+  const enterFeedMapMode = useCallback(() => {
+    setWorldMode(false);
+    setFeedMode(false);
+    setFeedMapMode(true);
   }, []);
 
 
@@ -2124,7 +2133,7 @@ export default function CharacterRegistryPage() {
         onToggleFilters={() => setShowFilters(f => !f)}
         onNewChar={() => activeRegistry ? setShowCreationDrawer(true) : null}
         isMobile={isMobile}
-        feedMode={feedMode}
+        feedMode={feedMode || feedMapMode}
         worldMode={worldMode}
       >
         {/* Registry tabs inside header */}
@@ -2133,12 +2142,12 @@ export default function CharacterRegistryPage() {
             {registries.map(r => (
               <button
                 key={r.id}
-                className={`cr-registry-pill${!worldMode && !feedMode && activeRegistry?.id === r.id ? ' active' : ''}`}
-                onClick={() => { exitWorldMode(); exitFeedMode(); fetchRegistry(r.id); }}
+                className={`cr-registry-pill${!worldMode && !feedMode && !feedMapMode && activeRegistry?.id === r.id ? ' active' : ''}`}
+                onClick={() => { exitWorldMode(); exitFeedMode(); setFeedMapMode(false); fetchRegistry(r.id); }}
               >
                 <span className="cr-pill-title">{r.title || 'Untitled'}</span>
                 {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
-                {!worldMode && !feedMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
+                {!worldMode && !feedMode && !feedMapMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
               </button>
             ))}
             <button
@@ -2155,12 +2164,19 @@ export default function CharacterRegistryPage() {
             >
               <span className="cr-pill-title">📱 The Feed</span>
             </button>
+            <button
+              className={`cr-registry-pill${feedMapMode ? ' active' : ''}`}
+              onClick={enterFeedMapMode}
+              title="Feed Relationship Map — influencer connections"
+            >
+              <span className="cr-pill-title">🕸️ Feed Map</span>
+            </button>
           </div>
         )}
       </HeaderBar>
 
       {/* Filters */}
-      {showFilters && !feedMode && (
+      {showFilters && !feedMode && !feedMapMode && (
         <div className="cr-filters">
           <span className="cr-filter-label">Filter</span>
 
@@ -2198,8 +2214,8 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
-      {/* Search — hidden in Feed mode (Feed has its own search) */}
-      {!feedMode && (
+      {/* Search — hidden in Feed/FeedMap mode (Feed has its own search) */}
+      {!feedMode && !feedMapMode && (
       <div className="cr-search-standalone">
         <div className="cr-search-wrap">
           <span className="cr-search-icon">⌕</span>
@@ -2217,8 +2233,10 @@ export default function CharacterRegistryPage() {
       {/* Content */}
       <div className="cr-content">
 
-        {/* ── FEED MODE ── */}
-        {feedMode ? (
+        {/* ── FEED MAP MODE ── */}
+        {feedMapMode ? (
+          <FeedRelationshipMap />
+        ) : feedMode ? (
           <SocialProfileGenerator embedded />
         ) : worldMode ? (
           <>
