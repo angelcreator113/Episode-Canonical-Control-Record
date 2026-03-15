@@ -60,6 +60,7 @@ const NAV = [
           { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
         ],
       },
+      { icon: '🔗', label: 'Relationship Engine', route: '/relationships' },
       { icon: '💭', label: 'Therapy',              route: '/therapy/default' },
     ],
   },

@@ -897,68 +897,56 @@ export default function WorldStudio() {
           </div>
         </div>
 
-        {/* Row 2: Quick-nav + Secondary Actions */}
-        <div className="ws4-header-row-2">
-          <nav className="ws4-quick-nav">
-            {[
-              { label: 'Universe',     icon: '◈', route: '/universe' },
-              { label: 'Scene Studio', icon: '🔥', route: '/scene-studio' },
-              { label: 'Feed',         icon: '📱', route: '/feed' },
-              { label: 'Relationships', icon: '🔗', route: '/relationships' },
-              { label: 'Registry',     icon: '📋', route: '/character-registry' },
-            ].map(t => (
-              <button key={t.route} className="ws4-quick-nav-btn" onClick={() => navigate(t.route)}>
-                <span className="ws4-quick-nav-icon">{t.icon}</span>
-                {t.label}
-              </button>
-            ))}
-          </nav>
-          <div className="ws4-header-secondary">
-            {draftCount > 0 && (
-              <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={bulkActivate} disabled={bulkActivating}>
-                {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
-              </button>
-            )}
-            {worldTag !== 'all' && characters.length > 0 && (
-              <button
-                className="ws4-btn ws4-btn-outline ws4-btn-sm"
-                title="Push all characters to the Character Registry so they stay in sync"
-                onClick={async () => {
-                  try {
-                    const resp = await fetch('/api/world/characters/bulk-re-sync', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ world_tag: worldTag }),
-                    });
-                    const data = await resp.json();
-                    flash(`Synced ${data.synced}/${data.total} to registry`);
-                  } catch (e) { flash(`Sync error: ${e.message}`); }
-                }}
-              >
-                🔄 Sync to Registry
-              </button>
-            )}
-            {worldTag !== 'all' && characters.length > 1 && (
-              <button
-                className="ws4-btn ws4-btn-outline ws4-btn-sm"
-                title="Auto-generate relationship connections between characters in this world"
-                onClick={async () => {
-                  try {
-                    const resp = await fetch('/api/world/characters/seed-cross-batch', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ world_tag: worldTag }),
-                    });
-                    const data = await resp.json();
-                    flash(`Created ${data.seeded} new relationships from ${data.total_candidates} candidates`);
-                  } catch (e) { flash(`Seed error: ${e.message}`, 'error'); }
-                }}
-              >
-                🔗 Auto-Link Characters
-              </button>
-            )}
+        {/* Row 2: Secondary Actions */}
+        {(draftCount > 0 || (worldTag !== 'all' && characters.length > 0)) && (
+          <div className="ws4-header-row-2">
+            <div className="ws4-header-secondary">
+              {draftCount > 0 && (
+                <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={bulkActivate} disabled={bulkActivating}>
+                  {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
+                </button>
+              )}
+              {worldTag !== 'all' && characters.length > 0 && (
+                <button
+                  className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                  title="Push all characters to the Character Registry so they stay in sync"
+                  onClick={async () => {
+                    try {
+                      const resp = await fetch('/api/world/characters/bulk-re-sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ world_tag: worldTag }),
+                      });
+                      const data = await resp.json();
+                      flash(`Synced ${data.synced}/${data.total} to registry`);
+                    } catch (e) { flash(`Sync error: ${e.message}`); }
+                  }}
+                >
+                  🔄 Sync to Registry
+                </button>
+              )}
+              {worldTag !== 'all' && characters.length > 1 && (
+                <button
+                  className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                  title="Auto-generate relationship connections between characters in this world"
+                  onClick={async () => {
+                    try {
+                      const resp = await fetch('/api/world/characters/seed-cross-batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ world_tag: worldTag }),
+                      });
+                      const data = await resp.json();
+                      flash(`Created ${data.seeded} new relationships from ${data.total_candidates} candidates`);
+                    } catch (e) { flash(`Seed error: ${e.message}`, 'error'); }
+                  }}
+                >
+                  🔗 Auto-Link Characters
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ── Characters content (Scenes/Feed/Relationships are now separate pages) ── */}

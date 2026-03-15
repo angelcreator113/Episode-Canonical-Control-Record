@@ -1214,33 +1214,11 @@
 .ws4-header-row-2 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px;
   padding: 6px 0 10px;
   border-top: 1px solid var(--ws4-border);
 }
-.ws4-quick-nav {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.ws4-quick-nav-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  border-radius: 14px;
-  border: 1px solid transparent;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ws4-muted);
-  cursor: pointer;
-  transition: all 0.12s;
-  white-space: nowrap;
-}
-.ws4-quick-nav-btn:hover { background: var(--ws4-bg); color: var(--ws4-text-mid); border-color: var(--ws4-border); }
-.ws4-quick-nav-icon { font-size: 12px; }
 .ws4-header-secondary {
   display: flex;
   gap: 6px;
@@ -1495,13 +1473,10 @@
 /* ── Responsive adjustments for new layout ────────────────────── */
 @media (max-width: 900px) {
   .ws4-health-grid { grid-template-columns: 1fr 1fr; }
-  .ws4-quick-nav { flex-wrap: wrap; }
 }
 @media (max-width: 680px) {
   .ws4-health-grid { grid-template-columns: 1fr; }
-  .ws4-header-row-2 { flex-direction: column; align-items: stretch; }
-  .ws4-quick-nav { overflow-x: auto; }
+  .ws4-header-row-2 { flex-wrap: wrap; }
   .ws4-tab-group-label { display: none; }
   .ws4-tab-divider { display: none; }
-  .ws4-header-secondary { justify-content: flex-end; }
 }
