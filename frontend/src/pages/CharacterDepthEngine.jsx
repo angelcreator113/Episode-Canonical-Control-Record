@@ -484,7 +484,7 @@ const TAB_RENDERERS = {
 
 export default function CharacterDepthEngine() {
   const [activeTab, setActiveTab] = useState('body');
-  const { data, updateItems, addItem, removeItem, saving } = usePageData('character_depth_engine', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving } = usePageData('character_depth_engine', DEFAULTS);
   const [editItem, setEditItem] = useState(null);
   const Renderer = TAB_RENDERERS[activeTab];
 
@@ -520,7 +520,7 @@ export default function CharacterDepthEngine() {
         {Renderer && <Renderer />}
       </main>
     </div>
-    {editItem && <EditItemModal item={editItem.item} onSave={(updated) => { updateItems(editItem.key, editItem.index, updated); setEditItem(null); }} onCancel={() => setEditItem(null)} title={`Edit ${editItem.key}`} />}
+    {editItem && <EditItemModal item={editItem.item} onSave={(updated) => { if (editItem.index === -1) addItem(editItem.key, updated); else updateItem(editItem.key, editItem.index, updated); setEditItem(null); }} onCancel={() => setEditItem(null)} title={`Edit ${editItem.key}`} />}
     </PageEditContext.Provider>
   );
 }
