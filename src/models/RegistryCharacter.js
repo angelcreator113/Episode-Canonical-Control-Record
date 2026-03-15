@@ -644,6 +644,20 @@ module.exports = (sequelize) => {
     paranoid: true,
   });
 
+  /* ── Auto-populate section defaults on every creation path ── */
+  const applyDefaults = (instance) => {
+    if (instance.aesthetic_dna === null || instance.aesthetic_dna === undefined) instance.aesthetic_dna = {};
+    if (instance.career_status === null || instance.career_status === undefined) instance.career_status = {};
+    if (instance.relationships_map === null || instance.relationships_map === undefined) instance.relationships_map = {};
+    if (instance.story_presence === null || instance.story_presence === undefined) instance.story_presence = {};
+    if (instance.voice_signature === null || instance.voice_signature === undefined) instance.voice_signature = {};
+    if (instance.evolution_tracking === null || instance.evolution_tracking === undefined) instance.evolution_tracking = {};
+    if (instance.species === null || instance.species === undefined) instance.species = 'human';
+    if (instance.is_alive === null || instance.is_alive === undefined) instance.is_alive = true;
+  };
+  RegistryCharacter.beforeCreate(applyDefaults);
+  RegistryCharacter.beforeBulkCreate((instances) => instances.forEach(applyDefaults));
+
   RegistryCharacter.associate = (models) => {
     if (models.CharacterRegistry) {
       RegistryCharacter.belongsTo(models.CharacterRegistry, {
