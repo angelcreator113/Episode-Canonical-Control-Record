@@ -160,6 +160,14 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [showAdvanced,setShowAdvanced] = useState(false);
   const [advFields,setAdvFields] = useState({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});
   const [activeJob,setActiveJob] = useState(null);
+  // View mode: 'feed' (grid), 'timeline' (social posts), 'follows' (follow graph)
+  const [feedView,setFeedView] = useState('grid');
+  const [detailTab,setDetailTab] = useState('profile');
+  const [regenerating,setRegenerating] = useState(false);
+  const [crossingPreview,setCrossingPreview] = useState(null);
+  const [sceneContext,setSceneContext] = useState(null);
+  const [exporting,setExporting] = useState(false);
+  const [followStats,setFollowStats] = useState(null);
   // LalaVerse Feed layer
   const [feedLayer,setFeedLayer] = useState('real_world');
   const [lvCity,setLvCity]       = useState('');
@@ -264,6 +272,77 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const crossProfile   = async id=>{try{const res=await fetch(`${API}/${id}/cross`,{method:'POST',headers:authHeaders(),body:JSON.stringify({})});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.message);}};
   const editProfile    = async(id,updates)=>{try{const res=await fetch(`${API}/${id}`,{method:'PUT',headers:authHeaders(),body:JSON.stringify(updates)});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.message);}};
   const deleteProfile  = async id=>{if(!window.confirm('Delete this profile permanently?'))return;try{const res=await fetch(`${API}/${id}`,{method:'DELETE',headers:authHeaders()});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.message);}};
+
+  // ── Regenerate profile ────────────────────────────────────────────
+  const regenerateProfile = async (id, overrides={})=>{
+    setRegenerating(true);setError(null);
+    try{
+      const res=await fetch(`${API}/${id}/regenerate`,{method:'POST',headers:authHeaders(),body:JSON.stringify({...overrides,character_context:protagonist.context,character_key:protagonist.key})});
+      const data=await res.json();
+      if(!res.ok)throw new Error(data.error||'Regeneration failed');
+      setProfiles(p=>p.map(x=>x.id===id?data.profile:x));
+      if(selected?.id===id)setSelected(data.profile);
+      showToast('Profile regenerated');
+    }catch(err){setError(err.message);}
+    finally{setRegenerating(false);}
+  };
+
+  // ── Crossing preview ────────────────────────────────────────────
+  const loadCrossingPreview = async (id)=>{
+    try{
+      const res=await fetch(`${API}/${id}/crossing-preview`,{method:'POST',headers:authHeaders()});
+      const data=await res.json();
+      if(!res.ok)throw new Error(data.error||'Preview failed');
+      setCrossingPreview(data.preview);
+    }catch(err){setError(err.message);}
+  };
+
+  // ── Scene context ───────────────────────────────────────────────
+  const loadSceneContext = async (id)=>{
+    try{
+      const res=await fetch(`${API}/${id}/scene-context`,{headers:authHeaders()});
+      const data=await res.json();
+      if(!res.ok)throw new Error(data.error||'Failed to load scene context');
+      setSceneContext(data.context);
+    }catch(err){setError(err.message);}
+  };
+
+  const copySceneContext = ()=>{
+    if(!sceneContext)return;
+    navigator.clipboard.writeText(sceneContext).then(()=>showToast('Scene context copied')).catch(()=>setError('Failed to copy'));
+  };
+
+  // ── Export ──────────────────────────────────────────────────────
+  const exportProfiles = async (format)=>{
+    setExporting(true);
+    try{
+      const qs=new URLSearchParams({format,feed_layer:feedLayer});
+      if(filterStatus)qs.set('status',filterStatus);
+      const res=await fetch(`${API}/export?${qs}`,{headers:authHeaders()});
+      if(!res.ok)throw new Error('Export failed');
+      if(format==='csv'){
+        const blob=await res.blob();
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download='feed-profiles.csv';a.click();URL.revokeObjectURL(url);
+      }else{
+        const data=await res.json();
+        const blob=new Blob([JSON.stringify(data.profiles,null,2)],{type:'application/json'});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download='feed-profiles.json';a.click();URL.revokeObjectURL(url);
+      }
+      showToast(`Exported as ${format.toUpperCase()}`);
+    }catch(err){setError(err.message);}
+    finally{setExporting(false);}
+  };
+
+  // ── Follow stats ───────────────────────────────────────────────
+  const loadFollowStats = async ()=>{
+    try{
+      const res=await fetch(`${API}/follow-engine/stats`,{headers:authHeaders()});
+      const data=await res.json();
+      setFollowStats(data);
+    }catch{}
+  };
 
   const fp = p=>p?.full_profile||p||{};
   const feedCap = feedLayer==='lalaverse'?200:443;
@@ -457,7 +536,26 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                 );
               })}
             </div>
+            {/* View mode switcher */}
+            <div style={{display:'flex',gap:2,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:2,border:`1px solid ${C.border}`,marginLeft:8}}>
+              {[['grid','Grid'],['timeline','Timeline'],['follows','Follows']].map(([k,l])=>(
+                <button key={k} onClick={()=>{setFeedView(k);if(k==='follows')loadFollowStats();}} style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
+                  background:feedView===k?C.lavender:'transparent',color:feedView===k?'#fff':C.inkLight,transition:'all 0.15s'}}>
+                  {l}
+                </button>
+              ))}
+            </div>
             <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
+              {/* Export dropdown */}
+              <div style={{position:'relative'}}>
+                <button onClick={()=>document.getElementById('feed-export-menu')?.classList.toggle('open')} disabled={exporting} style={{padding:'6px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`}}>
+                  {exporting?'Exporting…':'Export'}
+                </button>
+                <div id="feed-export-menu" style={{display:'none',position:'absolute',top:'calc(100% + 4px)',right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:C.radiusSm,boxShadow:C.shadowMd,zIndex:100,minWidth:120,overflow:'hidden'}}>
+                  <button onClick={()=>{exportProfiles('csv');document.getElementById('feed-export-menu')?.classList.remove('open');}} style={{width:'100%',padding:'8px 14px',textAlign:'left',fontSize:12,border:'none',background:'transparent',color:C.ink,cursor:'pointer'}}>Export CSV</button>
+                  <button onClick={()=>{exportProfiles('json');document.getElementById('feed-export-menu')?.classList.remove('open');}} style={{width:'100%',padding:'8px 14px',textAlign:'left',fontSize:12,border:'none',background:'transparent',color:C.ink,cursor:'pointer'}}>Export JSON</button>
+                </div>
+              </div>
               <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Search handle or name…" style={{padding:'6px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:200}}/>
               <select value={sortBy} onChange={e=>changeSort(e.target.value)} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,background:C.surface}}>
                 <option value="score">Score ↓</option>
@@ -521,7 +619,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                 <div style={{fontSize:13,color:C.inkLight}}>{search?'Try a different search term':'Enter a handle, platform, and vibe above to generate a creator profile'}</div>
               </div>
             )}
-            {!loading&&profiles.length>0 && (
+            {/* ── GRID VIEW ── */}
+            {!loading&&profiles.length>0&&feedView==='grid' && (
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:16}}>
                 {profiles.map(p=>{
                   const d=fp(p);
@@ -534,9 +633,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                   return (
                     <div key={p.id} onClick={()=>bulkMode?toggleSelect(p.id):setSelected(selected?.id===p.id?null:p)}
                       style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${isActive?C.lavender:isChecked?C.lavender+'80':C.border}`,cursor:'pointer',overflow:'hidden',boxShadow:isActive?C.shadowMd:C.shadow,transition:'all 0.15s',position:'relative'}}>
-                      {/* Top accent bar */}
                       <div style={{height:3,background:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
-                      {/* Checkbox */}
                       {bulkMode && (
                         <div style={{position:'absolute',top:10,right:10,width:20,height:20,borderRadius:5,border:`2px solid ${isChecked?C.lavender:C.border}`,background:isChecked?C.lavender:C.surface,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700}}>
                           {isChecked?'✓':''}
@@ -590,6 +687,167 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                 })}
               </div>
             )}
+
+            {/* ── TIMELINE VIEW — simulated social feed ── */}
+            {!loading&&profiles.length>0&&feedView==='timeline' && (
+              <div style={{maxWidth:560,margin:'0 auto',display:'flex',flexDirection:'column',gap:16,marginBottom:16}}>
+                {profiles.map(p=>{
+                  const d=fp(p);
+                  const captions=p.sample_captions||d.sample_captions||[];
+                  const comments=p.sample_comments||d.sample_comments||[];
+                  const pinned=p.pinned_post||d.pinned_post;
+                  const sc=p.current_state&&FEED_STATE_CONFIG[p.current_state];
+                  const score=p.lala_relevance_score??d.lala_relevance_score??0;
+                  return (
+                    <div key={p.id} style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,overflow:'hidden',boxShadow:C.shadow}}>
+                      {/* Post header */}
+                      <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,borderBottom:`1px solid ${C.border}`}}>
+                        <div style={{width:40,height:40,borderRadius:'50%',background:`linear-gradient(135deg,${C.pink},${C.lavender})`,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:14,fontWeight:700,flexShrink:0}}>
+                          {(p.handle||'').replace('@','').charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'center',gap:6}}>
+                            <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>setSelected(p)}>{p.display_name||d.display_name||p.handle}</span>
+                            {sc&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:sc.bg,color:sc.color}}>{sc.label}</span>}
+                          </div>
+                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {p.platform} · {p.follower_count_approx||d.follower_count_approx}</div>
+                        </div>
+                        <span style={{fontSize:10,fontWeight:700,color:score>=7?C.lavender:score>=4?C.blue:C.inkLight}}>✦{score}</span>
+                      </div>
+                      {/* Post body — pinned post or first caption */}
+                      <div style={{padding:'14px 16px'}}>
+                        <div style={{fontSize:13,color:C.ink,lineHeight:1.7,marginBottom:10,whiteSpace:'pre-wrap'}}>
+                          {pinned||captions[0]||p.vibe_sentence||''}
+                        </div>
+                        {/* Aesthetic tags */}
+                        {(d.aesthetic_dna?.vibe_tags||[]).length>0&&(
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
+                            {(d.aesthetic_dna?.vibe_tags||[]).map((t,i)=>(
+                              <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:C.lavLight,color:C.lavender}}>#{t.replace(/\s/g,'')}</span>
+                            ))}
+                          </div>
+                        )}
+                        {/* Engagement mock */}
+                        <div style={{display:'flex',gap:16,fontSize:11,color:C.inkLight,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
+                          <span>{d.platform_metrics?.avg_likes||'—'} likes</span>
+                          <span>{d.platform_metrics?.avg_comments||'—'} comments</span>
+                          <span>{p.engagement_rate||d.engagement_rate||''}</span>
+                        </div>
+                      </div>
+                      {/* Comments preview */}
+                      {comments.length>0&&(
+                        <div style={{padding:'0 16px 12px'}}>
+                          {comments.slice(0,2).map((c,i)=>(
+                            <div key={i} style={{fontSize:12,color:C.inkMid,lineHeight:1.5,padding:'4px 0',borderTop:i===0?`1px solid ${C.border}`:'none'}}>
+                              <span style={{fontWeight:600,color:C.ink,marginRight:6}}>fan_{i+1}</span>{c}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Quick actions */}
+                      <div style={{padding:'8px 16px',borderTop:`1px solid ${C.border}`,display:'flex',gap:8}}>
+                        <button onClick={()=>setSelected(p)} style={{fontSize:11,color:C.lavender,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>View Full Profile</button>
+                        <button onClick={()=>{loadSceneContext(p.id);setSelected(p);setDetailTab('scene');}} style={{fontSize:11,color:C.blue,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Use in Scene</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── FOLLOWS VIEW — who follows whom and why ── */}
+            {!loading&&feedView==='follows' && (
+              <div style={{maxWidth:800,margin:'0 auto'}}>
+                <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
+                  <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Follow Engine Overview</div>
+                  {followStats?(
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12}}>
+                      <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:22,fontWeight:700,color:C.lavender}}>{followStats.total_profiles}</div>
+                        <div style={{fontSize:11,color:C.inkLight}}>Total Profiles</div>
+                      </div>
+                      <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:22,fontWeight:700,color:'#2d7a50'}}>{followStats.followed_profiles}</div>
+                        <div style={{fontSize:11,color:C.inkLight}}>Followed by Someone</div>
+                      </div>
+                      <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:22,fontWeight:700,color:C.pink}}>{followStats.unfollowed_profiles}</div>
+                        <div style={{fontSize:11,color:C.inkLight}}>Unfollowed</div>
+                      </div>
+                    </div>
+                  ):(
+                    <div style={{textAlign:'center',padding:20,color:C.inkLight,fontSize:13}}>Loading follow stats...</div>
+                  )}
+                  {followStats?.character_follows&&(
+                    <div style={{marginTop:16}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Follows per Character</div>
+                      {followStats.character_follows.map(cf=>{
+                        const charProfile=followStats.character_profiles?.[cf.character_key];
+                        return (
+                          <div key={cf.character_key} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,marginBottom:6}}>
+                            <span style={{fontSize:18,color:cf.character_key==='justawoman'?C.blue:C.lavender}}>{cf.character_key==='justawoman'?'◈':'✦'}</span>
+                            <div style={{flex:1}}>
+                              <div style={{fontWeight:700,color:C.ink,fontSize:13}}>{charProfile?.name||cf.character_key}</div>
+                              <div style={{fontSize:11,color:C.inkLight}}>Threshold: {charProfile?.threshold}</div>
+                            </div>
+                            <span style={{fontSize:20,fontWeight:700,color:C.lavender}}>{cf.count}</span>
+                            <span style={{fontSize:11,color:C.inkLight}}>follows</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {followStats?.character_profiles&&(
+                    <div style={{marginTop:16}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Top Affinities</div>
+                      {Object.entries(followStats.character_profiles).map(([key,cp])=>(
+                        <div key={key} style={{marginBottom:12}}>
+                          <div style={{fontSize:12,fontWeight:700,color:C.ink,marginBottom:6}}>{cp.name}</div>
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                            {cp.top_categories?.map(c=>(
+                              <span key={c.category} style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{c.category} ({Math.round(c.weight*100)}%)</span>
+                            ))}
+                          </div>
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
+                            {cp.top_archetypes?.map(a=>(
+                              <span key={a.archetype} style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{ARCHETYPE_LABELS[a.archetype]||a.archetype} ({Math.round(a.weight*100)}%)</span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* Per-profile follow indicators */}
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {profiles.map(p=>{
+                    const d=fp(p);
+                    const followers=p.followers||[];
+                    return (
+                      <div key={p.id} onClick={()=>setSelected(p)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',background:C.surface,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,cursor:'pointer'}}>
+                        <span style={{fontSize:13,fontWeight:700,color:C.ink,minWidth:120}}>{p.handle}</span>
+                        <span style={{fontSize:11,color:C.inkLight,flex:1}}>{p.display_name||d.display_name||''}</span>
+                        <div style={{display:'flex',gap:4}}>
+                          {PROTAGONISTS.map(pr=>{
+                            const f=followers.find(fl=>fl.character_key===pr.key);
+                            return (
+                              <span key={pr.key} style={{fontSize:13,padding:'2px 8px',borderRadius:8,
+                                background:f?pr.key==='justawoman'?C.blueLight:C.lavLight:C.surfaceAlt,
+                                color:f?pr.key==='justawoman'?C.blue:C.lavender:C.border,
+                                fontWeight:f?700:400}}>
+                                {pr.icon} {f?'follows':'—'}
+                                {f?.follow_probability!=null&&<span style={{fontSize:9,marginLeft:3}}>{Math.round(f.follow_probability*100)}%</span>}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <span style={{fontSize:10,fontWeight:700,color:C.lavender}}>✦{p.lala_relevance_score??0}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <Pagination/>
           </div>
         </div>
@@ -603,7 +861,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
           {/* Panel */}
           <div style={{position:'relative',width:'min(520px,90vw)',height:'100%',background:C.surface,boxShadow:'-4px 0 24px rgba(0,0,0,0.12)',overflowY:'auto',animation:'slideInRight 0.2s ease-out'}}>
             <DetailPanel profile={selected} fp={fp(selected)} onClose={()=>setSelected(null)}
-              onFinalize={finalizeProfile} onCross={crossProfile} onEdit={editProfile} onDelete={deleteProfile} onRefresh={loadProfiles}/>
+              onFinalize={finalizeProfile} onCross={crossProfile} onEdit={editProfile} onDelete={deleteProfile} onRefresh={loadProfiles}
+              onRegenerate={regenerateProfile} regenerating={regenerating}
+              onLoadCrossingPreview={loadCrossingPreview} crossingPreview={crossingPreview} setCrossingPreview={setCrossingPreview}
+              onLoadSceneContext={loadSceneContext} sceneContext={sceneContext} setSceneContext={setSceneContext} onCopySceneContext={copySceneContext}
+              detailTab={detailTab} setDetailTab={setDetailTab}/>
           </div>
         </div>,
         document.body
@@ -620,7 +882,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
         document.body
       )}
 
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}#feed-export-menu.open{display:block!important}`}</style>
     </div>
   );
 }
@@ -671,14 +933,16 @@ function FeedStatePicker({ profile, onStateChange }) {
 // ══════════════════════════════════════════════════════════════════════
 // DETAIL PANEL
 // ══════════════════════════════════════════════════════════════════════
-function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh }) {
+function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh,
+  onRegenerate, regenerating, onLoadCrossingPreview, crossingPreview, setCrossingPreview,
+  onLoadSceneContext, sceneContext, setSceneContext, onCopySceneContext, detailTab, setDetailTab }) {
   const p = profile;
   const [editing,setEditing] = useState(false);
   const [draft,setDraft]     = useState({});
   const [followers,setFollowers] = useState(p.followers||[]);
   const [followLoading,setFollowLoading] = useState(null);
 
-  useEffect(()=>{setFollowers(p.followers||[]);},[profile?.id]);
+  useEffect(()=>{setFollowers(p.followers||[]);setSceneContext(null);setCrossingPreview(null);},[profile?.id]);
 
   const score = p.lala_relevance_score??d.lala_relevance_score??0;
   const lc    = lalaClass(score);
@@ -743,8 +1007,11 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
           ):(
             <>
               {p.status==='generated'&&<button onClick={()=>onFinalize(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:'none',cursor:'pointer'}}>✓ Finalize</button>}
-              {p.status==='finalized'&&<button onClick={()=>onCross(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:C.lavLight,color:C.lavender,border:'none',cursor:'pointer'}}>⚡ Cross Into World</button>}
+              {p.status==='finalized'&&<button onClick={()=>{onLoadCrossingPreview(p.id);setDetailTab('crossing');}} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:C.lavLight,color:C.lavender,border:'none',cursor:'pointer'}}>⚡ Cross Into World</button>}
               {p.status==='crossed'&&<span style={{fontSize:11,color:C.lavender,fontWeight:600}}>✦ Crossed {p.crossed_at?`on ${new Date(p.crossed_at).toLocaleDateString()}`:''}</span>}
+              <button onClick={()=>onRegenerate(p.id)} disabled={regenerating} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:regenerating?'not-allowed':'pointer'}}>
+                {regenerating?'Regenerating…':'↻ Regenerate'}
+              </button>
               <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>✎ Edit</button>
               <button onClick={()=>onDelete(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.pink,border:`1px solid ${C.pinkMid}`,cursor:'pointer'}}>✕ Delete</button>
             </>
@@ -752,158 +1019,402 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
         </div>
       </div>
 
-      {/* Body */}
-      <div style={{padding:'16px 20px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
-        {editing ? (
-          <div style={{gridColumn:'1/-1'}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
-              {inp('Handle','handle')}{inp('Display Name','display_name')}{inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
-            </div>
-            {inp('Content Persona','content_persona',true)}{inp('Real Signal','real_signal',true)}{inp('Posting Voice','posting_voice',true)}{inp('Comment Energy','comment_energy',true)}{inp('Parasocial Function','parasocial_function',true)}{inp('Emotional Activation','emotional_activation',true)}{inp('Why She Watches','watch_reason',true)}{inp('What It Costs Her','what_it_costs_her',true)}{inp('Trajectory','current_trajectory')}{inp('Pinned Post','pinned_post',true)}
+      {/* Detail tabs */}
+      <div style={{display:'flex',gap:2,padding:'12px 20px 0',borderBottom:`1px solid ${C.border}`,background:C.surfaceAlt}}>
+        {[['profile','Profile'],['intel','Intel'],['network','Network'],['scene','Scene'],['crossing','Crossing']].map(([k,l])=>(
+          <button key={k} onClick={()=>{setDetailTab(k);if(k==='scene'&&!sceneContext)onLoadSceneContext(p.id);if(k==='crossing'&&!crossingPreview&&p.status!=='crossed')onLoadCrossingPreview(p.id);}} style={{
+            padding:'8px 14px',fontSize:12,fontWeight:detailTab===k?700:500,cursor:'pointer',border:'none',borderBottom:`2px solid ${detailTab===k?C.lavender:'transparent'}`,
+            background:'transparent',color:detailTab===k?C.lavender:C.inkLight,marginBottom:-1,transition:'all 0.15s'}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* ── PROFILE TAB ── */}
+      {(detailTab==='profile') && (
+        <>
+          <div style={{padding:'16px 20px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+            {editing ? (
+              <div style={{gridColumn:'1/-1'}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
+                  {inp('Handle','handle')}{inp('Display Name','display_name')}{inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
+                </div>
+                {inp('Content Persona','content_persona',true)}{inp('Real Signal','real_signal',true)}{inp('Posting Voice','posting_voice',true)}{inp('Comment Energy','comment_energy',true)}{inp('Parasocial Function','parasocial_function',true)}{inp('Emotional Activation','emotional_activation',true)}{inp('Why She Watches','watch_reason',true)}{inp('What It Costs Her','what_it_costs_her',true)}{inp('Trajectory','current_trajectory')}{inp('Pinned Post','pinned_post',true)}
+              </div>
+            ) : (
+              <>
+                <div>
+                  <Section title="Content Persona"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.content_persona||d.content_persona}</div></Section>
+                  <Section title="Real Signal"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.real_signal||d.real_signal}</div></Section>
+                  <Section title="Posting Voice"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.posting_voice||d.posting_voice}</div></Section>
+                  <Section title="Comment Energy"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.comment_energy||d.comment_energy}</div></Section>
+                  {p.adult_content_present&&<Section title="Adult Content"><Field label="Type" value={p.adult_content_type||d.adult_content_type}/><Field label="Framing" value={p.adult_content_framing||d.adult_content_framing}/></Section>}
+                </div>
+                <div>
+                  <Section title="Parasocial Function">
+                    <div style={{fontSize:13,color:C.inkMid,lineHeight:1.7,marginBottom:8}}>{p.parasocial_function||d.parasocial_function}</div>
+                    <Field label="Emotional Activation" value={d.emotional_activation||p.emotional_activation}/>
+                    <Field label="Why She Watches" value={d.watch_reason||p.watch_reason}/>
+                    <Field label="What It Costs Her" value={d.what_it_costs_her||p.what_it_costs_her}/>
+                  </Section>
+                  <Section title="Trajectory">
+                    <div style={{fontSize:11,fontWeight:700,color:C.inkMid,marginBottom:4}}>{p.current_trajectory||d.current_trajectory}</div>
+                    <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.trajectory_detail||d.trajectory_detail}</div>
+                  </Section>
+                  <Section title="Lala Relevance">
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                      <div style={{flex:1,height:6,borderRadius:3,background:C.border,overflow:'hidden'}}>
+                        <div style={{height:'100%',borderRadius:3,background:lColor,width:`${score*10}%`,transition:'width 0.5s'}}/>
+                      </div>
+                      <span style={{fontSize:13,fontWeight:700,color:lColor,flexShrink:0}}>{score}/10</span>
+                    </div>
+                    <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.lala_relevance_reason||d.lala_relevance_reason}</div>
+                  </Section>
+                </div>
+              </>
+            )}
           </div>
-        ) : (
-          <>
-            {/* Left column */}
-            <div>
-              <Section title="Content Persona"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.content_persona||d.content_persona}</div></Section>
-              <Section title="Real Signal"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.real_signal||d.real_signal}</div></Section>
-              <Section title="Posting Voice"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.posting_voice||d.posting_voice}</div></Section>
-              <Section title="Comment Energy"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.comment_energy||d.comment_energy}</div></Section>
-              {p.adult_content_present&&<Section title="Adult Content"><Field label="Type" value={p.adult_content_type||d.adult_content_type}/><Field label="Framing" value={p.adult_content_framing||d.adult_content_framing}/></Section>}
+
+          {/* Followers */}
+          <div style={{padding:'0 20px 16px'}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Character Followers</div>
+            <div style={{display:'flex',gap:8,marginBottom:10}}>
+              {PROTAGONISTS.map(protag=>{
+                const isF=followers.some(f=>f.character_key===protag.key);
+                const fd=followers.find(f=>f.character_key===protag.key);
+                const isL=followLoading===protag.key;
+                return (
+                  <button key={protag.key} onClick={()=>toggleFollow(protag)} disabled={isL} style={{
+                    padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,cursor:'pointer',border:`1.5px solid ${isF?C.lavender:C.border}`,
+                    background:isF?C.lavLight:'transparent',color:isF?C.lavender:C.inkMid,display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:16}}>{protag.icon}</span>
+                    {isL?'…':isF?`${protag.context.name} follows`:`Add ${protag.context.name}`}
+                    {fd?.follow_probability!=null&&<span style={{fontSize:10,opacity:0.7}}>{Math.round(fd.follow_probability*100)}%</span>}
+                  </button>
+                );
+              })}
             </div>
-            {/* Right column */}
-            <div>
-              <Section title="Parasocial Function">
-                <div style={{fontSize:13,color:C.inkMid,lineHeight:1.7,marginBottom:8}}>{p.parasocial_function||d.parasocial_function}</div>
-                <Field label="Emotional Activation" value={d.emotional_activation||p.emotional_activation}/>
-                <Field label="Why She Watches" value={d.watch_reason||p.watch_reason}/>
-                <Field label="What It Costs Her" value={d.what_it_costs_her||p.what_it_costs_her}/>
-              </Section>
-              <Section title="Trajectory">
-                <div style={{fontSize:11,fontWeight:700,color:C.inkMid,marginBottom:4}}>{p.current_trajectory||d.current_trajectory}</div>
-                <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.trajectory_detail||d.trajectory_detail}</div>
-              </Section>
-              <Section title="Lala Relevance">
-                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
-                  <div style={{flex:1,height:6,borderRadius:3,background:C.border,overflow:'hidden'}}>
-                    <div style={{height:'100%',borderRadius:3,background:lColor,width:`${score*10}%`,transition:'width 0.5s'}}/>
+            {followers.length>0&&(
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {followers.map(f=>(
+                  <div key={f.character_key} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:f.follow_context?4:0}}>
+                      <span style={{fontSize:15,color:f.character_key==='justawoman'?C.blue:C.lavender}}>{f.character_key==='justawoman'?'◈':'✦'}</span>
+                      <span style={{fontWeight:700,color:C.ink}}>{f.character_name}</span>
+                      {f.auto_generated&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:4,background:C.blueLight,color:C.blue}}>auto</span>}
+                      {f.follow_motivation&&<span style={{fontSize:10,color:C.inkLight,marginLeft:'auto'}}>{f.follow_motivation.replace('_',' ')}</span>}
+                    </div>
+                    {f.follow_context&&<div style={{color:C.inkMid,lineHeight:1.5,paddingLeft:22}}>{f.follow_context}</div>}
                   </div>
-                  <span style={{fontSize:13,fontWeight:700,color:lColor,flexShrink:0}}>{score}/10</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pinned post */}
+          {(p.pinned_post||d.pinned_post)&&(
+            <div style={{padding:'0 20px 16px'}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>Pinned Post</div>
+              <div style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.pink}`,fontSize:13,color:C.inkMid,lineHeight:1.6}}>
+                <span style={{fontSize:11,fontWeight:700,color:C.pink,marginRight:6}}>📌</span>{p.pinned_post||d.pinned_post}
+              </div>
+            </div>
+          )}
+
+          {/* Sample captions */}
+          {((p.sample_captions||d.sample_captions)||[]).length>0&&(
+            <div style={{padding:'0 20px 16px'}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Sample Captions</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {(p.sample_captions||d.sample_captions||[]).map((c,i)=>(
+                  <div key={i} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,borderLeft:`3px solid ${C.lavender}`,fontSize:12,color:C.inkMid,lineHeight:1.6}}>{c}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Moment log */}
+          {((p.moment_log||d.moment_log)||[]).length>0&&(
+            <div style={{padding:'0 20px 16px'}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Moment Log</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {(p.moment_log||d.moment_log||[]).map((m,i)=>(
+                  <div key={i} style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.lavender,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:4}}>{m.moment_type} · {m.platform_format}</div>
+                    <div style={{fontSize:12,color:C.ink,marginBottom:4}}>{m.description}</div>
+                    <div style={{fontSize:11,color:C.inkMid,fontStyle:'italic',marginBottom:m.lala_seed?4:0}}>{m.protagonist_reaction||m.justawoman_reaction}</div>
+                    {m.lala_seed&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>✦ Lala Seed — {m.lala_seed_reason}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── INTEL TAB — creator intel, aesthetic, revenue, known associates, controversies ── */}
+      {detailTab==='intel' && (
+        <div style={{padding:'16px 20px'}}>
+          {/* Creator Intel Grid */}
+          <Section title="Creator Intel">
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
+              {[
+                ['📊','Post Frequency',p.post_frequency||d.post_frequency],
+                ['💬','Engagement Rate',p.engagement_rate||d.engagement_rate],
+                ['📍','Location',p.geographic_base||d.geographic_base],
+                ['🎂','Age Range',p.age_range||d.age_range],
+                ['💍','Relationship',p.relationship_status||d.relationship_status],
+                ['🤝','Collab Style',p.collab_style||d.collab_style],
+                ['📈','Tier Detail',p.influencer_tier_detail||d.influencer_tier_detail],
+              ].filter(([,,v])=>v).map(([icon,label,val])=>(
+                <div key={label} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>{icon} {label}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.ink}}>{val}</div>
                 </div>
-                <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.lala_relevance_reason||d.lala_relevance_reason}</div>
+              ))}
+            </div>
+          </Section>
+
+          {/* Aesthetic DNA */}
+          {(d.aesthetic_dna&&Object.keys(d.aesthetic_dna).length>0)&&(
+            <Section title="Aesthetic DNA">
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {d.aesthetic_dna.visual_style&&<div style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}><div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>Visual Style</div><div style={{fontSize:12,color:C.ink}}>{d.aesthetic_dna.visual_style}</div></div>}
+                {d.aesthetic_dna.color_palette&&<div style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}><div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>Color Palette</div><div style={{fontSize:12,color:C.ink}}>{d.aesthetic_dna.color_palette}</div></div>}
+                {d.aesthetic_dna.editing_style&&<div style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,gridColumn:'1/-1'}}><div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>Editing Style</div><div style={{fontSize:12,color:C.ink}}>{d.aesthetic_dna.editing_style}</div></div>}
+              </div>
+              {(d.aesthetic_dna.vibe_tags||[]).length>0&&(
+                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:8}}>
+                  {d.aesthetic_dna.vibe_tags.map((t,i)=>(
+                    <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:C.lavLight,color:C.lavender}}>#{t.replace(/\s/g,'')}</span>
+                  ))}
+                </div>
+              )}
+            </Section>
+          )}
+
+          {/* Revenue Streams */}
+          {(p.revenue_streams||d.revenue_streams||[]).length>0&&(
+            <Section title="Revenue Streams">
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {(p.revenue_streams||d.revenue_streams||[]).map((r,i)=>(
+                  <div key={i} style={{padding:'6px 10px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12,color:C.ink}}>{typeof r==='string'?r:r.source||JSON.stringify(r)}</div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Brand Partnerships */}
+          {(p.brand_partnerships||d.brand_partnerships||[]).length>0&&(
+            <Section title="Brand Partnerships">
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {(p.brand_partnerships||d.brand_partnerships||[]).map((bp,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 10px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12}}>
+                    <span style={{fontWeight:600,color:C.ink}}>{bp.brand||'Unknown'}</span>
+                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                      <span style={{fontSize:10,color:C.inkLight}}>{bp.type}</span>
+                      {bp.visible===false&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:4,background:C.pinkLight,color:C.pink}}>hidden</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Audience Demographics */}
+          {(d.audience_demographics&&Object.keys(d.audience_demographics).length>0)&&(
+            <Section title="Audience Demographics">
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {d.audience_demographics.primary_age&&<Field label="Primary Age" value={d.audience_demographics.primary_age}/>}
+                {d.audience_demographics.gender_split&&<Field label="Gender Split" value={d.audience_demographics.gender_split}/>}
+                {d.audience_demographics.psychographic&&<div style={{gridColumn:'1/-1'}}><Field label="Psychographic" value={d.audience_demographics.psychographic}/></div>}
+              </div>
+              {(d.audience_demographics.top_audience_locations||[]).length>0&&(
+                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
+                  {d.audience_demographics.top_audience_locations.map((loc,i)=>(
+                    <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>📍 {loc}</span>
+                  ))}
+                </div>
+              )}
+            </Section>
+          )}
+
+          {/* Controversy History */}
+          {(p.controversy_history||d.controversy_history||[]).length>0&&(
+            <Section title="Controversy History">
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {(p.controversy_history||d.controversy_history||[]).map((ch,i)=>{
+                  const sevColor={minor:'#2d7a50',moderate:'#8a6010',major:'#c45858',career_threatening:'#8a2020'}[ch.severity]||C.inkMid;
+                  return (
+                    <div key={i} style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,borderLeft:`3px solid ${sevColor}`}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                        <span style={{fontSize:10,fontWeight:700,color:sevColor,textTransform:'uppercase'}}>{ch.severity}</span>
+                        {ch.date_approx&&<span style={{fontSize:10,color:C.inkLight}}>{ch.date_approx}</span>}
+                        <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:ch.resolved?'#e8f5ee':'#fde8e8',color:ch.resolved?'#2d7a50':'#8a2020',marginLeft:'auto'}}>{ch.resolved?'resolved':'ongoing'}</span>
+                      </div>
+                      <div style={{fontSize:12,color:C.ink,marginBottom:4}}>{ch.event}</div>
+                      {ch.narrative_potential&&<div style={{fontSize:11,color:C.lavender,fontStyle:'italic'}}>{ch.narrative_potential}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          )}
+
+          {/* Mirror Fields (JustAWoman) */}
+          {d.justawoman_mirror&&Object.keys(d.justawoman_mirror).length>0&&(
+            <Section title="JustAWoman Mirror">
+              <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.pinkLight,border:`1px solid ${C.pink}40`}}>
+                {Object.entries(d.justawoman_mirror).filter(([,v])=>v).map(([k,v])=>(
+                  <div key={k} style={{marginBottom:6}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.pink,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2}}>{k.replace(/_/g,' ')}</div>
+                    <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+        </div>
+      )}
+
+      {/* ── NETWORK TAB — known associates and relationships ── */}
+      {detailTab==='network' && (
+        <div style={{padding:'16px 20px'}}>
+          {/* Known Associates */}
+          {(p.known_associates||d.known_associates||[]).length>0&&(
+            <Section title="Known Associates">
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {(p.known_associates||d.known_associates||[]).map((a,i)=>(
+                  <div key={i} style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.ink}}>{a.handle}</div>
+                      <div style={{fontSize:11,color:C.inkMid}}>{a.description}</div>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
+                      <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{(a.relationship_type||'').replace(/_/g,' ')}</span>
+                      {a.drama_level!=null&&<span style={{fontSize:10,color:a.drama_level>=7?C.pink:a.drama_level>=4?'#e67e22':C.inkLight}}>Drama: {a.drama_level}/10</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Sample Comments */}
+          {((p.sample_comments||d.sample_comments)||[]).length>0&&(
+            <Section title="Comment Section">
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {(p.sample_comments||d.sample_comments||[]).map((c,i)=>(
+                  <div key={i} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12,color:C.inkMid,lineHeight:1.5}}>
+                    <span style={{fontWeight:600,color:C.ink,marginRight:6}}>@user_{i+1}</span>{c}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Book Relevance */}
+          {(p.book_relevance||d.book_relevance||[]).length>0&&(
+            <Section title="Book Relevance">
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {(p.book_relevance||d.book_relevance||[]).map((r,i)=>(
+                  <div key={i} style={{padding:'6px 10px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`,fontSize:12,color:C.inkMid}}>✦ {r}</div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {(p.known_associates||d.known_associates||[]).length===0&&(p.sample_comments||d.sample_comments||[]).length===0&&(
+            <div style={{textAlign:'center',padding:40,color:C.inkLight,fontSize:13}}>No network data available for this profile.</div>
+          )}
+        </div>
+      )}
+
+      {/* ── SCENE TAB — scene context for story engine injection ── */}
+      {detailTab==='scene' && (
+        <div style={{padding:'16px 20px'}}>
+          <Section title="Scene Context">
+            <div style={{fontSize:12,color:C.inkLight,marginBottom:12}}>Voice-safe formatted context for story engine injection. Author-knowledge fields are withheld.</div>
+            {sceneContext?(
+              <>
+                <div style={{padding:'14px 16px',borderRadius:C.radiusSm,background:'#1a1625',color:'#d4d0e0',fontFamily:"'DM Mono', monospace",fontSize:11,lineHeight:1.7,whiteSpace:'pre-wrap',overflowX:'auto',maxHeight:400,overflowY:'auto',marginBottom:12}}>
+                  {sceneContext}
+                </div>
+                <button onClick={onCopySceneContext} style={{padding:'8px 18px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,background:C.lavender,color:'#fff',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+                  Copy to Clipboard
+                </button>
+              </>
+            ):(
+              <div style={{textAlign:'center',padding:30,color:C.inkLight}}><Spinner/> Loading scene context...</div>
+            )}
+          </Section>
+        </div>
+      )}
+
+      {/* ── CROSSING TAB — preview what crossing creates ── */}
+      {detailTab==='crossing' && (
+        <div style={{padding:'16px 20px'}}>
+          {p.status==='crossed'?(
+            <div style={{textAlign:'center',padding:30}}>
+              <div style={{fontSize:18,fontWeight:700,color:C.lavender,marginBottom:8}}>✦ Already Crossed</div>
+              <div style={{fontSize:13,color:C.inkMid}}>This profile was crossed into the story world{p.crossed_at?` on ${new Date(p.crossed_at).toLocaleDateString()}`:''}</div>
+            </div>
+          ):crossingPreview?(
+            <>
+              <Section title="Crossing Preview">
+                <div style={{fontSize:12,color:C.inkLight,marginBottom:12}}>This is what will be created in the Character Registry when you cross this profile.</div>
+                <div style={{padding:'16px',borderRadius:C.radius,background:C.surfaceAlt,border:`2px dashed ${C.lavender}40`}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                    <Field label="Character Key" value={crossingPreview.character_key}/>
+                    <Field label="Display Name" value={crossingPreview.display_name}/>
+                    <Field label="Role Type" value={crossingPreview.role_type}/>
+                    <Field label="Status" value={crossingPreview.status}/>
+                    <div style={{gridColumn:'1/-1'}}><Field label="Description" value={crossingPreview.description}/></div>
+                    <div style={{gridColumn:'1/-1'}}><Field label="Core Desire" value={crossingPreview.core_desire}/></div>
+                    <div style={{gridColumn:'1/-1'}}><Field label="Core Wound" value={crossingPreview.core_wound}/></div>
+                    <div style={{gridColumn:'1/-1'}}><Field label="Personality" value={crossingPreview.personality}/></div>
+                  </div>
+                </div>
+              </Section>
+
+              {crossingPreview.timeline_event&&(
+                <Section title="Timeline Event">
+                  <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.ink,marginBottom:4}}>{crossingPreview.timeline_event.event_name}</div>
+                    <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6,marginBottom:4}}>{crossingPreview.timeline_event.event_description}</div>
+                    <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:crossingPreview.timeline_event.impact_level==='major'?C.pinkLight:C.blueLight,color:crossingPreview.timeline_event.impact_level==='major'?C.pink:C.blue}}>
+                      {crossingPreview.timeline_event.impact_level} impact
+                    </span>
+                  </div>
+                </Section>
+              )}
+
+              {p.status==='finalized'&&(
+                <button onClick={()=>onCross(p.id)} style={{width:'100%',padding:'12px',borderRadius:C.radiusSm,fontSize:14,fontWeight:700,background:C.lavender,color:'#fff',border:'none',cursor:'pointer',marginTop:8}}>
+                  ⚡ Confirm Crossing Into World
+                </button>
+              )}
+              {p.status!=='finalized'&&(
+                <div style={{textAlign:'center',padding:12,fontSize:12,color:C.inkLight}}>Profile must be finalized before crossing.</div>
+              )}
+            </>
+          ):(
+            <div style={{textAlign:'center',padding:30,color:C.inkLight}}><Spinner/> Loading crossing preview...</div>
+          )}
+
+          {/* Crossing pathway info */}
+          {(p.crossing_trigger||d.crossing_trigger)&&(
+            <div style={{marginTop:16}}>
+              <Section title="Crossing Pathway">
+                <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`}}>
+                  <div style={{fontSize:11,fontWeight:700,color:C.lavender,marginBottom:4}}>Trigger</div>
+                  <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6,marginBottom:8}}>{p.crossing_trigger||d.crossing_trigger}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:C.lavender,marginBottom:4}}>Mechanism</div>
+                  <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.crossing_mechanism||d.crossing_mechanism}</div>
+                </div>
               </Section>
             </div>
-          </>
-        )}
-      </div>
-
-      {/* Followers section */}
-      <div style={{padding:'0 20px 16px'}}>
-        <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Character Followers</div>
-        <div style={{display:'flex',gap:8,marginBottom:10}}>
-          {PROTAGONISTS.map(protag=>{
-            const isF=followers.some(f=>f.character_key===protag.key);
-            const fd=followers.find(f=>f.character_key===protag.key);
-            const isL=followLoading===protag.key;
-            return (
-              <button key={protag.key} onClick={()=>toggleFollow(protag)} disabled={isL} style={{
-                padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,cursor:'pointer',border:`1.5px solid ${isF?C.lavender:C.border}`,
-                background:isF?C.lavLight:'transparent',color:isF?C.lavender:C.inkMid,display:'flex',alignItems:'center',gap:6}}>
-                <span style={{fontSize:16}}>{protag.icon}</span>
-                {isL?'…':isF?`${protag.context.name} follows`:`Add ${protag.context.name}`}
-                {fd?.follow_probability!=null&&<span style={{fontSize:10,opacity:0.7}}>{Math.round(fd.follow_probability*100)}%</span>}
-              </button>
-            );
-          })}
-        </div>
-        {followers.length>0&&(
-          <div style={{display:'flex',flexDirection:'column',gap:6}}>
-            {followers.map(f=>(
-              <div key={f.character_key} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:f.follow_context?4:0}}>
-                  <span style={{fontSize:15,color:f.character_key==='justawoman'?C.blue:C.lavender}}>{f.character_key==='justawoman'?'◈':'✦'}</span>
-                  <span style={{fontWeight:700,color:C.ink}}>{f.character_name}</span>
-                  {f.auto_generated&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:4,background:C.blueLight,color:C.blue}}>auto</span>}
-                  {f.follow_motivation&&<span style={{fontSize:10,color:C.inkLight,marginLeft:'auto'}}>{f.follow_motivation.replace('_',' ')}</span>}
-                </div>
-                {f.follow_context&&<div style={{color:C.inkMid,lineHeight:1.5,paddingLeft:22}}>{f.follow_context}</div>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Pinned post */}
-      {(p.pinned_post||d.pinned_post)&&(
-        <div style={{padding:'0 20px 16px'}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>Pinned Post</div>
-          <div style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.pink}`,fontSize:13,color:C.inkMid,lineHeight:1.6}}>
-            <span style={{fontSize:11,fontWeight:700,color:C.pink,marginRight:6}}>📌</span>{p.pinned_post||d.pinned_post}
-          </div>
-        </div>
-      )}
-
-      {/* Sample captions */}
-      {((p.sample_captions||d.sample_captions)||[]).length>0&&(
-        <div style={{padding:'0 20px 16px'}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Sample Captions</div>
-          <div style={{display:'flex',flexDirection:'column',gap:6}}>
-            {(p.sample_captions||d.sample_captions||[]).map((c,i)=>(
-              <div key={i} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,borderLeft:`3px solid ${C.lavender}`,fontSize:12,color:C.inkMid,lineHeight:1.6}}>{c}</div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Moment log */}
-      {((p.moment_log||d.moment_log)||[]).length>0&&(
-        <div style={{padding:'0 20px 16px'}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Moment Log</div>
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {(p.moment_log||d.moment_log||[]).map((m,i)=>(
-              <div key={i} style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                <div style={{fontSize:10,fontWeight:700,color:C.lavender,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:4}}>{m.moment_type} · {m.platform_format}</div>
-                <div style={{fontSize:12,color:C.ink,marginBottom:4}}>{m.description}</div>
-                <div style={{fontSize:11,color:C.inkMid,fontStyle:'italic',marginBottom:m.lala_seed?4:0}}>{m.justawoman_reaction}</div>
-                {m.lala_seed&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>✦ Lala Seed — {m.lala_seed_reason}</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Creator intel */}
-      {(p.post_frequency||d.post_frequency||p.engagement_rate||d.engagement_rate||p.geographic_base||d.geographic_base)&&(
-        <div style={{padding:'0 20px 16px'}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Creator Intel</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
-            {[
-              ['📊','Post Frequency',p.post_frequency||d.post_frequency],
-              ['💬','Engagement Rate',p.engagement_rate||d.engagement_rate],
-              ['📍','Location',p.geographic_base||d.geographic_base],
-              ['🎂','Age Range',p.age_range||d.age_range],
-              ['💍','Relationship',p.relationship_status||d.relationship_status],
-              ['🤝','Collab Style',p.collab_style||d.collab_style],
-            ].filter(([,,v])=>v).map(([icon,label,val])=>(
-              <div key={label} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                <div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>{icon} {label}</div>
-                <div style={{fontSize:12,fontWeight:600,color:C.ink}}>{val}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Crossing pathway */}
-      {(p.crossing_trigger||d.crossing_trigger)&&(
-        <div style={{padding:'0 20px 16px'}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>World Crossing</div>
-          <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.lavender,marginBottom:4}}>Crossing Trigger</div>
-            <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6,marginBottom:8}}>{p.crossing_trigger||d.crossing_trigger}</div>
-            <div style={{fontSize:11,fontWeight:700,color:C.lavender,marginBottom:4}}>Mechanism</div>
-            <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.crossing_mechanism||d.crossing_mechanism}</div>
-          </div>
+          )}
         </div>
       )}
     </div>
