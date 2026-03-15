@@ -1111,8 +1111,20 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
     if (!hasData(character.story_presence))       emptySections.push('story_presence');
     if (!hasData(character.evolution_tracking))   emptySections.push('evolution_tracking');
     if (!hasData(character.living_context))       emptySections.push('living_context');
+    if (!hasData(character.relationships_map))    emptySections.push('relationships_map');
 
-    if (emptySections.length === 0) {
+    // Essence Profile fields (Section 2) — individual columns, not JSONB
+    const essenceFields = [];
+    if (!character.core_fear)            essenceFields.push('core_fear');
+    if (!character.core_desire)          essenceFields.push('core_desire');
+    if (!character.core_wound)           essenceFields.push('core_wound');
+    if (!character.mask_persona)         essenceFields.push('mask_persona');
+    if (!character.truth_persona)        essenceFields.push('truth_persona');
+    if (!character.character_archetype)  essenceFields.push('character_archetype');
+    if (!character.signature_trait)      essenceFields.push('signature_trait');
+    if (!character.emotional_baseline)   essenceFields.push('emotional_baseline');
+
+    if (emptySections.length === 0 && essenceFields.length === 0) {
       return res.json({ success: true, message: 'All sections already populated', filled: [] });
     }
 
@@ -1142,12 +1154,28 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
       story_presence: `{ "appears_in_books": "which books/worlds", "appears_in_shows": "which shows", "appears_in_series": "which series", "current_story_status": "what triggers their entrance into a story", "unresolved_threads": "story types they're suited for", "future_potential": "Yes or No — can they introduce new characters" }`,
       evolution_tracking: `{ "version_history": "what just happened — recent event that changed something", "era_changes": "where they are in their arc right now", "personality_shifts": "what they are avoiding — the thing they know they need to face" }`,
       living_context: `{ "active_pressures": "what is pressing on them right now", "support_network": "who holds them up and what it costs", "home_environment": "what daily domestic life looks like", "relationship_to_deadlines": "how they relate to time pressure", "financial_reality": "actual financial situation — specific", "current_season": "the emotional season they are in" }`,
+      relationships_map: `{ "allies": "names and nature of alliances — who has their back and why", "rivals": "names and nature of rivalries — professional or personal", "mentors": "who shaped them — living or dead, present or absent", "love_interests": "current or past — who they wanted or want", "business_partners": "professional relationships that matter", "dynamic_notes": "the most important tension or unresolved dynamic" }`,
     };
 
     const sectionsToFill = emptySections.map(s => `"${s}": ${sectionSchemas[s]}`).join(',\n');
 
+    // Essence Profile field descriptions for AI generation
+    const essenceDescriptions = {
+      core_fear: '"core_fear": "the deepest fear driving their behavior — not surface anxiety but the existential threat"',
+      core_desire: '"core_desire": "what they want most — the real want beneath the stated want"',
+      core_wound: '"core_wound": "the formative injury — what happened that made them who they are"',
+      mask_persona: '"mask_persona": "who they pretend to be — the version the world sees"',
+      truth_persona: '"truth_persona": "who they actually are — the version only intimates see"',
+      character_archetype: '"character_archetype": "one of: Strategist, Dreamer, Performer, Caretaker, Rebel, Observer, Builder, Seeker"',
+      signature_trait: '"signature_trait": "the one behavior that makes them unmistakable — not a quality, a specific thing they do"',
+      emotional_baseline: '"emotional_baseline": "their default emotional register when nothing is happening — confident, guarded, restless, warm, watchful, etc."',
+    };
+    const essenceToFill = essenceFields.map(f => essenceDescriptions[f]).join(',\n');
+
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const allFieldsToFill = [sectionsToFill, essenceToFill].filter(Boolean).join(',\n');
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -1157,11 +1185,12 @@ router.post('/characters/:id/backfill-sections', async (req, res) => {
 Here is everything currently known about this character:
 ${JSON.stringify(known, null, 2)}
 
-Generate ONLY the following empty sections. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
+Generate ONLY the following empty fields. Infer from existing data. Be specific to THIS character — no generic filler. Use null for fields you truly cannot infer.
+${essenceFields.length ? 'For essence fields (core_fear, core_wound, mask_persona, etc.): return a single string value, not an object.' : ''}
 
 Return ONLY valid JSON with these keys:
 {
-${sectionsToFill}
+${allFieldsToFill}
 }`,
       messages: [{ role: 'user', content: `Fill in the missing sections for ${known.display_name || 'this character'}.` }],
     });
@@ -1171,7 +1200,7 @@ ${sectionsToFill}
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse Claude response' });
     const generated = JSON.parse(jsonMatch[0]);
 
-    // Apply each generated section
+    // Apply each generated JSONB section
     const filled = [];
     for (const section of emptySections) {
       if (generated[section] && typeof generated[section] === 'object') {
@@ -1182,6 +1211,14 @@ ${sectionsToFill}
         }
         character[section] = clean;
         filled.push(section);
+      }
+    }
+
+    // Apply each generated essence field (string columns)
+    for (const field of essenceFields) {
+      if (generated[field] && typeof generated[field] === 'string') {
+        character[field] = generated[field];
+        filled.push(field);
       }
     }
 

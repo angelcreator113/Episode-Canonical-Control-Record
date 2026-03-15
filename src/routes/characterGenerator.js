@@ -935,10 +935,11 @@ router.post('/commit', optionalAuth, async (req, res) => {
       status: 'draft',
 
       // Psychology
-      core_desire: c.surface_want || '',
-      core_fear: c.real_want || '',
+      core_desire: c.real_want || c.surface_want || '',
       core_wound: c.origin_story || '',
-      signature_trait: c.aesthetic || '',
+      signature_trait: c.signature_quote || c.aesthetic || '',
+      mask_persona: c.public_persona || '',
+      truth_persona: c.private_reality || '',
       description: c.occupation || '',
 
       // JSONB
