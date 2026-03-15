@@ -74,23 +74,72 @@ export const WORLD_LABELS = {
 
 // ─── Registry Dossier Tabs ────────────────────────────────────────────────────
 
-export const DOSSIER_TABS = [
-  { key: 'overview',      label: 'Overview' },
-  { key: 'demographics',  label: 'Demographics' },
-  { key: 'living',        label: '✦ Living State' },
-  { key: 'arc',           label: 'Arc Timeline' },
-  { key: 'threads',       label: 'Plot Threads' },
-  { key: 'psychology',    label: 'Psychology' },
-  { key: 'aesthetic',     label: 'Aesthetic DNA' },
-  { key: 'career',        label: 'Career' },
-  { key: 'relationships', label: 'Relationships' },
-  { key: 'story',         label: 'Story Presence' },
-  { key: 'voice',         label: 'Voice' },
-  { key: 'death',         label: 'Death Tracking' },
-  { key: 'dilemma',       label: 'Dilemma' },
-  { key: 'depth',         label: '🧬 Depth Engine' },
-  { key: 'ai',            label: '✦ AI Writer' },
+export const DOSSIER_TAB_GROUPS = [
+  { group: null, tabs: [
+    { key: 'overview', label: 'Overview', icon: '◈' },
+  ]},
+  { group: 'Identity', tabs: [
+    { key: 'demographics', label: 'Demographics', icon: '▤' },
+    { key: 'psychology',   label: 'Psychology',   icon: '◉' },
+    { key: 'aesthetic',    label: 'Aesthetic',     icon: '◆' },
+    { key: 'voice',        label: 'Voice',         icon: '¶' },
+  ]},
+  { group: 'Narrative', tabs: [
+    { key: 'living',    label: 'Living State',  icon: '✦' },
+    { key: 'arc',       label: 'Arc Timeline',  icon: '↗' },
+    { key: 'threads',   label: 'Plot Threads',  icon: '⊟' },
+    { key: 'dilemma',   label: 'Dilemma',       icon: '⚖' },
+  ]},
+  { group: 'World', tabs: [
+    { key: 'career',        label: 'Career',        icon: '▰' },
+    { key: 'relationships', label: 'Relationships', icon: '⇄' },
+    { key: 'story',         label: 'Story',         icon: '📖' },
+    { key: 'death',         label: 'Death',         icon: '†' },
+  ]},
+  { group: 'AI', tabs: [
+    { key: 'depth', label: 'Depth Engine', icon: '🧬' },
+    { key: 'ai',    label: 'AI Writer',   icon: '✦' },
+  ]},
 ];
+export const DOSSIER_TABS = DOSSIER_TAB_GROUPS.flatMap(g => g.tabs);
+
+// ── Dossier Completeness Tracking ────────────────────────────────────────────
+export const DOSSIER_SECTIONS = {
+  core:         { label: 'Core',         fields: ['display_name','description','core_belief','role_type','pressure_type'] },
+  demographics: { label: 'Demographics', fields: ['gender','age','ethnicity','hometown','current_city','class_origin'] },
+  psychology:   { label: 'Psychology',   fields: ['core_desire','core_fear','core_wound','mask_persona','truth_persona','emotional_baseline'] },
+  aesthetic:    { label: 'Aesthetic',    jsonb: 'aesthetic_dna', fields: ['era_aesthetic','color_palette','signature_silhouette','glam_energy'] },
+  voice:        { label: 'Voice',        jsonb: 'voice_signature', fields: ['speech_pattern','vocabulary_tone','catchphrases','internal_monologue_style'] },
+  career:       { label: 'Career',       jsonb: 'career_status', fields: ['profession','career_goal','public_recognition'] },
+  relationships:{ label: 'Relationships',jsonb: 'relationships_map', fields: ['allies','rivals','love_interests','mentors'] },
+  story:        { label: 'Story',        jsonb: 'story_presence', fields: ['appears_in_books','current_story_status'] },
+};
+
+export function getDossierCompleteness(char) {
+  if (!char) return { pct: 0, sections: {}, gaps: [] };
+  let filled = 0, total = 0;
+  const sections = {};
+  const gaps = [];
+  for (const [key, sec] of Object.entries(DOSSIER_SECTIONS)) {
+    const src = sec.jsonb ? (() => { try { return typeof char[sec.jsonb] === 'string' ? JSON.parse(char[sec.jsonb]) : (char[sec.jsonb] || {}); } catch { return {}; } })() : char;
+    const secFilled = sec.fields.filter(f => {
+      const val = src?.[f];
+      if (val === null || val === undefined) return false;
+      if (typeof val === 'string' && !val.trim()) return false;
+      if (Array.isArray(val) && val.length === 0) return false;
+      return true;
+    }).length;
+    const missing = sec.fields.filter(f => {
+      const val = src?.[f];
+      return !val || (typeof val === 'string' && !val.trim()) || (Array.isArray(val) && val.length === 0);
+    });
+    sections[key] = { filled: secFilled, total: sec.fields.length, label: sec.label, missing };
+    if (missing.length > 0) gaps.push({ section: sec.label, tab: key, missing });
+    filled += secFilled;
+    total += sec.fields.length;
+  }
+  return { pct: total ? Math.round((filled / total) * 100) : 0, sections, gaps };
+}
 
 // ─── Character Metadata ───────────────────────────────────────────────────────
 

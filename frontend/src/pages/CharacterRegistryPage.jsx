@@ -20,7 +20,8 @@ import './CharacterRegistryPage.css';
 import CharacterDilemmaEngine from '../components/CharacterDilemmaEngine';
 import {
   ROLE_COLORS, ROLE_LABELS, ROLE_OPTIONS, ROLE_ICONS,
-  MOMENTUM, CANON_TIERS, DOSSIER_TABS,
+  MOMENTUM, CANON_TIERS, DOSSIER_TABS, DOSSIER_TAB_GROUPS,
+  DOSSIER_SECTIONS, getDossierCompleteness,
   ARCHETYPES, GLAM_ENERGIES, STORY_STATUSES,
 } from '../constants/characterConstants';
 import useRegistries from '../hooks/useRegistries';
@@ -152,15 +153,19 @@ function WriterNotesDisplay({ notes }) {
   );
 }
 
-/* Empty state shown when a tab has no data */
-function EmptyState({ label, onEdit }) {
+/* Empty state shown when a tab has no data — consistent across all tabs */
+function EmptyState({ label, onEdit, characterId, section, onRefresh, icon }) {
   return (
     <div className="cr-dossier-empty">
-      <div className="cr-dossier-empty-icon">📝</div>
+      <div className="cr-dossier-empty-icon">{icon || '📝'}</div>
       <p className="cr-dossier-empty-text">No {label} data yet.</p>
-      <button className="cr-dossier-empty-btn" onClick={onEdit}>
-        ✎ Add {label}
-      </button>
+      <p className="cr-dossier-empty-hint">Add data manually or let AI generate it for you.</p>
+      <div className="cr-dossier-empty-actions">
+        <button className="cr-dossier-empty-btn" onClick={onEdit}>✎ Add Manually</button>
+        {characterId && section && onRefresh && (
+          <SectionRegenerateButton characterId={characterId} section={section} onRefresh={onRefresh} label="✦ Auto-Generate" />
+        )}
+      </div>
     </div>
   );
 }
@@ -1746,14 +1751,21 @@ export default function CharacterRegistryPage() {
               <div className="cr-dossier-tabs-row">
                 <button className="cr-tabs-scroll-btn left" onClick={() => { if (tabsRef.current) tabsRef.current.scrollBy({ left: -200, behavior: 'smooth' }); }} aria-label="Scroll tabs left">‹</button>
                 <div className="cr-dossier-tabs" ref={tabsRef}>
-                  {DOSSIER_TABS.map(t => (
-                    <button
-                      key={t.key}
-                      className={`cr-dossier-tab ${dossierTab === t.key ? 'active' : ''}`}
-                      onClick={() => { setDossierTab(t.key); setEditSection(null); }}
-                    >
-                      {t.label}
-                    </button>
+                  {DOSSIER_TAB_GROUPS.map((g, gi) => (
+                    <React.Fragment key={gi}>
+                      {g.group && <span className="cr-dossier-tab-group-label">{g.group}</span>}
+                      {g.tabs.map(t => (
+                        <button
+                          key={t.key}
+                          className={`cr-dossier-tab ${dossierTab === t.key ? 'active' : ''}`}
+                          onClick={() => { setDossierTab(t.key); setEditSection(null); }}
+                        >
+                          <span className="cr-dossier-tab-icon">{t.icon}</span>
+                          {t.label}
+                        </button>
+                      ))}
+                      {gi < DOSSIER_TAB_GROUPS.length - 1 && <span className="cr-dossier-tab-divider" />}
+                    </React.Fragment>
                   ))}
                 </div>
                 <button className="cr-tabs-scroll-btn right" onClick={() => { if (tabsRef.current) tabsRef.current.scrollBy({ left: 200, behavior: 'smooth' }); }} aria-label="Scroll tabs right">›</button>
@@ -3132,6 +3144,61 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
             </>
           ) : (
             <>
+              {/* Character Snapshot — completeness overview */}
+              {(() => {
+                const comp = getDossierCompleteness(c);
+                return (
+                  <div className="cr-dossier-snapshot">
+                    <div className="cr-dossier-snapshot-bar">
+                      <div className="cr-dossier-snapshot-pct">{comp.pct}%</div>
+                      <div className="cr-dossier-snapshot-track">
+                        <div className="cr-dossier-snapshot-fill" style={{
+                          width: `${comp.pct}%`,
+                          background: comp.pct >= 80 ? '#5dab62' : comp.pct >= 50 ? '#c9a84c' : '#d46070',
+                        }} />
+                      </div>
+                      <span className="cr-dossier-snapshot-label">Profile Completeness</span>
+                    </div>
+                    <div className="cr-dossier-snapshot-grid">
+                      {Object.entries(comp.sections).map(([key, sec]) => {
+                        const secPct = sec.total ? Math.round((sec.filled / sec.total) * 100) : 0;
+                        return (
+                          <div key={key} className="cr-dossier-snapshot-section" onClick={() => {
+                            const tabMap = { core: 'overview', demographics: 'demographics', psychology: 'psychology', aesthetic: 'aesthetic', voice: 'voice', career: 'career', relationships: 'relationships', story: 'story' };
+                            setDossierTab(tabMap[key] || 'overview');
+                          }}>
+                            <span className="cr-dossier-snapshot-sec-name">{sec.label}</span>
+                            <span className="cr-dossier-snapshot-sec-stat">{sec.filled}/{sec.total}</span>
+                            <div className="cr-dossier-snapshot-sec-track">
+                              <div className="cr-dossier-snapshot-sec-fill" style={{
+                                width: `${secPct}%`,
+                                background: secPct >= 80 ? '#5dab62' : secPct >= 50 ? '#c9a84c' : '#d46070',
+                              }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {comp.gaps.length > 0 && (
+                      <div className="cr-dossier-snapshot-gaps">
+                        <span className="cr-dossier-snapshot-gaps-label">Missing:</span>
+                        {comp.gaps.slice(0, 4).map(g => (
+                          <button key={g.tab} className="cr-dossier-snapshot-gap-pill" onClick={() => setDossierTab(g.tab)}>
+                            {g.section} ({g.missing.length})
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {comp.pct < 100 && (
+                      <div className="cr-dossier-snapshot-actions">
+                        <SectionGenerateButton characterId={c.id} onRefresh={onRefresh} />
+                        <button className="cr-dossier-quick-edit-btn" onClick={() => startEdit('overview')}>✎ Quick Edit</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {(c.description || c.subtitle) && (
                 <p style={{ fontFamily: 'var(--serif)', fontSize: 15, lineHeight: 1.6, color: 'var(--ink)', marginBottom: 20, fontStyle: 'italic', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                   {c.description || c.subtitle}
@@ -3143,6 +3210,16 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   <span className="cr-dossier-belief-text">"{c.core_belief}"</span>
                 </div>
               )}
+
+              {/* Quick Essence Summary */}
+              {(c.core_desire || c.core_fear || c.core_wound) && (
+                <div className="cr-dossier-essence-strip">
+                  {c.core_desire && <div className="cr-dossier-essence-chip cr-dossier-essence-desire"><span className="cr-dossier-essence-tag">Desire</span>{c.core_desire}</div>}
+                  {c.core_fear && <div className="cr-dossier-essence-chip cr-dossier-essence-fear"><span className="cr-dossier-essence-tag">Fear</span>{c.core_fear}</div>}
+                  {c.core_wound && <div className="cr-dossier-essence-chip cr-dossier-essence-wound"><span className="cr-dossier-essence-tag">Wound</span>{c.core_wound}</div>}
+                </div>
+              )}
+
               <DRow label="Appearance Mode" value={c.appearance_mode?.replace('_', ' ')} />
               <DRow label="Pressure Type" value={c.pressure_type} />
               {c.pressure_quote && (
@@ -3450,7 +3527,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <DRow label="Visual Evolution" value={jGet(c.aesthetic_dna, 'visual_evolution_notes')} />
             </>
           ) : (
-            <EmptyState label="Aesthetic DNA" onEdit={() => startEdit(tab)} />
+            <EmptyState label="Aesthetic DNA" onEdit={() => startEdit(tab)} characterId={c.id} section="aesthetic_dna" onRefresh={onRefresh} icon="◆" />
           )}
         </div>
       );
@@ -3482,7 +3559,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <DRow label="Ongoing Arc" value={jGet(c.career_status, 'ongoing_arc')} />
             </>
           ) : (
-            <EmptyState label="Career" onEdit={() => startEdit(tab)} />
+            <EmptyState label="Career" onEdit={() => startEdit(tab)} characterId={c.id} section="career_status" onRefresh={onRefresh} icon="▰" />
           )}
         </div>
       );
@@ -3629,7 +3706,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               </>
             ) : null;
           })() || (
-            <EmptyState label="Relationships" onEdit={() => startEdit(tab)} />
+            <EmptyState label="Relationships" onEdit={() => startEdit(tab)} characterId={c.id} section="relationships_map" onRefresh={onRefresh} icon="⇄" />
           )}
         </div>
       );
@@ -3673,7 +3750,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               )}
             </>
           ) : (
-            <EmptyState label="Story Presence" onEdit={() => startEdit(tab)} />
+            <EmptyState label="Story Presence" onEdit={() => startEdit(tab)} characterId={c.id} section="story_presence" onRefresh={onRefresh} icon="📖" />
           )}
         </div>
       );
@@ -3704,7 +3781,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <DRow label="Dialogue Rhythm" value={jGet(c.voice_signature, 'emotional_reactivity')} accent />
             </>
           ) : (
-            <EmptyState label="Voice Profile" onEdit={() => startEdit(tab)} />
+            <EmptyState label="Voice Profile" onEdit={() => startEdit(tab)} characterId={c.id} section="voice_signature" onRefresh={onRefresh} icon="¶" />
           )}
         </div>
       );

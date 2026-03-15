@@ -5918,3 +5918,245 @@
   /* Filter pills */
   .cr-filter-pill { padding: 6px 10px; font-size: 11px; min-height: 30px; }
 }
+
+/* ================================================================
+   DOSSIER IMPROVEMENTS — Grouped Tabs, Completeness, Quick-Edit
+   ================================================================ */
+
+/* ── Tab Group Labels & Dividers ── */
+.cr-dossier-tab-group-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8a8070;
+  padding: 0 6px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  font-family: 'DM Sans', sans-serif;
+}
+.cr-dossier-tab-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border, #e8e3da);
+  margin: 0 4px;
+  flex-shrink: 0;
+  align-self: center;
+}
+.cr-dossier-tab-icon {
+  margin-right: 4px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.cr-dossier-tab.active .cr-dossier-tab-icon {
+  opacity: 1;
+}
+
+/* ── Completeness Snapshot ── */
+.cr-dossier-snapshot {
+  background: rgba(250, 248, 244, 0.8);
+  border: 1px solid var(--border, #e8e3da);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.cr-dossier-snapshot-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cr-dossier-snapshot-pct {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--ink, #2c2520);
+  min-width: 48px;
+}
+.cr-dossier-snapshot-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(0,0,0,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.cr-dossier-snapshot-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.cr-dossier-snapshot-label {
+  font-size: 11px;
+  color: #8a8070;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cr-dossier-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cr-dossier-snapshot-section {
+  background: rgba(255,255,255,0.6);
+  border: 1px solid var(--border, #e8e3da);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.cr-dossier-snapshot-section:hover {
+  border-color: var(--se-gold, #b0922e);
+  background: rgba(176,146,46,0.05);
+}
+.cr-dossier-snapshot-sec-name {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a8070;
+  margin-bottom: 4px;
+}
+.cr-dossier-snapshot-sec-stat {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink, #2c2520);
+  margin-bottom: 4px;
+}
+.cr-dossier-snapshot-sec-track {
+  height: 3px;
+  background: rgba(0,0,0,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cr-dossier-snapshot-sec-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Gaps */
+.cr-dossier-snapshot-gaps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.cr-dossier-snapshot-gaps-label {
+  font-size: 11px;
+  color: #d46070;
+  font-weight: 600;
+}
+.cr-dossier-snapshot-gap-pill {
+  background: rgba(212,96,112,0.08);
+  border: 1px solid rgba(212,96,112,0.2);
+  color: #d46070;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  transition: background 0.15s;
+}
+.cr-dossier-snapshot-gap-pill:hover {
+  background: rgba(212,96,112,0.15);
+}
+
+/* Snapshot Actions (Fill All Gaps + Quick Edit) */
+.cr-dossier-snapshot-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, #e8e3da);
+}
+.cr-dossier-quick-edit-btn {
+  background: transparent;
+  border: 1px solid var(--border, #e8e3da);
+  color: var(--ink, #2c2520);
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cr-dossier-quick-edit-btn:hover {
+  border-color: var(--se-gold, #b0922e);
+  background: rgba(176,146,46,0.05);
+}
+
+/* ── Essence Strip ── */
+.cr-dossier-essence-strip {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+.cr-dossier-essence-chip {
+  flex: 1;
+  min-width: 140px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-family: var(--serif, Georgia, serif);
+}
+.cr-dossier-essence-tag {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  font-family: 'DM Sans', sans-serif;
+}
+.cr-dossier-essence-desire {
+  background: rgba(93,171,98,0.08);
+  border: 1px solid rgba(93,171,98,0.2);
+  color: #3d7a42;
+}
+.cr-dossier-essence-desire .cr-dossier-essence-tag { color: #5dab62; }
+.cr-dossier-essence-fear {
+  background: rgba(212,96,112,0.08);
+  border: 1px solid rgba(212,96,112,0.2);
+  color: #a83848;
+}
+.cr-dossier-essence-fear .cr-dossier-essence-tag { color: #d46070; }
+.cr-dossier-essence-wound {
+  background: rgba(155,77,202,0.08);
+  border: 1px solid rgba(155,77,202,0.2);
+  color: #7a3da0;
+}
+.cr-dossier-essence-wound .cr-dossier-essence-tag { color: #9b4dca; }
+
+/* ── Enhanced Empty State ── */
+.cr-dossier-empty-hint {
+  font-size: 11px;
+  color: #aaa59a;
+  margin: 0 0 12px;
+  font-style: italic;
+}
+.cr-dossier-empty-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ── Mobile adjustments for new components ── */
+@media (max-width: 767px) {
+  .cr-dossier-tab-group-label { font-size: 8px; padding: 0 3px; }
+  .cr-dossier-tab-icon { margin-right: 2px; font-size: 11px; }
+  .cr-dossier-snapshot { padding: 12px; }
+  .cr-dossier-snapshot-pct { font-size: 18px; }
+  .cr-dossier-snapshot-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .cr-dossier-essence-strip { flex-direction: column; }
+  .cr-dossier-essence-chip { min-width: unset; }
+  .cr-dossier-snapshot-actions { flex-direction: column; align-items: stretch; }
+}
