@@ -44,7 +44,7 @@ const STEP_LABELS = { brief: 'Brief', generate: 'Generate', read: 'Read', evalua
 const STEP_COLORS = { brief: '#64748b', generate: '#3b82f6', read: '#8b5cf6', evaluate: '#f59e0b', memory: '#14b8a6', registry: '#ec4899', write_back: '#22c55e' };
 
 const fetchJSON = async (url, opts = {}) => {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
   const res = await fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '', ...opts.headers } });
   return res.json();
 };

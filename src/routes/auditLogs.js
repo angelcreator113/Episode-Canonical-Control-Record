@@ -14,23 +14,38 @@ const router = express.Router();
 /**
  * GET /api/v1/audit-logs
  * Fetch audit logs with filtering
- * TODO: Re-enable admin authorization when auth is working
- * TODO: Set up audit_logs table properly and integrate with model
  */
 router.get('/', async (req, res) => {
   try {
-    const { limit = 100, offset = 0 } = req.query;
+    const { limit = 100, offset = 0, actionType, resourceType, startDate, endDate } = req.query;
+    const where = {};
 
-    // Return empty array for now - audit logs table needs to be set up
-    // This allows the endpoint to respond successfully
+    if (actionType) where.actionType = actionType;
+    if (resourceType) where.resourceType = resourceType;
+    if (startDate || endDate) {
+      where.timestamp = {};
+      if (startDate) where.timestamp[models.Sequelize.Op.gte] = new Date(startDate);
+      if (endDate) where.timestamp[models.Sequelize.Op.lte] = new Date(endDate);
+    }
+
+    const parsedLimit = Math.min(parseInt(limit) || 100, 500);
+    const parsedOffset = parseInt(offset) || 0;
+
+    const { count: total, rows: logs } = await models.ActivityLog.findAndCountAll({
+      where,
+      order: [['timestamp', 'DESC']],
+      limit: parsedLimit,
+      offset: parsedOffset,
+    });
+
     res.json({
       status: 'SUCCESS',
-      data: [],
+      data: logs,
       pagination: {
-        total: 0,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        pages: 0,
+        total,
+        limit: parsedLimit,
+        offset: parsedOffset,
+        pages: Math.ceil(total / parsedLimit),
       },
     });
   } catch (error) {

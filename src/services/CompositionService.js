@@ -5,6 +5,7 @@
 
 const { models } = require('../models');
 const _AssetService = require('./AssetService');
+const s3Service = require('./S3Service');
 const { v4: _uuidv4 } = require('uuid');
 const {
   shouldRequireIconHolder,
@@ -475,8 +476,17 @@ class CompositionService {
             // Save to S3 or local storage
             const s3Key = `thumbnails/${composition.id}/${format.name.toLowerCase()}.png`;
 
-            // TODO: Upload to S3 in production
-            // For now, just return the buffer
+            // Upload to S3 if configured
+            let s3Url = null;
+            const bucket = process.env.AWS_S3_BUCKET || 'episode-metadata-assets';
+            if (process.env.AWS_ACCESS_KEY_ID) {
+              try {
+                const s3Result = await s3Service.uploadFile(bucket, s3Key, thumbnailBuffer, { ContentType: 'image/png' });
+                s3Url = s3Result.Location || `https://${bucket}.s3.amazonaws.com/${s3Key}`;
+              } catch (s3Err) {
+                console.warn(`  ⚠️  S3 upload failed for ${format.name}:`, s3Err.message);
+              }
+            }
 
             thumbnails.push({
               format: format.name,
@@ -485,6 +495,7 @@ class CompositionService {
               buffer: thumbnailBuffer,
               size: thumbnailBuffer.length,
               s3_key: s3Key,
+              s3_url: s3Url,
             });
 
             console.log(`  ✅ ${format.name} complete (${thumbnailBuffer.length} bytes)`);

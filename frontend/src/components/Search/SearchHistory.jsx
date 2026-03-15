@@ -12,8 +12,8 @@ export default function SearchHistory({ onQueryClick }) {
 
   const loadHistory = async () => {
     try {
-      const token = localStorage.getItem('token');
-      
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+
       // Don't attempt to load if no token
       if (!token) {
         console.log('No auth token available, skipping history load');
@@ -54,8 +54,8 @@ export default function SearchHistory({ onQueryClick }) {
     if (!confirm('Clear all search history?')) return;
 
     try {
-      const token = localStorage.getItem('token');
-      
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+
       if (!token) {
         alert('Please log in to clear history');
         return;

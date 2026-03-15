@@ -40,6 +40,8 @@ const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
 const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
 const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
 const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
+const BeatGeneration = lazy(() => import('./pages/BeatGeneration'));
+const EpisodeReview = lazy(() => import('./pages/EpisodeReview'));
 const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
 const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
 const WorldStudio = lazy(() => import('./pages/WorldStudio'));
@@ -54,7 +56,7 @@ const BookToWriteRedirect = () => {
   const [loading, setLoading] = React.useState(true);
   const nav = useNavigate();
   React.useEffect(() => {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
     fetch(`/api/v1/storyteller/books/${id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
@@ -325,13 +327,8 @@ function AppContent() {
           
           {/* ===== ANIMATIC SYSTEM ROUTES ===== */}
           
-          {/* Beat Generation (Coming Soon) */}
-          <Route path="/episodes/:episodeId/beats" element={
-            <div className="page-wrapper">
-              <h1>Beat Generation</h1>
-              <p>Coming soon - Beat auto-generation interface</p>
-            </div>
-          } />
+          {/* Beat Generation */}
+          <Route path="/episodes/:episodeId/beats" element={<BeatGeneration />} />
           
           {/* Timeline Editor */}
           <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
@@ -371,13 +368,8 @@ function AppContent() {
           {/* Export */}
           <Route path="/episodes/:episodeId/export" element={<ExportPage />} />
           
-          {/* Review (Coming Soon) */}
-          <Route path="/episodes/:episodeId/review" element={
-            <div className="page-wrapper">
-              <h1>Review & Approve</h1>
-              <p>Coming soon - Review workflow</p>
-            </div>
-          } />
+          {/* Review & Approve */}
+          <Route path="/episodes/:episodeId/review" element={<EpisodeReview />} />
           
           {/* ===== MANAGEMENT ROUTES ===== */}
           

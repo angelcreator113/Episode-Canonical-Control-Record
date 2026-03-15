@@ -25,7 +25,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
     if (!showId) return;
     setLoading(true);
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
       const res = await fetch(`${API_BASE}/onboarding/status/${showId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

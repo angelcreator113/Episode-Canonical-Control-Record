@@ -15,6 +15,7 @@ const FormData = require('form-data');
 const fetch = require('node-fetch');
 const { models } = require('../models');
 const s3Service = require('../services/S3Service');
+const { authenticate } = require('../middleware/auth');
 
 /**
  * POST /api/v1/assets/:id/remove-background
@@ -22,12 +23,9 @@ const s3Service = require('../services/S3Service');
  *
  * @returns {Object} { status, message, data: { asset_id, url, original_url, cached? } }
  */
-router.post('/:id/remove-background', async (req, res) => {
+router.post('/:id/remove-background', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-
-    // TODO: Add authentication check
-    // if (!req.user) return res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
 
     const asset = await models.Asset.findByPk(id);
 
@@ -166,7 +164,7 @@ router.post('/:id/remove-background', async (req, res) => {
  * @body {Object} settings - Enhancement settings (skin_smooth, saturation, vibrance, contrast, sharpen)
  * @returns {Object} { status, message, data: { asset_id, url, original_url, settings, cached? } }
  */
-router.post('/:id/enhance', async (req, res) => {
+router.post('/:id/enhance', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -176,9 +174,6 @@ router.post('/:id/enhance', async (req, res) => {
       contrast = 10,
       sharpen = 20,
     } = req.body;
-
-    // TODO: Add authentication check
-    // if (!req.user) return res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
 
     const asset = await models.Asset.findByPk(id);
 
@@ -385,13 +380,10 @@ router.get('/:id/processing-status', async (req, res) => {
  * @body {string} reset_type - 'all', 'bg_removal', or 'enhancement'
  * @returns {Object} { status, message, data: { asset_id } }
  */
-router.post('/:id/reset-processing', async (req, res) => {
+router.post('/:id/reset-processing', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { reset_type = 'all' } = req.body;
-
-    // TODO: Add authentication check
-    // if (!req.user) return res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
 
     const asset = await models.Asset.findByPk(id);
 

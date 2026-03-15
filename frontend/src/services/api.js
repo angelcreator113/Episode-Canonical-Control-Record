@@ -23,17 +23,13 @@ apiClient.interceptors.request.use(
       return config;
     }
 
-    // In development, skip token to avoid expiration errors
-    if (import.meta.env.DEV) {
-      console.log('API Request (dev):', config.method.toUpperCase(), config.url);
-      return config;
-    }
-    
     const token = localStorage.getItem('authToken') || localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    console.log('API Request:', config.method.toUpperCase(), config.url); // Debug log
+    if (import.meta.env.DEV) {
+      console.log('API Request (dev):', config.method.toUpperCase(), config.url);
+    }
     return config;
   },
   (error) => {
