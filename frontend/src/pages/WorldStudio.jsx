@@ -158,7 +158,7 @@ function DepthPanel({ charDetail, charId, onRefresh }) {
     try {
       const r = await fetch(`${API}/character-depth/${charId}/generate`, { method: 'POST' });
       const d = await r.json();
-      if (d.depth) { setPreview(d.depth); }
+      if (d.proposed) { setPreview(d.proposed); }
       else showFlash(d.error || 'Generation failed', 'error');
     } catch (e) { showFlash(e.message, 'error'); }
     finally { setGenerating(false); }
@@ -169,7 +169,7 @@ function DepthPanel({ charDetail, charId, onRefresh }) {
     try {
       const r = await fetch(`${API}/character-depth/${charId}/generate/${dim}`, { method: 'POST' });
       const d = await r.json();
-      if (d.depth) setPreview(d.depth);
+      if (d.proposed) setPreview(prev => ({ ...prev, ...d.proposed }));
       else showFlash(d.error || 'Generation failed', 'error');
     } catch (e) { showFlash(e.message, 'error'); }
     finally { setGenDim(null); }
@@ -181,7 +181,7 @@ function DepthPanel({ charDetail, charId, onRefresh }) {
     try {
       const r = await fetch(`${API}/character-depth/${charId}/confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ depth: preview }),
+        body: JSON.stringify({ proposed: preview }),
       });
       const d = await r.json();
       if (d.success) {
