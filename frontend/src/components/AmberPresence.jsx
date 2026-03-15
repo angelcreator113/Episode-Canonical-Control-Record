@@ -100,7 +100,8 @@ export default function AmberPresence({ page = 'dashboard', className = '' }) {
       cancelled = true;
       clearTimeout(timerRef.current);
     };
-  }, [page]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, startTyping]);
 
   // ── Voice — ElevenLabs with browser TTS fallback ────────────────────────────
   async function speakGreeting(text) {

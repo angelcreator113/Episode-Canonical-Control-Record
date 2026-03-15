@@ -44,16 +44,28 @@ const TYPES = {
   coworker:        'Coworker',
 };
 
-/* ── Detail tabs ─────────────────────────────────────────────────────── */
-const DETAIL_TABS = [
-  { key: 'overview',      label: 'Overview' },
-  { key: 'desire',        label: 'Desire' },
-  { key: 'relationships', label: 'Relationships' },
-  { key: 'scenes',        label: 'Scenes' },
-  { key: 'depth',         label: 'Depth' },
-  { key: 'demographics',  label: 'Demographics' },
-  { key: 'evolution',     label: 'Evolution' },
+/* ── Detail tabs — grouped into sections ──────────────────────────────── */
+const DETAIL_TAB_GROUPS = [
+  { group: null, tabs: [
+    { key: 'overview', label: 'Overview', icon: '◈' },
+  ]},
+  { group: 'Identity', tabs: [
+    { key: 'essence',   label: 'Essence',   icon: '✦' },
+    { key: 'aesthetic',  label: 'Aesthetic', icon: '◆' },
+    { key: 'voice',      label: 'Voice',    icon: '¶' },
+  ]},
+  { group: 'Story', tabs: [
+    { key: 'desire',        label: 'Desire',        icon: '♡' },
+    { key: 'relationships', label: 'Relationships', icon: '⇄' },
+    { key: 'scenes',        label: 'Scenes',        icon: '▶' },
+  ]},
+  { group: 'Data', tabs: [
+    { key: 'depth',        label: 'Depth',        icon: '◉' },
+    { key: 'demographics', label: 'Demographics', icon: '▤' },
+    { key: 'evolution',    label: 'Evolution',    icon: '↗' },
+  ]},
 ];
+const DETAIL_TABS = DETAIL_TAB_GROUPS.flatMap(g => g.tabs);
 
 /* ── Fidelity pattern labels ───────────────────────────────────────── */
 const FIDELITY_LABELS = {
@@ -80,6 +92,29 @@ const DEPTH_DIMS = [
   { key: 'cosmology',   label: 'Operative Cosmology',        fields: ['de_operative_cosmology','de_stated_religion','de_cosmology_conflict','de_meaning_making_style'], color: 'gold' },
   { key: 'foreclosed',  label: 'Foreclosed Possibility',     fields: ['de_foreclosed_possibilities','de_foreclosure_origins','de_foreclosure_visibility','de_crack_conditions'], color: 'pink', authorOnly: true },
 ];
+
+/* ── Completeness tracking ─────────────────────────────────────────── */
+const COMPLETENESS_SECTIONS = {
+  core:      { label: 'Core',       fields: ['name','occupation','character_type','aesthetic','surface_want','real_want'] },
+  essence:   { label: 'Essence',    fields: ['character_archetype','emotional_baseline','core_fear','at_their_best','at_their_worst'] },
+  aesthetic: { label: 'Aesthetic',  fields: ['color_palette','glam_energy','signature_silhouette','signature_accessories'] },
+  voice:     { label: 'Voice',      fields: ['speech_pattern','vocabulary_tone','catchphrases','internal_monologue_style'] },
+  desire:    { label: 'Desire',     fields: ['attracted_to','how_they_love','desire_they_wont_admit','sexuality'] },
+  social:    { label: 'Social',     fields: ['relationship_status','moral_code','fidelity_pattern','dynamic'] },
+};
+
+function getCompleteness(char) {
+  if (!char) return { pct: 0, sections: {} };
+  let filled = 0, total = 0;
+  const sections = {};
+  for (const [key, sec] of Object.entries(COMPLETENESS_SECTIONS)) {
+    const secFilled = sec.fields.filter(f => char[f] && String(char[f]).trim()).length;
+    sections[key] = { filled: secFilled, total: sec.fields.length, label: sec.label };
+    filled += secFilled;
+    total += sec.fields.length;
+  }
+  return { pct: total ? Math.round((filled / total) * 100) : 0, sections };
+}
 
 /* ── Small helpers ──────────────────────────────────────────────────── */
 function getInitials(name) {
@@ -136,6 +171,31 @@ function FieldCard({ label, value, dimmed = false }) {
 
 function SectionLabel({ children, color = '' }) {
   return <div className={`ws4-section-label ${color}`}>{children}</div>;
+}
+
+function CompletenessBar({ pct, size = 'md' }) {
+  const color = pct >= 80 ? 'var(--ws4-green)' : pct >= 50 ? 'var(--ws4-gold)' : 'var(--ws4-pink)';
+  return (
+    <div className={`ws4-completeness ws4-completeness-${size}`}>
+      <div className="ws4-completeness-track">
+        <div className="ws4-completeness-fill" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <span className="ws4-completeness-label">{pct}%</span>
+    </div>
+  );
+}
+
+function CollapsibleSection({ title, color = '', defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`ws4-collapsible ${open ? 'ws4-collapsible-open' : ''}`}>
+      <button className={`ws4-collapsible-header ${color}`} onClick={() => setOpen(o => !o)}>
+        <span className="ws4-collapsible-title">{title}</span>
+        <span className="ws4-collapsible-arrow">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && <div className="ws4-collapsible-body">{children}</div>}
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -779,7 +839,11 @@ export default function WorldStudio() {
   /* ── Derived ───────────────────────────────────────────────────────── */
   const filtered = characters.filter(c => {
     if (charFilter !== 'all' && c.character_type !== charFilter) return false;
-    if (charSearch && !(c.name || '').toLowerCase().includes(charSearch.toLowerCase())) return false;
+    if (charSearch) {
+      const q = charSearch.toLowerCase();
+      const fields = [c.name, c.occupation, c.character_archetype, c.aesthetic, c.glam_energy, c.fidelity_pattern?.replace(/_/g, ' ')];
+      if (!fields.some(f => (f || '').toLowerCase().includes(q))) return false;
+    }
     return true;
   });
   const uniqueTypes = [...new Set(characters.map(c => c.character_type).filter(Boolean))];
@@ -800,75 +864,99 @@ export default function WorldStudio() {
 
       {/* ── PAGE HEADER ─────────────────────────────────────────────── */}
       <div className="ws4-page-header">
+        {/* Row 1: Title + World Switcher + Primary Action */}
         <div className="ws4-header-row">
           <div className="ws4-header-title-block">
             <div className="ws4-breadcrumb">
               <span className="ws4-breadcrumb-link" onClick={() => navigate('/')}>Home</span>
+              <span className="ws4-breadcrumb-sep">/</span>
+              <span className="ws4-breadcrumb-link" onClick={() => navigate('/universe')}>Universe</span>
               <span className="ws4-breadcrumb-sep">/</span>
               <span className="ws4-breadcrumb-current">World Studio</span>
             </div>
             <h1 className="ws4-page-title">World Studio</h1>
           </div>
 
-          {/* Quick-nav to related pages */}
-          <nav className="ws4-page-tabs">
+          <div className="ws4-world-switcher">
+            {WORLD_OPTIONS.map(w => (
+              <button
+                key={w.tag}
+                className={`ws4-world-btn ${worldTag === w.tag ? 'ws4-world-btn-active' : ''}`}
+                onClick={() => { setWorldTag(w.tag); setSelectedChar(null); setCharDetail(null); setCharFilter('all'); }}
+              >
+                <span>{w.icon}</span> {w.label}
+              </button>
+            ))}
+            <button
+              className={`ws4-world-btn ${worldTag === 'all' ? 'ws4-world-btn-active' : ''}`}
+              onClick={() => { setWorldTag('all'); setSelectedChar(null); setCharDetail(null); setCharFilter('all'); }}
+            >
+              <span>⊞</span> All
+            </button>
+          </div>
+
+          <div className="ws4-header-actions">
+            {worldTag !== 'all' && (
+              <button className="ws4-btn ws4-btn-primary" onClick={generatePreview} disabled={generating}>
+                {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: Quick-nav + Secondary Actions */}
+        <div className="ws4-header-row-2">
+          <nav className="ws4-quick-nav">
             {[
-              { label: 'Book Scene Studio', icon: '🔥', route: '/scene-studio' },
-              { label: 'The Feed',       icon: '📱', route: '/feed' },
-              { label: 'Relationships',  icon: '🔗', route: '/relationships' },
+              { label: 'Universe',     icon: '◈', route: '/universe' },
+              { label: 'Scene Studio', icon: '🔥', route: '/scene-studio' },
+              { label: 'Feed',         icon: '📱', route: '/feed' },
+              { label: 'Relationships', icon: '🔗', route: '/relationships' },
+              { label: 'Registry',     icon: '📋', route: '/character-registry' },
             ].map(t => (
-              <button key={t.route} className="ws4-page-tab" onClick={() => navigate(t.route)}>
-                <span className="ws4-page-tab-icon">{t.icon}</span>
+              <button key={t.route} className="ws4-quick-nav-btn" onClick={() => navigate(t.route)}>
+                <span className="ws4-quick-nav-icon">{t.icon}</span>
                 {t.label}
               </button>
             ))}
           </nav>
-
-          <div className="ws4-header-actions">
-              {/* World switcher — now lives here, inside Characters tab */}
-              <div className="ws4-world-switcher">
-                {WORLD_OPTIONS.map(w => (
-                  <button
-                    key={w.tag}
-                    className={`ws4-world-btn ${worldTag === w.tag ? 'ws4-world-btn-active' : ''}`}
-                    onClick={() => { setWorldTag(w.tag); setSelectedChar(null); setCharDetail(null); setCharFilter('all'); }}
-                  >
-                    <span>{w.icon}</span> {w.label}
-                  </button>
-                ))}
-                <button
-                  className={`ws4-world-btn ${worldTag === 'all' ? 'ws4-world-btn-active' : ''}`}
-                  onClick={() => { setWorldTag('all'); setSelectedChar(null); setCharDetail(null); setCharFilter('all'); }}
-                >
-                  <span>⊞</span> All
-                </button>
-              </div>
-              {draftCount > 0 && (
-                <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={bulkActivate} disabled={bulkActivating}>
-                  {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
-                </button>
-              )}
-              {worldTag !== 'all' && characters.length > 0 && (
-                <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={async () => {
-                  try {
-                    const resp = await fetch('/api/world/characters/bulk-re-sync', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ world_tag: worldTag }),
-                    });
-                    const data = await resp.json();
-                    flash(`Synced ${data.synced}/${data.total} to registry`);
-                  } catch (e) { flash(`Sync error: ${e.message}`); }
-                }}>
-                  🔄 Sync All to Registry
-                </button>
-              )}
-              {worldTag !== 'all' && (
-                <button className="ws4-btn ws4-btn-primary" onClick={generatePreview} disabled={generating}>
-                  {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
-                </button>
-              )}
-            </div>
+          <div className="ws4-header-secondary">
+            {draftCount > 0 && (
+              <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={bulkActivate} disabled={bulkActivating}>
+                {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
+              </button>
+            )}
+            {worldTag !== 'all' && characters.length > 0 && (
+              <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={async () => {
+                try {
+                  const resp = await fetch('/api/world/characters/bulk-re-sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ world_tag: worldTag }),
+                  });
+                  const data = await resp.json();
+                  flash(`Synced ${data.synced}/${data.total} to registry`);
+                } catch (e) { flash(`Sync error: ${e.message}`); }
+              }}>
+                Sync All
+              </button>
+            )}
+            {worldTag !== 'all' && characters.length > 1 && (
+              <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={async () => {
+                try {
+                  const resp = await fetch('/api/world/characters/seed-cross-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ world_tag: worldTag }),
+                  });
+                  const data = await resp.json();
+                  flash(`Seeded ${data.seeded} cross-batch relationships (${data.total_candidates} candidates)`);
+                } catch (e) { flash(`Seed error: ${e.message}`, 'error'); }
+              }}>
+                Seed Links
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -936,27 +1024,38 @@ export default function WorldStudio() {
                   <div className="ws4-sidebar-empty-icon">✦</div>
                   <div>No characters yet</div>
                 </div>
-              ) : paged.map(c => (
-                <div
-                  key={c.id}
-                  className={`ws4-char-item ${selectedChar === c.id ? 'ws4-char-item-active' : ''} ${c.is_alive === false ? 'ws4-char-item-deceased' : ''}`}
-                  onClick={() => { setSelectedChar(c.id); setDetailTab('overview'); }}
-                >
-                  <AvatarCircle name={c.name} size="sm" />
-                  <div className="ws4-char-item-info">
-                    <div className="ws4-char-item-name">
-                      {c.is_alive === false && <span className="ws4-dagger">†</span>}
-                      {c.name}
-                      {c.intimate_eligible && <span className="ws4-heart">♡</span>}
-                    </div>
-                    <div className="ws4-char-item-sub">{c.occupation || c.character_type?.replace(/_/g, ' ')}</div>
-                    <div className="ws4-char-item-badges">
-                      <TypeBadge type={c.character_type} />
-                      <span className={`ws4-status-dot ws4-status-dot-${c.status}`} />
+              ) : paged.map(c => {
+                const comp = getCompleteness(c);
+                const relCount = (() => {
+                  try {
+                    const g = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []);
+                    return g.length;
+                  } catch { return 0; }
+                })();
+                return (
+                  <div
+                    key={c.id}
+                    className={`ws4-char-item ${selectedChar === c.id ? 'ws4-char-item-active' : ''} ${c.is_alive === false ? 'ws4-char-item-deceased' : ''}`}
+                    onClick={() => { setSelectedChar(c.id); setDetailTab('overview'); }}
+                  >
+                    <AvatarCircle name={c.name} size="sm" />
+                    <div className="ws4-char-item-info">
+                      <div className="ws4-char-item-name">
+                        {c.is_alive === false && <span className="ws4-dagger">†</span>}
+                        {c.name}
+                        {c.intimate_eligible && <span className="ws4-heart">♡</span>}
+                      </div>
+                      <div className="ws4-char-item-sub">{c.occupation || c.character_type?.replace(/_/g, ' ')}</div>
+                      <div className="ws4-char-item-badges">
+                        <TypeBadge type={c.character_type} />
+                        <span className={`ws4-status-dot ws4-status-dot-${c.status}`} />
+                        {relCount > 0 && <span className="ws4-char-item-rel-count">{relCount}</span>}
+                      </div>
+                      <CompletenessBar pct={comp.pct} size="sm" />
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Pagination */}
@@ -1000,6 +1099,89 @@ export default function WorldStudio() {
               <div className="ws4-dashboard-heading">
                 {worldTag === 'all' ? '⊞ All Worlds' : `${curWorld?.icon} ${curWorld?.label}`} — Ecosystem Overview
               </div>
+
+              {/* Ecosystem Health Summary */}
+              {(() => {
+                const avgComp = characters.length
+                  ? Math.round(characters.reduce((s, c) => s + getCompleteness(c).pct, 0) / characters.length)
+                  : 0;
+                const needsWork = characters.filter(c => getCompleteness(c).pct < 50);
+                const withRels = characters.filter(c => {
+                  try {
+                    const g = typeof c.relationship_graph === 'string' ? JSON.parse(c.relationship_graph || '[]') : (c.relationship_graph || []);
+                    return g.length > 0;
+                  } catch { return false; }
+                });
+                const intimate = characters.filter(c => c.intimate_eligible);
+                // Section-level breakdown
+                const sectionAvgs = {};
+                for (const key of Object.keys(COMPLETENESS_SECTIONS)) {
+                  const sums = characters.reduce((s, c) => {
+                    const sec = getCompleteness(c).sections[key];
+                    return s + (sec ? sec.filled / sec.total : 0);
+                  }, 0);
+                  sectionAvgs[key] = characters.length ? Math.round((sums / characters.length) * 100) : 0;
+                }
+                return (
+                  <div className="ws4-health-grid">
+                    <div className="ws4-health-card ws4-health-card-main">
+                      <div className="ws4-health-stat">{avgComp}%</div>
+                      <div className="ws4-health-label">Avg Completeness</div>
+                      <CompletenessBar pct={avgComp} />
+                    </div>
+                    <div className="ws4-health-card">
+                      <div className="ws4-health-stat">{withRels.length}/{characters.length}</div>
+                      <div className="ws4-health-label">Have Relationships</div>
+                    </div>
+                    <div className="ws4-health-card">
+                      <div className="ws4-health-stat">{intimate.length}</div>
+                      <div className="ws4-health-label">Intimate Eligible</div>
+                    </div>
+                    <div className="ws4-health-card">
+                      <div className="ws4-health-stat ws4-health-warn">{needsWork.length}</div>
+                      <div className="ws4-health-label">Need Work (&lt;50%)</div>
+                    </div>
+                    <div className="ws4-health-sections">
+                      {Object.entries(sectionAvgs).map(([key, avg]) => (
+                        <div key={key} className="ws4-health-section-row">
+                          <span className="ws4-health-section-name">{COMPLETENESS_SECTIONS[key].label}</span>
+                          <CompletenessBar pct={avg} size="sm" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Characters needing attention */}
+              {(() => {
+                const lowChars = characters
+                  .map(c => ({ ...c, _comp: getCompleteness(c) }))
+                  .filter(c => c._comp.pct < 60)
+                  .sort((a, b) => a._comp.pct - b._comp.pct)
+                  .slice(0, 5);
+                return lowChars.length > 0 ? (
+                  <div className="ws4-attention-list">
+                    <div className="ws4-dash-label">Needs Attention</div>
+                    {lowChars.map(c => (
+                      <div key={c.id} className="ws4-attention-item" onClick={() => { setSelectedChar(c.id); setDetailTab('overview'); }}>
+                        <AvatarCircle name={c.name} size="sm" />
+                        <div className="ws4-attention-info">
+                          <span className="ws4-attention-name">{c.name}</span>
+                          <span className="ws4-attention-missing">
+                            {Object.entries(c._comp.sections)
+                              .filter(([, s]) => s.filled < s.total)
+                              .map(([, s]) => s.label)
+                              .join(', ')}
+                          </span>
+                        </div>
+                        <CompletenessBar pct={c._comp.pct} size="sm" />
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+
               {/* Saved Previews — resume generation you left */}
               {savedPreviews.length > 0 && (
                 <div className="ws4-saved-previews">
@@ -1133,6 +1315,7 @@ export default function WorldStudio() {
                         <Badge variant="species">{charDetail.species}</Badge>
                       )}
                     </div>
+                    <CompletenessBar pct={getCompleteness(charDetail).pct} />
                   </div>
                 </div>
 
@@ -1183,15 +1366,22 @@ export default function WorldStudio() {
               {/* Tabs */}
               {!editMode && (
                 <>
-                  <div className="ws4-tabs">
-                    {DETAIL_TABS.map(t => (
-                      <button
-                        key={t.key}
-                        className={`ws4-tab ${detailTab === t.key ? 'ws4-tab-active' : ''}`}
-                        onClick={() => setDetailTab(t.key)}
-                      >
-                        {t.label}
-                      </button>
+                  <div className="ws4-tabs ws4-tabs-grouped">
+                    {DETAIL_TAB_GROUPS.map((g, gi) => (
+                      <React.Fragment key={gi}>
+                        {g.group && <span className="ws4-tab-group-label">{g.group}</span>}
+                        {g.tabs.map(t => (
+                          <button
+                            key={t.key}
+                            className={`ws4-tab ${detailTab === t.key ? 'ws4-tab-active' : ''}`}
+                            onClick={() => setDetailTab(t.key)}
+                          >
+                            <span className="ws4-tab-icon">{t.icon}</span>
+                            {t.label}
+                          </button>
+                        ))}
+                        {gi < DETAIL_TAB_GROUPS.length - 1 && <span className="ws4-tab-divider" />}
+                      </React.Fragment>
                     ))}
                   </div>
 
@@ -1289,11 +1479,45 @@ export default function WorldStudio() {
                         )}
 
                         {charDetail.arc_role && <FieldCard label="Arc Role" value={charDetail.arc_role} />}
+                        {charDetail.career_goal && <FieldCard label="Career Goal" value={charDetail.career_goal} />}
 
-                        {/* Essence Profile */}
-                        {(charDetail.character_archetype || charDetail.emotional_baseline || charDetail.core_fear || charDetail.at_their_best || charDetail.at_their_worst) && (
+                        <div className="ws4-overview-links">
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={() => navigate('/relationships')}>
+                            🔗 Relationship Map
+                          </button>
+                          {charDetail.registry_character_id && (
+                            <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                              onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}>
+                              📋 Registry Entry
+                            </button>
+                          )}
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                            onClick={async () => {
+                              try {
+                                const resp = await fetch(`/api/world/characters/${charDetail.id}/re-sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                                const data = await resp.json();
+                                if (data.synced) { flash('Registry synced'); } else { flash(`Sync failed: ${data.error}`); }
+                              } catch (e) { flash(`Sync error: ${e.message}`); }
+                            }}>
+                            🔄 Sync to Registry
+                          </button>
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                            onClick={() => window.open(`/api/world/characters/${charDetail.id}/export`, '_blank')}>
+                            📥 Export Dossier
+                          </button>
+                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
+                            onClick={() => navigate(`/universe?highlight_character=${charDetail.name}`)}>
+                            ◈ View in Universe
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── ESSENCE ──────────────────────────────────── */}
+                    {detailTab === 'essence' && (
+                      <div className="ws4-overview">
+                        {(charDetail.character_archetype || charDetail.emotional_baseline || charDetail.core_fear) ? (
                           <>
-                            <SectionLabel color="gold">Essence</SectionLabel>
                             <div className="ws4-moral-grid">
                               {charDetail.character_archetype && (
                                 <div className="ws4-moral-card">
@@ -1316,13 +1540,20 @@ export default function WorldStudio() {
                             </div>
                             {charDetail.at_their_best && <FieldCard label="At Their Best" value={charDetail.at_their_best} />}
                             {charDetail.at_their_worst && <FieldCard label="At Their Worst" value={charDetail.at_their_worst} dimmed />}
+                            {charDetail.signature && <FieldCard label="Signature Trait" value={charDetail.signature} />}
                           </>
+                        ) : (
+                          <div className="ws4-tab-empty">No essence data yet. Use 🧠 Deepen to generate.</div>
                         )}
+                      </div>
+                    )}
 
-                        {/* Aesthetic DNA */}
-                        {(charDetail.color_palette || charDetail.signature_silhouette || charDetail.signature_accessories || charDetail.glam_energy) && (
+                    {/* ── AESTHETIC ────────────────────────────────── */}
+                    {detailTab === 'aesthetic' && (
+                      <div className="ws4-overview">
+                        {(charDetail.aesthetic || charDetail.color_palette || charDetail.glam_energy) ? (
                           <>
-                            <SectionLabel color="rose">Aesthetic DNA</SectionLabel>
+                            {charDetail.aesthetic && <FieldCard label="Aesthetic" value={charDetail.aesthetic} />}
                             <div className="ws4-moral-grid">
                               {charDetail.glam_energy && (
                                 <div className="ws4-moral-card">
@@ -1340,48 +1571,25 @@ export default function WorldStudio() {
                             {charDetail.signature_silhouette && <FieldCard label="Signature Silhouette" value={charDetail.signature_silhouette} />}
                             {charDetail.signature_accessories && <FieldCard label="Signature Accessories" value={charDetail.signature_accessories} />}
                           </>
+                        ) : (
+                          <div className="ws4-tab-empty">No aesthetic data yet. Use 🧠 Deepen to generate.</div>
                         )}
+                      </div>
+                    )}
 
-                        {/* Voice Signature */}
-                        {(charDetail.speech_pattern || charDetail.vocabulary_tone || charDetail.catchphrases || charDetail.internal_monologue_style) && (
+                    {/* ── VOICE ────────────────────────────────────── */}
+                    {detailTab === 'voice' && (
+                      <div className="ws4-overview">
+                        {(charDetail.speech_pattern || charDetail.vocabulary_tone || charDetail.catchphrases) ? (
                           <>
-                            <SectionLabel>Voice</SectionLabel>
                             {charDetail.speech_pattern && <FieldCard label="Speech Pattern" value={charDetail.speech_pattern} />}
                             {charDetail.vocabulary_tone && <FieldCard label="Vocabulary Tone" value={charDetail.vocabulary_tone} />}
                             {charDetail.catchphrases && <FieldCard label="Catchphrases" value={charDetail.catchphrases} />}
                             {charDetail.internal_monologue_style && <FieldCard label="Internal Monologue" value={charDetail.internal_monologue_style} dimmed />}
                           </>
+                        ) : (
+                          <div className="ws4-tab-empty">No voice data yet. Use 🧠 Deepen to generate.</div>
                         )}
-
-                        {/* Career */}
-                        {charDetail.career_goal && (
-                          <>
-                            <SectionLabel color="gold">Career</SectionLabel>
-                            <FieldCard label="Career Goal" value={charDetail.career_goal} />
-                          </>
-                        )}
-
-                        <div className="ws4-overview-links">
-                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={() => navigate('/relationships')}>
-                            🔗 Relationship Map
-                          </button>
-                          {charDetail.registry_character_id && (
-                            <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
-                              onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}>
-                              📋 Registry Entry
-                            </button>
-                          )}
-                          <button className="ws4-btn ws4-btn-outline ws4-btn-sm"
-                            onClick={async () => {
-                              try {
-                                const resp = await fetch(`/api/world/characters/${charDetail.id}/re-sync`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-                                const data = await resp.json();
-                                if (data.synced) { flash('Registry synced'); } else { flash(`Sync failed: ${data.error}`); }
-                              } catch (e) { flash(`Sync error: ${e.message}`); }
-                            }}>
-                            🔄 Sync to Registry
-                          </button>
-                        </div>
                       </div>
                     )}
 
@@ -1585,142 +1793,191 @@ export default function WorldStudio() {
               {/* Edit Form */}
               {editMode && (
                 <div className="ws4-edit-form">
-                  {[
-                    { key: 'name',                     label: 'Name' },
-                    { key: 'age_range',                label: 'Age Range' },
-                    { key: 'occupation',               label: 'Occupation' },
-                    { key: 'world_location',           label: 'Location' },
-                    { key: 'aesthetic',                label: 'Aesthetic',                          long: true },
-                    { key: 'surface_want',             label: 'Surface Want',                       long: true },
-                    { key: 'real_want',                label: 'Real Want',                          long: true },
-                    { key: 'what_they_want_from_lala', label: `Want From ${curWorld.protagonist}`,  long: true },
-                    { key: 'how_they_meet',            label: 'How They Meet',                      long: true },
-                    { key: 'dynamic',                  label: 'Dynamic',                            long: true },
-                    { key: 'intimate_style',           label: 'Intimate Style',                     long: true },
-                    { key: 'attracted_to',             label: 'Attracted To',                       long: true },
-                    { key: 'how_they_love',            label: 'How They Love',                      long: true },
-                    { key: 'desire_they_wont_admit',   label: "What They Won't Admit",               long: true },
-                    { key: 'origin_story',             label: 'Origin Story',                       long: true },
-                    { key: 'public_persona',           label: 'Public Persona',                     long: true },
-                    { key: 'private_reality',          label: 'Private Reality',                    long: true },
-                    { key: 'arc_role',                 label: 'Arc Role',                           long: true },
-                    { key: 'intimate_dynamic',         label: 'Intimate Dynamic',                   long: true },
-                    { key: 'what_lala_feels',          label: `What ${curWorld.protagonist} Feels`,  long: true },
-                    { key: 'moral_code',               label: 'Moral Code',                         long: true },
-                    { key: 'exit_reason',              label: 'Exit Reason',                        long: true },
-                    // Dossier-aligned essence fields
-                    { key: 'core_fear',                label: 'Core Fear',                          long: true },
-                    { key: 'character_archetype',      label: 'Archetype' },
-                    { key: 'emotional_baseline',       label: 'Emotional Baseline' },
-                    { key: 'at_their_best',            label: 'At Their Best',                      long: true },
-                    { key: 'at_their_worst',           label: 'At Their Worst',                     long: true },
-                    // Aesthetic DNA
-                    { key: 'color_palette',            label: 'Color Palette' },
-                    { key: 'signature_silhouette',     label: 'Signature Silhouette',               long: true },
-                    { key: 'signature_accessories',    label: 'Signature Accessories',              long: true },
-                    { key: 'glam_energy',              label: 'Glam Energy' },
-                    // Voice
-                    { key: 'speech_pattern',           label: 'Speech Pattern',                     long: true },
-                    { key: 'vocabulary_tone',          label: 'Vocabulary Tone',                    long: true },
-                    { key: 'catchphrases',             label: 'Catchphrases',                       long: true },
-                    { key: 'internal_monologue_style', label: 'Internal Monologue Style',           long: true },
-                    // Career
-                    { key: 'career_goal',              label: 'Career Goal',                        long: true },
-                  ].map(f => (
-                    <div key={f.key} className="ws4-edit-row">
-                      <label className="ws4-edit-label">{f.label}</label>
-                      {f.long
-                        ? <textarea className="ws4-textarea" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
-                        : <input className="ws4-input" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
-                      }
+                  <CollapsibleSection title="Core Info" color="pink" defaultOpen={true}>
+                    {[
+                      { key: 'name', label: 'Name' },
+                      { key: 'age_range', label: 'Age Range' },
+                      { key: 'occupation', label: 'Occupation' },
+                      { key: 'world_location', label: 'Location' },
+                      { key: 'aesthetic', label: 'Aesthetic', long: true },
+                      { key: 'surface_want', label: 'Surface Want', long: true },
+                      { key: 'real_want', label: 'Real Want', long: true },
+                      { key: 'what_they_want_from_lala', label: `Want From ${curWorld.protagonist}`, long: true },
+                      { key: 'how_they_meet', label: 'How They Meet', long: true },
+                      { key: 'dynamic', label: 'Dynamic', long: true },
+                    ].map(f => (
+                      <div key={f.key} className="ws4-edit-row">
+                        <label className="ws4-edit-label">{f.label}</label>
+                        {f.long
+                          ? <textarea className="ws4-textarea" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                          : <input className="ws4-input" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                        }
+                      </div>
+                    ))}
+                  </CollapsibleSection>
+
+                  <CollapsibleSection title="Essence" color="lav" defaultOpen={false}>
+                    {[
+                      { key: 'character_archetype', label: 'Archetype' },
+                      { key: 'emotional_baseline', label: 'Emotional Baseline' },
+                      { key: 'core_fear', label: 'Core Fear', long: true },
+                      { key: 'at_their_best', label: 'At Their Best', long: true },
+                      { key: 'at_their_worst', label: 'At Their Worst', long: true },
+                      { key: 'origin_story', label: 'Origin Story', long: true },
+                      { key: 'public_persona', label: 'Public Persona', long: true },
+                      { key: 'private_reality', label: 'Private Reality', long: true },
+                      { key: 'arc_role', label: 'Arc Role', long: true },
+                      { key: 'career_goal', label: 'Career Goal', long: true },
+                    ].map(f => (
+                      <div key={f.key} className="ws4-edit-row">
+                        <label className="ws4-edit-label">{f.label}</label>
+                        {f.long
+                          ? <textarea className="ws4-textarea" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                          : <input className="ws4-input" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                        }
+                      </div>
+                    ))}
+                  </CollapsibleSection>
+
+                  <CollapsibleSection title="Aesthetic DNA" color="blue" defaultOpen={false}>
+                    {[
+                      { key: 'color_palette', label: 'Color Palette' },
+                      { key: 'glam_energy', label: 'Glam Energy' },
+                      { key: 'signature_silhouette', label: 'Signature Silhouette', long: true },
+                      { key: 'signature_accessories', label: 'Signature Accessories', long: true },
+                    ].map(f => (
+                      <div key={f.key} className="ws4-edit-row">
+                        <label className="ws4-edit-label">{f.label}</label>
+                        {f.long
+                          ? <textarea className="ws4-textarea" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                          : <input className="ws4-input" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                        }
+                      </div>
+                    ))}
+                  </CollapsibleSection>
+
+                  <CollapsibleSection title="Voice" color="lav" defaultOpen={false}>
+                    {[
+                      { key: 'speech_pattern', label: 'Speech Pattern', long: true },
+                      { key: 'vocabulary_tone', label: 'Vocabulary Tone', long: true },
+                      { key: 'catchphrases', label: 'Catchphrases', long: true },
+                      { key: 'internal_monologue_style', label: 'Internal Monologue Style', long: true },
+                    ].map(f => (
+                      <div key={f.key} className="ws4-edit-row">
+                        <label className="ws4-edit-label">{f.label}</label>
+                        <textarea className="ws4-textarea" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                      </div>
+                    ))}
+                  </CollapsibleSection>
+
+                  <CollapsibleSection title="Desire & Intimacy" color="pink" defaultOpen={false}>
+                    {[
+                      { key: 'attracted_to', label: 'Attracted To', long: true },
+                      { key: 'how_they_love', label: 'How They Love', long: true },
+                      { key: 'desire_they_wont_admit', label: "What They Won't Admit", long: true },
+                      { key: 'intimate_style', label: 'Intimate Style', long: true },
+                      { key: 'intimate_dynamic', label: 'Intimate Dynamic', long: true },
+                      { key: 'what_lala_feels', label: `What ${curWorld.protagonist} Feels`, long: true },
+                    ].map(f => (
+                      <div key={f.key} className="ws4-edit-row">
+                        <label className="ws4-edit-label">{f.label}</label>
+                        <textarea className="ws4-textarea" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                      </div>
+                    ))}
+                    <div className="ws4-edit-row">
+                      <label className="ws4-checkbox-label">
+                        <input type="checkbox" checked={editForm.intimate_eligible || false} onChange={e => setEditForm(p => ({ ...p, intimate_eligible: e.target.checked }))} />
+                        Intimate Eligible
+                      </label>
                     </div>
-                  ))}
+                  </CollapsibleSection>
 
-                  <div className="ws4-edit-section">Moral & Relationship</div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Sexuality</label>
-                    <select className="ws4-select" value={editForm.sexuality || ''} onChange={e => setEditForm(p => ({ ...p, sexuality: e.target.value }))}>
-                      <option value="">—</option>
-                      {['straight','gay','lesbian','bisexual','pansexual','queer','fluid'].map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Relationship Status</label>
-                    <select className="ws4-select" value={editForm.relationship_status || ''} onChange={e => setEditForm(p => ({ ...p, relationship_status: e.target.value }))}>
-                      <option value="">—</option>
-                      {['single','dating','engaged','married','divorced','separated','its_complicated'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-                    </select>
-                  </div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Committed To</label>
-                    <input className="ws4-input" value={editForm.committed_to || ''} onChange={e => setEditForm(p => ({ ...p, committed_to: e.target.value }))} placeholder="Name of person they're committed to" />
-                  </div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Fidelity Pattern</label>
-                    <select className="ws4-select" value={editForm.fidelity_pattern || ''} onChange={e => setEditForm(p => ({ ...p, fidelity_pattern: e.target.value }))}>
-                      <option value="">—</option>
-                      {Object.entries(FIDELITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                  </div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Tension Type</label>
-                    <select className="ws4-select" value={editForm.tension_type || ''} onChange={e => setEditForm(p => ({ ...p, tension_type: e.target.value }))}>
-                      <option value="">—</option>
-                      {['romantic','professional','creative','power','unspoken','moral','fidelity','temptation','betrayal','guilt'].map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-checkbox-label">
-                      <input type="checkbox" checked={editForm.intimate_eligible || false} onChange={e => setEditForm(p => ({ ...p, intimate_eligible: e.target.checked }))} />
-                      Intimate Eligible
-                    </label>
-                  </div>
+                  <CollapsibleSection title="Moral & Relationship" color="gold" defaultOpen={false}>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Sexuality</label>
+                      <select className="ws4-select" value={editForm.sexuality || ''} onChange={e => setEditForm(p => ({ ...p, sexuality: e.target.value }))}>
+                        <option value="">—</option>
+                        {['straight','gay','lesbian','bisexual','pansexual','queer','fluid'].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Relationship Status</label>
+                      <select className="ws4-select" value={editForm.relationship_status || ''} onChange={e => setEditForm(p => ({ ...p, relationship_status: e.target.value }))}>
+                        <option value="">—</option>
+                        {['single','dating','engaged','married','divorced','separated','its_complicated'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                      </select>
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Committed To</label>
+                      <input className="ws4-input" value={editForm.committed_to || ''} onChange={e => setEditForm(p => ({ ...p, committed_to: e.target.value }))} placeholder="Name of person they're committed to" />
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Fidelity Pattern</label>
+                      <select className="ws4-select" value={editForm.fidelity_pattern || ''} onChange={e => setEditForm(p => ({ ...p, fidelity_pattern: e.target.value }))}>
+                        <option value="">—</option>
+                        {Object.entries(FIDELITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Tension Type</label>
+                      <select className="ws4-select" value={editForm.tension_type || ''} onChange={e => setEditForm(p => ({ ...p, tension_type: e.target.value }))}>
+                        <option value="">—</option>
+                        {['romantic','professional','creative','power','unspoken','moral','fidelity','temptation','betrayal','guilt'].map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Moral Code</label>
+                      <textarea className="ws4-textarea" value={editForm.moral_code || ''} onChange={e => setEditForm(p => ({ ...p, moral_code: e.target.value }))} />
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Exit Reason</label>
+                      <textarea className="ws4-textarea" value={editForm.exit_reason || ''} onChange={e => setEditForm(p => ({ ...p, exit_reason: e.target.value }))} />
+                    </div>
+                  </CollapsibleSection>
 
-                  <div className="ws4-edit-section">Identity</div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Gender</label>
-                    <input className="ws4-input" list="gender-opts" value={editForm.gender || ''} onChange={e => setEditForm(p => ({ ...p, gender: e.target.value }))} />
-                    <datalist id="gender-opts">{['Male','Female','Non-binary','Trans man','Trans woman','Genderfluid','Agender'].map(g => <option key={g} value={g} />)}</datalist>
-                  </div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Ethnicity</label>
-                    <input className="ws4-input" value={editForm.ethnicity || ''} onChange={e => setEditForm(p => ({ ...p, ethnicity: e.target.value }))} placeholder="e.g. Black, Korean, Mixed-race…" />
-                  </div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Species</label>
-                    <input className="ws4-input" list="species-opts" value={editForm.species || 'human'} onChange={e => setEditForm(p => ({ ...p, species: e.target.value }))} />
-                    <datalist id="species-opts">{['human','vampire','werewolf','fae','demon','angel','hybrid','shifter','witch','god'].map(s => <option key={s} value={s} />)}</datalist>
-                  </div>
-
-                  <div className="ws4-edit-section">Life Status</div>
-                  <div className="ws4-edit-row">
-                    <label className="ws4-checkbox-label">
-                      <input type="checkbox" checked={editForm.is_alive !== false} onChange={e => setEditForm(p => ({ ...p, is_alive: e.target.checked }))} />
-                      Character is alive
-                    </label>
-                  </div>
-                  {editForm.is_alive === false && (
-                    <>
-                      <div className="ws4-edit-row">
-                        <label className="ws4-edit-label">Cause of Death</label>
-                        <textarea className="ws4-textarea" value={editForm.death_cause || ''} onChange={e => setEditForm(p => ({ ...p, death_cause: e.target.value }))} placeholder="How did they die?" />
-                      </div>
-                      <div className="ws4-edit-row">
-                        <label className="ws4-edit-label">Narrative Impact</label>
-                        <textarea className="ws4-textarea" value={editForm.death_impact || ''} onChange={e => setEditForm(p => ({ ...p, death_impact: e.target.value }))} placeholder="What does their death mean for the story?" />
-                      </div>
-                    </>
-                  )}
-
-                  <div className="ws4-edit-row">
-                    <label className="ws4-edit-label">Family Layer</label>
-                    <select className="ws4-select" value={editForm.family_layer || worldTag} onChange={e => setEditForm(p => ({ ...p, family_layer: e.target.value }))}>
-                      <option value="real_world">Real World</option>
-                      <option value="lalaverse">LalaVerse</option>
-                      <option value="book-1">Book 1 · Before Lala</option>
-                      <option value="series_2">Series 2</option>
-                    </select>
-                  </div>
+                  <CollapsibleSection title="Identity & Life" color="blue" defaultOpen={false}>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Gender</label>
+                      <input className="ws4-input" list="gender-opts" value={editForm.gender || ''} onChange={e => setEditForm(p => ({ ...p, gender: e.target.value }))} />
+                      <datalist id="gender-opts">{['Male','Female','Non-binary','Trans man','Trans woman','Genderfluid','Agender'].map(g => <option key={g} value={g} />)}</datalist>
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Ethnicity</label>
+                      <input className="ws4-input" value={editForm.ethnicity || ''} onChange={e => setEditForm(p => ({ ...p, ethnicity: e.target.value }))} placeholder="e.g. Black, Korean, Mixed-race..." />
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Species</label>
+                      <input className="ws4-input" list="species-opts" value={editForm.species || 'human'} onChange={e => setEditForm(p => ({ ...p, species: e.target.value }))} />
+                      <datalist id="species-opts">{['human','vampire','werewolf','fae','demon','angel','hybrid','shifter','witch','god'].map(s => <option key={s} value={s} />)}</datalist>
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-edit-label">Family Layer</label>
+                      <select className="ws4-select" value={editForm.family_layer || worldTag} onChange={e => setEditForm(p => ({ ...p, family_layer: e.target.value }))}>
+                        <option value="real_world">Real World</option>
+                        <option value="lalaverse">LalaVerse</option>
+                        <option value="book-1">Book 1 · Before Lala</option>
+                        <option value="series_2">Series 2</option>
+                      </select>
+                    </div>
+                    <div className="ws4-edit-row">
+                      <label className="ws4-checkbox-label">
+                        <input type="checkbox" checked={editForm.is_alive !== false} onChange={e => setEditForm(p => ({ ...p, is_alive: e.target.checked }))} />
+                        Character is alive
+                      </label>
+                    </div>
+                    {editForm.is_alive === false && (
+                      <>
+                        <div className="ws4-edit-row">
+                          <label className="ws4-edit-label">Cause of Death</label>
+                          <textarea className="ws4-textarea" value={editForm.death_cause || ''} onChange={e => setEditForm(p => ({ ...p, death_cause: e.target.value }))} placeholder="How did they die?" />
+                        </div>
+                        <div className="ws4-edit-row">
+                          <label className="ws4-edit-label">Narrative Impact</label>
+                          <textarea className="ws4-textarea" value={editForm.death_impact || ''} onChange={e => setEditForm(p => ({ ...p, death_impact: e.target.value }))} placeholder="What does their death mean for the story?" />
+                        </div>
+                      </>
+                    )}
+                  </CollapsibleSection>
                 </div>
               )}
             </div>
@@ -1800,8 +2057,15 @@ export default function WorldStudio() {
                   <div className="ws4-preview-badges">
                     <TypeBadge type={c.character_type} />
                     {c.intimate_eligible && <Badge variant="intimate">♡</Badge>}
+                    {c.sexuality && <Badge variant="identity">{c.sexuality}</Badge>}
                   </div>
                   {c.signature && <div className="ws4-preview-sig">"{c.signature}"</div>}
+                  {c.dynamic && <div className="ws4-preview-dynamic">{c.dynamic}</div>}
+                  <div className="ws4-preview-wants">
+                    {c.surface_want && <div className="ws4-preview-want"><span className="ws4-preview-want-label">Wants:</span> {c.surface_want}</div>}
+                    {c.real_want && <div className="ws4-preview-want ws4-preview-want-real"><span className="ws4-preview-want-label">Really:</span> {c.real_want}</div>}
+                  </div>
+                  {c.aesthetic && <div className="ws4-preview-aesthetic">{c.aesthetic}</div>}
                 </div>
               ))}
             </div>

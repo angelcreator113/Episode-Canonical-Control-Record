@@ -18,6 +18,19 @@ import './AppAssistant.css';
 
 const API = '/api/v1/memories/assistant-command';
 
+// ─── Lightweight inline markdown → HTML (bold, italic, code, links) ──────────
+function renderMarkdown(text) {
+  if (!text) return text;
+  const escaped = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = escaped
+    .replace(/`([^`]+)`/g, '<code style="background:#f3f0f8;padding:1px 5px;border-radius:4px;font-size:11px">$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br/>');
+  return html;
+}
+
 const GREETING = {
   role: 'assistant',
   text: "hey it's amber. whatever you're working on rn — characters, the book, the feed, navigation — just tell me and i'll pull it up. i've been watching the world while you were gone.",
@@ -83,7 +96,13 @@ async function speak(text) {
 
 export default function AppAssistant({ appContext = {}, onNavigate, onRefresh }) {
   const [open,       setOpen]       = useState(false);
-  const [messages,   setMessages]   = useState([GREETING]);
+  const [messages,   setMessages]   = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('amber-chat');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return [GREETING];
+  });
   const [input,      setInput]      = useState('');
   const [sending,    setSending]    = useState(false);
 
@@ -105,12 +124,17 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages, open]);
 
+  // Persist chat to sessionStorage
+  useEffect(() => {
+    try { sessionStorage.setItem('amber-chat', JSON.stringify(messages)); } catch { /* ignore */ }
+  }, [messages]);
+
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 120);
   }, [open]);
 
-  // ── Core send ────────────────────────────────────────────────────────────
-  const send = useCallback(async (text) => {
+  // ── Core send (handles both text and voice-triggered messages) ───────────
+  const send = useCallback(async (text, { forceVoice = false } = {}) => {
     if (!text?.trim() || sending) return;
 
     const userMsg = { role: 'user', text: text.trim() };
@@ -119,14 +143,17 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     setSending(true);
 
     try {
-      const res  = await fetch(API, {
+      const body = {
+        message: text.trim(),
+        history: messages.slice(-20),
+        context: appContext,
+      };
+      if (forceVoice) body._voiceTriggered = true;
+
+      const res = await fetch(API, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          message: text.trim(),
-          history: messages.slice(-20),
-          context: appContext,
-        }),
+        body:    JSON.stringify(body),
       });
 
       const data = await res.json();
@@ -145,68 +172,8 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           action:         data.action,
           nextBestAction: data.nextBestAction || null,
         }]);
-        // Speak reply when voice-response is enabled
-        if (voiceResponse) speak(reply);
-      }
-
-      if (data.navigate && onNavigate) {
-        setTimeout(() => onNavigate(data.navigate), 400);
-      }
-      if (data.refresh && onRefresh) {
-        onRefresh(data.refresh);
-      }
-
-    } catch {
-      setMessages(prev => [...prev, {
-        role:  'assistant',
-        text:  "Can't reach Amber right now. Check your connection and try again.",
-        error: true,
-      }]);
-    } finally {
-      setSending(false);
-      inputRef.current?.focus();
-    }
-  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse]);
-
-  // ── Voice send — wraps send() and marks as voice-triggered ───────────────
-  const sendVoice = useCallback(async (text) => {
-    if (!text?.trim() || sending) return;
-
-    const userMsg = { role: 'user', text: text.trim() };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setSending(true);
-
-    try {
-      const res = await fetch(API, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          message:         text.trim(),
-          history:         messages.slice(-20),
-          context:         appContext,
-          _voiceTriggered: true,
-        }),
-      });
-
-      const data  = await res.json();
-
-      if (data.error) {
-        setMessages(prev => [...prev, {
-          role:  'assistant',
-          text:  data.reply || `Something went wrong: ${data.error}`,
-          error: true,
-        }]);
-      } else {
-        const reply = data.reply || 'Done.';
-        setMessages(prev => [...prev, {
-          role:           'assistant',
-          text:           reply,
-          action:         data.action,
-          nextBestAction: data.nextBestAction || null,
-        }]);
-        // Voice-first: Amber speaks her reply
-        speak(reply);
+        // Speak reply when voice-response is enabled or voice-triggered
+        if (forceVoice || voiceResponse) speak(reply);
       }
 
       if (data.navigate && onNavigate) setTimeout(() => onNavigate(data.navigate), 400);
@@ -222,7 +189,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       setSending(false);
       inputRef.current?.focus();
     }
-  }, [sending, messages, appContext, onNavigate, onRefresh]);
+  }, [sending, messages, appContext, onNavigate, onRefresh, voiceResponse]);
 
   // ── Voice: start listening ───────────────────────────────────────────────
   const startListening = useCallback(() => {
@@ -253,7 +220,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         setListening(false);
         setLiveTranscript('');
         rec.stop();
-        sendVoice(final.trim());
+        send(final.trim(), { forceVoice: true });
       }
     };
 
@@ -268,7 +235,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     };
 
     rec.start();
-  }, [voiceSupported, listening, sending, sendVoice]);
+  }, [voiceSupported, listening, sending, send]);
 
   // ── Voice: stop listening early (release before final) ──────────────────
   const stopListening = useCallback(() => {
@@ -277,6 +244,18 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       recognizerRef.current = null;
     }
     setListening(false);
+  }, []);
+
+  // Keyboard shortcut: Ctrl+Shift+A (or Cmd+Shift+A) toggles Amber
+  useEffect(() => {
+    function handleGlobalKey(e) {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        setOpen(prev => !prev);
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKey);
+    return () => window.removeEventListener('keydown', handleGlobalKey);
   }, []);
 
   // Cleanup on unmount
@@ -394,7 +373,11 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                   </span>
                 )}
                 <div className="apa-msg-body">
-                  <p className="apa-msg-text">{msg.text}</p>
+                  {msg.role === 'assistant' ? (
+                    <p className="apa-msg-text" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }} />
+                  ) : (
+                    <p className="apa-msg-text">{msg.text}</p>
+                  )}
                   {msg.nextBestAction && (
                     <p className="apa-msg-nba">→ {msg.nextBestAction}</p>
                   )}
@@ -444,8 +427,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           )}
 
           <AmberPromptLibrary onSelect={(text) => {
-            setInput(text);
-            inputRef.current?.focus();
+            send(text);
           }} />
 
           <div className="apa-input-row">

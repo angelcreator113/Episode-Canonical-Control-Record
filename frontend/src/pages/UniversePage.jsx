@@ -337,6 +337,32 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
         </div>
       )}
 
+      {/* World Studio Portals */}
+      <div className="up-timeline-block" style={{ marginBottom: 16 }}>
+        <div className="up-section-label">CHARACTER WORLD</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '8px 0' }}>
+          {[
+            { label: '✦ World Studio',    desc: 'Generate & manage characters',    href: '/world-studio' },
+            { label: '📋 Character Registry', desc: 'Full registry view',          href: '/character-registry' },
+            { label: '🔗 Relationships',   desc: 'Inter-character map',            href: '/relationships' },
+            { label: '🔥 Scene Studio',    desc: 'Book scenes & intimacy',         href: '/scene-studio' },
+            { label: '📜 World State',     desc: 'Live tensions & state',          href: '/universe/world-state' },
+            { label: '📍 World Locations', desc: 'Places & spaces',               href: '/world-locations' },
+          ].map(p => (
+            <a key={p.href} href={p.href} style={{
+              display: 'flex', flexDirection: 'column', padding: '10px 16px',
+              background: '#fff', border: '1px solid #e0d9ce', borderRadius: 8,
+              textDecoration: 'none', color: '#1a1a1a', minWidth: 160,
+              transition: 'border-color 0.2s',
+            }} onMouseEnter={e => e.currentTarget.style.borderColor = '#d4a574'}
+               onMouseLeave={e => e.currentTarget.style.borderColor = '#e0d9ce'}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{p.label}</span>
+              <span style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{p.desc}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+
       {/* Canon Timeline */}
       {timelineItems.length > 0 && (
         <div className="up-timeline-block">
