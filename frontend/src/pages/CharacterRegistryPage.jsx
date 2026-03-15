@@ -1959,7 +1959,7 @@ export default function CharacterRegistryPage() {
                     }}
                   />
                 ) : (
-                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile })
+                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile }, characters)
                 )}
               </div>
             </div>
@@ -2965,7 +2965,7 @@ function Toast({ msg, type, onClose }) {
 /* ================================================================
    DOSSIER TAB CONTENT
    ================================================================ */
-function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, ai) {
+function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, ai, characters) {
   const editing = editSection === tab;
 
   const editControls = editing ? (
