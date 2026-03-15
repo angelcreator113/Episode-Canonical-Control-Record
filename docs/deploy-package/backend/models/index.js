@@ -46,6 +46,7 @@ let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, CompositionAsse
 let Show, Scene, AssetLabel, EpisodeAsset, SceneAsset, SceneTemplate, ShowAsset;
 let Wardrobe, EpisodeWardrobe, OutfitSet;
 let WardrobeLibrary, OutfitSetItems, WardrobeUsageHistory, WardrobeLibraryReferences;
+let CharacterFollowProfile;
 
 try {
   // Core models
@@ -90,6 +91,9 @@ try {
   WardrobeUsageHistory = require('./WardrobeUsageHistory')(sequelize);
   WardrobeLibraryReferences = require('./WardrobeLibraryReferences')(sequelize);
 
+  // Character follow system
+  CharacterFollowProfile = require('./CharacterFollowProfile')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -126,6 +130,7 @@ const requiredModels = {
   OutfitSetItems,
   WardrobeUsageHistory,
   WardrobeLibraryReferences,
+  CharacterFollowProfile,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -658,6 +663,7 @@ const db = {
     OutfitSetItems,
     WardrobeUsageHistory,
     WardrobeLibraryReferences,
+    CharacterFollowProfile,
   },
 
   /**
@@ -851,3 +857,4 @@ module.exports.AssetLabel = AssetLabel;
 // module.exports.AssetUsage = AssetUsage; // Table doesn't exist
 module.exports.EpisodeAsset = EpisodeAsset;
 module.exports.SceneAsset = SceneAsset;
+module.exports.CharacterFollowProfile = CharacterFollowProfile;

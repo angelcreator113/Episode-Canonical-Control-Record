@@ -232,6 +232,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     sseRef.current=es;
     es.addEventListener('connected',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,id:jobId}));}catch{}});
     es.addEventListener('started',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'processing'}));}catch{}});
+    es.addEventListener('profile_generating',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,current:d.current,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('profile_complete',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('profile_failed',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('cancelled',()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
@@ -245,7 +246,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     return()=>{if(sseRef.current){sseRef.current.close();sseRef.current=null;}if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}};
   },[connectJobSSE]);
 
-  const startJobPolling = id=>{localStorage.setItem('spg_active_job',id);setActiveJob({id,status:'pending',total:0,completed:0,failed:0});connectJobSSE(id);};
+  const startJobPolling = (id,total)=>{localStorage.setItem('spg_active_job',id);setActiveJob({id,status:'pending',total:total||0,completed:0,failed:0});connectJobSSE(id);};
   const dismissJob = ()=>{setActiveJob(null);localStorage.removeItem('spg_active_job');if(sseRef.current){sseRef.current.close();sseRef.current=null;}};
   const cancelJob = async()=>{if(!activeJob?.id)return;setCancellingJob(true);try{await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`,{method:'POST',headers:authHeaders()});}catch{}finally{setCancellingJob(false);}};
 
@@ -412,13 +413,13 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   // ── Auto-Generate (background job — continues even if you leave the page) ──
   const runAutoGenerate = async ()=>{
-    setAutoGenRunning(true);setAutoGenProgress({current:0,total:autoGenCount,status:'starting',created:[]});setError(null);
+    setAutoGenRunning(true);setAutoGenProgress(null);setError(null);
     try{
       const res=await fetch(`${SCHED_API}/auto-generate-job`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:feedLayer,count:autoGenCount})});
       const data=await res.json();
       if(!res.ok){throw new Error(data.error||'Failed to start auto-generation');}
-      // Track via the existing bulk-job SSE infrastructure
-      startJobPolling(data.job_id);
+      // Track via the existing bulk-job SSE infrastructure (activeJob bar handles all progress)
+      startJobPolling(data.job_id, autoGenCount);
       showToast(`Auto-generating ${autoGenCount} profile(s) in background — you can leave this page`,'success');
     }catch(err){setError(err.message);}
     finally{setAutoGenRunning(false);}
@@ -435,7 +436,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   const fp = p=>p?.full_profile||p||{};
   const feedCap = feedLayer==='lalaverse'?200:443;
-  const stats = { total:statusCounts.total||totalCount, generated:statusCounts.generated, finalized:statusCounts.finalized, crossed:statusCounts.crossed };
+  // Use statusCounts.total (native layer only) for cap display; fallback to totalCount minus crossovers
+  const nativeTotal = statusCounts.total != null ? statusCounts.total : Math.max(0, totalCount - crossoverCount);
+  const stats = { total:nativeTotal, generated:statusCounts.generated, finalized:statusCounts.finalized, crossed:statusCounts.crossed };
 
   const Pagination = ()=>{
     if(loading||totalPages<=1)return null;
@@ -512,15 +515,15 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       {activeJob && (
         <div style={{background:activeJob.status==='completed'?'#e8f5ee':activeJob.status==='failed'?'#fde8e8':C.lavLight,borderBottom:`1px solid ${C.border}`,padding:'10px 24px',display:'flex',alignItems:'center',gap:12,fontSize:13}}>
           <span style={{flex:1,color:activeJob.status==='completed'?'#2d7a50':activeJob.status==='failed'?'#8a2020':C.inkMid}}>
-            {activeJob.status==='processing'&&<>⟳ Generating… {activeJob.completed||0}/{activeJob.total||0} done{activeJob.failed>0?`, ${activeJob.failed} failed`:''}</>}
+            {activeJob.status==='processing'&&<>⟳ Generating… {(activeJob.completed||0)+(activeJob.failed||0)}/{activeJob.total||0} processed{activeJob.completed>0?` (${activeJob.completed} created)`:''}{activeJob.failed>0?`, ${activeJob.failed} failed`:''}</>}
             {activeJob.status==='pending'&&<>⟳ Job queued — waiting to start…</>}
-            {activeJob.status==='completed'&&<>✓ Import complete — {activeJob.completed}/{activeJob.total} profiles generated</>}
+            {activeJob.status==='completed'&&<>✓ Generation complete — {activeJob.completed}/{activeJob.total} profiles created{activeJob.failed>0?` (${activeJob.failed} failed)`:''}</>}
             {activeJob.status==='cancelled'&&<>⊘ Job cancelled — {activeJob.completed||0}/{activeJob.total||0} generated</>}
             {activeJob.status==='failed'&&<>✕ Job failed{activeJob.error_message?`: ${activeJob.error_message}`:''}</>}
           </span>
           {['processing','pending'].includes(activeJob.status)&&(
             <div style={{width:200,height:4,background:C.border,borderRadius:2,overflow:'hidden'}}>
-              <div style={{height:'100%',background:C.lavender,transition:'width 0.5s',width:`${activeJob.total?((activeJob.completed||0)/activeJob.total)*100:0}%`}}/>
+              <div style={{height:'100%',background:activeJob.failed>0?`linear-gradient(90deg,${C.lavender},#e67e22)`:C.lavender,transition:'width 0.5s',width:`${activeJob.total?(((activeJob.completed||0)+(activeJob.failed||0))/activeJob.total)*100:0}%`}}/>
             </div>
           )}
           {['processing','pending'].includes(activeJob.status)&&(
