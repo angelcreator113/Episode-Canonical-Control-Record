@@ -38,7 +38,9 @@ const {
   updateConfig,
   runManualCycle,
   generateCreatorSpark,
+  generateSmartSparks,
   generateAndSaveProfile,
+  autoGenerateBatch,
   setDb,
 } = require('../services/feedScheduler');
 
@@ -136,6 +138,77 @@ router.get('/layer-status', optionalAuth, async (req, res) => {
 
     res.json({ layers });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /auto-generate ─────────────────────────────────────────────────────
+// Fully automated batch generation — AI creates the sparks AND the profiles.
+// No manual input needed. This replaces the manual "New Creator Spark" form.
+router.post('/auto-generate', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || req.app.get('models') || require('../models');
+  const layer = req.body.feed_layer || 'real_world';
+  const count = Math.min(parseInt(req.body.count) || 5, 20); // max 20 per request
+
+  // SSE streaming for real-time progress
+  if (req.body.stream) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write(`data: ${JSON.stringify({ type: 'started', count, layer })}\n\n`);
+
+    try {
+      const result = await autoGenerateBatch(db, layer, count, (progress) => {
+        res.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
+      });
+
+      res.write(`data: ${JSON.stringify({ type: 'done', created: result.created.length, errors: result.errors.length, sparks_generated: result.sparks_generated })}\n\n`);
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+    }
+    res.end();
+    return;
+  }
+
+  // Standard JSON response
+  try {
+    const result = await autoGenerateBatch(db, layer, count);
+    res.json({
+      message: `Auto-generated ${result.created.length} profiles for ${layer}`,
+      created: result.created.length,
+      errors: result.errors,
+      sparks_generated: result.sparks_generated,
+      profiles: result.created.map(p => ({
+        id: p.id,
+        handle: p.handle,
+        platform: p.platform,
+        display_name: p.display_name,
+        archetype: p.archetype,
+        follower_tier: p.follower_tier,
+        lala_relevance_score: p.lala_relevance_score,
+      })),
+    });
+  } catch (err) {
+    console.error('[FeedScheduler] Auto-generate error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /preview-sparks ────────────────────────────────────────────────────
+// Preview what the AI would generate without actually creating profiles.
+router.post('/preview-sparks', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || req.app.get('models') || require('../models');
+  const layer = req.body.feed_layer || 'real_world';
+  const count = Math.min(parseInt(req.body.count) || 5, 20);
+
+  try {
+    const sparks = await generateSmartSparks(db, layer, count);
+    res.json({ sparks, layer, count: sparks.length });
+  } catch (err) {
+    console.error('[FeedScheduler] Preview sparks error:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -173,6 +173,13 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [autoHistory,setAutoHistory] = useState([]);
   const [autoRunning,setAutoRunning] = useState(false);
   const [layerStatus,setLayerStatus] = useState(null);
+  // Auto-Generate state
+  const [autoGenCount,setAutoGenCount] = useState(5);
+  const [autoGenRunning,setAutoGenRunning] = useState(false);
+  const [autoGenProgress,setAutoGenProgress] = useState(null);
+  const [showManualSpark,setShowManualSpark] = useState(false);
+  const [previewSparks,setPreviewSparks] = useState(null);
+  const [previewLoading,setPreviewLoading] = useState(false);
   // LalaVerse Feed layer
   const [feedLayer,setFeedLayer] = useState('real_world');
   const [lvCity,setLvCity]       = useState('');
@@ -401,6 +408,46 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     }catch{}
   };
 
+  // ── Auto-Generate (replaces manual spark form) ──────────────────────
+  const runAutoGenerate = async ()=>{
+    setAutoGenRunning(true);setAutoGenProgress({current:0,total:autoGenCount,status:'starting',created:[]});setError(null);
+    try{
+      const res=await fetch(`${SCHED_API}/auto-generate`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:feedLayer,count:autoGenCount,stream:true})});
+      const reader=res.body.getReader();const decoder=new TextDecoder();let buffer='';
+      const created=[];
+      while(true){
+        const{done,value}=await reader.read();if(done)break;
+        buffer+=decoder.decode(value,{stream:true});
+        const lines=buffer.split('\n');buffer=lines.pop()||'';
+        for(const line of lines){
+          if(!line.startsWith('data: '))continue;
+          try{
+            const evt=JSON.parse(line.slice(6));
+            if(evt.type==='progress'){
+              if(evt.status==='created'&&evt.profile)created.push(evt.profile);
+              setAutoGenProgress({current:evt.current,total:evt.total,status:evt.status,created:[...created],spark:evt.spark,error:evt.error});
+            }else if(evt.type==='done'){
+              setAutoGenProgress({current:evt.created,total:evt.created+evt.errors,status:'done',created:[...created],sparks_generated:evt.sparks_generated});
+            }else if(evt.type==='error'){
+              setError(evt.error);
+            }
+          }catch{}
+        }
+      }
+      await loadProfiles();showToast(`Auto-generated ${created.length} creator(s)`,'success');
+    }catch(err){setError(err.message);}
+    finally{setAutoGenRunning(false);}
+  };
+
+  const previewAutoSparks = async ()=>{
+    setPreviewLoading(true);setPreviewSparks(null);
+    try{
+      const res=await fetch(`${SCHED_API}/preview-sparks`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:feedLayer,count:autoGenCount})});
+      const data=await res.json();if(data.sparks)setPreviewSparks(data.sparks);else setError(data.error||'Preview failed');
+    }catch(err){setError(err.message);}
+    finally{setPreviewLoading(false);}
+  };
+
   const fp = p=>p?.full_profile||p||{};
   const feedCap = feedLayer==='lalaverse'?200:443;
   const stats = { total:statusCounts.total||totalCount, generated:statusCounts.generated, finalized:statusCounts.finalized, crossed:statusCounts.crossed };
@@ -500,75 +547,163 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       )}
 
       {view==='feed' && <>
-        {/* ── Spark Form ──────────────────────────────────────── */}
+        {/* ── Auto-Generate Bar ──────────────────────────────── */}
         <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px'}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:10}}>
-            ✦ New Creator Spark
-          </div>
-          <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
-            <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
-              <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Handle</label>
-              <input value={handle} onChange={e=>setHandle(e.target.value)} disabled={generating} placeholder="@username" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}/>
+          {/* Primary: Auto-Generate */}
+          <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em'}}>
+              Auto-Generate
             </div>
-            <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
-              <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Platform</label>
-              <select value={platform} onChange={e=>setPlatform(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
-                {PLATFORMS.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
+            <div style={{display:'flex',alignItems:'center',gap:6,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:'4px 8px',border:`1px solid ${C.border}`}}>
+              {[1,3,5,10,15,20].map(n=>(
+                <button key={n} onClick={()=>setAutoGenCount(n)} disabled={autoGenRunning} style={{
+                  padding:'4px 10px',borderRadius:6,fontSize:12,fontWeight:700,border:'none',cursor:autoGenRunning?'not-allowed':'pointer',
+                  background:autoGenCount===n?C.lavender:'transparent',color:autoGenCount===n?'#fff':C.inkLight,transition:'all 0.15s',
+                }}>{n}</button>
+              ))}
+              <span style={{fontSize:11,color:C.inkLight,marginLeft:2}}>profiles</span>
             </div>
-            <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:200}}>
-              <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Vibe</label>
-              <input value={vibe} onChange={e=>setVibe(e.target.value)} disabled={generating} placeholder="One sentence — who is this creator?" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}
-                onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&generateProfile()}/>
-            </div>
-            <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()||(feedLayer==='lalaverse'&&!lvCity)} style={{
-              padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:generating||!handle.trim()||!vibe.trim()?'not-allowed':'pointer',
-              background:generating||!handle.trim()||!vibe.trim()?C.border:stats.total>=feedCap?'#c0392b':C.lavender,
-              color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
+            <button onClick={previewAutoSparks} disabled={previewLoading||autoGenRunning} style={{padding:'7px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,background:'transparent',color:C.inkMid,cursor:previewLoading?'wait':'pointer'}}>
+              {previewLoading?<><Spinner/> Previewing…</>:'Preview Sparks'}
+            </button>
+            <button onClick={runAutoGenerate} disabled={autoGenRunning} style={{
+              padding:'8px 22px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',
+              cursor:autoGenRunning?'not-allowed':'pointer',
+              background:autoGenRunning?C.border:stats.total>=feedCap?'#c0392b':C.lavender,
+              color:autoGenRunning?C.inkLight:'#fff',
               display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
             }}>
-              {generating?<><Spinner/> Generating…</>:stats.total>=feedCap?'Generate anyway (cap exceeded)':'✦ Generate'}
+              {autoGenRunning?<><Spinner/> Generating…</>:stats.total>=feedCap?`Generate ${autoGenCount} (cap exceeded)`:`Generate ${autoGenCount} Creators`}
             </button>
+            <span style={{fontSize:11,color:C.inkLight,marginLeft:'auto'}}>AI generates handles, vibes, and full profiles automatically</span>
           </div>
 
-          {/* Advanced toggle */}
-          <button onClick={()=>setShowAdvanced(!showAdvanced)} style={{marginTop:10,background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.inkLight,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
-            <span style={{transition:'transform 0.2s',display:'inline-block',transform:showAdvanced?'rotate(90deg)':'none'}}>▸</span>
-            Advanced Context
-            <span style={{color:C.inkLight,opacity:0.6,fontSize:11}}>— optional hints for AI</span>
-          </button>
-          {showAdvanced && (
-            <div style={{marginTop:10,display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:10,padding:'14px',background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
-              {[['📍 Location','location_hint','e.g. Atlanta, London'],['👥 Follower Range','follower_hint','e.g. 50K-100K'],['💔 Relationship','relationship_hint','e.g. ex of @handle'],['🔥 Drama','drama_hint','e.g. cheating scandal'],['🎨 Aesthetic','aesthetic_hint','e.g. clean girl, y2k'],['💰 Revenue','revenue_hint','e.g. brand deals only']].map(([label,key,ph])=>(
-                <div key={key} style={{display:'flex',flexDirection:'column',gap:3}}>
-                  <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>{label}</label>
-                  <input value={advFields[key]} onChange={e=>setAdvFields(f=>({...f,[key]:e.target.value}))} disabled={generating} placeholder={ph} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font}}/>
+          {/* Auto-Gen Progress */}
+          {autoGenProgress && autoGenRunning && (
+            <div style={{marginTop:12,padding:14,background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.ink}}>Generating {autoGenProgress.current}/{autoGenProgress.total}…</span>
+                {autoGenProgress.spark?.handle && <span style={{fontSize:12,color:C.lavender,fontWeight:600}}>{autoGenProgress.spark.handle}</span>}
+              </div>
+              <div style={{height:6,borderRadius:3,background:C.border,overflow:'hidden'}}>
+                <div style={{height:'100%',borderRadius:3,background:`linear-gradient(90deg,${C.lavender},${C.pink})`,transition:'width 0.5s',width:`${autoGenProgress.total?(autoGenProgress.current/autoGenProgress.total)*100:0}%`}}/>
+              </div>
+              {autoGenProgress.created?.length>0&&(
+                <div style={{marginTop:8,display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {autoGenProgress.created.map((p,i)=>(
+                    <span key={i} style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#eef7ec',color:'#22c55e',fontWeight:600}}>{p.handle||p.display_name||`Profile #${i+1}`}</span>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
-          {/* LalaVerse-specific fields */}
-          {feedLayer==='lalaverse'&&(
-            <div style={{marginTop:12,display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
-              <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:180}}>
-                <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>City</label>
-                <select value={lvCity} onChange={e=>setLvCity(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
-                  <option value="">Select city...</option>
-                  {LALAVERSE_CITIES.map(c=><option key={c.value} value={c.value}>{c.label} — {c.desc}</option>)}
-                </select>
+
+          {/* Spark Preview */}
+          {previewSparks && !autoGenRunning && (
+            <div style={{marginTop:12,padding:14,background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.lavender}30`}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.ink}}>Spark Preview — {previewSparks.length} creators the AI would generate</span>
+                <button onClick={()=>setPreviewSparks(null)} style={{fontSize:11,color:C.inkLight,background:'transparent',border:'none',cursor:'pointer'}}>Dismiss</button>
               </div>
-              <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:160}}>
-                <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>Lala's Relationship</label>
-                <select value={lvRelationship} onChange={e=>setLvRelationship(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
-                  {LALA_RELATIONSHIPS.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
+              <div style={{display:'grid',gap:8}}>
+                {previewSparks.map((spark,i)=>(
+                  <div key={i} style={{padding:'10px 14px',background:C.surface,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,display:'flex',gap:12,alignItems:'flex-start'}}>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                        <span style={{fontSize:13,fontWeight:700,color:C.ink}}>{spark.handle}</span>
+                        <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:C.blueLight,color:C.blue,fontWeight:600}}>{spark.platform}</span>
+                        <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:C.lavLight,color:C.lavender,fontWeight:600}}>{spark.archetype?.replace(/_/g,' ')}</span>
+                        <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:C.pinkLight,color:C.pink,fontWeight:600}}>{spark.follower_tier}</span>
+                      </div>
+                      <div style={{fontSize:12,color:C.inkMid,lineHeight:1.4}}>{spark.vibe_sentence}</div>
+                      {spark.advanced_context && Object.values(spark.advanced_context).some(v=>v) && (
+                        <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
+                          {Object.entries(spark.advanced_context).filter(([,v])=>v).map(([k,v])=>(
+                            <span key={k} style={{fontSize:10,color:C.inkLight}}>{k.replace('_hint','')}: {v}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
-                <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>Career Pressure</label>
-                <select value={lvPressure} onChange={e=>setLvPressure(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
-                  {CAREER_PRESSURES.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
-                </select>
+            </div>
+          )}
+
+          {/* Manual Spark toggle */}
+          <button onClick={()=>setShowManualSpark(!showManualSpark)} style={{marginTop:10,background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.inkLight,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
+            <span style={{transition:'transform 0.2s',display:'inline-block',transform:showManualSpark?'rotate(90deg)':'none'}}>▸</span>
+            Manual Spark
+            <span style={{color:C.inkLight,opacity:0.6,fontSize:11}}>— type a specific creator yourself</span>
+          </button>
+
+          {/* Manual Spark Form (collapsed by default) */}
+          {showManualSpark && (
+            <div style={{marginTop:10,padding:14,background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
+              <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
+                <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+                  <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Handle</label>
+                  <input value={handle} onChange={e=>setHandle(e.target.value)} disabled={generating} placeholder="@username" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}/>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+                  <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Platform</label>
+                  <select value={platform} onChange={e=>setPlatform(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                    {PLATFORMS.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:200}}>
+                  <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Vibe</label>
+                  <input value={vibe} onChange={e=>setVibe(e.target.value)} disabled={generating} placeholder="One sentence — who is this creator?" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}
+                    onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&generateProfile()}/>
+                </div>
+                <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()||(feedLayer==='lalaverse'&&!lvCity)} style={{
+                  padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:generating||!handle.trim()||!vibe.trim()?'not-allowed':'pointer',
+                  background:generating||!handle.trim()||!vibe.trim()?C.border:C.lavender,color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
+                  display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
+                }}>
+                  {generating?<><Spinner/> Generating…</>:'Generate'}
+                </button>
               </div>
+              {/* Advanced toggle */}
+              <button onClick={()=>setShowAdvanced(!showAdvanced)} style={{marginTop:10,background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.inkLight,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
+                <span style={{transition:'transform 0.2s',display:'inline-block',transform:showAdvanced?'rotate(90deg)':'none'}}>▸</span>
+                Advanced Context
+                <span style={{color:C.inkLight,opacity:0.6,fontSize:11}}>— optional hints for AI</span>
+              </button>
+              {showAdvanced && (
+                <div style={{marginTop:10,display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:10,padding:'14px',background:C.surface,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
+                  {[['Location','location_hint','e.g. Atlanta, London'],['Follower Range','follower_hint','e.g. 50K-100K'],['Relationship','relationship_hint','e.g. ex of @handle'],['Drama','drama_hint','e.g. cheating scandal'],['Aesthetic','aesthetic_hint','e.g. clean girl, y2k'],['Revenue','revenue_hint','e.g. brand deals only']].map(([label,key,ph])=>(
+                    <div key={key} style={{display:'flex',flexDirection:'column',gap:3}}>
+                      <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>{label}</label>
+                      <input value={advFields[key]} onChange={e=>setAdvFields(f=>({...f,[key]:e.target.value}))} disabled={generating} placeholder={ph} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font}}/>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* LalaVerse-specific fields */}
+              {feedLayer==='lalaverse'&&(
+                <div style={{marginTop:12,display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:180}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>City</label>
+                    <select value={lvCity} onChange={e=>setLvCity(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                      <option value="">Select city...</option>
+                      {LALAVERSE_CITIES.map(c=><option key={c.value} value={c.value}>{c.label} — {c.desc}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:160}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>Lala's Relationship</label>
+                    <select value={lvRelationship} onChange={e=>setLvRelationship(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                      {LALA_RELATIONSHIPS.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>Career Pressure</label>
+                    <select value={lvPressure} onChange={e=>setLvPressure(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                      {CAREER_PRESSURES.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {error && <div style={{color:C.pink,marginTop:8,fontSize:12}}>{error}</div>}
