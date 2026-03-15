@@ -1458,13 +1458,13 @@ router.post('/propose-registry-update', optionalAuth, async (req, res) => {
 
 // ── POST /write-back ──────────────────────────────────────────────────────
 router.post('/write-back', optionalAuth, async (req, res) => {
+  const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates } = req.body;
+  if (!story_id || !chapter_id) {
+    return res.status(400).json({ error: 'story_id and chapter_id are required' });
+  }
+
   const transaction = await db.sequelize.transaction();
   try {
-    const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates } = req.body;
-    if (!story_id || !chapter_id) {
-      await transaction.rollback();
-      return res.status(400).json({ error: 'story_id and chapter_id are required' });
-    }
 
     const story = await db.StorytellerStory.findByPk(story_id, { transaction, lock: true });
     if (!story) { await transaction.rollback(); return res.status(404).json({ error: 'Story not found' }); }
