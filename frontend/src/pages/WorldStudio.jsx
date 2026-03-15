@@ -12,9 +12,11 @@
  * Styling: WorldStudio.css — light theme, pink/blue/lavender palette
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './WorldStudio.css';
+
+const RelationshipEngine = lazy(() => import('./RelationshipEngine'));
 
 const API = '/api/v1';
 const PAGE_SIZE = 20;
@@ -464,7 +466,9 @@ function DemographicsPanel({ charDetail }) {
 export default function WorldStudio() {
   const navigate = useNavigate();
 
-  /* ── (page tabs removed — Scenes/Feed/Relationships are now separate pages) ──── */
+  /* ── Top-level studio tabs ─────────────────────────────────────────── */
+  const [searchParams] = useSearchParams();
+  const [studioTab, setStudioTab] = useState(() => searchParams.get('tab') || 'characters');
 
   /* ── World ─────────────────────────────────────────────────────────── */
   const [worldTag, setWorldTag] = useState('lalaverse');
@@ -949,8 +953,27 @@ export default function WorldStudio() {
         )}
       </div>
 
-      {/* ── Characters content (Scenes/Feed/Relationships are now separate pages) ── */}
-      <>
+      {/* ── Studio tab bar ─────────────────────────────────────────── */}
+      <div className="ws4-studio-tabs">
+        <button
+          className={`ws4-studio-tab${studioTab === 'characters' ? ' ws4-studio-tab--active' : ''}`}
+          onClick={() => setStudioTab('characters')}
+        >Characters</button>
+        <button
+          className={`ws4-studio-tab${studioTab === 'relationships' ? ' ws4-studio-tab--active' : ''}`}
+          onClick={() => setStudioTab('relationships')}
+        >Relationships</button>
+      </div>
+
+      {/* ── Relationships tab ─────────────────────────────────────── */}
+      {studioTab === 'relationships' && (
+        <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Relationship Engine…</div>}>
+          <RelationshipEngine />
+        </Suspense>
+      )}
+
+      {/* ── Characters tab ────────────────────────────────────────── */}
+      {studioTab === 'characters' && <>
 
       {/* ── STATS BAR ───────────────────────────────────────────────── */}
       <div className="ws4-stats-bar">
@@ -2165,7 +2188,7 @@ export default function WorldStudio() {
         </div>
       )}
 
-      </>
+      </>}
 
       {/* Toast */}
       {toast && (
