@@ -18,7 +18,6 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import StoryHubNav from '../components/StoryHubNav';
 import './StoryEvaluationEngine.css';
 
 const API = '/api/v1/memories';
@@ -1065,7 +1064,6 @@ export default function StoryEvaluationEngine() {
       overflowY: 'auto', WebkitOverflowScrolling: 'touch',
       overscrollBehaviorY: 'contain',
     }}>
-      <div style={{ padding: '10px 24px 0' }}><StoryHubNav /></div>
       {/* Header */}
       <div className="see-header" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',

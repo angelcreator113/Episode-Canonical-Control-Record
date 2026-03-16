@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from '../components/StoryReviewPanel';
 import WriteModeAIWriter from '../components/WriteModeAIWriter';
-import StoryHubNav from '../components/StoryHubNav';
 import ArcTrackingPanel from '../components/ArcTrackingPanel';
 import './StoryEngine.css';
 
@@ -1817,10 +1816,9 @@ export default function StoryEngine() {
     <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''} ${activeStory ? 'se-has-active-story' : ''}`}>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* ── Slim top bar: nav only ──────────────────────────────────── */}
+      {/* ── Slim top bar ──────────────────────────────────── */}
       {!readingMode && (
         <div className="se-topbar">
-          <StoryHubNav />
           <button className="se-btn-back" onClick={() => navigate('/')}>
             ← Home
           </button>

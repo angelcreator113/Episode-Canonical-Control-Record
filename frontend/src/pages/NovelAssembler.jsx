@@ -8,7 +8,6 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import StoryHubNav from '../components/StoryHubNav';
 import './NovelAssembler.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -341,7 +340,6 @@ export default function NovelAssembler() {
 
   return (
     <div className="na-page">
-      <div style={{ padding: '10px 16px 0' }}><StoryHubNav /></div>
       {/* Top bar */}
       <div className="na-topbar">
         <button className="na-btn-back" onClick={() => navigate('/')}>← Home</button>

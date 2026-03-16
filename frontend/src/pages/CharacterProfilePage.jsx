@@ -126,7 +126,27 @@ function TabOverview({ character }) {
         </div>
         <div className="cp-meta-item">
           <span className="cp-meta-label">World</span>
-          <span className="cp-meta-value">{character.world_exists ? 'Canon' : 'Interior'}</span>
+          <select
+            className="cp-meta-select"
+            value={character.world || 'book-1'}
+            onChange={async (e) => {
+              const newWorld = e.target.value;
+              try {
+                const res = await fetch(`${API_URL}/character-registry/characters/${character.id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ world: newWorld }),
+                });
+                if (res.ok) setCharacter(prev => ({ ...prev, world: newWorld }));
+              } catch (err) { console.error('Failed to update world:', err); }
+            }}
+            disabled={character.status === 'finalized'}
+            style={{ fontSize: 13, padding: '2px 6px', border: '1px solid var(--cp-border, #333)', borderRadius: 4, background: 'var(--cp-surface, #1a1a1a)', color: 'var(--cp-text, #e0e0e0)' }}
+          >
+            <option value="book-1">Book 1 — JustAWoman's World</option>
+            <option value="lalaverse">LalaVerse</option>
+            <option value="series-2">Series 2</option>
+          </select>
         </div>
         <div className="cp-meta-item">
           <span className="cp-meta-label">Series</span>

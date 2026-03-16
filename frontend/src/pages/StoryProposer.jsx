@@ -4,8 +4,6 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import StoryHubNav from '../components/StoryHubNav';
-
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 const C = {
@@ -232,7 +230,6 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
 
   return (
     <div style={{ fontFamily: "'Georgia', serif", background: C.bg, minHeight: '100vh', color: C.text }}>
-      <div style={{ padding: '10px 28px 0' }}><StoryHubNav /></div>
       {/* ── Header ── */}
       <div style={{ borderBottom: `1px solid ${C.border}`, padding: '20px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.surface }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
