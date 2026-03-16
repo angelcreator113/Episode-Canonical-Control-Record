@@ -1048,6 +1048,7 @@ export default function StoryEngine() {
   const [lastTexture, setLastTexture] = useState(null); // inline texture preview after approval
   const [rejectedStory, setRejectedStory] = useState(null); // undo buffer for rejected stories
   const [batchProgress, setBatchProgress] = useState(null); // { current, total } for batch approve
+  const [batchGenProgress, setBatchGenProgress] = useState(null); // { current, total, currentTitle } for batch generate
 
   const [showStats, setShowStats] = useState(false);
   const [readingMode, setReadingMode] = useState(false);
@@ -1397,6 +1398,90 @@ export default function StoryEngine() {
     }
   }
 
+  async function handleBatchGenerate() {
+    // Find all ungenerated tasks
+    const ungenerated = tasks.filter(t => !stories[t.story_number] && !approvedStories.includes(t.story_number));
+    if (!ungenerated.length) {
+      addToast('All stories already generated', 'info');
+      return;
+    }
+
+    if (!window.confirm(`Generate ${ungenerated.length} remaining stories? This runs the full quality pipeline for each.`)) return;
+
+    setGenerating(true);
+    setBatchGenProgress({ current: 0, total: ungenerated.length, currentTitle: ungenerated[0]?.title });
+
+    // Build previous stories from already approved/generated
+    const previousStories = approvedStories
+      .sort((a, b) => a - b)
+      .map(n => ({
+        number: n,
+        title: stories[n]?.title || `Story ${n}`,
+        summary: (stories[n]?.text || '').slice(0, 800),
+      }));
+
+    try {
+      const response = await fetch(`${API_BASE}/memories/batch-generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          characterKey: selectedChar,
+          taskBriefs: ungenerated,
+          previousStories,
+        }),
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const newStories = { ...stories };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (line.includes('event: progress') || data.status === 'generating') {
+                setBatchGenProgress(prev => ({
+                  ...prev,
+                  current: data.completed || prev?.current || 0,
+                  currentTitle: data.title || prev?.currentTitle,
+                }));
+              }
+              if (data.word_count && data.story_number) {
+                // Story completed — update the stories map
+                setBatchGenProgress(prev => ({
+                  ...prev,
+                  current: data.completed || (prev?.current || 0) + 1,
+                }));
+              }
+            } catch { /* skip unparseable SSE lines */ }
+          }
+          if (line.startsWith('event: story_complete')) {
+            // Next line will have the data
+          }
+        }
+      }
+
+      // After stream ends, reload all stories from the pipeline results
+      // Re-fetch the story tasks to get fresh data
+      addToast(`Batch generation complete — ${ungenerated.length} stories generated`, 'success');
+    } catch (e) {
+      console.error('Batch generate error:', e);
+      addToast('Batch generation failed — some stories may not have been generated', 'error');
+    } finally {
+      setGenerating(false);
+      setBatchGenProgress(null);
+    }
+  }
+
   async function handleGenerate(task) {
     setGenerating(true);
     setGeneratingNum(task.story_number);
@@ -1421,7 +1506,7 @@ export default function StoryEngine() {
           summary: stories[n]?.text?.slice(0, 800) || '',
         }));
 
-      const res = await fetch(`${API_BASE}/memories/generate-story`, {
+      const res = await fetch(`${API_BASE}/memories/pipeline-generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1651,6 +1736,15 @@ export default function StoryEngine() {
     }
 
     setProcessingStory(null);
+
+    // Auto-advance to the next unwritten story
+    const nextUnwritten = tasks.find(
+      t => t.story_number > story.story_number && !stories[t.story_number] && !nextApproved.includes(t.story_number)
+    );
+    if (nextUnwritten) {
+      setActiveTask(nextUnwritten);
+      setActiveStory(null);
+    }
   }
 
   function handleReject(story) {
@@ -2069,6 +2163,15 @@ export default function StoryEngine() {
                         </button>
                       )}
                       <button
+                        className="se-btn se-btn-generate-all"
+                        style={{ background: char?.color || '#b0922e', color: '#fff' }}
+                        onClick={handleBatchGenerate}
+                        disabled={generating}
+                        title="Generate all remaining stories through the quality pipeline"
+                      >
+                        {generating && batchGenProgress ? `⟳ ${batchGenProgress.current}/${batchGenProgress.total}` : '▶ Generate All'}
+                      </button>
+                      <button
                         className="se-btn se-btn-regen"
                         onClick={() => {
                           if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) {
@@ -2323,6 +2426,33 @@ export default function StoryEngine() {
             <div style={{
               width: `${(batchProgress.current / batchProgress.total) * 100}%`,
               height: '100%', background: char?.color || '#9a7d1e', borderRadius: 2,
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Batch generation progress indicator */}
+      {batchGenProgress && (
+        <div style={{
+          position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
+          background: '#1c1917', color: '#faf8f4', border: '1px solid #333',
+          borderRadius: 10, padding: '10px 20px', zIndex: 550,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+          display: 'flex', alignItems: 'center', gap: 12, fontSize: 13,
+          maxWidth: 420,
+        }}>
+          <div className="se-spinner" style={{ width: 16, height: 16, borderTopColor: char?.color || '#b0922e' }} />
+          <div>
+            <div style={{ fontWeight: 600 }}>Generating {batchGenProgress.current}/{batchGenProgress.total}</div>
+            {batchGenProgress.currentTitle && (
+              <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{batchGenProgress.currentTitle}</div>
+            )}
+          </div>
+          <div style={{ width: 80, height: 4, background: '#333', borderRadius: 2, marginLeft: 'auto' }}>
+            <div style={{
+              width: `${(batchGenProgress.current / batchGenProgress.total) * 100}%`,
+              height: '100%', background: char?.color || '#b0922e', borderRadius: 2,
               transition: 'width 0.3s ease',
             }} />
           </div>
