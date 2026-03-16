@@ -292,24 +292,44 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   for (let i = 0; i < sparks.length; i++) {
     try {
       if (progressCallback) {
-        progressCallback({ current: i + 1, total: sparks.length, spark: sparks[i], status: 'generating' });
+        await progressCallback({ current: i + 1, total: sparks.length, spark: sparks[i], status: 'generating' });
       }
       const profile = await generateAndSaveProfile(db, sparks[i], layer);
       if (profile) {
         created.push(profile);
         if (progressCallback) {
-          progressCallback({ current: i + 1, total: sparks.length, profile, status: 'created' });
+          await progressCallback({ current: i + 1, total: sparks.length, profile, status: 'created' });
         }
       }
     } catch (err) {
       errors.push({ spark: sparks[i]?.handle || `spark_${i}`, error: err.message });
       if (progressCallback) {
-        progressCallback({ current: i + 1, total: sparks.length, error: err.message, status: 'error' });
+        await progressCallback({ current: i + 1, total: sparks.length, error: err.message, status: 'error' });
       }
     }
   }
 
   return { created, errors, sparks_generated: sparks.length };
+}
+
+// ── ENUM validation helpers ──────────────────────────────────────────────────
+const VALID_TRAJECTORIES = new Set(['rising', 'plateauing', 'unraveling', 'pivoting', 'silent', 'viral_moment']);
+const VALID_ARCHETYPES = new Set([
+  'polished_curator', 'messy_transparent', 'soft_life', 'explicitly_paid',
+  'overnight_rise', 'cautionary', 'the_peer', 'the_watcher',
+  'chaos_creator', 'community_builder',
+]);
+const VALID_FOLLOWER_TIERS = new Set(['micro', 'mid', 'macro', 'mega']);
+
+function sanitizeEnum(value, validSet, fallback) {
+  if (!value) return fallback;
+  const normalized = String(value).toLowerCase().replace(/[\s-]+/g, '_');
+  if (validSet.has(normalized)) return normalized;
+  // Try fuzzy match for common AI variations
+  for (const valid of validSet) {
+    if (normalized.includes(valid) || valid.includes(normalized)) return valid;
+  }
+  return fallback;
 }
 
 /**
@@ -341,7 +361,7 @@ async function generateAndSaveProfile(db, spark, layer) {
 
   let prompt = buildGenerationPrompt(
     spark.handle, spark.platform, spark.vibe_sentence,
-    characterContext, null,
+    characterContext, spark.advanced_context || null,
   );
 
   if (layer === 'lalaverse' && spark.city) {
@@ -367,6 +387,11 @@ Lala does not know she was built. The world she lives in feels complete and self
     throw new Error('AI response failed to parse as JSON');
   }
 
+  // Sanitize ENUM fields to prevent DB insert failures from AI variations
+  const safeFollowerTier = sanitizeEnum(generated.follower_tier || spark.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
+  const safeArchetype = sanitizeEnum(generated.archetype || spark.archetype, VALID_ARCHETYPES, 'polished_curator');
+  const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
+
   const profile = await db.SocialProfile.create({
     series_id:             null,
     handle:                spark.handle.startsWith('@') ? spark.handle : `@${spark.handle}`,
@@ -376,10 +401,10 @@ Lala does not know she was built. The world she lives in feels complete and self
     generation_model:      'claude-sonnet-4-20250514',
     full_profile:          generated,
     display_name:          generated.display_name,
-    follower_tier:         generated.follower_tier || spark.follower_tier,
+    follower_tier:         safeFollowerTier,
     follower_count_approx: generated.follower_count_approx,
     content_category:      generated.content_category,
-    archetype:             generated.archetype || spark.archetype,
+    archetype:             safeArchetype,
     content_persona:       generated.content_persona,
     real_signal:           generated.real_signal,
     posting_voice:         generated.posting_voice,
@@ -391,7 +416,7 @@ Lala does not know she was built. The world she lives in feels complete and self
     emotional_activation:  generated.emotional_activation,
     watch_reason:          generated.watch_reason,
     what_it_costs_her:     generated.what_it_costs_her,
-    current_trajectory:    generated.current_trajectory,
+    current_trajectory:    safeTrajectory,
     trajectory_detail:     generated.trajectory_detail,
     moment_log:            generated.moment_log || [],
     sample_captions:       generated.sample_captions || [],
@@ -406,10 +431,10 @@ Lala does not know she was built. The world she lives in feels complete and self
     post_frequency:        generated.post_frequency,
     engagement_rate:       generated.engagement_rate,
     platform_metrics:      generated.platform_metrics || {},
-    geographic_base:       generated.geographic_base,
-    geographic_cluster:    generated.geographic_cluster,
-    age_range:             generated.age_range,
-    relationship_status:   generated.relationship_status,
+    geographic_base:       (generated.geographic_base || '').slice(0, 200) || null,
+    geographic_cluster:    (generated.geographic_cluster || '').slice(0, 100) || null,
+    age_range:             (generated.age_range || '').slice(0, 30) || null,
+    relationship_status:   (generated.relationship_status || '').slice(0, 100) || null,
     known_associates:      generated.known_associates || [],
     revenue_streams:       generated.revenue_streams || [],
     brand_partnerships:    generated.brand_partnerships || [],
@@ -591,7 +616,7 @@ async function autoCrossAgent(db) {
   for (const profile of candidates) {
     // Flag them with a current_state change so the UI can surface them
     try {
-      await profile.update({ current_trajectory: 'crossing_ready' });
+      await profile.update({ current_trajectory: 'pivoting' });
       flagged++;
       findings.push({
         level: 'success',
