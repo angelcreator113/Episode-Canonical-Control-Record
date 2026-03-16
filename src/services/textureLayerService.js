@@ -16,6 +16,16 @@ const BODY_RELATIONSHIP_NARRATIVES = {
   evidence:   'Her body is proof of something. What it proves depends on who is looking.',
 };
 
+// ── Body relationship ENUM → narrative lookup ────────────────────────
+const BODY_RELATIONSHIP_NARRATIVES = {
+  currency:   'Her body is currency. She knows exactly what it is worth and in what rooms.',
+  discipline: 'Her body is something she manages. Control is the relationship.',
+  burden:     'Her body is something she carries. It costs her.',
+  stranger:   'Her body is unfamiliar to her. She lives slightly outside it.',
+  home:       'Her body is where she lives. She is comfortable in it in a way most women are not.',
+  evidence:   'Her body is proof of something. What it proves depends on who is looking.',
+};
+
 // ── Conflict eligibility ──────────────────────────────────────────────
 const CONFLICT_ELIGIBLE_STORY_TYPES = ['collision', 'wrong_win'];
 const CONFLICT_ELIGIBLE_ROLES = [
