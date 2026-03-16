@@ -718,9 +718,11 @@ describe('feedScheduler', () => {
     });
 
     it('should fall back to random sparks when AI call fails', async () => {
-      jest.useFakeTimers();
-      // When the AI call throws (e.g., timeout), autoGenerateBatch should
-      // fall back to generateCreatorSpark for random sparks
+      // When the AI call throws, autoGenerateBatch should fall back to
+      // generateCreatorSpark for random sparks. callClaude has retries
+      // with backoff, so this test takes ~4s with real timers. We accept
+      // that cost for correctness. AI_MAX_RETRIES is 1 → at most 2 attempts
+      // with 2s backoff = ~4s total.
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
       // All AI calls fail immediately
@@ -730,20 +732,7 @@ describe('feedScheduler', () => {
       db.SocialProfile.count.mockResolvedValue(0);
       db.SocialProfile.findAll.mockResolvedValue([]);
 
-      const batchPromise = scheduler.autoGenerateBatch(db, 'real_world', 1);
-
-      // Advance timers to flush the retry backoff delays in callClaude
-      // (backoff is 2000ms * (attempt+1), with AI_MAX_RETRIES = 1 → 2 attempts max)
-      jest.advanceTimersByTime(5000);
-      // Allow microtasks to settle between advances
-      await Promise.resolve();
-      jest.advanceTimersByTime(5000);
-      await Promise.resolve();
-      jest.advanceTimersByTime(5000);
-      await Promise.resolve();
-      jest.advanceTimersByTime(5000);
-
-      const result = await batchPromise;
+      const result = await scheduler.autoGenerateBatch(db, 'real_world', 1);
 
       // Smart spark generation failed, so it should have logged the fallback message
       const fallbackCalls = consoleSpy.mock.calls.filter(
@@ -755,8 +744,7 @@ describe('feedScheduler', () => {
       expect(result.errors.length).toBeGreaterThanOrEqual(1);
 
       consoleSpy.mockRestore();
-      jest.useRealTimers();
-    });
+    }, 30000);
   });
 
   // ─────────────────────────────────────────────────────────────────────────
