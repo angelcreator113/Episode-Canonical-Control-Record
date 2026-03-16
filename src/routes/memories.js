@@ -8794,6 +8794,265 @@ Return ONLY the revised story. Begin with the title, then the story. No preamble
   }
 });
 
+// ─── POST /pipeline-generate ──────────────────────────────────────────────────
+// Automated pipeline: generate → quality gate → auto-revise if needed → return.
+// Handles a single story through the full quality pipeline without manual steps.
+router.post('/pipeline-generate', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
+
+  if (!characterKey || !storyNumber || !taskBrief) {
+    return res.status(400).json({ error: 'characterKey, storyNumber, and taskBrief required' });
+  }
+
+  // Keep-alive for long pipeline runs
+  res.setHeader('Content-Type', 'application/json');
+  let finished = false;
+  const keepAlive = setInterval(() => {
+    if (!finished) try { res.write(' '); } catch (_) {}
+  }, 15000);
+
+  const finish = (data) => {
+    finished = true;
+    clearInterval(keepAlive);
+    res.end(JSON.stringify(data));
+  };
+
+  try {
+    const pipeline = { steps: [], started_at: Date.now() };
+
+    // ── Step 1: Generate the story ──────────────────────────────────────
+    // Use internal fetch to reuse existing generate-story logic
+    const genPayload = { characterKey, storyNumber, taskBrief, previousStories };
+
+    // Call our own generate-story endpoint internally
+    const http = require('http');
+    const internalCall = (path, body) => new Promise((resolve, reject) => {
+      const port = process.env.PORT || 3000;
+      const postData = JSON.stringify(body);
+      const options = {
+        hostname: '127.0.0.1',
+        port,
+        path: `/api/v1/memories${path}`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+        timeout: 180000,
+      };
+      const req = http.request(options, (res) => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(data.trim())); } catch { resolve({ error: 'Parse error', raw: data.slice(0, 200) }); }
+        });
+      });
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('Internal call timeout')); });
+      req.write(postData);
+      req.end();
+    });
+
+    const genResult = await internalCall('/generate-story', genPayload);
+    pipeline.steps.push({ step: 'generate', success: !!genResult?.text, word_count: genResult?.word_count });
+
+    if (!genResult?.text) {
+      pipeline.steps.push({ step: 'aborted', reason: 'Generation produced no text' });
+      return finish({ pipeline, story: null, fallback: true });
+    }
+
+    let finalText = genResult.text;
+    let qualityReport = genResult.quality_report;
+    let revised = false;
+
+    // ── Step 2: Check quality gate ──────────────────────────────────────
+    if (qualityReport) {
+      pipeline.steps.push({ step: 'quality_gate', score: qualityReport.score, pass: qualityReport.pass, issues: qualityReport.issues?.length || 0 });
+
+      // ── Step 3: Auto-revise if quality score is below 8 ────────────────
+      if (qualityReport.score < 8 && qualityReport.issues?.length > 0) {
+        const editorialNotes = qualityReport.issues
+          .map(i => `[${i.type}] ${i.location}: ${i.fix}`)
+          .join('\n');
+
+        const revResult = await internalCall('/revise-story', {
+          characterKey,
+          storyNumber,
+          storyText: finalText,
+          editorialNotes,
+          qualityReport,
+        });
+
+        if (revResult?.text && revResult.revision_applied) {
+          finalText = revResult.text;
+          revised = true;
+          pipeline.steps.push({
+            step: 'auto_revise',
+            success: true,
+            original_words: genResult.word_count,
+            revised_words: revResult.revised_word_count,
+          });
+        } else {
+          pipeline.steps.push({ step: 'auto_revise', success: false, reason: 'Revision failed or produced no text' });
+        }
+      }
+    }
+
+    const wordCount = finalText.split(/\s+/).filter(Boolean).length;
+
+    // ── Step 4: Determine if this is a turning-point story worth multi-voice ──
+    const isTurningPoint = useMultiVoice || (
+      taskBrief.phase === 'crisis' &&
+      ['collision', 'wrong_win'].includes(taskBrief.story_type)
+    );
+    pipeline.steps.push({ step: 'multi_voice_check', eligible: isTurningPoint, reason: isTurningPoint ? 'crisis-phase collision/wrong_win or user requested' : 'standard story' });
+
+    pipeline.completed_at = Date.now();
+    pipeline.duration_ms = pipeline.completed_at - pipeline.started_at;
+
+    return finish({
+      pipeline,
+      story_number: storyNumber,
+      character_key: characterKey,
+      title: taskBrief.title,
+      phase: taskBrief.phase,
+      story_type: taskBrief.story_type,
+      text: finalText,
+      word_count: wordCount,
+      revised,
+      quality_report: qualityReport,
+      therapy_seeds: taskBrief.therapy_seeds || [],
+      new_character: taskBrief.new_character || false,
+      new_character_name: taskBrief.new_character_name || null,
+      new_character_role: taskBrief.new_character_role || null,
+      multi_voice_eligible: isTurningPoint,
+    });
+  } catch (err) {
+    console.error('[pipeline-generate] error:', err?.message);
+    finished = true;
+    clearInterval(keepAlive);
+    return res.status(500).json({ error: err?.message || 'Pipeline failed' });
+  }
+});
+
+// ─── POST /batch-generate ────────────────────────────────────────────────────
+// Generates multiple stories sequentially through the quality pipeline.
+// Uses SSE (Server-Sent Events) to stream progress to the frontend.
+router.post('/batch-generate', optionalAuth, async (req, res) => {
+  const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
+
+  if (!characterKey || !taskBriefs?.length) {
+    return res.status(400).json({ error: 'characterKey and taskBriefs[] required' });
+  }
+
+  // Set up SSE for streaming progress
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const total = taskBriefs.length;
+  let completed = 0;
+  let previousStories = initialPrevious || [];
+  const results = [];
+
+  sendEvent('start', { total, character_key: characterKey });
+
+  for (const taskBrief of taskBriefs) {
+    const storyNumber = taskBrief.story_number;
+    sendEvent('progress', {
+      story_number: storyNumber,
+      title: taskBrief.title,
+      phase: taskBrief.phase,
+      status: 'generating',
+      completed,
+      total,
+    });
+
+    try {
+      // Call pipeline-generate internally via HTTP
+      const http = require('http');
+      const port = process.env.PORT || 3000;
+      const postData = JSON.stringify({
+        characterKey,
+        storyNumber,
+        taskBrief,
+        previousStories,
+      });
+
+      const pipelineResult = await new Promise((resolve, reject) => {
+        const options = {
+          hostname: '127.0.0.1',
+          port,
+          path: '/api/v1/memories/pipeline-generate',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+          timeout: 300000,
+        };
+        const req = http.request(options, (res) => {
+          let data = '';
+          res.on('data', chunk => { data += chunk; });
+          res.on('end', () => {
+            try { resolve(JSON.parse(data.trim())); } catch { resolve({ error: 'Parse error' }); }
+          });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('Pipeline timeout')); });
+        req.write(postData);
+        req.end();
+      });
+
+      completed++;
+      results.push(pipelineResult);
+
+      // Add this story to previous stories context for the next story
+      if (pipelineResult?.text) {
+        previousStories = [
+          ...previousStories,
+          {
+            number: storyNumber,
+            title: pipelineResult.title || taskBrief.title,
+            summary: (pipelineResult.text || '').slice(0, 800),
+            taskBrief,
+          },
+        ];
+      }
+
+      sendEvent('story_complete', {
+        story_number: storyNumber,
+        title: pipelineResult.title || taskBrief.title,
+        word_count: pipelineResult.word_count,
+        quality_score: pipelineResult.quality_report?.score,
+        revised: pipelineResult.revised || false,
+        completed,
+        total,
+      });
+    } catch (err) {
+      completed++;
+      sendEvent('story_error', {
+        story_number: storyNumber,
+        error: err?.message || 'Generation failed',
+        completed,
+        total,
+      });
+    }
+  }
+
+  sendEvent('batch_complete', {
+    total_generated: completed,
+    total_requested: total,
+    results_summary: results.map(r => ({
+      story_number: r?.story_number,
+      word_count: r?.word_count,
+      quality_score: r?.quality_report?.score,
+      revised: r?.revised,
+    })),
+  });
+
+  res.end();
+});
+
 // ─── POST /check-story-consistency ───────────────────────────────────────────
 // When a story is edited, check for cascading contradictions in later stories.
 router.post('/check-story-consistency', optionalAuth, async (req, res) => {
