@@ -1680,7 +1680,9 @@ router.post('/character-interview-next', optionalAuth, async (req, res) => {
     if (mentionedChars.length > 0) {
       const wordCount = latestText.split(/\s+/).length;
       const primaryLower = primaryName?.toLowerCase();
-      const primaryMentions = (answerLower.match(new RegExp(primaryLower, 'g')) || []).length;
+      const primaryMentions = primaryLower
+        ? (answerLower.match(new RegExp(primaryLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length
+        : 0;
       const otherMentions = mentionedChars[0].searchTerms.reduce((count, term) =>
         count + (answerLower.match(new RegExp(term.toLowerCase(), 'g')) || []).length, 0
       );
@@ -2017,7 +2019,7 @@ ${answersFormatted}
 
 ${relational_notes.length > 0 ? `
 CROSS-CHARACTER OBSERVATIONS (captured during interview):
-${relational_notes.map((n, i) => `${i+1}. [${n.primary_character} ↔ ${n.other_character}] ${n.observation}`).join('\n')}
+${relational_notes.map((n, i) => `${i+1}. [${n.primary_character} ↔ ${n.drifted_to}] ${n.observation}`).join('\n')}
 
 These observations reveal how characters relate to each other through the author's instinctive associations. Use them to enrich the profile — especially pressure_type and personality sections.
 ` : ''}

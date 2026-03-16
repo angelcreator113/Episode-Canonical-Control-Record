@@ -528,7 +528,7 @@ async function loadStoryMemoriesForScene(characterKeys, registryId) {
     let socialSection = '';
     try {
       const socialProfiles = await db.SocialProfile.findAll({
-        where: { registry_character_id: charIds, status: ['crossed', 'finalized'] },
+        where: { registry_character_id: charIds, status: { [db.Sequelize.Op.in]: ['crossed', 'finalized'] } },
         attributes: ['handle', 'platform', 'parasocial_function', 'emotional_activation', 'current_trajectory', 'registry_character_id'],
         limit: 5,
       });
@@ -688,9 +688,12 @@ async function loadWorldLocationContext(sceneBrief, characterKeys, registryId) {
     let locations = [];
     if (charIds.length) {
       locations = await db.WorldLocation.findAll({
-        where: db.sequelize.literal(
-          `"associated_characters" @> ANY(ARRAY[${charIds.map(id => `'"${id}"'::jsonb`).join(',')}])`
-        ),
+        where: {
+          [db.Sequelize.Op.or]: charIds.map(id => db.sequelize.where(
+            db.sequelize.fn('jsonb_exists', db.sequelize.col('associated_characters'), id),
+            true
+          )),
+        },
         attributes: ['name', 'location_type', 'sensory_details', 'narrative_role', 'description'],
         limit: 5,
       });
@@ -769,7 +772,7 @@ async function loadSceneArcMetadata(chapterId) {
   if (!chapterId) return '';
   try {
     const proposal = await db.SceneProposal.findOne({
-      where: { chapter_id: chapterId, status: ['accepted', 'adjusted', 'proposed'] },
+      where: { chapter_id: chapterId, status: { [db.Sequelize.Op.in]: ['accepted', 'adjusted', 'proposed'] } },
       order: [['created_at', 'DESC']],
       attributes: ['arc_stage', 'arc_function', 'emotional_stakes', 'wounds_unaddressed', 'tensions_unresolved', 'scene_type', 'suggested_tone'],
     });
@@ -1529,10 +1532,19 @@ router.post('/write-back', optionalAuth, async (req, res) => {
       }, { transaction });
     }
 
-    // 2. Commit confirmed memories
+    // 2. Commit confirmed memories — resolve character_id from character_key
     if (confirmed_memories?.length) {
+      let charId = null;
+      if (story.character_key) {
+        const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
+        const regChar = regId
+          ? await db.RegistryCharacter.findOne({ where: { character_key: story.character_key, registry_id: regId }, attributes: ['id'], transaction })
+          : await db.RegistryCharacter.findOne({ where: { character_key: story.character_key }, attributes: ['id'], transaction });
+        if (regChar) charId = regChar.id;
+      }
       for (const mem of confirmed_memories) {
         await db.StorytellerMemory.create({
+          character_id: mem.character_id || charId,
           type: mem.type || 'event',
           statement: mem.content || mem.statement,
           confidence: 1.0,
@@ -1674,12 +1686,18 @@ Only include characters and dimensions where the scene reveals something new.`,
       messages: [{ role: 'user', content: scene_text.substring(0, 15000) }],
     });
 
-    const raw = response.content[0].text;
+    const raw = response.content?.[0]?.text || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return res.json({ revelations: {}, note: 'No structured revelations extracted' });
     }
-    const revelations = JSON.parse(jsonMatch[0]);
+    let revelations;
+    try {
+      revelations = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      console.error('[scene-revelation] JSON parse failed:', parseErr.message);
+      return res.status(422).json({ error: 'Scene revelation returned invalid JSON', raw_preview: raw.slice(0, 500) });
+    }
 
     return res.json({
       success: true,
