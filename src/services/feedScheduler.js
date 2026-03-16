@@ -38,16 +38,18 @@ async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES }
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      let timer;
       const response = await Promise.race([
         client.messages.create({
           model: AI_MODEL,
           max_tokens: maxTokens,
           messages: [{ role: 'user', content: prompt }],
         }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS)
-        ),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS);
+        }),
       ]);
+      clearTimeout(timer);
       return response;
     } catch (err) {
       lastErr = err;
@@ -126,6 +128,8 @@ let schedulerConfig = {
 };
 
 let schedulerTimer = null;
+let initialTimeout = null;
+let isRunning = false;
 let schedulerIntervalMs = schedulerConfig.interval_hours * 60 * 60 * 1000;
 const runHistory = [];
 let _db = null;
@@ -137,6 +141,14 @@ function updateConfig(updates) {
   for (const [k, v] of Object.entries(updates)) {
     if (k in schedulerConfig && v != null) {
       schedulerConfig[k] = typeof schedulerConfig[k] === 'number' ? Number(v) : v;
+    }
+  }
+  // Recalculate interval if it changed, and restart timer if running
+  if (updates.interval_hours != null) {
+    schedulerIntervalMs = schedulerConfig.interval_hours * 60 * 60 * 1000;
+    if (schedulerTimer) {
+      clearInterval(schedulerTimer);
+      schedulerTimer = setInterval(scheduledRun, schedulerIntervalMs);
     }
   }
   return { ...schedulerConfig };
@@ -333,7 +345,8 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
     where: { feed_layer: layer, lalaverse_cap_exempt: false },
   });
   const remaining = cap - currentCount;
-  const toCreate = Math.min(count, remaining > 0 ? remaining : count); // allow over-cap if forced
+  if (remaining <= 0) return { created: [], errors: [], sparks_generated: 0 };
+  const toCreate = Math.min(count, remaining);
 
   // Generate smart sparks
   let sparks;
@@ -734,8 +747,8 @@ async function autoDiscoverAgent(db) {
 
       if (score >= 5) {
         try {
-          let relType = 'orbit';
-          if (a.content_category === b.content_category && a.follower_tier === b.follower_tier) relType = 'competitors';
+          let relType = 'collab';
+          if (a.content_category === b.content_category && a.follower_tier === b.follower_tier) relType = 'rival';
 
           await db.SocialProfileRelationship.create({
             source_profile_id: a.id,
@@ -824,7 +837,12 @@ async function scheduledRun() {
     console.error('[FeedScheduler] No database reference — skipping run');
     return;
   }
+  if (isRunning) {
+    console.log('[FeedScheduler] Previous cycle still running — skipping');
+    return;
+  }
 
+  isRunning = true;
   try {
     console.log('[FeedScheduler] ⏰ Scheduled cycle starting...');
     const report = await runFullCycle(_db);
@@ -838,12 +856,15 @@ async function scheduledRun() {
     }
   } catch (err) {
     console.error('[FeedScheduler] ❌ Scheduled cycle failed:', err.message);
+  } finally {
+    isRunning = false;
   }
 }
 
 function startScheduler(intervalHours, db) {
   if (db) _db = db;
   if (schedulerTimer) clearInterval(schedulerTimer);
+  if (initialTimeout) clearTimeout(initialTimeout);
   if (intervalHours) {
     schedulerConfig.interval_hours = intervalHours;
     schedulerIntervalMs = intervalHours * 60 * 60 * 1000;
@@ -852,16 +873,20 @@ function startScheduler(intervalHours, db) {
   schedulerTimer = setInterval(scheduledRun, schedulerIntervalMs);
   console.log(`[FeedScheduler] 🕐 Scheduler started — running every ${schedulerConfig.interval_hours}h`);
   // First run after 15s delay (let server finish starting)
-  setTimeout(scheduledRun, 15000);
+  initialTimeout = setTimeout(scheduledRun, 15000);
 }
 
 function stopScheduler() {
   if (schedulerTimer) {
     clearInterval(schedulerTimer);
     schedulerTimer = null;
-    schedulerConfig.enabled = false;
-    console.log('[FeedScheduler] ⏹ Scheduler stopped');
   }
+  if (initialTimeout) {
+    clearTimeout(initialTimeout);
+    initialTimeout = null;
+  }
+  schedulerConfig.enabled = false;
+  console.log('[FeedScheduler] ⏹ Scheduler stopped');
 }
 
 function getSchedulerStatus() {
