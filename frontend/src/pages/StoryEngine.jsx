@@ -1827,6 +1827,23 @@ export default function StoryEngine() {
         </div>
       )}
 
+      {/* ── Mobile deck: character + arc (visible < 900px) ─────────── */}
+      {!readingMode && !writeMode && (
+        <div className="se-mobile-deck">
+          <CharacterSelector
+            characters={CHARACTERS}
+            selectedChar={selectedChar}
+            onSelect={setSelectedChar}
+            loading={charsLoading}
+          />
+          <ArcProgress
+            approvedStories={approvedStories}
+            savedStories={savedStories}
+            stories={stories}
+          />
+        </div>
+      )}
+
       {/* ── Main body: sidebar + workspace ──────────────────────────── */}
       <div className="se-body">
         {/* ── Left sidebar ─────────────────────────────────────────── */}
@@ -1955,36 +1972,41 @@ export default function StoryEngine() {
         )}
 
         {/* ── Workspace: task list + story column ──────────────────── */}
-        <div className={`se-workspace${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
-          {!readingMode && !writeMode && (
+        <div className={`se-workspace${storiesMinimized ? ' se-stories-collapsed' : ''}${!tasksLoading && tasks.length === 0 ? ' se-workspace-hero' : ''}`}>
+          {!readingMode && !writeMode && tasksLoading && (
             <div className="se-task-list">
-              {tasksLoading ? (
-                <div className="se-task-loading">
-                  <div className="se-spinner" style={{ borderTopColor: char?.color }} />
-                  <span>Building {char?.display_name}'s 50-story arc…</span>
-                  <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
-                </div>
-              ) : tasks.length === 0 ? (
-                <div className="se-task-empty se-hero-card">
-                  <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
-                  <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
-                  <div className="se-hero-text">
-                    Generate a 50-story progression that moves from establishment
-                    through pressure, crisis, and integration. The first run takes
-                    a few minutes — after that, it loads instantly.
-                  </div>
-                  <button
-                    className="se-btn se-btn-generate-arc se-primary-btn"
-                    style={{ background: char?.color }}
-                    onClick={() => handleGenerateArc()}
-                  >
-                    Generate Story Arc
-                  </button>
-                  <div className="se-hero-sub">Typically 2–3 minutes</div>
-                </div>
-              ) : (
-                <>
-                  <div className="se-task-section-intro">
+              <div className="se-task-loading">
+                <div className="se-spinner" style={{ borderTopColor: char?.color }} />
+                <span>Building {char?.display_name}'s 50-story arc…</span>
+                <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
+              </div>
+            </div>
+          )}
+
+          {!readingMode && !writeMode && !tasksLoading && tasks.length === 0 && (
+            <div className="se-hero-fullpage">
+              <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
+              <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
+              <div className="se-hero-text">
+                Generate a 50-story progression that moves from establishment
+                through pressure, crisis, and integration. The first run takes
+                a few minutes — after that, it loads instantly.
+              </div>
+              <button
+                className="se-btn se-btn-generate-arc se-primary-btn"
+                style={{ background: char?.color }}
+                onClick={() => handleGenerateArc()}
+              >
+                Generate Story Arc
+              </button>
+              <div className="se-hero-sub">Typically 2–3 minutes</div>
+            </div>
+          )}
+
+          {!readingMode && !writeMode && !tasksLoading && tasks.length > 0 && (
+            <div className="se-task-list">
+              <>
+                <div className="se-task-section-intro">
                     <div className="se-task-section-title">Story Arc</div>
                     <div className="se-task-section-sub">
                       {char?.display_name}'s 50-story progression
@@ -2086,11 +2108,11 @@ export default function StoryEngine() {
                       </button>
                     </div>
                   )}
-                </>
-              )}
+              </>
             </div>
           )}
 
+          {/* Story column — hidden in hero state on mobile */}
           <div className={`se-story-column${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
             {generating && generatingNum === activeTask?.story_number ? (
               <div className="se-generating">

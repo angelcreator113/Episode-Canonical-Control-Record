@@ -76,7 +76,6 @@ html, body {
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
-  padding-right: 64px; /* room for Amber trigger */
   border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
   background: var(--se-surface-glass);
@@ -189,6 +188,94 @@ html, body {
 
 .se-world-toggle-btn.closed:hover {
   background: rgba(239, 68, 68, 0.08);
+}
+
+/* ─────────────────────────────────────────
+   Mobile deck — visible on small screens only
+────────────────────────────────────────── */
+.se-mobile-deck {
+  display: none; /* hidden on desktop — shown via media query */
+  flex-direction: column;
+  padding: 8px 14px 4px;
+  gap: 2px;
+  border-bottom: 1px solid var(--se-border-light);
+  background: var(--se-surface);
+  flex-shrink: 0;
+}
+
+.se-mobile-deck .se-char-selector {
+  padding: 0 0 6px;
+  border-bottom: none;
+  background: transparent;
+}
+
+.se-mobile-deck .se-char-trigger {
+  max-width: none;
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.se-mobile-deck .se-arc-progress {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
+}
+
+.se-mobile-deck .se-arc-phase {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 6px 0;
+  margin-right: 0;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.se-mobile-deck .se-arc-phase:not(:last-child) {
+  border-right: none;
+  margin-right: 0;
+}
+
+.se-mobile-deck .se-arc-phase-label {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.se-mobile-deck .se-arc-phase-bar {
+  height: 3px;
+  border-radius: 2px;
+  margin: 3px 2px 0;
+}
+
+.se-mobile-deck .se-arc-phase-count {
+  font-size: 9px;
+  margin-top: 2px;
+}
+
+.se-mobile-deck .se-arc-dots { display: none; }
+
+/* ─────────────────────────────────────────
+   Hero fullpage — centered when no arc exists
+────────────────────────────────────────── */
+.se-hero-fullpage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 48px 24px;
+  text-align: center;
+  gap: 16px;
+  min-height: 320px;
+}
+
+/* When in hero state, hide the story column */
+.se-workspace-hero .se-story-column {
+  display: none;
 }
 
 /* ─────────────────────────────────────────
@@ -371,30 +458,39 @@ html, body {
   white-space: nowrap;
 }
 
-/* Sidebar arc — tighter */
+/* Sidebar arc — tighter, no dots, truncate labels */
 .se-sidebar-arc .se-arc-progress {
-  gap: 6px;
+  gap: 4px;
+  padding: 0;
+  border-bottom: none;
+  background: none;
+  flex-wrap: nowrap;
 }
 
 .se-sidebar-arc .se-arc-phase {
   padding: 0;
+  min-width: 0;
+  gap: 4px;
+}
+
+.se-sidebar-arc .se-arc-phase:not(:last-child) {
+  border-right: none;
+  margin-right: 4px;
 }
 
 .se-sidebar-arc .se-arc-phase-label {
-  font-size: 10px;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .se-sidebar-arc .se-arc-phase-count {
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .se-sidebar-arc .se-arc-dots {
-  gap: 2px;
-}
-
-.se-sidebar-arc .se-arc-dot {
-  width: 6px;
-  height: 6px;
+  display: none;
 }
 
 /* Sidebar stats — compact */
@@ -2182,7 +2278,8 @@ html, body {
 .se-write-mode .se-topbar,
 .se-write-mode .se-stats-dashboard,
 .se-write-mode .se-shortcuts-hint,
-.se-write-mode .se-mobile-deck {
+.se-write-mode .se-mobile-deck,
+.se-write-mode .se-sidebar {
   display: none;
 }
 
@@ -2443,6 +2540,7 @@ html, body {
   /* ── Topbar: slim, sticky, glass ── */
   .se-topbar {
     padding: 6px 12px;
+    padding-right: 12px;
     gap: 8px;
     position: sticky;
     top: 0;
@@ -2456,72 +2554,13 @@ html, body {
 
   .se-btn-back { padding: 6px 8px; font-size: 11px; min-height: 32px; }
 
-  /* ── Hide sidebar on mobile, stack body vertically ── */
+  /* ── Show mobile deck, hide sidebar ── */
+  .se-mobile-deck { display: flex; }
   .se-sidebar { display: none; }
 
   .se-body {
     flex-direction: column;
   }
-
-  .se-mobile-deck .se-char-selector {
-    padding: 0 0 6px;
-    border-bottom: none;
-    background: transparent;
-  }
-
-  .se-mobile-deck .se-char-trigger {
-    max-width: none;
-    min-height: 40px;
-    border-radius: 10px;
-    padding: 6px 10px;
-    font-size: 13px;
-    border-color: var(--se-border);
-  }
-
-  .se-mobile-deck .se-char-trigger-name { font-size: 13px; }
-  .se-mobile-deck .se-char-trigger-count { font-size: 10px; }
-
-  .se-mobile-deck .se-arc-progress {
-    display: flex !important;
-    gap: 0;
-    padding: 0;
-    background: transparent;
-    border-bottom: none;
-  }
-
-  .se-mobile-deck .se-arc-phase {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 6px 0;
-    margin-right: 0;
-    flex: 1;
-    min-width: 0;
-    text-align: center;
-  }
-
-  .se-mobile-deck .se-arc-phase:not(:last-child) {
-    border-right: none;
-    margin-right: 0;
-  }
-
-  .se-mobile-deck .se-arc-phase-label {
-    font-size: 8px;
-    letter-spacing: 0.08em;
-  }
-
-  .se-mobile-deck .se-arc-phase-bar {
-    height: 3px;
-    border-radius: 2px;
-    margin: 3px 2px 0;
-  }
-
-  .se-mobile-deck .se-arc-phase-count {
-    font-size: 9px;
-    margin-top: 2px;
-  }
-
-  .se-mobile-deck .se-arc-dots { display: none; }
 
   /* ── Workspace: scrollable area fills remaining height ── */
   .se-workspace,
@@ -2534,6 +2573,16 @@ html, body {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
+
+  /* ── Hero fullpage: compact on mobile ── */
+  .se-hero-fullpage {
+    padding: 32px 20px;
+    min-height: 240px;
+  }
+
+  .se-hero-fullpage .se-hero-icon { font-size: 24px; }
+  .se-hero-fullpage .se-hero-title { font-size: 18px; }
+  .se-hero-fullpage .se-hero-text { font-size: 12px; max-width: 300px; line-height: 1.5; }
 
   /* ── Task list ── */
   .se-task-list {
@@ -2679,21 +2728,6 @@ html, body {
     color: var(--char-color);
   }
 
-  /* ── Hero / empty state: compact on mobile ── */
-  .se-task-empty.se-hero-card {
-    margin: 20px 16px;
-    padding: 24px 18px 20px;
-    background: var(--se-surface);
-    border: 1px solid var(--se-border-light);
-    border-radius: 14px;
-    box-shadow: var(--se-shadow-sm);
-    gap: 10px;
-  }
-
-  .se-hero-icon { font-size: 24px; }
-  .se-hero-title { font-size: 16px; }
-  .se-hero-text { font-size: 12px; max-width: 280px; line-height: 1.5; }
-
   .se-task-loading {
     height: auto;
     padding: 40px 20px;
@@ -2711,6 +2745,8 @@ html, body {
     margin-top: 0;
     order: -1;
   }
+
+  /* In hero state, story column is already hidden by .se-workspace-hero */
 
   .se-write-mode .se-story-column {
     display: flex;
@@ -2887,6 +2923,7 @@ html, body {
   .se-stat-label { font-size: 9px; }
 
   .se-shortcuts-hint { display: none; }
+  .se-sidebar-shortcuts { display: none; }
 }
 
 /* ─── 768px: Write mode / editor ────── */
@@ -2975,9 +3012,7 @@ html, body {
 /* ─── 480px: Small phones ────── */
 @media (max-width: 480px) {
   .se-topbar { padding: 6px 10px; gap: 6px; }
-  .se-topbar-title { font-size: 16px; }
   .se-btn-back { font-size: 10px; padding: 5px 6px; }
-  .se-btn-stats-toggle { font-size: 9px; padding: 5px 8px; }
 
   .se-mobile-deck { padding: 6px 10px; }
 
@@ -2993,6 +3028,10 @@ html, body {
   .se-mobile-deck .se-arc-phase-label { font-size: 7px; }
   .se-mobile-deck .se-arc-phase-count { font-size: 8px; }
 
+  .se-hero-fullpage { padding: 24px 16px; min-height: 200px; }
+  .se-hero-fullpage .se-hero-title { font-size: 16px; }
+  .se-hero-fullpage .se-hero-text { font-size: 11px; max-width: 240px; }
+
   .se-task-section-intro { padding: 10px 12px 8px; }
   .se-task-section-title { font-size: 15px; }
 
@@ -3004,10 +3043,6 @@ html, body {
   .se-task-card { padding: 9px 12px; gap: 6px; }
   .se-task-card .se-task-title { font-size: 12px; }
   .se-task-generate-btn { min-height: 32px; min-width: 48px; padding: 5px 10px; font-size: 10px; }
-
-  .se-task-empty.se-hero-card { margin: 16px 12px; padding: 24px 16px 20px; }
-  .se-hero-title { font-size: 16px; }
-  .se-hero-text { font-size: 11px; max-width: 240px; }
 
   .se-story-section-title { font-size: 13px; }
 
