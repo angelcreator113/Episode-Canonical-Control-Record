@@ -4786,10 +4786,29 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
     console.error('Knowledge injection failed:', e.message);
   }
 
-  const conversationHistory = history
+  const rawHistory = history
     .filter(m => m.role && m.text)
     .slice(-20)
     .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+
+  // Ensure alternating roles — Anthropic API requires user/assistant alternation
+  // and the first message must be role: 'user'
+  const conversationHistory = [];
+  for (const msg of rawHistory) {
+    if (conversationHistory.length === 0 || conversationHistory[conversationHistory.length - 1].role !== msg.role) {
+      conversationHistory.push(msg);
+    }
+  }
+
+  // First message must be user role
+  while (conversationHistory.length > 0 && conversationHistory[0].role !== 'user') {
+    conversationHistory.shift();
+  }
+
+  // Last history message must be assistant so we can append user message
+  if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+    conversationHistory.pop();
+  }
 
   conversationHistory.push({ role: 'user', content: message });
 
@@ -4854,12 +4873,22 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
     });
 
   } catch (err) {
-    console.error('Assistant command error:', err);
+    console.error('Assistant command error:', err?.status, err?.message, err?.error?.type);
 
-    // Provide a helpful message when the API key is the problem
+    // Provide a helpful message based on error type
     const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    const isModelError = err.status === 404 || err.message?.includes('model') || err.error?.type === 'not_found_error';
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    const isRateLimit = err.status === 429;
+
     const reply = isAuthError
       ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
+      : isModelError
+      ? "My model configuration needs updating — the specified model wasn't found. Check server logs."
+      : isOverloaded
+      ? "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment."
+      : isRateLimit
+      ? "Too many requests hitting the AI service — give me a moment and try again."
       : "Hmm, that didn't work — try again or rephrase it for me.";
 
     return res.json({
@@ -4960,14 +4989,33 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
     console.error('Knowledge injection failed:', e.message);
   }
 
-  const conversationHistory = history
+  const rawHistory = history
     .filter(m => m.role && m.text)
     .slice(-20)
     .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
 
+  // Ensure alternating roles — Anthropic API requires user/assistant alternation
+  // and the first message must be role: 'user'
+  const conversationHistory = [];
+  for (const msg of rawHistory) {
+    if (conversationHistory.length === 0 || conversationHistory[conversationHistory.length - 1].role !== msg.role) {
+      conversationHistory.push(msg);
+    }
+  }
+
+  // First message must be user role
+  while (conversationHistory.length > 0 && conversationHistory[0].role !== 'user') {
+    conversationHistory.shift();
+  }
+
+  // Last history message must be assistant so we can append user message
+  if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+    conversationHistory.pop();
+  }
+
   conversationHistory.push({ role: 'user', content: message });
 
-  // Reuse the same system prompt from assistant-command (lines 4785-5123)
+  // Reuse the same system prompt from assistant-command
   // We reference the systemPrompt variable built inline in the non-streaming route.
   // Since the system prompt is built inline in the other route, we rebuild the key parts here.
   // The full system prompt is identical — we reference the same string structure.
@@ -5043,13 +5091,25 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
     res.end();
 
   } catch (err) {
-    console.error('Assistant stream error:', err);
+    console.error('Assistant stream error:', err?.status, err?.message, err?.error?.type);
     const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    const isModelError = err.status === 404 || err.message?.includes('model') || err.error?.type === 'not_found_error';
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    const isRateLimit = err.status === 429;
+
+    const reply = isAuthError
+      ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
+      : isModelError
+      ? "My model configuration needs updating — the specified model wasn't found. Check server logs."
+      : isOverloaded
+      ? "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment."
+      : isRateLimit
+      ? "Too many requests hitting the AI service — give me a moment and try again."
+      : "Hmm, that didn't work — try again or rephrase it for me.";
+
     res.write(`data: ${JSON.stringify({
       type:  'error',
-      reply: isAuthError
-        ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
-        : "Hmm, that didn't work — try again or rephrase it for me.",
+      reply,
       error: err.message,
     })}\n\n`);
     res.end();
