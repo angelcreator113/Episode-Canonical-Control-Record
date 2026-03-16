@@ -53,13 +53,13 @@ router.post('/generate', async (req, res) => {
     // Save to DB as proposed (not confirmed)
     const saved = await db.StoryTexture.create(texture);
 
-    // Update arc tracking with phone appearance
-    if (texture.phone_appeared) {
+    // Update arc tracking — phone appearance and bleed flag
+    if (texture.phone_appeared || texture.bleed_text) {
       await updateArcTracking(character_key, story, {
         storyNumber:    story.story_number,
         storyType:      story.story_type,
         phase:          story.phase,
-        phoneAppeared:  true,
+        phoneAppeared:  texture.phone_appeared || false,
       });
     }
 
@@ -72,6 +72,11 @@ router.post('/generate', async (req, res) => {
 });
 
 // ── Confirm a texture layer (or individual field) ─────────────────────
+const VALID_CONFIRM_FIELDS = [
+  'inner_thought_confirmed', 'conflict_confirmed', 'body_narrator_confirmed',
+  'private_moment_confirmed', 'post_confirmed', 'bleed_confirmed',
+];
+
 router.post('/confirm/:storyNumber', async (req, res) => {
   const { character_key, fields } = req.body;
 
@@ -99,7 +104,11 @@ router.post('/confirm/:storyNumber', async (req, res) => {
       updates.fully_confirmed          = true;
       updates.confirmed_at             = new Date();
     } else {
-      (fields || []).forEach(f => { updates[f] = true; });
+      const safeFields = (fields || []).filter(f => VALID_CONFIRM_FIELDS.includes(f));
+      if (safeFields.length === 0) {
+        return res.status(400).json({ error: 'No valid confirmation fields provided' });
+      }
+      safeFields.forEach(f => { updates[f] = true; });
       // Check if all applicable layers are now confirmed
       const updated = { ...texture.dataValues, ...updates };
       const allConfirmed = (
