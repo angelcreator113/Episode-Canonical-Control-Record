@@ -837,13 +837,32 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
 router.get('/', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { Op } = require('sequelize');
-  const { series_id, archetype, status, platform, page, limit, search, sort, feed_layer } = req.query;
+  const { series_id, archetype, status, platform, page, limit, search, sort, feed_layer, content_category, relevance_min, relevance_max, adult_content } = req.query;
   try {
     const where = {};
     if (series_id)  where.series_id  = series_id;
-    if (archetype)  where.archetype  = archetype;
+    if (archetype) {
+      const vals = archetype.split(',').map(v => v.trim()).filter(Boolean);
+      where.archetype = vals.length === 1 ? vals[0] : { [Op.in]: vals };
+    }
     if (status)     where.status     = status;
-    if (platform)   where.platform   = platform;
+    if (platform) {
+      const vals = platform.split(',').map(v => v.trim()).filter(Boolean);
+      where.platform = vals.length === 1 ? vals[0] : { [Op.in]: vals };
+    }
+    if (content_category) {
+      const vals = content_category.split(',').map(v => v.trim()).filter(Boolean);
+      where.content_category = vals.length === 1 ? vals[0] : { [Op.in]: vals };
+    }
+    if (relevance_min !== undefined && relevance_min !== '') {
+      where.lala_relevance_score = { ...(where.lala_relevance_score || {}), [Op.gte]: parseFloat(relevance_min) };
+    }
+    if (relevance_max !== undefined && relevance_max !== '') {
+      where.lala_relevance_score = { ...(where.lala_relevance_score || {}), [Op.lte]: parseFloat(relevance_max) };
+    }
+    if (adult_content !== undefined && adult_content !== '') {
+      where.adult_content_present = adult_content === 'true';
+    }
     // Track crossover IDs for lalaverse feeds (real_world profiles Lala follows)
     let crossoverIds = [];
     if (feed_layer) {
@@ -1933,6 +1952,461 @@ router.delete('/relationships/:relId', optionalAuth, async (req, res) => {
     if (!rel) return res.status(404).json({ error: 'Relationship not found' });
     await rel.destroy();
     return res.json({ deleted: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 4: Profile Diversity / Composition Analytics
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /analytics/composition ──────────────────────────────────────────────
+// Returns aggregated breakdown of feed composition for diversity dashboard
+router.get('/analytics/composition', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { Op } = require('sequelize');
+  const { feed_layer } = req.query;
+
+  try {
+    const where = {};
+    if (feed_layer) where.feed_layer = feed_layer;
+
+    // Archetype distribution
+    const archetypeRows = await db.SocialProfile.findAll({
+      where,
+      attributes: ['archetype', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+      group: ['archetype'], raw: true,
+    });
+
+    // Platform distribution
+    const platformRows = await db.SocialProfile.findAll({
+      where,
+      attributes: ['platform', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+      group: ['platform'], raw: true,
+    });
+
+    // Follower tier distribution
+    const tierRows = await db.SocialProfile.findAll({
+      where,
+      attributes: ['follower_tier', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+      group: ['follower_tier'], raw: true,
+    });
+
+    // Status distribution
+    const statusRows = await db.SocialProfile.findAll({
+      where,
+      attributes: ['status', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+      group: ['status'], raw: true,
+    });
+
+    // Trajectory distribution
+    const trajectoryRows = await db.SocialProfile.findAll({
+      where,
+      attributes: ['current_trajectory', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+      group: ['current_trajectory'], raw: true,
+    });
+
+    // Content category distribution (top 15)
+    const categoryRows = await db.SocialProfile.findAll({
+      where: { ...where, content_category: { [Op.ne]: null } },
+      attributes: ['content_category', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+      group: ['content_category'], order: [[db.sequelize.fn('COUNT', db.sequelize.col('id')), 'DESC']],
+      limit: 15, raw: true,
+    });
+
+    // Relevance score distribution (buckets: 0-2, 3-4, 5-6, 7-8, 9-10)
+    const allScores = await db.SocialProfile.findAll({
+      where,
+      attributes: ['lala_relevance_score'], raw: true,
+    });
+    const scoreBuckets = { '0-2': 0, '3-4': 0, '5-6': 0, '7-8': 0, '9-10': 0 };
+    for (const row of allScores) {
+      const s = row.lala_relevance_score || 0;
+      if (s <= 2) scoreBuckets['0-2']++;
+      else if (s <= 4) scoreBuckets['3-4']++;
+      else if (s <= 6) scoreBuckets['5-6']++;
+      else if (s <= 8) scoreBuckets['7-8']++;
+      else scoreBuckets['9-10']++;
+    }
+
+    // Adult content ratio
+    const adultCount = await db.SocialProfile.count({ where: { ...where, adult_content_present: true } });
+    const totalCount = allScores.length;
+
+    // City distribution (lalaverse)
+    let cityRows = [];
+    if (!feed_layer || feed_layer === 'lalaverse') {
+      cityRows = await db.SocialProfile.findAll({
+        where: { ...where, city: { [Op.ne]: null } },
+        attributes: ['city', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+        group: ['city'], raw: true,
+      });
+    }
+
+    // Geographic cluster distribution (top 10)
+    const geoRows = await db.SocialProfile.findAll({
+      where: { ...where, geographic_cluster: { [Op.ne]: null } },
+      attributes: ['geographic_cluster', [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count']],
+      group: ['geographic_cluster'], order: [[db.sequelize.fn('COUNT', db.sequelize.col('id')), 'DESC']],
+      limit: 10, raw: true,
+    });
+
+    const toMap = rows => rows.reduce((m, r) => { m[r[Object.keys(r)[0]]] = parseInt(r.count, 10); return m; }, {});
+
+    return res.json({
+      total: totalCount,
+      archetypes: toMap(archetypeRows),
+      platforms: toMap(platformRows),
+      follower_tiers: toMap(tierRows),
+      statuses: toMap(statusRows),
+      trajectories: toMap(trajectoryRows),
+      categories: categoryRows.map(r => ({ category: r.content_category, count: parseInt(r.count, 10) })),
+      relevance_buckets: scoreBuckets,
+      adult_content: { adult: adultCount, clean: totalCount - adultCount, ratio: totalCount > 0 ? (adultCount / totalCount * 100).toFixed(1) + '%' : '0%' },
+      cities: toMap(cityRows),
+      geographic_clusters: geoRows.map(r => ({ cluster: r.geographic_cluster, count: parseInt(r.count, 10) })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 6: Crossing Approval Workflow
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── POST /:id/approve ──────────────────────────────────────────────────────
+// Approve a finalized profile for crossing (adds approval gate before cross)
+router.post('/:id/approve', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { approval_notes } = req.body;
+
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+    if (profile.status !== 'finalized') {
+      return res.status(400).json({ error: 'Only finalized profiles can be approved for crossing' });
+    }
+
+    // Store approval in full_profile metadata (avoids migration)
+    const updatedProfile = { ...(profile.full_profile || {}) };
+    updatedProfile._approval = {
+      approved: true,
+      approved_at: new Date().toISOString(),
+      approval_notes: approval_notes || null,
+    };
+
+    await profile.update({ full_profile: updatedProfile });
+    return res.json({ profile: await profile.reload(), approved: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /:id/reject-crossing ──────────────────────────────────────────────
+// Reject a profile from crossing (clears approval, adds notes)
+router.post('/:id/reject-crossing', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { rejection_reason } = req.body;
+
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+
+    const updatedProfile = { ...(profile.full_profile || {}) };
+    updatedProfile._approval = {
+      approved: false,
+      rejected_at: new Date().toISOString(),
+      rejection_reason: rejection_reason || null,
+    };
+
+    await profile.update({ full_profile: updatedProfile });
+    return res.json({ profile: await profile.reload(), rejected: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 8: Moment Timeline Across Profiles
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /moments/timeline ──────────────────────────────────────────────────
+// Aggregates moment_log entries across all profiles into a unified timeline
+router.get('/moments/timeline', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { feed_layer, limit: queryLimit, moment_type, lala_seeds_only } = req.query;
+
+  try {
+    const where = {};
+    if (feed_layer) where.feed_layer = feed_layer;
+
+    const profiles = await db.SocialProfile.findAll({
+      where,
+      attributes: ['id', 'handle', 'display_name', 'platform', 'archetype', 'lala_relevance_score', 'moment_log', 'feed_layer'],
+      raw: true,
+    });
+
+    // Flatten all moments with profile attribution
+    let moments = [];
+    for (const p of profiles) {
+      const log = p.moment_log || [];
+      for (const m of log) {
+        if (moment_type && m.moment_type !== moment_type) continue;
+        if (lala_seeds_only === 'true' && !m.lala_seed) continue;
+        moments.push({
+          ...m,
+          profile_id: p.id,
+          handle: p.handle,
+          display_name: p.display_name,
+          platform: p.platform,
+          archetype: p.archetype,
+          relevance_score: p.lala_relevance_score,
+          feed_layer: p.feed_layer,
+        });
+      }
+    }
+
+    // Sort by moment type priority (controversy > live > post > comment > dm > collab > disappearance)
+    const typePriority = { controversy: 0, live: 1, post: 2, collab: 3, comment: 4, dm: 5, disappearance: 6 };
+    moments.sort((a, b) => (typePriority[a.moment_type] ?? 9) - (typePriority[b.moment_type] ?? 9));
+
+    const maxItems = Math.min(parseInt(queryLimit) || 50, 200);
+    moments = moments.slice(0, maxItems);
+
+    // Moment type counts
+    const typeCounts = {};
+    for (const m of moments) {
+      typeCounts[m.moment_type] = (typeCounts[m.moment_type] || 0) + 1;
+    }
+
+    return res.json({
+      moments,
+      total: moments.length,
+      type_counts: typeCounts,
+      profiles_with_moments: new Set(moments.map(m => m.profile_id)).size,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 9: Profile Templates
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /templates ──────────────────────────────────────────────────────────
+// List saved profile templates (stored in-memory for simplicity, no migration needed)
+const _profileTemplates = [];
+
+router.get('/templates', optionalAuth, (req, res) => {
+  return res.json({ templates: _profileTemplates });
+});
+
+// ── POST /templates ─────────────────────────────────────────────────────────
+// Save a profile as a reusable template
+router.post('/templates', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { profile_id, name, description } = req.body;
+
+  if (!name) return res.status(400).json({ error: 'Template name is required' });
+
+  try {
+    let templateData = req.body.template_data || {};
+
+    // If profile_id provided, extract template from existing profile
+    if (profile_id) {
+      const profile = await db.SocialProfile.findByPk(profile_id);
+      if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+      templateData = {
+        platform: profile.platform,
+        archetype: profile.archetype,
+        follower_tier: profile.follower_tier,
+        content_category: profile.content_category,
+        feed_layer: profile.feed_layer,
+        city: profile.city,
+        lala_relationship: profile.lala_relationship,
+        career_pressure: profile.career_pressure,
+        adult_content_present: profile.adult_content_present,
+        vibe_template: profile.vibe_sentence,
+        parasocial_function: profile.parasocial_function,
+        aesthetic_dna: profile.aesthetic_dna || (profile.full_profile || {}).aesthetic_dna,
+      };
+    }
+
+    const template = {
+      id: Date.now(),
+      name,
+      description: description || '',
+      template_data: templateData,
+      created_at: new Date().toISOString(),
+      usage_count: 0,
+    };
+
+    _profileTemplates.push(template);
+    return res.json({ template });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /templates/:templateId/apply ───────────────────────────────────────
+// Generate a new profile using a template's settings as starting context
+router.post('/templates/:templateId/apply', optionalAuth, async (req, res) => {
+  const templateId = parseInt(req.params.templateId);
+  const template = _profileTemplates.find(t => t.id === templateId);
+  if (!template) return res.status(404).json({ error: 'Template not found' });
+
+  template.usage_count++;
+  const td = template.template_data;
+
+  return res.json({
+    template_applied: true,
+    template_name: template.name,
+    prefill: {
+      platform: td.platform || 'instagram',
+      feed_layer: td.feed_layer || 'real_world',
+      city: td.city || '',
+      lala_relationship: td.lala_relationship || 'mutual_unaware',
+      career_pressure: td.career_pressure || 'level',
+      advanced_context: {
+        aesthetic_hint: td.aesthetic_dna?.vibe_tags?.join(', ') || '',
+      },
+    },
+  });
+});
+
+// ── DELETE /templates/:templateId ───────────────────────────────────────────
+router.delete('/templates/:templateId', optionalAuth, (req, res) => {
+  const idx = _profileTemplates.findIndex(t => t.id === parseInt(req.params.templateId));
+  if (idx === -1) return res.status(404).json({ error: 'Template not found' });
+  _profileTemplates.splice(idx, 1);
+  return res.json({ deleted: true });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 10: Relationship Discovery Suggestions
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /relationships/suggestions ──────────────────────────────────────────
+// Suggest potential relationships between profiles based on shared attributes
+router.get('/relationships/suggestions', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { Op } = require('sequelize');
+  const { feed_layer, limit: queryLimit } = req.query;
+
+  if (!db.SocialProfileRelationship) {
+    return res.status(404).json({ error: 'Relationship model not available' });
+  }
+
+  try {
+    const where = { status: { [Op.in]: ['generated', 'finalized', 'crossed'] } };
+    if (feed_layer) where.feed_layer = feed_layer;
+
+    const profiles = await db.SocialProfile.findAll({
+      where,
+      attributes: ['id', 'handle', 'display_name', 'platform', 'archetype', 'content_category',
+        'geographic_cluster', 'follower_tier', 'known_associates', 'lala_relevance_score', 'feed_layer'],
+      raw: true,
+    });
+
+    // Get existing relationships to avoid duplicates
+    const existingRels = await db.SocialProfileRelationship.findAll({
+      attributes: ['source_profile_id', 'target_profile_id'], raw: true,
+    });
+    const relSet = new Set(existingRels.map(r => `${r.source_profile_id}-${r.target_profile_id}`));
+    const hasRel = (a, b) => relSet.has(`${a}-${b}`) || relSet.has(`${b}-${a}`);
+
+    const suggestions = [];
+
+    for (let i = 0; i < profiles.length; i++) {
+      for (let j = i + 1; j < profiles.length; j++) {
+        const a = profiles[i], b = profiles[j];
+        if (hasRel(a.id, b.id)) continue;
+
+        let score = 0;
+        const reasons = [];
+
+        // Same platform
+        if (a.platform === b.platform) { score += 2; reasons.push('same platform'); }
+        // Same archetype
+        if (a.archetype && a.archetype === b.archetype) { score += 3; reasons.push('same archetype'); }
+        // Same content category
+        if (a.content_category && a.content_category === b.content_category) { score += 3; reasons.push('same content niche'); }
+        // Same geographic cluster
+        if (a.geographic_cluster && a.geographic_cluster === b.geographic_cluster) { score += 2; reasons.push('same scene'); }
+        // Complementary archetypes (natural tensions)
+        const tensions = [['polished_curator','messy_transparent'],['soft_life','explicitly_paid'],['overnight_rise','cautionary'],['the_peer','the_watcher']];
+        for (const [x,y] of tensions) {
+          if ((a.archetype===x&&b.archetype===y)||(a.archetype===y&&b.archetype===x)) { score += 4; reasons.push('natural tension'); break; }
+        }
+        // Similar tier (natural rivalry)
+        if (a.follower_tier && a.follower_tier === b.follower_tier && a.content_category === b.content_category) { score += 2; reasons.push('tier rivalry'); }
+        // Known associates mention
+        const aAssociates = a.known_associates || [];
+        const bAssociates = b.known_associates || [];
+        if (aAssociates.some(aa => b.handle?.toLowerCase().includes(aa.handle?.replace('@','').toLowerCase() || '---'))) { score += 5; reasons.push('mentioned in associates'); }
+        if (bAssociates.some(ba => a.handle?.toLowerCase().includes(ba.handle?.replace('@','').toLowerCase() || '---'))) { score += 5; reasons.push('mentioned in associates'); }
+
+        if (score >= 4) {
+          // Suggest relationship type based on reasons
+          let suggestedType = 'orbit';
+          if (reasons.includes('natural tension')) suggestedType = 'competitors';
+          else if (reasons.includes('mentioned in associates')) suggestedType = 'collab';
+          else if (reasons.includes('tier rivalry')) suggestedType = 'competitors';
+          else if (reasons.includes('same content niche') && reasons.includes('same platform')) suggestedType = 'orbit';
+
+          suggestions.push({
+            profile_a: { id: a.id, handle: a.handle, display_name: a.display_name, platform: a.platform, archetype: a.archetype },
+            profile_b: { id: b.id, handle: b.handle, display_name: b.display_name, platform: b.platform, archetype: b.archetype },
+            score,
+            reasons,
+            suggested_type: suggestedType,
+          });
+        }
+      }
+    }
+
+    suggestions.sort((a, b) => b.score - a.score);
+    const maxItems = Math.min(parseInt(queryLimit) || 20, 50);
+
+    return res.json({
+      suggestions: suggestions.slice(0, maxItems),
+      total_analyzed: profiles.length,
+      total_suggestions: suggestions.length,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /relationships/suggestions/accept ──────────────────────────────────
+// Accept a relationship suggestion and create the relationship
+router.post('/relationships/suggestions/accept', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { source_id, target_id, relationship_type, description } = req.body;
+
+  if (!db.SocialProfileRelationship) {
+    return res.status(404).json({ error: 'Relationship model not available' });
+  }
+  if (!source_id || !target_id) return res.status(400).json({ error: 'source_id and target_id required' });
+
+  try {
+    const [rel, created] = await db.SocialProfileRelationship.findOrCreate({
+      where: { source_profile_id: source_id, target_profile_id: target_id },
+      defaults: {
+        relationship_type: relationship_type || 'orbit',
+        description: description || 'Discovered via automated suggestion',
+        auto_generated: true,
+        direction: 'mutual',
+        public_visibility: 'public',
+        drama_level: 0,
+      },
+    });
+
+    return res.json({ relationship: rel, created });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
