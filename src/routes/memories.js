@@ -5087,8 +5087,6 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
 
     try {
       stream = tryStreamModel('claude-sonnet-4-6');
-      // Test the stream by waiting for initial connection
-      // If the model is unavailable, the error fires before any tokens
     } catch (primaryErr) {
       console.error('Assistant stream primary model failed:', {
         message: primaryErr.message,
@@ -5096,7 +5094,6 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
         type: primaryErr.error?.type,
         name: primaryErr.name,
       });
-      // Fall back to previous model
       stream = tryStreamModel('claude-sonnet-4-20250514');
     }
 
