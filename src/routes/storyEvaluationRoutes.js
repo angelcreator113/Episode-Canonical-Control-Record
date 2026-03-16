@@ -1475,7 +1475,7 @@ router.post('/propose-registry-update', optionalAuth, async (req, res) => {
       system: `You are a character registry curator. After reading a story, propose specific updates to character registry profiles. Respect the character growth history, continuity timeline, and world state provided — do NOT propose changes that contradict established arcs. Return ONLY valid JSON.`,
       messages: [{
         role: 'user',
-        content: `CURRENT PROFILES:\n${profileCtx || '(none)'}${enrichmentCtx}\n\nSTORY:\n${story.text}\n\nPropose registry updates in JSON:\n{\n  "updates": [\n    {\n      "character_key": "key",\n      "field": "core_desire|core_wound|hidden_want|core_belief|living_context|voice_notes",\n      "current_value": "what it is now",\n      "proposed_value": "what it should become",\n      "reason": "why this scene changes this"\n    }\n  ]\n}`,
+        content: `CURRENT PROFILES:\n${profileCtx || '(none)'}${enrichmentCtx}\n\nSTORY:\n${story.text}\n\nPropose registry updates in JSON:\n{\n  "updates": [\n    {\n      "character_key": "key",\n      "field": "core_desire|core_wound|hidden_want|core_belief|living_context|voice_signature",\n      "current_value": "what it is now",\n      "proposed_value": "what it should become",\n      "reason": "why this scene changes this"\n    }\n  ]\n}`,
       }],
     });
 
@@ -1560,7 +1560,7 @@ router.post('/write-back', optionalAuth, async (req, res) => {
     // 3. Apply confirmed registry updates (whitelist safe fields)
     const SAFE_REGISTRY_FIELDS = new Set([
       'core_desire', 'core_wound', 'core_belief', 'hidden_want',
-      'living_context', 'voice_notes', 'display_name',
+      'living_context', 'voice_signature', 'display_name',
       'personality_matrix', 'deep_profile', 'extra_fields',
     ]);
     if (confirmed_registry_updates?.length) {
