@@ -2353,7 +2353,6 @@ router.post('/templates', optionalAuth, async (req, res) => {
         return res.json({ template });
       } catch { /* fall through to in-memory */ }
     }
-
     const template = {
       id: Date.now(),
       name,
@@ -2565,7 +2564,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
-
 module.exports = router;
 module.exports.buildGenerationPrompt = buildGenerationPrompt;
 module.exports.autoAssignFollower = autoAssignFollower;
