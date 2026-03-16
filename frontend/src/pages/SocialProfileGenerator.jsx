@@ -145,6 +145,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [totalPages,setTotalPages] = useState(1);
   const [totalCount,setTotalCount] = useState(0);
   const [statusCounts,setStatusCounts] = useState({total:0,generated:0,finalized:0,crossed:0,archived:0});
+  const [displayCounts,setDisplayCounts] = useState({total:0,generated:0,finalized:0,crossed:0,archived:0});
   const [crossoverCount,setCrossoverCount] = useState(0);
   const PAGE_SIZE = 24;
   const [search,setSearch]       = useState('');
@@ -204,6 +205,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       setProfiles(data.profiles||[]);
       if(data.pagination){setTotalPages(data.pagination.totalPages||1);setTotalCount(data.pagination.total||0);}
       if(data.statusCounts)setStatusCounts(data.statusCounts);
+      if(data.displayCounts)setDisplayCounts(data.displayCounts);
+      else if(data.statusCounts)setDisplayCounts(data.statusCounts);
       setCrossoverCount(data.crossoverCount||0);
     } catch(err){setError(err.message);}
     finally{setLoading(false);}
@@ -439,6 +442,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   // Use statusCounts.total (native layer only) for cap display; fallback to totalCount minus crossovers
   const nativeTotal = statusCounts.total != null ? statusCounts.total : Math.max(0, totalCount - crossoverCount);
   const stats = { total:nativeTotal, generated:statusCounts.generated, finalized:statusCounts.finalized, crossed:statusCounts.crossed };
+  // Use displayCounts (native + crossover) for tab badges so they match the grid
+  const tabCounts = displayCounts;
 
   const Pagination = ()=>{
     if(loading||totalPages<=1)return null;
@@ -494,7 +499,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
         {/* Stats */}
         <div style={{display:'flex',gap:20,alignItems:'center'}}>
-          {[['Profiles',stats.total,stats.total>=feedCap?'#c0392b':stats.total>=(feedCap-23)?'#e67e22':feedLayer==='lalaverse'?C.lavender:C.blue],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
+          {[['Profiles',stats.total,stats.total>=feedCap?'#c0392b':stats.total>=(feedCap-23)?'#e67e22':feedLayer==='lalaverse'?C.lavender:C.blue],['Generated',stats.generated,C.inkMid],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
             <div key={label} style={{display:'flex',alignItems:'baseline',gap:6}}>
               <span style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{val||0}</span>
               <span style={{fontSize:12,color:C.inkLight}}>{label==='Profiles'?`/ ${feedCap}`:label}</span>
@@ -710,7 +715,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             {/* Status filters */}
             <div style={{display:'flex',gap:4}}>
               {[null,'generated','finalized','crossed','archived'].map(s=>{
-                const cnt=s?(statusCounts[s]||0):statusCounts.total;
+                const cnt=s?(tabCounts[s]||0):tabCounts.total;
                 const isActive=filterStatus===s;
                 return (
                   <button key={s||'all'} onClick={()=>changeFilter(s)} style={{padding:'5px 12px',borderRadius:14,fontSize:12,fontWeight:600,cursor:'pointer',transition:'all 0.15s',
