@@ -2262,7 +2262,7 @@ export default function StoryEngine() {
                   ))}
                 </div>
                 <div className="se-nav-count">
-                  {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
+                  {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} {filteredTasks.length === 1 ? 'story' : 'stories'}
                 </div>
               </div>
             )}
