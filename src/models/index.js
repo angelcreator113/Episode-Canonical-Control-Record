@@ -134,6 +134,7 @@ let BrainDocument; // Brain Documents: stores full ingested document text
 let AIUsageLog; // AI API cost/token tracking
 let CharacterArc; // Arc tracking: wound clock, stakes, visibility, David silence
 let StoryTexture; // Texture layer: inner thought, conflict, body narrator, private moment, post, bleed
+let StoryTaskArc; // Story Engine: persisted 50-story task arc per character
 
 try {
   // Core models
@@ -319,6 +320,7 @@ try {
 
   // Texture Layer model (inner thought, conflict, body narrator, private moment, post, bleed)
   StoryTexture = require('./StoryTexture')(sequelize);
+  StoryTaskArc = require('./StoryTaskArc')(sequelize);
 
   SessionBrief = require('./SessionBrief')(sequelize, DataTypes);
   PostGenerationReview = require('./PostGenerationReview')(sequelize, DataTypes);
@@ -513,6 +515,7 @@ const requiredModels = {
   AIUsageLog,
   CharacterArc,
   StoryTexture,
+  StoryTaskArc,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {

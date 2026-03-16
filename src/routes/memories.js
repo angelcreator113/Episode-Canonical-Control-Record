@@ -8005,13 +8005,79 @@ These influences are atmospheric. Characters don't announce who they follow — 
 const seTaskArcCache = new Map();
 
 // ─── GET /story-engine-tasks/:characterKey ─────────────────────────────────────
-// Returns cached task arc if available; no Claude call.
+// Returns cached task arc if available; falls back to DB, then to empty.
 router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) => {
   const { characterKey } = req.params;
-  // Accept any character key — hardcoded DNA or dynamic DB character
+
+  // 1. In-memory cache (fastest)
   if (seTaskArcCache.has(characterKey)) {
     return res.json({ cached: true, ...seTaskArcCache.get(characterKey) });
   }
+
+  // 2. Database fallback — restore from persisted arc
+  try {
+    await db.StoryTaskArc.sync();
+    const dbArc = await db.StoryTaskArc.findOne({ where: { character_key: characterKey } });
+    if (dbArc && dbArc.tasks?.length) {
+      const result = {
+        character_key: dbArc.character_key,
+        display_name: dbArc.display_name,
+        world: dbArc.world,
+        narrative_spine: dbArc.narrative_spine,
+        tasks: dbArc.tasks,
+      };
+      // Re-populate in-memory cache
+      seTaskArcCache.set(characterKey, result);
+      return res.json({ cached: true, ...result });
+    }
+  } catch (dbErr) {
+    console.warn('[story-engine-tasks] DB fallback failed:', dbErr.message);
+  }
+
+  // 3. Auto-rebuild from existing stories if any exist
+  try {
+    const existingStories = await db.StorytellerStory.findAll({
+      where: { character_key: characterKey },
+      order: [['story_number', 'ASC']],
+    });
+    if (existingStories.length > 0) {
+      const tasks = existingStories.map(s => {
+        const brief = s.task_brief || {};
+        return {
+          story_number: s.story_number,
+          title: brief.title || s.title,
+          phase: brief.phase || s.phase,
+          story_type: brief.story_type || s.story_type,
+          task: brief.task || `Story ${s.story_number}`,
+          obstacle: brief.obstacle || '',
+          domains_active: brief.domains_active || [],
+          strength_weaponized: brief.strength_weaponized || '',
+          emotional_start: brief.emotional_start || '',
+          emotional_end: brief.emotional_end || '',
+          primary_location: brief.primary_location || '',
+          time_of_day: brief.time_of_day || '',
+          season_weather: brief.season_weather || '',
+          new_character: s.new_character || false,
+          new_character_name: s.new_character_name || null,
+          new_character_role: s.new_character_role || null,
+          therapy_seeds: brief.therapy_seeds || [],
+          opening_line: brief.opening_line || s.opening_line || '',
+        };
+      });
+      const result = {
+        character_key: characterKey,
+        display_name: existingStories[0].task_brief?.display_name || characterKey,
+        world: null,
+        narrative_spine: null,
+        tasks,
+      };
+      seTaskArcCache.set(characterKey, result);
+      return res.json({ cached: true, rebuilt: true, ...result });
+    }
+  } catch (rebuildErr) {
+    console.warn('[story-engine-tasks] rebuild from stories failed:', rebuildErr.message);
+  }
+
   return res.json({ cached: false, tasks: [] });
 });
 
@@ -8232,6 +8298,20 @@ Format:
 
     // Cache the arc in memory
     seTaskArcCache.set(characterKey, result);
+
+    // Persist to database so it survives server restarts
+    try {
+      await db.StoryTaskArc.sync();
+      await db.StoryTaskArc.upsert({
+        character_key: characterKey,
+        display_name: result.display_name,
+        world: result.world,
+        narrative_spine: result.narrative_spine,
+        tasks: result.tasks,
+      });
+    } catch (persistErr) {
+      console.warn('[generate-story-tasks] DB persist failed:', persistErr.message);
+    }
 
     return res.json({ cached: false, ...result });
 

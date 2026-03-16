@@ -1954,7 +1954,7 @@ export default function StoryEngine() {
         </div>
       )}
 
-      {/* ── Mobile deck: character + arc (visible < 900px) ─────────── */}
+      {/* ── Mobile deck: character + arc + stats (visible < 900px) ─────────── */}
       {!readingMode && !writeMode && (
         <div className="se-mobile-deck">
           <CharacterSelector
@@ -1968,6 +1968,27 @@ export default function StoryEngine() {
             savedStories={savedStories}
             stories={stories}
           />
+          {/* Worlds — compact pills */}
+          {Object.keys(worldToggles).length > 0 && (
+            <div className="se-mobile-worlds">
+              {Object.entries(worldToggles).map(([worldId, isOpen]) => (
+                <button
+                  key={worldId}
+                  className={`se-world-pill ${isOpen ? 'open' : 'closed'}`}
+                  onClick={() => handleWorldToggle(worldId)}
+                >
+                  <span className="se-world-pill-name">{WORLD_LABELS[worldId] || worldId}</span>
+                  <span className={`se-world-pill-dot ${isOpen ? 'open' : 'closed'}`} />
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Compact stats row */}
+          <div className="se-mobile-stats-row">
+            <span className="se-mobile-stat">{Object.values(stories).reduce((s, st) => s + (st.word_count || 0), 0).toLocaleString()} words</span>
+            <span className="se-mobile-stat">{Object.keys(stories).length} written</span>
+            <span className="se-mobile-stat">{approvedStories.length} approved</span>
+          </div>
         </div>
       )}
 
