@@ -42,11 +42,26 @@ const {
   generateAndSaveProfile,
   autoGenerateBatch,
   setDb,
+  addSSEClient,
 } = require('../services/feedScheduler');
 
 // ── GET /status ─────────────────────────────────────────────────────────────
 router.get('/status', optionalAuth, (req, res) => {
   res.json(getSchedulerStatus());
+});
+
+// ── GET /events ─────────────────────────────────────────────────────────────
+// SSE stream for real-time scheduler status updates
+router.get('/events', optionalAuth, (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(`event: connected\ndata: ${JSON.stringify(getSchedulerStatus())}\n\n`);
+  addSSEClient(res);
+  req.on('close', () => res.end());
 });
 
 // ── GET /history ────────────────────────────────────────────────────────────

@@ -130,6 +130,11 @@ let schedulerConfig = {
 let schedulerTimer = null;
 let initialTimeout = null;
 let isRunning = false;
+
+// SSE subscribers for real-time scheduler events
+const sseClients = new Set();
+function addSSEClient(res) { sseClients.add(res); res.on('close', () => sseClients.delete(res)); }
+function emitSSE(event, data) { for (const res of sseClients) { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {} } }
 let schedulerIntervalMs = schedulerConfig.interval_hours * 60 * 60 * 1000;
 const runHistory = [];
 let _db = null;
@@ -361,23 +366,32 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
     }
   }
 
-  // Generate full profiles from sparks
-  for (let i = 0; i < sparks.length; i++) {
-    try {
-      if (progressCallback) {
-        await progressCallback({ current: i + 1, total: sparks.length, spark: sparks[i], status: 'generating' });
-      }
-      const profile = await generateAndSaveProfile(db, sparks[i], layer);
-      if (profile) {
-        created.push(profile);
+  // Generate full profiles from sparks (batch 3 at a time for speed)
+  const BATCH_CONCURRENCY = 3;
+  for (let i = 0; i < sparks.length; i += BATCH_CONCURRENCY) {
+    const batch = sparks.slice(i, i + BATCH_CONCURRENCY);
+    if (progressCallback) {
+      await progressCallback({ current: i + 1, total: sparks.length, spark: batch[0], status: 'generating' });
+    }
+
+    const results = await Promise.allSettled(
+      batch.map(spark => generateAndSaveProfile(db, spark, layer))
+    );
+
+    for (let j = 0; j < results.length; j++) {
+      const idx = i + j;
+      const result = results[j];
+      if (result.status === 'fulfilled' && result.value) {
+        created.push(result.value);
         if (progressCallback) {
-          await progressCallback({ current: i + 1, total: sparks.length, profile, status: 'created' });
+          await progressCallback({ current: idx + 1, total: sparks.length, profile: result.value, status: 'created' });
         }
-      }
-    } catch (err) {
-      errors.push({ spark: sparks[i]?.handle || `spark_${i}`, error: err.message });
-      if (progressCallback) {
-        await progressCallback({ current: i + 1, total: sparks.length, error: err.message, status: 'error' });
+      } else {
+        const errMsg = result.status === 'rejected' ? result.reason?.message : 'No profile returned';
+        errors.push({ spark: batch[j]?.handle || `spark_${idx}`, error: errMsg });
+        if (progressCallback) {
+          await progressCallback({ current: idx + 1, total: sparks.length, error: errMsg, status: 'error' });
+        }
       }
     }
   }
@@ -843,6 +857,7 @@ async function scheduledRun() {
   }
 
   isRunning = true;
+  emitSSE('cycle_start', { status: 'running', started_at: new Date().toISOString() });
   try {
     console.log('[FeedScheduler] ⏰ Scheduled cycle starting...');
     const report = await runFullCycle(_db);
@@ -850,14 +865,17 @@ async function scheduledRun() {
     if (runHistory.length > MAX_HISTORY) runHistory.shift();
 
     console.log(`[FeedScheduler] ✅ Cycle complete — ${report.summary.profiles_created} created | ${report.summary.profiles_finalized} finalized | ${report.summary.relationships_created} linked | ${report.duration_ms}ms`);
+    emitSSE('cycle_complete', { summary: report.summary, duration_ms: report.duration_ms, errors: report.errors });
 
     if (report.errors > 0) {
       console.log(`[FeedScheduler] ⚠️ ${report.errors} errors during cycle`);
     }
   } catch (err) {
     console.error('[FeedScheduler] ❌ Scheduled cycle failed:', err.message);
+    emitSSE('cycle_error', { error: err.message });
   } finally {
     isRunning = false;
+    emitSSE('cycle_end', { is_running: false });
   }
 }
 
@@ -931,4 +949,5 @@ module.exports = {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  addSSEClient,
 };
