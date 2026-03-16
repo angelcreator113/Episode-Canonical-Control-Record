@@ -409,6 +409,98 @@ function TaskCard({
   );
 }
 
+// ─── Therapy-informed story suggestions ──────────────────────────────────────
+function TherapySuggestions({ characterKey, apiBase }) {
+  const [suggestions, setSuggestions] = React.useState(null);
+  const [expanded, setExpanded] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!characterKey) return;
+    setSuggestions(null);
+    fetch(`${apiBase}/story-health/therapy-suggestions/${characterKey}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setSuggestions(d))
+      .catch(err => console.warn('therapy suggestions failed:', err.message));
+  }, [characterKey, apiBase]);
+
+  if (!suggestions?.suggestions?.length) return null;
+  return (
+    <div style={{
+      margin: '0 14px 12px', padding: 12, borderRadius: 10,
+      background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)',
+    }}>
+      <div
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed' }}>
+          🧠 Story Suggestions ({suggestions.suggestions.length})
+        </span>
+        <span style={{ fontSize: 10, color: '#999' }}>{expanded ? '▾' : '▸'}</span>
+      </div>
+      {expanded && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {suggestions.suggestions.map((s, i) => (
+            <div key={s.title || i} style={{ display: 'flex', gap: 8, fontSize: 11, padding: '4px 0' }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%', marginTop: 4, flexShrink: 0,
+                background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
+              }} />
+              <div>
+                <div style={{ fontWeight: 500, color: '#333' }}>{s.title}</div>
+                <div style={{ color: '#888', fontSize: 10 }}>{s.description}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Story Sparks panel ──────────────────────────────────────────────────────
+function StorySparksPanel({ characterKey }) {
+  const [sparks, setSparks] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+
+  // Reset when character changes
+  React.useEffect(() => {
+    setSparks([]);
+    setOpen(false);
+  }, [characterKey]);
+
+  const loadSparks = () => {
+    if (sparks.length) { setOpen(!open); return; }
+    setOpen(true); setLoading(true);
+    fetch(`/api/v1/story-health/story-sparks/${characterKey}`)
+      .then(r => r.json()).then(d => setSparks(d.sparks || []))
+      .catch(err => console.warn('story sparks:', err.message))
+      .finally(() => setLoading(false));
+  };
+
+  return (
+    <section className="se-insp-section">
+      <button className="se-insp-toggle" onClick={loadSparks}>
+        <span>Story Sparks</span>
+        <span>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="se-insp-sparks">
+          {loading ? <div className="se-insp-dim">Generating…</div>
+            : sparks.length === 0 ? <div className="se-insp-dim">No sparks yet</div>
+            : sparks.map((s, i) => (
+              <div key={s.title || i} className="se-insp-spark">
+                <div className="se-insp-spark-type">{s.type || 'Spark'}</div>
+                <div className="se-insp-spark-text">{s.suggestion || s.title || JSON.stringify(s)}</div>
+              </div>
+            ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Story reader / editor panel ──────────────────────────────────────────────
 function StoryPanel({
   story, task, charColor, charName,
@@ -429,7 +521,6 @@ function StoryPanel({
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
-  const [showAiSidebar, setShowAiSidebar] = useState(() => window.innerWidth <= 768);
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'unsaved'
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
 
@@ -1050,52 +1141,9 @@ function StoryPanel({
       )}
 
       {/* Therapy-informed story suggestions */}
-      {!editing && selectedCharKey && (() => {
-        const TherapySuggestions = () => {
-          const [suggestions, setSuggestions] = React.useState(null);
-          const [expanded, setExpanded] = React.useState(false);
-          React.useEffect(() => {
-            fetch(`${API_BASE}/story-health/therapy-suggestions/${selectedCharKey}`)
-              .then(r => r.ok ? r.json() : null)
-              .then(d => setSuggestions(d))
-              .catch(err => console.warn('therapy suggestions failed:', err.message));
-          }, []);
-          if (!suggestions?.suggestions?.length) return null;
-          return (
-            <div style={{
-              margin: '0 14px 12px', padding: 12, borderRadius: 10,
-              background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)',
-            }}>
-              <div
-                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                onClick={() => setExpanded(e => !e)}
-              >
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed' }}>
-                  🧠 Story Suggestions ({suggestions.suggestions.length})
-                </span>
-                <span style={{ fontSize: 10, color: '#999' }}>{expanded ? '▾' : '▸'}</span>
-              </div>
-              {expanded && (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {suggestions.suggestions.map((s, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, fontSize: 11, padding: '4px 0' }}>
-                      <span style={{
-                        width: 6, height: 6, borderRadius: '50%', marginTop: 4, flexShrink: 0,
-                        background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
-                      }} />
-                      <div>
-                        <div style={{ fontWeight: 500, color: '#333' }}>{s.title}</div>
-                        <div style={{ color: '#888', fontSize: 10 }}>{s.description}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        };
-        return <TherapySuggestions />;
-      })()}
+      {!editing && selectedCharKey && (
+        <TherapySuggestions characterKey={selectedCharKey} apiBase={API_BASE} />
+      )}
 
       {!editing && registryUpdate && (
         <div className="se-registry-update">
@@ -2410,42 +2458,9 @@ export default function StoryEngine() {
             )}
 
             {/* Story Sparks */}
-            {selectedChar && (() => {
-              const StorySparks = () => {
-                const [sparks, setSparks] = React.useState([]);
-                const [open, setOpen] = React.useState(false);
-                const [loading, setLoading] = React.useState(false);
-                const loadSparks = () => {
-                  if (sparks.length) { setOpen(!open); return; }
-                  setOpen(true); setLoading(true);
-                  fetch(`/api/v1/story-health/story-sparks/${selectedChar}`)
-                    .then(r => r.json()).then(d => setSparks(d.sparks || []))
-                    .catch(err => console.warn('story sparks:', err.message))
-                    .finally(() => setLoading(false));
-                };
-                return (
-                  <section className="se-insp-section">
-                    <button className="se-insp-toggle" onClick={loadSparks}>
-                      <span>Story Sparks</span>
-                      <span>{open ? '▾' : '▸'}</span>
-                    </button>
-                    {open && (
-                      <div className="se-insp-sparks">
-                        {loading ? <div className="se-insp-dim">Generating…</div>
-                          : sparks.length === 0 ? <div className="se-insp-dim">No sparks yet</div>
-                          : sparks.map((s, i) => (
-                            <div key={i} className="se-insp-spark">
-                              <div className="se-insp-spark-type">{s.type || 'Spark'}</div>
-                              <div className="se-insp-spark-text">{s.suggestion || s.title || JSON.stringify(s)}</div>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </section>
-                );
-              };
-              return <StorySparks />;
-            })()}
+            {selectedChar && (
+              <StorySparksPanel characterKey={selectedChar} />
+            )}
 
             {/* Consistency conflicts */}
             {consistencyConflicts?.length > 0 && (
