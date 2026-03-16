@@ -59,7 +59,7 @@ html, body {
 .se-page {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: 100%;
   background:
     radial-gradient(900px 500px at 18% 0%, rgba(176,146,46,0.05), transparent 52%),
     linear-gradient(to bottom, var(--se-bg) 0%, var(--se-bg-2) 100%);
@@ -479,10 +479,12 @@ html, body {
 }
 
 .se-sidebar-arc .se-arc-phase-label {
-  font-size: 9px;
+  font-size: 8px;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .se-sidebar-arc .se-arc-phase-count {

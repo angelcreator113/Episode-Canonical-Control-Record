@@ -253,8 +253,7 @@ function AppContent() {
   const isChapterJourney = location.pathname.startsWith('/chapter/');
   // Social Import is now embedded in Universe page as a tab
   const isSetupWizard = location.pathname === '/setup';
-  const isStoryEngine = location.pathname === '/story-engine';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isSetupWizard || isStoryEngine;
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isSetupWizard;
   const hideFooter = isFullScreen;
 
   return (
