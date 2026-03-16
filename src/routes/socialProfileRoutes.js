@@ -256,10 +256,36 @@ Respond ONLY in valid JSON:
 }`;
 }
 
+// ── Rate limiter for AI generation endpoints ────────────────────────────────
+const generateRateLimits = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX = 10; // max 10 generations per minute per IP
+
+function checkRateLimit(req, res) {
+  const key = req.ip || req.connection?.remoteAddress || 'unknown';
+  const now = Date.now();
+  const entry = generateRateLimits.get(key);
+  if (entry && now - entry.start < RATE_LIMIT_WINDOW_MS) {
+    if (entry.count >= RATE_LIMIT_MAX) {
+      res.status(429).json({ error: 'Rate limit exceeded. Max 10 generations per minute.' });
+      return false;
+    }
+    entry.count++;
+  } else {
+    generateRateLimits.set(key, { start: now, count: 1 });
+  }
+  // Cleanup old entries periodically
+  if (generateRateLimits.size > 1000) {
+    for (const [k, v] of generateRateLimits) { if (now - v.start > RATE_LIMIT_WINDOW_MS) generateRateLimits.delete(k); }
+  }
+  return true;
+}
+
 // ── POST /generate ───────────────────────────────────────────────────────────
 // Three inputs + optional advanced context → full profile generated
 // Supports feed_layer: 'real_world' (default) or 'lalaverse'
 router.post('/generate', optionalAuth, async (req, res) => {
+  if (!checkRateLimit(req, res)) return;
   const {
     handle, platform, vibe_sentence, series_id,
     character_context, character_key, advanced_context,
@@ -963,11 +989,15 @@ router.get('/', optionalAuth, async (req, res) => {
     const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 24));
     const offset   = (pageNum - 1) * pageSize;
 
+    // Exclude heavy JSON fields from list query for performance (full data via GET /:id)
+    const listAttributes = { exclude: ['full_profile', 'sample_captions', 'sample_comments', 'moment_log', 'book_relevance'] };
+
     const { count, rows } = await db.SocialProfile.findAndCountAll({
       where,
       order,
       limit: pageSize,
       offset,
+      attributes: listAttributes,
       include: db.SocialProfileFollower ? [{
         model: db.SocialProfileFollower,
         as: 'followers',
@@ -1382,6 +1412,7 @@ router.patch('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
 // ── POST /:id/regenerate ──────────────────────────────────────────────────
 // Re-generate a profile using the same handle/platform/vibe (or overrides)
 router.post('/:id/regenerate', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+  if (!checkRateLimit(req, res)) return;
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -2264,10 +2295,17 @@ router.get('/moments/timeline', optionalAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /templates ──────────────────────────────────────────────────────────
-// List saved profile templates (stored in-memory for simplicity, no migration needed)
-const _profileTemplates = [];
+// Templates stored in DB when SocialProfileTemplate model is available, otherwise in-memory fallback
+const _profileTemplates = []; // fallback
 
-router.get('/templates', optionalAuth, (req, res) => {
+router.get('/templates', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  if (db.SocialProfileTemplate) {
+    try {
+      const templates = await db.SocialProfileTemplate.findAll({ order: [['created_at', 'DESC']] });
+      return res.json({ templates });
+    } catch { /* fall through to in-memory */ }
+  }
   return res.json({ templates: _profileTemplates });
 });
 
@@ -2303,6 +2341,19 @@ router.post('/templates', optionalAuth, async (req, res) => {
       };
     }
 
+    // Persist to DB if model available, otherwise in-memory
+    if (db.SocialProfileTemplate) {
+      try {
+        const template = await db.SocialProfileTemplate.create({
+          name,
+          description: description || '',
+          template_data: templateData,
+          usage_count: 0,
+        });
+        return res.json({ template });
+      } catch { /* fall through to in-memory */ }
+    }
+
     const template = {
       id: Date.now(),
       name,
@@ -2322,11 +2373,17 @@ router.post('/templates', optionalAuth, async (req, res) => {
 // ── POST /templates/:templateId/apply ───────────────────────────────────────
 // Generate a new profile using a template's settings as starting context
 router.post('/templates/:templateId/apply', optionalAuth, async (req, res) => {
-  const templateId = parseInt(req.params.templateId);
-  const template = _profileTemplates.find(t => t.id === templateId);
+  const db = req.app.locals.db || require('../models');
+  const templateId = req.params.templateId;
+  let template;
+  if (db.SocialProfileTemplate) {
+    try { template = await db.SocialProfileTemplate.findByPk(templateId); } catch {}
+  }
+  if (!template) template = _profileTemplates.find(t => t.id === parseInt(templateId));
   if (!template) return res.status(404).json({ error: 'Template not found' });
 
-  template.usage_count++;
+  if (template.increment) await template.increment('usage_count').catch(() => {});
+  else template.usage_count++;
   const td = template.template_data;
 
   return res.json({
@@ -2346,8 +2403,18 @@ router.post('/templates/:templateId/apply', optionalAuth, async (req, res) => {
 });
 
 // ── DELETE /templates/:templateId ───────────────────────────────────────────
-router.delete('/templates/:templateId', optionalAuth, (req, res) => {
-  const idx = _profileTemplates.findIndex(t => t.id === parseInt(req.params.templateId));
+router.delete('/templates/:templateId', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const templateId = req.params.templateId;
+
+  if (db.SocialProfileTemplate) {
+    try {
+      const deleted = await db.SocialProfileTemplate.destroy({ where: { id: templateId } });
+      if (deleted) return res.json({ deleted: true });
+    } catch { /* fall through */ }
+  }
+
+  const idx = _profileTemplates.findIndex(t => t.id === parseInt(templateId));
   if (idx === -1) return res.status(404).json({ error: 'Template not found' });
   _profileTemplates.splice(idx, 1);
   return res.json({ deleted: true });

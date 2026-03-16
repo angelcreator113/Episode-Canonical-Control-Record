@@ -127,6 +127,19 @@ const PROTAGONISTS = [
   },
 ];
 
+function FeedPagination({ page, totalPages, loading, setPage }) {
+  if(loading||totalPages<=1)return null;
+  return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px 0',fontSize:13}}>
+      <PageBtn disabled={page<=1} onClick={()=>setPage(1)}>«</PageBtn>
+      <PageBtn disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>‹ Prev</PageBtn>
+      <span style={{color:C.inkLight,fontSize:12}}>Page {page} of {totalPages}</span>
+      <PageBtn disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next ›</PageBtn>
+      <PageBtn disabled={page>=totalPages} onClick={()=>setPage(totalPages)}>»</PageBtn>
+    </div>
+  );
+}
+
 function ExportDropdown({ exporting, onExport }) {
   const [open,setOpen] = useState(false);
   const ref = useRef(null);
@@ -427,6 +440,21 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   // ── Feed Automation helpers ──────────────────────────────────────────
   const SCHED_API = '/api/v1/feed-scheduler';
+  const schedSSERef = useRef(null);
+
+  // Connect to scheduler SSE when automation tab is active
+  useEffect(()=>{
+    if(feedView!=='automation')return;
+    const es=new EventSource(`${SCHED_API}/events`);
+    schedSSERef.current=es;
+    es.addEventListener('connected',e=>{try{setAutoStatus(JSON.parse(e.data));}catch{}});
+    es.addEventListener('cycle_start',()=>{setAutoRunning(true);});
+    es.addEventListener('cycle_complete',e=>{try{const d=JSON.parse(e.data);showToast(`Cycle complete: ${d.summary?.profiles_created||0} created`);loadAutoStatus();loadProfiles();}catch{}});
+    es.addEventListener('cycle_end',()=>{setAutoRunning(false);});
+    es.addEventListener('cycle_error',e=>{try{const d=JSON.parse(e.data);showToast('Cycle error: '+d.error,'error');}catch{}setAutoRunning(false);});
+    es.onerror=()=>{es.close();schedSSERef.current=null;};
+    return()=>{es.close();schedSSERef.current=null;};
+  },[feedView]);
   const loadAutoStatus = async ()=>{
     try{
       const [statusRes,histRes,layerRes]=await Promise.all([
@@ -596,18 +624,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   // Use displayCounts (native + crossover) for tab badges so they match the grid
   const tabCounts = displayCounts;
 
-  const Pagination = ()=>{
-    if(loading||totalPages<=1)return null;
-    return (
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px 0',fontSize:13}}>
-        <PageBtn disabled={page<=1} onClick={()=>setPage(1)}>«</PageBtn>
-        <PageBtn disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>‹ Prev</PageBtn>
-        <span style={{color:C.inkLight,fontSize:12}}>Page {page} of {totalPages}</span>
-        <PageBtn disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next ›</PageBtn>
-        <PageBtn disabled={page>=totalPages} onClick={()=>setPage(totalPages)}>»</PageBtn>
-      </div>
-    );
-  };
+  const paginationProps = { page, totalPages, loading, setPage };
 
   // ────────────────────────────────────────────────────────────────────
   return (
@@ -1004,7 +1021,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
           )}
 
           <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
-            <Pagination/>
+            <FeedPagination {...paginationProps}/>
             {/* JustAWoman's pinned record — Lala's Feed only */}
             {feedLayer==='lalaverse'&&justAwomanProfile&&page===1&&!search&&(
               <div style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${C.pink}`,marginBottom:16,overflow:'hidden',boxShadow:C.shadowMd}}>
@@ -1747,7 +1764,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                 )}
               </div>
             )}
-            <Pagination/>
+            <FeedPagination {...paginationProps}/>
           </div>
         </div>
       </>}
