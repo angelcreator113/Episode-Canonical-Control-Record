@@ -9223,6 +9223,81 @@ router.post('/pipeline-generate', optionalAuth, async (req, res) => {
   }
 });
 
+// ─── In-memory background job store ──────────────────────────────────────────
+const backgroundJobs = new Map();
+
+// Clean up completed/failed jobs older than 1 hour
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [id, job] of backgroundJobs) {
+    if (job.completedAt && job.completedAt < cutoff) backgroundJobs.delete(id);
+  }
+}, 10 * 60 * 1000);
+
+// ─── POST /pipeline-generate-background ──────────────────────────────────────
+// Starts generation as a background job. Returns a jobId for polling.
+router.post('/pipeline-generate-background', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
+
+  if (!characterKey || !storyNumber || !taskBrief) {
+    return res.status(400).json({ error: 'characterKey, storyNumber, and taskBrief required' });
+  }
+
+  const jobId = `gen-${characterKey}-${storyNumber}-${Date.now()}`;
+
+  backgroundJobs.set(jobId, {
+    status: 'running',
+    characterKey,
+    storyNumber,
+    startedAt: Date.now(),
+    completedAt: null,
+    result: null,
+    error: null,
+  });
+
+  // Fire and forget — run the pipeline in the background
+  runPipeline({ characterKey, storyNumber, taskBrief, previousStories, useMultiVoice })
+    .then(result => {
+      const job = backgroundJobs.get(jobId);
+      if (job) {
+        job.status = 'completed';
+        job.result = result;
+        job.completedAt = Date.now();
+      }
+    })
+    .catch(err => {
+      console.error(`[pipeline-generate-background] job ${jobId} failed:`, err?.message);
+      const job = backgroundJobs.get(jobId);
+      if (job) {
+        job.status = 'failed';
+        job.error = err?.message || 'Pipeline failed';
+        job.completedAt = Date.now();
+      }
+    });
+
+  return res.json({ jobId, status: 'running' });
+});
+
+// ─── GET /pipeline-generate-status/:jobId ────────────────────────────────────
+// Poll for background generation status.
+router.get('/pipeline-generate-status/:jobId', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  return res.json({
+    jobId: req.params.jobId,
+    status: job.status,
+    storyNumber: job.storyNumber,
+    characterKey: job.characterKey,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    result: job.status === 'completed' ? job.result : null,
+    error: job.status === 'failed' ? job.error : null,
+    durationMs: job.completedAt ? job.completedAt - job.startedAt : Date.now() - job.startedAt,
+  });
+});
+
 // ─── POST /batch-generate ────────────────────────────────────────────────────
 // Generates multiple stories sequentially through the quality pipeline.
 // Uses SSE (Server-Sent Events) to stream progress to the frontend.

@@ -27,35 +27,48 @@ const {
 } = require('../utils/feedProfileUtils');
 
 const AI_MODEL = 'claude-sonnet-4-6';
+const AI_FALLBACK_MODEL = 'claude-sonnet-4-20250514';
 const AI_TIMEOUT_MS = 120000; // 120s timeout matching bulk routes
 const AI_MAX_RETRIES = 1;
 
 /**
- * Call Claude with timeout and retry logic.
+ * Call Claude with timeout, retry, and model fallback logic.
  */
 async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES } = {}) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let lastErr;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      let timer;
-      const response = await Promise.race([
-        client.messages.create({
-          model: AI_MODEL,
-          max_tokens: maxTokens,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-        new Promise((_, reject) => {
-          timer = setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS);
-        }),
-      ]);
-      clearTimeout(timer);
-      return response;
-    } catch (err) {
-      lastErr = err;
-      console.log(`[FeedScheduler] AI call attempt ${attempt + 1} failed: ${err.message}`);
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); // backoff
+  const models = [AI_MODEL, AI_FALLBACK_MODEL];
+
+  for (const model of models) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        let timer;
+        const response = await Promise.race([
+          client.messages.create({
+            model,
+            max_tokens: maxTokens,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS);
+          }),
+        ]);
+        clearTimeout(timer);
+        if (!response?.content?.length || !response.content[0]?.text) {
+          throw new Error('AI returned empty or malformed response');
+        }
+        return response;
+      } catch (err) {
+        lastErr = err;
+        console.log(`[FeedScheduler] AI call (${model}) attempt ${attempt + 1} failed: ${err.message}`);
+        const isRetryable = err.status === 529 || err.status === 503 || err.status === 404;
+        if (isRetryable && model === AI_MODEL) {
+          console.warn(`[FeedScheduler] ${AI_MODEL} returned ${err.status}, falling back to ${AI_FALLBACK_MODEL}`);
+          break; // break inner loop, try fallback model
+        }
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); // backoff
+        }
       }
     }
   }
