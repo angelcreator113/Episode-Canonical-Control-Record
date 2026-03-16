@@ -1680,7 +1680,9 @@ router.post('/character-interview-next', optionalAuth, async (req, res) => {
     if (mentionedChars.length > 0) {
       const wordCount = latestText.split(/\s+/).length;
       const primaryLower = primaryName?.toLowerCase();
-      const primaryMentions = (answerLower.match(new RegExp(primaryLower, 'g')) || []).length;
+      const primaryMentions = primaryLower
+        ? (answerLower.match(new RegExp(primaryLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length
+        : 0;
       const otherMentions = mentionedChars[0].searchTerms.reduce((count, term) =>
         count + (answerLower.match(new RegExp(term.toLowerCase(), 'g')) || []).length, 0
       );
@@ -2017,7 +2019,7 @@ ${answersFormatted}
 
 ${relational_notes.length > 0 ? `
 CROSS-CHARACTER OBSERVATIONS (captured during interview):
-${relational_notes.map((n, i) => `${i+1}. [${n.primary_character} ↔ ${n.other_character}] ${n.observation}`).join('\n')}
+${relational_notes.map((n, i) => `${i+1}. [${n.primary_character} ↔ ${n.drifted_to}] ${n.observation}`).join('\n')}
 
 These observations reveal how characters relate to each other through the author's instinctive associations. Use them to enrich the profile — especially pressure_type and personality sections.
 ` : ''}
@@ -4784,25 +4786,67 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
     console.error('Knowledge injection failed:', e.message);
   }
 
-  const conversationHistory = history
+  const rawHistory = history
     .filter(m => m.role && m.text)
     .slice(-20)
     .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+
+  // Ensure alternating roles — Anthropic API requires user/assistant alternation
+  // and the first message must be role: 'user'
+  const conversationHistory = [];
+  for (const msg of rawHistory) {
+    if (conversationHistory.length === 0 || conversationHistory[conversationHistory.length - 1].role !== msg.role) {
+      conversationHistory.push(msg);
+    }
+  }
+
+  // First message must be user role
+  while (conversationHistory.length > 0 && conversationHistory[0].role !== 'user') {
+    conversationHistory.shift();
+  }
+
+  // Last history message must be assistant so we can append user message
+  if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+    conversationHistory.pop();
+  }
 
   conversationHistory.push({ role: 'user', content: message });
 
   const systemPrompt = buildAmberSystemPrompt(contextSummary, knowledgeBlock);
 
-  try {
-    const claudeResponse = await anthropic.messages.create({
-      model:      'claude-sonnet-4-6',
+  // Helper: attempt an API call with a given model
+  const tryModel = async (modelId) => {
+    return anthropic.messages.create({
+      model:      modelId,
       max_tokens: 2048,
       system:     systemPrompt,
       messages:   conversationHistory,
     });
+  };
+
+  try {
+    let claudeResponse;
+    try {
+      claudeResponse = await tryModel('claude-sonnet-4-6');
+    } catch (primaryErr) {
+      const isRetryable = primaryErr.status === 529 || primaryErr.status === 503 || primaryErr.status === 404;
+      console.error('Assistant command primary model failed:', {
+        message: primaryErr.message,
+        status: primaryErr.status,
+        type: primaryErr.error?.type,
+        name: primaryErr.name,
+      });
+      if (isRetryable) {
+        // Wait 2s then try fallback model (matches scene-interview retry pattern)
+        await new Promise(r => setTimeout(r, 2000));
+        claudeResponse = await tryModel('claude-sonnet-4-20250514');
+      } else {
+        throw primaryErr;
+      }
+    }
 
     const raw   = claudeResponse.content[0].text.trim();
-    
+
     // Extract JSON from the response — Claude may wrap it in markdown or prefix with text
     let jsonStr = raw;
     // Try to find a JSON block in ```json ... ``` fences
@@ -4852,19 +4896,56 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
     });
 
   } catch (err) {
-    console.error('Assistant command error:', err);
+    // Structured error logging
+    console.error('Assistant command error:', {
+      message: err.message,
+      status: err.status,
+      type: err.error?.type,
+      name: err.name,
+      stack: err.stack?.split('\n').slice(0, 3).join(' | '),
+    });
 
-    // Provide a helpful message when the API key is the problem
-    const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
-    const reply = isAuthError
-      ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
-      : "Hmm, that didn't work — try again or rephrase it for me.";
+    // Error classification with errorType and retryable fields
+    const isAuth = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    const isRateLimit = err.status === 429;
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    const isBadRequest = err.status === 400;
+    const isNetwork = err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.message?.includes('fetch failed');
+
+    let errorType, retryable, reply;
+    if (isAuth) {
+      errorType = 'auth';
+      retryable = false;
+      reply = "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env.";
+    } else if (isRateLimit) {
+      errorType = 'rate_limit';
+      retryable = false;
+      reply = "Too many requests hitting the AI service — give me a moment and try again.";
+    } else if (isOverloaded) {
+      errorType = 'overloaded';
+      retryable = true;
+      reply = "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment.";
+    } else if (isBadRequest) {
+      errorType = 'bad_request';
+      retryable = false;
+      reply = "Something went wrong with the request format. Check server logs for details.";
+    } else if (isNetwork) {
+      errorType = 'network';
+      retryable = true;
+      reply = "I can't reach the AI service right now — there may be a network issue. Try again in a moment.";
+    } else {
+      errorType = 'unknown';
+      retryable = false;
+      reply = `Something unexpected happened: ${err.message || 'unknown error'}. Check server logs for details.`;
+    }
 
     return res.json({
       reply,
-      action:  null,
-      refresh: null,
-      error:   err.message,
+      action:    null,
+      refresh:   null,
+      error:     err.message,
+      errorType,
+      retryable,
     });
   }
 });
@@ -4958,28 +5039,66 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
     console.error('Knowledge injection failed:', e.message);
   }
 
-  const conversationHistory = history
+  const rawHistory = history
     .filter(m => m.role && m.text)
     .slice(-20)
     .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
 
+  // Ensure alternating roles — Anthropic API requires user/assistant alternation
+  // and the first message must be role: 'user'
+  const conversationHistory = [];
+  for (const msg of rawHistory) {
+    if (conversationHistory.length === 0 || conversationHistory[conversationHistory.length - 1].role !== msg.role) {
+      conversationHistory.push(msg);
+    }
+  }
+
+  // First message must be user role
+  while (conversationHistory.length > 0 && conversationHistory[0].role !== 'user') {
+    conversationHistory.shift();
+  }
+
+  // Last history message must be assistant so we can append user message
+  if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+    conversationHistory.pop();
+  }
+
   conversationHistory.push({ role: 'user', content: message });
 
-  // Reuse the same system prompt from assistant-command (lines 4785-5123)
+  // Reuse the same system prompt from assistant-command
   // We reference the systemPrompt variable built inline in the non-streaming route.
   // Since the system prompt is built inline in the other route, we rebuild the key parts here.
   // The full system prompt is identical — we reference the same string structure.
   const systemPrompt = buildAmberSystemPrompt(contextSummary, knowledgeBlock);
 
-  try {
-    let fullText = '';
-
-    const stream = anthropic.messages.stream({
-      model:      'claude-sonnet-4-6',
+  // Helper: attempt streaming with a given model
+  const tryStreamModel = (modelId) => {
+    return anthropic.messages.stream({
+      model:      modelId,
       max_tokens: 2048,
       system:     systemPrompt,
       messages:   conversationHistory,
     });
+  };
+
+  try {
+    let fullText = '';
+    let stream;
+
+    try {
+      stream = tryStreamModel('claude-sonnet-4-6');
+      // Test the stream by waiting for initial connection
+      // If the model is unavailable, the error fires before any tokens
+    } catch (primaryErr) {
+      console.error('Assistant stream primary model failed:', {
+        message: primaryErr.message,
+        status: primaryErr.status,
+        type: primaryErr.error?.type,
+        name: primaryErr.name,
+      });
+      // Fall back to previous model
+      stream = tryStreamModel('claude-sonnet-4-20250514');
+    }
 
     // Handle client disconnect
     let aborted = false;
@@ -4991,7 +5110,30 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
       res.write(`data: ${JSON.stringify({ type: 'token', text })}\n\n`);
     });
 
-    await stream.finalMessage();
+    try {
+      await stream.finalMessage();
+    } catch (streamErr) {
+      // If primary model fails mid-stream, try fallback
+      const isRetryable = streamErr.status === 529 || streamErr.status === 503 || streamErr.status === 404;
+      if (isRetryable && fullText === '') {
+        console.error('Assistant stream retrying with fallback model:', {
+          message: streamErr.message,
+          status: streamErr.status,
+          type: streamErr.error?.type,
+        });
+        fullText = '';
+        stream = tryStreamModel('claude-sonnet-4-20250514');
+        req.on('close', () => { aborted = true; stream.abort(); });
+        stream.on('text', (text) => {
+          if (aborted) return;
+          fullText += text;
+          res.write(`data: ${JSON.stringify({ type: 'token', text })}\n\n`);
+        });
+        await stream.finalMessage();
+      } else {
+        throw streamErr;
+      }
+    }
 
     if (aborted) return;
 
@@ -5041,14 +5183,55 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
     res.end();
 
   } catch (err) {
-    console.error('Assistant stream error:', err);
-    const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    // Structured error logging
+    console.error('Assistant stream error:', {
+      message: err.message,
+      status: err.status,
+      type: err.error?.type,
+      name: err.name,
+      stack: err.stack?.split('\n').slice(0, 3).join(' | '),
+    });
+
+    // Error classification with errorType and retryable fields
+    const isAuth = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    const isRateLimit = err.status === 429;
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    const isBadRequest = err.status === 400;
+    const isNetwork = err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.message?.includes('fetch failed');
+
+    let errorType, retryable, reply;
+    if (isAuth) {
+      errorType = 'auth';
+      retryable = false;
+      reply = "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env.";
+    } else if (isRateLimit) {
+      errorType = 'rate_limit';
+      retryable = false;
+      reply = "Too many requests hitting the AI service — give me a moment and try again.";
+    } else if (isOverloaded) {
+      errorType = 'overloaded';
+      retryable = true;
+      reply = "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment.";
+    } else if (isBadRequest) {
+      errorType = 'bad_request';
+      retryable = false;
+      reply = "Something went wrong with the request format. Check server logs for details.";
+    } else if (isNetwork) {
+      errorType = 'network';
+      retryable = true;
+      reply = "I can't reach the AI service right now — there may be a network issue. Try again in a moment.";
+    } else {
+      errorType = 'unknown';
+      retryable = false;
+      reply = `Something unexpected happened: ${err.message || 'unknown error'}. Check server logs for details.`;
+    }
+
     res.write(`data: ${JSON.stringify({
       type:  'error',
-      reply: isAuthError
-        ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
-        : "Hmm, that didn't work — try again or rephrase it for me.",
+      reply,
       error: err.message,
+      errorType,
+      retryable,
     })}\n\n`);
     res.end();
   }
@@ -5475,7 +5658,7 @@ Return ONLY valid JSON:
         if (!validPages.includes(pageName)) return { error: `Invalid page_name. Valid: ${validPages.join(', ')}` };
 
         const rows = await sequelize.query(
-          `SELECT constant_key, data FROM page_contents WHERE page_name = :pageName`,
+          `SELECT constant_key, data FROM page_content WHERE page_name = :pageName`,
           { replacements: { pageName }, type: sequelize.QueryTypes.SELECT }
         );
 
@@ -5504,11 +5687,11 @@ Return ONLY valid JSON:
           character_depth_engine: 'Character Depth Engine',
         };
 
-        // Check page_contents table for each page
+        // Check page_content table for each page
         const pageCounts = await sequelize.query(
           `SELECT page_name, COUNT(*) as section_count,
                   SUM(LENGTH(data::text)) as total_chars
-           FROM page_contents
+           FROM page_content
            WHERE page_name IN (:pages)
            GROUP BY page_name`,
           { replacements: { pages: validPages }, type: sequelize.QueryTypes.SELECT }
@@ -5593,7 +5776,7 @@ Return ONLY valid JSON:
 
         // Load page content from DB
         const rows = await sequelize.query(
-          `SELECT constant_key, data FROM page_contents WHERE page_name = :pageName`,
+          `SELECT constant_key, data FROM page_content WHERE page_name = :pageName`,
           { replacements: { pageName }, type: sequelize.QueryTypes.SELECT }
         );
 
@@ -5687,7 +5870,7 @@ DOCUMENT:\n${trimmed}\n\nCATEGORIES: character, narrative, locked_decision, fran
 
         // Load existing page content + active brain knowledge for context
         const existingPage = await sequelize.query(
-          `SELECT constant_key, data FROM page_contents WHERE page_name = :pageName`,
+          `SELECT constant_key, data FROM page_content WHERE page_name = :pageName`,
           { replacements: { pageName }, type: sequelize.QueryTypes.SELECT }
         );
 
@@ -7820,6 +8003,60 @@ async function loadDialogueVoiceCards(characterKey) {
 }
 
 // ─── Load dramatic irony / open mysteries ────────────────────────────────────
+async function loadVoiceFingerprints(characterKey) {
+  try {
+    const { StorytellerStory, RegistryCharacter } = require('../models');
+    if (!StorytellerStory) return null;
+    const { Op } = require('sequelize');
+
+    // Find the main character to get their display name
+    const mainChar = await RegistryCharacter.findOne({
+      where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+      attributes: ['display_name'],
+    });
+    if (!mainChar) return null;
+
+    // Load the last 5 approved stories for this character
+    const approvedStories = await StorytellerStory.findAll({
+      where: {
+        character_key: characterKey,
+        status: { [Op.in]: ['approved', 'written_back', 'evaluated'] },
+      },
+      attributes: ['text', 'story_number', 'title'],
+      order: [['story_number', 'DESC']],
+      limit: 5,
+    });
+
+    if (!approvedStories.length) return null;
+
+    // Extract dialogue lines using a simple regex — lines between quotes
+    const dialogueExcerpts = [];
+    for (const story of approvedStories) {
+      if (!story.text) continue;
+      // Match quoted dialogue (both single and double quotes)
+      const matches = story.text.match(/"[^"]{15,120}"/g) || [];
+      // Take 2-3 distinctive lines per story
+      const selected = matches
+        .filter(m => !m.includes('…') || m.length > 30) // skip trailing fragments
+        .slice(0, 3);
+      if (selected.length) {
+        dialogueExcerpts.push({ story: story.story_number, title: story.title, lines: selected });
+      }
+    }
+
+    if (!dialogueExcerpts.length) return null;
+
+    const sections = dialogueExcerpts.map(d =>
+      `  Story ${d.story} ("${d.title}"):\n${d.lines.map(l => `    ${l}`).join('\n')}`
+    );
+
+    return `VOICE FINGERPRINTS (actual dialogue from approved stories — absorb the rhythm, vocabulary, and cadence, then write NEW dialogue that matches):\n${sections.join('\n')}`;
+  } catch (err) {
+    console.error('[loadVoiceFingerprints] error:', err?.message);
+    return null;
+  }
+}
+
 async function loadDramaticIrony(characterKey) {
   try {
     const { StorytellerMemory } = require('../models');
@@ -7949,13 +8186,79 @@ These influences are atmospheric. Characters don't announce who they follow — 
 const seTaskArcCache = new Map();
 
 // ─── GET /story-engine-tasks/:characterKey ─────────────────────────────────────
-// Returns cached task arc if available; no Claude call.
+// Returns cached task arc if available; falls back to DB, then to empty.
 router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) => {
   const { characterKey } = req.params;
-  // Accept any character key — hardcoded DNA or dynamic DB character
+
+  // 1. In-memory cache (fastest)
   if (seTaskArcCache.has(characterKey)) {
     return res.json({ cached: true, ...seTaskArcCache.get(characterKey) });
   }
+
+  // 2. Database fallback — restore from persisted arc
+  try {
+    await db.StoryTaskArc.sync();
+    const dbArc = await db.StoryTaskArc.findOne({ where: { character_key: characterKey } });
+    if (dbArc && dbArc.tasks?.length) {
+      const result = {
+        character_key: dbArc.character_key,
+        display_name: dbArc.display_name,
+        world: dbArc.world,
+        narrative_spine: dbArc.narrative_spine,
+        tasks: dbArc.tasks,
+      };
+      // Re-populate in-memory cache
+      seTaskArcCache.set(characterKey, result);
+      return res.json({ cached: true, ...result });
+    }
+  } catch (dbErr) {
+    console.warn('[story-engine-tasks] DB fallback failed:', dbErr.message);
+  }
+
+  // 3. Auto-rebuild from existing stories if any exist
+  try {
+    const existingStories = await db.StorytellerStory.findAll({
+      where: { character_key: characterKey },
+      order: [['story_number', 'ASC']],
+    });
+    if (existingStories.length > 0) {
+      const tasks = existingStories.map(s => {
+        const brief = s.task_brief || {};
+        return {
+          story_number: s.story_number,
+          title: brief.title || s.title,
+          phase: brief.phase || s.phase,
+          story_type: brief.story_type || s.story_type,
+          task: brief.task || `Story ${s.story_number}`,
+          obstacle: brief.obstacle || '',
+          domains_active: brief.domains_active || [],
+          strength_weaponized: brief.strength_weaponized || '',
+          emotional_start: brief.emotional_start || '',
+          emotional_end: brief.emotional_end || '',
+          primary_location: brief.primary_location || '',
+          time_of_day: brief.time_of_day || '',
+          season_weather: brief.season_weather || '',
+          new_character: s.new_character || false,
+          new_character_name: s.new_character_name || null,
+          new_character_role: s.new_character_role || null,
+          therapy_seeds: brief.therapy_seeds || [],
+          opening_line: brief.opening_line || s.opening_line || '',
+        };
+      });
+      const result = {
+        character_key: characterKey,
+        display_name: existingStories[0].task_brief?.display_name || characterKey,
+        world: null,
+        narrative_spine: null,
+        tasks,
+      };
+      seTaskArcCache.set(characterKey, result);
+      return res.json({ cached: true, rebuilt: true, ...result });
+    }
+  } catch (rebuildErr) {
+    console.warn('[story-engine-tasks] rebuild from stories failed:', rebuildErr.message);
+  }
+
   return res.json({ cached: false, tasks: [] });
 });
 
@@ -8058,6 +8361,22 @@ CHARACTER DNA:
 - Family domain: ${dna.domains.family}
 - Friends domain: ${dna.domains.friends}${profileSection}${memoriesSection}${worldSection}
 
+NARRATIVE SPINE (design this FIRST, then build all 50 stories around it):
+Before generating individual story briefs, you MUST design a narrative spine — the throughline that makes 50 stories feel like ONE story. Think of this as the architecture beneath the arc.
+
+1. CENTRAL DRAMATIC QUESTION — one question the reader carries from story 1 to story 50 (e.g., "Can she build something real without losing who she was before she started?"). This question should feel unanswerable until the final stories.
+
+2. KEY TURNING POINTS — pre-plan 4-5 structural pivots that change the direction of the arc:
+   - The Inciting Fracture (stories 8-12): something cracks that cannot be uncracked
+   - The False Summit (stories 18-22): she gets what she thought she wanted, and it tastes wrong
+   - The Betrayal/Revelation (stories 28-32): a truth she cannot unknow — about herself, someone she loves, or both
+   - The Crucible (stories 36-40): everything converges — career, relationship, identity — she cannot keep them separate
+   - The Quiet Shift (stories 46-50): not a triumph, not a collapse — a rearrangement of what matters
+
+3. SUBPLOT ARCS — each domain (career, romantic, family, friends) gets its own mini-arc with a beginning, middle, and end WITHIN the 50 stories. These subplot arcs should intersect at the turning points.
+
+4. RECURRING MOTIFS — 2-3 images, objects, or phrases that recur across the arc with shifting meaning (the recurring object is one; identify 1-2 more that emerge from the character's wound and desire).
+
 ARC PHASES:
 - Stories 1-10: Establishment — who she is, her rhythms, her world
 - Stories 11-25: Pressure — obstacles hit harder, strengths used against her
@@ -8087,6 +8406,19 @@ RULES:
 Return ONLY valid JSON — no preamble, no markdown.
 Format:
 {
+  "narrative_spine": {
+    "central_dramatic_question": "the one question the reader carries across all 50 stories",
+    "turning_points": [
+      { "name": "string", "story_range": "e.g. 8-12", "description": "what happens and why it changes everything" }
+    ],
+    "subplot_arcs": {
+      "career": "beginning → middle → end of the career subplot",
+      "romantic": "beginning → middle → end of the romantic subplot",
+      "family": "beginning → middle → end of the family subplot",
+      "friends": "beginning → middle → end of the friends subplot"
+    },
+    "recurring_motifs": ["motif 1 and how its meaning shifts", "motif 2 and how its meaning shifts"]
+  },
   "tasks": [
     {
       "story_number": 1,
@@ -8141,11 +8473,26 @@ Format:
       character_key: characterKey,
       display_name: dna.display_name,
       world: dna.world,
+      narrative_spine: parsed.narrative_spine || null,
       tasks: parsed.tasks || [],
     };
 
     // Cache the arc in memory
     seTaskArcCache.set(characterKey, result);
+
+    // Persist to database so it survives server restarts
+    try {
+      await db.StoryTaskArc.sync();
+      await db.StoryTaskArc.upsert({
+        character_key: characterKey,
+        display_name: result.display_name,
+        world: result.world,
+        narrative_spine: result.narrative_spine,
+        tasks: result.tasks,
+      });
+    } catch (persistErr) {
+      console.warn('[generate-story-tasks] DB persist failed:', persistErr.message);
+    }
 
     return res.json({ cached: false, ...result });
 
@@ -8226,24 +8573,56 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
   });
 
   try {
-    // Build previous stories context — use ALL approved, not just last 3
+    // Build previous stories context — relevance-based, not just recency
     let previousContext;
     if (previousStories?.length) {
-      // Last 3: full summary (up to 800 chars each for deep continuity)
-      // Previous 7: title + short summary
-      // Older: titles only
+      // Always include last 3 with full context (direct continuity)
       const last3 = previousStories.slice(-3);
-      const middle = previousStories.slice(-10, -3);
-      const older = previousStories.slice(0, -10);
+
+      // For older stories, identify thematically relevant ones using the current brief
+      const older = previousStories.slice(0, -3);
+      let relevantOlder = [];
+      let remainingOlder = [];
+
+      if (older.length > 5) {
+        // Use a fast model to pick the most relevant older stories for this brief
+        try {
+          const relevanceCheck = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 500,
+            system: 'Return ONLY a JSON array of story numbers. No commentary.',
+            messages: [{ role: 'user', content: `Current story brief: "${taskBrief.title}" — ${taskBrief.task}. Obstacle: ${taskBrief.obstacle}. Phase: ${taskBrief.phase}. Strength weaponized: ${taskBrief.strength_weaponized}.
+
+Which of these earlier stories are most THEMATICALLY relevant to the current brief? Pick up to 5 that share themes, characters, emotional territory, or plot threads that should inform continuity.
+
+${older.map(s => `Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 150)}`).join('\n')}
+
+Return JSON array of story numbers, e.g. [3, 7, 14]` }],
+          });
+          const relRaw = relevanceCheck.content?.[0]?.text || '[]';
+          const relNums = JSON.parse(relRaw.replace(/```json|```/g, '').trim());
+          if (Array.isArray(relNums)) {
+            relevantOlder = older.filter(s => relNums.includes(s.number));
+            remainingOlder = older.filter(s => !relNums.includes(s.number));
+          } else {
+            remainingOlder = older;
+          }
+        } catch {
+          // Fallback to recency if relevance check fails
+          remainingOlder = older;
+        }
+      } else {
+        remainingOlder = older;
+      }
 
       let contextParts = [];
-      if (older.length) {
-        contextParts.push('EARLIER ARC STORIES (titles only — these established the foundation):\n' +
-          older.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
+      if (remainingOlder.length) {
+        contextParts.push('EARLIER ARC STORIES (titles — these established the foundation):\n' +
+          remainingOlder.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
       }
-      if (middle.length) {
-        contextParts.push('RECENT ARC STORIES (for continuity — the character\'s recent journey):\n' +
-          middle.map(s => `- Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 300)}`).join('\n'));
+      if (relevantOlder.length) {
+        contextParts.push('THEMATICALLY RELEVANT EARLIER STORIES (these share emotional territory with the current brief — use for deep continuity):\n' +
+          relevantOlder.map(s => `- Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 500)}`).join('\n'));
       }
       contextParts.push('MOST RECENT STORIES (direct continuity — the story you write follows these):\n' +
         last3.map(s => `- Story ${s.number}: "${s.title}" — ${s.summary || ''}`).join('\n'));
@@ -8253,7 +8632,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     }
 
     // Load all context in parallel for speed
-    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence] = await Promise.all([
+    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence, voiceFingerprints] = await Promise.all([
       loadCharacterProfile(characterKey),
       loadStoryMemories(characterKey),
       loadWorldState(characterKey, dna.world),
@@ -8265,6 +8644,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
       loadDialogueVoiceCards(characterKey),
       loadDramaticIrony(characterKey),
       loadFollowInfluence(characterKey),
+      loadVoiceFingerprints(characterKey),
     ]);
 
     const profileSection = dbProfile
@@ -8282,6 +8662,20 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     const voiceCardsSection = voiceCards ? `\n\n${voiceCards}` : '';
     const ironySection = dramaticIrony ? `\n\n${dramaticIrony}` : '';
     const followSection = followInfluence ? `\n\n${followInfluence}` : '';
+    const fingerprintSection = voiceFingerprints ? `\n\n${voiceFingerprints}` : '';
+
+    // Build pacing analysis from recent stories to prevent repetitive structure
+    let pacingSection = '';
+    if (previousStories?.length >= 2) {
+      const recentBriefs = previousStories.slice(-3);
+      const patterns = recentBriefs.map(s => {
+        const brief = s.taskBrief || s;
+        return `  Story ${s.number}: type=${brief.story_type || '?'}, location=${brief.primary_location || '?'}, time=${brief.time_of_day || '?'}, emotional_start=${brief.emotional_start || '?'}`;
+      });
+      pacingSection = `\n\nPACING ANALYSIS (vary structure to prevent repetition — the last ${recentBriefs.length} stories used these patterns):
+${patterns.join('\n')}
+VARY: If recent stories opened in the same time of day, choose a different one. If they were all internal, bring collision energy. If they all started with tension, open with quiet. The reader needs rhythm — tension then breath, breath then tension. Surprise them with structure, not just plot.`;
+    }
 
     const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
@@ -8296,7 +8690,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${ironySection}${followSection}
+Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${fingerprintSection}${ironySection}${followSection}${pacingSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -8382,15 +8776,60 @@ Write the complete story now. No preamble. Begin with the title, then the story.
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      max_tokens: 10000,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Write Story ${storyNumber}: "${taskBrief.title}"` }],
     });
 
-    const storyText = response.content?.[0]?.text || '';
+    let storyText = response.content?.[0]?.text || '';
 
     if (!storyText || storyText.length < 500) {
       return fallback();
+    }
+
+    // ── Quality gate — fast check for show-don't-tell and craft issues ──
+    try {
+      const qualityCheck = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        system: `You are a literary quality checker. Analyze the story and return ONLY valid JSON — no markdown, no commentary.`,
+        messages: [{ role: 'user', content: `Check this story for craft quality issues:
+
+${storyText.slice(0, 6000)}
+
+Return JSON:
+{
+  "pass": true|false,
+  "score": 0-10,
+  "issues": [
+    { "type": "telling_not_showing|flat_dialogue|rushed_ending|missing_interiority|summary_instead_of_scene|weak_emotional_arc", "location": "brief description of where", "fix": "specific suggestion" }
+  ],
+  "strengths": ["what works well — be specific"],
+  "emotional_arc_delivered": true|false,
+  "all_domains_present": true|false
+}
+
+Score guide: 8+ pass, 6-7 has fixable issues, below 6 needs rewrite.
+Check specifically:
+1. Does the story SHOW scenes or SUMMARIZE events?
+2. Does dialogue do double duty (reveal character AND advance plot)?
+3. Is the emotional arc earned — does the ending shift feel real?
+4. Are all 4 life domains (career, romantic, family, friends) present?
+5. Is the ending a "quarter-inch shift" or a neat resolution?` }],
+      });
+
+      const qRaw = qualityCheck.content?.[0]?.text || '';
+      let quality;
+      try { quality = JSON.parse(qRaw.replace(/```json|```/g, '').trim()); } catch { quality = null; }
+
+      if (quality) {
+        // Attach quality report to the response
+        storyText = storyText; // keep original — quality report attached separately
+        // Store quality result for response
+        var qualityReport = quality;
+      }
+    } catch (qErr) {
+      console.error('[quality-gate] non-blocking error:', qErr?.message);
     }
 
     const wordCount = storyText.split(/\s+/).length;
@@ -8525,12 +8964,324 @@ Return ONLY valid JSON:
       new_character_name: taskBrief.new_character_name || null,
       new_character_role: taskBrief.new_character_role || null,
       auto_extraction: 'in_progress',
+      quality_report: typeof qualityReport !== 'undefined' ? qualityReport : null,
     });
 
   } catch (err) {
     console.error('[generate-story] error:', err?.message);
     return fallback();
   }
+});
+
+// ─── POST /revise-story ──────────────────────────────────────────────────────
+// Takes a generated story + editorial notes and produces a tightened revision.
+router.post('/revise-story', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, storyText, editorialNotes, qualityReport } = req.body;
+
+  if (!storyText || !editorialNotes) {
+    return res.status(400).json({ error: 'storyText and editorialNotes are required' });
+  }
+
+  // Keep-alive for long requests
+  res.setHeader('Content-Type', 'application/json');
+  let finished = false;
+  const keepAlive = setInterval(() => {
+    if (!finished) try { res.write(' '); } catch (_) {}
+  }, 15000);
+
+  const finish = (data) => {
+    finished = true;
+    clearInterval(keepAlive);
+    res.end(JSON.stringify(data));
+  };
+
+  try {
+    // Build quality issues context from auto-report if available
+    let qualityContext = '';
+    if (qualityReport?.issues?.length) {
+      qualityContext = '\n\nAUTO-DETECTED QUALITY ISSUES:\n' +
+        qualityReport.issues.map(i => `- [${i.type}] ${i.location}: ${i.fix}`).join('\n');
+    }
+
+    const revisionPrompt = `You are revising a short story based on editorial feedback.
+
+ORIGINAL STORY (${storyText.split(/\s+/).length} words):
+${storyText}
+
+EDITORIAL NOTES FROM THE AUTHOR:
+${editorialNotes}${qualityContext}
+
+REVISION RULES:
+- Preserve the story's core events, characters, and emotional arc
+- Address EVERY editorial note specifically
+- Maintain the same POV, tense, and voice register
+- Keep the word count within 3300-4800 words
+- Do NOT add explanatory framing or meta-commentary
+- Tighten prose: cut redundant descriptions, strengthen verbs, sharpen dialogue
+- If the editorial notes mention pacing, restructure scenes accordingly
+- If the notes mention "telling not showing," replace summary with scene
+- The revised version should feel like the same story, written better
+
+Return ONLY the revised story. Begin with the title, then the story. No preamble.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 10000,
+      system: revisionPrompt,
+      messages: [{ role: 'user', content: 'Revise the story now.' }],
+    });
+
+    const revisedText = response.content?.[0]?.text || '';
+
+    if (!revisedText || revisedText.length < 500) {
+      return finish({ error: 'Revision produced insufficient output — try again.' });
+    }
+
+    return finish({
+      story_number: storyNumber || null,
+      character_key: characterKey || null,
+      original_word_count: storyText.split(/\s+/).length,
+      revised_word_count: revisedText.split(/\s+/).length,
+      text: revisedText,
+      revision_applied: true,
+      token_usage: {
+        input: response.usage?.input_tokens || 0,
+        output: response.usage?.output_tokens || 0,
+      },
+    });
+  } catch (err) {
+    console.error('[revise-story] error:', err?.message);
+    finished = true;
+    clearInterval(keepAlive);
+    return res.status(500).json({ error: err?.message || 'Revision failed' });
+  }
+});
+
+// ─── Internal HTTP helper for calling sibling routes ─────────────────────────
+function internalCall(path, body) {
+  return new Promise((resolve, reject) => {
+    const http = require('http');
+    const port = process.env.PORT || 3000;
+    const postData = JSON.stringify(body);
+    const options = {
+      hostname: '127.0.0.1',
+      port,
+      path: `/api/v1/memories${path}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+      timeout: 180000,
+    };
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data.trim())); } catch { resolve({ error: 'Parse error', raw: data.slice(0, 200) }); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Internal call timeout')); });
+    req.write(postData);
+    req.end();
+  });
+}
+
+// ─── Pipeline core logic (shared by route handler and batch-generate) ────────
+async function runPipeline({ characterKey, storyNumber, taskBrief, previousStories, useMultiVoice }) {
+  const pipeline = { steps: [], started_at: Date.now() };
+
+  // ── Step 1: Generate the story ──────────────────────────────────────
+  const genResult = await internalCall('/generate-story', { characterKey, storyNumber, taskBrief, previousStories });
+  pipeline.steps.push({ step: 'generate', success: !!genResult?.text, word_count: genResult?.word_count });
+
+  if (!genResult?.text) {
+    pipeline.steps.push({ step: 'aborted', reason: 'Generation produced no text' });
+    return { pipeline, story: null, fallback: true };
+  }
+
+  let finalText = genResult.text;
+  let qualityReport = genResult.quality_report;
+  let revised = false;
+
+  // ── Step 2: Check quality gate ──────────────────────────────────────
+  if (qualityReport) {
+    pipeline.steps.push({ step: 'quality_gate', score: qualityReport.score, pass: qualityReport.pass, issues: qualityReport.issues?.length || 0 });
+
+    // ── Step 3: Auto-revise if quality score is below 8 ────────────────
+    if (qualityReport.score < 8 && qualityReport.issues?.length > 0) {
+      const editorialNotes = qualityReport.issues
+        .map(i => `[${i.type}] ${i.location}: ${i.fix}`)
+        .join('\n');
+
+      const revResult = await internalCall('/revise-story', {
+        characterKey, storyNumber, storyText: finalText, editorialNotes, qualityReport,
+      });
+
+      if (revResult?.text && revResult.revision_applied) {
+        finalText = revResult.text;
+        revised = true;
+        pipeline.steps.push({ step: 'auto_revise', success: true, original_words: genResult.word_count, revised_words: revResult.revised_word_count });
+      } else {
+        pipeline.steps.push({ step: 'auto_revise', success: false, reason: 'Revision failed or produced no text' });
+      }
+    }
+  }
+
+  const wordCount = finalText.split(/\s+/).filter(Boolean).length;
+
+  // ── Step 4: Determine if this is a turning-point story worth multi-voice ──
+  const isTurningPoint = useMultiVoice || (
+    taskBrief.phase === 'crisis' &&
+    ['collision', 'wrong_win'].includes(taskBrief.story_type)
+  );
+  pipeline.steps.push({ step: 'multi_voice_check', eligible: isTurningPoint, reason: isTurningPoint ? 'crisis-phase collision/wrong_win or user requested' : 'standard story' });
+
+  pipeline.completed_at = Date.now();
+  pipeline.duration_ms = pipeline.completed_at - pipeline.started_at;
+
+  return {
+    pipeline,
+    story_number: storyNumber,
+    character_key: characterKey,
+    title: taskBrief.title,
+    phase: taskBrief.phase,
+    story_type: taskBrief.story_type,
+    text: finalText,
+    word_count: wordCount,
+    revised,
+    quality_report: qualityReport,
+    therapy_seeds: taskBrief.therapy_seeds || [],
+    new_character: taskBrief.new_character || false,
+    new_character_name: taskBrief.new_character_name || null,
+    new_character_role: taskBrief.new_character_role || null,
+    multi_voice_eligible: isTurningPoint,
+  };
+}
+
+// ─── POST /pipeline-generate ──────────────────────────────────────────────────
+// Automated pipeline: generate → quality gate → auto-revise if needed → return.
+// Handles a single story through the full quality pipeline without manual steps.
+router.post('/pipeline-generate', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
+
+  if (!characterKey || !storyNumber || !taskBrief) {
+    return res.status(400).json({ error: 'characterKey, storyNumber, and taskBrief required' });
+  }
+
+  // Keep-alive for long pipeline runs
+  res.setHeader('Content-Type', 'application/json');
+  let finished = false;
+  const keepAlive = setInterval(() => {
+    if (!finished) try { res.write(' '); } catch (_) {}
+  }, 15000);
+
+  try {
+    const result = await runPipeline({ characterKey, storyNumber, taskBrief, previousStories, useMultiVoice });
+    finished = true;
+    clearInterval(keepAlive);
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    console.error('[pipeline-generate] error:', err?.message);
+    finished = true;
+    clearInterval(keepAlive);
+    return res.status(500).json({ error: err?.message || 'Pipeline failed' });
+  }
+});
+
+// ─── POST /batch-generate ────────────────────────────────────────────────────
+// Generates multiple stories sequentially through the quality pipeline.
+// Uses SSE (Server-Sent Events) to stream progress to the frontend.
+router.post('/batch-generate', optionalAuth, async (req, res) => {
+  const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
+
+  if (!characterKey || !taskBriefs?.length) {
+    return res.status(400).json({ error: 'characterKey and taskBriefs[] required' });
+  }
+
+  // Set up SSE for streaming progress
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const total = taskBriefs.length;
+  let completed = 0;
+  let previousStories = initialPrevious || [];
+  const results = [];
+
+  sendEvent('start', { total, character_key: characterKey });
+
+  for (const taskBrief of taskBriefs) {
+    const storyNumber = taskBrief.story_number;
+    sendEvent('progress', {
+      story_number: storyNumber,
+      title: taskBrief.title,
+      phase: taskBrief.phase,
+      status: 'generating',
+      completed,
+      total,
+    });
+
+    try {
+      // Call pipeline logic directly (no HTTP loopback)
+      const pipelineResult = await runPipeline({
+        characterKey,
+        storyNumber,
+        taskBrief,
+        previousStories,
+      });
+
+      completed++;
+      results.push(pipelineResult);
+
+      // Add this story to previous stories context for the next story
+      if (pipelineResult?.text) {
+        previousStories = [
+          ...previousStories,
+          {
+            number: storyNumber,
+            title: pipelineResult.title || taskBrief.title,
+            summary: (pipelineResult.text || '').slice(0, 800),
+            taskBrief,
+          },
+        ];
+      }
+
+      sendEvent('story_complete', {
+        story_number: storyNumber,
+        title: pipelineResult.title || taskBrief.title,
+        word_count: pipelineResult.word_count,
+        quality_score: pipelineResult.quality_report?.score,
+        revised: pipelineResult.revised || false,
+        completed,
+        total,
+      });
+    } catch (err) {
+      completed++;
+      sendEvent('story_error', {
+        story_number: storyNumber,
+        error: err?.message || 'Generation failed',
+        completed,
+        total,
+      });
+    }
+  }
+
+  sendEvent('batch_complete', {
+    total_generated: completed,
+    total_requested: total,
+    results_summary: results.map(r => ({
+      story_number: r?.story_number,
+      word_count: r?.word_count,
+      quality_score: r?.quality_report?.score,
+      revised: r?.revised,
+    })),
+  });
+
+  res.end();
 });
 
 // ─── POST /check-story-consistency ───────────────────────────────────────────
