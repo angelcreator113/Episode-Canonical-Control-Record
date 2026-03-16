@@ -8,8 +8,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import StoryHubNav from '../components/StoryHubNav';
-
 const API = '/api/v1/storyteller';
 
 const C = {
@@ -103,7 +101,6 @@ export default function StoryCalendar() {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text }}>
-      <StoryHubNav />
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>

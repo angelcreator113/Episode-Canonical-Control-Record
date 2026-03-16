@@ -74,9 +74,8 @@ html, body {
 .se-topbar {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 20px;
-  padding-right: 64px; /* room for Amber trigger */
+  gap: 8px;
+  padding: 6px 16px;
   border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
   background: var(--se-surface-glass);
@@ -192,14 +191,353 @@ html, body {
 }
 
 /* ─────────────────────────────────────────
-   Optional mobile deck wrapper
+   Mobile deck — visible on small screens only
 ────────────────────────────────────────── */
 .se-mobile-deck {
-  display: contents;
+  display: none; /* hidden on desktop — shown via media query */
+  flex-direction: column;
+  padding: 8px 14px 4px;
+  gap: 2px;
+  border-bottom: 1px solid var(--se-border-light);
+  background: var(--se-surface);
+  flex-shrink: 0;
+}
+
+.se-mobile-deck .se-char-selector {
+  padding: 0 0 6px;
+  border-bottom: none;
+  background: transparent;
+}
+
+.se-mobile-deck .se-char-trigger {
+  max-width: none;
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.se-mobile-deck .se-arc-progress {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
+}
+
+.se-mobile-deck .se-arc-phase {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 6px 0;
+  margin-right: 0;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.se-mobile-deck .se-arc-phase:not(:last-child) {
+  border-right: none;
+  margin-right: 0;
+}
+
+.se-mobile-deck .se-arc-phase-label {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.se-mobile-deck .se-arc-phase-bar {
+  height: 3px;
+  border-radius: 2px;
+  margin: 3px 2px 0;
+}
+
+.se-mobile-deck .se-arc-phase-count {
+  font-size: 9px;
+  margin-top: 2px;
+}
+
+.se-mobile-deck .se-arc-dots { display: none; }
+
+/* ─────────────────────────────────────────
+   Hero fullpage — centered when no arc exists
+────────────────────────────────────────── */
+.se-hero-fullpage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 48px 24px;
+  text-align: center;
+  gap: 16px;
+  min-height: 320px;
+}
+
+/* When in hero state, hide the story column */
+.se-workspace-hero .se-story-column {
+  display: none;
 }
 
 /* ─────────────────────────────────────────
-   Character selector
+   Body — sidebar + workspace
+────────────────────────────────────────── */
+.se-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─────────────────────────────────────────
+   Left sidebar
+────────────────────────────────────────── */
+.se-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--se-border-light);
+  background: var(--se-surface);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--se-border) transparent;
+}
+
+.se-sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.se-sidebar::-webkit-scrollbar-thumb {
+  background: var(--se-border);
+  border-radius: 999px;
+}
+
+.se-sidebar-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--se-border-light);
+}
+
+.se-sidebar-section:last-child {
+  border-bottom: none;
+}
+
+.se-sidebar-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--se-text-dim);
+  margin-bottom: 8px;
+}
+
+.se-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--se-text-muted);
+  margin-bottom: 4px;
+}
+
+.se-sidebar-toggle:hover {
+  color: var(--se-text);
+}
+
+.se-sidebar-toggle-arrow {
+  font-size: 10px;
+  color: var(--se-text-dim);
+}
+
+/* World pills — compact toggle */
+.se-world-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.se-world-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--se-border);
+  background: var(--se-surface);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--se-text);
+  transition: all 0.2s ease;
+}
+
+.se-world-pill:hover {
+  border-color: var(--se-border-strong);
+}
+
+.se-world-pill-name {
+  font-weight: 600;
+}
+
+.se-world-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.se-world-pill-dot.open {
+  background: var(--se-success);
+  box-shadow: 0 0 4px rgba(16,185,129,0.4);
+}
+
+.se-world-pill-dot.closed {
+  background: var(--se-danger);
+  box-shadow: 0 0 4px rgba(239,68,68,0.3);
+}
+
+/* Sidebar sparks */
+.se-sparks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.se-sparks-loading {
+  font-size: 11px;
+  color: var(--se-text-dim);
+  padding: 4px 0;
+}
+
+.se-spark-card {
+  padding: 8px 10px;
+  background: var(--se-cream);
+  border-radius: 8px;
+  border: 1px solid var(--se-border-light);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--se-text);
+}
+
+.se-spark-type {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--se-gold);
+  margin-bottom: 2px;
+}
+
+.se-spark-text {
+  color: var(--se-text-muted);
+}
+
+/* Sidebar shortcuts */
+.se-sidebar-shortcuts {
+  padding: 10px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--se-text-dim);
+  border-top: 1px solid var(--se-border-light);
+  margin-top: auto;
+}
+
+.se-sidebar-shortcuts span {
+  padding: 2px 6px;
+  background: var(--se-surface2);
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Sidebar arc — tighter, no dots, truncate labels */
+.se-sidebar-arc .se-arc-progress {
+  gap: 4px;
+  padding: 0;
+  border-bottom: none;
+  background: none;
+  flex-wrap: nowrap;
+}
+
+.se-sidebar-arc .se-arc-phase {
+  padding: 0;
+  min-width: 0;
+  gap: 4px;
+}
+
+.se-sidebar-arc .se-arc-phase:not(:last-child) {
+  border-right: none;
+  margin-right: 4px;
+}
+
+.se-sidebar-arc .se-arc-phase-label {
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.se-sidebar-arc .se-arc-phase-count {
+  font-size: 9px;
+}
+
+.se-sidebar-arc .se-arc-dots {
+  display: none;
+}
+
+/* Sidebar stats — compact */
+.se-sidebar-section .se-stats-dashboard {
+  padding: 0;
+  border: none;
+  margin: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.se-sidebar-section .se-stats-grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.se-sidebar-section .se-stat-card {
+  padding: 8px 10px;
+}
+
+.se-sidebar-section .se-stat-value {
+  font-size: 16px;
+}
+
+.se-sidebar-section .se-stat-label {
+  font-size: 9px;
+}
+
+.se-sidebar-section .se-stats-phase-row {
+  margin-top: 6px;
+}
+
+/* Character selector — sidebar-fitted */
+.se-sidebar .se-char-selector {
+  padding: 0;
+  border-bottom: none;
+  background: none;
+}
+
+.se-sidebar .se-char-trigger {
+  max-width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+/* ─────────────────────────────────────────
+   Character selector (shared)
 ────────────────────────────────────────── */
 .se-char-selector {
   position: relative;
@@ -1940,7 +2278,8 @@ html, body {
 .se-write-mode .se-topbar,
 .se-write-mode .se-stats-dashboard,
 .se-write-mode .se-shortcuts-hint,
-.se-write-mode .se-mobile-deck {
+.se-write-mode .se-mobile-deck,
+.se-write-mode .se-sidebar {
   display: none;
 }
 
@@ -2171,8 +2510,12 @@ html, body {
    Responsive
 ────────────────────────────────────────── */
 @media (max-width: 1100px) {
+  .se-sidebar {
+    width: 220px;
+  }
+
   .se-task-list {
-    width: 310px;
+    width: 280px;
   }
 
   .se-story-text,
@@ -2197,6 +2540,7 @@ html, body {
   /* ── Topbar: slim, sticky, glass ── */
   .se-topbar {
     padding: 6px 12px;
+    padding-right: 12px;
     gap: 8px;
     position: sticky;
     top: 0;
@@ -2208,84 +2552,15 @@ html, body {
     min-height: 44px;
   }
 
-  .se-topbar-title { font-size: 17px; }
   .se-btn-back { padding: 6px 8px; font-size: 11px; min-height: 32px; }
-  .se-btn-stats-toggle { padding: 6px 10px; font-size: 10px; min-height: 32px; }
-  .se-world-toggles { display: none; }
 
-  /* ── Mobile deck: compact character + arc summary ── */
-  .se-mobile-deck {
-    display: flex;
+  /* ── Show mobile deck, hide sidebar ── */
+  .se-mobile-deck { display: flex; }
+  .se-sidebar { display: none; }
+
+  .se-body {
     flex-direction: column;
-    margin: 0;
-    padding: 8px 14px;
-    background: var(--se-surface);
-    border-bottom: 1px solid var(--se-border-light);
-    border-radius: 0;
-    box-shadow: none;
-    overflow: visible;
-    flex-shrink: 0;
   }
-
-  .se-mobile-deck .se-char-selector {
-    padding: 0 0 6px;
-    border-bottom: none;
-    background: transparent;
-  }
-
-  .se-mobile-deck .se-char-trigger {
-    max-width: none;
-    min-height: 40px;
-    border-radius: 10px;
-    padding: 6px 10px;
-    font-size: 13px;
-    border-color: var(--se-border);
-  }
-
-  .se-mobile-deck .se-char-trigger-name { font-size: 13px; }
-  .se-mobile-deck .se-char-trigger-count { font-size: 10px; }
-
-  .se-mobile-deck .se-arc-progress {
-    display: flex !important;
-    gap: 0;
-    padding: 0;
-    background: transparent;
-    border-bottom: none;
-  }
-
-  .se-mobile-deck .se-arc-phase {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 6px 0;
-    margin-right: 0;
-    flex: 1;
-    min-width: 0;
-    text-align: center;
-  }
-
-  .se-mobile-deck .se-arc-phase:not(:last-child) {
-    border-right: none;
-    margin-right: 0;
-  }
-
-  .se-mobile-deck .se-arc-phase-label {
-    font-size: 8px;
-    letter-spacing: 0.08em;
-  }
-
-  .se-mobile-deck .se-arc-phase-bar {
-    height: 3px;
-    border-radius: 2px;
-    margin: 3px 2px 0;
-  }
-
-  .se-mobile-deck .se-arc-phase-count {
-    font-size: 9px;
-    margin-top: 2px;
-  }
-
-  .se-mobile-deck .se-arc-dots { display: none; }
 
   /* ── Workspace: scrollable area fills remaining height ── */
   .se-workspace,
@@ -2298,6 +2573,16 @@ html, body {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
+
+  /* ── Hero fullpage: compact on mobile ── */
+  .se-hero-fullpage {
+    padding: 32px 20px;
+    min-height: 240px;
+  }
+
+  .se-hero-fullpage .se-hero-icon { font-size: 24px; }
+  .se-hero-fullpage .se-hero-title { font-size: 18px; }
+  .se-hero-fullpage .se-hero-text { font-size: 12px; max-width: 300px; line-height: 1.5; }
 
   /* ── Task list ── */
   .se-task-list {
@@ -2443,21 +2728,6 @@ html, body {
     color: var(--char-color);
   }
 
-  /* ── Hero / empty state: compact on mobile ── */
-  .se-task-empty.se-hero-card {
-    margin: 20px 16px;
-    padding: 24px 18px 20px;
-    background: var(--se-surface);
-    border: 1px solid var(--se-border-light);
-    border-radius: 14px;
-    box-shadow: var(--se-shadow-sm);
-    gap: 10px;
-  }
-
-  .se-hero-icon { font-size: 24px; }
-  .se-hero-title { font-size: 16px; }
-  .se-hero-text { font-size: 12px; max-width: 280px; line-height: 1.5; }
-
   .se-task-loading {
     height: auto;
     padding: 40px 20px;
@@ -2475,6 +2745,8 @@ html, body {
     margin-top: 0;
     order: -1;
   }
+
+  /* In hero state, story column is already hidden by .se-workspace-hero */
 
   .se-write-mode .se-story-column {
     display: flex;
@@ -2651,6 +2923,7 @@ html, body {
   .se-stat-label { font-size: 9px; }
 
   .se-shortcuts-hint { display: none; }
+  .se-sidebar-shortcuts { display: none; }
 }
 
 /* ─── 768px: Write mode / editor ────── */
@@ -2739,9 +3012,7 @@ html, body {
 /* ─── 480px: Small phones ────── */
 @media (max-width: 480px) {
   .se-topbar { padding: 6px 10px; gap: 6px; }
-  .se-topbar-title { font-size: 16px; }
   .se-btn-back { font-size: 10px; padding: 5px 6px; }
-  .se-btn-stats-toggle { font-size: 9px; padding: 5px 8px; }
 
   .se-mobile-deck { padding: 6px 10px; }
 
@@ -2757,6 +3028,10 @@ html, body {
   .se-mobile-deck .se-arc-phase-label { font-size: 7px; }
   .se-mobile-deck .se-arc-phase-count { font-size: 8px; }
 
+  .se-hero-fullpage { padding: 24px 16px; min-height: 200px; }
+  .se-hero-fullpage .se-hero-title { font-size: 16px; }
+  .se-hero-fullpage .se-hero-text { font-size: 11px; max-width: 240px; }
+
   .se-task-section-intro { padding: 10px 12px 8px; }
   .se-task-section-title { font-size: 15px; }
 
@@ -2768,10 +3043,6 @@ html, body {
   .se-task-card { padding: 9px 12px; gap: 6px; }
   .se-task-card .se-task-title { font-size: 12px; }
   .se-task-generate-btn { min-height: 32px; min-width: 48px; padding: 5px 10px; font-size: 10px; }
-
-  .se-task-empty.se-hero-card { margin: 16px 12px; padding: 24px 16px 20px; }
-  .se-hero-title { font-size: 16px; }
-  .se-hero-text { font-size: 11px; max-width: 240px; }
 
   .se-story-section-title { font-size: 13px; }
 

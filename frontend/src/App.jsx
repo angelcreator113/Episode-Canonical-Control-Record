@@ -251,13 +251,10 @@ function AppContent() {
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
   const isChapterJourney = location.pathname.startsWith('/chapter/');
-  const isStoryEngine = location.pathname === '/story-engine';
-  const isStoryEval = location.pathname === '/story-evaluation';
-  const isStoryThreads = location.pathname === '/story-threads';
-  const isStoryCalendar = location.pathname === '/story-calendar';
   // Social Import is now embedded in Universe page as a tab
   const isSetupWizard = location.pathname === '/setup';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isStoryThreads || isStoryCalendar || isSetupWizard;
+  const isStoryEngine = location.pathname === '/story-engine';
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isSetupWizard || isStoryEngine;
   const hideFooter = isFullScreen;
 
   return (

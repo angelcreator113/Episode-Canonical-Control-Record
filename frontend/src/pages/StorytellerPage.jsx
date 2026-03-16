@@ -24,7 +24,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import NewBookModal from './NewBookModal';
 import BookEditor from '../components/BookEditor';
 import ChapterSelection from '../components/ChapterSelection';
-import StoryHubNav from '../components/StoryHubNav';
 import { api } from '../utils/storytellerApi';
 import { useToasts, ToastContainer } from '../hooks/useToasts';
 import './StorytellerPage.css';
@@ -162,7 +161,6 @@ function StorytellerPage() {
 
   return (
     <div className="storyteller-page">
-      <div style={{ padding: '10px 16px 0' }}><StoryHubNav /></div>
       {showEditor ? (
         <BookEditor
           book={activeBook}

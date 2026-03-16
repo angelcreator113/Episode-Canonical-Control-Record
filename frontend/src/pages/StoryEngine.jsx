@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from '../components/StoryReviewPanel';
 import WriteModeAIWriter from '../components/WriteModeAIWriter';
-import StoryHubNav from '../components/StoryHubNav';
 import ArcTrackingPanel from '../components/ArcTrackingPanel';
 import './StoryEngine.css';
 
@@ -497,7 +496,7 @@ function StoryPanel({
           setEvalScore(d.evaluation);
         }
       })
-      .catch(() => {});
+      .catch(err => console.warn('eval score fetch failed:', err.message));
   }, [story?.id]);
 
   // Fetch active threads for this story's character
@@ -507,7 +506,7 @@ function StoryPanel({
     fetch(`${API_BASE}/story-health/threads-for-story/${story.story_number}?character_key=${encodeURIComponent(selectedCharKey)}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.threads) setActiveThreads(d.threads); })
-      .catch(() => {});
+      .catch(err => console.warn('thread fetch failed:', err.message));
   }, [story?.story_number, selectedCharKey]);
 
   if (!story && !task) return (
@@ -673,7 +672,7 @@ function StoryPanel({
               <button
                 className="se-btn se-btn-approve"
                 style={{ background: charColor }}
-                onClick={() => onApprove(story)}
+                onClick={() => onApprove(story, true)}
               >
                 {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
               </button>
@@ -940,7 +939,7 @@ function StoryPanel({
             fetch(`${API_BASE}/story-health/therapy-suggestions/${selectedCharKey}`)
               .then(r => r.ok ? r.json() : null)
               .then(d => setSuggestions(d))
-              .catch(() => {});
+              .catch(err => console.warn('therapy suggestions failed:', err.message));
           }, []);
           if (!suggestions?.suggestions?.length) return null;
           return (
@@ -1042,8 +1041,13 @@ export default function StoryEngine() {
   const [therapyLoading, setTherapyLoading] = useState(false);
   const [registryUpdate, setRegistryUpdate] = useState(null);
   const [savingForLater, setSavingForLater] = useState(false);
+  const [processingStory, setProcessingStory] = useState(null); // lock to prevent concurrent save/approve
   const [amberNotification, setAmberNotification] = useState(null);
   const [amberTextureNotes, setAmberTextureNotes] = useState(null);
+  const [approveConfirm, setApproveConfirm] = useState(null); // story awaiting approval confirmation
+  const [lastTexture, setLastTexture] = useState(null); // inline texture preview after approval
+  const [rejectedStory, setRejectedStory] = useState(null); // undo buffer for rejected stories
+  const [batchProgress, setBatchProgress] = useState(null); // { current, total } for batch approve
 
   const [showStats, setShowStats] = useState(false);
   const [readingMode, setReadingMode] = useState(false);
@@ -1106,8 +1110,8 @@ export default function StoryEngine() {
     }
   }, [activeTask, tasks, stories]);
 
-  const hasPrevStory = activeTask ? tasks.findIndex(t => t.story_number === activeTask.story_number) > 0 : false;
-  const hasNextStory = activeTask ? tasks.findIndex(t => t.story_number === activeTask.story_number) < tasks.length - 1 : false;
+  const hasPrevStory = useMemo(() => activeTask ? tasks.findIndex(t => t.story_number === activeTask.story_number) > 0 : false, [activeTask, tasks]);
+  const hasNextStory = useMemo(() => activeTask ? tasks.findIndex(t => t.story_number === activeTask.story_number) < tasks.length - 1 : false, [activeTask, tasks]);
 
   const handleExportStory = useCallback((story) => {
     const text = `# ${story.title}\n\nStory ${story.story_number} · ${PHASE_LABELS[story.phase]} · ${story.story_type}\n${story.word_count?.toLocaleString() || ''} words\n\n${story.text || ''}`;
@@ -1130,10 +1134,12 @@ export default function StoryEngine() {
     const nums = [...batchSelected].filter(n => stories[n] && !approvedStories.includes(n));
     if (nums.length === 0) { addToast('No eligible stories to approve', 'warning'); return; }
 
-    addToast(`Approving ${nums.length} stories…`, 'info');
-    for (const num of nums) {
-      await handleApprove(stories[num]);
+    setBatchProgress({ current: 0, total: nums.length });
+    for (let i = 0; i < nums.length; i++) {
+      setBatchProgress({ current: i + 1, total: nums.length });
+      await handleApprove(stories[nums[i]]);
     }
+    setBatchProgress(null);
     setBatchSelected(new Set());
     setBatchMode(false);
     addToast(`${nums.length} stories approved`, 'success');
@@ -1176,7 +1182,7 @@ export default function StoryEngine() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        if (activeStory) handleApprove(activeStory);
+        if (activeStory) setApproveConfirm(activeStory);
       }
     };
     window.addEventListener('keydown', handler);
@@ -1449,6 +1455,8 @@ export default function StoryEngine() {
   }
 
   async function handleSaveForLater(story) {
+    if (processingStory === story.story_number) return;
+    setProcessingStory(story.story_number);
     setSavingForLater(true);
     try {
       const res = await fetch(`${API_BASE}/stories`, {
@@ -1484,10 +1492,14 @@ export default function StoryEngine() {
       addToast('Failed to save story. Please try again.', 'error');
     } finally {
       setSavingForLater(false);
+      setProcessingStory(null);
     }
   }
 
   async function handleApprove(story) {
+    if (processingStory === story.story_number) return;
+    setProcessingStory(story.story_number);
+
     const nextApproved = [...new Set([...approvedStories, story.story_number])];
     setApprovedStories(nextApproved);
     setSavedStories(prev => [...new Set([...prev, story.story_number])]);
@@ -1514,6 +1526,7 @@ export default function StoryEngine() {
       }
     } catch (e) {
       console.error('extract memories error:', e);
+      addToast('Failed to extract story memories', 'error');
     } finally {
       setTherapyLoading(false);
     }
@@ -1539,27 +1552,10 @@ export default function StoryEngine() {
       }
     } catch (e) {
       console.error('registry update error:', e);
+      addToast('Failed to update character registry', 'error');
     }
 
-    // Arc tracking update
-    try {
-      await fetch(`${API_BASE}/arc-tracking/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_key: selectedChar,
-          story_number: story.story_number,
-          story_type: story.story_type,
-          phase: story.phase,
-          phone_appeared: story.text?.toLowerCase().includes('her phone') ||
-                          story.text?.toLowerCase().includes('the phone'),
-        }),
-      });
-    } catch (e) {
-      console.error('arc tracking update error:', e);
-    }
-
-    // Texture layer generation — fires after arc tracking
+    // Texture layer generation — fires BEFORE arc tracking so story 47 bleed is not skipped
     try {
       const textureRes = await fetch(`${API_BASE}/texture-layer/generate`, {
         method: 'POST',
@@ -1582,6 +1578,11 @@ export default function StoryEngine() {
 
       if (textureRes.ok) {
         const textureData = await textureRes.json();
+        setLastTexture({
+          story_number: story.story_number,
+          story_title:  story.title,
+          texture:      textureData.texture,
+        });
         if (textureData.texture?.amber_notes?.length) {
           setAmberTextureNotes({
             story_number: story.story_number,
@@ -1593,48 +1594,95 @@ export default function StoryEngine() {
       }
     } catch (e) {
       console.error('texture layer generation error:', e);
+      addToast('Failed to generate texture layers', 'error');
     }
 
-    // Scene eligibility check
+    // Arc tracking update — after texture so bleed_generated flag doesn't block story 47
     try {
-      const eligibilityRes = await fetch(`${API_BASE}/world/scenes/check-eligibility`, {
+      await fetch(`${API_BASE}/arc-tracking/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          story_id: story.db_id,
           character_key: selectedChar,
-          story_text: story.text,
-          story_type: story.story_type,
           story_number: story.story_number,
-          characters_present: tasks
-            .find(t => t.story_number === story.story_number)
-            ?.characters_present || [],
+          story_type: story.story_type,
+          phase: story.phase,
+          phone_appeared: story.text?.toLowerCase().includes('her phone') ||
+                          story.text?.toLowerCase().includes('the phone'),
         }),
       });
-      if (eligibilityRes.ok) {
-        const eligibility = await eligibilityRes.json();
-        if (eligibility.eligible) {
-          setAmberNotification({
-            type: 'scene_eligible',
-            story_number: story.story_number,
-            story_title: story.title,
-            eligibility,
-          });
-        }
-      }
     } catch (e) {
-      console.error('scene eligibility check error:', e);
+      console.error('arc tracking update error:', e);
+      addToast('Failed to update arc tracking', 'error');
     }
+
+    // Scene eligibility check
+    if (story.db_id) {
+      try {
+        const eligibilityRes = await fetch(`${API_BASE}/world/scenes/check-eligibility`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            story_id: story.db_id,
+            character_key: selectedChar,
+            story_text: story.text,
+            story_type: story.story_type,
+            story_number: story.story_number,
+            characters_present: tasks
+              .find(t => t.story_number === story.story_number)
+              ?.characters_present || [],
+          }),
+        });
+        if (eligibilityRes.ok) {
+          const eligibility = await eligibilityRes.json();
+          if (eligibility.eligible) {
+            setAmberNotification({
+              type: 'scene_eligible',
+              story_number: story.story_number,
+              story_title: story.title,
+              eligibility,
+            });
+          }
+        }
+      } catch (e) {
+        console.error('scene eligibility check error:', e);
+        addToast('Failed to check scene eligibility', 'error');
+      }
+    }
+
+    setProcessingStory(null);
   }
 
   function handleReject(story) {
+    // Soft-delete: keep in undo buffer for 10 seconds
+    setRejectedStory({ story, timestamp: Date.now() });
     const nextStories = { ...stories };
     delete nextStories[story.story_number];
     setStories(nextStories);
     setActiveStory(null);
     setActiveTask(tasks.find((t) => t.story_number === story.story_number) || null);
     setCachedStories(selectedChar, nextStories, approvedStories);
+    addToast('Story rejected', 'info');
   }
+
+  function handleUndoReject() {
+    if (!rejectedStory) return;
+    const restored = rejectedStory.story;
+    const nextStories = { ...stories, [restored.story_number]: restored };
+    setStories(nextStories);
+    setActiveStory(restored);
+    setActiveTask(tasks.find(t => t.story_number === restored.story_number) || null);
+    setCachedStories(selectedChar, nextStories, approvedStories);
+    setRejectedStory(null);
+    addToast('Story restored', 'success');
+  }
+
+  // Clear undo buffer after 10 seconds
+  useEffect(() => {
+    if (!rejectedStory) return;
+    const timer = setTimeout(() => setRejectedStory(null), 10000);
+    return () => clearTimeout(timer);
+  }, [rejectedStory]);
 
   async function handleAddToRegistry(story) {
     if (!story.new_character_name) return;
@@ -1768,34 +1816,17 @@ export default function StoryEngine() {
     <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''} ${activeStory ? 'se-has-active-story' : ''}`}>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
+      {/* ── Slim top bar ──────────────────────────────────── */}
       {!readingMode && (
         <div className="se-topbar">
-          <StoryHubNav />
           <button className="se-btn-back" onClick={() => navigate('/')}>
             ← Home
           </button>
-          <div className="se-topbar-title">Story Engine</div>
-          <button
-            className={`se-btn se-btn-stats-toggle ${showStats ? 'active' : ''}`}
-            onClick={() => setShowStats(prev => !prev)}
-            title="Toggle stats dashboard"
-          >
-            📊 Stats
-          </button>
-          <WorldToggle worlds={worldToggles} onToggle={handleWorldToggle} />
         </div>
       )}
 
-      {showStats && !readingMode && (
-        <StatsDashboard
-          tasks={tasks}
-          stories={stories}
-          approvedStories={approvedStories}
-          savedStories={savedStories}
-        />
-      )}
-
-      {!readingMode && (
+      {/* ── Mobile deck: character + arc (visible < 900px) ─────────── */}
+      {!readingMode && !writeMode && (
         <div className="se-mobile-deck">
           <CharacterSelector
             characters={CHARACTERS}
@@ -1803,227 +1834,300 @@ export default function StoryEngine() {
             onSelect={setSelectedChar}
             loading={charsLoading}
           />
-
           <ArcProgress
             approvedStories={approvedStories}
             savedStories={savedStories}
             stories={stories}
           />
-          {selectedChar && (
-            <ArcTrackingPanel
-              characterKey={selectedChar}
-              characterName={char?.display_name || selectedChar}
-            />
-          )}
         </div>
       )}
 
-      {/* Story Sparks — creative suggestions for this character */}
-      {!readingMode && selectedChar && (() => {
-        const StorySparks = () => {
-          const [sparks, setSparks] = React.useState([]);
-          const [open, setOpen] = React.useState(false);
-          const [loading, setLoading] = React.useState(false);
+      {/* ── Main body: sidebar + workspace ──────────────────────────── */}
+      <div className="se-body">
+        {/* ── Left sidebar ─────────────────────────────────────────── */}
+        {!readingMode && !writeMode && (
+          <div className="se-sidebar">
+            {/* Character selector */}
+            <div className="se-sidebar-section">
+              <CharacterSelector
+                characters={CHARACTERS}
+                selectedChar={selectedChar}
+                onSelect={setSelectedChar}
+                loading={charsLoading}
+              />
+            </div>
 
-          const loadSparks = () => {
-            if (sparks.length) { setOpen(!open); return; }
-            setOpen(true);
-            setLoading(true);
-            fetch(`/api/v1/story-health/story-sparks/${selectedChar}`)
-              .then(r => r.json())
-              .then(d => setSparks(d.sparks || []))
-              .catch(() => {})
-              .finally(() => setLoading(false));
-          };
+            {/* Arc progress — compact */}
+            <div className="se-sidebar-section se-sidebar-arc">
+              <ArcProgress
+                approvedStories={approvedStories}
+                savedStories={savedStories}
+                stories={stories}
+              />
+            </div>
 
-          return (
-            <div style={{ margin: '8px 16px 4px', fontFamily: "'DM Sans', sans-serif" }}>
-              <button onClick={loadSparks} style={{
-                background: 'none', border: '1px solid #e0dcd4', borderRadius: 8, padding: '8px 14px',
-                color: 'var(--se-gold, #b0922e)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                display: 'flex', alignItems: 'center', gap: 6, width: '100%'
-              }}>
-                <span>✨</span> Story Sparks
-                <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.6 }}>{open ? '▾' : '▸'}</span>
-              </button>
-              {open && (
-                <div style={{ marginTop: 8, padding: '0 4px' }}>
-                  {loading ? (
-                    <div style={{ color: '#9a9080', fontSize: 12, padding: 8 }}>Generating sparks…</div>
-                  ) : sparks.length === 0 ? (
-                    <div style={{ color: '#9a9080', fontSize: 12, padding: 8 }}>No sparks available yet</div>
-                  ) : sparks.map((s, i) => (
-                    <div key={i} style={{
-                      padding: '10px 12px', marginBottom: 6, background: '#faf8f4', borderRadius: 8,
-                      border: '1px solid #ebe6dd', fontSize: 13, lineHeight: 1.5, color: '#3a3226'
-                    }}>
-                      <div style={{ fontWeight: 600, color: 'var(--se-gold, #b0922e)', marginBottom: 4, fontSize: 12 }}>
-                        {s.type || 'Spark'}
-                      </div>
-                      {s.suggestion || s.title || JSON.stringify(s)}
-                    </div>
+            {/* Arc tracking panel */}
+            {selectedChar && (
+              <div className="se-sidebar-section">
+                <ArcTrackingPanel
+                  characterKey={selectedChar}
+                  characterName={char?.display_name || selectedChar}
+                />
+              </div>
+            )}
+
+            {/* World toggles — compact pills */}
+            {Object.keys(worldToggles).length > 0 && (
+              <div className="se-sidebar-section se-sidebar-worlds">
+                <div className="se-sidebar-label">Worlds</div>
+                <div className="se-world-pills">
+                  {Object.entries(worldToggles).map(([worldId, isOpen]) => (
+                    <button
+                      key={worldId}
+                      className={`se-world-pill ${isOpen ? 'open' : 'closed'}`}
+                      onClick={() => handleWorldToggle(worldId)}
+                      title={`${WORLD_LABELS[worldId] || worldId}: New characters ${isOpen ? 'open' : 'locked'}`}
+                    >
+                      <span className="se-world-pill-name">{WORLD_LABELS[worldId] || worldId}</span>
+                      <span className={`se-world-pill-dot ${isOpen ? 'open' : 'closed'}`} />
+                    </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Stats — collapsible */}
+            <div className="se-sidebar-section">
+              <button
+                className="se-sidebar-toggle"
+                onClick={() => setShowStats(prev => !prev)}
+              >
+                <span>Stats</span>
+                <span className="se-sidebar-toggle-arrow">{showStats ? '▾' : '▸'}</span>
+              </button>
+              {showStats && (
+                <StatsDashboard
+                  tasks={tasks}
+                  stories={stories}
+                  approvedStories={approvedStories}
+                  savedStories={savedStories}
+                />
               )}
             </div>
-          );
-        };
-        return <StorySparks />;
-      })()}
 
-      <div className={`se-workspace${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
-        {!readingMode && !writeMode && (
-          <div className="se-task-list">
-            {tasksLoading ? (
+            {/* Story Sparks — collapsible */}
+            {selectedChar && (() => {
+              const StorySparks = () => {
+                const [sparks, setSparks] = React.useState([]);
+                const [open, setOpen] = React.useState(false);
+                const [loading, setLoading] = React.useState(false);
+
+                const loadSparks = () => {
+                  if (sparks.length) { setOpen(!open); return; }
+                  setOpen(true);
+                  setLoading(true);
+                  fetch(`/api/v1/story-health/story-sparks/${selectedChar}`)
+                    .then(r => r.json())
+                    .then(d => setSparks(d.sparks || []))
+                    .catch(err => console.warn('story sparks failed:', err.message))
+                    .finally(() => setLoading(false));
+                };
+
+                return (
+                  <div className="se-sidebar-section">
+                    <button className="se-sidebar-toggle" onClick={loadSparks}>
+                      <span>Story Sparks</span>
+                      <span className="se-sidebar-toggle-arrow">{open ? '▾' : '▸'}</span>
+                    </button>
+                    {open && (
+                      <div className="se-sparks-list">
+                        {loading ? (
+                          <div className="se-sparks-loading">Generating sparks…</div>
+                        ) : sparks.length === 0 ? (
+                          <div className="se-sparks-loading">No sparks available yet</div>
+                        ) : sparks.map((s, i) => (
+                          <div key={i} className="se-spark-card">
+                            <div className="se-spark-type">{s.type || 'Spark'}</div>
+                            <div className="se-spark-text">{s.suggestion || s.title || JSON.stringify(s)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+              return <StorySparks />;
+            })()}
+
+            {/* Keyboard shortcuts */}
+            <div className="se-sidebar-shortcuts">
+              <span>↑↓ Nav</span>
+              <span>F Read</span>
+              <span>⌘S Save</span>
+              <span>⌘↵ Approve…</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Workspace: task list + story column ──────────────────── */}
+        <div className={`se-workspace${storiesMinimized ? ' se-stories-collapsed' : ''}${!tasksLoading && tasks.length === 0 ? ' se-workspace-hero' : ''}`}>
+          {!readingMode && !writeMode && tasksLoading && (
+            <div className="se-task-list">
               <div className="se-task-loading">
                 <div className="se-spinner" style={{ borderTopColor: char?.color }} />
                 <span>Building {char?.display_name}'s 50-story arc…</span>
                 <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
               </div>
-            ) : tasks.length === 0 ? (
-              <div className="se-task-empty se-hero-card">
-                <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
-                <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
-                <div className="se-hero-text">
-                  Generate a 50-story progression that moves from establishment
-                  through pressure, crisis, and integration. The first run takes
-                  a few minutes — after that, it loads instantly.
-                </div>
-                <button
-                  className="se-btn se-btn-generate-arc se-primary-btn"
-                  style={{ background: char?.color }}
-                  onClick={() => handleGenerateArc()}
-                >
-                  Generate Story Arc
-                </button>
-                <div className="se-hero-sub">Typically 2–3 minutes</div>
+            </div>
+          )}
+
+          {!readingMode && !writeMode && !tasksLoading && tasks.length === 0 && (
+            <div className="se-hero-fullpage">
+              <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
+              <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
+              <div className="se-hero-text">
+                Generate a 50-story progression that moves from establishment
+                through pressure, crisis, and integration. The first run takes
+                a few minutes — after that, it loads instantly.
               </div>
-            ) : (
+              <button
+                className="se-btn se-btn-generate-arc se-primary-btn"
+                style={{ background: char?.color }}
+                onClick={() => handleGenerateArc()}
+              >
+                Generate Story Arc
+              </button>
+              <div className="se-hero-sub">Typically 2–3 minutes</div>
+            </div>
+          )}
+
+          {!readingMode && !writeMode && !tasksLoading && tasks.length > 0 && (
+            <div className="se-task-list">
               <>
                 <div className="se-task-section-intro">
-                  <div className="se-task-section-title">Story Arc</div>
-                  <div className="se-task-section-sub">
-                    {char?.display_name}'s 50-story progression
+                    <div className="se-task-section-title">Story Arc</div>
+                    <div className="se-task-section-sub">
+                      {char?.display_name}'s 50-story progression
+                    </div>
                   </div>
-                </div>
 
-                <div className="se-filter-bar">
-                  <input
-                    className="se-filter-search"
-                    type="text"
-                    placeholder="Search stories…"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <div className="se-filter-pills">
-                    {['establishment', 'pressure', 'crisis', 'integration'].map(p => (
+                  <div className="se-filter-bar">
+                    <input
+                      className="se-filter-search"
+                      type="text"
+                      placeholder="Search stories…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <div className="se-filter-pills">
+                      {['establishment', 'pressure', 'crisis', 'integration'].map(p => (
+                        <button
+                          key={p}
+                          className={`se-filter-pill ${phaseFilter === p ? 'active' : ''}`}
+                          style={phaseFilter === p ? { background: PHASE_COLORS[p], color: '#fff', borderColor: PHASE_COLORS[p] } : undefined}
+                          onClick={() => setPhaseFilter(prev => prev === p ? null : p)}
+                        >
+                          {PHASE_LABELS[p]}
+                        </button>
+                      ))}
+                      {['internal', 'collision', 'wrong_win'].map(t => (
+                        <button
+                          key={t}
+                          className={`se-filter-pill se-filter-type ${typeFilter === t ? 'active' : ''}`}
+                          onClick={() => setTypeFilter(prev => prev === t ? null : t)}
+                        >
+                          {TYPE_ICONS[t]} {t.replace('_', ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="se-task-list-header">
+                    <span className="se-task-list-count">
+                      {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
+                      {(() => {
+                        const queueCount = savedStories.filter(n => !approvedStories.includes(n)).length;
+                        return queueCount > 0 ? (
+                          <span className="se-reading-queue-badge">📥 {queueCount} to review</span>
+                        ) : null;
+                      })()}
+                    </span>
+                    <div className="se-task-list-actions">
                       <button
-                        key={p}
-                        className={`se-filter-pill ${phaseFilter === p ? 'active' : ''}`}
-                        style={phaseFilter === p ? { background: PHASE_COLORS[p], color: '#fff', borderColor: PHASE_COLORS[p] } : undefined}
-                        onClick={() => setPhaseFilter(prev => prev === p ? null : p)}
+                        className={`se-btn se-btn-batch ${batchMode ? 'active' : ''}`}
+                        onClick={() => { setBatchMode(prev => !prev); setBatchSelected(new Set()); }}
                       >
-                        {PHASE_LABELS[p]}
+                        {batchMode ? '✕ Cancel' : '☐ Batch'}
                       </button>
-                    ))}
-                    {['internal', 'collision', 'wrong_win'].map(t => (
+                      {batchMode && batchSelected.size > 0 && (
+                        <button
+                          className="se-btn se-btn-batch-approve"
+                          style={{ background: char?.color }}
+                          onClick={handleBatchApprove}
+                        >
+                          Approve {batchSelected.size}
+                        </button>
+                      )}
                       <button
-                        key={t}
-                        className={`se-filter-pill se-filter-type ${typeFilter === t ? 'active' : ''}`}
-                        onClick={() => setTypeFilter(prev => prev === t ? null : t)}
+                        className="se-btn se-btn-regen"
+                        onClick={() => {
+                          if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) {
+                            handleGenerateArc(true);
+                          }
+                        }}
                       >
-                        {TYPE_ICONS[t]} {t.replace('_', ' ')}
+                        ↻ Regen
                       </button>
-                    ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="se-task-list-header">
-                  <span className="se-task-list-count">
-                    {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
-                    {(() => {
-                      const queueCount = savedStories.filter(n => !approvedStories.includes(n)).length;
-                      return queueCount > 0 ? (
-                        <span className="se-reading-queue-badge">📥 {queueCount} to review</span>
-                      ) : null;
-                    })()}
-                  </span>
-                  <div className="se-task-list-actions">
-                    <button
-                      className={`se-btn se-btn-batch ${batchMode ? 'active' : ''}`}
-                      onClick={() => { setBatchMode(prev => !prev); setBatchSelected(new Set()); }}
-                    >
-                      {batchMode ? '✕ Cancel' : '☐ Batch'}
-                    </button>
-                    {batchMode && batchSelected.size > 0 && (
-                      <button
-                        className="se-btn se-btn-batch-approve"
-                        style={{ background: char?.color }}
-                        onClick={handleBatchApprove}
-                      >
-                        Approve {batchSelected.size}
+                  {filteredTasks.map((task) => (
+                    <TaskCard
+                      key={task.story_number}
+                      task={task}
+                      isApproved={approvedStories.includes(task.story_number)}
+                      isSaved={savedStories.includes(task.story_number) && !approvedStories.includes(task.story_number)}
+                      isActive={activeTask?.story_number === task.story_number}
+                      onGenerate={handleGenerate}
+                      onSelect={handleSelectTask}
+                      charColor={char?.color}
+                      generating={generating && generatingNum === task.story_number}
+                      batchMode={batchMode}
+                      batchSelected={batchSelected}
+                      onBatchToggle={handleBatchToggle}
+                    />
+                  ))}
+
+                  {filteredTasks.length === 0 && tasks.length > 0 && (
+                    <div className="se-filter-empty">
+                      No stories match current filters.
+                      <button className="se-filter-clear" onClick={() => { setPhaseFilter(null); setTypeFilter(null); setSearchQuery(''); }}>
+                        Clear filters
                       </button>
-                    )}
-                    <button
-                      className="se-btn se-btn-regen"
-                      onClick={() => {
-                        if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) {
-                          handleGenerateArc(true);
-                        }
-                      }}
-                    >
-                      ↻ Regen
-                    </button>
-                  </div>
-                </div>
-
-                {filteredTasks.map((task) => (
-                  <TaskCard
-                    key={task.story_number}
-                    task={task}
-                    isApproved={approvedStories.includes(task.story_number)}
-                    isSaved={savedStories.includes(task.story_number) && !approvedStories.includes(task.story_number)}
-                    isActive={activeTask?.story_number === task.story_number}
-                    onGenerate={handleGenerate}
-                    onSelect={handleSelectTask}
-                    charColor={char?.color}
-                    generating={generating && generatingNum === task.story_number}
-                    batchMode={batchMode}
-                    batchSelected={batchSelected}
-                    onBatchToggle={handleBatchToggle}
-                  />
-                ))}
-
-                {filteredTasks.length === 0 && tasks.length > 0 && (
-                  <div className="se-filter-empty">
-                    No stories match current filters.
-                    <button className="se-filter-clear" onClick={() => { setPhaseFilter(null); setTypeFilter(null); setSearchQuery(''); }}>
-                      Clear filters
-                    </button>
-                  </div>
-                )}
+                    </div>
+                  )}
               </>
-            )}
-          </div>
-        )}
-
-        <div className={`se-story-column${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
-          {generating && generatingNum === activeTask?.story_number ? (
-            <div className="se-generating">
-              <div className="se-generating-ring" style={{ borderTopColor: char?.color }} />
-              <div className="se-generating-title">Writing Story {generatingNum}…</div>
-              <div className="se-generating-sub">
-                {char?.display_name}'s world is assembling itself.
-              </div>
-              <div className="se-generating-elapsed">{elapsed}s · typically 1–2 minutes</div>
             </div>
-          ) : (
-            <StoryPanel
+          )}
+
+          {/* Story column — hidden in hero state on mobile */}
+          <div className={`se-story-column${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
+            {generating && generatingNum === activeTask?.story_number ? (
+              <div className="se-generating">
+                <div className="se-generating-ring" style={{ borderTopColor: char?.color }} />
+                <div className="se-generating-title">Writing Story {generatingNum}…</div>
+                <div className="se-generating-sub">
+                  {char?.display_name}'s world is assembling itself.
+                </div>
+                <div className="se-generating-elapsed">{elapsed}s · typically 1–2 minutes</div>
+              </div>
+            ) : (
+              <StoryPanel
               story={activeStory}
               task={activeTask}
               charColor={char?.color}
               charName={char?.display_name}
-              onApprove={handleApprove}
+              onApprove={(story, needsConfirm) => needsConfirm ? setApproveConfirm(story) : handleApprove(story)}
               onReject={handleReject}
               onEdit={handleEdit}
               onCheckConsistency={handleCheckConsistency}
@@ -2077,16 +2181,8 @@ export default function StoryEngine() {
             />
           )}
         </div>
-      </div>
-
-      {!readingMode && (
-        <div className="se-shortcuts-hint">
-          <span>↑↓ Navigate</span>
-          <span>F Reading mode</span>
-          <span>Ctrl+S Save</span>
-          <span>Ctrl+Enter Approve</span>
         </div>
-      )}
+      </div>
 
       {/* Amber notification — scene eligibility after story approval */}
       {amberNotification?.type === 'scene_eligible' && (
@@ -2173,6 +2269,169 @@ export default function StoryEngine() {
               Skip
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Approval confirmation modal */}
+      {approveConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setApproveConfirm(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 14, padding: '24px 28px', width: 380,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>
+              Approve Story {approveConfirm.story_number}?
+            </div>
+            <div style={{ fontSize: 13, color: '#5a5a7a', marginBottom: 16, lineHeight: 1.6 }}>
+              "{approveConfirm.title}" — This will extract memories, update registry, generate texture layers, and check scene eligibility.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setApproveConfirm(null)}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: '1px solid #e0dcd4',
+                  background: '#fff', cursor: 'pointer', fontSize: 13, color: '#666',
+                }}
+              >Cancel</button>
+              <button
+                onClick={() => { handleApprove(approveConfirm); setApproveConfirm(null); }}
+                style={{
+                  padding: '8px 20px', borderRadius: 8, border: 'none',
+                  background: char?.color || '#9a7d1e', color: '#fff',
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                }}
+              >Approve</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch progress indicator */}
+      {batchProgress && (
+        <div style={{
+          position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
+          background: '#fff', border: '1px solid #e0dcd4', borderRadius: 10,
+          padding: '10px 20px', zIndex: 550, boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+          display: 'flex', alignItems: 'center', gap: 12, fontSize: 13,
+        }}>
+          <div className="se-spinner" style={{ width: 16, height: 16, borderTopColor: char?.color }} />
+          <span>Approving {batchProgress.current}/{batchProgress.total}…</span>
+          <div style={{ width: 80, height: 4, background: '#eee', borderRadius: 2 }}>
+            <div style={{
+              width: `${(batchProgress.current / batchProgress.total) * 100}%`,
+              height: '100%', background: char?.color || '#9a7d1e', borderRadius: 2,
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Undo rejected story */}
+      {rejectedStory && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: '#1a1a2e', color: '#fff', borderRadius: 10,
+          padding: '10px 16px', zIndex: 550, display: 'flex', alignItems: 'center', gap: 12,
+          fontSize: 13, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        }}>
+          <span>Story {rejectedStory.story.story_number} rejected</span>
+          <button
+            onClick={handleUndoReject}
+            style={{
+              padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.3)',
+              background: 'transparent', color: '#fff', cursor: 'pointer',
+              fontSize: 12, fontWeight: 600,
+            }}
+          >Undo</button>
+        </div>
+      )}
+
+      {/* Inline texture preview after approval */}
+      {lastTexture && !amberTextureNotes && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, width: 360,
+          background: '#fff', border: '1px solid #e8dcf5', borderRadius: 14,
+          boxShadow: '0 8px 32px rgba(168,137,200,0.18)',
+          padding: '16px 18px', zIndex: 498, maxHeight: '50vh', overflowY: 'auto',
+          animation: 'ws-slide-up 0.22s ease',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>
+              Texture — Story {lastTexture.story_number}
+            </div>
+            <button
+              onClick={() => setLastTexture(null)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none',
+                cursor: 'pointer', color: '#9999b3', fontSize: 16 }}
+            >&times;</button>
+          </div>
+          {lastTexture.texture?.inner_thought_text && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0922e', marginBottom: 4 }}>
+                Inner Thought ({lastTexture.texture.inner_thought_type?.replace('_', ' ')})
+              </div>
+              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6, fontStyle: 'italic' }}>
+                {lastTexture.texture.inner_thought_text.slice(0, 200)}{lastTexture.texture.inner_thought_text.length > 200 ? '…' : ''}
+              </div>
+            </div>
+          )}
+          {lastTexture.texture?.body_narrator_text && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#d4789a', marginBottom: 4 }}>Body Narrator</div>
+              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>
+                {lastTexture.texture.body_narrator_text}
+              </div>
+            </div>
+          )}
+          {lastTexture.texture?.conflict_surface_text && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#c0392b', marginBottom: 4 }}>Conflict</div>
+              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>
+                {lastTexture.texture.conflict_surface_text}
+              </div>
+            </div>
+          )}
+          {lastTexture.texture?.private_moment_text && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#7c3aed', marginBottom: 4 }}>Private Moment</div>
+              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>
+                {lastTexture.texture.private_moment_text.slice(0, 200)}{lastTexture.texture.private_moment_text.length > 200 ? '…' : ''}
+              </div>
+            </div>
+          )}
+          {lastTexture.texture?.post_text && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0d9668', marginBottom: 4 }}>Post ({lastTexture.texture.post_platform})</div>
+              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>
+                {lastTexture.texture.post_text}
+              </div>
+            </div>
+          )}
+          {lastTexture.texture?.bleed_text && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#546678', marginBottom: 4 }}>Bleed</div>
+              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>
+                {lastTexture.texture.bleed_text}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              navigate(`/texture-review/${lastTexture.story_number}?char=${selectedChar}`);
+              setLastTexture(null);
+            }}
+            style={{
+              width: '100%', padding: '8px 0', borderRadius: 8,
+              background: '#a889c8', color: '#fff',
+              border: 'none', cursor: 'pointer',
+              fontSize: 12, fontWeight: 600, marginTop: 4,
+            }}
+          >
+            Full Texture Review
+          </button>
         </div>
       )}
 

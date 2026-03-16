@@ -6,6 +6,16 @@ const { buildArcContext } = require('./arcTrackingService');
 const client = new Anthropic();
 const MODEL = 'claude-sonnet-4-6';
 
+// ── Body relationship ENUM → narrative lookup ────────────────────────
+const BODY_RELATIONSHIP_NARRATIVES = {
+  currency:   'Her body is currency. She knows exactly what it is worth and in what rooms.',
+  discipline: 'Her body is something she manages. Control is the relationship.',
+  burden:     'Her body is something she carries. It costs her.',
+  stranger:   'Her body is unfamiliar to her. She lives slightly outside it.',
+  home:       'Her body is where she lives. She is comfortable in it in a way most women are not.',
+  evidence:   'Her body is proof of something. What it proves depends on who is looking.',
+};
+
 // ── Conflict eligibility ──────────────────────────────────────────────
 const CONFLICT_ELIGIBLE_STORY_TYPES = ['collision', 'wrong_win'];
 const CONFLICT_ELIGIBLE_ROLES = [
@@ -185,8 +195,8 @@ async function generateBodyNarrator(story, characterData, arcContext) {
   const prompt = `You are generating a body narrator insert for a literary novel.
 
 CHARACTER: ${characterData.display_name || characterData.name}
-Body relationship: ${characterData.body_relationship || 'She owns her body. She considers it art.'}
-Body currency: ${characterData.body_currency || 'Her body is the thing men agree with when they open their wallets.'}
+Body relationship: ${BODY_RELATIONSHIP_NARRATIVES[characterData.de_body_relationship] || 'She owns her body. She considers it art.'}
+Body currency: ${characterData.de_body_currency ? `Body currency score: ${characterData.de_body_currency}/100` : 'Her body is the thing men agree with when they open their wallets.'}
 
 ARC POSITION:
 ${arcContext.wound_clock_narrative}
