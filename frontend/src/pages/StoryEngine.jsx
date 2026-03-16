@@ -430,6 +430,15 @@ function StoryPanel({
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
   const [showAiSidebar, setShowAiSidebar] = useState(() => window.innerWidth <= 768);
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'unsaved'
+  const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
+
+  // Track unsaved changes
+  useEffect(() => {
+    if (editing && editText !== (story?.text || '')) {
+      setSaveStatus('unsaved');
+    }
+  }, [editText, editing, story?.text]);
   const [currentPage, setCurrentPage] = useState(0);
   const [evalScore, setEvalScore] = useState(null);
   const [activeThreads, setActiveThreads] = useState([]);
@@ -596,121 +605,157 @@ function StoryPanel({
     </div>
   );
 
+  const wordCount = editing
+    ? editText.split(/\s+/).filter(Boolean).length
+    : (story.word_count || 0);
+
+  const handleSave = () => {
+    setSaveStatus('saving');
+    onEdit(story, editText);
+    setEditing(false);
+    setTimeout(() => setSaveStatus('saved'), 600);
+  };
+
   return (
     <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''}`}>
-      <div className="se-story-header" style={{ borderBottomColor: charColor }}>
-        <div className="se-story-header-left">
-          <div className="se-story-nav-row">
+      {/* ── Edit mode header (clean, minimal) ── */}
+      {editing ? (
+        <div className="se-edit-header">
+          <div className="se-edit-header-left">
             <button
-              className="se-btn se-btn-nav"
-              onClick={() => onNavigateStory?.(-1)}
-              disabled={!hasPrev}
-              title="Previous story (←)"
+              className="se-edit-back"
+              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
             >
-              ‹ Prev
+              ← Back to Story Engine
             </button>
-            <div className="se-story-header-num">Story {story.story_number}</div>
+            <div className="se-edit-header-info">
+              <span className="se-edit-header-title">{story.title}</span>
+              <span className="se-edit-header-dot">·</span>
+              <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
+              <span className="se-edit-header-dot">·</span>
+              <span>{wordCount.toLocaleString()} words</span>
+              <span className="se-edit-header-dot">·</span>
+              <span>{getReadingTime(wordCount)}</span>
+            </div>
+          </div>
+          <div className="se-edit-header-right">
+            <span className={`se-save-indicator se-save-${saveStatus}`}>
+              {saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved changes'}
+            </span>
             <button
-              className="se-btn se-btn-nav"
-              onClick={() => onNavigateStory?.(1)}
-              disabled={!hasNext}
-              title="Next story (→)"
+              className="se-btn se-btn-save-primary"
+              style={{ background: charColor }}
+              onClick={handleSave}
             >
-              Next ›
+              Save
+            </button>
+            <button
+              className="se-btn se-btn-cancel-light"
+              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
+            >
+              Cancel
             </button>
           </div>
-          <div className="se-story-header-title">{story.title}</div>
-          <div className="se-story-header-meta">
-            <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
-            <span>·</span>
-            <span>{TYPE_ICONS[story.story_type]} {story.story_type}</span>
-            <span>·</span>
-            <span>{story.word_count?.toLocaleString() || '—'} words</span>
-            {story.word_count > 0 && (
-              <>
-                <span>·</span>
-                <span>{Math.ceil(story.word_count / 250)} {Math.ceil(story.word_count / 250) === 1 ? 'page' : 'pages'}</span>
-                <span>·</span>
-                <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
-              </>
+        </div>
+      ) : (
+        /* ── Read mode header (existing) ── */
+        <div className="se-story-header" style={{ borderBottomColor: charColor }}>
+          <div className="se-story-header-left">
+            <div className="se-story-nav-row">
+              <button
+                className="se-btn se-btn-nav"
+                onClick={() => onNavigateStory?.(-1)}
+                disabled={!hasPrev}
+                title="Previous story (←)"
+              >
+                ‹ Prev
+              </button>
+              <div className="se-story-header-num">Story {story.story_number}</div>
+              <button
+                className="se-btn se-btn-nav"
+                onClick={() => onNavigateStory?.(1)}
+                disabled={!hasNext}
+                title="Next story (→)"
+              >
+                Next ›
+              </button>
+            </div>
+            <div className="se-story-header-title">{story.title}</div>
+            <div className="se-story-header-meta">
+              <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
+              <span>·</span>
+              <span>{TYPE_ICONS[story.story_type]} {story.story_type}</span>
+              <span>·</span>
+              <span>{story.word_count?.toLocaleString() || '—'} words</span>
+              {story.word_count > 0 && (
+                <>
+                  <span>·</span>
+                  <span>{Math.ceil(story.word_count / 250)} {Math.ceil(story.word_count / 250) === 1 ? 'page' : 'pages'}</span>
+                  <span>·</span>
+                  <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="se-story-header-actions">
+            <button
+              className="se-btn se-btn-reading-mode"
+              onClick={() => onToggleReadingMode?.()}
+              title={readingMode ? 'Exit reading mode (Esc)' : 'Reading mode (F)'}
+            >
+              {readingMode ? '⊟' : '⊞'}
+            </button>
+            <button
+              className="se-btn se-btn-export"
+              onClick={() => onExportStory?.(story)}
+              title="Copy or download story"
+            >
+              ↗ Export
+            </button>
+            <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
+            <button
+              className="se-btn se-btn-consistency"
+              onClick={() => onCheckConsistency(story)}
+              disabled={consistencyLoading}
+            >
+              {consistencyLoading ? '…' : 'Check'}
+            </button>
+            <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
+            <button
+              className="se-btn se-btn-save-later"
+              onClick={() => onSaveForLater(story)}
+              disabled={savingForLater}
+            >
+              {savingForLater ? 'Saving…' : '📥 Save for Later'}
+            </button>
+            <button
+              className="se-btn"
+              style={{ background: '#3D7A9B', color: '#fff' }}
+              onClick={() => onEvaluate?.(story)}
+              title="Evaluate with multi-voice scoring"
+            >
+              📊 Evaluate
+            </button>
+            <button
+              className="se-btn se-btn-approve"
+              style={{ background: charColor }}
+              onClick={() => onApprove(story, true)}
+            >
+              {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
+            </button>
+            {evalScore && (
+              <div className="se-eval-badge" style={{
+                fontSize: 10, padding: '3px 8px', borderRadius: 6,
+                background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
+                fontWeight: 600, marginLeft: -4,
+              }}>
+                {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
+              </div>
             )}
           </div>
         </div>
-        <div className="se-story-header-actions">
-          {!editing && (
-            <>
-              <button
-                className="se-btn se-btn-reading-mode"
-                onClick={() => onToggleReadingMode?.()}
-                title={readingMode ? 'Exit reading mode (Esc)' : 'Reading mode (F)'}
-              >
-                {readingMode ? '⊟' : '⊞'}
-              </button>
-              <button
-                className="se-btn se-btn-export"
-                onClick={() => onExportStory?.(story)}
-                title="Copy or download story"
-              >
-                ↗ Export
-              </button>
-              <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
-              <button
-                className="se-btn se-btn-consistency"
-                onClick={() => onCheckConsistency(story)}
-                disabled={consistencyLoading}
-              >
-                {consistencyLoading ? '…' : 'Check'}
-              </button>
-              <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
-              <button
-                className="se-btn se-btn-save-later"
-                onClick={() => onSaveForLater(story)}
-                disabled={savingForLater}
-              >
-                {savingForLater ? 'Saving…' : '📥 Save for Later'}
-              </button>
-              <button
-                className="se-btn"
-                style={{ background: '#3D7A9B', color: '#fff' }}
-                onClick={() => onEvaluate?.(story)}
-                title="Evaluate with multi-voice scoring"
-              >
-                📊 Evaluate
-              </button>
-              <button
-                className="se-btn se-btn-approve"
-                style={{ background: charColor }}
-                onClick={() => onApprove(story, true)}
-              >
-                {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
-              </button>
-              {evalScore && (
-                <div className="se-eval-badge" style={{
-                  fontSize: 10, padding: '3px 8px', borderRadius: 6,
-                  background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                  color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
-                  fontWeight: 600, marginLeft: -4,
-                }}>
-                  {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
-                </div>
-              )}
-            </>
-          )}
-          {editing && (
-            <>
-              <button className="se-btn se-btn-cancel" onClick={() => { setEditing(false); setEditText(story.text); }}>Cancel</button>
-              <span className="se-edit-wordcount">{editText.split(/\s+/).filter(Boolean).length.toLocaleString()} words</span>
-              <button
-                className="se-btn se-btn-approve"
-                style={{ background: charColor }}
-                onClick={() => { onEdit(story, editText); setEditing(false); }}
-              >
-                Save
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
       {story.new_character && story.new_character_name && (
         <div className="se-new-char-alert">
@@ -773,124 +818,176 @@ function StoryPanel({
 
       <div className="se-story-body">
         {editing ? (
-          <>
-          <div className="se-edit-container">
-            <textarea
-              ref={textareaRef}
-              className="se-story-editor"
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              spellCheck
-            />
-            <button
-              className="se-ai-sidebar-toggle"
-              onClick={() => setShowAiSidebar(v => !v)}
-              title={showAiSidebar ? 'Hide AI tools' : 'Show AI tools'}
-            >
-              {showAiSidebar ? '✕ Close' : '✦ AI Tools'}
-            </button>
-            <div className={`se-ai-writer-sidebar${showAiSidebar ? ' se-ai-sidebar-open' : ''}`}>
-              <WriteModeAIWriter
-                chapterId={String(story?.story_number || task?.story_number || '')}
-                bookId={activeWorld || ''}
-                selectedCharacter={charObj ? {
-                  id: charObj.id || selectedCharKey,
-                  name: charObj.display_name || charName,
-                  selected_name: charObj.display_name || charName,
-                  type: charObj.role_type,
-                  role: charObj.role_type,
-                  core_desire: charObj.core_desire,
-                  core_fear: charObj.core_fear,
-                  core_wound: charObj.core_wound,
-                  description: charObj.description,
-                } : null}
-                currentProse={editText}
-                chapterContext={task ? {
-                  scene_goal: task.task,
-                  theme: task.title,
-                  emotional_arc_start: task.phase,
-                  emotional_arc_end: '',
-                  pov: charName || '',
-                } : {}}
-                onInsert={(text) => {
-                  const ta = textareaRef.current;
-                  if (ta) {
-                    const start = ta.selectionStart;
-                    const end = ta.selectionEnd;
-                    const before = editText.slice(0, start);
-                    const after = editText.slice(end);
-                    setEditText(before + text + after);
-                    setTimeout(() => {
-                      ta.selectionStart = ta.selectionEnd = start + text.length;
-                      ta.focus();
-                    }, 0);
-                  } else {
-                    setEditText(prev => prev + '\n\n' + text);
-                  }
-                }}
-                getSelectedText={() => {
-                  const ta = textareaRef.current;
-                  if (ta && ta.selectionStart !== ta.selectionEnd) {
-                    return editText.slice(ta.selectionStart, ta.selectionEnd);
-                  }
-                  return '';
-                }}
-                characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
-                  ...c, id: c.id || key, character_key: key, name: c.display_name,
-                })) : []}
-                onSelectCharacter={(c) => onSelectChar?.(c?.character_key || c?.id)}
+          <div className="se-edit-layout">
+            {/* ── Left: Writing Canvas (primary, 70%) ── */}
+            <div className="se-edit-canvas">
+              <textarea
+                ref={textareaRef}
+                className="se-story-editor"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                spellCheck
               />
+              {/* Page navigation under editor */}
+              {editTotalPages > 1 && (
+                <div className="se-page-nav">
+                  <button
+                    className="se-btn se-btn-page"
+                    onClick={() => {
+                      setCurrentPage(p => {
+                        const next = p - 1;
+                        const ta = textareaRef.current;
+                        if (ta) {
+                          ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
+                          const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+                          const textBefore = editText.slice(0, editPageOffsets[next]);
+                          const linesAbove = textBefore.split('\n').length - 1;
+                          ta.scrollTop = linesAbove * lineHeight;
+                        }
+                        return next;
+                      });
+                    }}
+                    disabled={currentPage === 0}
+                  >
+                    ← Previous
+                  </button>
+                  <span className="se-page-indicator">
+                    Page {currentPage + 1} of {editTotalPages}
+                  </span>
+                  <button
+                    className="se-btn se-btn-page"
+                    onClick={() => {
+                      setCurrentPage(p => {
+                        const next = p + 1;
+                        const ta = textareaRef.current;
+                        if (ta) {
+                          ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
+                          const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+                          const textBefore = editText.slice(0, editPageOffsets[next]);
+                          const linesAbove = textBefore.split('\n').length - 1;
+                          ta.scrollTop = linesAbove * lineHeight;
+                        }
+                        return next;
+                      });
+                    }}
+                    disabled={currentPage >= editTotalPages - 1}
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Right: Writing Tools Panel (30%) ── */}
+            <div className="se-writing-tools">
+              {/* Narrative Perspective */}
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">Narrative Perspective</div>
+                <div className="se-tools-section-subtitle">Choose voice for AI edits</div>
+                <div className="se-voice-list">
+                  {allCharacters && Object.entries(allCharacters).map(([key, c]) => (
+                    <label
+                      key={key}
+                      className={`se-voice-option ${selectedVoice === key ? 'se-voice-active' : ''}`}
+                      onClick={() => {
+                        setSelectedVoice(key);
+                        onSelectChar?.(key);
+                      }}
+                    >
+                      <span className={`se-voice-radio ${selectedVoice === key ? 'se-voice-radio-on' : ''}`} />
+                      <span className="se-voice-name">{c.display_name || key}</span>
+                      {selectedVoice === key && (
+                        <span className="se-voice-active-label">Writing tone applied</span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Story Context */}
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">Story Info</div>
+                <div className="se-tools-info-grid">
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Type</span>
+                    <span className="se-tools-info-value" style={{ color: PHASE_COLORS[story.phase] }}>
+                      {PHASE_LABELS[story.phase]}
+                    </span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Word Count</span>
+                    <span className="se-tools-info-value">{wordCount.toLocaleString()}</span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Pages</span>
+                    <span className="se-tools-info-value">{editTotalPages}</span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Reading Time</span>
+                    <span className="se-tools-info-value">{getReadingTime(wordCount)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Assistance */}
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">AI Assistance</div>
+                <WriteModeAIWriter
+                  chapterId={String(story?.story_number || task?.story_number || '')}
+                  bookId={activeWorld || ''}
+                  selectedCharacter={charObj ? {
+                    id: charObj.id || selectedCharKey,
+                    name: charObj.display_name || charName,
+                    selected_name: charObj.display_name || charName,
+                    type: charObj.role_type,
+                    role: charObj.role_type,
+                    core_desire: charObj.core_desire,
+                    core_fear: charObj.core_fear,
+                    core_wound: charObj.core_wound,
+                    description: charObj.description,
+                  } : null}
+                  currentProse={editText}
+                  chapterContext={task ? {
+                    scene_goal: task.task,
+                    theme: task.title,
+                    emotional_arc_start: task.phase,
+                    emotional_arc_end: '',
+                    pov: charName || '',
+                  } : {}}
+                  onInsert={(text) => {
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      const start = ta.selectionStart;
+                      const end = ta.selectionEnd;
+                      const before = editText.slice(0, start);
+                      const after = editText.slice(end);
+                      setEditText(before + text + after);
+                      setTimeout(() => {
+                        ta.selectionStart = ta.selectionEnd = start + text.length;
+                        ta.focus();
+                      }, 0);
+                    } else {
+                      setEditText(prev => prev + '\n\n' + text);
+                    }
+                  }}
+                  getSelectedText={() => {
+                    const ta = textareaRef.current;
+                    if (ta && ta.selectionStart !== ta.selectionEnd) {
+                      return editText.slice(ta.selectionStart, ta.selectionEnd);
+                    }
+                    return '';
+                  }}
+                  characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
+                    ...c, id: c.id || key, character_key: key, name: c.display_name,
+                  })) : []}
+                  onSelectCharacter={(c) => {
+                    setSelectedVoice(c?.character_key || c?.id);
+                    onSelectChar?.(c?.character_key || c?.id);
+                  }}
+                />
+              </div>
             </div>
           </div>
-          {editTotalPages > 1 && (
-            <div className="se-page-nav">
-              <button
-                className="se-btn se-btn-page"
-                onClick={() => {
-                  setCurrentPage(p => {
-                    const next = p - 1;
-                    const ta = textareaRef.current;
-                    if (ta) {
-                      ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
-                      // scroll textarea so the cursor/page start is visible
-                      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-                      const textBefore = editText.slice(0, editPageOffsets[next]);
-                      const linesAbove = textBefore.split('\n').length - 1;
-                      ta.scrollTop = linesAbove * lineHeight;
-                    }
-                    return next;
-                  });
-                }}
-                disabled={currentPage === 0}
-              >
-                ‹ Prev Page
-              </button>
-              <span className="se-page-indicator">
-                Page {currentPage + 1} of {editTotalPages}
-              </span>
-              <button
-                className="se-btn se-btn-page"
-                onClick={() => {
-                  setCurrentPage(p => {
-                    const next = p + 1;
-                    const ta = textareaRef.current;
-                    if (ta) {
-                      ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
-                      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-                      const textBefore = editText.slice(0, editPageOffsets[next]);
-                      const linesAbove = textBefore.split('\n').length - 1;
-                      ta.scrollTop = linesAbove * lineHeight;
-                    }
-                    return next;
-                  });
-                }}
-                disabled={currentPage >= editTotalPages - 1}
-              >
-                Next Page ›
-              </button>
-            </div>
-          )}
-          </>
         ) : (
           <>
             <div className="se-story-text" ref={storyBodyRef}>
