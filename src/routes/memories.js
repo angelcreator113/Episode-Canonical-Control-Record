@@ -7820,6 +7820,60 @@ async function loadDialogueVoiceCards(characterKey) {
 }
 
 // ─── Load dramatic irony / open mysteries ────────────────────────────────────
+async function loadVoiceFingerprints(characterKey) {
+  try {
+    const { StorytellerStory, RegistryCharacter } = require('../models');
+    if (!StorytellerStory) return null;
+    const { Op } = require('sequelize');
+
+    // Find the main character to get their display name
+    const mainChar = await RegistryCharacter.findOne({
+      where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+      attributes: ['display_name'],
+    });
+    if (!mainChar) return null;
+
+    // Load the last 5 approved stories for this character
+    const approvedStories = await StorytellerStory.findAll({
+      where: {
+        character_key: characterKey,
+        status: { [Op.in]: ['approved', 'written_back', 'evaluated'] },
+      },
+      attributes: ['text', 'story_number', 'title'],
+      order: [['story_number', 'DESC']],
+      limit: 5,
+    });
+
+    if (!approvedStories.length) return null;
+
+    // Extract dialogue lines using a simple regex — lines between quotes
+    const dialogueExcerpts = [];
+    for (const story of approvedStories) {
+      if (!story.text) continue;
+      // Match quoted dialogue (both single and double quotes)
+      const matches = story.text.match(/"[^"]{15,120}"/g) || [];
+      // Take 2-3 distinctive lines per story
+      const selected = matches
+        .filter(m => !m.includes('…') || m.length > 30) // skip trailing fragments
+        .slice(0, 3);
+      if (selected.length) {
+        dialogueExcerpts.push({ story: story.story_number, title: story.title, lines: selected });
+      }
+    }
+
+    if (!dialogueExcerpts.length) return null;
+
+    const sections = dialogueExcerpts.map(d =>
+      `  Story ${d.story} ("${d.title}"):\n${d.lines.map(l => `    ${l}`).join('\n')}`
+    );
+
+    return `VOICE FINGERPRINTS (actual dialogue from approved stories — absorb the rhythm, vocabulary, and cadence, then write NEW dialogue that matches):\n${sections.join('\n')}`;
+  } catch (err) {
+    console.error('[loadVoiceFingerprints] error:', err?.message);
+    return null;
+  }
+}
+
 async function loadDramaticIrony(characterKey) {
   try {
     const { StorytellerMemory } = require('../models');
@@ -8058,6 +8112,22 @@ CHARACTER DNA:
 - Family domain: ${dna.domains.family}
 - Friends domain: ${dna.domains.friends}${profileSection}${memoriesSection}${worldSection}
 
+NARRATIVE SPINE (design this FIRST, then build all 50 stories around it):
+Before generating individual story briefs, you MUST design a narrative spine — the throughline that makes 50 stories feel like ONE story. Think of this as the architecture beneath the arc.
+
+1. CENTRAL DRAMATIC QUESTION — one question the reader carries from story 1 to story 50 (e.g., "Can she build something real without losing who she was before she started?"). This question should feel unanswerable until the final stories.
+
+2. KEY TURNING POINTS — pre-plan 4-5 structural pivots that change the direction of the arc:
+   - The Inciting Fracture (stories 8-12): something cracks that cannot be uncracked
+   - The False Summit (stories 18-22): she gets what she thought she wanted, and it tastes wrong
+   - The Betrayal/Revelation (stories 28-32): a truth she cannot unknow — about herself, someone she loves, or both
+   - The Crucible (stories 36-40): everything converges — career, relationship, identity — she cannot keep them separate
+   - The Quiet Shift (stories 46-50): not a triumph, not a collapse — a rearrangement of what matters
+
+3. SUBPLOT ARCS — each domain (career, romantic, family, friends) gets its own mini-arc with a beginning, middle, and end WITHIN the 50 stories. These subplot arcs should intersect at the turning points.
+
+4. RECURRING MOTIFS — 2-3 images, objects, or phrases that recur across the arc with shifting meaning (the recurring object is one; identify 1-2 more that emerge from the character's wound and desire).
+
 ARC PHASES:
 - Stories 1-10: Establishment — who she is, her rhythms, her world
 - Stories 11-25: Pressure — obstacles hit harder, strengths used against her
@@ -8087,6 +8157,19 @@ RULES:
 Return ONLY valid JSON — no preamble, no markdown.
 Format:
 {
+  "narrative_spine": {
+    "central_dramatic_question": "the one question the reader carries across all 50 stories",
+    "turning_points": [
+      { "name": "string", "story_range": "e.g. 8-12", "description": "what happens and why it changes everything" }
+    ],
+    "subplot_arcs": {
+      "career": "beginning → middle → end of the career subplot",
+      "romantic": "beginning → middle → end of the romantic subplot",
+      "family": "beginning → middle → end of the family subplot",
+      "friends": "beginning → middle → end of the friends subplot"
+    },
+    "recurring_motifs": ["motif 1 and how its meaning shifts", "motif 2 and how its meaning shifts"]
+  },
   "tasks": [
     {
       "story_number": 1,
@@ -8141,6 +8224,7 @@ Format:
       character_key: characterKey,
       display_name: dna.display_name,
       world: dna.world,
+      narrative_spine: parsed.narrative_spine || null,
       tasks: parsed.tasks || [],
     };
 
@@ -8226,24 +8310,56 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
   });
 
   try {
-    // Build previous stories context — use ALL approved, not just last 3
+    // Build previous stories context — relevance-based, not just recency
     let previousContext;
     if (previousStories?.length) {
-      // Last 3: full summary (up to 800 chars each for deep continuity)
-      // Previous 7: title + short summary
-      // Older: titles only
+      // Always include last 3 with full context (direct continuity)
       const last3 = previousStories.slice(-3);
-      const middle = previousStories.slice(-10, -3);
-      const older = previousStories.slice(0, -10);
+
+      // For older stories, identify thematically relevant ones using the current brief
+      const older = previousStories.slice(0, -3);
+      let relevantOlder = [];
+      let remainingOlder = [];
+
+      if (older.length > 5) {
+        // Use a fast model to pick the most relevant older stories for this brief
+        try {
+          const relevanceCheck = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 500,
+            system: 'Return ONLY a JSON array of story numbers. No commentary.',
+            messages: [{ role: 'user', content: `Current story brief: "${taskBrief.title}" — ${taskBrief.task}. Obstacle: ${taskBrief.obstacle}. Phase: ${taskBrief.phase}. Strength weaponized: ${taskBrief.strength_weaponized}.
+
+Which of these earlier stories are most THEMATICALLY relevant to the current brief? Pick up to 5 that share themes, characters, emotional territory, or plot threads that should inform continuity.
+
+${older.map(s => `Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 150)}`).join('\n')}
+
+Return JSON array of story numbers, e.g. [3, 7, 14]` }],
+          });
+          const relRaw = relevanceCheck.content?.[0]?.text || '[]';
+          const relNums = JSON.parse(relRaw.replace(/```json|```/g, '').trim());
+          if (Array.isArray(relNums)) {
+            relevantOlder = older.filter(s => relNums.includes(s.number));
+            remainingOlder = older.filter(s => !relNums.includes(s.number));
+          } else {
+            remainingOlder = older;
+          }
+        } catch {
+          // Fallback to recency if relevance check fails
+          remainingOlder = older;
+        }
+      } else {
+        remainingOlder = older;
+      }
 
       let contextParts = [];
-      if (older.length) {
-        contextParts.push('EARLIER ARC STORIES (titles only — these established the foundation):\n' +
-          older.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
+      if (remainingOlder.length) {
+        contextParts.push('EARLIER ARC STORIES (titles — these established the foundation):\n' +
+          remainingOlder.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
       }
-      if (middle.length) {
-        contextParts.push('RECENT ARC STORIES (for continuity — the character\'s recent journey):\n' +
-          middle.map(s => `- Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 300)}`).join('\n'));
+      if (relevantOlder.length) {
+        contextParts.push('THEMATICALLY RELEVANT EARLIER STORIES (these share emotional territory with the current brief — use for deep continuity):\n' +
+          relevantOlder.map(s => `- Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 500)}`).join('\n'));
       }
       contextParts.push('MOST RECENT STORIES (direct continuity — the story you write follows these):\n' +
         last3.map(s => `- Story ${s.number}: "${s.title}" — ${s.summary || ''}`).join('\n'));
@@ -8253,7 +8369,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     }
 
     // Load all context in parallel for speed
-    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence] = await Promise.all([
+    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence, voiceFingerprints] = await Promise.all([
       loadCharacterProfile(characterKey),
       loadStoryMemories(characterKey),
       loadWorldState(characterKey, dna.world),
@@ -8265,6 +8381,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
       loadDialogueVoiceCards(characterKey),
       loadDramaticIrony(characterKey),
       loadFollowInfluence(characterKey),
+      loadVoiceFingerprints(characterKey),
     ]);
 
     const profileSection = dbProfile
@@ -8282,6 +8399,20 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     const voiceCardsSection = voiceCards ? `\n\n${voiceCards}` : '';
     const ironySection = dramaticIrony ? `\n\n${dramaticIrony}` : '';
     const followSection = followInfluence ? `\n\n${followInfluence}` : '';
+    const fingerprintSection = voiceFingerprints ? `\n\n${voiceFingerprints}` : '';
+
+    // Build pacing analysis from recent stories to prevent repetitive structure
+    let pacingSection = '';
+    if (previousStories?.length >= 2) {
+      const recentBriefs = previousStories.slice(-3);
+      const patterns = recentBriefs.map(s => {
+        const brief = s.taskBrief || s;
+        return `  Story ${s.number}: type=${brief.story_type || '?'}, location=${brief.primary_location || '?'}, time=${brief.time_of_day || '?'}, emotional_start=${brief.emotional_start || '?'}`;
+      });
+      pacingSection = `\n\nPACING ANALYSIS (vary structure to prevent repetition — the last ${recentBriefs.length} stories used these patterns):
+${patterns.join('\n')}
+VARY: If recent stories opened in the same time of day, choose a different one. If they were all internal, bring collision energy. If they all started with tension, open with quiet. The reader needs rhythm — tension then breath, breath then tension. Surprise them with structure, not just plot.`;
+    }
 
     const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
@@ -8296,7 +8427,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${ironySection}${followSection}
+Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${fingerprintSection}${ironySection}${followSection}${pacingSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -8382,15 +8513,60 @@ Write the complete story now. No preamble. Begin with the title, then the story.
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      max_tokens: 10000,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Write Story ${storyNumber}: "${taskBrief.title}"` }],
     });
 
-    const storyText = response.content?.[0]?.text || '';
+    let storyText = response.content?.[0]?.text || '';
 
     if (!storyText || storyText.length < 500) {
       return fallback();
+    }
+
+    // ── Quality gate — fast check for show-don't-tell and craft issues ──
+    try {
+      const qualityCheck = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        system: `You are a literary quality checker. Analyze the story and return ONLY valid JSON — no markdown, no commentary.`,
+        messages: [{ role: 'user', content: `Check this story for craft quality issues:
+
+${storyText.slice(0, 6000)}
+
+Return JSON:
+{
+  "pass": true|false,
+  "score": 0-10,
+  "issues": [
+    { "type": "telling_not_showing|flat_dialogue|rushed_ending|missing_interiority|summary_instead_of_scene|weak_emotional_arc", "location": "brief description of where", "fix": "specific suggestion" }
+  ],
+  "strengths": ["what works well — be specific"],
+  "emotional_arc_delivered": true|false,
+  "all_domains_present": true|false
+}
+
+Score guide: 8+ pass, 6-7 has fixable issues, below 6 needs rewrite.
+Check specifically:
+1. Does the story SHOW scenes or SUMMARIZE events?
+2. Does dialogue do double duty (reveal character AND advance plot)?
+3. Is the emotional arc earned — does the ending shift feel real?
+4. Are all 4 life domains (career, romantic, family, friends) present?
+5. Is the ending a "quarter-inch shift" or a neat resolution?` }],
+      });
+
+      const qRaw = qualityCheck.content?.[0]?.text || '';
+      let quality;
+      try { quality = JSON.parse(qRaw.replace(/```json|```/g, '').trim()); } catch { quality = null; }
+
+      if (quality) {
+        // Attach quality report to the response
+        storyText = storyText; // keep original — quality report attached separately
+        // Store quality result for response
+        var qualityReport = quality;
+      }
+    } catch (qErr) {
+      console.error('[quality-gate] non-blocking error:', qErr?.message);
     }
 
     const wordCount = storyText.split(/\s+/).length;
@@ -8525,11 +8701,96 @@ Return ONLY valid JSON:
       new_character_name: taskBrief.new_character_name || null,
       new_character_role: taskBrief.new_character_role || null,
       auto_extraction: 'in_progress',
+      quality_report: typeof qualityReport !== 'undefined' ? qualityReport : null,
     });
 
   } catch (err) {
     console.error('[generate-story] error:', err?.message);
     return fallback();
+  }
+});
+
+// ─── POST /revise-story ──────────────────────────────────────────────────────
+// Takes a generated story + editorial notes and produces a tightened revision.
+router.post('/revise-story', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, storyText, editorialNotes, qualityReport } = req.body;
+
+  if (!storyText || !editorialNotes) {
+    return res.status(400).json({ error: 'storyText and editorialNotes are required' });
+  }
+
+  // Keep-alive for long requests
+  res.setHeader('Content-Type', 'application/json');
+  let finished = false;
+  const keepAlive = setInterval(() => {
+    if (!finished) try { res.write(' '); } catch (_) {}
+  }, 15000);
+
+  const finish = (data) => {
+    finished = true;
+    clearInterval(keepAlive);
+    res.end(JSON.stringify(data));
+  };
+
+  try {
+    // Build quality issues context from auto-report if available
+    let qualityContext = '';
+    if (qualityReport?.issues?.length) {
+      qualityContext = '\n\nAUTO-DETECTED QUALITY ISSUES:\n' +
+        qualityReport.issues.map(i => `- [${i.type}] ${i.location}: ${i.fix}`).join('\n');
+    }
+
+    const revisionPrompt = `You are revising a short story based on editorial feedback.
+
+ORIGINAL STORY (${storyText.split(/\s+/).length} words):
+${storyText}
+
+EDITORIAL NOTES FROM THE AUTHOR:
+${editorialNotes}${qualityContext}
+
+REVISION RULES:
+- Preserve the story's core events, characters, and emotional arc
+- Address EVERY editorial note specifically
+- Maintain the same POV, tense, and voice register
+- Keep the word count within 3300-4800 words
+- Do NOT add explanatory framing or meta-commentary
+- Tighten prose: cut redundant descriptions, strengthen verbs, sharpen dialogue
+- If the editorial notes mention pacing, restructure scenes accordingly
+- If the notes mention "telling not showing," replace summary with scene
+- The revised version should feel like the same story, written better
+
+Return ONLY the revised story. Begin with the title, then the story. No preamble.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 10000,
+      system: revisionPrompt,
+      messages: [{ role: 'user', content: 'Revise the story now.' }],
+    });
+
+    const revisedText = response.content?.[0]?.text || '';
+
+    if (!revisedText || revisedText.length < 500) {
+      return finish({ error: 'Revision produced insufficient output — try again.' });
+    }
+
+    return finish({
+      story_number: storyNumber || null,
+      character_key: characterKey || null,
+      original_word_count: storyText.split(/\s+/).length,
+      revised_word_count: revisedText.split(/\s+/).length,
+      text: revisedText,
+      revision_applied: true,
+      token_usage: {
+        input: response.usage?.input_tokens || 0,
+        output: response.usage?.output_tokens || 0,
+      },
+    });
+  } catch (err) {
+    console.error('[revise-story] error:', err?.message);
+    finished = true;
+    clearInterval(keepAlive);
+    return res.status(500).json({ error: err?.message || 'Revision failed' });
   }
 });
 
