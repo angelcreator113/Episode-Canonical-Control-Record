@@ -25,6 +25,25 @@ try {
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// ── ENUM validation helpers ──────────────────────────────────────────────────
+const VALID_TRAJECTORIES = new Set(['rising', 'plateauing', 'unraveling', 'pivoting', 'silent', 'viral_moment']);
+const VALID_ARCHETYPES = new Set([
+  'polished_curator', 'messy_transparent', 'soft_life', 'explicitly_paid',
+  'overnight_rise', 'cautionary', 'the_peer', 'the_watcher',
+  'chaos_creator', 'community_builder',
+]);
+const VALID_FOLLOWER_TIERS = new Set(['micro', 'mid', 'macro', 'mega']);
+
+function sanitizeEnum(value, validSet, fallback) {
+  if (!value) return fallback;
+  const normalized = String(value).toLowerCase().replace(/[\s-]+/g, '_');
+  if (validSet.has(normalized)) return normalized;
+  for (const valid of validSet) {
+    if (normalized.includes(valid) || valid.includes(normalized)) return valid;
+  }
+  return fallback;
+}
+
 // ── Feed caps ─────────────────────────────────────────────────────────────────
 const FEED_CAPS = { real_world: 443, lalaverse: 200 };
 
@@ -283,7 +302,7 @@ Lala does not know she was built. The world she lives in feels complete and self
     }
 
     const response = await client.messages.create({
-      model:      'claude-sonnet-4-20250514',
+      model:      'claude-sonnet-4-6',
       max_tokens: 6000,
       messages:   [{ role: 'user', content: prompt }],
     });
@@ -295,6 +314,11 @@ Lala does not know she was built. The world she lives in feels complete and self
       return res.status(500).json({ error: 'Profile generation failed to parse. Try again.' });
     }
 
+    // Sanitize ENUM fields to prevent DB insert failures from AI variations
+    const safeFollowerTier = sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
+    const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
+    const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
+
     // Save as draft
     const profile = await db.SocialProfile.create({
       series_id:       series_id || null,
@@ -302,14 +326,14 @@ Lala does not know she was built. The world she lives in feels complete and self
       platform,
       vibe_sentence,
       status:          'generated',
-      generation_model: 'claude-sonnet-4-20250514',
+      generation_model: 'claude-sonnet-4-6',
       full_profile:    generated,
       // Flatten key fields for querying
       display_name:          generated.display_name,
-      follower_tier:         generated.follower_tier,
+      follower_tier:         safeFollowerTier,
       follower_count_approx: generated.follower_count_approx,
       content_category:      generated.content_category,
-      archetype:             generated.archetype,
+      archetype:             safeArchetype,
       content_persona:       generated.content_persona,
       real_signal:           generated.real_signal,
       posting_voice:         generated.posting_voice,
@@ -321,7 +345,7 @@ Lala does not know she was built. The world she lives in feels complete and self
       emotional_activation:  generated.emotional_activation,
       watch_reason:          generated.watch_reason,
       what_it_costs_her:     generated.what_it_costs_her,
-      current_trajectory:    generated.current_trajectory,
+      current_trajectory:    safeTrajectory,
       trajectory_detail:     generated.trajectory_detail,
       moment_log:            generated.moment_log || [],
       sample_captions:       generated.sample_captions || [],
@@ -1140,22 +1164,8 @@ router.get('/export', optionalAuth, async (req, res) => {
   }
 });
 
-// ── GET /:id ─────────────────────────────────────────────────────────────────
-router.get('/:id', optionalAuth, async (req, res) => {
-  const db = req.app.locals.db || require('../models');
-  try {
-    const profile = await db.SocialProfile.findByPk(req.params.id, {
-      include: db.SocialProfileFollower ? [{
-        model: db.SocialProfileFollower,
-        as: 'followers',
-      }] : [],
-    });
-    if (!profile) return res.status(404).json({ error: 'Not found' });
-    return res.json({ profile });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+// NOTE: GET /:id moved to end of file — must come after all named single-segment
+// routes (GET /network, GET /templates, etc.) to avoid shadowing them.
 
 // ── GET /:id/followers ───────────────────────────────────────────────────────
 router.get('/:id/followers', optionalAuth, async (req, res) => {
@@ -1350,7 +1360,7 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     }
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 6000,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -1362,15 +1372,20 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       return res.status(500).json({ error: 'Regeneration failed to parse. Try again.' });
     }
 
+    // Sanitize ENUM fields to prevent DB insert failures from AI variations
+    const safeFollowerTier = sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
+    const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
+    const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
+
     await profile.update({
       vibe_sentence,
       full_profile: generated,
-      generation_model: 'claude-sonnet-4-20250514',
+      generation_model: 'claude-sonnet-4-6',
       display_name: generated.display_name,
-      follower_tier: generated.follower_tier,
+      follower_tier: safeFollowerTier,
       follower_count_approx: generated.follower_count_approx,
       content_category: generated.content_category,
-      archetype: generated.archetype,
+      archetype: safeArchetype,
       content_persona: generated.content_persona,
       real_signal: generated.real_signal,
       posting_voice: generated.posting_voice,
@@ -1382,7 +1397,7 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       emotional_activation: generated.emotional_activation,
       watch_reason: generated.watch_reason,
       what_it_costs_her: generated.what_it_costs_her,
-      current_trajectory: generated.current_trajectory,
+      current_trajectory: safeTrajectory,
       trajectory_detail: generated.trajectory_detail,
       moment_log: generated.moment_log || [],
       sample_captions: generated.sample_captions || [],
@@ -2407,6 +2422,25 @@ router.post('/relationships/suggestions/accept', optionalAuth, async (req, res) 
     });
 
     return res.json({ relationship: rel, created });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /:id ─────────────────────────────────────────────────────────────────
+// IMPORTANT: This catch-all must be the LAST GET route registered.
+// Named routes like GET /network, GET /templates must come before this.
+router.get('/:id', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id, {
+      include: db.SocialProfileFollower ? [{
+        model: db.SocialProfileFollower,
+        as: 'followers',
+      }] : [],
+    });
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+    return res.json({ profile });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
