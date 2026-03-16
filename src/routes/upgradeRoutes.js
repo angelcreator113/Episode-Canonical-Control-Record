@@ -27,6 +27,14 @@ const { Op } = require('sequelize');
 
 const client = new Anthropic();
 
+// Safe extraction of text from Claude API response
+function extractAIText(response) {
+  if (!response?.content?.length || !response.content[0]?.text) {
+    throw new Error('AI returned empty or malformed response');
+  }
+  return response.content[0].text;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // UPGRADE 1: SESSION BRIEF
 // Reads tech knowledge + story state → gives the assistant full context on entry
@@ -36,24 +44,24 @@ router.post('/session/brief', optionalAuth, async (req, res) => {
 
   try {
     // Read tech knowledge
-    const techEntries = await db.FranchiseTechKnowledge.findAll({
+    const techEntries = db.FranchiseTechKnowledge ? await db.FranchiseTechKnowledge.findAll({
       where: { status: 'active' },
       order: [['category', 'ASC']],
-    });
+    }) : [];
 
     // Read story arc state
     let storySnapshot = {};
     if (book_id) {
-      const book = await db.StorytellerBook.findByPk(book_id);
-      const recentStories = await db.StorytellerStory.findAll({
+      const book = db.StorytellerBook ? await db.StorytellerBook.findByPk(book_id) : null;
+      const recentStories = db.StorytellerStory ? await db.StorytellerStory.findAll({
         where: { book_id, status: { [Op.in]: ['evaluated', 'written_back'] } },
         order: [['updated_at', 'DESC']],
         limit: 5,
-      });
-      const recentGrowth = await db.CharacterGrowthLog.findAll({
+      }) : [];
+      const recentGrowth = db.CharacterGrowthLog ? await db.CharacterGrowthLog.findAll({
         where: { update_type: 'flagged_contradiction', author_reviewed: false },
         limit: 5,
-      });
+      }) : [];
       storySnapshot = {
         arc_stage: book?.current_arc_stage || 'establishment',
         arc_scores: book?.arc_stage_scores || {},
@@ -119,16 +127,18 @@ Keep it tight. This brief should take 30 seconds to read and give the assistant 
       messages: [{ role: 'user', content: briefPrompt }],
     });
 
-    const briefText = response.content[0].text;
+    const briefText = extractAIText(response);
 
-    const brief = await db.SessionBrief.create({
-      brief_text: briefText,
-      tech_snapshot: { entry_count: techEntries.length, categories: [...new Set(techEntries.map(e => e.category))] },
-      story_snapshot: storySnapshot,
-      pending_builds: pendingBuilds,
-    });
-
-    return res.json({ brief_id: brief.id, brief_text: briefText, generated_at: brief.generated_at });
+    if (db.SessionBrief) {
+      const brief = await db.SessionBrief.create({
+        brief_text: briefText,
+        tech_snapshot: { entry_count: techEntries.length, categories: [...new Set(techEntries.map(e => e.category))] },
+        story_snapshot: storySnapshot,
+        pending_builds: pendingBuilds,
+      });
+      return res.json({ brief_id: brief.id, brief_text: briefText, generated_at: brief.generated_at });
+    }
+    return res.json({ brief_text: briefText, generated_at: new Date().toISOString() });
   } catch (err) {
     console.error('Session brief error:', err);
     return res.status(500).json({ error: err.message });
@@ -137,6 +147,7 @@ Keep it tight. This brief should take 30 seconds to read and give the assistant 
 
 router.get('/session/brief/latest', optionalAuth, async (req, res) => {
   try {
+    if (!db.SessionBrief) return res.json({ brief: null });
     const brief = await db.SessionBrief.findOne({ order: [['created_at', 'DESC']] });
     if (!brief) return res.json({ brief: null });
     await brief.update({ used_at: new Date() });
@@ -220,7 +231,7 @@ Respond ONLY in valid JSON:
 
     let reviewData;
     try {
-      reviewData = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+      reviewData = JSON.parse(extractAIText(response).replace(/```json|```/g, '').trim());
     } catch {
       reviewData = { violations: [], warnings: [], passed: true, overall_assessment: 'Review parse failed', strongest_moment: '' };
     }
@@ -465,9 +476,9 @@ Generate content for all five formats. Respond ONLY in valid JSON:
 
     let contentData;
     try {
-      contentData = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+      contentData = JSON.parse(extractAIText(response).replace(/```json|```/g, '').trim());
     } catch {
-      return res.status(500).json({ error: 'Content parse failed', raw: response.content[0].text });
+      return res.status(500).json({ error: 'Content parse failed', raw: extractAIText(response) });
     }
 
     const formats = ['instagram_caption', 'tiktok_concept', 'howto_lesson', 'bestie_newsletter', 'behind_the_scenes'];
@@ -585,9 +596,9 @@ router.post('/tech-knowledge/ingest-document', optionalAuth, async (req, res) =>
 
     let extracted;
     try {
-      extracted = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+      extracted = JSON.parse(extractAIText(response).replace(/```json|```/g, '').trim());
     } catch {
-      return res.status(500).json({ error: 'Parse failed', raw: response.content[0].text });
+      return res.status(500).json({ error: 'Parse failed', raw: extractAIText(response) });
     }
 
     const created = await db.FranchiseTechKnowledge.bulkCreate(
@@ -625,7 +636,7 @@ router.post('/tech-knowledge/extract-conversation', optionalAuth, async (req, re
 
     let extracted;
     try {
-      extracted = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+      extracted = JSON.parse(extractAIText(response).replace(/```json|```/g, '').trim());
     } catch {
       return res.status(500).json({ error: 'Parse failed' });
     }
