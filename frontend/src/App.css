@@ -107,6 +107,15 @@ html, body {
   box-sizing: border-box;
 }
 
+/* StoryEngine manages its own layout — bypass the content box */
+.app-content > .se-page {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+  height: 100%;
+}
+
 /* StorytellerPage manages its own layout — bypass the content box */
 .app-content > .storyteller-page {
   max-width: none;
@@ -134,14 +143,12 @@ html, body {
   background: var(--st-bg, #F6F1EB);
 }
 
-/* StoryEngine: unlock vertical scrolling on the .app-content scroll container.
-   body.page-story-engine is set by StoryEngine.jsx on mount.
-   Keep the fixed viewport-height chain intact — only change overflow. */
-body.page-story-engine .app-main-wrapper.full-screen .app-content {
-  background: #f5f3f0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
+/* StoryEngine: keep app-content as a non-scrolling container so se-page
+   manages its own internal scroll (se-sidebar and se-workspace scroll independently).
+   body.page-story-engine is set by StoryEngine.jsx on mount. */
+body.page-story-engine .app-content {
+  overflow: hidden;
+  background: transparent;
 }
 
 /* StorytellerPage needs scrolling even in full-screen mode */

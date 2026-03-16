@@ -1984,7 +1984,7 @@ export default function StoryEngine() {
           {!readingMode && !writeMode && !tasksLoading && tasks.length === 0 && (
             <div className="se-hero-fullpage">
               <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
-              <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
+              <div className="se-hero-title">Build {char?.display_name ? `${char.display_name}'s` : 'your'} story engine</div>
               <div className="se-hero-text">
                 Generate a 50-story progression that moves from establishment
                 through pressure, crisis, and integration. The first run takes
@@ -1992,7 +1992,7 @@ export default function StoryEngine() {
               </div>
               <button
                 className="se-btn se-btn-generate-arc se-primary-btn"
-                style={{ background: char?.color }}
+                style={{ background: char?.color || '#b0922e' }}
                 onClick={() => handleGenerateArc()}
               >
                 Generate Story Arc
