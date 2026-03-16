@@ -33,7 +33,7 @@ router.post('/generate', async (req, res) => {
       where: { character_key },
       attributes: [
         'id', 'display_name', 'name', 'core_wound', 'core_desire',
-        'core_fear', 'body_relationship', 'body_currency',
+        'core_fear', 'de_body_relationship', 'de_body_currency',
         'platform_primary', 'follower_tier',
       ],
     });
