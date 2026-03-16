@@ -25,6 +25,67 @@ const {
   inferFollowerTier,
 } = require('../utils/feedProfileUtils');
 
+const AI_MODEL = 'claude-sonnet-4-6';
+const AI_TIMEOUT_MS = 120000; // 120s timeout matching bulk routes
+const AI_MAX_RETRIES = 1;
+
+/**
+ * Call Claude with timeout and retry logic.
+ */
+async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES } = {}) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await Promise.race([
+        client.messages.create({
+          model: AI_MODEL,
+          max_tokens: maxTokens,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS)
+        ),
+      ]);
+      return response;
+    } catch (err) {
+      lastErr = err;
+      console.log(`[FeedScheduler] AI call attempt ${attempt + 1} failed: ${err.message}`);
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); // backoff
+      }
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Robustly parse AI JSON response — extract JSON object, fix trailing commas.
+ */
+function parseAIJson(text) {
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  // Try direct parse first
+  try { return JSON.parse(cleaned); } catch {}
+  // Extract JSON object with regex
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('AI did not return valid JSON');
+  // Fix trailing commas before } or ]
+  const fixed = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
+  return JSON.parse(fixed);
+}
+
+/**
+ * Robustly parse AI JSON array response.
+ */
+function parseAIJsonArray(text) {
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+  if (!arrayMatch) throw new Error('AI did not return valid JSON array');
+  const fixed = arrayMatch[0].replace(/,\s*([\]}])/g, '$1');
+  return JSON.parse(fixed);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
@@ -157,8 +218,6 @@ function generateCreatorSpark(layer) {
  * already exists in the feed. This is what makes the form unnecessary.
  */
 async function generateSmartSparks(db, layer, count = 5) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
   // Sample existing profiles for diversity awareness
   const existing = await db.SocialProfile.findAll({
     where: { feed_layer: layer },
@@ -234,15 +293,11 @@ Return a JSON array of exactly ${count} objects:
 
 Return ONLY the JSON array. No markdown, no explanation.`;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const response = await callClaude(prompt, { maxTokens: 4000 });
 
   let sparks;
   try {
-    sparks = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+    sparks = parseAIJsonArray(response.content[0].text);
   } catch {
     throw new Error('AI spark generation failed to parse');
   }
@@ -336,8 +391,6 @@ function sanitizeEnum(value, validSet, fallback) {
  * Call Claude to generate a full profile from a spark, then save it.
  */
 async function generateAndSaveProfile(db, spark, layer) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
   // Build the generation prompt (importing the shared builder)
   const { buildGenerationPrompt } = require('../routes/socialProfileRoutes');
 
@@ -374,16 +427,13 @@ Do not reference JustAWoman or the real world in any generated content.
 Lala does not know she was built. The world she lives in feels complete and self-contained.`;
   }
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 6000,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const response = await callClaude(prompt, { maxTokens: 4000 });
 
   let generated;
   try {
-    generated = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
-  } catch {
+    generated = parseAIJson(response.content[0].text);
+  } catch (parseErr) {
+    console.error('[FeedScheduler] JSON parse failed for', spark.handle, '— raw text:', response.content[0].text.slice(0, 200));
     throw new Error('AI response failed to parse as JSON');
   }
 
@@ -398,7 +448,7 @@ Lala does not know she was built. The world she lives in feels complete and self
     platform:              spark.platform,
     vibe_sentence:         spark.vibe_sentence,
     status:                'generated',
-    generation_model:      'claude-sonnet-4-20250514',
+    generation_model:      AI_MODEL,
     full_profile:          generated,
     display_name:          generated.display_name,
     follower_tier:         safeFollowerTier,
