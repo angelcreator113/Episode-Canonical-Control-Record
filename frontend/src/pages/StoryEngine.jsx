@@ -1817,257 +1817,292 @@ export default function StoryEngine() {
     <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''} ${activeStory ? 'se-has-active-story' : ''}`}>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
+      {/* ── Slim top bar: nav only ──────────────────────────────────── */}
       {!readingMode && (
         <div className="se-topbar">
           <StoryHubNav />
           <button className="se-btn-back" onClick={() => navigate('/')}>
             ← Home
           </button>
-          <div className="se-topbar-title">Story Engine</div>
-          <button
-            className={`se-btn se-btn-stats-toggle ${showStats ? 'active' : ''}`}
-            onClick={() => setShowStats(prev => !prev)}
-            title="Toggle stats dashboard"
-          >
-            📊 Stats
-          </button>
-          <WorldToggle worlds={worldToggles} onToggle={handleWorldToggle} />
         </div>
       )}
 
-      {showStats && !readingMode && (
-        <StatsDashboard
-          tasks={tasks}
-          stories={stories}
-          approvedStories={approvedStories}
-          savedStories={savedStories}
-        />
-      )}
+      {/* ── Main body: sidebar + workspace ──────────────────────────── */}
+      <div className="se-body">
+        {/* ── Left sidebar ─────────────────────────────────────────── */}
+        {!readingMode && !writeMode && (
+          <div className="se-sidebar">
+            {/* Character selector */}
+            <div className="se-sidebar-section">
+              <CharacterSelector
+                characters={CHARACTERS}
+                selectedChar={selectedChar}
+                onSelect={setSelectedChar}
+                loading={charsLoading}
+              />
+            </div>
 
-      {!readingMode && (
-        <div className="se-mobile-deck">
-          <CharacterSelector
-            characters={CHARACTERS}
-            selectedChar={selectedChar}
-            onSelect={setSelectedChar}
-            loading={charsLoading}
-          />
+            {/* Arc progress — compact */}
+            <div className="se-sidebar-section se-sidebar-arc">
+              <ArcProgress
+                approvedStories={approvedStories}
+                savedStories={savedStories}
+                stories={stories}
+              />
+            </div>
 
-          <ArcProgress
-            approvedStories={approvedStories}
-            savedStories={savedStories}
-            stories={stories}
-          />
-          {selectedChar && (
-            <ArcTrackingPanel
-              characterKey={selectedChar}
-              characterName={char?.display_name || selectedChar}
-            />
-          )}
-        </div>
-      )}
+            {/* Arc tracking panel */}
+            {selectedChar && (
+              <div className="se-sidebar-section">
+                <ArcTrackingPanel
+                  characterKey={selectedChar}
+                  characterName={char?.display_name || selectedChar}
+                />
+              </div>
+            )}
 
-      {/* Story Sparks — creative suggestions for this character */}
-      {!readingMode && selectedChar && (() => {
-        const StorySparks = () => {
-          const [sparks, setSparks] = React.useState([]);
-          const [open, setOpen] = React.useState(false);
-          const [loading, setLoading] = React.useState(false);
-
-          const loadSparks = () => {
-            if (sparks.length) { setOpen(!open); return; }
-            setOpen(true);
-            setLoading(true);
-            fetch(`/api/v1/story-health/story-sparks/${selectedChar}`)
-              .then(r => r.json())
-              .then(d => setSparks(d.sparks || []))
-              .catch(err => console.warn('story sparks failed:', err.message))
-              .finally(() => setLoading(false));
-          };
-
-          return (
-            <div style={{ margin: '8px 16px 4px', fontFamily: "'DM Sans', sans-serif" }}>
-              <button onClick={loadSparks} style={{
-                background: 'none', border: '1px solid #e0dcd4', borderRadius: 8, padding: '8px 14px',
-                color: 'var(--se-gold, #b0922e)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                display: 'flex', alignItems: 'center', gap: 6, width: '100%'
-              }}>
-                <span>✨</span> Story Sparks
-                <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.6 }}>{open ? '▾' : '▸'}</span>
-              </button>
-              {open && (
-                <div style={{ marginTop: 8, padding: '0 4px' }}>
-                  {loading ? (
-                    <div style={{ color: '#9a9080', fontSize: 12, padding: 8 }}>Generating sparks…</div>
-                  ) : sparks.length === 0 ? (
-                    <div style={{ color: '#9a9080', fontSize: 12, padding: 8 }}>No sparks available yet</div>
-                  ) : sparks.map((s, i) => (
-                    <div key={i} style={{
-                      padding: '10px 12px', marginBottom: 6, background: '#faf8f4', borderRadius: 8,
-                      border: '1px solid #ebe6dd', fontSize: 13, lineHeight: 1.5, color: '#3a3226'
-                    }}>
-                      <div style={{ fontWeight: 600, color: 'var(--se-gold, #b0922e)', marginBottom: 4, fontSize: 12 }}>
-                        {s.type || 'Spark'}
-                      </div>
-                      {s.suggestion || s.title || JSON.stringify(s)}
-                    </div>
+            {/* World toggles — compact pills */}
+            {Object.keys(worldToggles).length > 0 && (
+              <div className="se-sidebar-section se-sidebar-worlds">
+                <div className="se-sidebar-label">Worlds</div>
+                <div className="se-world-pills">
+                  {Object.entries(worldToggles).map(([worldId, isOpen]) => (
+                    <button
+                      key={worldId}
+                      className={`se-world-pill ${isOpen ? 'open' : 'closed'}`}
+                      onClick={() => handleWorldToggle(worldId)}
+                      title={`${WORLD_LABELS[worldId] || worldId}: New characters ${isOpen ? 'open' : 'locked'}`}
+                    >
+                      <span className="se-world-pill-name">{WORLD_LABELS[worldId] || worldId}</span>
+                      <span className={`se-world-pill-dot ${isOpen ? 'open' : 'closed'}`} />
+                    </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Stats — collapsible */}
+            <div className="se-sidebar-section">
+              <button
+                className="se-sidebar-toggle"
+                onClick={() => setShowStats(prev => !prev)}
+              >
+                <span>Stats</span>
+                <span className="se-sidebar-toggle-arrow">{showStats ? '▾' : '▸'}</span>
+              </button>
+              {showStats && (
+                <StatsDashboard
+                  tasks={tasks}
+                  stories={stories}
+                  approvedStories={approvedStories}
+                  savedStories={savedStories}
+                />
               )}
             </div>
-          );
-        };
-        return <StorySparks />;
-      })()}
 
-      <div className={`se-workspace${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
-        {!readingMode && !writeMode && (
-          <div className="se-task-list">
-            {tasksLoading ? (
-              <div className="se-task-loading">
-                <div className="se-spinner" style={{ borderTopColor: char?.color }} />
-                <span>Building {char?.display_name}'s 50-story arc…</span>
-                <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
-              </div>
-            ) : tasks.length === 0 ? (
-              <div className="se-task-empty se-hero-card">
-                <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
-                <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
-                <div className="se-hero-text">
-                  Generate a 50-story progression that moves from establishment
-                  through pressure, crisis, and integration. The first run takes
-                  a few minutes — after that, it loads instantly.
-                </div>
-                <button
-                  className="se-btn se-btn-generate-arc se-primary-btn"
-                  style={{ background: char?.color }}
-                  onClick={() => handleGenerateArc()}
-                >
-                  Generate Story Arc
-                </button>
-                <div className="se-hero-sub">Typically 2–3 minutes</div>
-              </div>
-            ) : (
-              <>
-                <div className="se-task-section-intro">
-                  <div className="se-task-section-title">Story Arc</div>
-                  <div className="se-task-section-sub">
-                    {char?.display_name}'s 50-story progression
-                  </div>
-                </div>
+            {/* Story Sparks — collapsible */}
+            {selectedChar && (() => {
+              const StorySparks = () => {
+                const [sparks, setSparks] = React.useState([]);
+                const [open, setOpen] = React.useState(false);
+                const [loading, setLoading] = React.useState(false);
 
-                <div className="se-filter-bar">
-                  <input
-                    className="se-filter-search"
-                    type="text"
-                    placeholder="Search stories…"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <div className="se-filter-pills">
-                    {['establishment', 'pressure', 'crisis', 'integration'].map(p => (
-                      <button
-                        key={p}
-                        className={`se-filter-pill ${phaseFilter === p ? 'active' : ''}`}
-                        style={phaseFilter === p ? { background: PHASE_COLORS[p], color: '#fff', borderColor: PHASE_COLORS[p] } : undefined}
-                        onClick={() => setPhaseFilter(prev => prev === p ? null : p)}
-                      >
-                        {PHASE_LABELS[p]}
-                      </button>
-                    ))}
-                    {['internal', 'collision', 'wrong_win'].map(t => (
-                      <button
-                        key={t}
-                        className={`se-filter-pill se-filter-type ${typeFilter === t ? 'active' : ''}`}
-                        onClick={() => setTypeFilter(prev => prev === t ? null : t)}
-                      >
-                        {TYPE_ICONS[t]} {t.replace('_', ' ')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                const loadSparks = () => {
+                  if (sparks.length) { setOpen(!open); return; }
+                  setOpen(true);
+                  setLoading(true);
+                  fetch(`/api/v1/story-health/story-sparks/${selectedChar}`)
+                    .then(r => r.json())
+                    .then(d => setSparks(d.sparks || []))
+                    .catch(err => console.warn('story sparks failed:', err.message))
+                    .finally(() => setLoading(false));
+                };
 
-                <div className="se-task-list-header">
-                  <span className="se-task-list-count">
-                    {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
-                    {(() => {
-                      const queueCount = savedStories.filter(n => !approvedStories.includes(n)).length;
-                      return queueCount > 0 ? (
-                        <span className="se-reading-queue-badge">📥 {queueCount} to review</span>
-                      ) : null;
-                    })()}
-                  </span>
-                  <div className="se-task-list-actions">
-                    <button
-                      className={`se-btn se-btn-batch ${batchMode ? 'active' : ''}`}
-                      onClick={() => { setBatchMode(prev => !prev); setBatchSelected(new Set()); }}
-                    >
-                      {batchMode ? '✕ Cancel' : '☐ Batch'}
+                return (
+                  <div className="se-sidebar-section">
+                    <button className="se-sidebar-toggle" onClick={loadSparks}>
+                      <span>Story Sparks</span>
+                      <span className="se-sidebar-toggle-arrow">{open ? '▾' : '▸'}</span>
                     </button>
-                    {batchMode && batchSelected.size > 0 && (
-                      <button
-                        className="se-btn se-btn-batch-approve"
-                        style={{ background: char?.color }}
-                        onClick={handleBatchApprove}
-                      >
-                        Approve {batchSelected.size}
-                      </button>
+                    {open && (
+                      <div className="se-sparks-list">
+                        {loading ? (
+                          <div className="se-sparks-loading">Generating sparks…</div>
+                        ) : sparks.length === 0 ? (
+                          <div className="se-sparks-loading">No sparks available yet</div>
+                        ) : sparks.map((s, i) => (
+                          <div key={i} className="se-spark-card">
+                            <div className="se-spark-type">{s.type || 'Spark'}</div>
+                            <div className="se-spark-text">{s.suggestion || s.title || JSON.stringify(s)}</div>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                    <button
-                      className="se-btn se-btn-regen"
-                      onClick={() => {
-                        if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) {
-                          handleGenerateArc(true);
-                        }
-                      }}
-                    >
-                      ↻ Regen
-                    </button>
                   </div>
-                </div>
+                );
+              };
+              return <StorySparks />;
+            })()}
 
-                {filteredTasks.map((task) => (
-                  <TaskCard
-                    key={task.story_number}
-                    task={task}
-                    isApproved={approvedStories.includes(task.story_number)}
-                    isSaved={savedStories.includes(task.story_number) && !approvedStories.includes(task.story_number)}
-                    isActive={activeTask?.story_number === task.story_number}
-                    onGenerate={handleGenerate}
-                    onSelect={handleSelectTask}
-                    charColor={char?.color}
-                    generating={generating && generatingNum === task.story_number}
-                    batchMode={batchMode}
-                    batchSelected={batchSelected}
-                    onBatchToggle={handleBatchToggle}
-                  />
-                ))}
-
-                {filteredTasks.length === 0 && tasks.length > 0 && (
-                  <div className="se-filter-empty">
-                    No stories match current filters.
-                    <button className="se-filter-clear" onClick={() => { setPhaseFilter(null); setTypeFilter(null); setSearchQuery(''); }}>
-                      Clear filters
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+            {/* Keyboard shortcuts */}
+            <div className="se-sidebar-shortcuts">
+              <span>↑↓ Nav</span>
+              <span>F Read</span>
+              <span>⌘S Save</span>
+              <span>⌘↵ Approve…</span>
+            </div>
           </div>
         )}
 
-        <div className={`se-story-column${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
-          {generating && generatingNum === activeTask?.story_number ? (
-            <div className="se-generating">
-              <div className="se-generating-ring" style={{ borderTopColor: char?.color }} />
-              <div className="se-generating-title">Writing Story {generatingNum}…</div>
-              <div className="se-generating-sub">
-                {char?.display_name}'s world is assembling itself.
-              </div>
-              <div className="se-generating-elapsed">{elapsed}s · typically 1–2 minutes</div>
+        {/* ── Workspace: task list + story column ──────────────────── */}
+        <div className={`se-workspace${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
+          {!readingMode && !writeMode && (
+            <div className="se-task-list">
+              {tasksLoading ? (
+                <div className="se-task-loading">
+                  <div className="se-spinner" style={{ borderTopColor: char?.color }} />
+                  <span>Building {char?.display_name}'s 50-story arc…</span>
+                  <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
+                </div>
+              ) : tasks.length === 0 ? (
+                <div className="se-task-empty se-hero-card">
+                  <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
+                  <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
+                  <div className="se-hero-text">
+                    Generate a 50-story progression that moves from establishment
+                    through pressure, crisis, and integration. The first run takes
+                    a few minutes — after that, it loads instantly.
+                  </div>
+                  <button
+                    className="se-btn se-btn-generate-arc se-primary-btn"
+                    style={{ background: char?.color }}
+                    onClick={() => handleGenerateArc()}
+                  >
+                    Generate Story Arc
+                  </button>
+                  <div className="se-hero-sub">Typically 2–3 minutes</div>
+                </div>
+              ) : (
+                <>
+                  <div className="se-task-section-intro">
+                    <div className="se-task-section-title">Story Arc</div>
+                    <div className="se-task-section-sub">
+                      {char?.display_name}'s 50-story progression
+                    </div>
+                  </div>
+
+                  <div className="se-filter-bar">
+                    <input
+                      className="se-filter-search"
+                      type="text"
+                      placeholder="Search stories…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <div className="se-filter-pills">
+                      {['establishment', 'pressure', 'crisis', 'integration'].map(p => (
+                        <button
+                          key={p}
+                          className={`se-filter-pill ${phaseFilter === p ? 'active' : ''}`}
+                          style={phaseFilter === p ? { background: PHASE_COLORS[p], color: '#fff', borderColor: PHASE_COLORS[p] } : undefined}
+                          onClick={() => setPhaseFilter(prev => prev === p ? null : p)}
+                        >
+                          {PHASE_LABELS[p]}
+                        </button>
+                      ))}
+                      {['internal', 'collision', 'wrong_win'].map(t => (
+                        <button
+                          key={t}
+                          className={`se-filter-pill se-filter-type ${typeFilter === t ? 'active' : ''}`}
+                          onClick={() => setTypeFilter(prev => prev === t ? null : t)}
+                        >
+                          {TYPE_ICONS[t]} {t.replace('_', ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="se-task-list-header">
+                    <span className="se-task-list-count">
+                      {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
+                      {(() => {
+                        const queueCount = savedStories.filter(n => !approvedStories.includes(n)).length;
+                        return queueCount > 0 ? (
+                          <span className="se-reading-queue-badge">📥 {queueCount} to review</span>
+                        ) : null;
+                      })()}
+                    </span>
+                    <div className="se-task-list-actions">
+                      <button
+                        className={`se-btn se-btn-batch ${batchMode ? 'active' : ''}`}
+                        onClick={() => { setBatchMode(prev => !prev); setBatchSelected(new Set()); }}
+                      >
+                        {batchMode ? '✕ Cancel' : '☐ Batch'}
+                      </button>
+                      {batchMode && batchSelected.size > 0 && (
+                        <button
+                          className="se-btn se-btn-batch-approve"
+                          style={{ background: char?.color }}
+                          onClick={handleBatchApprove}
+                        >
+                          Approve {batchSelected.size}
+                        </button>
+                      )}
+                      <button
+                        className="se-btn se-btn-regen"
+                        onClick={() => {
+                          if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) {
+                            handleGenerateArc(true);
+                          }
+                        }}
+                      >
+                        ↻ Regen
+                      </button>
+                    </div>
+                  </div>
+
+                  {filteredTasks.map((task) => (
+                    <TaskCard
+                      key={task.story_number}
+                      task={task}
+                      isApproved={approvedStories.includes(task.story_number)}
+                      isSaved={savedStories.includes(task.story_number) && !approvedStories.includes(task.story_number)}
+                      isActive={activeTask?.story_number === task.story_number}
+                      onGenerate={handleGenerate}
+                      onSelect={handleSelectTask}
+                      charColor={char?.color}
+                      generating={generating && generatingNum === task.story_number}
+                      batchMode={batchMode}
+                      batchSelected={batchSelected}
+                      onBatchToggle={handleBatchToggle}
+                    />
+                  ))}
+
+                  {filteredTasks.length === 0 && tasks.length > 0 && (
+                    <div className="se-filter-empty">
+                      No stories match current filters.
+                      <button className="se-filter-clear" onClick={() => { setPhaseFilter(null); setTypeFilter(null); setSearchQuery(''); }}>
+                        Clear filters
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-          ) : (
-            <StoryPanel
+          )}
+
+          <div className={`se-story-column${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
+            {generating && generatingNum === activeTask?.story_number ? (
+              <div className="se-generating">
+                <div className="se-generating-ring" style={{ borderTopColor: char?.color }} />
+                <div className="se-generating-title">Writing Story {generatingNum}…</div>
+                <div className="se-generating-sub">
+                  {char?.display_name}'s world is assembling itself.
+                </div>
+                <div className="se-generating-elapsed">{elapsed}s · typically 1–2 minutes</div>
+              </div>
+            ) : (
+              <StoryPanel
               story={activeStory}
               task={activeTask}
               charColor={char?.color}
@@ -2126,16 +2161,8 @@ export default function StoryEngine() {
             />
           )}
         </div>
-      </div>
-
-      {!readingMode && (
-        <div className="se-shortcuts-hint">
-          <span>↑↓ Navigate</span>
-          <span>F Reading mode</span>
-          <span>Ctrl+S Save</span>
-          <span>Ctrl+Enter Approve…</span>
         </div>
-      )}
+      </div>
 
       {/* Amber notification — scene eligibility after story approval */}
       {amberNotification?.type === 'scene_eligible' && (
