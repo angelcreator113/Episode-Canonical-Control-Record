@@ -945,6 +945,25 @@ router.get('/', optionalAuth, async (req, res) => {
     // Count total crossover profiles (real_world profiles Lala follows), not just current page
     const crossoverCount = crossoverIds.length;
 
+    // Count crossover profiles by status so tab badges match the grid
+    const crossoverCounts = {};
+    if (crossoverIds.length > 0) {
+      const crossoverStatusRows = await db.SocialProfile.findAll({
+        where: { id: { [Op.in]: crossoverIds } },
+        attributes: [
+          'status',
+          [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count'],
+        ],
+        group: ['status'],
+        raw: true,
+      });
+      for (const row of crossoverStatusRows) {
+        crossoverCounts[row.status] = parseInt(row.count, 10);
+      }
+    }
+
+    const nativeTotal = Object.values(counts).reduce((a, b) => a + b, 0);
+
     return res.json({
       profiles: rows,
       pagination: {
@@ -954,11 +973,20 @@ router.get('/', optionalAuth, async (req, res) => {
         totalPages: Math.ceil(count / pageSize),
       },
       statusCounts: {
-        total: Object.values(counts).reduce((a, b) => a + b, 0),
+        // Native-only counts (for cap display)
+        total: nativeTotal,
         generated: counts.generated || 0,
         finalized: counts.finalized || 0,
         crossed: counts.crossed || 0,
         archived: counts.archived || 0,
+      },
+      // Combined counts including crossovers (for tab badges)
+      displayCounts: {
+        total: nativeTotal + crossoverCount,
+        generated: (counts.generated || 0) + (crossoverCounts.generated || 0),
+        finalized: (counts.finalized || 0) + (crossoverCounts.finalized || 0),
+        crossed: (counts.crossed || 0) + (crossoverCounts.crossed || 0),
+        archived: (counts.archived || 0) + (crossoverCounts.archived || 0),
       },
       crossoverCount,
     });
