@@ -16,20 +16,19 @@ function parseDatabaseUrl(url) {
   if (!url) return null;
 
   try {
-    // Format: postgresql://user:password@host:port/database
-    const match = url.match(/postgresql?:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+    const parsed = new URL(url);
 
-    if (!match) {
+    if (!parsed.hostname || !parsed.username) {
       console.warn('⚠️  Invalid DATABASE_URL format');
       return null;
     }
 
     return {
-      username: decodeURIComponent(match[1]),
-      password: decodeURIComponent(match[2]),
-      host: match[3],
-      port: parseInt(match[4]),
-      database: match[5].split('?')[0], // Remove query params
+      username: decodeURIComponent(parsed.username),
+      password: decodeURIComponent(parsed.password),
+      host: parsed.hostname,
+      port: parseInt(parsed.port || '5432'),
+      database: parsed.pathname.replace(/^\//, '').split('?')[0],
     };
   } catch (error) {
     console.error('❌ Error parsing DATABASE_URL:', error.message);
