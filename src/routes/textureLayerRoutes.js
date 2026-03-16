@@ -55,7 +55,7 @@ router.post('/generate', async (req, res) => {
 
     // Update arc tracking — phone appearance and bleed flag
     if (texture.phone_appeared || texture.bleed_text) {
-      await updateArcTracking(character_key, story, {
+      await updateArcTracking(db, character_key, {
         storyNumber:    story.story_number,
         storyType:      story.story_type,
         phase:          story.phase,
