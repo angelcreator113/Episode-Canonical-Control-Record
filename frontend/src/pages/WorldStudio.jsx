@@ -17,6 +17,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import './WorldStudio.css';
 
 const RelationshipEngine = lazy(() => import('./RelationshipEngine'));
+const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 
 const API = '/api/v1';
 const PAGE_SIZE = 20;
@@ -1133,10 +1134,21 @@ export default function WorldStudio() {
           onClick={() => setStudioTab('characters')}
         >Characters</button>
         <button
+          className={`ws4-studio-tab${studioTab === 'feed' ? ' ws4-studio-tab--active' : ''}`}
+          onClick={() => setStudioTab('feed')}
+        >Feed</button>
+        <button
           className={`ws4-studio-tab${studioTab === 'relationships' ? ' ws4-studio-tab--active' : ''}`}
           onClick={() => setStudioTab('relationships')}
         >Relationships</button>
       </div>
+
+      {/* ── Feed tab ────────────────────────────────────────────── */}
+      {studioTab === 'feed' && (
+        <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Feed Generator…</div>}>
+          <SocialProfileGenerator embedded={true} worldTag={worldTag} />
+        </Suspense>
+      )}
 
       {/* ── Relationships tab ─────────────────────────────────────── */}
       {studioTab === 'relationships' && (
