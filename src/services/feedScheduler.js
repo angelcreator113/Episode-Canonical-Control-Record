@@ -297,9 +297,12 @@ Return ONLY the JSON array. No markdown, no explanation.`;
 
   const response = await callClaude(prompt, { maxTokens: 4000 });
 
+  const rawText = response?.content?.[0]?.text;
+  if (!rawText) throw new Error('AI returned empty response for spark generation');
+
   let sparks;
   try {
-    sparks = parseAIJsonArray(response.content[0].text);
+    sparks = parseAIJsonArray(rawText);
   } catch {
     throw new Error('AI spark generation failed to parse');
   }
@@ -431,11 +434,14 @@ Lala does not know she was built. The world she lives in feels complete and self
 
   const response = await callClaude(prompt, { maxTokens: 4000 });
 
+  const rawText = response?.content?.[0]?.text;
+  if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
+
   let generated;
   try {
-    generated = parseAIJson(response.content[0].text);
+    generated = parseAIJson(rawText);
   } catch (parseErr) {
-    console.error('[FeedScheduler] JSON parse failed for', spark.handle, '— raw text:', response.content[0].text.slice(0, 200));
+    console.error('[FeedScheduler] JSON parse failed for', spark.handle, '— raw text:', rawText.slice(0, 200));
     throw new Error('AI response failed to parse as JSON');
   }
 
