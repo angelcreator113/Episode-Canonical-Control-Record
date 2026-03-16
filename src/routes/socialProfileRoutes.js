@@ -822,8 +822,9 @@ const VALID_REL_TYPES = new Set([
 ]);
 
 async function autoLinkRelationships(db, profile, knownAssociates) {
-  if (!db.SocialProfileRelationship) return;
+  if (!db.SocialProfileRelationship) return 0;
   const { Op } = require('sequelize');
+  let linked = 0;
 
   for (const assoc of knownAssociates) {
     try {
@@ -842,7 +843,7 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
 
       const relType = VALID_REL_TYPES.has(assoc.relationship_type) ? assoc.relationship_type : 'collab';
 
-      await db.SocialProfileRelationship.findOrCreate({
+      const [, created] = await db.SocialProfileRelationship.findOrCreate({
         where: {
           source_profile_id: profile.id,
           target_profile_id: target.id,
@@ -856,10 +857,12 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
           public_visibility: 'public',
         },
       });
+      if (created) linked++;
     } catch (e) {
       console.warn('Auto-link relationship failed:', e.message);
     }
   }
+  return linked;
 }
 
 // ── GET / ────────────────────────────────────────────────────────────────────
