@@ -12,6 +12,7 @@
  *  3. Auto-Relate   — triggers relationship auto-generation for unlinked profiles
  *  4. Auto-Follow   — re-evaluates follow engine for stale profiles
  *  5. Auto-Cross    — identifies profiles ready for story crossing
+ *  6. Auto-Discover — discovers potential relationships between unlinked profiles
  */
 
 /* eslint-disable no-console */
@@ -121,6 +122,7 @@ let schedulerConfig = {
   auto_relate_enabled: true,
   auto_follow_enabled: true,
   auto_cross_enabled: true,
+  auto_discover_enabled: true,
 };
 
 let schedulerTimer = null;
@@ -681,6 +683,79 @@ async function autoCrossAgent(db) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SUB-AGENT 6: Auto-Discover — Find potential relationships
+// ═══════════════════════════════════════════════════════════════
+async function autoDiscoverAgent(db) {
+  const findings = [];
+  let discovered = 0;
+
+  if (!db.SocialProfileRelationship) {
+    findings.push({ level: 'info', msg: 'Relationship model not available — skipping discovery' });
+    return { agent: 'auto_discover', findings, relationships_discovered: 0 };
+  }
+
+  const { Op } = require('sequelize');
+
+  const profiles = await db.SocialProfile.findAll({
+    where: { status: { [Op.in]: ['generated', 'finalized', 'crossed'] } },
+    attributes: ['id', 'handle', 'platform', 'archetype', 'content_category', 'geographic_cluster', 'follower_tier', 'known_associates'],
+    raw: true,
+  });
+
+  const existingRels = await db.SocialProfileRelationship.findAll({
+    attributes: ['source_profile_id', 'target_profile_id'], raw: true,
+  });
+  const relSet = new Set(existingRels.map(r => `${r.source_profile_id}-${r.target_profile_id}`));
+  const hasRel = (a, b) => relSet.has(`${a}-${b}`) || relSet.has(`${b}-${a}`);
+
+  findings.push({ level: 'info', msg: `Scanning ${profiles.length} profiles for undiscovered relationships` });
+
+  // Find high-confidence matches (same niche + same platform + complementary archetypes)
+  const tensions = [['polished_curator','messy_transparent'],['soft_life','explicitly_paid'],['overnight_rise','cautionary']];
+
+  for (let i = 0; i < profiles.length && discovered < schedulerConfig.batch_size * 3; i++) {
+    for (let j = i + 1; j < profiles.length && discovered < schedulerConfig.batch_size * 3; j++) {
+      const a = profiles[i], b = profiles[j];
+      if (hasRel(a.id, b.id)) continue;
+
+      let score = 0;
+      if (a.platform === b.platform) score += 1;
+      if (a.content_category && a.content_category === b.content_category) score += 2;
+      if (a.geographic_cluster && a.geographic_cluster === b.geographic_cluster) score += 2;
+      for (const [x,y] of tensions) {
+        if ((a.archetype===x&&b.archetype===y)||(a.archetype===y&&b.archetype===x)) { score += 3; break; }
+      }
+
+      if (score >= 5) {
+        try {
+          let relType = 'orbit';
+          if (a.content_category === b.content_category && a.follower_tier === b.follower_tier) relType = 'competitors';
+
+          await db.SocialProfileRelationship.create({
+            source_profile_id: a.id,
+            target_profile_id: b.id,
+            relationship_type: relType,
+            description: `Auto-discovered: shared ${a.content_category || 'niche'} on ${a.platform}`,
+            auto_generated: true,
+            direction: 'mutual',
+            public_visibility: 'public',
+            drama_level: 0,
+          });
+          discovered++;
+          relSet.add(`${a.id}-${b.id}`);
+          findings.push({ level: 'success', msg: `Discovered ${relType} between @${a.handle} and @${b.handle}` });
+        } catch (err) {
+          findings.push({ level: 'error', msg: `Discovery failed for ${a.id}-${b.id}: ${err.message}` });
+        }
+      }
+    }
+  }
+
+  findings.push({ level: 'info', msg: `Discovered ${discovered} new relationships` });
+  return { agent: 'auto_discover', findings, relationships_discovered: discovered };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ORCHESTRATOR — Run all enabled sub-agents
 // ═══════════════════════════════════════════════════════════════
 async function runFullCycle(db) {
@@ -702,6 +777,9 @@ async function runFullCycle(db) {
   if (schedulerConfig.auto_cross_enabled) {
     results.push(await autoCrossAgent(db));
   }
+  if (schedulerConfig.auto_discover_enabled) {
+    results.push(await autoDiscoverAgent(db));
+  }
 
   const allFindings = results.flatMap(r => r.findings.map(f => ({ ...f, agent: r.agent })));
   const duration = Date.now() - startTime;
@@ -721,6 +799,7 @@ async function runFullCycle(db) {
       relationships_created:  results.find(r => r.agent === 'auto_relate')?.relationships_created || 0,
       followers_updated:      results.find(r => r.agent === 'auto_follow')?.followers_updated || 0,
       profiles_flagged:       results.find(r => r.agent === 'auto_cross')?.profiles_flagged || 0,
+      relationships_discovered: results.find(r => r.agent === 'auto_discover')?.relationships_discovered || 0,
     },
     layer_status: {
       real_world: { count: realCount, cap: FEED_CAPS.real_world, remaining: FEED_CAPS.real_world - realCount },

@@ -190,6 +190,18 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [filterRelevanceMin,setFilterRelevanceMin] = useState('');
   const [filterRelevanceMax,setFilterRelevanceMax] = useState('');
   const [filterAdultContent,setFilterAdultContent] = useState(null);
+  // Diversity Dashboard
+  const [diversityData,setDiversityData] = useState(null);
+  const [diversityLoading,setDiversityLoading] = useState(false);
+  // Moments Timeline
+  const [momentsData,setMomentsData] = useState(null);
+  const [momentsLoading,setMomentsLoading] = useState(false);
+  // Relationship Suggestions
+  const [suggestions,setSuggestions] = useState(null);
+  const [suggestionsLoading,setSuggestionsLoading] = useState(false);
+  // Templates
+  const [templates,setTemplates] = useState([]);
+  const [templateName,setTemplateName] = useState('');
   // LalaVerse Feed layer
   const [feedLayer,setFeedLayer] = useState('real_world');
   const [lvCity,setLvCity]       = useState('');
@@ -449,6 +461,89 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       const data=await res.json();if(data.sparks)setPreviewSparks(data.sparks);else setError(data.error||'Preview failed');
     }catch(err){setError(err.message);}
     finally{setPreviewLoading(false);}
+  };
+
+  // ── Diversity Dashboard loader ────────────────────────────────────
+  const loadDiversity = async ()=>{
+    setDiversityLoading(true);
+    try{
+      const res=await fetch(`${API}/analytics/composition?feed_layer=${feedLayer}`,{headers:authHeaders()});
+      const data=await res.json();
+      setDiversityData(data);
+    }catch{}
+    finally{setDiversityLoading(false);}
+  };
+
+  // ── Moments Timeline loader ─────────────────────────────────────
+  const loadMoments = async ()=>{
+    setMomentsLoading(true);
+    try{
+      const res=await fetch(`${API}/moments/timeline?feed_layer=${feedLayer}&limit=50`,{headers:authHeaders()});
+      const data=await res.json();
+      setMomentsData(data);
+    }catch{}
+    finally{setMomentsLoading(false);}
+  };
+
+  // ── Relationship Suggestions loader ─────────────────────────────
+  const loadSuggestions = async ()=>{
+    setSuggestionsLoading(true);
+    try{
+      const res=await fetch(`${API}/relationships/suggestions?feed_layer=${feedLayer}&limit=20`,{headers:authHeaders()});
+      const data=await res.json();
+      setSuggestions(data);
+    }catch{}
+    finally{setSuggestionsLoading(false);}
+  };
+
+  const acceptSuggestion = async (sourceId,targetId,relType)=>{
+    try{
+      await fetch(`${API}/relationships/suggestions/accept`,{method:'POST',headers:authHeaders(),body:JSON.stringify({source_id:sourceId,target_id:targetId,relationship_type:relType})});
+      showToast('Relationship created');
+      loadSuggestions();
+    }catch(err){setError(err.message);}
+  };
+
+  // ── Templates loader ────────────────────────────────────────────
+  const loadTemplates = async ()=>{
+    try{const res=await fetch(`${API}/templates`,{headers:authHeaders()});const d=await res.json();setTemplates(d.templates||[]);}catch{}
+  };
+
+  const saveAsTemplate = async (profileId)=>{
+    const name=prompt('Template name:');
+    if(!name)return;
+    try{
+      await fetch(`${API}/templates`,{method:'POST',headers:authHeaders(),body:JSON.stringify({profile_id:profileId,name})});
+      showToast('Template saved');
+      loadTemplates();
+    }catch(err){setError(err.message);}
+  };
+
+  const deleteTemplate = async (templateId)=>{
+    try{await fetch(`${API}/templates/${templateId}`,{method:'DELETE',headers:authHeaders()});setTemplates(t=>t.filter(x=>x.id!==templateId));}catch{}
+  };
+
+  // ── Crossing Approval ───────────────────────────────────────────
+  const approveForCrossing = async (id,notes)=>{
+    try{
+      const res=await fetch(`${API}/${id}/approve`,{method:'POST',headers:authHeaders(),body:JSON.stringify({approval_notes:notes||''})});
+      const d=await res.json();
+      if(!res.ok)throw new Error(d.error);
+      setProfiles(p=>p.map(x=>x.id===id?d.profile:x));
+      if(selected?.id===id)setSelected(d.profile);
+      showToast('Approved for crossing');
+    }catch(err){setError(err.message);}
+  };
+
+  const rejectCrossing = async (id,reason)=>{
+    try{
+      const res=await fetch(`${API}/${id}/reject-crossing`,{method:'POST',headers:authHeaders(),body:JSON.stringify({rejection_reason:reason||''})});
+      const d=await res.json();
+      if(!res.ok)throw new Error(d.error);
+      setProfiles(p=>p.map(x=>x.id===id?d.profile:x));
+      if(selected?.id===id)setSelected(d.profile);
+      showToast('Crossing rejected');
+    }catch(err){setError(err.message);}
   };
 
   const fp = p=>p?.full_profile||p||{};
@@ -769,8 +864,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </div>
             {/* View mode switcher */}
             <div style={{display:'flex',gap:2,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:2,border:`1px solid ${C.border}`,marginLeft:8}}>
-              {[['grid','Grid'],['timeline','Timeline'],['follows','Follows'],['automation','Automation']].map(([k,l])=>(
-                <button key={k} onClick={()=>{setFeedView(k);if(k==='follows')loadFollowStats();if(k==='automation')loadAutoStatus();}} style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
+              {[['grid','Grid'],['timeline','Timeline'],['follows','Follows'],['moments','Moments'],['dashboard','Dashboard'],['graph','Graph'],['templates','Templates'],['automation','Automation']].map(([k,l])=>(
+                <button key={k} onClick={()=>{setFeedView(k);if(k==='follows')loadFollowStats();if(k==='automation')loadAutoStatus();if(k==='dashboard')loadDiversity();if(k==='moments')loadMoments();if(k==='graph')loadSuggestions();if(k==='templates')loadTemplates();}} style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
                   background:feedView===k?C.lavender:'transparent',color:feedView===k?'#fff':C.inkLight,transition:'all 0.15s'}}>
                   {l}
                 </button>
@@ -1033,10 +1128,36 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                           ))}
                         </div>
                       )}
+                      {/* Additional captions (scrollable) */}
+                      {captions.length>1&&(
+                        <div style={{padding:'0 16px 8px'}}>
+                          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,marginBottom:4}}>More posts</div>
+                          {captions.slice(1,3).map((c,i)=>(
+                            <div key={i} style={{fontSize:12,color:C.inkMid,lineHeight:1.5,padding:'4px 0',borderTop:`1px solid ${C.border}`}}>{c}</div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Moment log preview */}
+                      {(p.moment_log||d.moment_log||[]).length>0&&(
+                        <div style={{padding:'0 16px 8px'}}>
+                          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,marginBottom:4}}>Key Moments</div>
+                          {(p.moment_log||d.moment_log||[]).slice(0,2).map((m,i)=>{
+                            const typeColors={controversy:'#ef4444',live:'#8b5cf6',post:'#3b82f6',collab:'#22c55e'};
+                            return(
+                              <div key={i} style={{fontSize:11,color:C.inkMid,padding:'3px 0',display:'flex',gap:6}}>
+                                <span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:`${typeColors[m.moment_type]||C.border}15`,color:typeColors[m.moment_type]||C.inkLight,flexShrink:0}}>{m.moment_type}</span>
+                                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.description}</span>
+                                {m.lala_seed&&<span style={{fontSize:8,fontWeight:700,color:C.lavender,flexShrink:0}}>SEED</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       {/* Quick actions */}
                       <div style={{padding:'8px 16px',borderTop:`1px solid ${C.border}`,display:'flex',gap:8}}>
                         <button onClick={()=>setSelected(p)} style={{fontSize:11,color:C.lavender,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>View Full Profile</button>
                         <button onClick={()=>{loadSceneContext(p.id);setSelected(p);setDetailTab('scene');}} style={{fontSize:11,color:C.blue,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Use in Scene</button>
+                        <button onClick={()=>saveAsTemplate(p.id)} style={{fontSize:11,color:C.pink,background:'none',border:'none',cursor:'pointer',fontWeight:600,marginLeft:'auto'}}>Save Template</button>
                       </div>
                     </div>
                   );
@@ -1088,20 +1209,62 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                   )}
                   {followStats?.character_profiles&&(
                     <div style={{marginTop:16}}>
-                      <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Top Affinities</div>
+                      <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Follow Psychology & Affinities</div>
                       {Object.entries(followStats.character_profiles).map(([key,cp])=>(
-                        <div key={key} style={{marginBottom:12}}>
-                          <div style={{fontSize:12,fontWeight:700,color:C.ink,marginBottom:6}}>{cp.name}</div>
-                          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                            {cp.top_categories?.map(c=>(
-                              <span key={c.category} style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{c.category} ({Math.round(c.weight*100)}%)</span>
-                            ))}
+                        <div key={key} style={{marginBottom:16,padding:'14px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                          <div style={{fontSize:13,fontWeight:700,color:C.ink,marginBottom:8}}>{cp.name}</div>
+                          {/* Category Affinities */}
+                          <div style={{marginBottom:8}}>
+                            <div style={{fontSize:10,fontWeight:600,color:C.inkLight,marginBottom:4}}>Category Affinity</div>
+                            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                              {cp.top_categories?.map(c=>(
+                                <div key={c.category} style={{display:'flex',alignItems:'center',gap:4}}>
+                                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{c.category}</span>
+                                  <div style={{width:40,height:4,borderRadius:2,background:C.border,overflow:'hidden'}}>
+                                    <div style={{height:'100%',background:C.blue,width:`${Math.round(c.weight*100)}%`}}/>
+                                  </div>
+                                  <span style={{fontSize:9,color:C.inkLight}}>{Math.round(c.weight*100)}%</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
-                            {cp.top_archetypes?.map(a=>(
-                              <span key={a.archetype} style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{ARCHETYPE_LABELS[a.archetype]||a.archetype} ({Math.round(a.weight*100)}%)</span>
-                            ))}
+                          {/* Archetype Affinities */}
+                          <div style={{marginBottom:8}}>
+                            <div style={{fontSize:10,fontWeight:600,color:C.inkLight,marginBottom:4}}>Archetype Affinity</div>
+                            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                              {cp.top_archetypes?.map(a=>(
+                                <div key={a.archetype} style={{display:'flex',alignItems:'center',gap:4}}>
+                                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{ARCHETYPE_LABELS[a.archetype]||a.archetype}</span>
+                                  <div style={{width:40,height:4,borderRadius:2,background:C.border,overflow:'hidden'}}>
+                                    <div style={{height:'100%',background:C.lavender,width:`${Math.round(a.weight*100)}%`}}/>
+                                  </div>
+                                  <span style={{fontSize:9,color:C.inkLight}}>{Math.round(a.weight*100)}%</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
+                          {/* Motivation Weights */}
+                          {cp.motivation_weights&&Object.keys(cp.motivation_weights).length>0&&(
+                            <div>
+                              <div style={{fontSize:10,fontWeight:600,color:C.inkLight,marginBottom:4}}>Motivation Weights</div>
+                              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                                {Object.entries(cp.motivation_weights).sort((a,b)=>b[1]-a[1]).map(([mot,weight])=>(
+                                  <div key={mot} style={{display:'flex',alignItems:'center',gap:4}}>
+                                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{mot.replace(/_/g,' ')}</span>
+                                    <span style={{fontSize:9,color:C.inkLight}}>{Math.round(weight*100)}%</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Behavioral Modifiers */}
+                          {cp.threshold!=null&&(
+                            <div style={{display:'flex',gap:12,marginTop:8,fontSize:10,color:C.inkLight}}>
+                              <span>Threshold: {cp.threshold}</span>
+                              {cp.drama_bonus!=null&&<span>Drama bonus: {cp.drama_bonus>0?'+':''}{cp.drama_bonus}</span>}
+                              {cp.adult_penalty!=null&&<span>Adult penalty: {cp.adult_penalty}</span>}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1141,6 +1304,271 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                 </div>
               </div>
             )}
+            {/* ── MOMENTS VIEW — aggregated moment timeline across profiles ── */}
+            {!loading&&feedView==='moments' && (
+              <div style={{maxWidth:700,margin:'0 auto'}}>
+                {momentsLoading&&<div style={{textAlign:'center',padding:30,color:C.inkLight}}><Spinner/> Loading moments…</div>}
+                {momentsData&&!momentsLoading&&(
+                  <>
+                    <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
+                      <div style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surface,border:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:18,fontWeight:700,color:C.lavender}}>{momentsData.total}</div>
+                        <div style={{fontSize:10,color:C.inkLight}}>Total Moments</div>
+                      </div>
+                      <div style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surface,border:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:18,fontWeight:700,color:C.blue}}>{momentsData.profiles_with_moments}</div>
+                        <div style={{fontSize:10,color:C.inkLight}}>Profiles</div>
+                      </div>
+                      {momentsData.type_counts&&Object.entries(momentsData.type_counts).map(([type,count])=>(
+                        <div key={type} style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surface,border:`1px solid ${C.border}`}}>
+                          <div style={{fontSize:16,fontWeight:700,color:C.pink}}>{count}</div>
+                          <div style={{fontSize:10,color:C.inkLight,textTransform:'capitalize'}}>{type}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                      {(momentsData.moments||[]).map((m,i)=>{
+                        const typeColors={controversy:'#ef4444',live:'#8b5cf6',post:'#3b82f6',collab:'#22c55e',comment:'#f59e0b',dm:'#ec4899',disappearance:'#6b7280'};
+                        const tc=typeColors[m.moment_type]||C.inkMid;
+                        return(
+                          <div key={i} style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,overflow:'hidden',boxShadow:C.shadow}}>
+                            <div style={{height:3,background:tc}}/>
+                            <div style={{padding:'12px 16px'}}>
+                              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                                <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:`${tc}15`,color:tc,textTransform:'uppercase'}}>{m.moment_type}</span>
+                                {m.platform_format&&<span style={{fontSize:10,color:C.inkLight}}>{m.platform_format}</span>}
+                                <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>{const pr=profiles.find(p=>p.id===m.profile_id);if(pr)setSelected(pr);}}>{m.handle}</span>
+                                <span style={{fontSize:10,color:C.inkLight}}>{m.platform}</span>
+                                {m.lala_seed&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:6,background:C.lavLight,color:C.lavender}}>Lala Seed</span>}
+                              </div>
+                              <div style={{fontSize:13,color:C.ink,lineHeight:1.6,marginBottom:6}}>{m.description}</div>
+                              {m.protagonist_reaction&&<div style={{fontSize:12,color:C.inkMid,fontStyle:'italic',lineHeight:1.5}}>{m.protagonist_reaction}</div>}
+                              {m.lala_seed_reason&&<div style={{fontSize:11,color:C.lavender,marginTop:4}}>Seed: {m.lala_seed_reason}</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {momentsData.moments?.length===0&&<div style={{textAlign:'center',padding:40,color:C.inkLight}}>No moments logged yet. Generate profiles to populate the moment timeline.</div>}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── DASHBOARD VIEW — diversity/composition analytics ── */}
+            {feedView==='dashboard' && (
+              <div style={{maxWidth:900,margin:'0 auto'}}>
+                {diversityLoading&&<div style={{textAlign:'center',padding:30,color:C.inkLight}}><Spinner/> Loading analytics…</div>}
+                {diversityData&&!diversityLoading&&(
+                  <>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10,marginBottom:20}}>
+                      <div style={{padding:'14px 16px',borderRadius:C.radius,background:C.surface,border:`1px solid ${C.border}`,textAlign:'center'}}>
+                        <div style={{fontSize:28,fontWeight:700,color:C.lavender}}>{diversityData.total}</div>
+                        <div style={{fontSize:11,color:C.inkLight}}>Total Profiles</div>
+                      </div>
+                      <div style={{padding:'14px 16px',borderRadius:C.radius,background:C.surface,border:`1px solid ${C.border}`,textAlign:'center'}}>
+                        <div style={{fontSize:28,fontWeight:700,color:C.blue}}>{Object.keys(diversityData.archetypes||{}).length}</div>
+                        <div style={{fontSize:11,color:C.inkLight}}>Archetypes Used</div>
+                      </div>
+                      <div style={{padding:'14px 16px',borderRadius:C.radius,background:C.surface,border:`1px solid ${C.border}`,textAlign:'center'}}>
+                        <div style={{fontSize:28,fontWeight:700,color:C.pink}}>{Object.keys(diversityData.platforms||{}).length}</div>
+                        <div style={{fontSize:11,color:C.inkLight}}>Platforms</div>
+                      </div>
+                      <div style={{padding:'14px 16px',borderRadius:C.radius,background:C.surface,border:`1px solid ${C.border}`,textAlign:'center'}}>
+                        <div style={{fontSize:28,fontWeight:700,color:'#2d7a50'}}>{diversityData.adult_content?.ratio||'0%'}</div>
+                        <div style={{fontSize:11,color:C.inkLight}}>Adult Content</div>
+                      </div>
+                    </div>
+
+                    {/* Archetype Distribution */}
+                    <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Archetype Distribution</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                        {Object.entries(diversityData.archetypes||{}).sort((a,b)=>b[1]-a[1]).map(([arch,count])=>(
+                          <div key={arch} style={{display:'flex',alignItems:'center',gap:10}}>
+                            <span style={{fontSize:11,fontWeight:600,color:C.ink,minWidth:130}}>{ARCHETYPE_LABELS[arch]||arch}</span>
+                            <div style={{flex:1,height:16,background:C.surfaceAlt,borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`}}>
+                              <div style={{height:'100%',background:`linear-gradient(90deg,${C.lavender},${C.pink})`,borderRadius:8,width:`${diversityData.total>0?(count/diversityData.total)*100:0}%`,transition:'width 0.3s'}}/>
+                            </div>
+                            <span style={{fontSize:12,fontWeight:700,color:C.inkMid,minWidth:30,textAlign:'right'}}>{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Platform + Tier side by side */}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+                      <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
+                        <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Platforms</div>
+                        {Object.entries(diversityData.platforms||{}).sort((a,b)=>b[1]-a[1]).map(([plat,count])=>(
+                          <div key={plat} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
+                            <span style={{fontSize:12,fontWeight:600,color:C.ink,textTransform:'capitalize'}}>{plat}</span>
+                            <span style={{fontSize:12,fontWeight:700,color:C.blue}}>{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
+                        <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Follower Tiers</div>
+                        {Object.entries(diversityData.follower_tiers||{}).sort((a,b)=>b[1]-a[1]).map(([tier,count])=>(
+                          <div key={tier} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
+                            <span style={{fontSize:12,fontWeight:600,color:C.ink,textTransform:'capitalize'}}>{tier}</span>
+                            <span style={{fontSize:12,fontWeight:700,color:C.lavender}}>{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Relevance Score Distribution */}
+                    <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Relevance Score Distribution</div>
+                      <div style={{display:'flex',gap:8,alignItems:'flex-end',height:100}}>
+                        {Object.entries(diversityData.relevance_buckets||{}).map(([bucket,count])=>{
+                          const maxCount=Math.max(...Object.values(diversityData.relevance_buckets||{}),1);
+                          const height=Math.max(8,(count/maxCount)*80);
+                          const colors={'0-2':C.border,'3-4':C.inkLight,'5-6':C.blue,'7-8':C.lavender,'9-10':C.pink};
+                          return(
+                            <div key={bucket} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                              <span style={{fontSize:10,fontWeight:700,color:C.ink}}>{count}</span>
+                              <div style={{width:'100%',height,background:colors[bucket]||C.border,borderRadius:4}}/>
+                              <span style={{fontSize:9,color:C.inkLight}}>{bucket}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Content Categories + Geographic Clusters */}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+                      {(diversityData.categories||[]).length>0&&(
+                        <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
+                          <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Top Content Categories</div>
+                          {diversityData.categories.map(c=>(
+                            <div key={c.category} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                              <span style={{color:C.ink}}>{c.category}</span>
+                              <span style={{fontWeight:700,color:C.lavender}}>{c.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(diversityData.geographic_clusters||[]).length>0&&(
+                        <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
+                          <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Top Geographic Clusters</div>
+                          {diversityData.geographic_clusters.map(g=>(
+                            <div key={g.cluster} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                              <span style={{color:C.ink}}>{g.cluster}</span>
+                              <span style={{fontWeight:700,color:C.blue}}>{g.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* City Distribution (Lalaverse) */}
+                    {Object.keys(diversityData.cities||{}).length>0&&(
+                      <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
+                        <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>LalaVerse City Distribution</div>
+                        <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                          {Object.entries(diversityData.cities).map(([city,count])=>(
+                            <div key={city} style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`,textAlign:'center'}}>
+                              <div style={{fontSize:18,fontWeight:700,color:C.lavender}}>{count}</div>
+                              <div style={{fontSize:10,color:C.inkMid}}>{city.replace(/_/g,' ')}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── GRAPH VIEW — relationship suggestions and network ── */}
+            {feedView==='graph' && (
+              <div style={{maxWidth:900,margin:'0 auto'}}>
+                <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+                    <div style={{fontSize:16,fontWeight:700,color:C.ink}}>Relationship Discovery</div>
+                    <button onClick={loadSuggestions} disabled={suggestionsLoading} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.lavender}`,background:'transparent',color:C.lavender}}>
+                      {suggestionsLoading?'Scanning…':'Rescan'}
+                    </button>
+                  </div>
+                  {suggestionsLoading&&<div style={{textAlign:'center',padding:20,color:C.inkLight}}><Spinner/> Analyzing profiles for connections…</div>}
+                  {suggestions&&!suggestionsLoading&&(
+                    <>
+                      <div style={{display:'flex',gap:12,marginBottom:16}}>
+                        <div style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                          <div style={{fontSize:18,fontWeight:700,color:C.lavender}}>{suggestions.total_suggestions}</div>
+                          <div style={{fontSize:10,color:C.inkLight}}>Potential Connections</div>
+                        </div>
+                        <div style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                          <div style={{fontSize:18,fontWeight:700,color:C.blue}}>{suggestions.total_analyzed}</div>
+                          <div style={{fontSize:10,color:C.inkLight}}>Profiles Analyzed</div>
+                        </div>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {(suggestions.suggestions||[]).map((s,i)=>{
+                          const typeColors={competitors:'#ef4444',collab:'#22c55e',orbit:'#9ca3af',beef:'#f59e0b'};
+                          return(
+                            <div key={i} style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:12}}>
+                              <div style={{flex:1}}>
+                                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                                  <span style={{fontSize:13,fontWeight:700,color:C.ink}}>{s.profile_a.handle}</span>
+                                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${typeColors[s.suggested_type]||C.border}20`,color:typeColors[s.suggested_type]||C.inkMid,fontWeight:700}}>{s.suggested_type}</span>
+                                  <span style={{fontSize:13,fontWeight:700,color:C.ink}}>{s.profile_b.handle}</span>
+                                </div>
+                                <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                                  {s.reasons.map((r,j)=>(
+                                    <span key={j} style={{fontSize:10,padding:'1px 6px',borderRadius:6,background:C.blueLight,color:C.blue}}>{r}</span>
+                                  ))}
+                                  <span style={{fontSize:10,color:C.inkLight,marginLeft:4}}>Score: {s.score}</span>
+                                </div>
+                              </div>
+                              <button onClick={()=>acceptSuggestion(s.profile_a.id,s.profile_b.id,s.suggested_type)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:11,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>
+                                + Accept
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {(suggestions.suggestions||[]).length===0&&<div style={{textAlign:'center',padding:30,color:C.inkLight}}>No new relationship suggestions. Try generating more profiles first.</div>}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── TEMPLATES VIEW — saved profile templates ── */}
+            {feedView==='templates' && (
+              <div style={{maxWidth:700,margin:'0 auto'}}>
+                <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
+                  <div style={{fontSize:16,fontWeight:700,color:C.ink,marginBottom:16}}>Profile Templates</div>
+                  <div style={{fontSize:12,color:C.inkLight,marginBottom:16}}>Save profiles as templates to quickly generate similar creators. Templates preserve platform, archetype, tier, and aesthetic settings.</div>
+                  {templates.length===0&&<div style={{textAlign:'center',padding:30,color:C.inkLight}}>No templates saved yet. Open a profile and use "Save as Template" to create one.</div>}
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    {templates.map(t=>(
+                      <div key={t.id} style={{padding:'14px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                          <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{t.name}</span>
+                          <div style={{display:'flex',gap:6}}>
+                            <span style={{fontSize:10,color:C.inkLight}}>Used {t.usage_count}x</span>
+                            <button onClick={()=>deleteTemplate(t.id)} style={{fontSize:11,color:C.pink,background:'none',border:'none',cursor:'pointer'}}>Delete</button>
+                          </div>
+                        </div>
+                        {t.description&&<div style={{fontSize:12,color:C.inkMid,marginBottom:6}}>{t.description}</div>}
+                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                          {t.template_data?.platform&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{t.template_data.platform}</span>}
+                          {t.template_data?.archetype&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{(ARCHETYPE_LABELS[t.template_data.archetype]||t.template_data.archetype)}</span>}
+                          {t.template_data?.follower_tier&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{t.template_data.follower_tier}</span>}
+                          {t.template_data?.content_category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.surfaceAlt,color:C.inkMid}}>{t.template_data.content_category}</span>}
+                          {t.template_data?.feed_layer&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:t.template_data.feed_layer==='lalaverse'?C.lavLight:C.blueLight,color:t.template_data.feed_layer==='lalaverse'?C.lavender:C.blue}}>{t.template_data.feed_layer==='lalaverse'?"Lala's Feed":"JustAWoman's Feed"}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ── AUTOMATION VIEW — scheduler controls ── */}
             {feedView==='automation' && (
               <div style={{maxWidth:900,margin:'0 auto'}}>
@@ -1216,6 +1644,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                         {key:'auto_relate_enabled',label:'Auto-Relate',desc:'Link relationships automatically'},
                         {key:'auto_follow_enabled',label:'Auto-Follow',desc:'Assign followers to new profiles'},
                         {key:'auto_cross_enabled',label:'Auto-Cross',desc:'Flag profiles ready for crossing'},
+                        {key:'auto_discover_enabled',label:'Auto-Discover',desc:'Find potential relationships between profiles'},
                       ].map(a=>{
                         const enabled=autoStatus?.config?.[a.key]!==false;
                         return (
@@ -1269,6 +1698,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{run.summary?.profiles_finalized||0} finalized</span>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{run.summary?.relationships_created||0} linked</span>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{run.summary?.profiles_flagged||0} crossing-ready</span>
+                          {(run.summary?.relationships_discovered||0)>0&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#e8f5e9',color:'#2e7d32'}}>{run.summary.relationships_discovered} discovered</span>}
                           {run.errors>0&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#fde8e8',color:'#ef4444'}}>{run.errors} errors</span>}
                         </div>
                         {run.layer_status&&(
@@ -1300,7 +1730,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
               onRegenerate={regenerateProfile} regenerating={regenerating}
               onLoadCrossingPreview={loadCrossingPreview} crossingPreview={crossingPreview} setCrossingPreview={setCrossingPreview}
               onLoadSceneContext={loadSceneContext} sceneContext={sceneContext} setSceneContext={setSceneContext} onCopySceneContext={copySceneContext}
-              detailTab={detailTab} setDetailTab={setDetailTab}/>
+              detailTab={detailTab} setDetailTab={setDetailTab}
+              onApprove={approveForCrossing} onRejectCrossing={rejectCrossing} onSaveAsTemplate={saveAsTemplate}/>
           </div>
         </div>,
         document.body
@@ -1370,7 +1801,8 @@ function FeedStatePicker({ profile, onStateChange }) {
 // ══════════════════════════════════════════════════════════════════════
 function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh,
   onRegenerate, regenerating, onLoadCrossingPreview, crossingPreview, setCrossingPreview,
-  onLoadSceneContext, sceneContext, setSceneContext, onCopySceneContext, detailTab, setDetailTab }) {
+  onLoadSceneContext, sceneContext, setSceneContext, onCopySceneContext, detailTab, setDetailTab,
+  onApprove, onRejectCrossing, onSaveAsTemplate }) {
   const p = profile;
   const [editing,setEditing] = useState(false);
   const [draft,setDraft]     = useState({});
@@ -1449,6 +1881,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                 {regenerating?'Regenerating…':'↻ Regenerate'}
               </button>
               <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>✎ Edit</button>
+              {onSaveAsTemplate&&<button onClick={()=>onSaveAsTemplate(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:'pointer'}}>⊞ Template</button>}
               <button onClick={()=>onDelete(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.pink,border:`1px solid ${C.pinkMid}`,cursor:'pointer'}}>✕ Delete</button>
             </>
           )}
@@ -1834,11 +2267,48 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
               )}
 
               {p.status==='finalized'&&(
-                <button onClick={()=>onCross(p.id)} style={{width:'100%',padding:'12px',borderRadius:C.radiusSm,fontSize:14,fontWeight:700,background:C.lavender,color:'#fff',border:'none',cursor:'pointer',marginTop:8}}>
-                  ⚡ Confirm Crossing Into World
-                </button>
+                <>
+                  {/* Crossing Approval Gate */}
+                  {(()=>{
+                    const approval=(p.full_profile||{})?._approval;
+                    if(approval?.approved){
+                      return(
+                        <>
+                          <div style={{padding:'10px 14px',borderRadius:C.radiusSm,background:'#e8f5ee',border:`1px solid #c3e6cb`,marginBottom:8,fontSize:12}}>
+                            <span style={{fontWeight:700,color:'#2d7a50'}}>Approved for crossing</span>
+                            {approval.approved_at&&<span style={{color:'#6b8a6b',marginLeft:8}}>{new Date(approval.approved_at).toLocaleDateString()}</span>}
+                            {approval.approval_notes&&<div style={{color:'#4a6a4a',marginTop:4}}>{approval.approval_notes}</div>}
+                          </div>
+                          <button onClick={()=>onCross(p.id)} style={{width:'100%',padding:'12px',borderRadius:C.radiusSm,fontSize:14,fontWeight:700,background:C.lavender,color:'#fff',border:'none',cursor:'pointer'}}>
+                            ⚡ Confirm Crossing Into World
+                          </button>
+                        </>
+                      );
+                    }
+                    if(approval&&!approval.approved){
+                      return(
+                        <div style={{padding:'10px 14px',borderRadius:C.radiusSm,background:'#fde8e8',border:`1px solid #f5c6cb`,marginBottom:8,fontSize:12}}>
+                          <span style={{fontWeight:700,color:'#8a2020'}}>Crossing rejected</span>
+                          {approval.rejection_reason&&<div style={{color:'#6a3030',marginTop:4}}>{approval.rejection_reason}</div>}
+                          <button onClick={()=>{const notes=prompt('Approval notes (optional):');if(notes!==null)onApprove(p.id,notes);}} style={{marginTop:8,padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:'#2d7a50',border:`1px solid #c3e6cb`,cursor:'pointer'}}>Re-approve</button>
+                        </div>
+                      );
+                    }
+                    // No approval yet — show approve/reject buttons
+                    return(
+                      <div style={{display:'flex',gap:8,marginTop:8}}>
+                        <button onClick={()=>{const notes=prompt('Approval notes (optional):');if(notes!==null)onApprove(p.id,notes);}} style={{flex:1,padding:'10px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:`1px solid #c3e6cb`,cursor:'pointer'}}>
+                          ✓ Approve for Crossing
+                        </button>
+                        <button onClick={()=>{const reason=prompt('Rejection reason:');if(reason!==null)onRejectCrossing(p.id,reason);}} style={{flex:1,padding:'10px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,background:'#fde8e8',color:'#8a2020',border:`1px solid #f5c6cb`,cursor:'pointer'}}>
+                          ✕ Reject
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </>
               )}
-              {p.status!=='finalized'&&(
+              {p.status!=='finalized'&&p.status!=='crossed'&&(
                 <div style={{textAlign:'center',padding:12,fontSize:12,color:C.inkLight}}>Profile must be finalized before crossing.</div>
               )}
             </>
