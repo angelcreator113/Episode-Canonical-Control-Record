@@ -814,7 +814,7 @@ html, body { margin: 0; padding: 0; }
   font-weight: 500;
   cursor: pointer;
   width: 100%;
-  max-width: 520px;
+  max-width: 100%;
   transition: all 0.2s ease;
   box-shadow: 0 1px 0 rgba(0,0,0,0.02);
 }
@@ -2076,7 +2076,7 @@ html, body { margin: 0; padding: 0; }
 .se-edit-header-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
   flex: 1;
 }
@@ -2126,7 +2126,7 @@ html, body { margin: 0; padding: 0; }
 .se-edit-header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
@@ -2408,7 +2408,7 @@ html, body { margin: 0; padding: 0; }
 .se-fullscreen-reading .se-canvas { flex: 1; }
 
 .se-fullscreen-reading .se-story-text {
-  max-width: 660px;
+  max-width: 720px;
   font-size: 19px;
   padding: 52px 36px;
 }
@@ -2426,11 +2426,14 @@ html, body { margin: 0; padding: 0; }
   position: fixed;
   top: 16px;
   right: 16px;
+  left: 16px;
   z-index: 10000;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
   max-width: 380px;
+  margin-left: auto;
   pointer-events: none;
 }
 
@@ -2734,6 +2737,25 @@ html, body { margin: 0; padding: 0; }
 }
 
 /* ─────────────────────────────────────────
+   Responsive: Narrow desktop / edit mode (≤ 960px)
+────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .se-edit-canvas .se-story-editor {
+    padding: 32px 28px;
+    max-width: none;
+  }
+
+  .se-writing-tools {
+    min-width: 240px;
+    max-width: 300px;
+  }
+
+  .se-edit-header {
+    padding: 10px 16px;
+  }
+}
+
+/* ─────────────────────────────────────────
    Responsive: Small tablet / write mode (≤ 768px)
 ────────────────────────────────────────── */
 @media (max-width: 768px) {
@@ -2744,7 +2766,7 @@ html, body { margin: 0; padding: 0; }
 
   .se-edit-canvas {
     flex: 1;
-    min-height: 40vh;
+    min-height: 0;
   }
 
   .se-edit-canvas .se-story-editor {
@@ -2758,18 +2780,20 @@ html, body { margin: 0; padding: 0; }
     min-width: 0;
     border-left: none;
     border-top: 1px solid var(--se-border-light);
-    max-height: 50vh;
+    max-height: 40vh;
     flex: 0 0 auto;
+    overflow-y: auto;
   }
 
   .se-edit-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
+    gap: 8px;
     padding: 10px 14px;
   }
 
   .se-edit-header-left {
+    width: 100%;
     flex-direction: column;
     gap: 6px;
   }
