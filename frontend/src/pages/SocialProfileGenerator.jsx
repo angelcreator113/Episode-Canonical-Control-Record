@@ -493,26 +493,52 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
           </button>
           <button onClick={()=>{setFeedLayer('lalaverse');setPage(1);setProtagonist(PROTAGONISTS[1]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='lalaverse'?C.lavender:'transparent',color:feedLayer==='lalaverse'?'#fff':C.inkLight,transition:'all 0.15s'}}>
-            Lala's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${stats.total}/${feedCap}`:''}</span>
+            Lala's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${nativeTotal}/${feedCap}`:''}</span>
           </button>
         </div>
 
         {/* Stats */}
         <div style={{display:'flex',gap:20,alignItems:'center'}}>
-          {[['Profiles',stats.total,stats.total>=feedCap?'#c0392b':stats.total>=(feedCap-23)?'#e67e22':feedLayer==='lalaverse'?C.lavender:C.blue],['Generated',stats.generated,C.inkMid],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
-            <div key={label} style={{display:'flex',alignItems:'baseline',gap:6}}>
-              <span style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{val||0}</span>
-              <span style={{fontSize:12,color:C.inkLight}}>{label==='Profiles'?`/ ${feedCap}`:label}</span>
-            </div>
-          ))}
+          {feedLayer==='lalaverse'&&crossoverCount>0?(
+            <>
+              {/* Lala's Feed: show combined total, then native/cap, then shared */}
+              <div style={{display:'flex',alignItems:'baseline',gap:6}}>
+                <span style={{fontSize:22,fontWeight:700,color:C.lavender,lineHeight:1}}>{nativeTotal+crossoverCount}</span>
+                <span style={{fontSize:12,color:C.inkLight}}>Profiles</span>
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',gap:6,paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
+                <span style={{fontSize:16,fontWeight:700,color:C.lavender,lineHeight:1}}>{nativeTotal}</span>
+                <span style={{fontSize:11,color:C.inkLight}}>/ {feedCap} native</span>
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',gap:6}}>
+                <span style={{fontSize:16,fontWeight:700,color:C.blue,lineHeight:1}}>{crossoverCount}</span>
+                <span style={{fontSize:11,color:C.inkLight}}>shared</span>
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',gap:6,paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
+                <span style={{fontSize:16,fontWeight:700,color:C.inkMid,lineHeight:1}}>{stats.generated||0}</span>
+                <span style={{fontSize:11,color:C.inkLight}}>Generated</span>
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',gap:6}}>
+                <span style={{fontSize:16,fontWeight:700,color:'#2d7a50',lineHeight:1}}>{tabCounts.finalized||0}</span>
+                <span style={{fontSize:11,color:C.inkLight}}>Finalized</span>
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',gap:6}}>
+                <span style={{fontSize:16,fontWeight:700,color:C.pink,lineHeight:1}}>{tabCounts.crossed||0}</span>
+                <span style={{fontSize:11,color:C.inkLight}}>Crossed</span>
+              </div>
+            </>
+          ):(
+            <>
+              {[['Profiles',stats.total,stats.total>=feedCap?'#c0392b':stats.total>=(feedCap-23)?'#e67e22':C.blue],['Generated',stats.generated,C.inkMid],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
+                <div key={label} style={{display:'flex',alignItems:'baseline',gap:6}}>
+                  <span style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{val||0}</span>
+                  <span style={{fontSize:12,color:C.inkLight}}>{label==='Profiles'?`/ ${feedCap}`:label}</span>
+                </div>
+              ))}
+            </>
+          )}
           {stats.total>=feedCap&&<span style={{fontSize:11,fontWeight:600,color:'#c0392b',background:'#fde8e8',padding:'2px 8px',borderRadius:4}}>Cap reached</span>}
           {stats.total>=(feedCap-23)&&stats.total<feedCap&&<span style={{fontSize:11,fontWeight:600,color:'#e67e22',background:'#fef3e0',padding:'2px 8px',borderRadius:4}}>{feedCap-stats.total} remaining</span>}
-          {feedLayer==='lalaverse'&&crossoverCount>0&&(
-            <div style={{display:'flex',alignItems:'baseline',gap:6,marginLeft:8,paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
-              <span style={{fontSize:22,fontWeight:700,color:C.blue,lineHeight:1}}>{crossoverCount}</span>
-              <span style={{fontSize:12,color:C.inkLight}}>◈ Following</span>
-            </div>
-          )}
         </div>
       </div>
 
