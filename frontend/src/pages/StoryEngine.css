@@ -258,6 +258,28 @@ html, body {
 
 .se-mobile-deck .se-arc-dots { display: none; }
 
+/* Mobile worlds row */
+.se-mobile-worlds {
+  display: none; /* shown via media query */
+  gap: 6px;
+  padding: 4px 0;
+}
+
+/* Mobile stats row */
+.se-mobile-stats-row {
+  display: none; /* shown via media query */
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--se-text-muted);
+}
+
+.se-mobile-stat {
+  font-weight: 600;
+  color: var(--se-text);
+  font-size: 11px;
+}
+
 /* ─────────────────────────────────────────
    Hero fullpage — centered when no arc exists
 ────────────────────────────────────────── */
@@ -2538,6 +2560,8 @@ html, body {
 @media (max-width: 1100px) {
   .se-sidebar {
     width: 220px;
+    max-height: 100%;
+    overflow-y: auto;
   }
 
   .se-task-list {
@@ -2582,7 +2606,9 @@ html, body {
 
   /* ── Show mobile deck, hide sidebar ── */
   .se-mobile-deck { display: flex; }
-  .se-sidebar { display: none; }
+  .se-mobile-deck .se-mobile-worlds { display: flex; }
+  .se-mobile-deck .se-mobile-stats-row { display: flex; }
+  .se-sidebar { display: none !important; }
 
   .se-body {
     flex-direction: column;
