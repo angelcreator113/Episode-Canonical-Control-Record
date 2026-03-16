@@ -182,6 +182,14 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [showManualSpark,setShowManualSpark] = useState(false);
   const [previewSparks,setPreviewSparks] = useState(null);
   const [previewLoading,setPreviewLoading] = useState(false);
+  // Advanced Filters
+  const [showFilters,setShowFilters] = useState(false);
+  const [filterArchetypes,setFilterArchetypes] = useState([]);
+  const [filterPlatforms,setFilterPlatforms] = useState([]);
+  const [filterCategory,setFilterCategory] = useState('');
+  const [filterRelevanceMin,setFilterRelevanceMin] = useState('');
+  const [filterRelevanceMax,setFilterRelevanceMax] = useState('');
+  const [filterAdultContent,setFilterAdultContent] = useState(null);
   // LalaVerse Feed layer
   const [feedLayer,setFeedLayer] = useState('real_world');
   const [lvCity,setLvCity]       = useState('');
@@ -199,6 +207,12 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       if(search.trim())qs.set('search',search.trim());
       qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',PAGE_SIZE);
       qs.set('feed_layer',feedLayer);
+      if(filterArchetypes.length)qs.set('archetype',filterArchetypes.join(','));
+      if(filterPlatforms.length)qs.set('platform',filterPlatforms.join(','));
+      if(filterCategory.trim())qs.set('content_category',filterCategory.trim());
+      if(filterRelevanceMin!=='')qs.set('relevance_min',filterRelevanceMin);
+      if(filterRelevanceMax!=='')qs.set('relevance_max',filterRelevanceMax);
+      if(filterAdultContent!==null)qs.set('adult_content',filterAdultContent.toString());
       const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});
       if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`Server error (${res.status})`);}
       const data=await res.json();
@@ -210,7 +224,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       setCrossoverCount(data.crossoverCount||0);
     } catch(err){setError(err.message);}
     finally{setLoading(false);}
-  },[filterStatus,search,sortBy,page,feedLayer]);
+  },[filterStatus,search,sortBy,page,feedLayer,filterArchetypes,filterPlatforms,filterCategory,filterRelevanceMin,filterRelevanceMax,filterAdultContent]);
 
   useEffect(()=>{loadProfiles();},[loadProfiles]);
 
@@ -786,6 +800,63 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                 {bulkMode?'✕ Cancel':'☐ Select'}
               </button>
             </div>
+          </div>
+
+          {/* Advanced Filters toggle + panel */}
+          <div style={{borderBottom:`1px solid ${C.border}`,padding:'0 24px'}}>
+            <button onClick={()=>setShowFilters(f=>!f)} style={{padding:'5px 12px',fontSize:11,fontWeight:600,cursor:'pointer',background:'transparent',color:C.lavender,border:'none',display:'flex',alignItems:'center',gap:4}}>
+              {showFilters?'Hide':'Show'} Advanced Filters
+              {(filterArchetypes.length+filterPlatforms.length+(filterCategory?1:0)+(filterRelevanceMin!==''?1:0)+(filterRelevanceMax!==''?1:0)+(filterAdultContent!==null?1:0))>0&&
+                <span style={{fontSize:9,background:C.lavender,color:'#fff',borderRadius:8,padding:'0 5px',marginLeft:2}}>{filterArchetypes.length+filterPlatforms.length+(filterCategory?1:0)+(filterRelevanceMin!==''?1:0)+(filterRelevanceMax!==''?1:0)+(filterAdultContent!==null?1:0)}</span>}
+            </button>
+            {showFilters&&(
+              <div style={{padding:'10px 0 14px',display:'flex',flexDirection:'column',gap:10}}>
+                {/* Archetypes */}
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:0.5}}>Archetype</label>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
+                    {Object.entries(ARCHETYPE_LABELS).map(([k,v])=>{
+                      const active=filterArchetypes.includes(k);
+                      return <button key={k} onClick={()=>setFilterArchetypes(prev=>active?prev.filter(a=>a!==k):[...prev,k])} style={{padding:'4px 10px',borderRadius:12,fontSize:11,fontWeight:600,cursor:'pointer',transition:'all 0.15s',background:active?C.lavLight:'transparent',color:active?C.lavender:C.inkLight,border:`1.5px solid ${active?C.lavender:C.border}`}}>{v}</button>;
+                    })}
+                  </div>
+                </div>
+                {/* Platforms */}
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:0.5}}>Platform</label>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
+                    {['instagram','tiktok','youtube','twitter','onlyfans'].map(p=>{
+                      const active=filterPlatforms.includes(p);
+                      return <button key={p} onClick={()=>setFilterPlatforms(prev=>active?prev.filter(x=>x!==p):[...prev,p])} style={{padding:'4px 10px',borderRadius:12,fontSize:11,fontWeight:600,cursor:'pointer',transition:'all 0.15s',background:active?C.blueLight:'transparent',color:active?C.blue:C.inkLight,border:`1.5px solid ${active?C.blue:C.border}`,textTransform:'capitalize'}}>{p}</button>;
+                    })}
+                  </div>
+                </div>
+                {/* Category + Relevance + Adult Content row */}
+                <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-end'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                    <label style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:0.5}}>Content Category</label>
+                    <input value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} placeholder="e.g. fitness, beauty" style={{padding:'5px 10px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:160}}/>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                    <label style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:0.5}}>Relevance Score</label>
+                    <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                      <input type="number" min="0" max="10" step="0.1" value={filterRelevanceMin} onChange={e=>setFilterRelevanceMin(e.target.value)} placeholder="Min" style={{padding:'5px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:60}}/>
+                      <span style={{fontSize:11,color:C.inkLight}}>to</span>
+                      <input type="number" min="0" max="10" step="0.1" value={filterRelevanceMax} onChange={e=>setFilterRelevanceMax(e.target.value)} placeholder="Max" style={{padding:'5px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:60}}/>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                    <label style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:0.5}}>Adult Content</label>
+                    <div style={{display:'flex',gap:2}}>
+                      {[{label:'All',val:null},{label:'Yes',val:true},{label:'No',val:false}].map(opt=>(
+                        <button key={String(opt.val)} onClick={()=>setFilterAdultContent(opt.val)} style={{padding:'4px 10px',borderRadius:12,fontSize:11,fontWeight:600,cursor:'pointer',transition:'all 0.15s',background:filterAdultContent===opt.val?C.pinkLight:'transparent',color:filterAdultContent===opt.val?C.pink:C.inkLight,border:`1.5px solid ${filterAdultContent===opt.val?C.pink:C.border}`}}>{opt.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={()=>{setFilterArchetypes([]);setFilterPlatforms([]);setFilterCategory('');setFilterRelevanceMin('');setFilterRelevanceMax('');setFilterAdultContent(null);}} style={{padding:'5px 12px',borderRadius:C.radiusSm,fontSize:11,fontWeight:600,cursor:'pointer',background:'transparent',color:C.pink,border:`1px solid ${C.pink}40`}}>Clear Filters</button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Bulk action bar */}

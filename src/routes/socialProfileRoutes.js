@@ -837,13 +837,32 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
 router.get('/', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { Op } = require('sequelize');
-  const { series_id, archetype, status, platform, page, limit, search, sort, feed_layer } = req.query;
+  const { series_id, archetype, status, platform, page, limit, search, sort, feed_layer, content_category, relevance_min, relevance_max, adult_content } = req.query;
   try {
     const where = {};
     if (series_id)  where.series_id  = series_id;
-    if (archetype)  where.archetype  = archetype;
+    if (archetype) {
+      const vals = archetype.split(',').map(v => v.trim()).filter(Boolean);
+      where.archetype = vals.length === 1 ? vals[0] : { [Op.in]: vals };
+    }
     if (status)     where.status     = status;
-    if (platform)   where.platform   = platform;
+    if (platform) {
+      const vals = platform.split(',').map(v => v.trim()).filter(Boolean);
+      where.platform = vals.length === 1 ? vals[0] : { [Op.in]: vals };
+    }
+    if (content_category) {
+      const vals = content_category.split(',').map(v => v.trim()).filter(Boolean);
+      where.content_category = vals.length === 1 ? vals[0] : { [Op.in]: vals };
+    }
+    if (relevance_min !== undefined && relevance_min !== '') {
+      where.lala_relevance_score = { ...(where.lala_relevance_score || {}), [Op.gte]: parseFloat(relevance_min) };
+    }
+    if (relevance_max !== undefined && relevance_max !== '') {
+      where.lala_relevance_score = { ...(where.lala_relevance_score || {}), [Op.lte]: parseFloat(relevance_max) };
+    }
+    if (adult_content !== undefined && adult_content !== '') {
+      where.adult_content_present = adult_content === 'true';
+    }
     // Track crossover IDs for lalaverse feeds (real_world profiles Lala follows)
     let crossoverIds = [];
     if (feed_layer) {
