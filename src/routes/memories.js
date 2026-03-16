@@ -4814,16 +4814,39 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
 
   const systemPrompt = buildAmberSystemPrompt(contextSummary, knowledgeBlock);
 
-  try {
-    const claudeResponse = await anthropic.messages.create({
-      model:      'claude-sonnet-4-6',
+  // Helper: attempt an API call with a given model
+  const tryModel = async (modelId) => {
+    return anthropic.messages.create({
+      model:      modelId,
       max_tokens: 2048,
       system:     systemPrompt,
       messages:   conversationHistory,
     });
+  };
+
+  try {
+    let claudeResponse;
+    try {
+      claudeResponse = await tryModel('claude-sonnet-4-6');
+    } catch (primaryErr) {
+      const isRetryable = primaryErr.status === 529 || primaryErr.status === 503 || primaryErr.status === 404;
+      console.error('Assistant command primary model failed:', {
+        message: primaryErr.message,
+        status: primaryErr.status,
+        type: primaryErr.error?.type,
+        name: primaryErr.name,
+      });
+      if (isRetryable) {
+        // Wait 2s then try fallback model (matches scene-interview retry pattern)
+        await new Promise(r => setTimeout(r, 2000));
+        claudeResponse = await tryModel('claude-sonnet-4-20250514');
+      } else {
+        throw primaryErr;
+      }
+    }
 
     const raw   = claudeResponse.content[0].text.trim();
-    
+
     // Extract JSON from the response — Claude may wrap it in markdown or prefix with text
     let jsonStr = raw;
     // Try to find a JSON block in ```json ... ``` fences
@@ -4873,29 +4896,56 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
     });
 
   } catch (err) {
-    console.error('Assistant command error:', err?.status, err?.message, err?.error?.type);
+    // Structured error logging
+    console.error('Assistant command error:', {
+      message: err.message,
+      status: err.status,
+      type: err.error?.type,
+      name: err.name,
+      stack: err.stack?.split('\n').slice(0, 3).join(' | '),
+    });
 
-    // Provide a helpful message based on error type
-    const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
-    const isModelError = err.status === 404 || err.message?.includes('model') || err.error?.type === 'not_found_error';
-    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    // Error classification with errorType and retryable fields
+    const isAuth = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
     const isRateLimit = err.status === 429;
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    const isBadRequest = err.status === 400;
+    const isNetwork = err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.message?.includes('fetch failed');
 
-    const reply = isAuthError
-      ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
-      : isModelError
-      ? "My model configuration needs updating — the specified model wasn't found. Check server logs."
-      : isOverloaded
-      ? "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment."
-      : isRateLimit
-      ? "Too many requests hitting the AI service — give me a moment and try again."
-      : "Hmm, that didn't work — try again or rephrase it for me.";
+    let errorType, retryable, reply;
+    if (isAuth) {
+      errorType = 'auth';
+      retryable = false;
+      reply = "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env.";
+    } else if (isRateLimit) {
+      errorType = 'rate_limit';
+      retryable = false;
+      reply = "Too many requests hitting the AI service — give me a moment and try again.";
+    } else if (isOverloaded) {
+      errorType = 'overloaded';
+      retryable = true;
+      reply = "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment.";
+    } else if (isBadRequest) {
+      errorType = 'bad_request';
+      retryable = false;
+      reply = "Something went wrong with the request format. Check server logs for details.";
+    } else if (isNetwork) {
+      errorType = 'network';
+      retryable = true;
+      reply = "I can't reach the AI service right now — there may be a network issue. Try again in a moment.";
+    } else {
+      errorType = 'unknown';
+      retryable = false;
+      reply = `Something unexpected happened: ${err.message || 'unknown error'}. Check server logs for details.`;
+    }
 
     return res.json({
       reply,
-      action:  null,
-      refresh: null,
-      error:   err.message,
+      action:    null,
+      refresh:   null,
+      error:     err.message,
+      errorType,
+      retryable,
     });
   }
 });
@@ -5021,15 +5071,34 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
   // The full system prompt is identical — we reference the same string structure.
   const systemPrompt = buildAmberSystemPrompt(contextSummary, knowledgeBlock);
 
-  try {
-    let fullText = '';
-
-    const stream = anthropic.messages.stream({
-      model:      'claude-sonnet-4-6',
+  // Helper: attempt streaming with a given model
+  const tryStreamModel = (modelId) => {
+    return anthropic.messages.stream({
+      model:      modelId,
       max_tokens: 2048,
       system:     systemPrompt,
       messages:   conversationHistory,
     });
+  };
+
+  try {
+    let fullText = '';
+    let stream;
+
+    try {
+      stream = tryStreamModel('claude-sonnet-4-6');
+      // Test the stream by waiting for initial connection
+      // If the model is unavailable, the error fires before any tokens
+    } catch (primaryErr) {
+      console.error('Assistant stream primary model failed:', {
+        message: primaryErr.message,
+        status: primaryErr.status,
+        type: primaryErr.error?.type,
+        name: primaryErr.name,
+      });
+      // Fall back to previous model
+      stream = tryStreamModel('claude-sonnet-4-20250514');
+    }
 
     // Handle client disconnect
     let aborted = false;
@@ -5041,7 +5110,30 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
       res.write(`data: ${JSON.stringify({ type: 'token', text })}\n\n`);
     });
 
-    await stream.finalMessage();
+    try {
+      await stream.finalMessage();
+    } catch (streamErr) {
+      // If primary model fails mid-stream, try fallback
+      const isRetryable = streamErr.status === 529 || streamErr.status === 503 || streamErr.status === 404;
+      if (isRetryable && fullText === '') {
+        console.error('Assistant stream retrying with fallback model:', {
+          message: streamErr.message,
+          status: streamErr.status,
+          type: streamErr.error?.type,
+        });
+        fullText = '';
+        stream = tryStreamModel('claude-sonnet-4-20250514');
+        req.on('close', () => { aborted = true; stream.abort(); });
+        stream.on('text', (text) => {
+          if (aborted) return;
+          fullText += text;
+          res.write(`data: ${JSON.stringify({ type: 'token', text })}\n\n`);
+        });
+        await stream.finalMessage();
+      } else {
+        throw streamErr;
+      }
+    }
 
     if (aborted) return;
 
@@ -5091,26 +5183,55 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
     res.end();
 
   } catch (err) {
-    console.error('Assistant stream error:', err?.status, err?.message, err?.error?.type);
-    const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
-    const isModelError = err.status === 404 || err.message?.includes('model') || err.error?.type === 'not_found_error';
-    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
-    const isRateLimit = err.status === 429;
+    // Structured error logging
+    console.error('Assistant stream error:', {
+      message: err.message,
+      status: err.status,
+      type: err.error?.type,
+      name: err.name,
+      stack: err.stack?.split('\n').slice(0, 3).join(' | '),
+    });
 
-    const reply = isAuthError
-      ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
-      : isModelError
-      ? "My model configuration needs updating — the specified model wasn't found. Check server logs."
-      : isOverloaded
-      ? "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment."
-      : isRateLimit
-      ? "Too many requests hitting the AI service — give me a moment and try again."
-      : "Hmm, that didn't work — try again or rephrase it for me.";
+    // Error classification with errorType and retryable fields
+    const isAuth = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    const isRateLimit = err.status === 429;
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    const isBadRequest = err.status === 400;
+    const isNetwork = err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.message?.includes('fetch failed');
+
+    let errorType, retryable, reply;
+    if (isAuth) {
+      errorType = 'auth';
+      retryable = false;
+      reply = "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env.";
+    } else if (isRateLimit) {
+      errorType = 'rate_limit';
+      retryable = false;
+      reply = "Too many requests hitting the AI service — give me a moment and try again.";
+    } else if (isOverloaded) {
+      errorType = 'overloaded';
+      retryable = true;
+      reply = "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment.";
+    } else if (isBadRequest) {
+      errorType = 'bad_request';
+      retryable = false;
+      reply = "Something went wrong with the request format. Check server logs for details.";
+    } else if (isNetwork) {
+      errorType = 'network';
+      retryable = true;
+      reply = "I can't reach the AI service right now — there may be a network issue. Try again in a moment.";
+    } else {
+      errorType = 'unknown';
+      retryable = false;
+      reply = `Something unexpected happened: ${err.message || 'unknown error'}. Check server logs for details.`;
+    }
 
     res.write(`data: ${JSON.stringify({
       type:  'error',
       reply,
       error: err.message,
+      errorType,
+      retryable,
     })}\n\n`);
     res.end();
   }
