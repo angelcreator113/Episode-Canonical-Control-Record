@@ -25,6 +25,25 @@ try {
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// ── ENUM validation helpers ──────────────────────────────────────────────────
+const VALID_TRAJECTORIES = new Set(['rising', 'plateauing', 'unraveling', 'pivoting', 'silent', 'viral_moment']);
+const VALID_ARCHETYPES = new Set([
+  'polished_curator', 'messy_transparent', 'soft_life', 'explicitly_paid',
+  'overnight_rise', 'cautionary', 'the_peer', 'the_watcher',
+  'chaos_creator', 'community_builder',
+]);
+const VALID_FOLLOWER_TIERS = new Set(['micro', 'mid', 'macro', 'mega']);
+
+function sanitizeEnum(value, validSet, fallback) {
+  if (!value) return fallback;
+  const normalized = String(value).toLowerCase().replace(/[\s-]+/g, '_');
+  if (validSet.has(normalized)) return normalized;
+  for (const valid of validSet) {
+    if (normalized.includes(valid) || valid.includes(normalized)) return valid;
+  }
+  return fallback;
+}
+
 // ── Feed caps ─────────────────────────────────────────────────────────────────
 const FEED_CAPS = { real_world: 443, lalaverse: 200 };
 
@@ -237,10 +256,36 @@ Respond ONLY in valid JSON:
 }`;
 }
 
+// ── Rate limiter for AI generation endpoints ────────────────────────────────
+const generateRateLimits = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX = 10; // max 10 generations per minute per IP
+
+function checkRateLimit(req, res) {
+  const key = req.ip || req.connection?.remoteAddress || 'unknown';
+  const now = Date.now();
+  const entry = generateRateLimits.get(key);
+  if (entry && now - entry.start < RATE_LIMIT_WINDOW_MS) {
+    if (entry.count >= RATE_LIMIT_MAX) {
+      res.status(429).json({ error: 'Rate limit exceeded. Max 10 generations per minute.' });
+      return false;
+    }
+    entry.count++;
+  } else {
+    generateRateLimits.set(key, { start: now, count: 1 });
+  }
+  // Cleanup old entries periodically
+  if (generateRateLimits.size > 1000) {
+    for (const [k, v] of generateRateLimits) { if (now - v.start > RATE_LIMIT_WINDOW_MS) generateRateLimits.delete(k); }
+  }
+  return true;
+}
+
 // ── POST /generate ───────────────────────────────────────────────────────────
 // Three inputs + optional advanced context → full profile generated
 // Supports feed_layer: 'real_world' (default) or 'lalaverse'
 router.post('/generate', optionalAuth, async (req, res) => {
+  if (!checkRateLimit(req, res)) return;
   const {
     handle, platform, vibe_sentence, series_id,
     character_context, character_key, advanced_context,
@@ -283,17 +328,27 @@ Lala does not know she was built. The world she lives in feels complete and self
     }
 
     const response = await client.messages.create({
-      model:      'claude-sonnet-4-20250514',
+      model:      'claude-sonnet-4-6',
       max_tokens: 6000,
       messages:   [{ role: 'user', content: prompt }],
     });
 
+    const rawText = response?.content?.[0]?.text;
+    if (!rawText) {
+      return res.status(500).json({ error: 'AI returned empty response. Try again.' });
+    }
+
     let generated;
     try {
-      generated = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+      generated = JSON.parse(rawText.replace(/```json|```/g, '').trim());
     } catch {
       return res.status(500).json({ error: 'Profile generation failed to parse. Try again.' });
     }
+
+    // Sanitize ENUM fields to prevent DB insert failures from AI variations
+    const safeFollowerTier = sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
+    const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
+    const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
     // Save as draft
     const profile = await db.SocialProfile.create({
@@ -302,14 +357,14 @@ Lala does not know she was built. The world she lives in feels complete and self
       platform,
       vibe_sentence,
       status:          'generated',
-      generation_model: 'claude-sonnet-4-20250514',
+      generation_model: 'claude-sonnet-4-6',
       full_profile:    generated,
       // Flatten key fields for querying
       display_name:          generated.display_name,
-      follower_tier:         generated.follower_tier,
+      follower_tier:         safeFollowerTier,
       follower_count_approx: generated.follower_count_approx,
       content_category:      generated.content_category,
-      archetype:             generated.archetype,
+      archetype:             safeArchetype,
       content_persona:       generated.content_persona,
       real_signal:           generated.real_signal,
       posting_voice:         generated.posting_voice,
@@ -321,7 +376,7 @@ Lala does not know she was built. The world she lives in feels complete and self
       emotional_activation:  generated.emotional_activation,
       watch_reason:          generated.watch_reason,
       what_it_costs_her:     generated.what_it_costs_her,
-      current_trajectory:    generated.current_trajectory,
+      current_trajectory:    safeTrajectory,
       trajectory_detail:     generated.trajectory_detail,
       moment_log:            generated.moment_log || [],
       sample_captions:       generated.sample_captions || [],
@@ -793,8 +848,9 @@ const VALID_REL_TYPES = new Set([
 ]);
 
 async function autoLinkRelationships(db, profile, knownAssociates) {
-  if (!db.SocialProfileRelationship) return;
+  if (!db.SocialProfileRelationship) return 0;
   const { Op } = require('sequelize');
+  let linked = 0;
 
   for (const assoc of knownAssociates) {
     try {
@@ -813,7 +869,7 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
 
       const relType = VALID_REL_TYPES.has(assoc.relationship_type) ? assoc.relationship_type : 'collab';
 
-      await db.SocialProfileRelationship.findOrCreate({
+      const [, created] = await db.SocialProfileRelationship.findOrCreate({
         where: {
           source_profile_id: profile.id,
           target_profile_id: target.id,
@@ -827,10 +883,12 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
           public_visibility: 'public',
         },
       });
+      if (created) linked++;
     } catch (e) {
       console.warn('Auto-link relationship failed:', e.message);
     }
   }
+  return linked;
 }
 
 // ── GET / ────────────────────────────────────────────────────────────────────
@@ -900,12 +958,13 @@ router.get('/', optionalAuth, async (req, res) => {
       }
     }
 
-    // Search condition
+    // Search condition (escape LIKE wildcards to prevent pattern manipulation)
     if (search) {
+      const escapedSearch = search.replace(/[%_\\]/g, '\\$&');
       conditions.push({
         [Op.or]: [
-          { handle: { [Op.iLike]: `%${search}%` } },
-          { display_name: { [Op.iLike]: `%${search}%` } },
+          { handle: { [Op.iLike]: `%${escapedSearch}%` } },
+          { display_name: { [Op.iLike]: `%${escapedSearch}%` } },
         ],
       });
     }
@@ -930,11 +989,15 @@ router.get('/', optionalAuth, async (req, res) => {
     const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 24));
     const offset   = (pageNum - 1) * pageSize;
 
+    // Exclude heavy JSON fields from list query for performance (full data via GET /:id)
+    const listAttributes = { exclude: ['full_profile', 'sample_captions', 'sample_comments', 'moment_log', 'book_relevance'] };
+
     const { count, rows } = await db.SocialProfile.findAndCountAll({
       where,
       order,
       limit: pageSize,
       offset,
+      attributes: listAttributes,
       include: db.SocialProfileFollower ? [{
         model: db.SocialProfileFollower,
         as: 'followers',
@@ -1140,26 +1203,13 @@ router.get('/export', optionalAuth, async (req, res) => {
   }
 });
 
-// ── GET /:id ─────────────────────────────────────────────────────────────────
-router.get('/:id', optionalAuth, async (req, res) => {
-  const db = req.app.locals.db || require('../models');
-  try {
-    const profile = await db.SocialProfile.findByPk(req.params.id, {
-      include: db.SocialProfileFollower ? [{
-        model: db.SocialProfileFollower,
-        as: 'followers',
-      }] : [],
-    });
-    if (!profile) return res.status(404).json({ error: 'Not found' });
-    return res.json({ profile });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+// NOTE: GET /:id moved to end of file — must come after all named single-segment
+// routes (GET /network, GET /templates, etc.) to avoid shadowing them.
 
 // ── GET /:id/followers ───────────────────────────────────────────────────────
 router.get('/:id/followers', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
+  if (!db.SocialProfileFollower) return res.json({ followers: [] });
   try {
     const followers = await db.SocialProfileFollower.findAll({
       where: { social_profile_id: req.params.id },
@@ -1183,6 +1233,7 @@ router.post('/:id/followers', optionalAuth, async (req, res) => {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
 
+    if (!db.SocialProfileFollower) return res.status(501).json({ error: 'SocialProfileFollower model not available' });
     const [follower, created] = await db.SocialProfileFollower.findOrCreate({
       where: { social_profile_id: profile.id, character_key },
       defaults: { character_name, follow_context, emotional_reaction, influence_type, influence_level: influence_level || 5 },
@@ -1200,6 +1251,7 @@ router.post('/:id/followers', optionalAuth, async (req, res) => {
 // Remove a character from following this profile
 router.delete('/:id/followers/:characterKey', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
+  if (!db.SocialProfileFollower) return res.status(501).json({ error: 'SocialProfileFollower model not available' });
   try {
     const count = await db.SocialProfileFollower.destroy({
       where: { social_profile_id: req.params.id, character_key: req.params.characterKey },
@@ -1235,10 +1287,12 @@ router.post('/:id/cross', optionalAuth, guardJustAWomanRecord, async (req, res) 
 
     // Auto-create registry character from social profile
     let registryCharacter = null;
-    if (registry_id || profile.registry_character_id) {
-      const targetRegistry = registry_id || (await db.CharacterRegistry.findOne({ order: [['created_at', 'DESC']] }))?.id;
+    if (registry_id && !profile.registry_character_id) {
+      const targetRegistry = db.CharacterRegistry
+        ? (registry_id || (await db.CharacterRegistry.findOne({ order: [['created_at', 'DESC']] }))?.id)
+        : null;
 
-      if (targetRegistry) {
+      if (targetRegistry && db.RegistryCharacter) {
         const charKey = profile.handle.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
         registryCharacter = await db.RegistryCharacter.create({
           registry_id: targetRegistry,
@@ -1311,7 +1365,37 @@ router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
       'adult_content_present', 'adult_content_type', 'adult_content_framing',
       'crossing_trigger', 'crossing_mechanism', 'archetype',
       'follower_count_approx', 'sample_captions', 'sample_comments',
-      'book_relevance', 'status',
+      'book_relevance', 'status', 'current_state',
+    ];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+
+    await profile.update(updates);
+    return res.json({ profile });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /:id — partial update (same logic as PUT, supports frontend PATCH calls)
+router.patch('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+
+    const allowed = [
+      'handle', 'platform', 'vibe_sentence', 'display_name',
+      'content_persona', 'real_signal', 'posting_voice', 'comment_energy',
+      'parasocial_function', 'emotional_activation', 'watch_reason',
+      'what_it_costs_her', 'current_trajectory', 'trajectory_detail',
+      'pinned_post', 'lala_relevance_score', 'lala_relevance_reason',
+      'adult_content_present', 'adult_content_type', 'adult_content_framing',
+      'crossing_trigger', 'crossing_mechanism', 'archetype',
+      'follower_count_approx', 'sample_captions', 'sample_comments',
+      'book_relevance', 'status', 'current_state',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -1328,6 +1412,7 @@ router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
 // ── POST /:id/regenerate ──────────────────────────────────────────────────
 // Re-generate a profile using the same handle/platform/vibe (or overrides)
 router.post('/:id/regenerate', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+  if (!checkRateLimit(req, res)) return;
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1350,27 +1435,37 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     }
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 6000,
       messages: [{ role: 'user', content: prompt }],
     });
 
+    const rawText = response?.content?.[0]?.text;
+    if (!rawText) {
+      return res.status(500).json({ error: 'AI returned empty response. Try again.' });
+    }
+
     let generated;
     try {
-      generated = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+      generated = JSON.parse(rawText.replace(/```json|```/g, '').trim());
     } catch {
       return res.status(500).json({ error: 'Regeneration failed to parse. Try again.' });
     }
 
+    // Sanitize ENUM fields to prevent DB insert failures from AI variations
+    const safeFollowerTier = sanitizeEnum(generated.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
+    const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
+    const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
+
     await profile.update({
       vibe_sentence,
       full_profile: generated,
-      generation_model: 'claude-sonnet-4-20250514',
+      generation_model: 'claude-sonnet-4-6',
       display_name: generated.display_name,
-      follower_tier: generated.follower_tier,
+      follower_tier: safeFollowerTier,
       follower_count_approx: generated.follower_count_approx,
       content_category: generated.content_category,
-      archetype: generated.archetype,
+      archetype: safeArchetype,
       content_persona: generated.content_persona,
       real_signal: generated.real_signal,
       posting_voice: generated.posting_voice,
@@ -1382,7 +1477,7 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       emotional_activation: generated.emotional_activation,
       watch_reason: generated.watch_reason,
       what_it_costs_her: generated.what_it_costs_her,
-      current_trajectory: generated.current_trajectory,
+      current_trajectory: safeTrajectory,
       trajectory_detail: generated.trajectory_detail,
       moment_log: generated.moment_log || [],
       sample_captions: generated.sample_captions || [],
@@ -1482,6 +1577,9 @@ router.post('/:id/add-moment', optionalAuth, async (req, res) => {
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Not found' });
+    if (!req.body.moment || typeof req.body.moment !== 'object') {
+      return res.status(400).json({ error: 'moment object is required' });
+    }
     const moments = [...(profile.moment_log || []), req.body.moment];
     await profile.update({ moment_log: moments });
     return res.json({ profile });
@@ -1599,7 +1697,7 @@ router.get('/follow-engine/evaluate/:id', optionalAuth, async (req, res) => {
             adult_penalty: dbp.adult_penalty || 0,
             same_platform_bonus: dbp.same_platform_bonus || {},
             follower_tier_affinity: dbp.follower_tier_affinity || {},
-            base_follow_threshold: dbp.base_follow_threshold || 0.45,
+            base_follow_threshold: dbp.base_follow_threshold ?? 0.45,
           };
           evaluations[dbp.character_key] = computeFollowScore(dbp.character_key, profileData, dynProfile);
         }
@@ -1653,7 +1751,7 @@ router.post('/follow-engine/run', optionalAuth, async (req, res) => {
                 adult_penalty: dbp.adult_penalty || 0,
                 same_platform_bonus: dbp.same_platform_bonus || {},
                 follower_tier_affinity: dbp.follower_tier_affinity || {},
-                base_follow_threshold: dbp.base_follow_threshold || 0.45,
+                base_follow_threshold: dbp.base_follow_threshold ?? 0.45,
               };
               evals[dbp.character_key] = computeFollowScore(dbp.character_key, profileData, dynProfile);
             }
@@ -2197,10 +2295,17 @@ router.get('/moments/timeline', optionalAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /templates ──────────────────────────────────────────────────────────
-// List saved profile templates (stored in-memory for simplicity, no migration needed)
-const _profileTemplates = [];
+// Templates stored in DB when SocialProfileTemplate model is available, otherwise in-memory fallback
+const _profileTemplates = []; // fallback
 
-router.get('/templates', optionalAuth, (req, res) => {
+router.get('/templates', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  if (db.SocialProfileTemplate) {
+    try {
+      const templates = await db.SocialProfileTemplate.findAll({ order: [['created_at', 'DESC']] });
+      return res.json({ templates });
+    } catch { /* fall through to in-memory */ }
+  }
   return res.json({ templates: _profileTemplates });
 });
 
@@ -2236,6 +2341,18 @@ router.post('/templates', optionalAuth, async (req, res) => {
       };
     }
 
+    // Persist to DB if model available, otherwise in-memory
+    if (db.SocialProfileTemplate) {
+      try {
+        const template = await db.SocialProfileTemplate.create({
+          name,
+          description: description || '',
+          template_data: templateData,
+          usage_count: 0,
+        });
+        return res.json({ template });
+      } catch { /* fall through to in-memory */ }
+    }
     const template = {
       id: Date.now(),
       name,
@@ -2255,11 +2372,17 @@ router.post('/templates', optionalAuth, async (req, res) => {
 // ── POST /templates/:templateId/apply ───────────────────────────────────────
 // Generate a new profile using a template's settings as starting context
 router.post('/templates/:templateId/apply', optionalAuth, async (req, res) => {
-  const templateId = parseInt(req.params.templateId);
-  const template = _profileTemplates.find(t => t.id === templateId);
+  const db = req.app.locals.db || require('../models');
+  const templateId = req.params.templateId;
+  let template;
+  if (db.SocialProfileTemplate) {
+    try { template = await db.SocialProfileTemplate.findByPk(templateId); } catch {}
+  }
+  if (!template) template = _profileTemplates.find(t => t.id === parseInt(templateId));
   if (!template) return res.status(404).json({ error: 'Template not found' });
 
-  template.usage_count++;
+  if (template.increment) await template.increment('usage_count').catch(() => {});
+  else template.usage_count++;
   const td = template.template_data;
 
   return res.json({
@@ -2279,8 +2402,18 @@ router.post('/templates/:templateId/apply', optionalAuth, async (req, res) => {
 });
 
 // ── DELETE /templates/:templateId ───────────────────────────────────────────
-router.delete('/templates/:templateId', optionalAuth, (req, res) => {
-  const idx = _profileTemplates.findIndex(t => t.id === parseInt(req.params.templateId));
+router.delete('/templates/:templateId', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const templateId = req.params.templateId;
+
+  if (db.SocialProfileTemplate) {
+    try {
+      const deleted = await db.SocialProfileTemplate.destroy({ where: { id: templateId } });
+      if (deleted) return res.json({ deleted: true });
+    } catch { /* fall through */ }
+  }
+
+  const idx = _profileTemplates.findIndex(t => t.id === parseInt(templateId));
   if (idx === -1) return res.status(404).json({ error: 'Template not found' });
   _profileTemplates.splice(idx, 1);
   return res.json({ deleted: true });
@@ -2347,16 +2480,17 @@ router.get('/relationships/suggestions', optionalAuth, async (req, res) => {
         // Known associates mention
         const aAssociates = a.known_associates || [];
         const bAssociates = b.known_associates || [];
-        if (aAssociates.some(aa => b.handle?.toLowerCase().includes(aa.handle?.replace('@','').toLowerCase() || '---'))) { score += 5; reasons.push('mentioned in associates'); }
-        if (bAssociates.some(ba => a.handle?.toLowerCase().includes(ba.handle?.replace('@','').toLowerCase() || '---'))) { score += 5; reasons.push('mentioned in associates'); }
+        const normalizeHandle = h => (h || '').replace(/^@/, '').toLowerCase();
+        if (aAssociates.some(aa => aa.handle && normalizeHandle(b.handle) === normalizeHandle(aa.handle))) { score += 5; reasons.push('mentioned in associates'); }
+        if (bAssociates.some(ba => ba.handle && normalizeHandle(a.handle) === normalizeHandle(ba.handle))) { score += 5; reasons.push('mentioned in associates'); }
 
         if (score >= 4) {
           // Suggest relationship type based on reasons
-          let suggestedType = 'orbit';
-          if (reasons.includes('natural tension')) suggestedType = 'competitors';
+          let suggestedType = 'collab';
+          if (reasons.includes('natural tension')) suggestedType = 'rival';
           else if (reasons.includes('mentioned in associates')) suggestedType = 'collab';
-          else if (reasons.includes('tier rivalry')) suggestedType = 'competitors';
-          else if (reasons.includes('same content niche') && reasons.includes('same platform')) suggestedType = 'orbit';
+          else if (reasons.includes('tier rivalry')) suggestedType = 'rival';
+          else if (reasons.includes('same content niche') && reasons.includes('same platform')) suggestedType = 'copycat';
 
           suggestions.push({
             profile_a: { id: a.id, handle: a.handle, display_name: a.display_name, platform: a.platform, archetype: a.archetype },
@@ -2397,7 +2531,7 @@ router.post('/relationships/suggestions/accept', optionalAuth, async (req, res) 
     const [rel, created] = await db.SocialProfileRelationship.findOrCreate({
       where: { source_profile_id: source_id, target_profile_id: target_id },
       defaults: {
-        relationship_type: relationship_type || 'orbit',
+        relationship_type: VALID_REL_TYPES.has(relationship_type) ? relationship_type : 'collab',
         description: description || 'Discovered via automated suggestion',
         auto_generated: true,
         direction: 'mutual',
@@ -2412,6 +2546,24 @@ router.post('/relationships/suggestions/accept', optionalAuth, async (req, res) 
   }
 });
 
+// ── GET /:id ─────────────────────────────────────────────────────────────────
+// IMPORTANT: This catch-all must be the LAST GET route registered.
+// Named routes like GET /network, GET /templates must come before this.
+router.get('/:id', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id, {
+      include: db.SocialProfileFollower ? [{
+        model: db.SocialProfileFollower,
+        as: 'followers',
+      }] : [],
+    });
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+    return res.json({ profile });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 module.exports = router;
 module.exports.buildGenerationPrompt = buildGenerationPrompt;
 module.exports.autoAssignFollower = autoAssignFollower;

@@ -38,16 +38,18 @@ async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES }
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      let timer;
       const response = await Promise.race([
         client.messages.create({
           model: AI_MODEL,
           max_tokens: maxTokens,
           messages: [{ role: 'user', content: prompt }],
         }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS)
-        ),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS);
+        }),
       ]);
+      clearTimeout(timer);
       return response;
     } catch (err) {
       lastErr = err;
@@ -126,6 +128,13 @@ let schedulerConfig = {
 };
 
 let schedulerTimer = null;
+let initialTimeout = null;
+let isRunning = false;
+
+// SSE subscribers for real-time scheduler events
+const sseClients = new Set();
+function addSSEClient(res) { sseClients.add(res); res.on('close', () => sseClients.delete(res)); }
+function emitSSE(event, data) { for (const res of sseClients) { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {} } }
 let schedulerIntervalMs = schedulerConfig.interval_hours * 60 * 60 * 1000;
 const runHistory = [];
 let _db = null;
@@ -137,6 +146,14 @@ function updateConfig(updates) {
   for (const [k, v] of Object.entries(updates)) {
     if (k in schedulerConfig && v != null) {
       schedulerConfig[k] = typeof schedulerConfig[k] === 'number' ? Number(v) : v;
+    }
+  }
+  // Recalculate interval if it changed, and restart timer if running
+  if (updates.interval_hours != null) {
+    schedulerIntervalMs = schedulerConfig.interval_hours * 60 * 60 * 1000;
+    if (schedulerTimer) {
+      clearInterval(schedulerTimer);
+      schedulerTimer = setInterval(scheduledRun, schedulerIntervalMs);
     }
   }
   return { ...schedulerConfig };
@@ -297,9 +314,12 @@ Return ONLY the JSON array. No markdown, no explanation.`;
 
   const response = await callClaude(prompt, { maxTokens: 4000 });
 
+  const rawText = response?.content?.[0]?.text;
+  if (!rawText) throw new Error('AI returned empty response for spark generation');
+
   let sparks;
   try {
-    sparks = parseAIJsonArray(response.content[0].text);
+    sparks = parseAIJsonArray(rawText);
   } catch {
     throw new Error('AI spark generation failed to parse');
   }
@@ -330,7 +350,8 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
     where: { feed_layer: layer, lalaverse_cap_exempt: false },
   });
   const remaining = cap - currentCount;
-  const toCreate = Math.min(count, remaining > 0 ? remaining : count); // allow over-cap if forced
+  if (remaining <= 0) return { created: [], errors: [], sparks_generated: 0 };
+  const toCreate = Math.min(count, remaining);
 
   // Generate smart sparks
   let sparks;
@@ -345,23 +366,32 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
     }
   }
 
-  // Generate full profiles from sparks
-  for (let i = 0; i < sparks.length; i++) {
-    try {
-      if (progressCallback) {
-        await progressCallback({ current: i + 1, total: sparks.length, spark: sparks[i], status: 'generating' });
-      }
-      const profile = await generateAndSaveProfile(db, sparks[i], layer);
-      if (profile) {
-        created.push(profile);
+  // Generate full profiles from sparks (batch 3 at a time for speed)
+  const BATCH_CONCURRENCY = 3;
+  for (let i = 0; i < sparks.length; i += BATCH_CONCURRENCY) {
+    const batch = sparks.slice(i, i + BATCH_CONCURRENCY);
+    if (progressCallback) {
+      await progressCallback({ current: i + 1, total: sparks.length, spark: batch[0], status: 'generating' });
+    }
+
+    const results = await Promise.allSettled(
+      batch.map(spark => generateAndSaveProfile(db, spark, layer))
+    );
+
+    for (let j = 0; j < results.length; j++) {
+      const idx = i + j;
+      const result = results[j];
+      if (result.status === 'fulfilled' && result.value) {
+        created.push(result.value);
         if (progressCallback) {
-          await progressCallback({ current: i + 1, total: sparks.length, profile, status: 'created' });
+          await progressCallback({ current: idx + 1, total: sparks.length, profile: result.value, status: 'created' });
         }
-      }
-    } catch (err) {
-      errors.push({ spark: sparks[i]?.handle || `spark_${i}`, error: err.message });
-      if (progressCallback) {
-        await progressCallback({ current: i + 1, total: sparks.length, error: err.message, status: 'error' });
+      } else {
+        const errMsg = result.status === 'rejected' ? result.reason?.message : 'No profile returned';
+        errors.push({ spark: batch[j]?.handle || `spark_${idx}`, error: errMsg });
+        if (progressCallback) {
+          await progressCallback({ current: idx + 1, total: sparks.length, error: errMsg, status: 'error' });
+        }
       }
     }
   }
@@ -431,11 +461,14 @@ Lala does not know she was built. The world she lives in feels complete and self
 
   const response = await callClaude(prompt, { maxTokens: 4000 });
 
+  const rawText = response?.content?.[0]?.text;
+  if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
+
   let generated;
   try {
-    generated = parseAIJson(response.content[0].text);
+    generated = parseAIJson(rawText);
   } catch (parseErr) {
-    console.error('[FeedScheduler] JSON parse failed for', spark.handle, '— raw text:', response.content[0].text.slice(0, 200));
+    console.error('[FeedScheduler] JSON parse failed for', spark.handle, '— raw text:', rawText.slice(0, 200));
     throw new Error('AI response failed to parse as JSON');
   }
 
@@ -728,8 +761,8 @@ async function autoDiscoverAgent(db) {
 
       if (score >= 5) {
         try {
-          let relType = 'orbit';
-          if (a.content_category === b.content_category && a.follower_tier === b.follower_tier) relType = 'competitors';
+          let relType = 'collab';
+          if (a.content_category === b.content_category && a.follower_tier === b.follower_tier) relType = 'rival';
 
           await db.SocialProfileRelationship.create({
             source_profile_id: a.id,
@@ -818,7 +851,13 @@ async function scheduledRun() {
     console.error('[FeedScheduler] No database reference — skipping run');
     return;
   }
+  if (isRunning) {
+    console.log('[FeedScheduler] Previous cycle still running — skipping');
+    return;
+  }
 
+  isRunning = true;
+  emitSSE('cycle_start', { status: 'running', started_at: new Date().toISOString() });
   try {
     console.log('[FeedScheduler] ⏰ Scheduled cycle starting...');
     const report = await runFullCycle(_db);
@@ -826,18 +865,24 @@ async function scheduledRun() {
     if (runHistory.length > MAX_HISTORY) runHistory.shift();
 
     console.log(`[FeedScheduler] ✅ Cycle complete — ${report.summary.profiles_created} created | ${report.summary.profiles_finalized} finalized | ${report.summary.relationships_created} linked | ${report.duration_ms}ms`);
+    emitSSE('cycle_complete', { summary: report.summary, duration_ms: report.duration_ms, errors: report.errors });
 
     if (report.errors > 0) {
       console.log(`[FeedScheduler] ⚠️ ${report.errors} errors during cycle`);
     }
   } catch (err) {
     console.error('[FeedScheduler] ❌ Scheduled cycle failed:', err.message);
+    emitSSE('cycle_error', { error: err.message });
+  } finally {
+    isRunning = false;
+    emitSSE('cycle_end', { is_running: false });
   }
 }
 
 function startScheduler(intervalHours, db) {
   if (db) _db = db;
   if (schedulerTimer) clearInterval(schedulerTimer);
+  if (initialTimeout) clearTimeout(initialTimeout);
   if (intervalHours) {
     schedulerConfig.interval_hours = intervalHours;
     schedulerIntervalMs = intervalHours * 60 * 60 * 1000;
@@ -846,16 +891,20 @@ function startScheduler(intervalHours, db) {
   schedulerTimer = setInterval(scheduledRun, schedulerIntervalMs);
   console.log(`[FeedScheduler] 🕐 Scheduler started — running every ${schedulerConfig.interval_hours}h`);
   // First run after 15s delay (let server finish starting)
-  setTimeout(scheduledRun, 15000);
+  initialTimeout = setTimeout(scheduledRun, 15000);
 }
 
 function stopScheduler() {
   if (schedulerTimer) {
     clearInterval(schedulerTimer);
     schedulerTimer = null;
-    schedulerConfig.enabled = false;
-    console.log('[FeedScheduler] ⏹ Scheduler stopped');
   }
+  if (initialTimeout) {
+    clearTimeout(initialTimeout);
+    initialTimeout = null;
+  }
+  schedulerConfig.enabled = false;
+  console.log('[FeedScheduler] ⏹ Scheduler stopped');
 }
 
 function getSchedulerStatus() {
@@ -900,4 +949,5 @@ module.exports = {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  addSSEClient,
 };

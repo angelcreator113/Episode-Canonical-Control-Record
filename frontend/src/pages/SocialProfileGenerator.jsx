@@ -127,6 +127,43 @@ const PROTAGONISTS = [
   },
 ];
 
+function FeedPagination({ page, totalPages, loading, setPage }) {
+  if(loading||totalPages<=1)return null;
+  return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px 0',fontSize:13}}>
+      <PageBtn disabled={page<=1} onClick={()=>setPage(1)}>«</PageBtn>
+      <PageBtn disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>‹ Prev</PageBtn>
+      <span style={{color:C.inkLight,fontSize:12}}>Page {page} of {totalPages}</span>
+      <PageBtn disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next ›</PageBtn>
+      <PageBtn disabled={page>=totalPages} onClick={()=>setPage(totalPages)}>»</PageBtn>
+    </div>
+  );
+}
+
+function ExportDropdown({ exporting, onExport }) {
+  const [open,setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(!open)return;
+    const handler=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener('mousedown',handler);
+    return()=>document.removeEventListener('mousedown',handler);
+  },[open]);
+  return (
+    <div style={{position:'relative'}} ref={ref}>
+      <button onClick={()=>setOpen(!open)} disabled={exporting} style={{padding:'6px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`}}>
+        {exporting?'Exporting…':'Export'}
+      </button>
+      {open&&(
+        <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:C.radiusSm,boxShadow:C.shadowMd,zIndex:100,minWidth:120,overflow:'hidden'}}>
+          <button onClick={()=>{onExport('csv');setOpen(false);}} style={{width:'100%',padding:'8px 14px',textAlign:'left',fontSize:12,border:'none',background:'transparent',color:C.ink,cursor:'pointer'}}>Export CSV</button>
+          <button onClick={()=>{onExport('json');setOpen(false);}} style={{width:'100%',padding:'8px 14px',textAlign:'left',fontSize:12,border:'none',background:'transparent',color:C.ink,cursor:'pointer'}}>Export JSON</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function lalaClass(score) { return score>=7?'high':score>=4?'mid':'low'; }
 function getToken() { return localStorage.getItem('authToken')||localStorage.getItem('token')||sessionStorage.getItem('token'); }
 function authHeaders() { const t=getToken(); return t?{Authorization:`Bearer ${t}`,'Content-Type':'application/json'}:{'Content-Type':'application/json'}; }
@@ -149,6 +186,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [crossoverCount,setCrossoverCount] = useState(0);
   const PAGE_SIZE = 24;
   const [search,setSearch]       = useState('');
+  const [debouncedSearch,setDebouncedSearch] = useState('');
   const [sortBy,setSortBy]       = useState('score');
   const searchTimer = useRef(null);
   const [bulkMode,setBulkMode]   = useState(false);
@@ -216,7 +254,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       const pg=targetPage||page;
       const qs=new URLSearchParams();
       if(filterStatus)qs.set('status',filterStatus);
-      if(search.trim())qs.set('search',search.trim());
+      if(debouncedSearch.trim())qs.set('search',debouncedSearch.trim());
       qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',PAGE_SIZE);
       qs.set('feed_layer',feedLayer);
       if(filterArchetypes.length)qs.set('archetype',filterArchetypes.join(','));
@@ -236,7 +274,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       setCrossoverCount(data.crossoverCount||0);
     } catch(err){setError(err.message);}
     finally{setLoading(false);}
-  },[filterStatus,search,sortBy,page,feedLayer,filterArchetypes,filterPlatforms,filterCategory,filterRelevanceMin,filterRelevanceMax,filterAdultContent]);
+  },[filterStatus,debouncedSearch,sortBy,page,feedLayer,filterArchetypes,filterPlatforms,filterCategory,filterRelevanceMin,filterRelevanceMax,filterAdultContent]);
 
   useEffect(()=>{loadProfiles();},[loadProfiles]);
 
@@ -244,9 +282,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   useEffect(()=>{
     if(feedLayer!=='lalaverse'){setJustAwomanProfile(null);return;}
     fetch(`${API}?feed_layer=lalaverse&search=justawoman&limit=1`,{headers:authHeaders()})
-      .then(r=>r.json())
+      .then(r=>{if(!r.ok)throw new Error();return r.json();})
       .then(d=>{const jw=(d.profiles||[]).find(p=>p.is_justawoman_record);setJustAwomanProfile(jw||null);})
-      .catch(()=>{});
+      .catch(()=>{setJustAwomanProfile(null);});
   },[feedLayer]);
 
   // ── SSE job tracking ───────────────────────────────────────────────
@@ -272,7 +310,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   useEffect(()=>{
     const saved=localStorage.getItem('spg_active_job');
     if(saved){fetch(`${API}/bulk/jobs/${saved}`,{headers:authHeaders()}).then(r=>r.json()).then(d=>{if(d.job){setActiveJob(d.job);if(!['completed','failed','cancelled'].includes(d.job.status))connectJobSSE(saved);else localStorage.removeItem('spg_active_job');}}).catch(()=>{});}
-    return()=>{if(sseRef.current){sseRef.current.close();sseRef.current=null;}if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}};
+    return()=>{if(sseRef.current){sseRef.current.close();sseRef.current=null;}if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}if(searchTimer.current)clearTimeout(searchTimer.current);if(toastTimer.current)clearTimeout(toastTimer.current);};
   },[connectJobSSE]);
 
   const startJobPolling = (id,total)=>{localStorage.setItem('spg_active_job',id);setActiveJob({id,status:'pending',total:total||0,completed:0,failed:0});connectJobSSE(id);};
@@ -281,9 +319,20 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   const showToast = (message,type='success')=>{clearTimeout(toastTimer.current);setToast({message,type});toastTimer.current=setTimeout(()=>setToast(null),4000);};
 
+  // Fetch full profile (with all follower fields) when selecting
+  const selectProfile = async (profile)=>{
+    if(!profile){setSelected(null);return;}
+    if(selected?.id===profile.id){setSelected(null);return;}
+    setSelected(profile); // show immediately with partial data
+    try{
+      const res=await fetch(`${API}/${profile.id}`,{headers:authHeaders()});
+      if(res.ok){const d=await res.json();if(d.profile)setSelected(d.profile);}
+    }catch{}
+  };
+
   const changeFilter = s=>{setFilterStatus(s);setPage(1);setSelectedIds(new Set());};
   const changeSort   = s=>{setSortBy(s);setPage(1);};
-  const handleSearch = val=>{setSearch(val);clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>setPage(1),400);};
+  const handleSearch = val=>{setSearch(val);clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>{setDebouncedSearch(val);setPage(1);},400);};
 
   // ── Bulk helpers ───────────────────────────────────────────────────
   const toggleSelect = id=>{setSelectAllPages(false);setSelectedIds(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});};
@@ -291,7 +340,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const getBulkIds = async()=>{
     if(!selectAllPages)return[...selectedIds];
     const allIds=[];let pg=1;
-    while(true){const qs=new URLSearchParams();if(filterStatus)qs.set('status',filterStatus);if(search.trim())qs.set('search',search.trim());qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',100);const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});const d=await res.json();const batch=(d.profiles||[]).map(p=>p.id);allIds.push(...batch);if(batch.length<100||allIds.length>=(d.total||0))break;pg++;}
+    while(true){const qs=new URLSearchParams();if(filterStatus)qs.set('status',filterStatus);if(feedLayer)qs.set('feed_layer',feedLayer);if(search.trim())qs.set('search',search.trim());qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',100);const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});const d=await res.json();const batch=(d.profiles||[]).map(p=>p.id);allIds.push(...batch);if(batch.length<100||allIds.length>=(d.pagination?.total||d.total||0))break;pg++;}
     return allIds;
   };
   const runBulk = async(ids,endpoint)=>{const results=[];for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);const res=await fetch(`${API}/${endpoint}`,{method:'POST',headers:authHeaders(),body:JSON.stringify({ids:chunk})});const d=await res.json();if(!res.ok)throw new Error(d.error);results.push(d);}return results;};
@@ -307,7 +356,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       const res=await fetch(`${API}/generate`,{method:'POST',headers:authHeaders(),body:JSON.stringify({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})})});
       const data=await res.json();
       if(!res.ok)throw new Error(data.error||'Generation failed');
-      setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);loadProfiles(1);
+      setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);
     }catch(err){setError(err.message);}
     finally{setGenerating(false);}
   };
@@ -383,13 +432,29 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const loadFollowStats = async ()=>{
     try{
       const res=await fetch(`${API}/follow-engine/stats`,{headers:authHeaders()});
+      if(!res.ok)throw new Error('Failed to load follow stats');
       const data=await res.json();
       setFollowStats(data);
-    }catch{}
+    }catch(err){console.warn('loadFollowStats:',err.message);}
   };
 
   // ── Feed Automation helpers ──────────────────────────────────────────
   const SCHED_API = '/api/v1/feed-scheduler';
+  const schedSSERef = useRef(null);
+
+  // Connect to scheduler SSE when automation tab is active
+  useEffect(()=>{
+    if(feedView!=='automation')return;
+    const es=new EventSource(`${SCHED_API}/events`);
+    schedSSERef.current=es;
+    es.addEventListener('connected',e=>{try{setAutoStatus(JSON.parse(e.data));}catch{}});
+    es.addEventListener('cycle_start',()=>{setAutoRunning(true);});
+    es.addEventListener('cycle_complete',e=>{try{const d=JSON.parse(e.data);showToast(`Cycle complete: ${d.summary?.profiles_created||0} created`);loadAutoStatus();loadProfiles();}catch{}});
+    es.addEventListener('cycle_end',()=>{setAutoRunning(false);});
+    es.addEventListener('cycle_error',e=>{try{const d=JSON.parse(e.data);showToast('Cycle error: '+d.error,'error');}catch{}setAutoRunning(false);});
+    es.onerror=()=>{es.close();schedSSERef.current=null;};
+    return()=>{es.close();schedSSERef.current=null;};
+  },[feedView]);
   const loadAutoStatus = async ()=>{
     try{
       const [statusRes,histRes,layerRes]=await Promise.all([
@@ -397,18 +462,18 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
         fetch(`${SCHED_API}/history?limit=5`,{headers:authHeaders()}),
         fetch(`${SCHED_API}/layer-status`,{headers:authHeaders()}),
       ]);
-      setAutoStatus(await statusRes.json());
-      const hd=await histRes.json();
-      setAutoHistory(hd.history||[]);
-      setLayerStatus((await layerRes.json()).layers||null);
-    }catch{}
+      if(statusRes.ok)setAutoStatus(await statusRes.json());
+      if(histRes.ok){const hd=await histRes.json();setAutoHistory(hd.history||[]);}
+      if(layerRes.ok)setLayerStatus((await layerRes.json()).layers||null);
+    }catch(err){console.warn('loadAutoStatus:',err.message);}
   };
 
   const toggleScheduler = async (action)=>{
     try{
-      await fetch(`${SCHED_API}/${action}`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()}});
+      const res=await fetch(`${SCHED_API}/${action}`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()}});
+      if(!res.ok){const e=await res.json().catch(()=>({}));showToast(e.error||'Scheduler action failed','error');}
       await loadAutoStatus();
-    }catch{}
+    }catch(err){showToast('Scheduler action failed: '+err.message,'error');}
   };
 
   const runAutoNow = async ()=>{
@@ -435,9 +500,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   const updateAutoConfig = async (updates)=>{
     try{
-      await fetch(`${SCHED_API}/config`,{method:'PUT',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify(updates)});
+      const res=await fetch(`${SCHED_API}/config`,{method:'PUT',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify(updates)});
+      if(!res.ok){const e=await res.json().catch(()=>({}));showToast(e.error||'Config update failed','error');}
       await loadAutoStatus();
-    }catch{}
+    }catch(err){showToast('Config update failed: '+err.message,'error');}
   };
 
   // ── Auto-Generate (background job — continues even if you leave the page) ──
@@ -468,9 +534,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     setDiversityLoading(true);
     try{
       const res=await fetch(`${API}/analytics/composition?feed_layer=${feedLayer}`,{headers:authHeaders()});
+      if(!res.ok)throw new Error('Failed to load analytics');
       const data=await res.json();
       setDiversityData(data);
-    }catch{}
+    }catch(err){console.warn('loadDiversity:',err.message);}
     finally{setDiversityLoading(false);}
   };
 
@@ -479,9 +546,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     setMomentsLoading(true);
     try{
       const res=await fetch(`${API}/moments/timeline?feed_layer=${feedLayer}&limit=50`,{headers:authHeaders()});
+      if(!res.ok)throw new Error('Failed to load moments');
       const data=await res.json();
       setMomentsData(data);
-    }catch{}
+    }catch(err){console.warn('loadMoments:',err.message);}
     finally{setMomentsLoading(false);}
   };
 
@@ -490,15 +558,17 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     setSuggestionsLoading(true);
     try{
       const res=await fetch(`${API}/relationships/suggestions?feed_layer=${feedLayer}&limit=20`,{headers:authHeaders()});
+      if(!res.ok)throw new Error('Failed to load suggestions');
       const data=await res.json();
       setSuggestions(data);
-    }catch{}
+    }catch(err){console.warn('loadSuggestions:',err.message);}
     finally{setSuggestionsLoading(false);}
   };
 
   const acceptSuggestion = async (sourceId,targetId,relType)=>{
     try{
-      await fetch(`${API}/relationships/suggestions/accept`,{method:'POST',headers:authHeaders(),body:JSON.stringify({source_id:sourceId,target_id:targetId,relationship_type:relType})});
+      const res=await fetch(`${API}/relationships/suggestions/accept`,{method:'POST',headers:authHeaders(),body:JSON.stringify({source_id:sourceId,target_id:targetId,relationship_type:relType})});
+      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||'Accept failed');}
       showToast('Relationship created');
       loadSuggestions();
     }catch(err){setError(err.message);}
@@ -506,7 +576,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   // ── Templates loader ────────────────────────────────────────────
   const loadTemplates = async ()=>{
-    try{const res=await fetch(`${API}/templates`,{headers:authHeaders()});const d=await res.json();setTemplates(d.templates||[]);}catch{}
+    try{const res=await fetch(`${API}/templates`,{headers:authHeaders()});if(!res.ok)throw new Error('Failed to load templates');const d=await res.json();setTemplates(d.templates||[]);}catch(err){console.warn('loadTemplates:',err.message);}
   };
 
   const saveAsTemplate = async (profileId)=>{
@@ -520,7 +590,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   };
 
   const deleteTemplate = async (templateId)=>{
-    try{await fetch(`${API}/templates/${templateId}`,{method:'DELETE',headers:authHeaders()});setTemplates(t=>t.filter(x=>x.id!==templateId));}catch{}
+    try{const res=await fetch(`${API}/templates/${templateId}`,{method:'DELETE',headers:authHeaders()});if(!res.ok)throw new Error('Delete failed');setTemplates(t=>t.filter(x=>x.id!==templateId));}catch(err){showToast('Delete template failed: '+err.message,'error');}
   };
 
   // ── Crossing Approval ───────────────────────────────────────────
@@ -554,18 +624,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   // Use displayCounts (native + crossover) for tab badges so they match the grid
   const tabCounts = displayCounts;
 
-  const Pagination = ()=>{
-    if(loading||totalPages<=1)return null;
-    return (
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px 0',fontSize:13}}>
-        <PageBtn disabled={page<=1} onClick={()=>setPage(1)}>«</PageBtn>
-        <PageBtn disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>‹ Prev</PageBtn>
-        <span style={{color:C.inkLight,fontSize:12}}>Page {page} of {totalPages}</span>
-        <PageBtn disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next ›</PageBtn>
-        <PageBtn disabled={page>=totalPages} onClick={()=>setPage(totalPages)}>»</PageBtn>
-      </div>
-    );
-  };
+  const paginationProps = { page, totalPages, loading, setPage };
 
   // ────────────────────────────────────────────────────────────────────
   return (
@@ -677,7 +736,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
       {/* ── Bulk Import View ─────────────────────────────────── */}
       {view==='bulk' && (
-        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);loadProfiles(1);}} characterContext={protagonist.context} characterKey={protagonist.key} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
+        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);}} characterContext={protagonist.context} characterKey={protagonist.key} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
       )}
 
       {view==='feed' && <>
@@ -873,15 +932,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </div>
             <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
               {/* Export dropdown */}
-              <div style={{position:'relative'}}>
-                <button onClick={()=>document.getElementById('feed-export-menu')?.classList.toggle('open')} disabled={exporting} style={{padding:'6px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`}}>
-                  {exporting?'Exporting…':'Export'}
-                </button>
-                <div id="feed-export-menu" style={{display:'none',position:'absolute',top:'calc(100% + 4px)',right:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:C.radiusSm,boxShadow:C.shadowMd,zIndex:100,minWidth:120,overflow:'hidden'}}>
-                  <button onClick={()=>{exportProfiles('csv');document.getElementById('feed-export-menu')?.classList.remove('open');}} style={{width:'100%',padding:'8px 14px',textAlign:'left',fontSize:12,border:'none',background:'transparent',color:C.ink,cursor:'pointer'}}>Export CSV</button>
-                  <button onClick={()=>{exportProfiles('json');document.getElementById('feed-export-menu')?.classList.remove('open');}} style={{width:'100%',padding:'8px 14px',textAlign:'left',fontSize:12,border:'none',background:'transparent',color:C.ink,cursor:'pointer'}}>Export JSON</button>
-                </div>
-              </div>
+              <ExportDropdown exporting={exporting} onExport={exportProfiles}/>
               <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Search handle or name…" style={{padding:'6px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:200}}/>
               <select value={sortBy} onChange={e=>changeSort(e.target.value)} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,background:C.surface}}>
                 <option value="score">Score ↓</option>
@@ -970,7 +1021,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
           )}
 
           <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
-            <Pagination/>
+            <FeedPagination {...paginationProps}/>
             {/* JustAWoman's pinned record — Lala's Feed only */}
             {feedLayer==='lalaverse'&&justAwomanProfile&&page===1&&!search&&(
               <div style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${C.pink}`,marginBottom:16,overflow:'hidden',boxShadow:C.shadowMd}}>
@@ -1014,7 +1065,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                   const score=p.lala_relevance_score??d.lala_relevance_score??0;
                   const lc=lalaClass(score);
                   return (
-                    <div key={p.id} onClick={()=>bulkMode?toggleSelect(p.id):setSelected(selected?.id===p.id?null:p)}
+                    <div key={p.id} onClick={()=>bulkMode?toggleSelect(p.id):selectProfile(selected?.id===p.id?null:p)}
                       style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${isActive?C.lavender:isChecked?C.lavender+'80':(feedLayer==='lalaverse'&&p.feed_layer==='real_world')?C.blue+'60':C.border}`,cursor:'pointer',overflow:'hidden',boxShadow:isActive?C.shadowMd:C.shadow,transition:'all 0.15s',position:'relative'}}>
                       <div style={{height:3,background:(feedLayer==='lalaverse'&&p.feed_layer==='real_world')?`linear-gradient(90deg,${C.blue},${C.lavender})`:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
                       {bulkMode && (
@@ -1091,7 +1142,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>setSelected(p)}>{p.display_name||d.display_name||p.handle}</span>
+                            <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>selectProfile(p)}>{p.display_name||d.display_name||p.handle}</span>
                             {sc&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:sc.bg,color:sc.color}}>{sc.label}</span>}
                           </div>
                           <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {p.platform} · {p.follower_count_approx||d.follower_count_approx}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
@@ -1155,8 +1206,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                       )}
                       {/* Quick actions */}
                       <div style={{padding:'8px 16px',borderTop:`1px solid ${C.border}`,display:'flex',gap:8}}>
-                        <button onClick={()=>setSelected(p)} style={{fontSize:11,color:C.lavender,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>View Full Profile</button>
-                        <button onClick={()=>{loadSceneContext(p.id);setSelected(p);setDetailTab('scene');}} style={{fontSize:11,color:C.blue,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Use in Scene</button>
+                        <button onClick={()=>selectProfile(p)} style={{fontSize:11,color:C.lavender,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>View Full Profile</button>
+                        <button onClick={()=>{loadSceneContext(p.id);selectProfile(p);setDetailTab('scene');}} style={{fontSize:11,color:C.blue,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Use in Scene</button>
                         <button onClick={()=>saveAsTemplate(p.id)} style={{fontSize:11,color:C.pink,background:'none',border:'none',cursor:'pointer',fontWeight:600,marginLeft:'auto'}}>Save Template</button>
                       </div>
                     </div>
@@ -1276,7 +1327,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                     const d=fp(p);
                     const followers=p.followers||[];
                     return (
-                      <div key={p.id} onClick={()=>setSelected(p)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',background:C.surface,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,cursor:'pointer'}}>
+                      <div key={p.id} onClick={()=>selectProfile(p)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',background:C.surface,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,cursor:'pointer'}}>
                         <span style={{fontSize:13,fontWeight:700,color:C.ink,minWidth:120}}>{p.handle}</span>
                         <span style={{fontSize:11,color:C.inkLight,flex:1}}>{p.display_name||d.display_name||''}</span>
                         <div style={{display:'flex',gap:4}}>
@@ -1713,7 +1764,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                 )}
               </div>
             )}
-            <Pagination/>
+            <FeedPagination {...paginationProps}/>
           </div>
         </div>
       </>}
@@ -1775,8 +1826,12 @@ function FeedStatePicker({ profile, onStateChange }) {
   const changeState = async newState=>{
     if(newState===current||saving)return;
     setSaving(true);
-    try{await fetch(`${API}/${profile.id}`,{method:'PATCH',headers:authHeaders(),body:JSON.stringify({current_state:newState})});onStateChange?.();}
-    catch(err){console.error('State change failed:',err);}
+    try{
+      const res=await fetch(`${API}/${profile.id}`,{method:'PATCH',headers:authHeaders(),body:JSON.stringify({current_state:newState})});
+      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||'State change failed');}
+      onStateChange?.(newState);
+    }
+    catch(err){console.error('State change failed:',err);alert('State change failed: '+(err.message||'Unknown error'));}
     finally{setSaving(false);setOpen(false);}
   };
   return (
@@ -1866,7 +1921,7 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:C.inkLight,lineHeight:1,flexShrink:0}}>×</button>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-          <FeedStatePicker profile={p} onStateChange={onRefresh}/>
+          <FeedStatePicker profile={p} onStateChange={(newState)=>{p.current_state=newState;onRefresh();}}/>
           {editing?(
             <>
               <button onClick={()=>{onEdit(p.id,draft);setEditing(false);}} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:'none',cursor:'pointer'}}>✓ Save</button>
