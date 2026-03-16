@@ -74,8 +74,8 @@ html, body {
 .se-topbar {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 20px;
+  gap: 8px;
+  padding: 6px 16px;
   padding-right: 64px; /* room for Amber trigger */
   border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
@@ -192,14 +192,256 @@ html, body {
 }
 
 /* ─────────────────────────────────────────
-   Optional mobile deck wrapper
+   Body — sidebar + workspace
 ────────────────────────────────────────── */
-.se-mobile-deck {
-  display: contents;
+.se-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* ─────────────────────────────────────────
-   Character selector
+   Left sidebar
+────────────────────────────────────────── */
+.se-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--se-border-light);
+  background: var(--se-surface);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--se-border) transparent;
+}
+
+.se-sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.se-sidebar::-webkit-scrollbar-thumb {
+  background: var(--se-border);
+  border-radius: 999px;
+}
+
+.se-sidebar-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--se-border-light);
+}
+
+.se-sidebar-section:last-child {
+  border-bottom: none;
+}
+
+.se-sidebar-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--se-text-dim);
+  margin-bottom: 8px;
+}
+
+.se-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--se-text-muted);
+  margin-bottom: 4px;
+}
+
+.se-sidebar-toggle:hover {
+  color: var(--se-text);
+}
+
+.se-sidebar-toggle-arrow {
+  font-size: 10px;
+  color: var(--se-text-dim);
+}
+
+/* World pills — compact toggle */
+.se-world-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.se-world-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--se-border);
+  background: var(--se-surface);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--se-text);
+  transition: all 0.2s ease;
+}
+
+.se-world-pill:hover {
+  border-color: var(--se-border-strong);
+}
+
+.se-world-pill-name {
+  font-weight: 600;
+}
+
+.se-world-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.se-world-pill-dot.open {
+  background: var(--se-success);
+  box-shadow: 0 0 4px rgba(16,185,129,0.4);
+}
+
+.se-world-pill-dot.closed {
+  background: var(--se-danger);
+  box-shadow: 0 0 4px rgba(239,68,68,0.3);
+}
+
+/* Sidebar sparks */
+.se-sparks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.se-sparks-loading {
+  font-size: 11px;
+  color: var(--se-text-dim);
+  padding: 4px 0;
+}
+
+.se-spark-card {
+  padding: 8px 10px;
+  background: var(--se-cream);
+  border-radius: 8px;
+  border: 1px solid var(--se-border-light);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--se-text);
+}
+
+.se-spark-type {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--se-gold);
+  margin-bottom: 2px;
+}
+
+.se-spark-text {
+  color: var(--se-text-muted);
+}
+
+/* Sidebar shortcuts */
+.se-sidebar-shortcuts {
+  padding: 10px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--se-text-dim);
+  border-top: 1px solid var(--se-border-light);
+  margin-top: auto;
+}
+
+.se-sidebar-shortcuts span {
+  padding: 2px 6px;
+  background: var(--se-surface2);
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Sidebar arc — tighter */
+.se-sidebar-arc .se-arc-progress {
+  gap: 6px;
+}
+
+.se-sidebar-arc .se-arc-phase {
+  padding: 0;
+}
+
+.se-sidebar-arc .se-arc-phase-label {
+  font-size: 10px;
+}
+
+.se-sidebar-arc .se-arc-phase-count {
+  font-size: 10px;
+}
+
+.se-sidebar-arc .se-arc-dots {
+  gap: 2px;
+}
+
+.se-sidebar-arc .se-arc-dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* Sidebar stats — compact */
+.se-sidebar-section .se-stats-dashboard {
+  padding: 0;
+  border: none;
+  margin: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.se-sidebar-section .se-stats-grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.se-sidebar-section .se-stat-card {
+  padding: 8px 10px;
+}
+
+.se-sidebar-section .se-stat-value {
+  font-size: 16px;
+}
+
+.se-sidebar-section .se-stat-label {
+  font-size: 9px;
+}
+
+.se-sidebar-section .se-stats-phase-row {
+  margin-top: 6px;
+}
+
+/* Character selector — sidebar-fitted */
+.se-sidebar .se-char-selector {
+  padding: 0;
+  border-bottom: none;
+  background: none;
+}
+
+.se-sidebar .se-char-trigger {
+  max-width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+/* ─────────────────────────────────────────
+   Character selector (shared)
 ────────────────────────────────────────── */
 .se-char-selector {
   position: relative;
@@ -2171,8 +2413,12 @@ html, body {
    Responsive
 ────────────────────────────────────────── */
 @media (max-width: 1100px) {
+  .se-sidebar {
+    width: 220px;
+  }
+
   .se-task-list {
-    width: 310px;
+    width: 280px;
   }
 
   .se-story-text,
@@ -2208,23 +2454,13 @@ html, body {
     min-height: 44px;
   }
 
-  .se-topbar-title { font-size: 17px; }
   .se-btn-back { padding: 6px 8px; font-size: 11px; min-height: 32px; }
-  .se-btn-stats-toggle { padding: 6px 10px; font-size: 10px; min-height: 32px; }
-  .se-world-toggles { display: none; }
 
-  /* ── Mobile deck: compact character + arc summary ── */
-  .se-mobile-deck {
-    display: flex;
+  /* ── Hide sidebar on mobile, stack body vertically ── */
+  .se-sidebar { display: none; }
+
+  .se-body {
     flex-direction: column;
-    margin: 0;
-    padding: 8px 14px;
-    background: var(--se-surface);
-    border-bottom: 1px solid var(--se-border-light);
-    border-radius: 0;
-    box-shadow: none;
-    overflow: visible;
-    flex-shrink: 0;
   }
 
   .se-mobile-deck .se-char-selector {
