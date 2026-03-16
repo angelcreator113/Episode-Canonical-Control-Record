@@ -433,6 +433,16 @@ function StoryPanel({
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'unsaved'
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
 
+  // Sync selectedVoice when parent character changes
+  useEffect(() => {
+    if (selectedCharKey) setSelectedVoice(selectedCharKey);
+  }, [selectedCharKey]);
+
+  // Reset save status when switching stories
+  useEffect(() => {
+    setSaveStatus('saved');
+  }, [story?.story_number]);
+
   // Track unsaved changes
   useEffect(() => {
     if (editing && editText !== (story?.text || '')) {
@@ -609,11 +619,15 @@ function StoryPanel({
     ? editText.split(/\s+/).filter(Boolean).length
     : (story.word_count || 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaveStatus('saving');
-    onEdit(story, editText);
-    setEditing(false);
-    setTimeout(() => setSaveStatus('saved'), 600);
+    try {
+      await onEdit(story, editText);
+      setSaveStatus('saved');
+      setEditing(false);
+    } catch (e) {
+      setSaveStatus('unsaved');
+    }
   };
 
   return (
