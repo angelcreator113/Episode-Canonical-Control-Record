@@ -1256,10 +1256,12 @@ router.post('/:id/cross', optionalAuth, guardJustAWomanRecord, async (req, res) 
 
     // Auto-create registry character from social profile
     let registryCharacter = null;
-    if (registry_id || profile.registry_character_id) {
-      const targetRegistry = registry_id || (await db.CharacterRegistry.findOne({ order: [['created_at', 'DESC']] }))?.id;
+    if (registry_id && !profile.registry_character_id) {
+      const targetRegistry = db.CharacterRegistry
+        ? (registry_id || (await db.CharacterRegistry.findOne({ order: [['created_at', 'DESC']] }))?.id)
+        : null;
 
-      if (targetRegistry) {
+      if (targetRegistry && db.RegistryCharacter) {
         const charKey = profile.handle.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
         registryCharacter = await db.RegistryCharacter.create({
           registry_id: targetRegistry,
@@ -1663,7 +1665,7 @@ router.get('/follow-engine/evaluate/:id', optionalAuth, async (req, res) => {
             adult_penalty: dbp.adult_penalty || 0,
             same_platform_bonus: dbp.same_platform_bonus || {},
             follower_tier_affinity: dbp.follower_tier_affinity || {},
-            base_follow_threshold: dbp.base_follow_threshold || 0.45,
+            base_follow_threshold: dbp.base_follow_threshold ?? 0.45,
           };
           evaluations[dbp.character_key] = computeFollowScore(dbp.character_key, profileData, dynProfile);
         }
@@ -1717,7 +1719,7 @@ router.post('/follow-engine/run', optionalAuth, async (req, res) => {
                 adult_penalty: dbp.adult_penalty || 0,
                 same_platform_bonus: dbp.same_platform_bonus || {},
                 follower_tier_affinity: dbp.follower_tier_affinity || {},
-                base_follow_threshold: dbp.base_follow_threshold || 0.45,
+                base_follow_threshold: dbp.base_follow_threshold ?? 0.45,
               };
               evals[dbp.character_key] = computeFollowScore(dbp.character_key, profileData, dynProfile);
             }
@@ -2461,7 +2463,7 @@ router.post('/relationships/suggestions/accept', optionalAuth, async (req, res) 
     const [rel, created] = await db.SocialProfileRelationship.findOrCreate({
       where: { source_profile_id: source_id, target_profile_id: target_id },
       defaults: {
-        relationship_type: relationship_type || 'orbit',
+        relationship_type: VALID_REL_TYPES.has(relationship_type) ? relationship_type : 'collab',
         description: description || 'Discovered via automated suggestion',
         auto_generated: true,
         direction: 'mutual',
