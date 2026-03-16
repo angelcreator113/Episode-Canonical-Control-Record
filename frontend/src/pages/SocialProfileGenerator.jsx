@@ -291,7 +291,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const getBulkIds = async()=>{
     if(!selectAllPages)return[...selectedIds];
     const allIds=[];let pg=1;
-    while(true){const qs=new URLSearchParams();if(filterStatus)qs.set('status',filterStatus);if(search.trim())qs.set('search',search.trim());qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',100);const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});const d=await res.json();const batch=(d.profiles||[]).map(p=>p.id);allIds.push(...batch);if(batch.length<100||allIds.length>=(d.total||0))break;pg++;}
+    while(true){const qs=new URLSearchParams();if(filterStatus)qs.set('status',filterStatus);if(feedLayer)qs.set('feed_layer',feedLayer);if(search.trim())qs.set('search',search.trim());qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',100);const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});const d=await res.json();const batch=(d.profiles||[]).map(p=>p.id);allIds.push(...batch);if(batch.length<100||allIds.length>=(d.pagination?.total||d.total||0))break;pg++;}
     return allIds;
   };
   const runBulk = async(ids,endpoint)=>{const results=[];for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);const res=await fetch(`${API}/${endpoint}`,{method:'POST',headers:authHeaders(),body:JSON.stringify({ids:chunk})});const d=await res.json();if(!res.ok)throw new Error(d.error);results.push(d);}return results;};
@@ -307,7 +307,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       const res=await fetch(`${API}/generate`,{method:'POST',headers:authHeaders(),body:JSON.stringify({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})})});
       const data=await res.json();
       if(!res.ok)throw new Error(data.error||'Generation failed');
-      setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);loadProfiles(1);
+      setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);
     }catch(err){setError(err.message);}
     finally{setGenerating(false);}
   };
@@ -677,7 +677,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
       {/* ── Bulk Import View ─────────────────────────────────── */}
       {view==='bulk' && (
-        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);loadProfiles(1);}} characterContext={protagonist.context} characterKey={protagonist.key} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
+        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);}} characterContext={protagonist.context} characterKey={protagonist.key} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
       )}
 
       {view==='feed' && <>
