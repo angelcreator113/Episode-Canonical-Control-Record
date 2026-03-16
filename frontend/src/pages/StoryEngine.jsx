@@ -7,6 +7,14 @@ import './StoryEngine.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
+// Helper: build headers with auth token when available
+function authHeaders(extra = {}) {
+  const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+  const headers = { 'Content-Type': 'application/json', ...extra };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
 // ─── Reading time helper ──────────────────────────────────────────────────────
 const getReadingTime = (wordCount) => {
   if (!wordCount) return null;
@@ -1546,7 +1554,7 @@ export default function StoryEngine() {
     try {
       const res = await fetch(`${API_BASE}/stories`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           character_key: selectedChar,
           story_number: story.story_number,
@@ -1589,6 +1597,33 @@ export default function StoryEngine() {
     setApprovedStories(nextApproved);
     setSavedStories(prev => [...new Set([...prev, story.story_number])]);
     setCachedStories(selectedChar, stories, nextApproved);
+
+    // Persist approved story to database
+    try {
+      const task = tasks.find(t => t.story_number === story.story_number);
+      await fetch(`${API_BASE}/stories`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          character_key: selectedChar,
+          story_number: story.story_number,
+          title: story.title,
+          text: story.text,
+          phase: story.phase,
+          story_type: story.story_type,
+          word_count: story.word_count || story.text?.split(/\s+/).length,
+          status: 'approved',
+          task_brief: task,
+          new_character: story.new_character,
+          new_character_name: story.new_character_name,
+          new_character_role: story.new_character_role,
+          opening_line: story.opening_line,
+        }),
+      });
+    } catch (e) {
+      console.error('story persist error:', e);
+      addToast('Failed to save approved story to database', 'error');
+    }
 
     setTherapyLoading(true);
     let extractedMemories = null;
@@ -1837,7 +1872,7 @@ export default function StoryEngine() {
       const task = tasks.find(t => t.story_number === story.story_number);
       await fetch(`${API_BASE}/stories`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           character_key: selectedChar,
           story_number: story.story_number,
