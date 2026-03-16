@@ -4,7 +4,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { buildArcContext } = require('./arcTrackingService');
 
 const client = new Anthropic();
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-sonnet-4-20250514';
 
 // ── Body relationship ENUM → narrative lookup ────────────────────────
 const BODY_RELATIONSHIP_NARRATIVES = {
