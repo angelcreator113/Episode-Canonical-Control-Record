@@ -7130,23 +7130,45 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
     const { Op } = require('sequelize');
     const { CharacterRegistry, RegistryCharacter } = require('../models');
 
-    const characters = await RegistryCharacter.findAll({
-      where: {
-        status: { [Op.in]: ['accepted', 'finalized'] },
-      },
-      include: [{
-        model: CharacterRegistry,
-        as: 'registry',
-        attributes: ['id', 'title', 'book_tag'],
-      }],
-      attributes: [
-        'id', 'character_key', 'display_name', 'icon', 'role_type',
-        'world',
-        'core_desire', 'core_fear', 'core_wound', 'description',
-        'career_status', 'portrait_url',
-      ],
-      order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
-    });
+    if (!RegistryCharacter) {
+      return res.json({ success: true, worlds: {}, total: 0 });
+    }
+
+    // Try with full columns first; fall back if sort_order/world don't exist yet
+    let characters;
+    try {
+      characters = await RegistryCharacter.findAll({
+        where: {
+          status: { [Op.in]: ['accepted', 'finalized'] },
+        },
+        include: [{
+          model: CharacterRegistry,
+          as: 'registry',
+          attributes: ['id', 'title', 'book_tag'],
+        }],
+        attributes: [
+          'id', 'character_key', 'display_name', 'icon', 'role_type',
+          'world',
+          'core_desire', 'core_fear', 'core_wound', 'description',
+          'career_status', 'portrait_url',
+        ],
+        order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
+      });
+    } catch (queryErr) {
+      // Fallback: columns like sort_order or world may not exist yet
+      console.warn('[story-engine-characters] full query failed, trying fallback:', queryErr.message);
+      characters = await RegistryCharacter.findAll({
+        where: {
+          status: { [Op.in]: ['accepted', 'finalized'] },
+        },
+        include: [{
+          model: CharacterRegistry,
+          as: 'registry',
+          attributes: ['id', 'title', 'book_tag'],
+        }],
+        order: [['display_name', 'ASC']],
+      });
+    }
 
     // Group by world column — never show 'unknown'
     const byWorld = {};
@@ -8440,12 +8462,29 @@ Format:
   ]
 }`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
-    });
+    let response;
+    try {
+      response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 16000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+      });
+    } catch (apiErr) {
+      const isRetryable = apiErr.status === 529 || apiErr.status === 503 || apiErr.status === 404;
+      console.error('[generate-story-tasks] primary model failed:', apiErr.status, apiErr.message);
+      if (isRetryable) {
+        await new Promise(r => setTimeout(r, 2000));
+        response = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 16000,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+        });
+      } else {
+        throw apiErr;
+      }
+    }
 
     const raw = response.content?.[0]?.text || '';
     let parsed;

@@ -295,6 +295,7 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
 }
 
 // ─── Arc progress bar ────────────────────────────────────────────────────────
+const ARC_SHORT_LABELS = { establishment: 'Estab.', pressure: 'Press.', crisis: 'Crisis', integration: 'Integ.' };
 function ArcProgress({ approvedStories, savedStories = [], stories = {} }) {
   const phases = ['establishment', 'pressure', 'crisis', 'integration'];
   const phaseRanges = { establishment: [1,10], pressure: [11,25], crisis: [26,40], integration: [41,50] };
@@ -308,8 +309,8 @@ function ArcProgress({ approvedStories, savedStories = [], stories = {} }) {
         const pct = Math.round((approved / total) * 100);
         return (
           <div key={phase} className="se-arc-phase">
-            <div className="se-arc-phase-label" style={{ color: PHASE_COLORS[phase] }}>
-              {PHASE_LABELS[phase]}
+            <div className="se-arc-phase-label" style={{ color: PHASE_COLORS[phase] }} title={PHASE_LABELS[phase]}>
+              {ARC_SHORT_LABELS[phase]}
             </div>
             <div className="se-arc-phase-bar">
               <div
