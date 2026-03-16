@@ -6961,17 +6961,18 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
       }],
       attributes: [
         'id', 'character_key', 'display_name', 'icon', 'role_type',
+        'world',
         'core_desire', 'core_fear', 'core_wound', 'description',
         'career_status', 'portrait_url',
       ],
       order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
     });
 
-    // Group by world (book_tag)
+    // Group by world column — never show 'unknown'
     const byWorld = {};
     const seen = new Set(); // deduplicate by character_key
     for (const char of characters) {
-      const world = char.registry?.book_tag || 'unknown';
+      const world = char.world || 'book-1'; // fallback to book-1, never unknown
       // Skip duplicates (same character_key in same world)
       const dedupeKey = `${world}:${char.character_key}`;
       if (seen.has(dedupeKey)) continue;
@@ -6994,6 +6995,11 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
         description: char.description || null,
       });
     }
+
+    // Remove empty worlds before sending
+    Object.keys(byWorld).forEach(k => {
+      if (!byWorld[k].length) delete byWorld[k];
+    });
 
     return res.json({
       success: true,

@@ -220,6 +220,7 @@ router.post('/registries/:id/characters', async (req, res) => {
       icon: icon || null,
       display_name: display_name || 'New Character',
       subtitle: subtitle || null,
+      world: req.body.world || req.body.layer || 'book-1',
       role_type: role_type || 'pressure',
       role_label: role_label || null,
       appearance_mode: appearance_mode || 'on_page',
@@ -544,7 +545,7 @@ router.put('/characters/:id', express.json(), async (req, res) => {
     ];
 
     const allowed = [
-      'character_key', 'icon', 'display_name', 'subtitle', 'role_type', 'role_label',
+      'character_key', 'icon', 'display_name', 'subtitle', 'world', 'role_type', 'role_label',
       'appearance_mode', 'status', 'core_belief', 'pressure_type', 'pressure_quote',
       'personality', 'job_options', 'description', 'name_options', 'selected_name',
       'personality_matrix', 'extra_fields', 'sort_order', 'portrait_url',

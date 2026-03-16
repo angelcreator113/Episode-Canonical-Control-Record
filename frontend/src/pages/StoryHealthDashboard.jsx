@@ -6,7 +6,6 @@
  * evaluation scores, recent activity.
  */
 import { useState, useEffect, useMemo } from 'react';
-import StoryHubNav from '../components/StoryHubNav';
 import './StoryEngine.css';
 
 const API = '/api/v1/story-health';
@@ -38,7 +37,6 @@ export default function StoryHealthDashboard() {
   if (loading) {
     return (
       <div className="se-page">
-        <div style={{ padding: '10px 16px 0' }}><StoryHubNav /></div>
         <div style={{ textAlign: 'center', padding: 80, color: '#999' }}>Loading dashboard…</div>
       </div>
     );
@@ -50,8 +48,6 @@ export default function StoryHealthDashboard() {
 
   return (
     <div className="se-page">
-      <div style={{ padding: '10px 16px 0' }}><StoryHubNav /></div>
-
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 40px' }}>
         <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 500, color: 'var(--se-text)', margin: '20px 0 8px' }}>
           Story Health Dashboard

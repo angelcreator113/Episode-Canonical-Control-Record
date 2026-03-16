@@ -43,6 +43,11 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(255),
       allowNull: true,
     },
+    world: {
+      type: DataTypes.ENUM('book-1', 'lalaverse', 'series-2'),
+      allowNull: true,
+      comment: 'Which world this character belongs to.',
+    },
     role_type: {
       type: DataTypes.ENUM('protagonist', 'pressure', 'mirror', 'support', 'shadow', 'special'),
       defaultValue: 'pressure',
