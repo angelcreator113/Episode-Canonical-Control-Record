@@ -12,6 +12,7 @@
  *  3. Auto-Relate   — triggers relationship auto-generation for unlinked profiles
  *  4. Auto-Follow   — re-evaluates follow engine for stale profiles
  *  5. Auto-Cross    — identifies profiles ready for story crossing
+ *  6. Auto-Discover — discovers potential relationships between unlinked profiles
  */
 
 /* eslint-disable no-console */
@@ -24,6 +25,67 @@ const {
   inferCareerPressure,
   inferFollowerTier,
 } = require('../utils/feedProfileUtils');
+
+const AI_MODEL = 'claude-sonnet-4-6';
+const AI_TIMEOUT_MS = 120000; // 120s timeout matching bulk routes
+const AI_MAX_RETRIES = 1;
+
+/**
+ * Call Claude with timeout and retry logic.
+ */
+async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES } = {}) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await Promise.race([
+        client.messages.create({
+          model: AI_MODEL,
+          max_tokens: maxTokens,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS)
+        ),
+      ]);
+      return response;
+    } catch (err) {
+      lastErr = err;
+      console.log(`[FeedScheduler] AI call attempt ${attempt + 1} failed: ${err.message}`);
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); // backoff
+      }
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Robustly parse AI JSON response — extract JSON object, fix trailing commas.
+ */
+function parseAIJson(text) {
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  // Try direct parse first
+  try { return JSON.parse(cleaned); } catch {}
+  // Extract JSON object with regex
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('AI did not return valid JSON');
+  // Fix trailing commas before } or ]
+  const fixed = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
+  return JSON.parse(fixed);
+}
+
+/**
+ * Robustly parse AI JSON array response.
+ */
+function parseAIJsonArray(text) {
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+  if (!arrayMatch) throw new Error('AI did not return valid JSON array');
+  const fixed = arrayMatch[0].replace(/,\s*([\]}])/g, '$1');
+  return JSON.parse(fixed);
+}
 
 // ═══════════════════════════════════════════════════════════════
 // CONFIGURATION
@@ -60,6 +122,7 @@ let schedulerConfig = {
   auto_relate_enabled: true,
   auto_follow_enabled: true,
   auto_cross_enabled: true,
+  auto_discover_enabled: true,
 };
 
 let schedulerTimer = null;
@@ -157,8 +220,6 @@ function generateCreatorSpark(layer) {
  * already exists in the feed. This is what makes the form unnecessary.
  */
 async function generateSmartSparks(db, layer, count = 5) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
   // Sample existing profiles for diversity awareness
   const existing = await db.SocialProfile.findAll({
     where: { feed_layer: layer },
@@ -234,15 +295,11 @@ Return a JSON array of exactly ${count} objects:
 
 Return ONLY the JSON array. No markdown, no explanation.`;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const response = await callClaude(prompt, { maxTokens: 4000 });
 
   let sparks;
   try {
-    sparks = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+    sparks = parseAIJsonArray(response.content[0].text);
   } catch {
     throw new Error('AI spark generation failed to parse');
   }
@@ -292,19 +349,19 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   for (let i = 0; i < sparks.length; i++) {
     try {
       if (progressCallback) {
-        progressCallback({ current: i + 1, total: sparks.length, spark: sparks[i], status: 'generating' });
+        await progressCallback({ current: i + 1, total: sparks.length, spark: sparks[i], status: 'generating' });
       }
       const profile = await generateAndSaveProfile(db, sparks[i], layer);
       if (profile) {
         created.push(profile);
         if (progressCallback) {
-          progressCallback({ current: i + 1, total: sparks.length, profile, status: 'created' });
+          await progressCallback({ current: i + 1, total: sparks.length, profile, status: 'created' });
         }
       }
     } catch (err) {
       errors.push({ spark: sparks[i]?.handle || `spark_${i}`, error: err.message });
       if (progressCallback) {
-        progressCallback({ current: i + 1, total: sparks.length, error: err.message, status: 'error' });
+        await progressCallback({ current: i + 1, total: sparks.length, error: err.message, status: 'error' });
       }
     }
   }
@@ -312,12 +369,30 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   return { created, errors, sparks_generated: sparks.length };
 }
 
+// ── ENUM validation helpers ──────────────────────────────────────────────────
+const VALID_TRAJECTORIES = new Set(['rising', 'plateauing', 'unraveling', 'pivoting', 'silent', 'viral_moment']);
+const VALID_ARCHETYPES = new Set([
+  'polished_curator', 'messy_transparent', 'soft_life', 'explicitly_paid',
+  'overnight_rise', 'cautionary', 'the_peer', 'the_watcher',
+  'chaos_creator', 'community_builder',
+]);
+const VALID_FOLLOWER_TIERS = new Set(['micro', 'mid', 'macro', 'mega']);
+
+function sanitizeEnum(value, validSet, fallback) {
+  if (!value) return fallback;
+  const normalized = String(value).toLowerCase().replace(/[\s-]+/g, '_');
+  if (validSet.has(normalized)) return normalized;
+  // Try fuzzy match for common AI variations
+  for (const valid of validSet) {
+    if (normalized.includes(valid) || valid.includes(normalized)) return valid;
+  }
+  return fallback;
+}
+
 /**
  * Call Claude to generate a full profile from a spark, then save it.
  */
 async function generateAndSaveProfile(db, spark, layer) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
   // Build the generation prompt (importing the shared builder)
   const { buildGenerationPrompt } = require('../routes/socialProfileRoutes');
 
@@ -341,7 +416,7 @@ async function generateAndSaveProfile(db, spark, layer) {
 
   let prompt = buildGenerationPrompt(
     spark.handle, spark.platform, spark.vibe_sentence,
-    characterContext, null,
+    characterContext, spark.advanced_context || null,
   );
 
   if (layer === 'lalaverse' && spark.city) {
@@ -354,18 +429,20 @@ Do not reference JustAWoman or the real world in any generated content.
 Lala does not know she was built. The world she lives in feels complete and self-contained.`;
   }
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 6000,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const response = await callClaude(prompt, { maxTokens: 4000 });
 
   let generated;
   try {
-    generated = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
-  } catch {
+    generated = parseAIJson(response.content[0].text);
+  } catch (parseErr) {
+    console.error('[FeedScheduler] JSON parse failed for', spark.handle, '— raw text:', response.content[0].text.slice(0, 200));
     throw new Error('AI response failed to parse as JSON');
   }
+
+  // Sanitize ENUM fields to prevent DB insert failures from AI variations
+  const safeFollowerTier = sanitizeEnum(generated.follower_tier || spark.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
+  const safeArchetype = sanitizeEnum(generated.archetype || spark.archetype, VALID_ARCHETYPES, 'polished_curator');
+  const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
   const profile = await db.SocialProfile.create({
     series_id:             null,
@@ -373,13 +450,13 @@ Lala does not know she was built. The world she lives in feels complete and self
     platform:              spark.platform,
     vibe_sentence:         spark.vibe_sentence,
     status:                'generated',
-    generation_model:      'claude-sonnet-4-20250514',
+    generation_model:      AI_MODEL,
     full_profile:          generated,
     display_name:          generated.display_name,
-    follower_tier:         generated.follower_tier || spark.follower_tier,
+    follower_tier:         safeFollowerTier,
     follower_count_approx: generated.follower_count_approx,
     content_category:      generated.content_category,
-    archetype:             generated.archetype || spark.archetype,
+    archetype:             safeArchetype,
     content_persona:       generated.content_persona,
     real_signal:           generated.real_signal,
     posting_voice:         generated.posting_voice,
@@ -391,7 +468,7 @@ Lala does not know she was built. The world she lives in feels complete and self
     emotional_activation:  generated.emotional_activation,
     watch_reason:          generated.watch_reason,
     what_it_costs_her:     generated.what_it_costs_her,
-    current_trajectory:    generated.current_trajectory,
+    current_trajectory:    safeTrajectory,
     trajectory_detail:     generated.trajectory_detail,
     moment_log:            generated.moment_log || [],
     sample_captions:       generated.sample_captions || [],
@@ -406,10 +483,10 @@ Lala does not know she was built. The world she lives in feels complete and self
     post_frequency:        generated.post_frequency,
     engagement_rate:       generated.engagement_rate,
     platform_metrics:      generated.platform_metrics || {},
-    geographic_base:       generated.geographic_base,
-    geographic_cluster:    generated.geographic_cluster,
-    age_range:             generated.age_range,
-    relationship_status:   generated.relationship_status,
+    geographic_base:       (generated.geographic_base || '').slice(0, 200) || null,
+    geographic_cluster:    (generated.geographic_cluster || '').slice(0, 100) || null,
+    age_range:             (generated.age_range || '').slice(0, 30) || null,
+    relationship_status:   (generated.relationship_status || '').slice(0, 100) || null,
     known_associates:      generated.known_associates || [],
     revenue_streams:       generated.revenue_streams || [],
     brand_partnerships:    generated.brand_partnerships || [],
@@ -591,7 +668,7 @@ async function autoCrossAgent(db) {
   for (const profile of candidates) {
     // Flag them with a current_state change so the UI can surface them
     try {
-      await profile.update({ current_trajectory: 'crossing_ready' });
+      await profile.update({ current_trajectory: 'pivoting' });
       flagged++;
       findings.push({
         level: 'success',
@@ -603,6 +680,79 @@ async function autoCrossAgent(db) {
   }
 
   return { agent: 'auto_cross', findings, profiles_flagged: flagged };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUB-AGENT 6: Auto-Discover — Find potential relationships
+// ═══════════════════════════════════════════════════════════════
+async function autoDiscoverAgent(db) {
+  const findings = [];
+  let discovered = 0;
+
+  if (!db.SocialProfileRelationship) {
+    findings.push({ level: 'info', msg: 'Relationship model not available — skipping discovery' });
+    return { agent: 'auto_discover', findings, relationships_discovered: 0 };
+  }
+
+  const { Op } = require('sequelize');
+
+  const profiles = await db.SocialProfile.findAll({
+    where: { status: { [Op.in]: ['generated', 'finalized', 'crossed'] } },
+    attributes: ['id', 'handle', 'platform', 'archetype', 'content_category', 'geographic_cluster', 'follower_tier', 'known_associates'],
+    raw: true,
+  });
+
+  const existingRels = await db.SocialProfileRelationship.findAll({
+    attributes: ['source_profile_id', 'target_profile_id'], raw: true,
+  });
+  const relSet = new Set(existingRels.map(r => `${r.source_profile_id}-${r.target_profile_id}`));
+  const hasRel = (a, b) => relSet.has(`${a}-${b}`) || relSet.has(`${b}-${a}`);
+
+  findings.push({ level: 'info', msg: `Scanning ${profiles.length} profiles for undiscovered relationships` });
+
+  // Find high-confidence matches (same niche + same platform + complementary archetypes)
+  const tensions = [['polished_curator','messy_transparent'],['soft_life','explicitly_paid'],['overnight_rise','cautionary']];
+
+  for (let i = 0; i < profiles.length && discovered < schedulerConfig.batch_size * 3; i++) {
+    for (let j = i + 1; j < profiles.length && discovered < schedulerConfig.batch_size * 3; j++) {
+      const a = profiles[i], b = profiles[j];
+      if (hasRel(a.id, b.id)) continue;
+
+      let score = 0;
+      if (a.platform === b.platform) score += 1;
+      if (a.content_category && a.content_category === b.content_category) score += 2;
+      if (a.geographic_cluster && a.geographic_cluster === b.geographic_cluster) score += 2;
+      for (const [x,y] of tensions) {
+        if ((a.archetype===x&&b.archetype===y)||(a.archetype===y&&b.archetype===x)) { score += 3; break; }
+      }
+
+      if (score >= 5) {
+        try {
+          let relType = 'orbit';
+          if (a.content_category === b.content_category && a.follower_tier === b.follower_tier) relType = 'competitors';
+
+          await db.SocialProfileRelationship.create({
+            source_profile_id: a.id,
+            target_profile_id: b.id,
+            relationship_type: relType,
+            description: `Auto-discovered: shared ${a.content_category || 'niche'} on ${a.platform}`,
+            auto_generated: true,
+            direction: 'mutual',
+            public_visibility: 'public',
+            drama_level: 0,
+          });
+          discovered++;
+          relSet.add(`${a.id}-${b.id}`);
+          findings.push({ level: 'success', msg: `Discovered ${relType} between @${a.handle} and @${b.handle}` });
+        } catch (err) {
+          findings.push({ level: 'error', msg: `Discovery failed for ${a.id}-${b.id}: ${err.message}` });
+        }
+      }
+    }
+  }
+
+  findings.push({ level: 'info', msg: `Discovered ${discovered} new relationships` });
+  return { agent: 'auto_discover', findings, relationships_discovered: discovered };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -627,6 +777,9 @@ async function runFullCycle(db) {
   if (schedulerConfig.auto_cross_enabled) {
     results.push(await autoCrossAgent(db));
   }
+  if (schedulerConfig.auto_discover_enabled) {
+    results.push(await autoDiscoverAgent(db));
+  }
 
   const allFindings = results.flatMap(r => r.findings.map(f => ({ ...f, agent: r.agent })));
   const duration = Date.now() - startTime;
@@ -646,6 +799,7 @@ async function runFullCycle(db) {
       relationships_created:  results.find(r => r.agent === 'auto_relate')?.relationships_created || 0,
       followers_updated:      results.find(r => r.agent === 'auto_follow')?.followers_updated || 0,
       profiles_flagged:       results.find(r => r.agent === 'auto_cross')?.profiles_flagged || 0,
+      relationships_discovered: results.find(r => r.agent === 'auto_discover')?.relationships_discovered || 0,
     },
     layer_status: {
       real_world: { count: realCount, cap: FEED_CAPS.real_world, remaining: FEED_CAPS.real_world - realCount },
