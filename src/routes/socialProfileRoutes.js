@@ -307,9 +307,14 @@ Lala does not know she was built. The world she lives in feels complete and self
       messages:   [{ role: 'user', content: prompt }],
     });
 
+    const rawText = response?.content?.[0]?.text;
+    if (!rawText) {
+      return res.status(500).json({ error: 'AI returned empty response. Try again.' });
+    }
+
     let generated;
     try {
-      generated = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+      generated = JSON.parse(rawText.replace(/```json|```/g, '').trim());
     } catch {
       return res.status(500).json({ error: 'Profile generation failed to parse. Try again.' });
     }
@@ -1170,6 +1175,7 @@ router.get('/export', optionalAuth, async (req, res) => {
 // ── GET /:id/followers ───────────────────────────────────────────────────────
 router.get('/:id/followers', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
+  if (!db.SocialProfileFollower) return res.json({ followers: [] });
   try {
     const followers = await db.SocialProfileFollower.findAll({
       where: { social_profile_id: req.params.id },
@@ -1193,6 +1199,7 @@ router.post('/:id/followers', optionalAuth, async (req, res) => {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
 
+    if (!db.SocialProfileFollower) return res.status(501).json({ error: 'SocialProfileFollower model not available' });
     const [follower, created] = await db.SocialProfileFollower.findOrCreate({
       where: { social_profile_id: profile.id, character_key },
       defaults: { character_name, follow_context, emotional_reaction, influence_type, influence_level: influence_level || 5 },
@@ -1210,6 +1217,7 @@ router.post('/:id/followers', optionalAuth, async (req, res) => {
 // Remove a character from following this profile
 router.delete('/:id/followers/:characterKey', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
+  if (!db.SocialProfileFollower) return res.status(501).json({ error: 'SocialProfileFollower model not available' });
   try {
     const count = await db.SocialProfileFollower.destroy({
       where: { social_profile_id: req.params.id, character_key: req.params.characterKey },
@@ -1321,7 +1329,37 @@ router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
       'adult_content_present', 'adult_content_type', 'adult_content_framing',
       'crossing_trigger', 'crossing_mechanism', 'archetype',
       'follower_count_approx', 'sample_captions', 'sample_comments',
-      'book_relevance', 'status',
+      'book_relevance', 'status', 'current_state',
+    ];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+
+    await profile.update(updates);
+    return res.json({ profile });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /:id — partial update (same logic as PUT, supports frontend PATCH calls)
+router.patch('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+
+    const allowed = [
+      'handle', 'platform', 'vibe_sentence', 'display_name',
+      'content_persona', 'real_signal', 'posting_voice', 'comment_energy',
+      'parasocial_function', 'emotional_activation', 'watch_reason',
+      'what_it_costs_her', 'current_trajectory', 'trajectory_detail',
+      'pinned_post', 'lala_relevance_score', 'lala_relevance_reason',
+      'adult_content_present', 'adult_content_type', 'adult_content_framing',
+      'crossing_trigger', 'crossing_mechanism', 'archetype',
+      'follower_count_approx', 'sample_captions', 'sample_comments',
+      'book_relevance', 'status', 'current_state',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -1365,9 +1403,14 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       messages: [{ role: 'user', content: prompt }],
     });
 
+    const rawText = response?.content?.[0]?.text;
+    if (!rawText) {
+      return res.status(500).json({ error: 'AI returned empty response. Try again.' });
+    }
+
     let generated;
     try {
-      generated = JSON.parse(response.content[0].text.replace(/```json|```/g, '').trim());
+      generated = JSON.parse(rawText.replace(/```json|```/g, '').trim());
     } catch {
       return res.status(500).json({ error: 'Regeneration failed to parse. Try again.' });
     }
@@ -1497,6 +1540,9 @@ router.post('/:id/add-moment', optionalAuth, async (req, res) => {
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Not found' });
+    if (!req.body.moment || typeof req.body.moment !== 'object') {
+      return res.status(400).json({ error: 'moment object is required' });
+    }
     const moments = [...(profile.moment_log || []), req.body.moment];
     await profile.update({ moment_log: moments });
     return res.json({ profile });
@@ -2367,11 +2413,11 @@ router.get('/relationships/suggestions', optionalAuth, async (req, res) => {
 
         if (score >= 4) {
           // Suggest relationship type based on reasons
-          let suggestedType = 'orbit';
-          if (reasons.includes('natural tension')) suggestedType = 'competitors';
+          let suggestedType = 'collab';
+          if (reasons.includes('natural tension')) suggestedType = 'rival';
           else if (reasons.includes('mentioned in associates')) suggestedType = 'collab';
-          else if (reasons.includes('tier rivalry')) suggestedType = 'competitors';
-          else if (reasons.includes('same content niche') && reasons.includes('same platform')) suggestedType = 'orbit';
+          else if (reasons.includes('tier rivalry')) suggestedType = 'rival';
+          else if (reasons.includes('same content niche') && reasons.includes('same platform')) suggestedType = 'copycat';
 
           suggestions.push({
             profile_a: { id: a.id, handle: a.handle, display_name: a.display_name, platform: a.platform, archetype: a.archetype },
