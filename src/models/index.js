@@ -575,12 +575,6 @@ if (StorytellerEcho && StorytellerEcho.associate) {
   StorytellerEcho.associate(requiredModels);
 }
 
-// StorytellerLine → StorytellerMemory (1:N) — line has many memories
-StorytellerLine.hasMany(StorytellerMemory, {
-  foreignKey: 'line_id',
-  as: 'memories',
-});
-
 // RegistryCharacter → StorytellerMemory (1:N) — character has many memories
 RegistryCharacter.hasMany(StorytellerMemory, {
   foreignKey: 'character_id',
