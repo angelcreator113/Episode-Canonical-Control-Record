@@ -932,12 +932,13 @@ router.get('/', optionalAuth, async (req, res) => {
       }
     }
 
-    // Search condition
+    // Search condition (escape LIKE wildcards to prevent pattern manipulation)
     if (search) {
+      const escapedSearch = search.replace(/[%_\\]/g, '\\$&');
       conditions.push({
         [Op.or]: [
-          { handle: { [Op.iLike]: `%${search}%` } },
-          { display_name: { [Op.iLike]: `%${search}%` } },
+          { handle: { [Op.iLike]: `%${escapedSearch}%` } },
+          { display_name: { [Op.iLike]: `%${escapedSearch}%` } },
         ],
       });
     }
@@ -2413,8 +2414,9 @@ router.get('/relationships/suggestions', optionalAuth, async (req, res) => {
         // Known associates mention
         const aAssociates = a.known_associates || [];
         const bAssociates = b.known_associates || [];
-        if (aAssociates.some(aa => b.handle?.toLowerCase().includes(aa.handle?.replace('@','').toLowerCase() || '---'))) { score += 5; reasons.push('mentioned in associates'); }
-        if (bAssociates.some(ba => a.handle?.toLowerCase().includes(ba.handle?.replace('@','').toLowerCase() || '---'))) { score += 5; reasons.push('mentioned in associates'); }
+        const normalizeHandle = h => (h || '').replace(/^@/, '').toLowerCase();
+        if (aAssociates.some(aa => aa.handle && normalizeHandle(b.handle) === normalizeHandle(aa.handle))) { score += 5; reasons.push('mentioned in associates'); }
+        if (bAssociates.some(ba => ba.handle && normalizeHandle(a.handle) === normalizeHandle(ba.handle))) { score += 5; reasons.push('mentioned in associates'); }
 
         if (score >= 4) {
           // Suggest relationship type based on reasons
