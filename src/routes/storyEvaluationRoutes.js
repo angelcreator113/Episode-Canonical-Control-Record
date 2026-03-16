@@ -22,6 +22,7 @@ const db = require('../models');
 
 const anthropic = new Anthropic();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
+const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
 
 let optionalAuth;
 try {
@@ -1527,6 +1528,15 @@ router.post('/write-back', optionalAuth, async (req, res) => {
 
     await transaction.commit();
 
+    // Fire async enrichment pipeline (non-blocking — does not delay response)
+    enrichAfterWriteBack(db, {
+      story: story.toJSON(),
+      chapter: chapter.toJSON(),
+      storyText: story.text,
+      confirmedMemories: confirmed_memories,
+      confirmedRegistryUpdates: confirmed_registry_updates,
+    }).catch(err => console.error('[post-write-back enrichment]', err?.message));
+
     return res.json({
       success: true,
       story_id,
@@ -1551,6 +1561,24 @@ router.get('/eval-stories/:storyId', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('[eval-stories/get]', err?.message);
     return res.status(500).json({ error: err?.message || 'Failed to fetch story' });
+  }
+});
+
+// ── GET /eval-stories/:storyId/enrichment — enrichment status ────────────
+router.get('/eval-stories/:storyId/enrichment', optionalAuth, async (req, res) => {
+  try {
+    const story = await db.StorytellerStory.findByPk(req.params.storyId, {
+      attributes: ['id', 'status', 'enrichment_status'],
+    });
+    if (!story) return res.status(404).json({ error: 'Story not found' });
+    return res.json({
+      story_id: story.id,
+      status: story.status,
+      enrichment: story.enrichment_status || null,
+    });
+  } catch (err) {
+    console.error('[eval-stories/enrichment]', err?.message);
+    return res.status(500).json({ error: err?.message || 'Failed to fetch enrichment status' });
   }
 });
 
