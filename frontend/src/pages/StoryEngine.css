@@ -662,6 +662,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1497,6 +1498,45 @@ html, body {
 
 .se-navigator .se-arc-dots {
   display: none;
+}
+
+/* Inspector-fitted stat overrides */
+.se-inspector .se-stats-dashboard {
+  padding: 0;
+  border: none;
+  margin: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.se-inspector .se-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.se-inspector .se-stat-card {
+  padding: 8px 6px;
+  min-width: 0;
+}
+
+.se-inspector .se-stat-value {
+  font-size: 18px;
+}
+
+.se-inspector .se-stat-label {
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+
+.se-inspector .se-stats-phase-row {
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.se-inspector .se-stats-phase-item {
+  font-size: 10px;
+  gap: 4px;
 }
 
 .se-nav-top {

@@ -47,7 +47,7 @@ export default function ArcTrackingPanel({ characterKey, characterName }) {
       {/* Always visible — key numbers */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(2, 1fr)',
         gap: 1,
         borderTop: '1px solid #f2eef8',
       }}>
