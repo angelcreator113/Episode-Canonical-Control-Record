@@ -276,29 +276,34 @@ router.post('/promote-ghost/:characterId', async (req, res) => {
 // What depth level is this character at, and what would move them deeper?
 // ────────────────────────────────────────────────────────────────────────────
 router.get('/depth/:id', async (req, res) => {
-  const models    = getModels(req);
-  const character = await models.RegistryCharacter.findByPk(req.params.id);
-  if (!character) return res.status(404).json({ error: 'Character not found' });
+  try {
+    const models    = getModels(req);
+    const character = await models.RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
 
-  const current = character.depth_level || calculateDepthLevel(character.toJSON());
+    const current = character.depth_level || calculateDepthLevel(character.toJSON());
 
-  const nextSteps = {
-    sparked:   ['Generate Deep Profile', 'Generate Want Architecture', 'Generate Wound'],
-    breathing: ['Add to a story scene', 'Create Feed profile', 'Build Relationship Map'],
-    active:    ['Approve 3+ scenes featuring this character', 'Build out Triggers', 'Complete Dilemma'],
-    alive:     ['Character is fully alive. They can walk into any scene right now.'],
-  };
+    const nextSteps = {
+      sparked:   ['Generate Deep Profile', 'Generate Want Architecture', 'Generate Wound'],
+      breathing: ['Add to a story scene', 'Create Feed profile', 'Build Relationship Map'],
+      active:    ['Approve 3+ scenes featuring this character', 'Build out Triggers', 'Complete Dilemma'],
+      alive:     ['Character is fully alive. They can walk into any scene right now.'],
+    };
 
-  res.json({
-    character_id:  character.id,
-    name:          character.selected_name,
-    depth_level:   current,
-    next_steps:    nextSteps[current] || [],
-    has_feed:      !!character.feed_profile_id,
-    has_deep_profile: !!(character.deep_profile && Object.keys(character.deep_profile).length > 0),
-    has_wound:     !!character.wound,
-    has_dilemma:   !!character.dilemma,
-  });
+    res.json({
+      character_id:  character.id,
+      name:          character.selected_name,
+      depth_level:   current,
+      next_steps:    nextSteps[current] || [],
+      has_feed:      !!character.feed_profile_id,
+      has_deep_profile: !!(character.deep_profile && Object.keys(character.deep_profile).length > 0),
+      has_wound:     !!character.wound,
+      has_dilemma:   !!character.dilemma,
+    });
+  } catch (err) {
+    console.error('[character-generation] depth GET error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -306,19 +311,24 @@ router.get('/depth/:id', async (req, res) => {
 // Manually set depth level
 // ────────────────────────────────────────────────────────────────────────────
 router.patch('/depth/:id', async (req, res) => {
-  const { depth_level } = req.body;
-  const valid = ['sparked', 'breathing', 'active', 'alive'];
+  try {
+    const { depth_level } = req.body;
+    const valid = ['sparked', 'breathing', 'active', 'alive'];
 
-  if (!valid.includes(depth_level)) {
-    return res.status(400).json({ error: `depth_level must be one of: ${valid.join(', ')}` });
+    if (!valid.includes(depth_level)) {
+      return res.status(400).json({ error: `depth_level must be one of: ${valid.join(', ')}` });
+    }
+
+    const models    = getModels(req);
+    const character = await models.RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+
+    await character.update({ depth_level });
+    res.json({ character, message: `Depth level set to ${depth_level}.` });
+  } catch (err) {
+    console.error('[character-generation] depth PATCH error:', err.message);
+    res.status(500).json({ error: err.message });
   }
-
-  const models    = getModels(req);
-  const character = await models.RegistryCharacter.findByPk(req.params.id);
-  if (!character) return res.status(404).json({ error: 'Character not found' });
-
-  await character.update({ depth_level });
-  res.json({ character, message: `Depth level set to ${depth_level}.` });
 });
 
 module.exports = router;

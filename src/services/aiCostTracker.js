@@ -74,6 +74,42 @@ function inferRouteName() {
   return 'unknown';
 }
 
+// ── Daily budget limiter ──────────────────────────────────────────────────
+// Set AI_DAILY_BUDGET_USD to cap daily spending (default: no limit).
+// When the budget is exceeded, API calls are blocked and return an error.
+// The counter resets at midnight UTC.
+let dailySpend = 0;
+let dailySpendDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+const DAILY_BUDGET = parseFloat(process.env.AI_DAILY_BUDGET_USD) || Infinity;
+
+function checkBudget(costEstimate) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== dailySpendDate) {
+    dailySpend = 0;
+    dailySpendDate = today;
+  }
+  return (dailySpend + costEstimate) <= DAILY_BUDGET;
+}
+
+function recordSpend(cost) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== dailySpendDate) {
+    dailySpend = 0;
+    dailySpendDate = today;
+  }
+  dailySpend += cost;
+  // Warn at 80% budget
+  if (DAILY_BUDGET < Infinity && dailySpend >= DAILY_BUDGET * 0.8) {
+    console.warn(`[AI Cost] Daily spend $${dailySpend.toFixed(2)} / $${DAILY_BUDGET} (${Math.round(dailySpend / DAILY_BUDGET * 100)}%)`);
+  }
+}
+
+function getDailySpend() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== dailySpendDate) return 0;
+  return dailySpend;
+}
+
 let patchApplied = false;
 
 function applyPatch() {
@@ -119,10 +155,26 @@ function applyPatch() {
     const routeName = inferRouteName();
     const model = params?.model || 'unknown';
 
+    // Budget gate — estimate worst-case cost before making the call
+    if (DAILY_BUDGET < Infinity) {
+      const pricing = MODEL_PRICING[model] || DEFAULT_PRICING;
+      const maxTokens = params?.max_tokens || 4096;
+      const estimatedCost = (maxTokens / 1_000_000) * pricing.output; // worst-case: full output
+      if (!checkBudget(estimatedCost)) {
+        const err = new Error(`AI daily budget exceeded ($${dailySpend.toFixed(2)} / $${DAILY_BUDGET}). Call blocked.`);
+        err.status = 429;
+        console.error(`[AI Cost] BLOCKED ${routeName} — budget exceeded`);
+        return Promise.reject(err);
+      }
+    }
+
     const logUsage = (response, isError, errorType) => {
       const duration = Date.now() - startTime;
       const usage = response?.usage || {};
       const cost = isError ? 0 : calculateCost(model, usage);
+
+      // Track daily spend for budget limiter
+      if (!isError && cost > 0) recordSpend(cost);
 
       // Fire-and-forget DB write — never block the caller
       setImmediate(() => {
@@ -174,4 +226,4 @@ function applyPatch() {
 // Auto-apply on require
 applyPatch();
 
-module.exports = { calculateCost, MODEL_PRICING };
+module.exports = { calculateCost, MODEL_PRICING, getDailySpend, DAILY_BUDGET };

@@ -894,6 +894,15 @@ async function scheduledRun() {
 
 function startScheduler(intervalHours, db) {
   if (db) _db = db;
+
+  // Gate: only run scheduler when explicitly opted-in via env var.
+  // Each cycle makes 10+ Claude API calls (~$30-50/cycle, 6 cycles/day).
+  // Set FEED_SCHEDULER_ENABLED=true in production when you want auto-generation.
+  if (process.env.FEED_SCHEDULER_ENABLED !== 'true') {
+    console.log('[FeedScheduler] Scheduler disabled (set FEED_SCHEDULER_ENABLED=true to enable)');
+    return;
+  }
+
   if (schedulerTimer) clearInterval(schedulerTimer);
   if (initialTimeout) clearTimeout(initialTimeout);
   if (intervalHours) {
@@ -902,7 +911,7 @@ function startScheduler(intervalHours, db) {
   }
   schedulerConfig.enabled = true;
   schedulerTimer = setInterval(scheduledRun, schedulerIntervalMs);
-  console.log(`[FeedScheduler] 🕐 Scheduler started — running every ${schedulerConfig.interval_hours}h`);
+  console.log(`[FeedScheduler] Scheduler started — running every ${schedulerConfig.interval_hours}h`);
   // First run after 15s delay (let server finish starting)
   initialTimeout = setTimeout(scheduledRun, 15000);
 }
