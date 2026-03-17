@@ -805,71 +805,76 @@ router.post('/generate-batch', optionalAuth, async (req, res) => {
 
 // ─── POST /check-staging ─────────────────────────────────────────────────────
 router.post('/check-staging', optionalAuth, async (req, res) => {
-  const { character, existingCharacters, ecosystemStats } = req.body;
+  try {
+    const { character, existingCharacters, ecosystemStats } = req.body;
 
-  if (!character) return res.status(400).json({ error: 'character required' });
+    if (!character) return res.status(400).json({ error: 'character required' });
 
-  const warnings = [];
-  const errors = [];
+    const warnings = [];
+    const errors = [];
 
-  const name = character.name || character.identity?.name || '';
-  const roleType = character.role_type || character.identity?.role_type || '';
-  const world = character.layer || character.identity?.world || 'book1';
+    const name = character.name || character.identity?.name || '';
+    const roleType = character.role_type || character.identity?.role_type || '';
+    const world = character.layer || character.identity?.world || 'book1';
 
-  // Name collision check
-  const existing = existingCharacters || [];
-  const exactMatch = existing.find(c =>
-    c.name?.toLowerCase() === name.toLowerCase()
-  );
-  if (exactMatch) {
-    errors.push({
-      type: 'name_collision',
-      severity: 'critical',
-      message: `"${name}" already exists in the registry.`,
-    });
-  }
-
-  // Phonetic similarity
-  const phoneticMatch = existing.find(c => {
-    const a = (c.name || '').toLowerCase().slice(0, 3);
-    const b = name.toLowerCase().slice(0, 3);
-    return a === b && c.name?.toLowerCase() !== name.toLowerCase();
-  });
-  if (phoneticMatch) {
-    warnings.push({
-      type: 'phonetic_similarity',
-      severity: 'warning',
-      message: `"${name}" sounds similar to existing character "${phoneticMatch.name}".`,
-    });
-  }
-
-  // Role saturation
-  const worldStats = ecosystemStats?.[world]?.stats;
-  if (worldStats?.roleCount && roleType) {
-    const currentCount = worldStats.roleCount[roleType] || 0;
-    if (currentCount >= 4) {
-      warnings.push({
-        type: 'role_saturation',
-        severity: 'warning',
-        message: `${world} already has ${currentCount} ${roleType} characters.`,
+    // Name collision check
+    const existing = existingCharacters || [];
+    const exactMatch = existing.find(c =>
+      c.name?.toLowerCase() === name.toLowerCase()
+    );
+    if (exactMatch) {
+      errors.push({
+        type: 'name_collision',
+        severity: 'critical',
+        message: `"${name}" already exists in the registry.`,
       });
     }
+
+    // Phonetic similarity
+    const phoneticMatch = existing.find(c => {
+      const a = (c.name || '').toLowerCase().slice(0, 3);
+      const b = name.toLowerCase().slice(0, 3);
+      return a === b && c.name?.toLowerCase() !== name.toLowerCase();
+    });
+    if (phoneticMatch) {
+      warnings.push({
+        type: 'phonetic_similarity',
+        severity: 'warning',
+        message: `"${name}" sounds similar to existing character "${phoneticMatch.name}".`,
+      });
+    }
+
+    // Role saturation
+    const worldStats = ecosystemStats?.[world]?.stats;
+    if (worldStats?.roleCount && roleType) {
+      const currentCount = worldStats.roleCount[roleType] || 0;
+      if (currentCount >= 4) {
+        warnings.push({
+          type: 'role_saturation',
+          severity: 'warning',
+          message: `${world} already has ${currentCount} ${roleType} characters.`,
+        });
+      }
+    }
+
+    // Demographic coherence
+    const demographicWarnings = checkDemographicCoherence(character);
+    warnings.push(...demographicWarnings.map(w => ({
+      type: 'demographic_coherence',
+      severity: 'warning',
+      message: w.message,
+      field: w.field,
+    })));
+
+    return res.json({
+      errors,
+      warnings,
+      can_commit: errors.length === 0,
+    });
+  } catch (err) {
+    console.error('[character-generator] check-staging error:', err.message);
+    return res.status(500).json({ error: err.message });
   }
-
-  // Demographic coherence
-  const demographicWarnings = checkDemographicCoherence(character);
-  warnings.push(...demographicWarnings.map(w => ({
-    type: 'demographic_coherence',
-    severity: 'warning',
-    message: w.message,
-    field: w.field,
-  })));
-
-  return res.json({
-    errors,
-    warnings,
-    can_commit: errors.length === 0,
-  });
 });
 
 // ─── POST /commit (v5.3 — flat character format) ─────────────────────────────

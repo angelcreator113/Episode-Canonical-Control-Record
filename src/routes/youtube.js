@@ -249,7 +249,7 @@ router.post('/:id/detect-scenes', optionalAuth, async (req, res) => {
     if (video.s3_key) {
       // Download from S3
       console.log('📦 Downloading video from S3...');
-      const s3Service = require('../services/s3Service');
+      const s3Service = require('../services/S3Service');
       const bucketName = process.env.S3_TRAINING_DATA_BUCKET || 'episode-metadata-training-data-dev';
       videoPath = await s3Service.downloadFromS3(video.s3_key, bucketName);
     } else if (video.video_url) {

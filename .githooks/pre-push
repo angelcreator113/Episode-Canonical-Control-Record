@@ -1,0 +1,21 @@
+#!/bin/bash
+# Pre-push hook: runs full validation (routes + lint + tests + cost audit)
+# before allowing push. Install: git config core.hooksPath .githooks
+
+echo "[pre-push] Running full validation suite..."
+
+# Cost audit (fast — no npm needed)
+if ! bash scripts/audit-cost-exposure.sh; then
+  echo ""
+  echo "Push blocked — fix cost exposure issues above."
+  exit 1
+fi
+
+# Route validation (fast — no npm needed)
+if ! node scripts/validate-routes.js; then
+  echo ""
+  echo "Push blocked — fix route validation issues above."
+  exit 1
+fi
+
+echo "[pre-push] All checks passed."

@@ -15,6 +15,14 @@ try {
   ({ createFollowProfileFromDNA } = require('../services/characterFollowService'));
 } catch { /* characterFollowService not available yet */ }
 
+// Safe extraction of text from Claude API response
+function extractAIText(response) {
+  if (!response?.content?.length || !response.content[0]?.text) {
+    throw new Error('AI returned empty or malformed response');
+  }
+  return response.content[0].text;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Lazy model loader                                                  */
 /* ------------------------------------------------------------------ */
@@ -1324,7 +1332,7 @@ ${allFieldsToFill}
       messages: [{ role: 'user', content: `Fill in the missing sections for ${known.display_name || 'this character'}.` }],
     });
 
-    const raw = response.content[0].text;
+    const raw = extractAIText(response);
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse Claude response' });
     const generated = JSON.parse(jsonMatch[0]);
@@ -1407,7 +1415,7 @@ ${allFieldsToFill}
           system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
           messages: [{ role: 'user', content: `Generate plot threads for ${known.display_name || 'this character'}.` }],
         });
-        const ptRaw = threadResp.content[0].text;
+        const ptRaw = extractAIText(threadResp);
         const ptMatch = ptRaw.match(/\[[\s\S]*\]/);
         if (ptMatch) {
           const ptArr = JSON.parse(ptMatch[0]);
@@ -1670,7 +1678,7 @@ ${config.schema}`,
       messages: [{ role: 'user', content: config.prompt }],
     });
 
-    const raw = response.content[0].text;
+    const raw = extractAIText(response);
     const jsonMatch = raw.match(/[\[{][\s\S]*[\]}]/);
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse AI response' });
     const generated = JSON.parse(jsonMatch[0]);
@@ -1762,7 +1770,7 @@ router.post('/registries/:registryId/backfill-all', async (req, res) => {
           messages: [{ role: 'user', content: `Fill in the missing sections for ${known.display_name || 'this character'}.` }],
         });
 
-        const raw = response.content[0].text;
+        const raw = extractAIText(response);
         const jsonMatch = raw.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
           results.push({ id: character.id, name: character.display_name, filled: [], error: 'Parse error' });
@@ -1814,7 +1822,7 @@ router.post('/registries/:registryId/backfill-all', async (req, res) => {
               system: `Generate 2-4 plot threads for this character based on their profile. Each thread should be a specific unresolved situation.\n\nCharacter: ${JSON.stringify(known, null, 2)}\n\nReturn ONLY valid JSON array:\n[\n  { "thread": "specific unresolved situation", "status": "open", "activation_condition": "what would bring this thread into a story" }\n]`,
               messages: [{ role: 'user', content: `Generate plot threads for ${known.display_name || 'this character'}.` }],
             });
-            const ptRaw = threadResp.content[0].text;
+            const ptRaw = extractAIText(threadResp);
             const ptMatch = ptRaw.match(/\[[\s\S]*\]/);
             if (ptMatch) {
               const ptArr = JSON.parse(ptMatch[0]);
@@ -1961,7 +1969,7 @@ Return ONLY a JSON object matching this structure (include ALL 14 top-level dime
       messages: [{ role: 'user', content: `Generate the full deep_profile for ${cleanDossier.name || 'this character'}.` }],
     });
 
-    const raw = response.content[0].text;
+    const raw = extractAIText(response);
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse Claude response' });
     const generated = JSON.parse(jsonMatch[0]);
@@ -2047,7 +2055,7 @@ Parse the writer's text into the 14 deep_profile dimensions. Return ONLY a JSON 
       messages: [{ role: 'user', content: text.trim() }],
     });
 
-    const raw = response.content[0].text;
+    const raw = extractAIText(response);
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return res.status(500).json({ error: 'Failed to parse Claude response' });
@@ -2180,7 +2188,7 @@ Return ONLY a JSON object with 14 dimensions: life_stage, the_body, class_and_mo
         messages: [{ role: 'user', content: `Generate deep_profile for ${dossier.name || 'this character'}.` }],
       });
 
-      const raw = response.content[0].text;
+      const raw = extractAIText(response);
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) { results.failed++; results.errors.push(`${character.display_name}: parse failed`); continue; }
       const generated = JSON.parse(jsonMatch[0]);
@@ -2255,7 +2263,7 @@ Write a single, flowing paragraph (200–400 words) that captures who this perso
       messages: [{ role: 'user', content: `Write the writer paragraph for ${charData.name || 'this character'}.` }],
     });
 
-    const paragraph = response.content[0].text.trim();
+    const paragraph = extractAIText(response).trim();
 
     return res.json({
       success: true,
@@ -2323,7 +2331,7 @@ Write a single flowing paragraph (200–400 words) capturing who this person IS 
         messages: [{ role: 'user', content: `Write the writer paragraph for ${charData.name || 'this character'}.` }],
       });
 
-      const paragraph = response.content[0].text.trim();
+      const paragraph = extractAIText(response).trim();
       results.paragraphs.push({ id, name: character.display_name || character.selected_name, paragraph });
       results.succeeded++;
     } catch (err) {

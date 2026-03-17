@@ -51,6 +51,12 @@ try {
   ({ buildKnowledgeInjection, getTechContext } = require('./franchiseBrainRoutes'));
 } catch { buildKnowledgeInjection = null; getTechContext = null; }
 
+// Arc tracking service — wound clock, stakes, visibility, David silence
+let buildArcContext, buildArcContextPromptSection, updateArcTracking;
+try {
+  ({ buildArcContext, buildArcContextPromptSection, updateArcTracking } = require('../services/arcTrackingService'));
+} catch { buildArcContext = null; buildArcContextPromptSection = null; updateArcTracking = null; }
+
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
 // Ensure dotenv is loaded before creating the client (PM2 may pass empty string)
@@ -1680,7 +1686,9 @@ router.post('/character-interview-next', optionalAuth, async (req, res) => {
     if (mentionedChars.length > 0) {
       const wordCount = latestText.split(/\s+/).length;
       const primaryLower = primaryName?.toLowerCase();
-      const primaryMentions = (answerLower.match(new RegExp(primaryLower, 'g')) || []).length;
+      const primaryMentions = primaryLower
+        ? (answerLower.match(new RegExp(primaryLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length
+        : 0;
       const otherMentions = mentionedChars[0].searchTerms.reduce((count, term) =>
         count + (answerLower.match(new RegExp(term.toLowerCase(), 'g')) || []).length, 0
       );
@@ -2017,7 +2025,7 @@ ${answersFormatted}
 
 ${relational_notes.length > 0 ? `
 CROSS-CHARACTER OBSERVATIONS (captured during interview):
-${relational_notes.map((n, i) => `${i+1}. [${n.primary_character} ↔ ${n.other_character}] ${n.observation}`).join('\n')}
+${relational_notes.map((n, i) => `${i+1}. [${n.primary_character} ↔ ${n.drifted_to}] ${n.observation}`).join('\n')}
 
 These observations reveal how characters relate to each other through the author's instinctive associations. Use them to enrich the profile — especially pressure_type and personality sections.
 ` : ''}
@@ -4784,61 +4792,67 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
     console.error('Knowledge injection failed:', e.message);
   }
 
-  const conversationHistory = history
+  const rawHistory = history
     .filter(m => m.role && m.text)
     .slice(-20)
     .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+
+  // Ensure alternating roles — Anthropic API requires user/assistant alternation
+  // and the first message must be role: 'user'
+  const conversationHistory = [];
+  for (const msg of rawHistory) {
+    if (conversationHistory.length === 0 || conversationHistory[conversationHistory.length - 1].role !== msg.role) {
+      conversationHistory.push(msg);
+    }
+  }
+
+  // First message must be user role
+  while (conversationHistory.length > 0 && conversationHistory[0].role !== 'user') {
+    conversationHistory.shift();
+  }
+
+  // Last history message must be assistant so we can append user message
+  if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+    conversationHistory.pop();
+  }
 
   conversationHistory.push({ role: 'user', content: message });
 
   const systemPrompt = buildAmberSystemPrompt(contextSummary, knowledgeBlock);
 
-  try {
-    // ── Call Claude with model fallback + retry for overloaded errors ──
-    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
-    let claudeResponse;
-    for (const model of MODELS) {
-      let succeeded = false;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          console.log(`assistant-command: trying ${model} (attempt ${attempt + 1})`);
-          claudeResponse = await anthropic.messages.create({
-            model,
-            max_tokens: 2048,
-            system:     systemPrompt,
-            messages:   conversationHistory,
-          });
-          succeeded = true;
-          break;
-        } catch (apiErr) {
-          const status = apiErr?.status || apiErr?.error?.status;
-          if ((status === 529 || status === 503) && attempt < 1) {
-            console.log(`assistant-command: ${model} returned ${status}, retrying in 2s`);
-            await new Promise(r => setTimeout(r, 2000));
-            continue;
-          }
-          if (status === 529 || status === 503 || status === 404) {
-            console.log(`assistant-command: ${model} status ${status}, trying next model`);
-            break;
-          }
-          throw apiErr;
-        }
-      }
-      if (succeeded) break;
-    }
+  // Helper: attempt an API call with a given model
+  const tryModel = async (modelId) => {
+    return anthropic.messages.create({
+      model:      modelId,
+      max_tokens: 2048,
+      system:     systemPrompt,
+      messages:   conversationHistory,
+    });
+  };
 
-    if (!claudeResponse) {
-      return res.status(503).json({
-        reply: "I'm temporarily overloaded — please wait a moment and try again.",
-        action: null, refresh: null,
-        error: 'All models overloaded',
-        errorType: 'overloaded',
-        retryable: true,
+  try {
+    let claudeResponse;
+    try {
+      claudeResponse = await tryModel('claude-sonnet-4-6');
+    } catch (primaryErr) {
+      const isRetryable = primaryErr.status === 529 || primaryErr.status === 503 || primaryErr.status === 404;
+      console.error('Assistant command primary model failed:', {
+        message: primaryErr.message,
+        status: primaryErr.status,
+        type: primaryErr.error?.type,
+        name: primaryErr.name,
       });
+      if (isRetryable) {
+        // Wait 2s then try fallback model (matches scene-interview retry pattern)
+        await new Promise(r => setTimeout(r, 2000));
+        claudeResponse = await tryModel('claude-sonnet-4-20250514');
+      } else {
+        throw primaryErr;
+      }
     }
 
     const raw   = claudeResponse.content[0].text.trim();
-    
+
     // Extract JSON from the response — Claude may wrap it in markdown or prefix with text
     let jsonStr = raw;
     // Try to find a JSON block in ```json ... ``` fences
@@ -4888,40 +4902,47 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
     });
 
   } catch (err) {
-    const status = err?.status || err?.error?.status;
+    // Structured error logging
     console.error('Assistant command error:', {
       message: err.message,
-      status,
-      type: err?.error?.type || err?.type,
-      name: err?.name,
-      stack: err?.stack?.split('\n').slice(0, 3).join('\n'),
+      status: err.status,
+      type: err.error?.type,
+      name: err.name,
+      stack: err.stack?.split('\n').slice(0, 3).join(' | '),
     });
 
-    // Classify the error for the frontend
-    let errorType = 'unknown';
-    let reply;
-    let retryable = false;
+    // Error classification with errorType and retryable fields
+    const isAuth = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    const isRateLimit = err.status === 429;
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    const isBadRequest = err.status === 400;
+    const isNetwork = err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.message?.includes('fetch failed');
 
-    if (status === 401 || err.message?.includes('API key') || err.message?.includes('authentication')) {
+    let errorType, retryable, reply;
+    if (isAuth) {
       errorType = 'auth';
+      retryable = false;
       reply = "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env.";
-    } else if (status === 429) {
+    } else if (isRateLimit) {
       errorType = 'rate_limit';
-      reply = "I'm being rate-limited — please wait a moment and try again.";
-      retryable = true;
-    } else if (status === 529 || status === 503) {
+      retryable = false;
+      reply = "Too many requests hitting the AI service — give me a moment and try again.";
+    } else if (isOverloaded) {
       errorType = 'overloaded';
-      reply = "I'm temporarily overloaded — please wait a moment and try again.";
       retryable = true;
-    } else if (status === 400) {
+      reply = "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment.";
+    } else if (isBadRequest) {
       errorType = 'bad_request';
-      reply = `Request error: ${err.message || 'invalid request'}`;
-    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+      retryable = false;
+      reply = "Something went wrong with the request format. Check server logs for details.";
+    } else if (isNetwork) {
       errorType = 'network';
-      reply = "I can't reach the AI service right now — check your network connection.";
       retryable = true;
+      reply = "I can't reach the AI service right now — there may be a network issue. Try again in a moment.";
     } else {
-      reply = `Something went wrong: ${err.message || 'unknown error'}. Try again or rephrase your request.`;
+      errorType = 'unknown';
+      retryable = false;
+      reply = `Something unexpected happened: ${err.message || 'unknown error'}. Check server logs for details.`;
     }
 
     return res.json({
@@ -5024,50 +5045,62 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
     console.error('Knowledge injection failed:', e.message);
   }
 
-  const conversationHistory = history
+  const rawHistory = history
     .filter(m => m.role && m.text)
     .slice(-20)
     .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
 
+  // Ensure alternating roles — Anthropic API requires user/assistant alternation
+  // and the first message must be role: 'user'
+  const conversationHistory = [];
+  for (const msg of rawHistory) {
+    if (conversationHistory.length === 0 || conversationHistory[conversationHistory.length - 1].role !== msg.role) {
+      conversationHistory.push(msg);
+    }
+  }
+
+  // First message must be user role
+  while (conversationHistory.length > 0 && conversationHistory[0].role !== 'user') {
+    conversationHistory.shift();
+  }
+
+  // Last history message must be assistant so we can append user message
+  if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+    conversationHistory.pop();
+  }
+
   conversationHistory.push({ role: 'user', content: message });
 
-  // Reuse the same system prompt from assistant-command (lines 4785-5123)
+  // Reuse the same system prompt from assistant-command
   // We reference the systemPrompt variable built inline in the non-streaming route.
   // Since the system prompt is built inline in the other route, we rebuild the key parts here.
   // The full system prompt is identical — we reference the same string structure.
   const systemPrompt = buildAmberSystemPrompt(contextSummary, knowledgeBlock);
 
+  // Helper: attempt streaming with a given model
+  const tryStreamModel = (modelId) => {
+    return anthropic.messages.stream({
+      model:      modelId,
+      max_tokens: 2048,
+      system:     systemPrompt,
+      messages:   conversationHistory,
+    });
+  };
+
   try {
     let fullText = '';
-
-    // ── Try models with fallback ──
-    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
     let stream;
-    let streamModel;
-    for (const model of MODELS) {
-      try {
-        console.log(`assistant-stream: trying ${model}`);
-        stream = anthropic.messages.stream({
-          model,
-          max_tokens: 2048,
-          system:     systemPrompt,
-          messages:   conversationHistory,
-        });
-        streamModel = model;
-        break;
-      } catch (apiErr) {
-        const status = apiErr?.status || apiErr?.error?.status;
-        if (status === 529 || status === 503 || status === 404) {
-          console.log(`assistant-stream: ${model} status ${status}, trying next model`);
-          continue;
-        }
-        throw apiErr;
-      }
-    }
 
-    if (!stream) {
-      res.write(`data: ${JSON.stringify({ type: 'error', reply: "I'm temporarily overloaded — please wait a moment and try again.", errorType: 'overloaded', retryable: true })}\n\n`);
-      return res.end();
+    try {
+      stream = tryStreamModel('claude-sonnet-4-6');
+    } catch (primaryErr) {
+      console.error('Assistant stream primary model failed:', {
+        message: primaryErr.message,
+        status: primaryErr.status,
+        type: primaryErr.error?.type,
+        name: primaryErr.name,
+      });
+      stream = tryStreamModel('claude-sonnet-4-20250514');
     }
 
     // Handle client disconnect
@@ -5080,7 +5113,30 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
       res.write(`data: ${JSON.stringify({ type: 'token', text })}\n\n`);
     });
 
-    await stream.finalMessage();
+    try {
+      await stream.finalMessage();
+    } catch (streamErr) {
+      // If primary model fails mid-stream, try fallback
+      const isRetryable = streamErr.status === 529 || streamErr.status === 503 || streamErr.status === 404;
+      if (isRetryable && fullText === '') {
+        console.error('Assistant stream retrying with fallback model:', {
+          message: streamErr.message,
+          status: streamErr.status,
+          type: streamErr.error?.type,
+        });
+        fullText = '';
+        stream = tryStreamModel('claude-sonnet-4-20250514');
+        req.on('close', () => { aborted = true; stream.abort(); });
+        stream.on('text', (text) => {
+          if (aborted) return;
+          fullText += text;
+          res.write(`data: ${JSON.stringify({ type: 'token', text })}\n\n`);
+        });
+        await stream.finalMessage();
+      } else {
+        throw streamErr;
+      }
+    }
 
     if (aborted) return;
 
@@ -5130,39 +5186,56 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
     res.end();
 
   } catch (err) {
-    const status = err?.status || err?.error?.status;
+    // Structured error logging
     console.error('Assistant stream error:', {
       message: err.message,
-      status,
-      type: err?.error?.type || err?.type,
-      name: err?.name,
-      stack: err?.stack?.split('\n').slice(0, 3).join('\n'),
+      status: err.status,
+      type: err.error?.type,
+      name: err.name,
+      stack: err.stack?.split('\n').slice(0, 3).join(' | '),
     });
 
-    let errorType = 'unknown';
-    let reply;
-    let retryable = false;
+    // Error classification with errorType and retryable fields
+    const isAuth = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    const isRateLimit = err.status === 429;
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('overloaded');
+    const isBadRequest = err.status === 400;
+    const isNetwork = err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.message?.includes('fetch failed');
 
-    if (status === 401 || err.message?.includes('API key') || err.message?.includes('authentication')) {
+    let errorType, retryable, reply;
+    if (isAuth) {
       errorType = 'auth';
+      retryable = false;
       reply = "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env.";
-    } else if (status === 429) {
+    } else if (isRateLimit) {
       errorType = 'rate_limit';
-      reply = "I'm being rate-limited — please wait a moment and try again.";
-      retryable = true;
-    } else if (status === 529 || status === 503) {
+      retryable = false;
+      reply = "Too many requests hitting the AI service — give me a moment and try again.";
+    } else if (isOverloaded) {
       errorType = 'overloaded';
-      reply = "I'm temporarily overloaded — please wait a moment and try again.";
       retryable = true;
-    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+      reply = "I'm a bit overwhelmed right now — the AI service is temporarily busy. Try again in a moment.";
+    } else if (isBadRequest) {
+      errorType = 'bad_request';
+      retryable = false;
+      reply = "Something went wrong with the request format. Check server logs for details.";
+    } else if (isNetwork) {
       errorType = 'network';
-      reply = "I can't reach the AI service right now — check your network connection.";
       retryable = true;
+      reply = "I can't reach the AI service right now — there may be a network issue. Try again in a moment.";
     } else {
-      reply = `Something went wrong: ${err.message || 'unknown error'}. Try again or rephrase your request.`;
+      errorType = 'unknown';
+      retryable = false;
+      reply = `Something unexpected happened: ${err.message || 'unknown error'}. Check server logs for details.`;
     }
 
-    res.write(`data: ${JSON.stringify({ type: 'error', reply, error: err.message, errorType, retryable })}\n\n`);
+    res.write(`data: ${JSON.stringify({
+      type:  'error',
+      reply,
+      error: err.message,
+      errorType,
+      retryable,
+    })}\n\n`);
     res.end();
   }
 });
@@ -5588,7 +5661,7 @@ Return ONLY valid JSON:
         if (!validPages.includes(pageName)) return { error: `Invalid page_name. Valid: ${validPages.join(', ')}` };
 
         const rows = await sequelize.query(
-          `SELECT constant_key, data FROM page_contents WHERE page_name = :pageName`,
+          `SELECT constant_key, data FROM page_content WHERE page_name = :pageName`,
           { replacements: { pageName }, type: sequelize.QueryTypes.SELECT }
         );
 
@@ -5617,11 +5690,11 @@ Return ONLY valid JSON:
           character_depth_engine: 'Character Depth Engine',
         };
 
-        // Check page_contents table for each page
+        // Check page_content table for each page
         const pageCounts = await sequelize.query(
           `SELECT page_name, COUNT(*) as section_count,
                   SUM(LENGTH(data::text)) as total_chars
-           FROM page_contents
+           FROM page_content
            WHERE page_name IN (:pages)
            GROUP BY page_name`,
           { replacements: { pages: validPages }, type: sequelize.QueryTypes.SELECT }
@@ -5706,7 +5779,7 @@ Return ONLY valid JSON:
 
         // Load page content from DB
         const rows = await sequelize.query(
-          `SELECT constant_key, data FROM page_contents WHERE page_name = :pageName`,
+          `SELECT constant_key, data FROM page_content WHERE page_name = :pageName`,
           { replacements: { pageName }, type: sequelize.QueryTypes.SELECT }
         );
 
@@ -5800,7 +5873,7 @@ DOCUMENT:\n${trimmed}\n\nCATEGORIES: character, narrative, locked_decision, fran
 
         // Load existing page content + active brain knowledge for context
         const existingPage = await sequelize.query(
-          `SELECT constant_key, data FROM page_contents WHERE page_name = :pageName`,
+          `SELECT constant_key, data FROM page_content WHERE page_name = :pageName`,
           { replacements: { pageName }, type: sequelize.QueryTypes.SELECT }
         );
 
@@ -7063,23 +7136,62 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
     const { Op } = require('sequelize');
     const { CharacterRegistry, RegistryCharacter } = require('../models');
 
-    const characters = await RegistryCharacter.findAll({
-      where: {
-        status: { [Op.in]: ['accepted', 'finalized'] },
-      },
-      include: [{
-        model: CharacterRegistry,
-        as: 'registry',
-        attributes: ['id', 'title', 'book_tag'],
-      }],
-      attributes: [
-        'id', 'character_key', 'display_name', 'icon', 'role_type',
-        'world',
-        'core_desire', 'core_fear', 'core_wound', 'description',
-        'career_status', 'portrait_url',
-      ],
-      order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
-    });
+    if (!RegistryCharacter) {
+      return res.json({ success: true, worlds: {}, total: 0 });
+    }
+
+    // Try with full columns first; fall back if sort_order/world don't exist yet
+    let characters;
+    try {
+      characters = await RegistryCharacter.findAll({
+        where: {
+          status: { [Op.in]: ['accepted', 'finalized'] },
+        },
+        include: [{
+          model: CharacterRegistry,
+          as: 'registry',
+          attributes: ['id', 'title', 'book_tag'],
+        }],
+        attributes: [
+          'id', 'character_key', 'display_name', 'icon', 'role_type',
+          'world',
+          'core_desire', 'core_fear', 'core_wound', 'description',
+          'career_status', 'portrait_url',
+        ],
+        order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
+      });
+    } catch (queryErr) {
+      // Fallback: columns like sort_order or world may not exist yet
+      console.warn('[story-engine-characters] full query failed, trying fallback:', queryErr.message);
+      try {
+        characters = await RegistryCharacter.findAll({
+          where: {
+            status: { [Op.in]: ['accepted', 'finalized'] },
+          },
+          include: [{
+            model: CharacterRegistry,
+            as: 'registry',
+            attributes: ['id', 'title', 'book_tag'],
+          }],
+          order: [['display_name', 'ASC']],
+        });
+      } catch (fallbackErr) {
+        // Last resort: no include, no association
+        console.warn('[story-engine-characters] fallback also failed, trying bare query:', fallbackErr.message);
+        try {
+          characters = await RegistryCharacter.findAll({
+            where: {
+              status: { [Op.in]: ['accepted', 'finalized'] },
+            },
+            order: [['display_name', 'ASC']],
+          });
+        } catch (bareErr) {
+          // Table may not exist yet — return empty results instead of 500
+          console.warn('[story-engine-characters] bare query also failed (table may not exist):', bareErr.message);
+          return res.json({ success: true, worlds: {}, total: 0 });
+        }
+      }
+    }
 
     // Group by world column — never show 'unknown'
     const byWorld = {};
@@ -7933,6 +8045,60 @@ async function loadDialogueVoiceCards(characterKey) {
 }
 
 // ─── Load dramatic irony / open mysteries ────────────────────────────────────
+async function loadVoiceFingerprints(characterKey) {
+  try {
+    const { StorytellerStory, RegistryCharacter } = require('../models');
+    if (!StorytellerStory) return null;
+    const { Op } = require('sequelize');
+
+    // Find the main character to get their display name
+    const mainChar = await RegistryCharacter.findOne({
+      where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+      attributes: ['display_name'],
+    });
+    if (!mainChar) return null;
+
+    // Load the last 5 approved stories for this character
+    const approvedStories = await StorytellerStory.findAll({
+      where: {
+        character_key: characterKey,
+        status: { [Op.in]: ['approved', 'written_back', 'evaluated'] },
+      },
+      attributes: ['text', 'story_number', 'title'],
+      order: [['story_number', 'DESC']],
+      limit: 5,
+    });
+
+    if (!approvedStories.length) return null;
+
+    // Extract dialogue lines using a simple regex — lines between quotes
+    const dialogueExcerpts = [];
+    for (const story of approvedStories) {
+      if (!story.text) continue;
+      // Match quoted dialogue (both single and double quotes)
+      const matches = story.text.match(/"[^"]{15,120}"/g) || [];
+      // Take 2-3 distinctive lines per story
+      const selected = matches
+        .filter(m => !m.includes('…') || m.length > 30) // skip trailing fragments
+        .slice(0, 3);
+      if (selected.length) {
+        dialogueExcerpts.push({ story: story.story_number, title: story.title, lines: selected });
+      }
+    }
+
+    if (!dialogueExcerpts.length) return null;
+
+    const sections = dialogueExcerpts.map(d =>
+      `  Story ${d.story} ("${d.title}"):\n${d.lines.map(l => `    ${l}`).join('\n')}`
+    );
+
+    return `VOICE FINGERPRINTS (actual dialogue from approved stories — absorb the rhythm, vocabulary, and cadence, then write NEW dialogue that matches):\n${sections.join('\n')}`;
+  } catch (err) {
+    console.error('[loadVoiceFingerprints] error:', err?.message);
+    return null;
+  }
+}
+
 async function loadDramaticIrony(characterKey) {
   try {
     const { StorytellerMemory } = require('../models');
@@ -8058,23 +8224,260 @@ These influences are atmospheric. Characters don't announce who they follow — 
   }
 }
 
+// ─── Load arc tracking context ──────────────────────────────────────────────
+async function loadArcContext(characterKey) {
+  try {
+    if (!buildArcContext) return null;
+    const arcCtx = await buildArcContext(db, characterKey);
+    if (!arcCtx) return null;
+    return buildArcContextPromptSection ? buildArcContextPromptSection(arcCtx) : null;
+  } catch (err) {
+    console.warn('[loadArcContext] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load therapy profile ──────────────────────────────────────────────────
+async function loadTherapyProfile(characterKey) {
+  try {
+    const { CharacterTherapyProfile, RegistryCharacter } = require('../models');
+    if (!CharacterTherapyProfile) return null;
+
+    // Find the character's ID
+    const char = await RegistryCharacter.findOne({
+      where: { character_key: characterKey },
+      attributes: ['id'],
+    });
+    if (!char) return null;
+
+    const profile = await CharacterTherapyProfile.findOne({
+      where: { character_id: char.id },
+    });
+    if (!profile) return null;
+
+    const parts = [];
+    if (profile.primary_defense) parts.push(`Primary defense mechanism: ${profile.primary_defense}`);
+    // emotional_state is JSONB — extract meaningful fields
+    const emo = profile.emotional_state || {};
+    if (emo.current_state) parts.push(`Current emotional state: ${emo.current_state}`);
+    if (emo.dominant_emotion) parts.push(`Dominant emotion: ${emo.dominant_emotion}`);
+    if (emo.vulnerability_level) parts.push(`Vulnerability level: ${emo.vulnerability_level}`);
+    // baseline is JSONB — psychological baseline
+    const base = profile.baseline || {};
+    if (base.attachment_style) parts.push(`Attachment style: ${base.attachment_style}`);
+    if (base.core_wound) parts.push(`Core wound: ${base.core_wound}`);
+    if (base.coping_patterns) parts.push(`Coping patterns: ${Array.isArray(base.coping_patterns) ? base.coping_patterns.join(', ') : base.coping_patterns}`);
+    // known = things the character knows about herself
+    if (profile.known?.length) parts.push(`What she knows about herself: ${profile.known.join('; ')}`);
+    // sensed = things she senses but can't articulate
+    if (profile.sensed?.length) parts.push(`What she senses but can't name: ${profile.sensed.join('; ')}`);
+    // never_knows = blind spots
+    if (profile.never_knows?.length) parts.push(`Blind spots (she will never see these): ${profile.never_knows.join('; ')}`);
+
+    if (!parts.length) return null;
+
+    return `PSYCHOLOGICAL PROFILE (this is what a therapist would see — the character does NOT have this language for herself, but these patterns drive her behavior):\n${parts.join('\n')}`;
+  } catch (err) {
+    console.warn('[loadTherapyProfile] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load character growth logs ──────────────────────────────────────────────
+async function loadGrowthLogs(characterKey) {
+  try {
+    const { CharacterGrowthLog, RegistryCharacter } = require('../models');
+    if (!CharacterGrowthLog) return null;
+
+    // GrowthLog uses character_id (UUID), not character_key
+    const char = await RegistryCharacter.findOne({
+      where: { character_key: characterKey },
+      attributes: ['id'],
+    });
+    if (!char) return null;
+
+    const logs = await CharacterGrowthLog.findAll({
+      where: { character_id: char.id },
+      order: [['created_at', 'DESC']],
+      limit: 10,
+    });
+    if (!logs.length) return null;
+
+    const lines = logs.map(log => {
+      const parts = [`  • [${log.update_type}]`];
+      if (log.field_updated) parts.push(`${log.field_updated}:`);
+      if (log.new_value) parts.push(typeof log.new_value === 'string' ? log.new_value : JSON.stringify(log.new_value));
+      if (log.growth_source) parts.push(`(source: ${log.growth_source})`);
+      return parts.join(' ');
+    });
+
+    return `CHARACTER GROWTH (recent changes to who she is — these are cumulative, not temporary):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.warn('[loadGrowthLogs] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load franchise knowledge (world rules / lore) ───────────────────────────
+async function loadFranchiseKnowledge(characterKey) {
+  try {
+    const { FranchiseKnowledge } = require('../models');
+    if (!FranchiseKnowledge) return null;
+
+    const entries = await FranchiseKnowledge.findAll({
+      where: { status: 'active' },
+      order: [['severity', 'ASC'], ['created_at', 'DESC']],
+      limit: 15,
+    });
+    if (!entries.length) return null;
+
+    const lines = entries.map(e => {
+      const cat = e.category ? `[${e.category}] ` : '';
+      const sev = e.severity === 'critical' ? ' ⚠' : '';
+      return `  • ${cat}${e.title}${sev}: ${(e.content || '').slice(0, 200)}`;
+    });
+
+    return `WORLD RULES & FRANCHISE KNOWLEDGE (these are constraints — never contradict them):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.warn('[loadFranchiseKnowledge] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load world timeline events (non-canon, recent) ──────────────────────────
+async function loadRecentWorldEvents(characterKey) {
+  try {
+    const { WorldTimelineEvent } = require('../models');
+    if (!WorldTimelineEvent) return null;
+
+    const events = await WorldTimelineEvent.findAll({
+      where: { is_canon: false },
+      order: [['created_at', 'DESC']],
+      limit: 10,
+    });
+    if (!events.length) return null;
+
+    const relevant = events.filter(e => {
+      const involved = e.characters_involved || [];
+      return involved.some(c =>
+        (typeof c === 'string' && c === characterKey) ||
+        (typeof c === 'object' && (c.key === characterKey || c.character_key === characterKey))
+      );
+    });
+    if (!relevant.length) return null;
+
+    const lines = relevant.map(e => {
+      const date = e.story_date ? ` (${e.story_date})` : '';
+      return `  • ${e.event_name}${date}: ${e.event_description || ''}`;
+    });
+
+    return `RECENT WORLD EVENTS (what has been happening — these shape the character's current reality):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.warn('[loadRecentWorldEvents] error:', err?.message);
+    return null;
+  }
+}
+
 // ─── In-memory cache for story engine task arcs ───────────────────────────────
 const seTaskArcCache = new Map();
 
 // ─── GET /story-engine-tasks/:characterKey ─────────────────────────────────────
-// Returns cached task arc if available; no Claude call.
+// Returns cached task arc if available; falls back to DB, then to empty.
 router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) => {
   const { characterKey } = req.params;
-  // Accept any character key — hardcoded DNA or dynamic DB character
+
+  // 1. In-memory cache (fastest)
   if (seTaskArcCache.has(characterKey)) {
     return res.json({ cached: true, ...seTaskArcCache.get(characterKey) });
   }
+
+  // 2. Database fallback — restore from persisted arc
+  try {
+    await db.StoryTaskArc.sync();
+    const dbArc = await db.StoryTaskArc.findOne({ where: { character_key: characterKey } });
+    if (dbArc && dbArc.tasks?.length) {
+      const result = {
+        character_key: dbArc.character_key,
+        display_name: dbArc.display_name,
+        world: dbArc.world,
+        narrative_spine: dbArc.narrative_spine,
+        tasks: dbArc.tasks,
+      };
+      // Re-populate in-memory cache
+      seTaskArcCache.set(characterKey, result);
+      return res.json({ cached: true, ...result });
+    }
+  } catch (dbErr) {
+    console.warn('[story-engine-tasks] DB fallback failed:', dbErr.message);
+  }
+
+  // 3. Auto-rebuild from existing stories if any exist
+  try {
+    const existingStories = await db.StorytellerStory.findAll({
+      where: { character_key: characterKey },
+      order: [['story_number', 'ASC']],
+    });
+    if (existingStories.length > 0) {
+      const tasks = existingStories.map(s => {
+        const brief = s.task_brief || {};
+        // Determine phase from brief, story, or story_number position
+        const inferredPhase = brief.phase || s.phase || (
+          s.story_number <= 10 ? 'establishment' :
+          s.story_number <= 25 ? 'pressure' :
+          s.story_number <= 40 ? 'crisis' : 'integration'
+        );
+        // Infer story type from brief, story, or scene_brief
+        const inferredType = brief.story_type || s.story_type || (
+          s.scene_brief ? 'eval_scene' : 'internal'
+        );
+        return {
+          story_number: s.story_number,
+          title: brief.title || s.title || `Story ${s.story_number}`,
+          phase: inferredPhase,
+          story_type: inferredType,
+          task: brief.task || s.scene_brief || `Story ${s.story_number}`,
+          obstacle: brief.obstacle || '',
+          domains_active: brief.domains_active || [],
+          strength_weaponized: brief.strength_weaponized || '',
+          emotional_start: brief.emotional_start || '',
+          emotional_end: brief.emotional_end || '',
+          primary_location: brief.primary_location || '',
+          time_of_day: brief.time_of_day || '',
+          season_weather: brief.season_weather || '',
+          new_character: s.new_character || false,
+          new_character_name: s.new_character_name || null,
+          new_character_role: s.new_character_role || null,
+          therapy_seeds: brief.therapy_seeds || [],
+          opening_line: brief.opening_line || s.opening_line || '',
+          // Track whether this task has a full brief or was reconstructed
+          has_full_brief: !!(brief.task && brief.obstacle),
+        };
+      });
+      const result = {
+        character_key: characterKey,
+        display_name: existingStories[0].task_brief?.display_name || characterKey,
+        world: null,
+        narrative_spine: null,
+        tasks,
+      };
+      seTaskArcCache.set(characterKey, result);
+      return res.json({ cached: true, rebuilt: true, ...result });
+    }
+  } catch (rebuildErr) {
+    console.warn('[story-engine-tasks] rebuild from stories failed:', rebuildErr.message);
+  }
+
   return res.json({ cached: false, tasks: [] });
 });
 
 // ─── POST /generate-story-tasks ───────────────────────────────────────────────
 // Generates the 50-story task arc for a character before stories are written.
 router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
+  // Extend request timeout — this endpoint calls Claude with max_tokens: 16000
+  // which can take 60-90s. Default proxy timeouts (30-60s) cause 504s.
+  if (req.setTimeout) req.setTimeout(300000); // 5 minutes
+  if (res.setTimeout) res.setTimeout(300000);
+
   const { characterKey, forceRegenerate } = req.body;
 
   if (!characterKey) {
@@ -8135,20 +8538,18 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
   }
 
   try {
-    // Load rich profile from DB (for both hardcoded and dynamic characters)
-    const dbProfile = dynamicChar ? await loadCharacterProfile(characterKey) : await loadCharacterProfile(characterKey);
+    // Load all context in parallel to reduce total latency
+    const [dbProfile, storyMemories, worldState] = await Promise.all([
+      loadCharacterProfile(characterKey),
+      loadStoryMemories(characterKey),
+      loadWorldState(characterKey, dna.world),
+    ]);
     const profileSection = dbProfile
       ? `\n\nCHARACTER PROFILE FROM REGISTRY (use this to enrich every story brief — this is who they really are):\n${dbProfile}`
       : '';
-
-    // Load existing story memories to inform arc planning
-    const storyMemories = await loadStoryMemories(characterKey);
     const memoriesSection = storyMemories
       ? `\n\n${storyMemories}`
       : '';
-
-    // Load cross-character world state for collision story planning
-    const worldState = await loadWorldState(characterKey, dna.world);
     const worldSection = worldState
       ? `\n\n${worldState}`
       : '';
@@ -8170,6 +8571,22 @@ CHARACTER DNA:
 - Romantic domain: ${dna.domains.romantic}
 - Family domain: ${dna.domains.family}
 - Friends domain: ${dna.domains.friends}${profileSection}${memoriesSection}${worldSection}
+
+NARRATIVE SPINE (design this FIRST, then build all 50 stories around it):
+Before generating individual story briefs, you MUST design a narrative spine — the throughline that makes 50 stories feel like ONE story. Think of this as the architecture beneath the arc.
+
+1. CENTRAL DRAMATIC QUESTION — one question the reader carries from story 1 to story 50 (e.g., "Can she build something real without losing who she was before she started?"). This question should feel unanswerable until the final stories.
+
+2. KEY TURNING POINTS — pre-plan 4-5 structural pivots that change the direction of the arc:
+   - The Inciting Fracture (stories 8-12): something cracks that cannot be uncracked
+   - The False Summit (stories 18-22): she gets what she thought she wanted, and it tastes wrong
+   - The Betrayal/Revelation (stories 28-32): a truth she cannot unknow — about herself, someone she loves, or both
+   - The Crucible (stories 36-40): everything converges — career, relationship, identity — she cannot keep them separate
+   - The Quiet Shift (stories 46-50): not a triumph, not a collapse — a rearrangement of what matters
+
+3. SUBPLOT ARCS — each domain (career, romantic, family, friends) gets its own mini-arc with a beginning, middle, and end WITHIN the 50 stories. These subplot arcs should intersect at the turning points.
+
+4. RECURRING MOTIFS — 2-3 images, objects, or phrases that recur across the arc with shifting meaning (the recurring object is one; identify 1-2 more that emerge from the character's wound and desire).
 
 ARC PHASES:
 - Stories 1-10: Establishment — who she is, her rhythms, her world
@@ -8200,6 +8617,19 @@ RULES:
 Return ONLY valid JSON — no preamble, no markdown.
 Format:
 {
+  "narrative_spine": {
+    "central_dramatic_question": "the one question the reader carries across all 50 stories",
+    "turning_points": [
+      { "name": "string", "story_range": "e.g. 8-12", "description": "what happens and why it changes everything" }
+    ],
+    "subplot_arcs": {
+      "career": "beginning → middle → end of the career subplot",
+      "romantic": "beginning → middle → end of the romantic subplot",
+      "family": "beginning → middle → end of the family subplot",
+      "friends": "beginning → middle → end of the friends subplot"
+    },
+    "recurring_motifs": ["motif 1 and how its meaning shifts", "motif 2 and how its meaning shifts"]
+  },
   "tasks": [
     {
       "story_number": 1,
@@ -8224,12 +8654,29 @@ Format:
   ]
 }`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
-    });
+    let response;
+    try {
+      response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 16000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+      });
+    } catch (apiErr) {
+      const isRetryable = apiErr.status === 529 || apiErr.status === 503 || apiErr.status === 404;
+      console.error('[generate-story-tasks] primary model failed:', apiErr.status, apiErr.message);
+      if (isRetryable) {
+        await new Promise(r => setTimeout(r, 2000));
+        response = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 16000,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+        });
+      } else {
+        throw apiErr;
+      }
+    }
 
     const raw = response.content?.[0]?.text || '';
     let parsed;
@@ -8254,11 +8701,26 @@ Format:
       character_key: characterKey,
       display_name: dna.display_name,
       world: dna.world,
+      narrative_spine: parsed.narrative_spine || null,
       tasks: parsed.tasks || [],
     };
 
     // Cache the arc in memory
     seTaskArcCache.set(characterKey, result);
+
+    // Persist to database so it survives server restarts
+    try {
+      await db.StoryTaskArc.sync();
+      await db.StoryTaskArc.upsert({
+        character_key: characterKey,
+        display_name: result.display_name,
+        world: result.world,
+        narrative_spine: result.narrative_spine,
+        tasks: result.tasks,
+      });
+    } catch (persistErr) {
+      console.warn('[generate-story-tasks] DB persist failed:', persistErr.message);
+    }
 
     return res.json({ cached: false, ...result });
 
@@ -8267,6 +8729,165 @@ Format:
     return res.status(500).json({ error: 'Task generation failed.' });
   }
 });
+
+// ─── Narrative variety engine ──────────────────────────────────────────────────
+// Each story gets a unique combination of structure, POV, length, and technique
+// based on its position in the arc, phase, and story type.
+
+function buildCraftRules(storyNumber, taskBrief, dna) {
+  const phase = taskBrief.phase || 'establishment';
+  const storyType = taskBrief.story_type || 'internal';
+  const n = storyNumber || 1;
+
+  // ── Word count varies by phase and story position ──
+  const lengthRanges = {
+    establishment: { min: 2800, max: 4200 },  // shorter, grounding
+    pressure:      { min: 3500, max: 5500 },  // building, expanding
+    crisis:        { min: 4000, max: 6500 },  // longer, the big moments need room
+    integration:   { min: 2000, max: 5000 },  // widest range — some need brevity, some need space
+  };
+  // Key turning points get extra room
+  const isTurningPoint = [8, 9, 10, 11, 18, 19, 20, 21, 28, 29, 30, 31, 36, 37, 38, 39, 46, 47, 48, 49, 50].includes(n);
+  const range = lengthRanges[phase] || lengthRanges.establishment;
+  const wordMin = isTurningPoint ? range.min + 500 : range.min;
+  const wordMax = isTurningPoint ? range.max + 1000 : range.max;
+
+  // ── Domain focus — NOT all four in every story ──
+  const domainInstructions = {
+    establishment: 'All four life domains should be present — the reader is learning this world.',
+    pressure: `Focus on 2-3 domains that are actively colliding. The others can be present as background texture, not as active storylines. Go DEEP on the domains that matter most to this story's task.`,
+    crisis: `Focus on the 1-2 domains under maximum pressure. The others exist only as absence — what she is NOT attending to while this crisis unfolds. Depth over breadth.`,
+    integration: `Let the domains that need it breathe. Some stories in integration should go deep on ONE domain. Others should show how all four have been reshaped. Match the task.`,
+  };
+
+  // ── POV and narrative distance varies ──
+  const povOptions = [
+    { pov: 'close third person — deep in her interior', weight: 60 },
+    { pov: 'close third person — slightly pulled back, observational, almost cinematic', weight: 15 },
+    { pov: 'close third person — so deep it feels like first person without using "I"', weight: 15 },
+    { pov: 'close third person — with one section that shifts to another character\'s perspective (mark the shift with a section break)', weight: 10 },
+  ];
+  // Deterministic selection based on story number
+  const povSeed = (n * 7 + 3) % 100;
+  let povCumulative = 0;
+  let selectedPov = povOptions[0].pov;
+  for (const opt of povOptions) {
+    povCumulative += opt.weight;
+    if (povSeed < povCumulative) { selectedPov = opt.pov; break; }
+  }
+
+  // ── Narrative technique — varies by story type and position ──
+  const techniques = {
+    internal: [
+      'Standard scene-based narrative with deep interiority.',
+      'Open with the ending, then show how she got there. Non-linear — the reader knows the outcome, the tension is in the HOW.',
+      'A single continuous scene — real-time, no cuts, one unbroken sequence. Claustrophobic intimacy.',
+      'Alternate between the present action and a memory. Two timelines braided together, each illuminating the other.',
+      'Interior monologue interrupted by the external world. The story lives in her head, but reality keeps crashing in.',
+    ],
+    collision: [
+      'Standard scene-based narrative with escalating tension.',
+      'Dialogue-driven. This story is 50%+ conversation. The conflict lives in what people say and don\'t say.',
+      'Two parallel storylines that converge. Show both characters approaching the collision from their own angles before they meet.',
+      'The collision happens in the first paragraph. The rest of the story is the aftermath — what the collision broke open.',
+      'Ensemble scene — multiple characters in one space, overlapping conversations, competing needs. Like a dinner party that goes wrong.',
+    ],
+    wrong_win: [
+      'Standard scene-based narrative where success curdles.',
+      'Build the success as triumph for 80% of the story. The wrongness reveals itself in the final 20%. The reader should feel the floor tilt.',
+      'Frame it as a celebration or achievement story — then let one small detail unravel everything. The detail should have been visible all along.',
+      'Tell the story from the perspective of someone watching her win. They see what she can\'t.',
+      'Start with the aftermath of the win. Open with what it cost. Then show the winning.',
+    ],
+  };
+
+  const typeOpts = techniques[storyType] || techniques.internal;
+  const techIndex = (n * 13 + 5) % typeOpts.length;
+  const selectedTechnique = typeOpts[techIndex];
+
+  // ── Ending type varies by phase ──
+  const endingTypes = {
+    establishment: [
+      'End on a quiet shift — something small has changed that the reader notices before the character does.',
+      'End on a question the character asks herself that she couldn\'t have asked at the beginning.',
+      'End on a sensory detail that carries the weight of the whole story.',
+    ],
+    pressure: [
+      'End on an escalation — the last sentence should raise the stakes, not resolve them.',
+      'End mid-action. Cut the story off while something is still happening. Leave the reader leaning forward.',
+      'End on a silence — someone doesn\'t say the thing. The reader knows what it was.',
+    ],
+    crisis: [
+      'End on devastation. Something is broken. Let it be broken. Do not comfort the reader.',
+      'End on a choice. She decides. The reader doesn\'t know yet if she\'s right.',
+      'End on a reversal — what she thought was true isn\'t. The last paragraph reshapes every scene before it.',
+    ],
+    integration: [
+      'End on acceptance — not resolution. She sees something clearly that she couldn\'t before.',
+      'End on tenderness that hurts. A gentle moment that the reader knows is fragile.',
+      'End on the beginning of something new. Not hopeful — real. She is different now and she knows it.',
+      'End on a circular return to where story 1 began — but everything means something different now.',
+    ],
+  };
+
+  const endOpts = endingTypes[phase] || endingTypes.establishment;
+  const endIndex = (n * 11 + 2) % endOpts.length;
+  const selectedEnding = endOpts[endIndex];
+
+  // ── Scene structure varies ──
+  const sceneStructures = {
+    establishment: `SCENE STRUCTURE:
+This story needs 3-5 distinct scenes. Ground each in a specific place and time.
+- Open in the character's body. The task should be visible within the first 300 words.
+- Between scenes: SENSORY TRANSITIONS — ground each change in a physical detail.
+- Alternate TENSION and BREATH.`,
+
+    pressure: `SCENE STRUCTURE:
+This story needs 3-6 scenes. The pressure should build across scene breaks — each scene tighter than the last.
+- Open with forward momentum. Something is already in motion.
+- At least one scene should create collision between domains.
+- The character should be forced to act, choose, or reveal something.
+- Pacing: the screws tighten. Breaths get shorter.`,
+
+    crisis: `SCENE STRUCTURE:
+This story can have 1-7 scenes. Match the crisis. A single unbroken scene of confrontation. Or short sharp cuts between fragmenting realities. Let the structure mirror the pressure.
+- Open in the middle of it. No setup. The reader catches up.
+- At least one moment where the character's control breaks — something leaks through.
+- Structure should feel different from the stories around it. This is the peak. It should read like it.`,
+
+    integration: `SCENE STRUCTURE:
+This story needs 2-5 scenes. The pacing is different here — more breath, more space, but NOT less weight.
+- Open with stillness or aftermath. The storm has passed (or is passing).
+- At least one moment of genuine interiority — not reaction, but understanding.
+- Let scenes breathe. Longer beats. The reader needs to sit with what has happened.`,
+  };
+
+  const dialogueGuide = storyType === 'collision'
+    ? 'Dialogue ratio: 30-50%. This story lives in conversation. Let it.'
+    : storyType === 'wrong_win'
+      ? 'Dialogue ratio: 20-35%. The wrong win needs both action and the words people say when they think things are going well.'
+      : 'Dialogue ratio: 10-30%. This story lives in interiority. Dialogue is punctuation, not the main text.';
+
+  return `CRAFT RULES:
+- Length: ${wordMin}-${wordMax} words.
+- ${domainInstructions[phase]}
+- The TASK creates the clock. The obstacle hits inside the task.
+- The recurring object (${dna.recurring_object}) should appear naturally — not forced. If it doesn't fit this story, let it be absent.
+- POV: ${selectedPov}
+- Do not summarize. Show every scene. Trust the reader.
+- The character's desire line and fear line must both be active throughout.
+- ${dialogueGuide}
+- Every line of dialogue must do double duty — reveal character AND advance plot.
+- New character introductions: name, one physical detail, one line of dialogue that reveals their entire persona. No more than one paragraph.
+
+NARRATIVE APPROACH FOR THIS SPECIFIC STORY:
+${selectedTechnique}
+
+${sceneStructures[phase]}
+
+ENDING:
+${selectedEnding}`;
+}
 
 // ─── POST /generate-story ─────────────────────────────────────────────────────
 // Generates one complete short story (3300-4800 words) from a task brief.
@@ -8339,24 +8960,56 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
   });
 
   try {
-    // Build previous stories context — use ALL approved, not just last 3
+    // Build previous stories context — relevance-based, not just recency
     let previousContext;
     if (previousStories?.length) {
-      // Last 3: full summary (up to 800 chars each for deep continuity)
-      // Previous 7: title + short summary
-      // Older: titles only
+      // Always include last 3 with full context (direct continuity)
       const last3 = previousStories.slice(-3);
-      const middle = previousStories.slice(-10, -3);
-      const older = previousStories.slice(0, -10);
+
+      // For older stories, identify thematically relevant ones using the current brief
+      const older = previousStories.slice(0, -3);
+      let relevantOlder = [];
+      let remainingOlder = [];
+
+      if (older.length > 5) {
+        // Use a fast model to pick the most relevant older stories for this brief
+        try {
+          const relevanceCheck = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 500,
+            system: 'Return ONLY a JSON array of story numbers. No commentary.',
+            messages: [{ role: 'user', content: `Current story brief: "${taskBrief.title}" — ${taskBrief.task}. Obstacle: ${taskBrief.obstacle}. Phase: ${taskBrief.phase}. Strength weaponized: ${taskBrief.strength_weaponized}.
+
+Which of these earlier stories are most THEMATICALLY relevant to the current brief? Pick up to 5 that share themes, characters, emotional territory, or plot threads that should inform continuity.
+
+${older.map(s => `Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 150)}`).join('\n')}
+
+Return JSON array of story numbers, e.g. [3, 7, 14]` }],
+          });
+          const relRaw = relevanceCheck.content?.[0]?.text || '[]';
+          const relNums = JSON.parse(relRaw.replace(/```json|```/g, '').trim());
+          if (Array.isArray(relNums)) {
+            relevantOlder = older.filter(s => relNums.includes(s.number));
+            remainingOlder = older.filter(s => !relNums.includes(s.number));
+          } else {
+            remainingOlder = older;
+          }
+        } catch (relErr) {
+          console.warn(`[relevance-check] Story ${storyNumber} for ${characterKey} failed: ${relErr?.message} — falling back to recency`);
+          remainingOlder = older;
+        }
+      } else {
+        remainingOlder = older;
+      }
 
       let contextParts = [];
-      if (older.length) {
-        contextParts.push('EARLIER ARC STORIES (titles only — these established the foundation):\n' +
-          older.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
+      if (remainingOlder.length) {
+        contextParts.push('EARLIER ARC STORIES (titles — these established the foundation):\n' +
+          remainingOlder.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
       }
-      if (middle.length) {
-        contextParts.push('RECENT ARC STORIES (for continuity — the character\'s recent journey):\n' +
-          middle.map(s => `- Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 300)}`).join('\n'));
+      if (relevantOlder.length) {
+        contextParts.push('THEMATICALLY RELEVANT EARLIER STORIES (these share emotional territory with the current brief — use for deep continuity):\n' +
+          relevantOlder.map(s => `- Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 500)}`).join('\n'));
       }
       contextParts.push('MOST RECENT STORIES (direct continuity — the story you write follows these):\n' +
         last3.map(s => `- Story ${s.number}: "${s.title}" — ${s.summary || ''}`).join('\n'));
@@ -8366,7 +9019,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     }
 
     // Load all context in parallel for speed
-    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence] = await Promise.all([
+    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence, voiceFingerprints, arcContext, therapyProfile, growthLogs, franchiseKnowledge, recentWorldEvents] = await Promise.all([
       loadCharacterProfile(characterKey),
       loadStoryMemories(characterKey),
       loadWorldState(characterKey, dna.world),
@@ -8378,7 +9031,27 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
       loadDialogueVoiceCards(characterKey),
       loadDramaticIrony(characterKey),
       loadFollowInfluence(characterKey),
+      loadVoiceFingerprints(characterKey),
+      loadArcContext(characterKey),
+      loadTherapyProfile(characterKey),
+      loadGrowthLogs(characterKey),
+      loadFranchiseKnowledge(characterKey),
+      loadRecentWorldEvents(characterKey),
     ]);
+
+    // ── Context presence logging ─────────────────────────────────────────────
+    const contextPresence = {
+      profile: !!dbProfile, memories: !!storyMemories, world: !!worldState,
+      relationships: !!relationships, threads: !!activeThreads, locations: !!locations,
+      canon: !!canonEvents, prose: !!proseStyle, voiceCards: !!voiceCards,
+      irony: !!dramaticIrony, follow: !!followInfluence, fingerprints: !!voiceFingerprints,
+      arc: !!arcContext, therapy: !!therapyProfile, growth: !!growthLogs,
+      franchise: !!franchiseKnowledge, worldEvents: !!recentWorldEvents,
+    };
+    const missingContext = Object.entries(contextPresence).filter(([, v]) => !v).map(([k]) => k);
+    if (missingContext.length > 0) {
+      console.log(`[generate-story] Story ${storyNumber} for ${characterKey} — missing context: ${missingContext.join(', ')}`);
+    }
 
     const profileSection = dbProfile
       ? `\n\nCHARACTER PROFILE FROM REGISTRY (ground the story in these details — this is who they really are):\n${dbProfile}`
@@ -8395,6 +9068,25 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     const voiceCardsSection = voiceCards ? `\n\n${voiceCards}` : '';
     const ironySection = dramaticIrony ? `\n\n${dramaticIrony}` : '';
     const followSection = followInfluence ? `\n\n${followInfluence}` : '';
+    const fingerprintSection = voiceFingerprints ? `\n\n${voiceFingerprints}` : '';
+    const arcSection = arcContext ? `\n\n${arcContext}` : '';
+    const therapySection = therapyProfile ? `\n\n${therapyProfile}` : '';
+    const growthSection = growthLogs ? `\n\n${growthLogs}` : '';
+    const franchiseSection = franchiseKnowledge ? `\n\n${franchiseKnowledge}` : '';
+    const worldEventsSection = recentWorldEvents ? `\n\n${recentWorldEvents}` : '';
+
+    // Build pacing analysis from recent stories to prevent repetitive structure
+    let pacingSection = '';
+    if (previousStories?.length >= 2) {
+      const recentBriefs = previousStories.slice(-3);
+      const patterns = recentBriefs.map(s => {
+        const brief = s.taskBrief || s;
+        return `  Story ${s.number}: type=${brief.story_type || '?'}, location=${brief.primary_location || '?'}, time=${brief.time_of_day || '?'}, emotional_start=${brief.emotional_start || '?'}`;
+      });
+      pacingSection = `\n\nPACING ANALYSIS (vary structure to prevent repetition — the last ${recentBriefs.length} stories used these patterns):
+${patterns.join('\n')}
+VARY: If recent stories opened in the same time of day, choose a different one. If they were all internal, bring collision energy. If they all started with tension, open with quiet. The reader needs rhythm — tension then breath, breath then tension. Surprise them with structure, not just plot.`;
+    }
 
     const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
@@ -8409,7 +9101,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${ironySection}${followSection}
+Recurring object: ${dna.recurring_object}${profileSection}${arcSection}${therapySection}${growthSection}${relationshipsSection}${memoriesSection}${worldSection}${worldEventsSection}${threadsSection}${locationsSection}${canonSection}${franchiseSection}${proseSection}${voiceCardsSection}${fingerprintSection}${ironySection}${followSection}${pacingSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -8443,26 +9135,7 @@ This is ADULT LITERARY FICTION for an adult readership. The author writes books 
 - Do NOT fade to black, cut away, or use euphemisms. If a scene matters enough to be in the story, it matters enough to be shown.
 - This is not erotica — sex serves character and plot. But it IS explicit adult fiction where nothing is sanitized.
 
-CRAFT RULES:
-- Length: 3300-4800 words. No shorter. No longer.
-- All four life domains must be active in every story — career, romantic, family, friends.
-- The TASK creates the clock. The obstacle hits inside the task.
-- The recurring object (${dna.recurring_object}) appears at least once.
-- Write in close third person — deep in her interior, but not first person.
-- End on a shift, not a resolution. The ground moves a quarter inch.
-- Do not summarize. Show every scene. Trust the reader.
-- The character\'s desire line and fear line must both be active throughout.
-- New character introductions: one paragraph only in the story — name, one physical detail, one line of dialogue that reveals their entire persona.
-
-SCENE STRUCTURE (a 3300-4800 word story needs 3-5 distinct scenes):
-- Scene 1 — GROUNDING: Open in the character\'s body, in a specific place. Establish the emotional starting point. The task should be visible within the first 300 words.
-- Scene 2 — COMPLICATION: The obstacle arrives or intensifies. At least one domain collides with another (e.g., career pressure bleeds into romantic tension). This is where the story earns its complexity.
-- Scene 3 — PRESSURE PEAK: The character is forced to act, choose, or reveal something she\'d rather keep hidden. This is where strengths get weaponized. Dialogue should carry emotional weight here.
-- Scene 4 (optional) — AFTERMATH/PIVOT: A quieter beat where the character processes what just happened. Interiority deepens. The recurring object may appear here.
-- Final scene — SHIFT: Not resolution. Something has moved — an understanding, a loss, a micro-betrayal, a tenderness she didn\'t expect. The reader feels the ground shift under them.
-- Between scenes: use SENSORY TRANSITIONS — don\'t just jump-cut. Ground each scene change in a physical detail (light changing, a sound, a smell, a body sensation).
-- Pacing rule: alternate TENSION and BREATH. After a high-pressure scene, give the reader (and character) a moment. After a quiet moment, tighten the screws.
-- Dialogue ratio: aim for 30-40% dialogue in collision stories, 15-25% in internal stories. Every line of dialogue must do double duty — reveal character AND advance plot.
+${buildCraftRules(storyNumber, taskBrief, dna)}
 
 MULTI-PLOT & CONTINUITY RULES:
 - If WORLD STATE is provided, naturally reference or intersect with other characters' storylines where organic. Don't force crossovers — let shared spaces (the same city, industry, social circle) create natural collisions.
@@ -8495,15 +9168,85 @@ Write the complete story now. No preamble. Begin with the title, then the story.
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      max_tokens: 10000,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Write Story ${storyNumber}: "${taskBrief.title}"` }],
     });
 
-    const storyText = response.content?.[0]?.text || '';
+    let storyText = response.content?.[0]?.text || '';
 
     if (!storyText || storyText.length < 500) {
       return fallback();
+    }
+
+    // ── Quality gate — fast check for show-don't-tell and craft issues ──
+    try {
+      const qualityCheck = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        system: `You are a literary quality checker. Analyze the story and return ONLY valid JSON — no markdown, no commentary.`,
+        messages: [{ role: 'user', content: `Check this story for craft quality AND task brief adherence:
+
+TASK BRIEF REQUIREMENTS:
+- Phase: ${taskBrief.phase}
+- Story type: ${taskBrief.story_type}
+- Task: ${taskBrief.task || 'not specified'}
+- Obstacle: ${taskBrief.obstacle || 'not specified'}
+- Strength weaponized: ${taskBrief.strength_weaponized || 'not specified'}
+${taskBrief.emotional_start ? `- Emotional start: ${taskBrief.emotional_start}` : ''}
+${taskBrief.emotional_end ? `- Emotional end: ${taskBrief.emotional_end}` : ''}
+${taskBrief.primary_location ? `- Required location: ${taskBrief.primary_location}` : ''}
+${taskBrief.time_of_day ? `- Time of day: ${taskBrief.time_of_day}` : ''}
+
+STORY TEXT:
+${storyText.slice(0, 6000)}
+
+Return JSON:
+{
+  "pass": true|false,
+  "score": 0-10,
+  "issues": [
+    { "type": "telling_not_showing|flat_dialogue|rushed_ending|missing_interiority|summary_instead_of_scene|weak_emotional_arc|brief_mismatch", "location": "brief description of where", "fix": "specific suggestion" }
+  ],
+  "strengths": ["what works well — be specific"],
+  "emotional_arc_delivered": true|false,
+  "all_domains_present": true|false,
+  "brief_adherence": {
+    "task_addressed": true|false,
+    "obstacle_present": true|false,
+    "strength_weaponized": true|false,
+    "emotional_arc_matches": true|false,
+    "location_used": true|false,
+    "phase_appropriate": true|false
+  }
+}
+
+Score guide: 8+ pass, 6-7 has fixable issues, below 6 needs rewrite.
+Check specifically:
+1. Does the story SHOW scenes or SUMMARIZE events?
+2. Does dialogue do double duty (reveal character AND advance plot)?
+3. Is the emotional arc earned — does the ending shift feel real?
+4. Are all 4 life domains (career, romantic, family, friends) present?
+5. Is the ending a "quarter-inch shift" or a neat resolution?
+6. Does the story actually address the TASK from the brief?
+7. Does the OBSTACLE appear and create real pressure?
+8. Is the specified STRENGTH weaponized (used as a tool, not just mentioned)?
+9. Does the emotional arc match START → END from the brief?
+10. Is the story appropriate for its PHASE (establishment=grounding, pressure=escalation, crisis=breaking point, integration=reckoning)?` }],
+      });
+
+      const qRaw = qualityCheck.content?.[0]?.text || '';
+      let quality;
+      try { quality = JSON.parse(qRaw.replace(/```json|```/g, '').trim()); } catch { quality = null; }
+
+      if (quality) {
+        // Attach quality report to the response
+        storyText = storyText; // keep original — quality report attached separately
+        // Store quality result for response
+        var qualityReport = quality;
+      }
+    } catch (qErr) {
+      console.error('[quality-gate] non-blocking error:', qErr?.message);
     }
 
     const wordCount = storyText.split(/\s+/).length;
@@ -8524,7 +9267,8 @@ Extract ALL of the following from the story text:
 4. DRAMATIC IRONY — things the READER now knows that one or more characters do NOT know
 5. OPEN MYSTERIES — new questions planted that the reader will want answered
 6. FORESHADOWING SEEDS — details, images, or moments that feel like they could pay off later
-7. SETTING DETAILS — any new sensory details about locations that should be remembered
+7. SETTING DETAILS — any new or enriched locations that appear in the story
+8. WORLD EVENTS — significant events that happen in the story that affect the world state
 
 Return ONLY valid JSON:
 {
@@ -8534,6 +9278,8 @@ Return ONLY valid JSON:
   "dramatic_irony": [{ "statement": "what the reader knows that characters don't", "characters_unaware": ["who doesn't know"] }],
   "open_mysteries": [{ "question": "what the reader is now wondering", "planted_in": "brief description of the moment" }],
   "foreshadow_seeds": [{ "detail": "the image/moment/detail", "potential_payoff": "what it could connect to later" }],
+  "new_locations": [{ "name": "location name", "description": "sensory description", "location_type": "interior|exterior|digital|vehicle", "narrative_role": "what role this place plays" }],
+  "world_events": [{ "event_name": "short name", "event_description": "what happened", "event_type": "plot|emotional|social|professional", "impact_level": "minor|moderate|major", "characters_involved": ["character_keys"] }],
   "therapy_opening": "one sentence a therapist could use to open the next session"
 }`;
 
@@ -8562,7 +9308,7 @@ Return ONLY valid JSON:
             character_id: charId, type: 'pain_point', statement: pp.statement,
             confidence: 0.85, confirmed: false, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify([pp.category]), category: pp.category, coaching_angle: pp.coaching_angle,
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] pain_point save error:`, e?.message));
         }
 
         // Save belief shifts
@@ -8572,25 +9318,73 @@ Return ONLY valid JSON:
             statement: `${bs.before} → ${bs.after} (triggered by: ${bs.trigger})`,
             confidence: 0.80, confirmed: false, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify(['belief_shift']), category: 'belief_shift',
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] belief_shift save error:`, e?.message));
+        }
+
+        // Save relationship changes — to both StorytellerMemory and CharacterRelationship
+        const { CharacterRelationship } = require('../models');
+        for (const rc of (extracted.relationship_changes || [])) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'relationship_change',
+            statement: `${(rc.characters || []).join(' ↔ ')}: ${rc.change} (now: ${rc.new_state})`,
+            confidence: 0.85, confirmed: false, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(rc.characters || []), category: `story_${storyNumber}`,
+          }).catch(e => console.warn(`[auto-extract] relationship_change save error:`, e?.message));
+
+          // Also update the CharacterRelationship model if both characters exist
+          if (CharacterRelationship && rc.characters?.length >= 2) {
+            try {
+              const charA = await RegistryCharacter.findOne({ where: { character_key: rc.characters[0] } });
+              const charB = await RegistryCharacter.findOne({ where: { character_key: rc.characters[1] } });
+              if (charA && charB) {
+                const rel = await CharacterRelationship.findOne({
+                  where: {
+                    [require('sequelize').Op.or]: [
+                      { character_id_a: charA.id, character_id_b: charB.id },
+                      { character_id_a: charB.id, character_id_b: charA.id },
+                    ],
+                  },
+                });
+                if (rel) {
+                  // Update existing relationship with new state
+                  const updates = {};
+                  if (rc.new_state) updates.situation = rc.new_state;
+                  if (rc.change) updates.notes = `${rel.notes ? rel.notes + '\n' : ''}[Story ${storyNumber}] ${rc.change}`;
+                  await rel.update(updates);
+                } else {
+                  // Create new relationship record
+                  await CharacterRelationship.create({
+                    character_id_a: charA.id,
+                    character_id_b: charB.id,
+                    relationship_type: rc.new_state || 'acquaintance',
+                    situation: rc.change,
+                    notes: `[Story ${storyNumber}] ${rc.change}`,
+                    confirmed: false,
+                  });
+                }
+              }
+            } catch (relErr) {
+              console.warn(`[auto-extract] CharacterRelationship update error:`, relErr?.message);
+            }
+          }
         }
 
         // Save dramatic irony entries
         for (const di of (extracted.dramatic_irony || [])) {
           await StorytellerMemory.create({
             character_id: charId, type: 'dramatic_irony', statement: di.statement,
-            confidence: 0.85, confirmed: true, source_ref: characterKey,
+            confidence: 0.85, confirmed: true, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify(di.characters_unaware || []), category: `story_${storyNumber}`,
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] dramatic_irony save error:`, e?.message));
         }
 
         // Save open mysteries
         for (const om of (extracted.open_mysteries || [])) {
           await StorytellerMemory.create({
             character_id: charId, type: 'open_mystery', statement: om.question,
-            confidence: 0.80, confirmed: true, source_ref: characterKey,
-            tags: JSON.stringify(['mystery']), category: `${storyNumber}`,
-          }).catch(() => {});
+            confidence: 0.80, confirmed: true, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(['mystery']), category: `story_${storyNumber}`,
+          }).catch(e => console.warn(`[auto-extract] open_mystery save error:`, e?.message));
         }
 
         // Save foreshadowing seeds
@@ -8598,9 +9392,9 @@ Return ONLY valid JSON:
           await StorytellerMemory.create({
             character_id: charId, type: 'foreshadow_seed',
             statement: `${fs.detail} — potential: ${fs.potential_payoff}`,
-            confidence: 0.75, confirmed: true, source_ref: characterKey,
-            tags: JSON.stringify(['foreshadow']), category: `${storyNumber}`,
-          }).catch(() => {});
+            confidence: 0.75, confirmed: true, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(['foreshadow']), category: `story_${storyNumber}`,
+          }).catch(e => console.warn(`[auto-extract] foreshadow save error:`, e?.message));
         }
 
         // Save therapy opening
@@ -8609,14 +9403,51 @@ Return ONLY valid JSON:
             character_id: charId, type: 'therapy_opening', statement: extracted.therapy_opening,
             confidence: 0.90, confirmed: false, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify(['therapy_opening']), category: 'therapy_opening',
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] therapy_opening save error:`, e?.message));
         }
 
+        // Save new locations to WorldLocation
+        const { WorldLocation, WorldTimelineEvent } = require('../models');
+        for (const loc of (extracted.new_locations || [])) {
+          if (!loc.name) continue;
+          // Only create if this location doesn't already exist
+          const existing = await WorldLocation.findOne({ where: { name: loc.name } }).catch(() => null);
+          if (!existing) {
+            await WorldLocation.create({
+              name: loc.name,
+              description: loc.description || null,
+              location_type: ['interior', 'exterior', 'digital', 'vehicle'].includes(loc.location_type) ? loc.location_type : 'interior',
+              narrative_role: loc.narrative_role || null,
+              associated_characters: [characterKey],
+              sensory_details: loc.description ? { from_story: loc.description } : {},
+              metadata: { source_story: storyNumber, auto_extracted: true },
+            }).catch(e => console.warn('[auto-extract] location create error:', e?.message));
+          }
+        }
+
+        // Save world events to WorldTimelineEvent
+        for (const evt of (extracted.world_events || [])) {
+          if (!evt.event_name) continue;
+          await WorldTimelineEvent.create({
+            event_name: evt.event_name,
+            event_description: evt.event_description || null,
+            event_type: ['plot', 'emotional', 'social', 'professional'].includes(evt.event_type) ? evt.event_type : 'plot',
+            impact_level: ['minor', 'moderate', 'major'].includes(evt.impact_level) ? evt.impact_level : 'minor',
+            characters_involved: evt.characters_involved || [characterKey],
+            story_date: `Story ${storyNumber}`,
+            sort_order: storyNumber,
+            is_canon: true,
+            metadata: { source_story: storyNumber, character_key: characterKey, auto_extracted: true },
+          }).catch(e => console.warn('[auto-extract] event create error:', e?.message));
+        }
+
+        const locationCount = (extracted.new_locations || []).length;
+        const eventCount = (extracted.world_events || []).length;
         console.log(`[auto-extract] Story ${storyNumber} for ${characterKey}: extracted ${
           (extracted.pain_points?.length || 0) + (extracted.belief_shifts?.length || 0) +
           (extracted.dramatic_irony?.length || 0) + (extracted.open_mysteries?.length || 0) +
           (extracted.foreshadow_seeds?.length || 0)
-        } continuity items`);
+        } continuity items, ${locationCount} locations, ${eventCount} world events`);
       } catch (err) {
         console.error('[auto-extract] error:', err?.message);
       }
@@ -8624,6 +9455,105 @@ Return ONLY valid JSON:
 
     // Fire and forget — don't block the story response
     autoExtract();
+
+    // ── Arc tracking update — every story, all parameters ──────────────────
+    const updateArc = async () => {
+      try {
+        if (!updateArcTracking) return;
+        // Detect intimacy and post content from the story text
+        const textLower = storyText.toLowerCase();
+        const intimateGenerated = /\b(kiss|touch|undress|naked|bed together|skin against|mouth on|between her legs|inside her)\b/i.test(storyText);
+        const intimateWithDavid = intimateGenerated && /\bdavid\b/i.test(storyText);
+        const postGenerated = /\b(posted|instagram|tiktok|onlyfans|went live|hit publish|uploaded)\b/i.test(textLower);
+        const phoneAppeared = /\b(phone|notification|screen lit|vibrated|text message|DM|direct message)\b/i.test(storyText);
+
+        await updateArcTracking(db, characterKey, {
+          storyNumber,
+          storyType: taskBrief.story_type,
+          phase: taskBrief.phase,
+          intimateGenerated,
+          intimateWithDavid,
+          postGenerated,
+          phoneAppeared,
+        });
+        console.log(`[arc-tracking] Story ${storyNumber} for ${characterKey}: updated (intimate=${intimateGenerated}, david=${intimateWithDavid}, post=${postGenerated}, phone=${phoneAppeared})`);
+      } catch (err) {
+        console.error('[arc-tracking] update error:', err?.message);
+      }
+    };
+    updateArc();
+
+    // ── Update active story threads — advance threads that were used ────────
+    const updateThreads = async () => {
+      try {
+        const { StoryThread } = require('../models');
+        if (!StoryThread) return;
+        // StoryThread uses characters_involved (JSONB array), not character_key
+        const threads = await StoryThread.findAll({
+          where: { status: 'active' },
+        });
+        // Filter to threads involving this character
+        const charThreads = threads.filter(t => {
+          const involved = t.characters_involved || [];
+          return involved.some(c =>
+            (typeof c === 'string' && c === characterKey) ||
+            (typeof c === 'object' && (c.key === characterKey || c.character_key === characterKey))
+          );
+        });
+        for (const thread of charThreads) {
+          // Check if the story text references this thread's topic
+          const threadKeywords = (thread.thread_name || '').split(/\s+/).filter(w => w.length > 3);
+          const mentioned = threadKeywords.some(kw => storyText.toLowerCase().includes(kw.toLowerCase()));
+          if (mentioned) {
+            const events = thread.key_events || [];
+            events.push({ story_number: storyNumber, title: taskBrief.title, note: 'auto-advanced' });
+            await thread.update({
+              key_events: events,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[update-threads] error:', err?.message);
+      }
+    };
+    updateThreads();
+
+    // ── Auto-register new character if taskBrief says so ───────────────────
+    const registerNewCharacter = async () => {
+      try {
+        if (!taskBrief.new_character || !taskBrief.new_character_name) return;
+        const { RegistryCharacter } = require('../models');
+        const newKey = taskBrief.new_character_name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        // Check if already registered
+        const exists = await RegistryCharacter.findOne({ where: { character_key: newKey } });
+        if (exists) {
+          console.log(`[auto-register] Character "${newKey}" already exists — skipping`);
+          return;
+        }
+        // Find the registry_id from the current character
+        const parentChar = await RegistryCharacter.findOne({ where: { character_key: characterKey } });
+        if (!parentChar) return;
+
+        const roleType = (taskBrief.new_character_role || '').toLowerCase();
+        const validRoles = ['protagonist', 'pressure', 'mirror', 'support', 'shadow', 'special'];
+        const mappedRole = validRoles.includes(roleType) ? roleType : 'pressure';
+
+        await RegistryCharacter.create({
+          registry_id: parentChar.registry_id,
+          character_key: newKey,
+          display_name: taskBrief.new_character_name,
+          role_type: mappedRole,
+          role_label: taskBrief.new_character_role || null,
+          status: 'draft',
+          appearance_mode: 'on_page',
+          metadata: { auto_registered: true, source_story: storyNumber, introduced_by: characterKey },
+        });
+        console.log(`[auto-register] Created new character "${newKey}" (${taskBrief.new_character_name}) as ${mappedRole} from story ${storyNumber}`);
+      } catch (err) {
+        console.warn('[auto-register] error:', err?.message);
+      }
+    };
+    registerNewCharacter();
 
     return finish({
       story_number: storyNumber,
@@ -8638,12 +9568,550 @@ Return ONLY valid JSON:
       new_character_name: taskBrief.new_character_name || null,
       new_character_role: taskBrief.new_character_role || null,
       auto_extraction: 'in_progress',
+      context_loaded: contextPresence,
+      quality_report: typeof qualityReport !== 'undefined' ? qualityReport : null,
     });
 
   } catch (err) {
     console.error('[generate-story] error:', err?.message);
     return fallback();
   }
+});
+
+// ─── POST /revise-story ──────────────────────────────────────────────────────
+// Takes a generated story + editorial notes and produces a tightened revision.
+router.post('/revise-story', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, storyText, editorialNotes, qualityReport } = req.body;
+
+  if (!storyText || !editorialNotes) {
+    return res.status(400).json({ error: 'storyText and editorialNotes are required' });
+  }
+
+  // Keep-alive for long requests
+  res.setHeader('Content-Type', 'application/json');
+  let finished = false;
+  const keepAlive = setInterval(() => {
+    if (!finished) try { res.write(' '); } catch (_) {}
+  }, 15000);
+
+  const finish = (data) => {
+    finished = true;
+    clearInterval(keepAlive);
+    res.end(JSON.stringify(data));
+  };
+
+  try {
+    // Build quality issues context from auto-report if available
+    let qualityContext = '';
+    if (qualityReport?.issues?.length) {
+      qualityContext = '\n\nAUTO-DETECTED QUALITY ISSUES:\n' +
+        qualityReport.issues.map(i => `- [${i.type}] ${i.location}: ${i.fix}`).join('\n');
+    }
+
+    const revisionPrompt = `You are revising a short story based on editorial feedback.
+
+ORIGINAL STORY (${storyText.split(/\s+/).length} words):
+${storyText}
+
+EDITORIAL NOTES FROM THE AUTHOR:
+${editorialNotes}${qualityContext}
+
+REVISION RULES:
+- Preserve the story's core events, characters, and emotional arc
+- Address EVERY editorial note specifically
+- Maintain the same POV, tense, and voice register
+- Keep the word count within 3300-4800 words
+- Do NOT add explanatory framing or meta-commentary
+- Tighten prose: cut redundant descriptions, strengthen verbs, sharpen dialogue
+- If the editorial notes mention pacing, restructure scenes accordingly
+- If the notes mention "telling not showing," replace summary with scene
+- The revised version should feel like the same story, written better
+
+Return ONLY the revised story. Begin with the title, then the story. No preamble.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 10000,
+      system: revisionPrompt,
+      messages: [{ role: 'user', content: 'Revise the story now.' }],
+    });
+
+    const revisedText = response.content?.[0]?.text || '';
+
+    if (!revisedText || revisedText.length < 500) {
+      return finish({ error: 'Revision produced insufficient output — try again.' });
+    }
+
+    // Persist revision to StoryRevision table
+    try {
+      const db = require('../models');
+      if (db.StoryRevision && characterKey && storyNumber) {
+        // Find the StorytellerStory to get its UUID
+        const parentStory = await db.StorytellerStory?.findOne({
+          where: { character_key: characterKey, story_number: storyNumber },
+          attributes: ['id'],
+        }).catch(() => null);
+        if (parentStory) {
+          const lastRev = await db.StoryRevision.findOne({
+            where: { story_id: parentStory.id },
+            order: [['revision_number', 'DESC']],
+          }).catch(() => null);
+          await db.StoryRevision.create({
+            story_id: parentStory.id,
+            revision_number: (lastRev?.revision_number || 0) + 1,
+            text: revisedText,
+            word_count: revisedText.split(/\s+/).length,
+            revision_type: 'ai_rewrite',
+            revision_source: 'quality_gate',
+            change_summary: editorialNotes?.slice(0, 500),
+            metadata: { quality_score_before: qualityReport?.score || null },
+          }).catch(e => console.warn('[revise-story] revision save error:', e?.message));
+        }
+      }
+    } catch { /* StoryRevision table may not exist yet */ }
+
+    return finish({
+      story_number: storyNumber || null,
+      character_key: characterKey || null,
+      original_word_count: storyText.split(/\s+/).length,
+      revised_word_count: revisedText.split(/\s+/).length,
+      text: revisedText,
+      revision_applied: true,
+      token_usage: {
+        input: response.usage?.input_tokens || 0,
+        output: response.usage?.output_tokens || 0,
+      },
+    });
+  } catch (err) {
+    console.error('[revise-story] error:', err?.message);
+    finished = true;
+    clearInterval(keepAlive);
+    return res.status(500).json({ error: err?.message || 'Revision failed' });
+  }
+});
+
+// ─── Internal HTTP helper for calling sibling routes ─────────────────────────
+function internalCall(path, body) {
+  return new Promise((resolve, reject) => {
+    const http = require('http');
+    const port = process.env.PORT || 3000;
+    const postData = JSON.stringify(body);
+    const options = {
+      hostname: '127.0.0.1',
+      port,
+      path: `/api/v1/memories${path}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+      timeout: 180000,
+    };
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data.trim())); } catch { resolve({ error: 'Parse error', raw: data.slice(0, 200) }); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Internal call timeout')); });
+    req.write(postData);
+    req.end();
+  });
+}
+
+// ─── Pipeline core logic (shared by route handler and batch-generate) ────────
+async function runPipeline({ characterKey, storyNumber, taskBrief, previousStories, useMultiVoice }) {
+  const pipeline = { steps: [], started_at: Date.now() };
+
+  // ── Step 1: Generate the story ──────────────────────────────────────
+  const genResult = await internalCall('/generate-story', { characterKey, storyNumber, taskBrief, previousStories });
+  pipeline.steps.push({ step: 'generate', success: !!genResult?.text, word_count: genResult?.word_count });
+
+  if (!genResult?.text) {
+    pipeline.steps.push({ step: 'aborted', reason: 'Generation produced no text' });
+    return { pipeline, story: null, fallback: true };
+  }
+
+  let finalText = genResult.text;
+  let qualityReport = genResult.quality_report;
+  let revised = false;
+
+  // ── Step 2: Check quality gate ──────────────────────────────────────
+  if (qualityReport) {
+    pipeline.steps.push({ step: 'quality_gate', score: qualityReport.score, pass: qualityReport.pass, issues: qualityReport.issues?.length || 0 });
+
+    // ── Step 3: Auto-revise if quality score is below 8 ────────────────
+    if (qualityReport.score < 8 && qualityReport.issues?.length > 0) {
+      const editorialNotes = qualityReport.issues
+        .map(i => `[${i.type}] ${i.location}: ${i.fix}`)
+        .join('\n');
+
+      const revResult = await internalCall('/revise-story', {
+        characterKey, storyNumber, storyText: finalText, editorialNotes, qualityReport,
+      });
+
+      if (revResult?.text && revResult.revision_applied) {
+        finalText = revResult.text;
+        revised = true;
+        pipeline.steps.push({ step: 'auto_revise', success: true, original_words: genResult.word_count, revised_words: revResult.revised_word_count });
+      } else {
+        pipeline.steps.push({ step: 'auto_revise', success: false, reason: 'Revision failed or produced no text' });
+      }
+    }
+  }
+
+  const wordCount = finalText.split(/\s+/).filter(Boolean).length;
+
+  // ── Step 4: Determine if this is a turning-point story worth multi-voice ──
+  const isTurningPoint = useMultiVoice || (
+    taskBrief.phase === 'crisis' &&
+    ['collision', 'wrong_win'].includes(taskBrief.story_type)
+  );
+  pipeline.steps.push({ step: 'multi_voice_check', eligible: isTurningPoint, reason: isTurningPoint ? 'crisis-phase collision/wrong_win or user requested' : 'standard story' });
+
+  pipeline.completed_at = Date.now();
+  pipeline.duration_ms = pipeline.completed_at - pipeline.started_at;
+
+  return {
+    pipeline,
+    story_number: storyNumber,
+    character_key: characterKey,
+    title: taskBrief.title,
+    phase: taskBrief.phase,
+    story_type: taskBrief.story_type,
+    text: finalText,
+    word_count: wordCount,
+    revised,
+    quality_report: qualityReport,
+    therapy_seeds: taskBrief.therapy_seeds || [],
+    new_character: taskBrief.new_character || false,
+    new_character_name: taskBrief.new_character_name || null,
+    new_character_role: taskBrief.new_character_role || null,
+    multi_voice_eligible: isTurningPoint,
+  };
+}
+
+// ─── POST /pipeline-generate ──────────────────────────────────────────────────
+// Automated pipeline: generate → quality gate → auto-revise if needed → return.
+// Handles a single story through the full quality pipeline without manual steps.
+router.post('/pipeline-generate', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
+
+  if (!characterKey || !storyNumber || !taskBrief) {
+    return res.status(400).json({ error: 'characterKey, storyNumber, and taskBrief required' });
+  }
+
+  // Keep-alive for long pipeline runs
+  res.setHeader('Content-Type', 'application/json');
+  let finished = false;
+  const keepAlive = setInterval(() => {
+    if (!finished) try { res.write(' '); } catch (_) {}
+  }, 15000);
+
+  try {
+    const result = await runPipeline({ characterKey, storyNumber, taskBrief, previousStories, useMultiVoice });
+    finished = true;
+    clearInterval(keepAlive);
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    console.error('[pipeline-generate] error:', err?.message);
+    finished = true;
+    clearInterval(keepAlive);
+    return res.status(500).json({ error: err?.message || 'Pipeline failed' });
+  }
+});
+
+// ─── In-memory background job store ──────────────────────────────────────────
+const backgroundJobs = new Map();
+
+// Clean up completed/failed jobs older than 1 hour
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [id, job] of backgroundJobs) {
+    if (job.completedAt && job.completedAt < cutoff) backgroundJobs.delete(id);
+  }
+}, 10 * 60 * 1000);
+
+// ─── POST /pipeline-generate-background ──────────────────────────────────────
+// Starts generation as a background job. Returns a jobId for polling.
+router.post('/pipeline-generate-background', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
+
+  if (!characterKey || !storyNumber || !taskBrief) {
+    return res.status(400).json({ error: 'characterKey, storyNumber, and taskBrief required' });
+  }
+
+  const jobId = `gen-${characterKey}-${storyNumber}-${Date.now()}`;
+
+  backgroundJobs.set(jobId, {
+    status: 'running',
+    characterKey,
+    storyNumber,
+    startedAt: Date.now(),
+    completedAt: null,
+    result: null,
+    error: null,
+  });
+
+  // Fire and forget — run the pipeline in the background
+  runPipeline({ characterKey, storyNumber, taskBrief, previousStories, useMultiVoice })
+    .then(result => {
+      const job = backgroundJobs.get(jobId);
+      if (job) {
+        job.status = 'completed';
+        job.result = result;
+        job.completedAt = Date.now();
+      }
+    })
+    .catch(err => {
+      console.error(`[pipeline-generate-background] job ${jobId} failed:`, err?.message);
+      const job = backgroundJobs.get(jobId);
+      if (job) {
+        job.status = 'failed';
+        job.error = err?.message || 'Pipeline failed';
+        job.completedAt = Date.now();
+      }
+    });
+
+  return res.json({ jobId, status: 'running' });
+});
+
+// ─── GET /pipeline-generate-status/:jobId ────────────────────────────────────
+// Poll for background generation status.
+router.get('/pipeline-generate-status/:jobId', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  return res.json({
+    jobId: req.params.jobId,
+    status: job.status,
+    storyNumber: job.storyNumber,
+    characterKey: job.characterKey,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    result: job.status === 'completed' ? job.result : null,
+    error: job.status === 'failed' ? job.error : null,
+    durationMs: job.completedAt ? job.completedAt - job.startedAt : Date.now() - job.startedAt,
+  });
+});
+
+// ─── POST /batch-generate ────────────────────────────────────────────────────
+// Generates multiple stories sequentially through the quality pipeline.
+// Uses SSE (Server-Sent Events) to stream progress to the frontend.
+router.post('/batch-generate', optionalAuth, async (req, res) => {
+  const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
+
+  if (!characterKey || !taskBriefs?.length) {
+    return res.status(400).json({ error: 'characterKey and taskBriefs[] required' });
+  }
+
+  // Set up SSE for streaming progress
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const total = taskBriefs.length;
+  let completed = 0;
+  let previousStories = initialPrevious || [];
+  const results = [];
+
+  sendEvent('start', { total, character_key: characterKey });
+
+  for (const taskBrief of taskBriefs) {
+    const storyNumber = taskBrief.story_number;
+    sendEvent('progress', {
+      story_number: storyNumber,
+      title: taskBrief.title,
+      phase: taskBrief.phase,
+      status: 'generating',
+      completed,
+      total,
+    });
+
+    try {
+      // Call pipeline logic directly (no HTTP loopback)
+      const pipelineResult = await runPipeline({
+        characterKey,
+        storyNumber,
+        taskBrief,
+        previousStories,
+      });
+
+      completed++;
+      results.push(pipelineResult);
+
+      // Add this story to previous stories context for the next story
+      if (pipelineResult?.text) {
+        previousStories = [
+          ...previousStories,
+          {
+            number: storyNumber,
+            title: pipelineResult.title || taskBrief.title,
+            summary: (pipelineResult.text || '').slice(0, 800),
+            taskBrief,
+          },
+        ];
+      }
+
+      sendEvent('story_complete', {
+        story_number: storyNumber,
+        title: pipelineResult.title || taskBrief.title,
+        word_count: pipelineResult.word_count,
+        quality_score: pipelineResult.quality_report?.score,
+        revised: pipelineResult.revised || false,
+        completed,
+        total,
+      });
+    } catch (err) {
+      completed++;
+      sendEvent('story_error', {
+        story_number: storyNumber,
+        error: err?.message || 'Generation failed',
+        completed,
+        total,
+      });
+    }
+  }
+
+  sendEvent('batch_complete', {
+    total_generated: completed,
+    total_requested: total,
+    results_summary: results.map(r => ({
+      story_number: r?.story_number,
+      word_count: r?.word_count,
+      quality_score: r?.quality_report?.score,
+      revised: r?.revised,
+    })),
+  });
+
+  res.end();
+});
+
+// ─── POST /batch-generate-background ──────────────────────────────────────────
+// Starts batch generation as a background job. Returns a jobId for polling.
+// Each story is generated sequentially, results accumulate in the job store.
+router.post('/batch-generate-background', optionalAuth, async (req, res) => {
+  const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
+
+  if (!characterKey || !taskBriefs?.length) {
+    return res.status(400).json({ error: 'characterKey and taskBriefs[] required' });
+  }
+
+  const jobId = `batch-${characterKey}-${Date.now()}`;
+  const total = taskBriefs.length;
+
+  backgroundJobs.set(jobId, {
+    status: 'running',
+    type: 'batch',
+    characterKey,
+    total,
+    completed: 0,
+    currentStoryNumber: taskBriefs[0]?.story_number,
+    currentTitle: taskBriefs[0]?.title,
+    startedAt: Date.now(),
+    completedAt: null,
+    results: {},
+    errors: [],
+  });
+
+  // Fire and forget — run all stories sequentially in the background
+  (async () => {
+    const job = backgroundJobs.get(jobId);
+    let previousStories = initialPrevious || [];
+
+    for (const taskBrief of taskBriefs) {
+      const storyNumber = taskBrief.story_number;
+      if (job) {
+        job.currentStoryNumber = storyNumber;
+        job.currentTitle = taskBrief.title;
+      }
+
+      try {
+        const result = await runPipeline({
+          characterKey,
+          storyNumber,
+          taskBrief,
+          previousStories,
+        });
+
+        if (job) {
+          job.completed++;
+          job.results[storyNumber] = result;
+        }
+
+        // Chain context forward
+        if (result?.text) {
+          previousStories = [
+            ...previousStories,
+            {
+              number: storyNumber,
+              title: result.title || taskBrief.title,
+              summary: (result.text || '').slice(0, 800),
+            },
+          ];
+        }
+      } catch (err) {
+        console.error(`[batch-generate-background] story ${storyNumber} failed:`, err?.message);
+        if (job) {
+          job.completed++;
+          job.errors.push({ story_number: storyNumber, error: err?.message });
+        }
+      }
+    }
+
+    if (job) {
+      job.status = 'completed';
+      job.completedAt = Date.now();
+    }
+  })();
+
+  return res.json({ jobId, status: 'running', total });
+});
+
+// ─── GET /batch-generate-status/:jobId ────────────────────────────────────────
+// Poll for background batch generation status.
+router.get('/batch-generate-status/:jobId', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+
+  return res.json({
+    jobId: req.params.jobId,
+    status: job.status,
+    type: job.type,
+    characterKey: job.characterKey,
+    total: job.total,
+    completed: job.completed,
+    currentStoryNumber: job.currentStoryNumber,
+    currentTitle: job.currentTitle,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    results: job.status === 'completed' ? job.results : null,
+    // Send partial results while running so frontend can show stories as they complete
+    completedStories: Object.keys(job.results || {}).map(Number),
+    errors: job.errors,
+    durationMs: job.completedAt ? job.completedAt - job.startedAt : Date.now() - job.startedAt,
+  });
+});
+
+// ─── GET /batch-generate-story/:jobId/:storyNumber ────────────────────────────
+// Fetch a single completed story from a running/completed batch job.
+router.get('/batch-generate-story/:jobId/:storyNumber', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  const story = job.results?.[req.params.storyNumber];
+  if (!story) {
+    return res.status(404).json({ error: 'Story not yet generated' });
+  }
+  return res.json(story);
 });
 
 // ─── POST /check-story-consistency ───────────────────────────────────────────

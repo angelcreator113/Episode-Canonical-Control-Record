@@ -66,6 +66,9 @@ module.exports = (sequelize) => {
 
   StorytellerLine.associate = (models) => {
     StorytellerLine.belongsTo(models.StorytellerChapter, { foreignKey: 'chapter_id', as: 'chapter' });
+    if (models.StorytellerMemory) {
+      StorytellerLine.hasMany(models.StorytellerMemory, { foreignKey: 'line_id', as: 'memories' });
+    }
   };
 
   return StorytellerLine;

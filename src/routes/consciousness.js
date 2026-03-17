@@ -339,7 +339,7 @@ router.post('/save', optionalAuth, async (req, res) => {
     if (!character) return res.status(404).json({ error: 'Character not found' });
 
     let notes = {};
-    try { notes = JSON.parse(character.writer_notes || '{}'); } catch {}
+    try { notes = JSON.parse(character.writer_notes || '{}'); } catch (err) { console.warn('[consciousness] writer_notes parse error:', err?.message); }
 
     if (is_lala_profile) {
       notes.inherited_consciousness = profile;
@@ -371,7 +371,7 @@ router.get('/:characterId', optionalAuth, async (req, res) => {
 
     const name = character.selected_name || character.display_name;
     let notes = {};
-    try { notes = JSON.parse(character.writer_notes || '{}'); } catch {}
+    try { notes = JSON.parse(character.writer_notes || '{}'); } catch (err) { console.warn('[consciousness] writer_notes parse error:', err?.message); }
 
     return res.json({
       character_id: character.id,
@@ -464,7 +464,7 @@ Return ONLY valid JSON:
       const char = await db.RegistryCharacter.findByPk(character.id);
       if (char) {
         let notes = {};
-        try { notes = JSON.parse(char.writer_notes || '{}'); } catch {}
+        try { notes = JSON.parse(char.writer_notes || '{}'); } catch (err) { console.warn('[consciousness] writer_notes parse error:', err?.message); }
         notes.dilemma_triggers = triggers;
         await char.update({ writer_notes: JSON.stringify(notes) });
       }
@@ -482,25 +482,30 @@ Return ONLY valid JSON:
 
 // ─── POST /interview ──────────────────────────────────────────────────────────
 router.post('/interview', optionalAuth, async (req, res) => {
-  const { character, psychology } = req.body;
+  try {
+    const { character, psychology } = req.body;
 
-  if (!character) return res.status(400).json({ error: 'character required' });
+    if (!character) return res.status(400).json({ error: 'character required' });
 
-  const name = character.selected_name || character.display_name || character.name || 'this character';
-  const fields = Object.entries(CONSCIOUSNESS_FIELDS);
-  const firstField = fields[0];
+    const name = character.selected_name || character.display_name || character.name || 'this character';
+    const fields = Object.entries(CONSCIOUSNESS_FIELDS);
+    const firstField = fields[0];
 
-  const openingQuestion = `I'm going to ask you some questions about how ${name} actually exists — not what she does, but what it's like to be her.
+    const openingQuestion = `I'm going to ask you some questions about how ${name} actually exists — not what she does, but what it's like to be her.
 
 ${firstField[1].questions[0]}`;
 
-  return res.json({
-    message: openingQuestion,
-    current_field: firstField[0],
-    field_index: 0,
-    total_fields: fields.length,
-    extracted: {},
-  });
+    return res.json({
+      message: openingQuestion,
+      current_field: firstField[0],
+      field_index: 0,
+      total_fields: fields.length,
+      extracted: {},
+    });
+  } catch (err) {
+    console.error('[consciousness] interview error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── POST /interview-next ─────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ const db = require('../models');
 
 const anthropic = new Anthropic();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
+const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
 
 let optionalAuth;
 try {
@@ -527,7 +528,7 @@ async function loadStoryMemoriesForScene(characterKeys, registryId) {
     let socialSection = '';
     try {
       const socialProfiles = await db.SocialProfile.findAll({
-        where: { registry_character_id: charIds, status: ['crossed', 'finalized'] },
+        where: { registry_character_id: charIds, status: { [db.Sequelize.Op.in]: ['crossed', 'finalized'] } },
         attributes: ['handle', 'platform', 'parasocial_function', 'emotional_activation', 'current_trajectory', 'registry_character_id'],
         limit: 5,
       });
@@ -687,9 +688,12 @@ async function loadWorldLocationContext(sceneBrief, characterKeys, registryId) {
     let locations = [];
     if (charIds.length) {
       locations = await db.WorldLocation.findAll({
-        where: db.sequelize.literal(
-          `"associated_characters" @> ANY(ARRAY[${charIds.map(id => `'"${id}"'::jsonb`).join(',')}])`
-        ),
+        where: {
+          [db.Sequelize.Op.or]: charIds.map(id => db.sequelize.where(
+            db.sequelize.fn('jsonb_exists', db.sequelize.col('associated_characters'), id),
+            true
+          )),
+        },
         attributes: ['name', 'location_type', 'sensory_details', 'narrative_role', 'description'],
         limit: 5,
       });
@@ -700,7 +704,11 @@ async function loadWorldLocationContext(sceneBrief, characterKeys, registryId) {
       const words = sceneBrief.toLowerCase().split(/\s+/).filter(w => w.length > 4 && /^[a-z]+$/i.test(w)).slice(0, 20);
       if (words.length) {
         locations = await db.WorldLocation.findAll({
-          where: { name: { [db.Sequelize.Op.iLike]: { [db.Sequelize.Op.any]: words.map(w => `%${w}%`) } } },
+          where: {
+            [db.Sequelize.Op.or]: words.map(w => ({
+              name: { [db.Sequelize.Op.iLike]: `%${w}%` },
+            })),
+          },
           attributes: ['name', 'location_type', 'sensory_details', 'narrative_role', 'description'],
           limit: 3,
         });
@@ -764,7 +772,7 @@ async function loadSceneArcMetadata(chapterId) {
   if (!chapterId) return '';
   try {
     const proposal = await db.SceneProposal.findOne({
-      where: { chapter_id: chapterId, status: ['accepted', 'adjusted', 'proposed'] },
+      where: { chapter_id: chapterId, status: { [db.Sequelize.Op.in]: ['accepted', 'adjusted', 'proposed'] } },
       order: [['created_at', 'DESC']],
       attributes: ['arc_stage', 'arc_function', 'emotional_stakes', 'wounds_unaddressed', 'tensions_unresolved', 'scene_type', 'suggested_tone'],
     });
@@ -1115,8 +1123,8 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
     // Fetch enriched character context (living context + relationships + knowledge asymmetry)
     const { dossiers, charBlocks } = await fetchSceneContext(characters_in_scene, registry_id);
 
-    // Load ALL enrichment layers in parallel for maximum context
-    const [storyMemories, therapyCtx, franchiseCtx, authorNoteCtx, worldCtx, voiceRuleCtx, arcCtx, socialCtx, continuityCtx, growthCtx, worldStateCtx, crossingCtx] = await Promise.all([
+    // Load ALL enrichment layers in parallel — use allSettled so one failure doesn't block generation
+    const enrichmentResults = await Promise.allSettled([
       loadStoryMemoriesForScene(characters_in_scene, registry_id),
       loadTherapyProfiles(characters_in_scene, registry_id),
       loadFranchiseConstraints(characters_in_scene),
@@ -1130,6 +1138,12 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       loadWorldStateContext(chapter_id, book_id),
       loadCharacterCrossingContext(characters_in_scene, registry_id),
     ]);
+    const settled = enrichmentResults.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      console.error(`[generate-story-multi] enrichment layer ${i} failed:`, r.reason?.message);
+      return '';
+    });
+    const [storyMemories, therapyCtx, franchiseCtx, authorNoteCtx, worldCtx, voiceRuleCtx, arcCtx, socialCtx, continuityCtx, growthCtx, worldStateCtx, crossingCtx] = settled;
 
     // Load arc tracking context for POV character (first in scene)
     const povCharKey = characters_in_scene?.[0];
@@ -1187,6 +1201,8 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       story_number: 0,
       title: `Eval Scene — ${(scene_brief || '').slice(0, 80)}`,
       text: '',
+      phase: 'establishment',
+      story_type: 'eval_scene',
       status: 'pending_evaluation',
       chapter_id: chapter_id || null,
       book_id: book_id || null,
@@ -1199,6 +1215,15 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       story_a: storyA,
       story_b: storyB,
       story_c: storyC,
+      task_brief: {
+        task: scene_brief,
+        phase: 'establishment',
+        story_type: 'eval_scene',
+        title: `Eval Scene — ${(scene_brief || '').slice(0, 80)}`,
+        obstacle: 'Evaluation scene — multi-voice comparison',
+        tone_dial: tone_dial || 'literary',
+        characters_in_scene,
+      },
     });
 
     const wordCount = (t) => (t || '').split(/\s+/).filter(Boolean).length;
@@ -1294,7 +1319,13 @@ router.post('/evaluate-stories', optionalAuth, async (req, res) => {
 
     let raw = msg.content?.[0]?.text || '{}';
     raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-    const evaluation = JSON.parse(raw);
+    let evaluation;
+    try {
+      evaluation = JSON.parse(raw);
+    } catch (parseErr) {
+      console.error('[evaluate-stories] JSON parse failed:', parseErr.message, 'raw length:', raw.length);
+      return res.status(422).json({ error: 'Evaluation returned invalid JSON — retry', raw_preview: raw.slice(0, 500) });
+    }
 
     // Persist evaluation + set the synthesised text as the story text
     story.evaluation_result = evaluation;
@@ -1356,12 +1387,23 @@ router.post('/propose-memory', optionalAuth, async (req, res) => {
     const charKeys = story.characters_in_scene || [];
     const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
 
+    // Look up character_id for the story's character_key
+    let characterId = null;
+    if (story.character_key && regId) {
+      const regChar = await db.RegistryCharacter.findOne({
+        where: { character_key: story.character_key, registry_id: regId },
+        attributes: ['id'],
+      });
+      if (regChar) characterId = regChar.id;
+    }
+
+    const memWhere = characterId ? { character_id: characterId } : {};
     const [existingMemories, continuityCtx, growthCtx, worldStateCtx] = await Promise.all([
       db.StorytellerMemory.findAll({
-        where: { character_key: story.character_key },
+        where: memWhere,
         order: [['created_at', 'DESC']],
         limit: 30,
-        attributes: ['type', 'content', 'weight'],
+        attributes: ['type', 'statement', 'confidence'],
       }),
       loadContinuityContext(charKeys, regId),
       loadCharacterGrowthContext(charKeys, regId),
@@ -1369,7 +1411,7 @@ router.post('/propose-memory', optionalAuth, async (req, res) => {
     ]);
 
     const memCtx = existingMemories.map(m =>
-      `[${m.type}] ${m.content} (weight: ${m.weight})`
+      `[${m.type}] ${m.statement} (confidence: ${m.confidence})`
     ).join('\n');
 
     const enrichmentCtx = continuityCtx + growthCtx + worldStateCtx;
@@ -1386,7 +1428,13 @@ router.post('/propose-memory', optionalAuth, async (req, res) => {
 
     let raw = msg.content?.[0]?.text || '{}';
     raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-    const proposals = JSON.parse(raw);
+    let proposals;
+    try {
+      proposals = JSON.parse(raw);
+    } catch (parseErr) {
+      console.error('[propose-memory] JSON parse failed:', parseErr.message);
+      return res.status(422).json({ error: 'Memory proposal returned invalid JSON — retry', raw_preview: raw.slice(0, 500) });
+    }
 
     story.plot_memory_proposal = proposals.plot_memories || [];
     story.character_revelation_proposal = proposals.character_revelations || [];
@@ -1438,13 +1486,19 @@ router.post('/propose-registry-update', optionalAuth, async (req, res) => {
       system: `You are a character registry curator. After reading a story, propose specific updates to character registry profiles. Respect the character growth history, continuity timeline, and world state provided — do NOT propose changes that contradict established arcs. Return ONLY valid JSON.`,
       messages: [{
         role: 'user',
-        content: `CURRENT PROFILES:\n${profileCtx || '(none)'}${enrichmentCtx}\n\nSTORY:\n${story.text}\n\nPropose registry updates in JSON:\n{\n  "updates": [\n    {\n      "character_key": "key",\n      "field": "core_desire|core_wound|hidden_want|core_belief|living_context|voice_notes",\n      "current_value": "what it is now",\n      "proposed_value": "what it should become",\n      "reason": "why this scene changes this"\n    }\n  ]\n}`,
+        content: `CURRENT PROFILES:\n${profileCtx || '(none)'}${enrichmentCtx}\n\nSTORY:\n${story.text}\n\nPropose registry updates in JSON:\n{\n  "updates": [\n    {\n      "character_key": "key",\n      "field": "core_desire|core_wound|hidden_want|core_belief|living_context|voice_signature",\n      "current_value": "what it is now",\n      "proposed_value": "what it should become",\n      "reason": "why this scene changes this"\n    }\n  ]\n}`,
       }],
     });
 
     let raw = msg.content?.[0]?.text || '{}';
     raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-    const proposals = JSON.parse(raw);
+    let proposals;
+    try {
+      proposals = JSON.parse(raw);
+    } catch (parseErr) {
+      console.error('[propose-registry-update] JSON parse failed:', parseErr.message);
+      return res.status(422).json({ error: 'Registry update proposal returned invalid JSON — retry', raw_preview: raw.slice(0, 500) });
+    }
 
     story.registry_update_proposals = proposals.updates || [];
     await story.save();
@@ -1483,35 +1537,51 @@ router.post('/write-back', optionalAuth, async (req, res) => {
     for (const para of paragraphs) {
       await db.StorytellerLine.create({
         chapter_id,
-        book_id: chapter.book_id,
         text: para.trim(),
-        line_order: lineOrder++,
-        line_type: 'prose',
+        sort_order: lineOrder++,
+        status: 'approved',
       }, { transaction });
     }
 
-    // 2. Commit confirmed memories
+    // 2. Commit confirmed memories — resolve character_id from character_key
     if (confirmed_memories?.length) {
+      let charId = null;
+      if (story.character_key) {
+        const regId = story.registry_dossiers_used?.[0]?.registry_id || null;
+        const regChar = regId
+          ? await db.RegistryCharacter.findOne({ where: { character_key: story.character_key, registry_id: regId }, attributes: ['id'], transaction })
+          : await db.RegistryCharacter.findOne({ where: { character_key: story.character_key }, attributes: ['id'], transaction });
+        if (regChar) charId = regChar.id;
+      }
       for (const mem of confirmed_memories) {
         await db.StorytellerMemory.create({
-          character_key: story.character_key,
+          character_id: mem.character_id || charId,
           type: mem.type || 'event',
-          content: mem.content,
-          weight: mem.weight || 5,
-          source: 'evaluation_engine',
-          story_id: story.id,
+          statement: mem.content || mem.statement,
+          confidence: 1.0,
+          confirmed: true,
+          confirmed_at: new Date(),
+          source_type: 'scene',
+          source_ref: `story_${story.story_number}`,
+          tags: mem.tags || [],
         }, { transaction });
       }
     }
 
-    // 3. Apply confirmed registry updates
+    // 3. Apply confirmed registry updates (whitelist safe fields)
+    const SAFE_REGISTRY_FIELDS = new Set([
+      'core_desire', 'core_wound', 'core_belief', 'hidden_want',
+      'living_context', 'voice_signature', 'display_name',
+      'personality_matrix', 'deep_profile', 'extra_fields',
+    ]);
     if (confirmed_registry_updates?.length) {
       for (const upd of confirmed_registry_updates) {
+        if (!upd.field || !SAFE_REGISTRY_FIELDS.has(upd.field)) continue;
         const char = await db.RegistryCharacter.findOne({
           where: { character_key: upd.character_key },
           transaction,
         });
-        if (char && upd.field && upd.proposed_value !== undefined) {
+        if (char && upd.proposed_value !== undefined) {
           char[upd.field] = upd.proposed_value;
           await char.save({ transaction });
         }
@@ -1526,6 +1596,15 @@ router.post('/write-back', optionalAuth, async (req, res) => {
     await story.save({ transaction });
 
     await transaction.commit();
+
+    // Fire async enrichment pipeline (non-blocking — does not delay response)
+    enrichAfterWriteBack(db, {
+      story: story.toJSON(),
+      chapter: chapter.toJSON(),
+      storyText: story.text,
+      confirmedMemories: confirmed_memories,
+      confirmedRegistryUpdates: confirmed_registry_updates,
+    }).catch(err => console.error('[post-write-back enrichment]', err?.message));
 
     return res.json({
       success: true,
@@ -1551,6 +1630,24 @@ router.get('/eval-stories/:storyId', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('[eval-stories/get]', err?.message);
     return res.status(500).json({ error: err?.message || 'Failed to fetch story' });
+  }
+});
+
+// ── GET /eval-stories/:storyId/enrichment — enrichment status ────────────
+router.get('/eval-stories/:storyId/enrichment', optionalAuth, async (req, res) => {
+  try {
+    const story = await db.StorytellerStory.findByPk(req.params.storyId, {
+      attributes: ['id', 'status', 'enrichment_status'],
+    });
+    if (!story) return res.status(404).json({ error: 'Story not found' });
+    return res.json({
+      story_id: story.id,
+      status: story.status,
+      enrichment: story.enrichment_status || null,
+    });
+  } catch (err) {
+    console.error('[eval-stories/enrichment]', err?.message);
+    return res.status(500).json({ error: err?.message || 'Failed to fetch enrichment status' });
   }
 });
 
@@ -1600,12 +1697,18 @@ Only include characters and dimensions where the scene reveals something new.`,
       messages: [{ role: 'user', content: scene_text.substring(0, 15000) }],
     });
 
-    const raw = response.content[0].text;
+    const raw = response.content?.[0]?.text || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return res.json({ revelations: {}, note: 'No structured revelations extracted' });
     }
-    const revelations = JSON.parse(jsonMatch[0]);
+    let revelations;
+    try {
+      revelations = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      console.error('[scene-revelation] JSON parse failed:', parseErr.message);
+      return res.status(422).json({ error: 'Scene revelation returned invalid JSON', raw_preview: raw.slice(0, 500) });
+    }
 
     return res.json({
       success: true,
