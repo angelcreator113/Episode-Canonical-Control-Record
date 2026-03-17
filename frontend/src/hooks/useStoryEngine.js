@@ -115,6 +115,7 @@ export default function useStoryEngine() {
   const [amberNotification, setAmberNotification] = useState(null);
   const [amberTextureNotes, setAmberTextureNotes] = useState(null);
   const [batchProgress, setBatchProgress] = useState(null);
+  const [arcProgress, setArcProgress] = useState(null); // SSE arc generation progress
 
   // --- UI toggles ---
   const [readingMode, setReadingMode] = useState(false);
@@ -336,26 +337,69 @@ export default function useStoryEngine() {
     setTherapyMemories([]);
   }, [stories]);
 
-  // --- Generate arc ---
+  // --- Generate arc (SSE with real-time progress) ---
   const handleGenerateArc = useCallback(async (forceRegenerate = false) => {
     setTasksLoading(true);
+    setArcProgress(null);
+
     try {
-      const res = await fetch(`${API_BASE}/memories/generate-story-tasks`, {
+      const res = await fetch(`${API_BASE}/memories/generate-story-tasks-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ characterKey: selectedChar, forceRegenerate }),
       });
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      setTasks(data.tasks || []);
-      setCachedTasks(selectedChar, data.tasks || []);
-      if (data.tasks?.length) setActiveTask(data.tasks[0]);
+
+      if (!res.ok) throw new Error('Failed to start arc generation');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events from buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              setArcProgress(event);
+
+              if (event.step === 'done') {
+                // Arc complete — extract results
+                const result = event;
+                setTasks(result.tasks || []);
+                setCachedTasks(selectedChar, result.tasks || []);
+                if (result.tasks?.length) setActiveTask(result.tasks[0]);
+                // Keep arcProgress showing 'done' briefly, then clear
+                setTimeout(() => setArcProgress(null), 3000);
+              }
+
+              if (event.step === 'error') {
+                console.error('Arc generation error:', event.message);
+                addToast(event.message || 'Arc generation failed', 'error');
+                setTimeout(() => setArcProgress(null), 5000);
+              }
+            } catch (parseErr) {
+              // Skip malformed events
+            }
+          }
+        }
+      }
     } catch (e) {
-      console.error('generateArc error:', e);
+      console.error('generateArc SSE error:', e);
+      addToast('Arc generation failed — please try again.', 'error');
+      setArcProgress(null);
     } finally {
       setTasksLoading(false);
     }
-  }, [selectedChar]);
+  }, [selectedChar, addToast]);
 
   // --- Generate single story ---
   const handleGenerate = useCallback(async (task) => {
@@ -724,7 +768,7 @@ export default function useStoryEngine() {
     // Tasks
     tasks, tasksLoading, filteredTasks,
     activeTask, setActiveTask, activeStory, setActiveStory,
-    handleSelectTask, handleGenerateArc,
+    handleSelectTask, handleGenerateArc, arcProgress,
 
     // Stories
     stories, approvedStories, savedStories,

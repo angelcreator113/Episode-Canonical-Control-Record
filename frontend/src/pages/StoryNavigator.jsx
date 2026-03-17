@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { PHASE_COLORS, PHASE_LABELS, TYPE_ICONS, WORLD_LABELS, WORLD_SHORT, ARC_SHORT_LABELS } from './storyEngineConstants';
+import ArcGenerationStatus from './ArcGenerationStatus';
 
 // ─── Searchable character dropdown ────────────────────────────────────────────
 function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
@@ -245,6 +246,7 @@ export default function StoryNavigator({
   handleBatchApprove, handleBatchToggle,
   mobileNav, setMobileNav,
   elapsed,
+  arcProgress,
 }) {
   return (
     <aside className={`se-navigator ${mobileNav ? 'se-drawer-open' : ''}`}>
@@ -341,10 +343,18 @@ export default function StoryNavigator({
       {/* Story list */}
       <div className="se-nav-stories">
         {tasksLoading ? (
-          <div className="se-nav-loading">
-            <div className="se-spinner" style={{ borderTopColor: char?.color }} />
-            <span>Building arc… {elapsed}s</span>
-          </div>
+          arcProgress ? (
+            <ArcGenerationStatus
+              arcProgress={arcProgress}
+              charColor={char?.color}
+              elapsed={elapsed}
+            />
+          ) : (
+            <div className="se-nav-loading">
+              <div className="se-spinner" style={{ borderTopColor: char?.color }} />
+              <span>Building arc… {elapsed}s</span>
+            </div>
+          )
         ) : (
           filteredTasks.map((t) => (
             <TaskCard
