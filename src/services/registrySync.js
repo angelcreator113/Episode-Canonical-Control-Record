@@ -322,7 +322,7 @@ If nothing new is revealed, return { "moments": [] }`;
             ));
             updates.personality_matrix = matrix;
           }
-        } catch {}
+        } catch (err) { console.warn('[registrySync] personality matrix compute error:', err?.message); }
       }
 
       await models.RegistryCharacter.update(updates, {

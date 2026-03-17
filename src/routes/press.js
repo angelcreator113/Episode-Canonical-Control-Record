@@ -673,7 +673,7 @@ Write only the post. No preamble. No explanation. Start immediately with the con
           paranoid: false,
         });
       }
-    } catch {}
+    } catch (err) { console.warn('[press] content_generated increment error:', err?.message); }
 
     res.json({
       character:   pc.name,

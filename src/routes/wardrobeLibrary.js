@@ -170,7 +170,7 @@ router.post('/:id/assign-content', optionalAuth, async (req, res) => {
       event_type:  'assigned_to_content',
       event_data:  { content_type, content_id, scene_context },
       character_id: character_id || null,
-    }).catch(() => {});
+    }).catch(e => console.warn('[wardrobe] usage history create error:', e?.message));
 
     // Auto-trigger Press notification if piece has uncovered brand tag
     let pressTriggered = false;
@@ -236,7 +236,7 @@ router.get('/:id/assignments', optionalAuth, async (req, res) => {
           const ln = await models.StorytellerLine?.findByPk(a.content_id);
           entry.content_label = ln?.content?.slice(0, 60) + '…' || 'Line';
         }
-      } catch {}
+      } catch (err) { console.warn('[wardrobe] content label lookup error:', err?.message); }
 
       (grouped[a.content_type] = grouped[a.content_type] || []).push(entry);
     }

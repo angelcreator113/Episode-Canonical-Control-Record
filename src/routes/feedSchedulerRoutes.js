@@ -348,7 +348,7 @@ function processAutoGenInBackground(jobId, db, layer, count) {
           status: 'failed',
           error_message: err.message,
           completed_at: new Date(),
-        }).catch(() => {});
+        }).catch(e => console.warn('[feed-scheduler] job status update error:', e?.message));
       }
       notifyJobSSE(jobId, 'error', { job_id: jobId, error: err.message });
     }

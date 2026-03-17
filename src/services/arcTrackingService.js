@@ -111,8 +111,30 @@ async function updateArcTracking(db, characterKey, options = {}) {
 // ── Build generation context ──────────────────────────────────────────
 // This is what gets injected into every generation prompt
 async function buildArcContext(db, characterKey) {
-  const arc = await db.CharacterArc.findOne({ where: { character_key: characterKey } });
-  if (!arc) return null;
+  if (!db.CharacterArc) return null;
+  let arc;
+  try {
+    arc = await db.CharacterArc.findOne({ where: { character_key: characterKey } });
+  } catch (err) {
+    console.warn('[buildArcContext] Query failed (table may not exist):', err.message);
+    return null;
+  }
+  // Auto-initialize arc for new characters instead of returning null
+  if (!arc) {
+    try {
+      arc = await db.CharacterArc.create({
+        character_key: characterKey,
+        wound_clock: 75,
+        stakes_level: 1,
+        visibility_score: 20,
+        david_silence_counter: 0,
+        phone_appearances: 0,
+      });
+    } catch (createErr) {
+      console.warn('[buildArcContext] Could not auto-create arc:', createErr.message);
+      return null;
+    }
+  }
 
   return {
     wound_clock: arc.wound_clock,

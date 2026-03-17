@@ -1201,6 +1201,8 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       story_number: 0,
       title: `Eval Scene — ${(scene_brief || '').slice(0, 80)}`,
       text: '',
+      phase: 'establishment',
+      story_type: 'eval_scene',
       status: 'pending_evaluation',
       chapter_id: chapter_id || null,
       book_id: book_id || null,
@@ -1213,6 +1215,15 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       story_a: storyA,
       story_b: storyB,
       story_c: storyC,
+      task_brief: {
+        task: scene_brief,
+        phase: 'establishment',
+        story_type: 'eval_scene',
+        title: `Eval Scene — ${(scene_brief || '').slice(0, 80)}`,
+        obstacle: 'Evaluation scene — multi-voice comparison',
+        tone_dial: tone_dial || 'literary',
+        characters_in_scene,
+      },
     });
 
     const wordCount = (t) => (t || '').split(/\s+/).filter(Boolean).length;

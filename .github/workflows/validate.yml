@@ -1,0 +1,94 @@
+name: Validate
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  cost-audit:
+    name: Cost Exposure Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run cost exposure audit
+        run: bash scripts/audit-cost-exposure.sh
+
+  route-validation:
+    name: Route Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate routes
+        run: node scripts/validate-routes.js
+
+      - name: Lint silent catches
+        run: bash scripts/lint-silent-catches.sh
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: episode_metadata_test
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS episode_metadata_test;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE episode_metadata_test;"
+
+      - name: Run database migrations
+        run: npm run migrate:up
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+          NODE_ENV: test
+
+      - name: Run tests
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+          JWT_SECRET: test-secret-key-minimum-32-characters-long
+          NODE_ENV: test

@@ -25,6 +25,8 @@ module.exports = {
     ],
     'prefer-const': 'error',
     'no-var': 'error',
+    // Prevent silent error swallowing — every catch must log or handle
+    'no-empty': ['error', { allowEmptyCatch: false }],
   },
   overrides: [
     {

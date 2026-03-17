@@ -53,15 +53,16 @@ router.post('/generate', async (req, res) => {
     // Save to DB as proposed (not confirmed)
     const saved = await db.StoryTexture.create(texture);
 
-    // Update arc tracking — phone appearance and bleed flag
-    if (texture.phone_appeared || texture.bleed_text) {
-      await updateArcTracking(db, character_key, {
-        storyNumber:    story.story_number,
-        storyType:      story.story_type,
-        phase:          story.phase,
-        phoneAppeared:  texture.phone_appeared || false,
-      });
-    }
+    // Update arc tracking — every story, all parameters
+    await updateArcTracking(db, character_key, {
+      storyNumber:      story.story_number,
+      storyType:        story.story_type,
+      phase:            story.phase,
+      phoneAppeared:    texture.phone_appeared || false,
+      intimateGenerated: !!texture.private_moment_text,
+      intimateWithDavid: !!(texture.private_moment_text && /\bdavid\b/i.test(texture.private_moment_text)),
+      postGenerated:     !!texture.post_text,
+    });
 
     res.json({ texture: saved, proposed: true, saved: false });
 

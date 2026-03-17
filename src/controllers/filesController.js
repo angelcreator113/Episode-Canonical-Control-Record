@@ -24,8 +24,8 @@ class FilesController {
 
     // If episodeId provided, verify user has access
     if (episodeId) {
-      const Episode = require('../models/episode');
-      const episode = await Episode.getById(episodeId);
+      const { Episode } = require('../models');
+      const episode = await Episode.findByPk(episodeId);
 
       if (!episode) {
         return res.status(404).json({

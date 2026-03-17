@@ -130,9 +130,10 @@ const PHASE_LABELS = {
 };
 
 const TYPE_ICONS = {
-  internal:  '◎',
-  collision: '⊕',
-  wrong_win: '◇',
+  internal:   '◎',
+  collision:  '⊕',
+  wrong_win:  '◇',
+  eval_scene: '📊',
 };
 
 // ─── World toggle ─────────────────────────────────────────────────────────────
@@ -295,6 +296,7 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
 }
 
 // ─── Arc progress bar ────────────────────────────────────────────────────────
+const ARC_SHORT_LABELS = { establishment: 'Estab.', pressure: 'Press.', crisis: 'Crisis', integration: 'Integ.' };
 function ArcProgress({ approvedStories, savedStories = [], stories = {} }) {
   const phases = ['establishment', 'pressure', 'crisis', 'integration'];
   const phaseRanges = { establishment: [1,10], pressure: [11,25], crisis: [26,40], integration: [41,50] };
@@ -308,8 +310,8 @@ function ArcProgress({ approvedStories, savedStories = [], stories = {} }) {
         const pct = Math.round((approved / total) * 100);
         return (
           <div key={phase} className="se-arc-phase">
-            <div className="se-arc-phase-label" style={{ color: PHASE_COLORS[phase] }}>
-              {PHASE_LABELS[phase]}
+            <div className="se-arc-phase-label" style={{ color: PHASE_COLORS[phase] }} title={PHASE_LABELS[phase]}>
+              {ARC_SHORT_LABELS[phase]}
             </div>
             <div className="se-arc-phase-bar">
               <div
@@ -409,6 +411,98 @@ function TaskCard({
   );
 }
 
+// ─── Therapy-informed story suggestions ──────────────────────────────────────
+function TherapySuggestions({ characterKey, apiBase }) {
+  const [suggestions, setSuggestions] = React.useState(null);
+  const [expanded, setExpanded] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!characterKey) return;
+    setSuggestions(null);
+    fetch(`${apiBase}/story-health/therapy-suggestions/${characterKey}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setSuggestions(d))
+      .catch(err => console.warn('therapy suggestions failed:', err.message));
+  }, [characterKey, apiBase]);
+
+  if (!suggestions?.suggestions?.length) return null;
+  return (
+    <div style={{
+      margin: '0 14px 12px', padding: 12, borderRadius: 10,
+      background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)',
+    }}>
+      <div
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed' }}>
+          🧠 Story Suggestions ({suggestions.suggestions.length})
+        </span>
+        <span style={{ fontSize: 10, color: '#999' }}>{expanded ? '▾' : '▸'}</span>
+      </div>
+      {expanded && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {suggestions.suggestions.map((s, i) => (
+            <div key={s.title || i} style={{ display: 'flex', gap: 8, fontSize: 11, padding: '4px 0' }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%', marginTop: 4, flexShrink: 0,
+                background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
+              }} />
+              <div>
+                <div style={{ fontWeight: 500, color: '#333' }}>{s.title}</div>
+                <div style={{ color: '#888', fontSize: 10 }}>{s.description}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Story Sparks panel ──────────────────────────────────────────────────────
+function StorySparksPanel({ characterKey }) {
+  const [sparks, setSparks] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+
+  // Reset when character changes
+  React.useEffect(() => {
+    setSparks([]);
+    setOpen(false);
+  }, [characterKey]);
+
+  const loadSparks = () => {
+    if (sparks.length) { setOpen(!open); return; }
+    setOpen(true); setLoading(true);
+    fetch(`/api/v1/story-health/story-sparks/${characterKey}`)
+      .then(r => r.json()).then(d => setSparks(d.sparks || []))
+      .catch(err => console.warn('story sparks:', err.message))
+      .finally(() => setLoading(false));
+  };
+
+  return (
+    <section className="se-insp-section">
+      <button className="se-insp-toggle" onClick={loadSparks}>
+        <span>Story Sparks</span>
+        <span>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="se-insp-sparks">
+          {loading ? <div className="se-insp-dim">Generating…</div>
+            : sparks.length === 0 ? <div className="se-insp-dim">No sparks yet</div>
+            : sparks.map((s, i) => (
+              <div key={s.title || i} className="se-insp-spark">
+                <div className="se-insp-spark-type">{s.type || 'Spark'}</div>
+                <div className="se-insp-spark-text">{s.suggestion || s.title || JSON.stringify(s)}</div>
+              </div>
+            ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Story reader / editor panel ──────────────────────────────────────────────
 function StoryPanel({
   story, task, charColor, charName,
@@ -429,7 +523,25 @@ function StoryPanel({
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
-  const [showAiSidebar, setShowAiSidebar] = useState(() => window.innerWidth <= 768);
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'unsaved'
+  const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
+
+  // Sync selectedVoice when parent character changes
+  useEffect(() => {
+    if (selectedCharKey) setSelectedVoice(selectedCharKey);
+  }, [selectedCharKey]);
+
+  // Reset save status when switching stories
+  useEffect(() => {
+    setSaveStatus('saved');
+  }, [story?.story_number]);
+
+  // Track unsaved changes
+  useEffect(() => {
+    if (editing && editText !== (story?.text || '')) {
+      setSaveStatus('unsaved');
+    }
+  }, [editText, editing, story?.text]);
   const [currentPage, setCurrentPage] = useState(0);
   const [evalScore, setEvalScore] = useState(null);
   const [activeThreads, setActiveThreads] = useState([]);
@@ -549,26 +661,26 @@ function StoryPanel({
       <div className="se-story-brief-header" style={{ borderColor: charColor }}>
         <div className="se-story-brief-num">Story {task.story_number}</div>
         <div className="se-story-brief-title">{task.title}</div>
-        <div className="se-story-brief-phase" style={{ color: PHASE_COLORS[task.phase] }}>
-          {PHASE_LABELS[task.phase]} · {task.story_type}
+        <div className="se-story-brief-phase" style={{ color: PHASE_COLORS[task.phase] || '#888' }}>
+          {PHASE_LABELS[task.phase] || task.phase || '—'} · {task.story_type?.replace(/_/g, ' ') || '—'}
         </div>
       </div>
       <div className="se-story-brief-grid">
         <div className="se-story-brief-field">
           <div className="se-story-brief-label">Task</div>
-          <div className="se-story-brief-value">{task.task}</div>
+          <div className="se-story-brief-value">{task.task || '—'}</div>
         </div>
         <div className="se-story-brief-field">
           <div className="se-story-brief-label">Obstacle</div>
-          <div className="se-story-brief-value">{task.obstacle}</div>
+          <div className="se-story-brief-value">{task.obstacle || '—'}</div>
         </div>
         <div className="se-story-brief-field">
           <div className="se-story-brief-label">Strength Weaponized</div>
-          <div className="se-story-brief-value">{task.strength_weaponized}</div>
+          <div className="se-story-brief-value">{task.strength_weaponized || '—'}</div>
         </div>
         <div className="se-story-brief-field">
           <div className="se-story-brief-label">Opening Line</div>
-          <div className="se-story-brief-value se-story-brief-opening">"{task.opening_line}"</div>
+          <div className="se-story-brief-value se-story-brief-opening">{task.opening_line ? `"${task.opening_line}"` : '—'}</div>
         </div>
       </div>
       {task.new_character && (
@@ -596,121 +708,161 @@ function StoryPanel({
     </div>
   );
 
+  const wordCount = editing
+    ? editText.split(/\s+/).filter(Boolean).length
+    : (story.word_count || 0);
+
+  const handleSave = async () => {
+    setSaveStatus('saving');
+    try {
+      await onEdit(story, editText);
+      setSaveStatus('saved');
+      setEditing(false);
+    } catch (e) {
+      setSaveStatus('unsaved');
+    }
+  };
+
   return (
     <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''}`}>
-      <div className="se-story-header" style={{ borderBottomColor: charColor }}>
-        <div className="se-story-header-left">
-          <div className="se-story-nav-row">
+      {/* ── Edit mode header (clean, minimal) ── */}
+      {editing ? (
+        <div className="se-edit-header">
+          <div className="se-edit-header-left">
             <button
-              className="se-btn se-btn-nav"
-              onClick={() => onNavigateStory?.(-1)}
-              disabled={!hasPrev}
-              title="Previous story (←)"
+              className="se-edit-back"
+              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
             >
-              ‹ Prev
+              ← Back to Story Engine
             </button>
-            <div className="se-story-header-num">Story {story.story_number}</div>
+            <div className="se-edit-header-info">
+              <span className="se-edit-header-title">{story.title}</span>
+              <span className="se-edit-header-dot">·</span>
+              <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
+              <span className="se-edit-header-dot">·</span>
+              <span>{wordCount.toLocaleString()} words</span>
+              <span className="se-edit-header-dot">·</span>
+              <span>{getReadingTime(wordCount)}</span>
+            </div>
+          </div>
+          <div className="se-edit-header-right">
+            <span className={`se-save-indicator se-save-${saveStatus}`}>
+              {saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved changes'}
+            </span>
             <button
-              className="se-btn se-btn-nav"
-              onClick={() => onNavigateStory?.(1)}
-              disabled={!hasNext}
-              title="Next story (→)"
+              className="se-btn se-btn-save-primary"
+              style={{ background: charColor }}
+              onClick={handleSave}
             >
-              Next ›
+              Save
+            </button>
+            <button
+              className="se-btn se-btn-cancel-light"
+              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
+            >
+              Cancel
             </button>
           </div>
-          <div className="se-story-header-title">{story.title}</div>
-          <div className="se-story-header-meta">
-            <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
-            <span>·</span>
-            <span>{TYPE_ICONS[story.story_type]} {story.story_type}</span>
-            <span>·</span>
-            <span>{story.word_count?.toLocaleString() || '—'} words</span>
-            {story.word_count > 0 && (
-              <>
-                <span>·</span>
-                <span>{Math.ceil(story.word_count / 250)} {Math.ceil(story.word_count / 250) === 1 ? 'page' : 'pages'}</span>
-                <span>·</span>
-                <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
-              </>
+        </div>
+      ) : (
+        /* ── Read mode header (existing) ── */
+        <div className="se-story-header" style={{ borderBottomColor: charColor }}>
+          <div className="se-story-header-left">
+            <div className="se-story-nav-row">
+              <button
+                className="se-btn se-btn-nav"
+                onClick={() => onNavigateStory?.(-1)}
+                disabled={!hasPrev}
+                title="Previous story (←)"
+              >
+                ‹ Prev
+              </button>
+              <div className="se-story-header-num">Story {story.story_number}</div>
+              <button
+                className="se-btn se-btn-nav"
+                onClick={() => onNavigateStory?.(1)}
+                disabled={!hasNext}
+                title="Next story (→)"
+              >
+                Next ›
+              </button>
+            </div>
+            <div className="se-story-header-title">{story.title}</div>
+            <div className="se-story-header-meta">
+              <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
+              <span>·</span>
+              <span>{TYPE_ICONS[story.story_type]} {story.story_type}</span>
+              <span>·</span>
+              <span>{story.word_count?.toLocaleString() || '—'} words</span>
+              {story.word_count > 0 && (
+                <>
+                  <span>·</span>
+                  <span>{Math.ceil(story.word_count / 250)} {Math.ceil(story.word_count / 250) === 1 ? 'page' : 'pages'}</span>
+                  <span>·</span>
+                  <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="se-story-header-actions">
+            <button
+              className="se-btn se-btn-reading-mode"
+              onClick={() => onToggleReadingMode?.()}
+              title={readingMode ? 'Exit reading mode (Esc)' : 'Reading mode (F)'}
+            >
+              {readingMode ? '⊟' : '⊞'}
+            </button>
+            <button
+              className="se-btn se-btn-export"
+              onClick={() => onExportStory?.(story)}
+              title="Copy or download story"
+            >
+              ↗ Export
+            </button>
+            <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
+            <button
+              className="se-btn se-btn-consistency"
+              onClick={() => onCheckConsistency(story)}
+              disabled={consistencyLoading}
+            >
+              {consistencyLoading ? '…' : 'Check'}
+            </button>
+            <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
+            <button
+              className="se-btn se-btn-save-later"
+              onClick={() => onSaveForLater(story)}
+              disabled={savingForLater}
+            >
+              {savingForLater ? 'Saving…' : '📥 Save for Later'}
+            </button>
+            <button
+              className="se-btn"
+              style={{ background: '#3D7A9B', color: '#fff' }}
+              onClick={() => onEvaluate?.(story)}
+              title="Evaluate with multi-voice scoring"
+            >
+              📊 Evaluate
+            </button>
+            <button
+              className="se-btn se-btn-approve"
+              style={{ background: charColor }}
+              onClick={() => onApprove(story, true)}
+            >
+              {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
+            </button>
+            {evalScore && (
+              <div className="se-eval-badge" style={{
+                fontSize: 10, padding: '3px 8px', borderRadius: 6,
+                background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
+                fontWeight: 600, marginLeft: -4,
+              }}>
+                {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
+              </div>
             )}
           </div>
         </div>
-        <div className="se-story-header-actions">
-          {!editing && (
-            <>
-              <button
-                className="se-btn se-btn-reading-mode"
-                onClick={() => onToggleReadingMode?.()}
-                title={readingMode ? 'Exit reading mode (Esc)' : 'Reading mode (F)'}
-              >
-                {readingMode ? '⊟' : '⊞'}
-              </button>
-              <button
-                className="se-btn se-btn-export"
-                onClick={() => onExportStory?.(story)}
-                title="Copy or download story"
-              >
-                ↗ Export
-              </button>
-              <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
-              <button
-                className="se-btn se-btn-consistency"
-                onClick={() => onCheckConsistency(story)}
-                disabled={consistencyLoading}
-              >
-                {consistencyLoading ? '…' : 'Check'}
-              </button>
-              <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
-              <button
-                className="se-btn se-btn-save-later"
-                onClick={() => onSaveForLater(story)}
-                disabled={savingForLater}
-              >
-                {savingForLater ? 'Saving…' : '📥 Save for Later'}
-              </button>
-              <button
-                className="se-btn"
-                style={{ background: '#3D7A9B', color: '#fff' }}
-                onClick={() => onEvaluate?.(story)}
-                title="Evaluate with multi-voice scoring"
-              >
-                📊 Evaluate
-              </button>
-              <button
-                className="se-btn se-btn-approve"
-                style={{ background: charColor }}
-                onClick={() => onApprove(story, true)}
-              >
-                {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
-              </button>
-              {evalScore && (
-                <div className="se-eval-badge" style={{
-                  fontSize: 10, padding: '3px 8px', borderRadius: 6,
-                  background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                  color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
-                  fontWeight: 600, marginLeft: -4,
-                }}>
-                  {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
-                </div>
-              )}
-            </>
-          )}
-          {editing && (
-            <>
-              <button className="se-btn se-btn-cancel" onClick={() => { setEditing(false); setEditText(story.text); }}>Cancel</button>
-              <span className="se-edit-wordcount">{editText.split(/\s+/).filter(Boolean).length.toLocaleString()} words</span>
-              <button
-                className="se-btn se-btn-approve"
-                style={{ background: charColor }}
-                onClick={() => { onEdit(story, editText); setEditing(false); }}
-              >
-                Save
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
       {story.new_character && story.new_character_name && (
         <div className="se-new-char-alert">
@@ -773,124 +925,176 @@ function StoryPanel({
 
       <div className="se-story-body">
         {editing ? (
-          <>
-          <div className="se-edit-container">
-            <textarea
-              ref={textareaRef}
-              className="se-story-editor"
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              spellCheck
-            />
-            <button
-              className="se-ai-sidebar-toggle"
-              onClick={() => setShowAiSidebar(v => !v)}
-              title={showAiSidebar ? 'Hide AI tools' : 'Show AI tools'}
-            >
-              {showAiSidebar ? '✕ Close' : '✦ AI Tools'}
-            </button>
-            <div className={`se-ai-writer-sidebar${showAiSidebar ? ' se-ai-sidebar-open' : ''}`}>
-              <WriteModeAIWriter
-                chapterId={String(story?.story_number || task?.story_number || '')}
-                bookId={activeWorld || ''}
-                selectedCharacter={charObj ? {
-                  id: charObj.id || selectedCharKey,
-                  name: charObj.display_name || charName,
-                  selected_name: charObj.display_name || charName,
-                  type: charObj.role_type,
-                  role: charObj.role_type,
-                  core_desire: charObj.core_desire,
-                  core_fear: charObj.core_fear,
-                  core_wound: charObj.core_wound,
-                  description: charObj.description,
-                } : null}
-                currentProse={editText}
-                chapterContext={task ? {
-                  scene_goal: task.task,
-                  theme: task.title,
-                  emotional_arc_start: task.phase,
-                  emotional_arc_end: '',
-                  pov: charName || '',
-                } : {}}
-                onInsert={(text) => {
-                  const ta = textareaRef.current;
-                  if (ta) {
-                    const start = ta.selectionStart;
-                    const end = ta.selectionEnd;
-                    const before = editText.slice(0, start);
-                    const after = editText.slice(end);
-                    setEditText(before + text + after);
-                    setTimeout(() => {
-                      ta.selectionStart = ta.selectionEnd = start + text.length;
-                      ta.focus();
-                    }, 0);
-                  } else {
-                    setEditText(prev => prev + '\n\n' + text);
-                  }
-                }}
-                getSelectedText={() => {
-                  const ta = textareaRef.current;
-                  if (ta && ta.selectionStart !== ta.selectionEnd) {
-                    return editText.slice(ta.selectionStart, ta.selectionEnd);
-                  }
-                  return '';
-                }}
-                characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
-                  ...c, id: c.id || key, character_key: key, name: c.display_name,
-                })) : []}
-                onSelectCharacter={(c) => onSelectChar?.(c?.character_key || c?.id)}
+          <div className="se-edit-layout">
+            {/* ── Left: Writing Canvas (primary, 70%) ── */}
+            <div className="se-edit-canvas">
+              <textarea
+                ref={textareaRef}
+                className="se-story-editor"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                spellCheck
               />
+              {/* Page navigation under editor */}
+              {editTotalPages > 1 && (
+                <div className="se-page-nav">
+                  <button
+                    className="se-btn se-btn-page"
+                    onClick={() => {
+                      setCurrentPage(p => {
+                        const next = p - 1;
+                        const ta = textareaRef.current;
+                        if (ta) {
+                          ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
+                          const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+                          const textBefore = editText.slice(0, editPageOffsets[next]);
+                          const linesAbove = textBefore.split('\n').length - 1;
+                          ta.scrollTop = linesAbove * lineHeight;
+                        }
+                        return next;
+                      });
+                    }}
+                    disabled={currentPage === 0}
+                  >
+                    ← Previous
+                  </button>
+                  <span className="se-page-indicator">
+                    Page {currentPage + 1} of {editTotalPages}
+                  </span>
+                  <button
+                    className="se-btn se-btn-page"
+                    onClick={() => {
+                      setCurrentPage(p => {
+                        const next = p + 1;
+                        const ta = textareaRef.current;
+                        if (ta) {
+                          ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
+                          const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+                          const textBefore = editText.slice(0, editPageOffsets[next]);
+                          const linesAbove = textBefore.split('\n').length - 1;
+                          ta.scrollTop = linesAbove * lineHeight;
+                        }
+                        return next;
+                      });
+                    }}
+                    disabled={currentPage >= editTotalPages - 1}
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Right: Writing Tools Panel (30%) ── */}
+            <div className="se-writing-tools">
+              {/* Narrative Perspective */}
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">Narrative Perspective</div>
+                <div className="se-tools-section-subtitle">Choose voice for AI edits</div>
+                <div className="se-voice-list">
+                  {allCharacters && Object.entries(allCharacters).map(([key, c]) => (
+                    <label
+                      key={key}
+                      className={`se-voice-option ${selectedVoice === key ? 'se-voice-active' : ''}`}
+                      onClick={() => {
+                        setSelectedVoice(key);
+                        onSelectChar?.(key);
+                      }}
+                    >
+                      <span className={`se-voice-radio ${selectedVoice === key ? 'se-voice-radio-on' : ''}`} />
+                      <span className="se-voice-name">{c.display_name || key}</span>
+                      {selectedVoice === key && (
+                        <span className="se-voice-active-label">Writing tone applied</span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Story Context */}
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">Story Info</div>
+                <div className="se-tools-info-grid">
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Type</span>
+                    <span className="se-tools-info-value" style={{ color: PHASE_COLORS[story.phase] }}>
+                      {PHASE_LABELS[story.phase]}
+                    </span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Word Count</span>
+                    <span className="se-tools-info-value">{wordCount.toLocaleString()}</span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Pages</span>
+                    <span className="se-tools-info-value">{editTotalPages}</span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Reading Time</span>
+                    <span className="se-tools-info-value">{getReadingTime(wordCount)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Assistance */}
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">AI Assistance</div>
+                <WriteModeAIWriter
+                  chapterId={String(story?.story_number || task?.story_number || '')}
+                  bookId={activeWorld || ''}
+                  selectedCharacter={charObj ? {
+                    id: charObj.id || selectedCharKey,
+                    name: charObj.display_name || charName,
+                    selected_name: charObj.display_name || charName,
+                    type: charObj.role_type,
+                    role: charObj.role_type,
+                    core_desire: charObj.core_desire,
+                    core_fear: charObj.core_fear,
+                    core_wound: charObj.core_wound,
+                    description: charObj.description,
+                  } : null}
+                  currentProse={editText}
+                  chapterContext={task ? {
+                    scene_goal: task.task,
+                    theme: task.title,
+                    emotional_arc_start: task.phase,
+                    emotional_arc_end: '',
+                    pov: charName || '',
+                  } : {}}
+                  onInsert={(text) => {
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      const start = ta.selectionStart;
+                      const end = ta.selectionEnd;
+                      const before = editText.slice(0, start);
+                      const after = editText.slice(end);
+                      setEditText(before + text + after);
+                      setTimeout(() => {
+                        ta.selectionStart = ta.selectionEnd = start + text.length;
+                        ta.focus();
+                      }, 0);
+                    } else {
+                      setEditText(prev => prev + '\n\n' + text);
+                    }
+                  }}
+                  getSelectedText={() => {
+                    const ta = textareaRef.current;
+                    if (ta && ta.selectionStart !== ta.selectionEnd) {
+                      return editText.slice(ta.selectionStart, ta.selectionEnd);
+                    }
+                    return '';
+                  }}
+                  characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
+                    ...c, id: c.id || key, character_key: key, name: c.display_name,
+                  })) : []}
+                  onSelectCharacter={(c) => {
+                    setSelectedVoice(c?.character_key || c?.id);
+                    onSelectChar?.(c?.character_key || c?.id);
+                  }}
+                />
+              </div>
             </div>
           </div>
-          {editTotalPages > 1 && (
-            <div className="se-page-nav">
-              <button
-                className="se-btn se-btn-page"
-                onClick={() => {
-                  setCurrentPage(p => {
-                    const next = p - 1;
-                    const ta = textareaRef.current;
-                    if (ta) {
-                      ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
-                      // scroll textarea so the cursor/page start is visible
-                      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-                      const textBefore = editText.slice(0, editPageOffsets[next]);
-                      const linesAbove = textBefore.split('\n').length - 1;
-                      ta.scrollTop = linesAbove * lineHeight;
-                    }
-                    return next;
-                  });
-                }}
-                disabled={currentPage === 0}
-              >
-                ‹ Prev Page
-              </button>
-              <span className="se-page-indicator">
-                Page {currentPage + 1} of {editTotalPages}
-              </span>
-              <button
-                className="se-btn se-btn-page"
-                onClick={() => {
-                  setCurrentPage(p => {
-                    const next = p + 1;
-                    const ta = textareaRef.current;
-                    if (ta) {
-                      ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
-                      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
-                      const textBefore = editText.slice(0, editPageOffsets[next]);
-                      const linesAbove = textBefore.split('\n').length - 1;
-                      ta.scrollTop = linesAbove * lineHeight;
-                    }
-                    return next;
-                  });
-                }}
-                disabled={currentPage >= editTotalPages - 1}
-              >
-                Next Page ›
-              </button>
-            </div>
-          )}
-          </>
         ) : (
           <>
             <div className="se-story-text" ref={storyBodyRef}>
@@ -939,52 +1143,9 @@ function StoryPanel({
       )}
 
       {/* Therapy-informed story suggestions */}
-      {!editing && selectedCharKey && (() => {
-        const TherapySuggestions = () => {
-          const [suggestions, setSuggestions] = React.useState(null);
-          const [expanded, setExpanded] = React.useState(false);
-          React.useEffect(() => {
-            fetch(`${API_BASE}/story-health/therapy-suggestions/${selectedCharKey}`)
-              .then(r => r.ok ? r.json() : null)
-              .then(d => setSuggestions(d))
-              .catch(err => console.warn('therapy suggestions failed:', err.message));
-          }, []);
-          if (!suggestions?.suggestions?.length) return null;
-          return (
-            <div style={{
-              margin: '0 14px 12px', padding: 12, borderRadius: 10,
-              background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)',
-            }}>
-              <div
-                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                onClick={() => setExpanded(e => !e)}
-              >
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed' }}>
-                  🧠 Story Suggestions ({suggestions.suggestions.length})
-                </span>
-                <span style={{ fontSize: 10, color: '#999' }}>{expanded ? '▾' : '▸'}</span>
-              </div>
-              {expanded && (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {suggestions.suggestions.map((s, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, fontSize: 11, padding: '4px 0' }}>
-                      <span style={{
-                        width: 6, height: 6, borderRadius: '50%', marginTop: 4, flexShrink: 0,
-                        background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
-                      }} />
-                      <div>
-                        <div style={{ fontWeight: 500, color: '#333' }}>{s.title}</div>
-                        <div style={{ color: '#888', fontSize: 10 }}>{s.description}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        };
-        return <TherapySuggestions />;
-      })()}
+      {!editing && selectedCharKey && (
+        <TherapySuggestions characterKey={selectedCharKey} apiBase={API_BASE} />
+      )}
 
       {!editing && registryUpdate && (
         <div className="se-registry-update">
@@ -1043,6 +1204,8 @@ export default function StoryEngine() {
   const [generatingNum, setGeneratingNum] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef(null);
+  const [backgroundJobId, setBackgroundJobId] = useState(null);
+  const backgroundPollRef = useRef(null);
   const [consistencyConflicts, setConsistencyConflicts] = useState([]);
   const [consistencyLoading, setConsistencyLoading] = useState(false);
   const [therapyMemories, setTherapyMemories] = useState([]);
@@ -1417,10 +1580,11 @@ export default function StoryEngine() {
       return;
     }
 
-    if (!window.confirm(`Generate ${ungenerated.length} remaining stories? This runs the full quality pipeline for each.`)) return;
+    if (!window.confirm(`Generate ${ungenerated.length} remaining stories? This runs the full quality pipeline for each and continues in the background.`)) return;
 
     setGenerating(true);
     setBatchGenProgress({ current: 0, total: ungenerated.length, currentTitle: ungenerated[0]?.title });
+    requestNotificationPermission();
 
     // Build previous stories from already approved/generated
     const previousStories = approvedStories
@@ -1432,7 +1596,7 @@ export default function StoryEngine() {
       }));
 
     try {
-      const response = await fetch(`${API_BASE}/memories/batch-generate`, {
+      const response = await fetch(`${API_BASE}/memories/batch-generate-background`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1442,56 +1606,247 @@ export default function StoryEngine() {
         }),
       });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const newStories = { ...stories };
+      if (!response.ok) throw new Error('Failed to start batch generation');
+      const { jobId, total } = await response.json();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Store in localStorage for resume on page navigation
+      localStorage.setItem('storyEngine_activeBatchJob', JSON.stringify({
+        jobId,
+        total,
+        characterKey: selectedChar,
+        startedAt: Date.now(),
+      }));
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+      // Track which stories we've already fetched to avoid re-fetching
+      const fetchedStories = new Set();
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
+      // Poll for progress
+      if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+      backgroundPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${API_BASE}/memories/batch-generate-status/${jobId}`);
+          if (!statusRes.ok) return;
+          const job = await statusRes.json();
+
+          // Update progress
+          setBatchGenProgress({
+            current: job.completed,
+            total: job.total,
+            currentTitle: job.currentTitle,
+          });
+
+          // Fetch any newly completed stories we haven't loaded yet
+          const newlyCompleted = (job.completedStories || []).filter(n => !fetchedStories.has(n));
+          for (const storyNum of newlyCompleted) {
             try {
-              const data = JSON.parse(line.slice(6));
-              if (line.includes('event: progress') || data.status === 'generating') {
-                setBatchGenProgress(prev => ({
-                  ...prev,
-                  current: data.completed || prev?.current || 0,
-                  currentTitle: data.title || prev?.currentTitle,
-                }));
+              const storyRes = await fetch(`${API_BASE}/memories/batch-generate-story/${jobId}/${storyNum}`);
+              if (storyRes.ok) {
+                const storyData = await storyRes.json();
+                fetchedStories.add(storyNum);
+                setStories(prev => {
+                  const next = { ...prev, [storyNum]: storyData };
+                  setCachedStories(selectedChar, next, approvedStories);
+                  return next;
+                });
               }
-              if (data.word_count && data.story_number) {
-                // Story completed — update the stories map
-                setBatchGenProgress(prev => ({
-                  ...prev,
-                  current: data.completed || (prev?.current || 0) + 1,
-                }));
-              }
-            } catch { /* skip unparseable SSE lines */ }
+            } catch { /* will retry next poll */ }
           }
-          if (line.startsWith('event: story_complete')) {
-            // Next line will have the data
-          }
-        }
-      }
 
-      // After stream ends, reload all stories from the pipeline results
-      // Re-fetch the story tasks to get fresh data
-      addToast(`Batch generation complete — ${ungenerated.length} stories generated`, 'success');
+          if (job.status === 'completed') {
+            clearInterval(backgroundPollRef.current);
+            backgroundPollRef.current = null;
+            localStorage.removeItem('storyEngine_activeBatchJob');
+            setGenerating(false);
+            setBatchGenProgress(null);
+            const errorCount = job.errors?.length || 0;
+            const successCount = job.total - errorCount;
+            addToast(`Batch complete — ${successCount} stories generated${errorCount ? `, ${errorCount} failed` : ''}`, 'success');
+            sendBrowserNotification('Batch Generation Complete', `${successCount}/${job.total} stories generated successfully.`);
+          }
+        } catch (_) {
+          // Network error — keep polling
+        }
+      }, 4000);
     } catch (e) {
       console.error('Batch generate error:', e);
-      addToast('Batch generation failed — some stories may not have been generated', 'error');
-    } finally {
+      addToast('Batch generation failed to start', 'error');
       setGenerating(false);
       setBatchGenProgress(null);
     }
   }
+
+  // Request browser notification permission on first generate
+  function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
+  // Send browser notification
+  function sendBrowserNotification(title, body) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const n = new Notification(title, { body, icon: '/favicon.ico' });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch (_) { /* mobile may not support */ }
+    }
+  }
+
+  // Handle completed background job
+  function handleJobComplete(data, storyNumber) {
+    if (data.fallback) {
+      addToast('Story generation failed — please try again.', 'error');
+    } else {
+      const nextStories = { ...stories, [storyNumber]: data };
+      setStories(nextStories);
+      setActiveStory(data);
+      setCachedStories(selectedChar, nextStories, approvedStories);
+      addToast(`Story ${storyNumber} generated successfully!`, 'success');
+      sendBrowserNotification('Story Ready', `Story ${storyNumber}: ${data.title || 'Untitled'} is ready for review.`);
+    }
+    setGenerating(false);
+    setGeneratingNum(null);
+    setBackgroundJobId(null);
+    localStorage.removeItem('storyEngine_activeJob');
+    stopTimer();
+  }
+
+  // Poll for background job status
+  function startPolling(jobId, storyNumber) {
+    if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+
+    backgroundPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/memories/pipeline-generate-status/${jobId}`);
+        if (!res.ok) return;
+        const job = await res.json();
+
+        if (job.status === 'completed') {
+          clearInterval(backgroundPollRef.current);
+          backgroundPollRef.current = null;
+          handleJobComplete(job.result, storyNumber);
+        } else if (job.status === 'failed') {
+          clearInterval(backgroundPollRef.current);
+          backgroundPollRef.current = null;
+          addToast(`Story ${storyNumber} generation failed: ${job.error}`, 'error');
+          sendBrowserNotification('Generation Failed', `Story ${storyNumber} failed to generate.`);
+          setGenerating(false);
+          setGeneratingNum(null);
+          setBackgroundJobId(null);
+          localStorage.removeItem('storyEngine_activeJob');
+          stopTimer();
+        }
+      } catch (_) {
+        // Network error — keep polling
+      }
+    }, 3000);
+  }
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+    };
+  }, []);
+
+  // Resume polling if we remount with an active background job
+  useEffect(() => {
+    if (backgroundJobId && !backgroundPollRef.current) {
+      startPolling(backgroundJobId, generatingNum);
+    }
+  }, [backgroundJobId]);
+
+  // On mount: check localStorage for active background jobs and resume
+  useEffect(() => {
+    // Check for single story job
+    try {
+      const saved = localStorage.getItem('storyEngine_activeJob');
+      if (saved) {
+        const { jobId, storyNumber, startedAt } = JSON.parse(saved);
+        if (Date.now() - startedAt > 30 * 60 * 1000) {
+          localStorage.removeItem('storyEngine_activeJob');
+        } else {
+          setGenerating(true);
+          setGeneratingNum(storyNumber);
+          setBackgroundJobId(jobId);
+          startTimer();
+          addToast(`Resuming Story ${storyNumber} generation...`, 'info');
+          return; // only one job at a time
+        }
+      }
+    } catch (_) {
+      localStorage.removeItem('storyEngine_activeJob');
+    }
+
+    // Check for batch job
+    try {
+      const saved = localStorage.getItem('storyEngine_activeBatchJob');
+      if (saved) {
+        const { jobId, total, startedAt } = JSON.parse(saved);
+        // Batch jobs can take hours — allow up to 6 hours
+        if (Date.now() - startedAt > 6 * 60 * 60 * 1000) {
+          localStorage.removeItem('storyEngine_activeBatchJob');
+          return;
+        }
+        setGenerating(true);
+        setBatchGenProgress({ current: 0, total, currentTitle: 'Resuming...' });
+        addToast('Resuming batch generation...', 'info');
+
+        // Start polling for batch status
+        const fetchedStories = new Set();
+        if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+        backgroundPollRef.current = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`${API_BASE}/memories/batch-generate-status/${jobId}`);
+            if (!statusRes.ok) {
+              // Job not found — it expired or server restarted
+              clearInterval(backgroundPollRef.current);
+              backgroundPollRef.current = null;
+              localStorage.removeItem('storyEngine_activeBatchJob');
+              setGenerating(false);
+              setBatchGenProgress(null);
+              addToast('Batch job expired — server may have restarted', 'warning');
+              return;
+            }
+            const job = await statusRes.json();
+
+            setBatchGenProgress({ current: job.completed, total: job.total, currentTitle: job.currentTitle });
+
+            // Fetch newly completed stories
+            const newlyCompleted = (job.completedStories || []).filter(n => !fetchedStories.has(n));
+            for (const storyNum of newlyCompleted) {
+              try {
+                const storyRes = await fetch(`${API_BASE}/memories/batch-generate-story/${jobId}/${storyNum}`);
+                if (storyRes.ok) {
+                  const storyData = await storyRes.json();
+                  fetchedStories.add(storyNum);
+                  setStories(prev => {
+                    const next = { ...prev, [storyNum]: storyData };
+                    setCachedStories(selectedChar, next, approvedStories);
+                    return next;
+                  });
+                }
+              } catch { /* retry next poll */ }
+            }
+
+            if (job.status === 'completed') {
+              clearInterval(backgroundPollRef.current);
+              backgroundPollRef.current = null;
+              localStorage.removeItem('storyEngine_activeBatchJob');
+              setGenerating(false);
+              setBatchGenProgress(null);
+              const errorCount = job.errors?.length || 0;
+              const successCount = job.total - errorCount;
+              addToast(`Batch complete — ${successCount} stories generated${errorCount ? `, ${errorCount} failed` : ''}`, 'success');
+              sendBrowserNotification('Batch Generation Complete', `${successCount}/${job.total} stories generated.`);
+            }
+          } catch (_) { /* network error — keep polling */ }
+        }, 4000);
+      }
+    } catch (_) {
+      localStorage.removeItem('storyEngine_activeBatchJob');
+    }
+  }, []);
 
   async function handleGenerate(task) {
     setGenerating(true);
@@ -1501,6 +1856,7 @@ export default function StoryEngine() {
     setConsistencyConflicts([]);
     setTherapyMemories([]);
     startTimer();
+    requestNotificationPermission();
 
     // On mobile, scroll to top so the generating indicator is visible
     if (window.innerWidth <= 900) {
@@ -1517,7 +1873,8 @@ export default function StoryEngine() {
           summary: stories[n]?.text?.slice(0, 800) || '',
         }));
 
-      const res = await fetch(`${API_BASE}/memories/pipeline-generate`, {
+      // Start as a background job so generation survives page navigation
+      const res = await fetch(`${API_BASE}/memories/pipeline-generate-background`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1528,22 +1885,21 @@ export default function StoryEngine() {
         }),
       });
 
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
+      if (!res.ok) throw new Error('Failed to start generation');
+      const { jobId } = await res.json();
 
-      if (data.fallback) {
-        addToast('Story generation failed — please try again.', 'error');
-        return;
-      }
-
-      const nextStories = { ...stories, [task.story_number]: data };
-      setStories(nextStories);
-      setActiveStory(data);
-      setCachedStories(selectedChar, nextStories, approvedStories);
+      // Store job ID and start polling
+      setBackgroundJobId(jobId);
+      localStorage.setItem('storyEngine_activeJob', JSON.stringify({
+        jobId,
+        storyNumber: task.story_number,
+        characterKey: selectedChar,
+        startedAt: Date.now(),
+      }));
+      startPolling(jobId, task.story_number);
     } catch (e) {
       console.error('handleGenerate error:', e);
       addToast('Story generation failed — please try again.', 'error');
-    } finally {
       setGenerating(false);
       setGeneratingNum(null);
       stopTimer();
@@ -2103,7 +2459,7 @@ export default function StoryEngine() {
                   ))}
                 </div>
                 <div className="se-nav-count">
-                  {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
+                  {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} {filteredTasks.length === 1 ? 'story' : 'stories'}
                 </div>
               </div>
             )}
@@ -2223,13 +2579,13 @@ export default function StoryEngine() {
                 </div>
                 <div className="se-insp-row">
                   <span className="se-insp-key">Phase</span>
-                  <span className="se-insp-val" style={{ color: PHASE_COLORS[activeTask.phase] }}>
-                    {PHASE_LABELS[activeTask.phase]}
+                  <span className="se-insp-val" style={{ color: PHASE_COLORS[activeTask.phase] || '#888' }}>
+                    {PHASE_LABELS[activeTask.phase] || activeTask.phase || '—'}
                   </span>
                 </div>
                 <div className="se-insp-row">
                   <span className="se-insp-key">Type</span>
-                  <span className="se-insp-val">{TYPE_ICONS[activeTask.story_type]} {activeTask.story_type?.replace('_', ' ')}</span>
+                  <span className="se-insp-val">{TYPE_ICONS[activeTask.story_type] || '○'} {activeTask.story_type?.replace(/_/g, ' ') || '—'}</span>
                 </div>
                 {activeStory && (
                   <>
@@ -2299,42 +2655,9 @@ export default function StoryEngine() {
             )}
 
             {/* Story Sparks */}
-            {selectedChar && (() => {
-              const StorySparks = () => {
-                const [sparks, setSparks] = React.useState([]);
-                const [open, setOpen] = React.useState(false);
-                const [loading, setLoading] = React.useState(false);
-                const loadSparks = () => {
-                  if (sparks.length) { setOpen(!open); return; }
-                  setOpen(true); setLoading(true);
-                  fetch(`/api/v1/story-health/story-sparks/${selectedChar}`)
-                    .then(r => r.json()).then(d => setSparks(d.sparks || []))
-                    .catch(err => console.warn('story sparks:', err.message))
-                    .finally(() => setLoading(false));
-                };
-                return (
-                  <section className="se-insp-section">
-                    <button className="se-insp-toggle" onClick={loadSparks}>
-                      <span>Story Sparks</span>
-                      <span>{open ? '▾' : '▸'}</span>
-                    </button>
-                    {open && (
-                      <div className="se-insp-sparks">
-                        {loading ? <div className="se-insp-dim">Generating…</div>
-                          : sparks.length === 0 ? <div className="se-insp-dim">No sparks yet</div>
-                          : sparks.map((s, i) => (
-                            <div key={i} className="se-insp-spark">
-                              <div className="se-insp-spark-type">{s.type || 'Spark'}</div>
-                              <div className="se-insp-spark-text">{s.suggestion || s.title || JSON.stringify(s)}</div>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </section>
-                );
-              };
-              return <StorySparks />;
-            })()}
+            {selectedChar && (
+              <StorySparksPanel characterKey={selectedChar} />
+            )}
 
             {/* Consistency conflicts */}
             {consistencyConflicts?.length > 0 && (
