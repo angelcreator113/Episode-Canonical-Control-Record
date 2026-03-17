@@ -482,25 +482,30 @@ Return ONLY valid JSON:
 
 // ─── POST /interview ──────────────────────────────────────────────────────────
 router.post('/interview', optionalAuth, async (req, res) => {
-  const { character, psychology } = req.body;
+  try {
+    const { character, psychology } = req.body;
 
-  if (!character) return res.status(400).json({ error: 'character required' });
+    if (!character) return res.status(400).json({ error: 'character required' });
 
-  const name = character.selected_name || character.display_name || character.name || 'this character';
-  const fields = Object.entries(CONSCIOUSNESS_FIELDS);
-  const firstField = fields[0];
+    const name = character.selected_name || character.display_name || character.name || 'this character';
+    const fields = Object.entries(CONSCIOUSNESS_FIELDS);
+    const firstField = fields[0];
 
-  const openingQuestion = `I'm going to ask you some questions about how ${name} actually exists — not what she does, but what it's like to be her.
+    const openingQuestion = `I'm going to ask you some questions about how ${name} actually exists — not what she does, but what it's like to be her.
 
 ${firstField[1].questions[0]}`;
 
-  return res.json({
-    message: openingQuestion,
-    current_field: firstField[0],
-    field_index: 0,
-    total_fields: fields.length,
-    extracted: {},
-  });
+    return res.json({
+      message: openingQuestion,
+      current_field: firstField[0],
+      field_index: 0,
+      total_fields: fields.length,
+      extracted: {},
+    });
+  } catch (err) {
+    console.error('[consciousness] interview error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── POST /interview-next ─────────────────────────────────────────────────────
