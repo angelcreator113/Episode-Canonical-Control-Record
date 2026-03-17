@@ -57,7 +57,7 @@ function notifyJobSSE(jobId, event, data) {
   if (!clients || clients.size === 0) return;
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of clients) {
-    try { client.write(payload); } catch {}
+    try { client.write(payload); } catch (err) { console.warn('[social-bulk] SSE write error:', err?.message); }
   }
 }
 
@@ -640,7 +640,7 @@ router.get('/jobs/:id/stream', optionalAuth, (req, res) => {
   if (db && db.BulkImportJob) {
     db.BulkImportJob.findByPk(req.params.id).then(job => {
       if (job) res.write(`event: status\ndata: ${JSON.stringify({ job })}\n\n`);
-    }).catch(() => {});
+    }).catch(e => console.warn('[social-bulk] initial job status send error:', e?.message));
   }
 
   const keepAlive = setInterval(() => {
@@ -798,7 +798,7 @@ async function processJobInBackground(jobId, concurrency = 3) {
           status: 'failed',
           error_message: err.message,
           completed_at: new Date(),
-        }).catch(() => {});
+        }).catch(e => console.warn('[social-bulk] job status update error:', e?.message));
       }
       notifyJobSSE(jobId, 'error', { job_id: jobId, error: err.message });
     }

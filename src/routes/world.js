@@ -260,7 +260,7 @@ router.post('/world/:showId/browse-pool', optionalAuth, async (req, res) => {
         pool_size,
         total_items: result.config.total_items,
         has_wardrobe: wardrobeItems.length > 0,
-      }).catch(() => {});
+      }).catch(e => console.warn('[world] browse pool log error:', e?.message));
     }
 
     return res.json({ success: true, ...result });

@@ -264,7 +264,7 @@ async function checkAllThresholds(passedModels) {
       let charRecord = null;
       try {
         charRecord = await models.RegistryCharacter.findByPk(charId);
-      } catch {}
+      } catch (err) { console.warn('[thresholdDetection] character lookup error:', err?.message); }
       if (!charRecord) continue;
 
       // Match to threshold config

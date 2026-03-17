@@ -20,7 +20,7 @@ function extractAIText(response) {
   if (!response?.content?.length || !response.content[0]?.text) {
     throw new Error('AI returned empty or malformed response');
   }
-  return extractAIText(response);
+  return response.content[0].text;
 }
 
 /* ------------------------------------------------------------------ */
