@@ -8730,6 +8730,367 @@ Format:
   }
 });
 
+// ─── SSE Arc Generation — real-time progress ─────────────────────────────────
+// Streams step-by-step progress events as the arc is built.
+// Steps: loading_dna → loading_context → building_arc → parsing → saving → done
+router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
+  // Extend timeouts — arc generation calls Claude with max_tokens: 16000
+  // which can take 60-120s. Default proxy timeouts (30-60s) cause 502s.
+  if (req.setTimeout) req.setTimeout(300000);
+  if (res.setTimeout) res.setTimeout(300000);
+
+  const { characterKey, forceRegenerate } = req.body;
+
+  if (!characterKey) {
+    return res.status(400).json({ error: 'characterKey required' });
+  }
+
+  // Set up SSE
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no', // disable nginx buffering
+  });
+
+  // Send keepalive comments every 15s to prevent proxy timeouts
+  const keepalive = setInterval(() => {
+    try { res.write(': keepalive\n\n'); } catch (_) {}
+  }, 15000);
+
+  // Clean up on client disconnect
+  req.on('close', () => clearInterval(keepalive));
+
+  const send = (step, data = {}) => {
+    res.write(`data: ${JSON.stringify({ step, ...data })}\n\n`);
+  };
+
+  const finish = () => {
+    clearInterval(keepalive);
+    res.end();
+  };
+
+  const sendError = (message) => {
+    res.write(`data: ${JSON.stringify({ step: 'error', message })}\n\n`);
+    finish();
+  };
+
+  // Step 1: Load character DNA
+  send('loading_dna', { message: `Loading ${characterKey} character DNA…` });
+
+  let dna = CHARACTER_DNA[characterKey];
+
+  if (!dna) {
+    const dbProfile = await loadCharacterProfile(characterKey);
+    if (!dbProfile) {
+      return sendError(`No character DNA or DB profile found for ${characterKey}`);
+    }
+
+    const { Op } = require('sequelize');
+    const { RegistryCharacter } = require('../models');
+    const charRow = await RegistryCharacter.findOne({
+      where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+      order: [['updated_at', 'DESC']],
+    });
+
+    if (!charRow) {
+      return sendError(`No accepted/finalized character found for ${characterKey}`);
+    }
+
+    const plain = charRow.get({ plain: true });
+    const career = plain.career_status || {};
+
+    dna = {
+      display_name: plain.display_name,
+      role_type: plain.role_type || 'support',
+      job: career.current || plain.description?.slice(0, 200) || 'To be developed across stories.',
+      desire_line: plain.core_desire || 'To be developed.',
+      fear_line: plain.core_fear || 'To be developed.',
+      wound: plain.core_wound || 'To be developed.',
+      strengths: plain.personality_matrix?.strengths || (plain.signature_trait ? [plain.signature_trait] : ['Resilience', 'Adaptability']),
+      job_antagonist: 'To be developed across stories.',
+      personal_antagonist: 'To be developed across stories.',
+      recurring_object: 'To be developed across stories.',
+      world: 'dynamic',
+      domains: {
+        career: career.current || 'To be developed across stories.',
+        romantic: 'To be developed across stories.',
+        family: 'To be developed across stories.',
+        friends: 'To be developed across stories.',
+      },
+    };
+  }
+
+  send('loading_dna', { message: `${dna.display_name} DNA loaded`, done: true });
+
+  // Cache check
+  if (!forceRegenerate && seTaskArcCache.has(characterKey)) {
+    send('done', { cached: true, ...seTaskArcCache.get(characterKey) });
+    return finish();
+  }
+
+  try {
+    // Step 2: Load context (profile, memories, world state)
+    send('loading_context', { message: 'Loading character profile, memories & world state…' });
+
+    const [dbProfile, storyMemories, worldState] = await Promise.all([
+      loadCharacterProfile(characterKey),
+      loadStoryMemories(characterKey),
+      loadWorldState(characterKey, dna.world),
+    ]);
+
+    const profileSection = dbProfile
+      ? `\n\nCHARACTER PROFILE FROM REGISTRY (use this to enrich every story brief — this is who they really are):\n${dbProfile}`
+      : '';
+    const memoriesSection = storyMemories ? `\n\n${storyMemories}` : '';
+    const worldSection = worldState ? `\n\n${worldState}` : '';
+
+    send('loading_context', {
+      message: `Context loaded — profile${dbProfile ? ' ✓' : ' –'}, memories${storyMemories ? ' ✓' : ' –'}, world${worldState ? ' ✓' : ' –'}`,
+      done: true,
+    });
+
+    // Step 3: Build arc with Claude (streaming)
+    send('building_arc', { message: 'Claude is designing the narrative spine & 50 story briefs…', tokens: 0 });
+
+    const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
+
+    const systemPrompt = `You are building a 50-story arc for ${dna.display_name}.
+
+CHARACTER DNA:
+- Job: ${dna.job}
+- Desire line: ${dna.desire_line}
+- Fear line: ${dna.fear_line}
+- Wound: ${dna.wound}
+- Strengths: ${strengthsList}
+- Job antagonist: ${dna.job_antagonist}
+- Personal antagonist: ${dna.personal_antagonist}
+- Recurring object: ${dna.recurring_object}
+- Career domain: ${dna.domains.career}
+- Romantic domain: ${dna.domains.romantic}
+- Family domain: ${dna.domains.family}
+- Friends domain: ${dna.domains.friends}${profileSection}${memoriesSection}${worldSection}
+
+NARRATIVE SPINE (design this FIRST, then build all 50 stories around it):
+Before generating individual story briefs, you MUST design a narrative spine — the throughline that makes 50 stories feel like ONE story. Think of this as the architecture beneath the arc.
+
+1. CENTRAL DRAMATIC QUESTION — one question the reader carries from story 1 to story 50 (e.g., "Can she build something real without losing who she was before she started?"). This question should feel unanswerable until the final stories.
+
+2. KEY TURNING POINTS — pre-plan 4-5 structural pivots that change the direction of the arc:
+   - The Inciting Fracture (stories 8-12): something cracks that cannot be uncracked
+   - The False Summit (stories 18-22): she gets what she thought she wanted, and it tastes wrong
+   - The Betrayal/Revelation (stories 28-32): a truth she cannot unknow — about herself, someone she loves, or both
+   - The Crucible (stories 36-40): everything converges — career, relationship, identity — she cannot keep them separate
+   - The Quiet Shift (stories 46-50): not a triumph, not a collapse — a rearrangement of what matters
+
+3. SUBPLOT ARCS — each domain (career, romantic, family, friends) gets its own mini-arc with a beginning, middle, and end WITHIN the 50 stories. These subplot arcs should intersect at the turning points.
+
+4. RECURRING MOTIFS — 2-3 images, objects, or phrases that recur across the arc with shifting meaning (the recurring object is one; identify 1-2 more that emerge from the character's wound and desire).
+
+ARC PHASES:
+- Stories 1-10: Establishment — who she is, her rhythms, her world
+- Stories 11-25: Pressure — obstacles hit harder, strengths used against her
+- Stories 26-40: Crisis — something load-bearing breaks
+- Stories 41-50: Integration — she comes out different
+
+STORY TYPES (rotate: internal, collision, wrong_win, internal, collision, wrong_win...):
+- internal: single character facing obstacle alone, psychological
+- collision: two characters with different worldviews hitting each other
+- wrong_win: character succeeds at exactly the wrong moment, it costs something
+
+RULES:
+- Every story must include all four domains: career, romantic, family, friends
+- Every story has a concrete TASK the character is trying to complete (creates the clock)
+- The task must be specific and real — not "work on content" but "film a 90-second reel before Noah wakes up"
+- Obstacles come from character DNA — specifically from strengths being used against her
+- Stories 1-50 feel like a journey: story 1 and story 50 are recognizably the same person but shifted
+- Adult themes: real marriage tension, financial stress, sexuality, exhaustion, ambition, loneliness
+- New characters can be introduced (max 1 per story) — flag them with new_character: true
+- Each story is 3300-4800 words
+- If WORLD STATE is provided, use other characters for collision stories — don't invent strangers when the world already has people
+- If ACCUMULATED PAIN POINTS or BELIEF SHIFTS are provided, the arc should build on those — not repeat them, but deepen them
+- Multiple plotlines should interweave across the 50 stories — career subplot, romantic subplot, family subplot, friendship subplot — each with its own mini-arc within the 50-story structure
+- Every story needs an EMOTIONAL ARC — where the character starts emotionally and where she ends. These should feel like a real emotional journey, not flat.
+- Every story should be grounded in a SPECIFIC SETTING — a real place with weather, time of day, atmosphere. Use established locations when possible.
+
+Return ONLY valid JSON — no preamble, no markdown.
+Format:
+{
+  "narrative_spine": {
+    "central_dramatic_question": "the one question the reader carries across all 50 stories",
+    "turning_points": [
+      { "name": "string", "story_range": "e.g. 8-12", "description": "what happens and why it changes everything" }
+    ],
+    "subplot_arcs": {
+      "career": "beginning → middle → end of the career subplot",
+      "romantic": "beginning → middle → end of the romantic subplot",
+      "family": "beginning → middle → end of the family subplot",
+      "friends": "beginning → middle → end of the friends subplot"
+    },
+    "recurring_motifs": ["motif 1 and how its meaning shifts", "motif 2 and how its meaning shifts"]
+  },
+  "tasks": [
+    {
+      "story_number": 1,
+      "title": "string",
+      "phase": "establishment|pressure|crisis|integration",
+      "story_type": "internal|collision|wrong_win",
+      "task": "the specific thing she is trying to complete in this story",
+      "obstacle": "what hits her inside that task",
+      "domains_active": ["career", "romantic", "family", "friends"],
+      "strength_weaponized": "which strength gets used against her and how",
+      "emotional_start": "where the character is emotionally at the opening — specific feeling, not generic",
+      "emotional_end": "where she lands — the quarter-inch shift. Must differ from start",
+      "primary_location": "the main setting for this story — specific place name or type",
+      "time_of_day": "morning|afternoon|evening|night|spans_full_day",
+      "season_weather": "what the weather/season feels like — grounds the sensory world",
+      "new_character": false,
+      "new_character_name": null,
+      "new_character_role": null,
+      "therapy_seeds": ["pain point 1", "pain point 2"],
+      "opening_line": "suggested first line of the story"
+    }
+  ]
+}`;
+
+    let rawText = '';
+    let tokenCount = 0;
+    let lastProgressUpdate = 0;
+
+    try {
+      const stream = anthropic.messages.stream({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 16000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+      });
+
+      stream.on('text', (text) => {
+        rawText += text;
+        tokenCount += Math.ceil(text.length / 4); // rough estimate
+
+        // Send progress every ~500 tokens to avoid flooding
+        if (tokenCount - lastProgressUpdate > 500) {
+          lastProgressUpdate = tokenCount;
+
+          // Detect how many stories have been generated so far
+          const storyMatches = rawText.match(/"story_number"\s*:\s*\d+/g);
+          const storiesFound = storyMatches ? storyMatches.length : 0;
+
+          // Detect if narrative spine is done
+          const hasSpine = rawText.includes('"narrative_spine"') && rawText.includes('"recurring_motifs"');
+
+          send('building_arc', {
+            message: hasSpine
+              ? `Writing story briefs… ${storiesFound}/50`
+              : 'Designing narrative spine…',
+            tokens: tokenCount,
+            storiesFound,
+            hasSpine,
+          });
+        }
+      });
+
+      await stream.finalMessage();
+    } catch (apiErr) {
+      const isRetryable = apiErr.status === 529 || apiErr.status === 503 || apiErr.status === 404;
+      console.error('[generate-story-tasks-stream] primary attempt failed:', apiErr.status, apiErr.message);
+      if (isRetryable) {
+        send('building_arc', { message: 'Retrying Claude call…', tokens: tokenCount });
+        await new Promise(r => setTimeout(r, 2000));
+
+        rawText = '';
+        tokenCount = 0;
+        lastProgressUpdate = 0;
+
+        const retryStream = anthropic.messages.stream({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 16000,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+        });
+
+        retryStream.on('text', (text) => {
+          rawText += text;
+          tokenCount += Math.ceil(text.length / 4);
+          if (tokenCount - lastProgressUpdate > 500) {
+            lastProgressUpdate = tokenCount;
+            const storyMatches = rawText.match(/"story_number"\s*:\s*\d+/g);
+            const storiesFound = storyMatches ? storyMatches.length : 0;
+            const hasSpine = rawText.includes('"narrative_spine"') && rawText.includes('"recurring_motifs"');
+            send('building_arc', {
+              message: hasSpine ? `Writing story briefs… ${storiesFound}/50` : 'Designing narrative spine…',
+              tokens: tokenCount, storiesFound, hasSpine,
+            });
+          }
+        });
+
+        await retryStream.finalMessage();
+      } else {
+        throw apiErr;
+      }
+    }
+
+    send('building_arc', { message: 'Arc generation complete', done: true, tokens: tokenCount });
+
+    // Step 4: Parse response
+    send('parsing', { message: 'Parsing 50 story briefs…' });
+
+    let parsed;
+    try {
+      let cleaned = rawText.replace(/```json|```/g, '').trim();
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+      }
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error('[generate-story-tasks-stream] JSON parse error:', parseErr.message);
+      return sendError(`Failed to parse arc from Claude: ${parseErr.message}`);
+    }
+
+    const taskCount = parsed.tasks?.length || 0;
+    send('parsing', { message: `Parsed ${taskCount} story briefs`, done: true, taskCount });
+
+    // Step 5: Save to cache + DB
+    send('saving', { message: 'Saving arc to database…' });
+
+    const result = {
+      character_key: characterKey,
+      display_name: dna.display_name,
+      world: dna.world,
+      narrative_spine: parsed.narrative_spine || null,
+      tasks: parsed.tasks || [],
+    };
+
+    seTaskArcCache.set(characterKey, result);
+
+    try {
+      await db.StoryTaskArc.sync();
+      await db.StoryTaskArc.upsert({
+        character_key: characterKey,
+        display_name: result.display_name,
+        world: result.world,
+        narrative_spine: result.narrative_spine,
+        tasks: result.tasks,
+      });
+    } catch (persistErr) {
+      console.warn('[generate-story-tasks-stream] DB persist failed:', persistErr.message);
+    }
+
+    send('saving', { message: 'Arc saved', done: true });
+
+    // Final: send the full result
+    send('done', { cached: false, ...result });
+    finish();
+
+  } catch (err) {
+    console.error('[generate-story-tasks-stream] error:', err?.message);
+    sendError('Task generation failed.');
+  }
+});
+
 // ─── Narrative variety engine ──────────────────────────────────────────────────
 // Each story gets a unique combination of structure, POV, length, and technique
 // based on its position in the arc, phase, and story type.
