@@ -212,7 +212,7 @@ router.post('/confirm-feed', async (req, res) => {
         entanglement_type: 'identity_anchor',
         is_active:         true,
         notes:             'Auto-created: character owns this Feed profile',
-      }).catch(() => {}); // non-fatal if it fails
+      }).catch(e => console.warn('[char-gen] entanglement create error:', e?.message)); // non-fatal
     }
 
     res.status(201).json({

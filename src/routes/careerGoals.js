@@ -325,7 +325,7 @@ router.get('/world/:showId/suggest-events', optionalAuth, async (req, res) => {
         { replacements: { showId } }
       );
       if (states?.length) charState = states[0];
-    } catch (e) {}
+    } catch (e) { console.warn('[career-goals] character state query error:', e?.message); }
 
     // Get available events (not used, or reusable)
     const [events] = await models.sequelize.query(

@@ -147,7 +147,7 @@ let isRunning = false;
 // SSE subscribers for real-time scheduler events
 const sseClients = new Set();
 function addSSEClient(res) { sseClients.add(res); res.on('close', () => sseClients.delete(res)); }
-function emitSSE(event, data) { for (const res of sseClients) { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {} } }
+function emitSSE(event, data) { for (const res of sseClients) { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch (err) { console.warn('[feedScheduler] SSE write error:', err?.message); } } }
 let schedulerIntervalMs = schedulerConfig.interval_hours * 60 * 60 * 1000;
 const runHistory = [];
 let _db = null;

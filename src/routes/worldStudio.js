@@ -330,7 +330,7 @@ async function ensurePreviewsTable() {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
-  `).catch(() => {});
+  `).catch(e => console.warn('[world-studio] ecosystem_previews table create error:', e?.message));
 }
 let previewsTableReady = false;
 async function persistPreviewToDB(previewId, data, ownerId = null) {
@@ -357,9 +357,9 @@ async function cleanupOrphanedPreviews() {
     const [result] = await sequelize.query(
       `DELETE FROM ecosystem_previews WHERE status = 'pending' AND created_at < NOW() - INTERVAL '1 hour' RETURNING preview_id`,
       { type: sequelize.QueryTypes.SELECT }
-    ).catch(() => [[]]);
+    ).catch(e => { console.warn('[world-studio] preview cleanup query error:', e?.message); return [[]]; });
     if (result?.preview_id) console.log('Cleaned orphaned preview:', result.preview_id);
-  } catch (_) {}
+  } catch (err) { console.warn('[world-studio] preview cleanup error:', err?.message); }
 }
 setTimeout(cleanupOrphanedPreviews, 10_000); // 10s after startup
 setInterval(cleanupOrphanedPreviews, 60 * 60_000); // then hourly
@@ -1288,7 +1288,7 @@ router.post('/world/characters/:id/activate', optionalAuth, async (req, res) => 
     await sequelize.query(
       `UPDATE registry_characters SET status = 'accepted', updated_at = NOW() WHERE world_character_id = :id`,
       { replacements: { id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
-    ).catch(() => {});
+    ).catch(e => console.warn('[world-studio] registry sync (activate) error:', e?.message));
     res.json({ activated: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1301,7 +1301,7 @@ router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
     await sequelize.query(
       `UPDATE registry_characters SET status = 'declined', updated_at = NOW() WHERE world_character_id = :id`,
       { replacements: { id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
-    ).catch(() => {});
+    ).catch(e => console.warn('[world-studio] registry sync (archive) error:', e?.message));
     res.json({ archived: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1840,23 +1840,23 @@ router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
       await sequelize.query(
         `DELETE FROM character_relationships WHERE character_id_a = :rcId OR character_id_b = :rcId`,
         { replacements: { rcId: rc.id }, type: sequelize.QueryTypes.DELETE }
-      ).catch(() => {});
+      ).catch(e => console.warn('[world-studio] delete character relationships error:', e?.message));
     }
     // Remove linked registry character
     await sequelize.query(
       `DELETE FROM registry_characters WHERE world_character_id = :id`,
       { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
-    ).catch(() => {});
+    ).catch(e => console.warn('[world-studio] delete registry character error:', e?.message));
     // Remove linked scenes
     await sequelize.query(
       `DELETE FROM intimate_scenes WHERE character_a_id = :id OR character_b_id = :id`,
       { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
-    ).catch(() => {});
+    ).catch(e => console.warn('[world-studio] delete intimate scenes error:', e?.message));
     // Remove extended relationships
     await sequelize.query(
       `DELETE FROM character_relationships_extended WHERE character_id = :id OR related_character_id = :id`,
       { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
-    ).catch(() => {});
+    ).catch(e => console.warn('[world-studio] delete extended relationships error:', e?.message));
     // Delete the character
     await sequelize.query(
       `DELETE FROM world_characters WHERE id = :id`,
@@ -1941,7 +1941,7 @@ router.get('/world/tension-check', optionalAuth, async (req, res) => {
           WHEN 'simmering' THEN 2
           WHEN 'fractured' THEN 3
         END
-    `).catch(() => []);
+    `).catch(e => { console.warn('[world-studio] tension-check query error:', e?.message); return []; });
 
     // Also include intimate-eligible characters without relationship records
     // who haven't had a scene yet (one-night-stand candidates)
@@ -1951,7 +1951,7 @@ router.get('/world/tension-check', optionalAuth, async (req, res) => {
         AND wc.status = 'active'
         AND wc.intimate_eligible = true
         AND NOT EXISTS (SELECT 1 FROM intimate_scenes WHERE character_a_id = wc.id OR character_b_id = wc.id)
-    `).catch(() => []);
+    `).catch(e => { console.warn('[world-studio] one-night candidates query error:', e?.message); return []; });
 
     res.json({
       triggered,
@@ -1994,7 +1994,7 @@ router.post('/world/scenes/generate', optionalAuth, async (req, res) => {
       WHERE (character_a_id = :a AND character_b_id = :b)
          OR (character_a_id = :b AND character_b_id = :a)
       ORDER BY created_at DESC LIMIT 3
-    `, { replacements: { a: character_a_id, b: character_b_id || character_a_id } }).catch(() => []);
+    `, { replacements: { a: character_a_id, b: character_b_id || character_a_id } }).catch(e => { console.warn('[world-studio] scene history query error:', e?.message); return []; });
 
     // Determine scene length
     const { min, max, label } = resolveSceneLength(charA.character_type, scene_type, charA.dynamic);
@@ -2158,9 +2158,9 @@ router.get('/world/scenes/:sceneId', optionalAuth, async (req, res) => {
     const [scene] = await Q(req, 'SELECT * FROM intimate_scenes WHERE id = :id', { replacements: { id: req.params.sceneId } });
     if (!scene) return res.status(404).json({ error: 'Scene not found' });
 
-    const [charA] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: scene.character_a_id } }).catch(() => [{}]);
+    const [charA] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: scene.character_a_id } }).catch(e => { console.warn('[world-studio] charA query error:', e?.message); return [{}]; });
     const charB   = scene.character_b_id
-      ? (await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: scene.character_b_id } }).catch(() => [{}]))[0]
+      ? (await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: scene.character_b_id } }).catch(e => { console.warn('[world-studio] charB query error:', e?.message); return [{}]; }))[0]
       : null;
 
     const continuations = await Q(req, 'SELECT * FROM scene_continuations WHERE scene_id = :id ORDER BY created_at ASC', { replacements: { id: req.params.sceneId } });
@@ -2221,7 +2221,7 @@ router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => 
         `UPDATE character_relationships SET tension_state = :state, updated_at = NOW()
          WHERE (character_id_a = :a AND character_id_b = :b) OR (character_id_a = :b AND character_id_b = :a)`,
         { replacements: { state: scene.new_tension_state, a: scene.character_a_id, b: scene.character_b_id }, type: sequelize.QueryTypes.UPDATE }
-      ).catch(() => {});
+      ).catch(e => console.warn('[world-studio] tension state update error:', e?.message));
       await sequelize.query(
         `UPDATE world_characters SET current_tension = :state, updated_at = NOW() WHERE id = :id`,
         { replacements: { state: scene.new_tension_state, id: scene.character_b_id }, type: sequelize.QueryTypes.UPDATE }
@@ -2256,7 +2256,7 @@ router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => 
         },
         type: sequelize.QueryTypes.INSERT,
       }
-    ).catch(() => {});
+    ).catch(e => console.warn('[world-studio] continuity beat insert error:', e?.message));
 
     // 4. Extract memory
     let memoryResult;
@@ -2279,7 +2279,7 @@ Return JSON: { "memory_statement": "what she now knows or feels", "memory_type":
         `INSERT INTO storyteller_memories (id, type, statement, confidence, confirmed, source_ref, created_at, updated_at)
          VALUES (:id, :type, :statement, :confidence, false, :source, NOW(), NOW())`,
         { replacements: { id: uuidv4(), type: mem.memory_type || 'character_dynamic', statement: mem.memory_statement, confidence: mem.confidence || 0.8, source: `intimate_scene:${sceneId}` }, type: sequelize.QueryTypes.INSERT }
-      ).catch(() => {});
+      ).catch(e => console.warn('[world-studio] memory insert error:', e?.message));
     }
 
     // 5. Generate morning-after continuation in background
@@ -2781,7 +2781,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       sequelize.query(
         `UPDATE ecosystem_previews SET status = 'confirmed', updated_at = NOW() WHERE preview_id = :pid`,
         { replacements: { pid: preview_id }, type: sequelize.QueryTypes.UPDATE }
-      ).catch(() => {});
+      ).catch(e => console.warn('[world-studio] preview confirm error:', e?.message));
     }
 
     res.status(201).json({
@@ -2799,7 +2799,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       sequelize.query(
         `UPDATE ecosystem_previews SET status = 'failed', updated_at = NOW() WHERE preview_id = :pid`,
         { replacements: { pid: preview_id }, type: sequelize.QueryTypes.UPDATE }
-      ).catch(() => {});
+      ).catch(e => console.warn('[world-studio] preview fail-mark error:', e?.message));
     }
     console.error('generate-ecosystem-confirm error:', err);
     const detail = err.original?.message || err.parent?.message || '';
@@ -2973,7 +2973,7 @@ router.get('/world/characters/:id/relationships', optionalAuth, async (req, res)
          WHERE character_id = :id ORDER BY created_at DESC`,
         { replacements: { id: req.params.id } }
       );
-    } catch (_) {}
+    } catch (err) { console.warn('[world-studio] extended relationships query error:', err?.message); }
 
     res.json({
       relationship_graph: safeJson(char.relationship_graph),
@@ -3083,7 +3083,7 @@ router.put('/world/characters/:id/relationships/:relId', optionalAuth, async (re
           `UPDATE character_relationships_extended SET ${updates.join(', ')} WHERE id = :relId AND character_id = :cid`,
           { replacements: rep, type: sequelize.QueryTypes.UPDATE }
         );
-      } catch (_) {}
+      } catch (err) { console.warn('[world-studio] extended relationship update error:', err?.message); }
     }
 
     // Update JSONB graph
@@ -3116,7 +3116,7 @@ router.delete('/world/characters/:id/relationships/:relId', optionalAuth, async 
         `DELETE FROM character_relationships_extended WHERE id = :relId AND character_id = :cid`,
         { replacements: { relId: req.params.relId, cid: req.params.id }, type: sequelize.QueryTypes.DELETE }
       );
-    } catch (_) {}
+    } catch (err) { console.warn('[world-studio] extended relationship delete error:', err?.message); }
 
     // Remove from JSONB graph
     const graph = safeJson(char.relationship_graph).filter(r => r.rel_id !== req.params.relId);
@@ -3465,7 +3465,7 @@ router.get('/world/context-summary', optionalAuth, async (req, res) => {
     try {
       const ST = models.StoryThread;
       if (ST) activeThreadCount = await ST.count({ where: { status: 'active' } });
-    } catch (_) {}
+    } catch (err) { console.warn('[world-studio] thread count error:', err?.message); }
 
     // Tension pair count
     let tensionCount = 0;
@@ -3478,7 +3478,7 @@ router.get('/world/context-summary', optionalAuth, async (req, res) => {
           if (['Simmering', 'Explosive', 'Unresolved', 'High', 'high', 'simmering', 'explosive'].includes(t)) tensionCount++;
         }
       }
-    } catch (_) {}
+    } catch (err) { console.warn('[world-studio] tension count error:', err?.message); }
 
     res.json({ facts, threads, snapshotLabel, locations, activeThreadCount, tensionCount: Math.floor(tensionCount / 2) });
   } catch (err) { res.json({ facts: [], threads: [], locations: [], activeThreadCount: 0, tensionCount: 0 }); }

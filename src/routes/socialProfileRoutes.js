@@ -2376,12 +2376,12 @@ router.post('/templates/:templateId/apply', optionalAuth, async (req, res) => {
   const templateId = req.params.templateId;
   let template;
   if (db.SocialProfileTemplate) {
-    try { template = await db.SocialProfileTemplate.findByPk(templateId); } catch {}
+    try { template = await db.SocialProfileTemplate.findByPk(templateId); } catch (err) { console.warn('[social-profile] template lookup error:', err?.message); }
   }
   if (!template) template = _profileTemplates.find(t => t.id === parseInt(templateId));
   if (!template) return res.status(404).json({ error: 'Template not found' });
 
-  if (template.increment) await template.increment('usage_count').catch(() => {});
+  if (template.increment) await template.increment('usage_count').catch(e => console.warn('[social-profile] usage_count increment error:', e?.message));
   else template.usage_count++;
   const td = template.template_data;
 

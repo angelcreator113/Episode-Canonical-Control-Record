@@ -1043,7 +1043,7 @@ Return JSON:
           metadata: db.sequelize.literal(`COALESCE(metadata, '{}')::jsonb || '${JSON.stringify({ beat_sheet: result.beats, arc_type: result.chapter_arc_type })}'::jsonb`),
         },
         { where: { id: chapter_id } }
-      ).catch(() => {});
+      ).catch(e => console.warn('[tier-features] beat sheet metadata update error:', e?.message));
     }
 
     return res.json({ success: true, ...result });

@@ -176,7 +176,7 @@ Be emotionally specific. No grand revelations. Just one real moment — somethin
         messages: [{ role: 'user', content: morningPrompt }],
       });
       morningText = morningResp.content.find(b => b.type === 'text')?.text || '';
-    } catch (_) {}
+    } catch (err) { console.warn('[intimate-patch] morning-after generation error:', err?.message); }
 
     if (morningText) {
       const morningParas = morningText.split(/\n\n+/).map(p => p.trim()).filter(Boolean).slice(0, 3);
@@ -212,7 +212,7 @@ Be emotionally specific. No grand revelations. Just one real moment — somethin
           type: sequelize.QueryTypes.INSERT,
         }
       );
-    } catch (_) {}
+    } catch (err) { console.warn('[intimate-patch] intimate_scenes insert error:', err?.message); }
 
     // ── 6. Update character tension ───────────────────────────────────
     try {
@@ -221,7 +221,7 @@ Be emotionally specific. No grand revelations. Just one real moment — somethin
          WHERE id = :id`,
         { replacements: { id: character_id }, type: sequelize.QueryTypes.UPDATE }
       );
-    } catch (_) {}
+    } catch (err) { console.warn('[intimate-patch] tension update error:', err?.message); }
 
     res.json({
       lines,
