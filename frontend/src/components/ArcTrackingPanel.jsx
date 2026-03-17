@@ -45,9 +45,9 @@ export default function ArcTrackingPanel({ characterKey, characterName }) {
       </div>
 
       {/* Always visible — key numbers */}
-      <div style={{
+      <div className="arc-tracking-stats" style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(2, 1fr)',
         gap: 1,
         borderTop: '1px solid #f2eef8',
       }}>
@@ -57,10 +57,10 @@ export default function ArcTrackingPanel({ characterKey, characterName }) {
           { label: 'Visibility', value: `${context.visibility_score}%`, color: '#7ab3d4' },
           { label: 'David Silence', value: context.david_silence_counter, color: '#c0392b' },
         ].map(({ label, value, color }) => (
-          <div key={label} style={{ padding: '12px 14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
-            <div style={{ fontSize: 10, color: '#9999b3', marginTop: 3, fontWeight: 600,
-              textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+          <div key={label} style={{ padding: '10px 8px', textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+            <div style={{ fontSize: 9, color: '#9999b3', marginTop: 3, fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</div>
           </div>
         ))}
       </div>
