@@ -2860,3 +2860,161 @@ html, body { margin: 0; padding: 0; }
   .se-task-card .se-task-excerpt { display: none; }
   .se-task-generate-btn { min-height: 32px; min-width: 48px; padding: 5px 10px; font-size: 10px; }
 }
+
+/* ─── Arc Generation Status Bar ─────────────────────────────────────────────── */
+.se-arc-status {
+  padding: 20px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.se-arc-status-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  max-width: 400px;
+}
+
+.se-arc-status-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.se-arc-status-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--se-border, #e0dcd4);
+  min-width: 16px;
+  margin-bottom: 20px;
+  transition: background 0.3s ease;
+}
+
+.se-arc-status-connector.filled {
+  height: 2px;
+}
+
+.se-arc-status-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--se-border, #e0dcd4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.3s ease;
+  background: var(--se-bg, #faf8f4);
+}
+
+.se-arc-status-step--done .se-arc-status-dot {
+  border-color: var(--se-accent, #b0922e);
+}
+
+.se-arc-status-step--active .se-arc-status-dot {
+  border-color: var(--se-accent, #b0922e);
+  box-shadow: 0 0 0 4px rgba(176, 146, 46, 0.12);
+}
+
+.se-arc-status-step--error .se-arc-status-dot {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.se-arc-status-check {
+  font-size: 11px;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.se-arc-status-x {
+  font-size: 11px;
+  color: #dc2626;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.se-arc-status-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: se-arc-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes se-arc-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.7); }
+}
+
+.se-arc-status-label {
+  font-size: 10px;
+  color: var(--se-text-muted, #999);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.se-arc-status-step--active .se-arc-status-label {
+  color: var(--se-text, #1a1a2e);
+  font-weight: 600;
+}
+
+.se-arc-status-step--done .se-arc-status-label {
+  color: var(--se-text-secondary, #666);
+}
+
+.se-arc-status-message {
+  font-size: 12px;
+  color: var(--se-text-secondary, #666);
+  text-align: center;
+  min-height: 18px;
+}
+
+.se-arc-status-error {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.se-arc-status-done {
+  color: #059669;
+  font-weight: 600;
+}
+
+.se-arc-status-stories-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.se-arc-status-stories-track {
+  flex: 1;
+  height: 4px;
+  background: var(--se-border, #e0dcd4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.se-arc-status-stories-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.se-arc-status-stories-count {
+  font-size: 11px;
+  color: var(--se-text-muted, #999);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.se-arc-status-elapsed {
+  font-size: 11px;
+  color: var(--se-text-muted, #999);
+}

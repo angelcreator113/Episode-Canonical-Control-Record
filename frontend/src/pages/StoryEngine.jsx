@@ -6,6 +6,7 @@ import useStoryEngine from '../hooks/useStoryEngine';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import StoryNavigator from './StoryNavigator';
 import StoryInspector from './StoryInspector';
+import ArcGenerationStatus from './ArcGenerationStatus';
 import { API_BASE, PHASE_COLORS, PHASE_LABELS, TYPE_ICONS, WORLD_LABELS, getReadingTime } from './storyEngineConstants';
 import './StoryEngine.css';
 
@@ -749,6 +750,7 @@ export default function StoryEngine() {
             mobileNav={engine.mobileNav}
             setMobileNav={engine.setMobileNav}
             elapsed={engine.generation.elapsed}
+            arcProgress={engine.arcProgress}
           />
         )}
 
@@ -760,6 +762,17 @@ export default function StoryEngine() {
               <div className="se-generating-title">Writing Story {engine.generation.generatingNum}…</div>
               <div className="se-generating-sub">{engine.char?.display_name}'s world is assembling itself.</div>
               <div className="se-generating-elapsed">{engine.generation.elapsed}s · typically 1–2 minutes</div>
+            </div>
+          ) : engine.tasksLoading && engine.arcProgress ? (
+            /* Arc generation in progress — show full status bar in canvas */
+            <div className="se-canvas-hero">
+              <div className="se-hero-icon" style={{ color: engine.char?.color }}>{engine.char?.icon || '◇'}</div>
+              <div className="se-hero-title">Building {engine.char?.display_name ? `${engine.char.display_name}'s` : 'your'} story arc</div>
+              <ArcGenerationStatus
+                arcProgress={engine.arcProgress}
+                charColor={engine.char?.color}
+                elapsed={engine.generation.elapsed}
+              />
             </div>
           ) : !engine.tasksLoading && engine.tasks.length === 0 && !engine.activeStory ? (
             <div className="se-canvas-hero">
