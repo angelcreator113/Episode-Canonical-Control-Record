@@ -110,23 +110,16 @@ function applyPatch() {
 
   const originalCreate = MessagesProto.create;
 
-  MessagesProto.create = async function trackedCreate(params, ...rest) {
+  // IMPORTANT: Must NOT be async — async functions always return plain Promises,
+  // which strips the SDK's APIPromise (which has .withResponse(), .asResponse(), etc.).
+  // The SDK's messages.stream() internally calls create(...).withResponse(),
+  // so wrapping create() in async breaks all streaming.
+  MessagesProto.create = function trackedCreate(params, ...rest) {
     const startTime = Date.now();
     const routeName = inferRouteName();
     const model = params?.model || 'unknown';
 
-    let response;
-    let isError = false;
-    let errorType = null;
-
-    try {
-      response = await originalCreate.call(this, params, ...rest);
-      return response;
-    } catch (err) {
-      isError = true;
-      errorType = err?.error?.type || err?.status?.toString() || err.constructor?.name || 'unknown';
-      throw err;
-    } finally {
+    const logUsage = (response, isError, errorType) => {
       const duration = Date.now() - startTime;
       const usage = response?.usage || {};
       const cost = isError ? 0 : calculateCost(model, usage);
@@ -148,7 +141,6 @@ function applyPatch() {
               is_error: isError,
               error_type: errorType,
             }).catch(dbErr => {
-              // Silently fail — never crash the app for logging
               if (process.env.NODE_ENV !== 'production') {
                 console.log('⚠️  AI cost log write failed:', dbErr.message);
               }
@@ -158,7 +150,21 @@ function applyPatch() {
           // models not loaded yet or table missing — skip silently
         }
       });
-    }
+    };
+
+    // Call original — returns APIPromise (which has .withResponse, .asResponse, etc.)
+    // We must return THIS object, not a new Promise wrapper.
+    const result = originalCreate.call(this, params, ...rest);
+
+    // Hook into the promise chain for logging without changing the return type.
+    // APIPromise.then() returns a new plain Promise, so we can't use that as our return.
+    // Instead, attach a side-effect via .then() on a SEPARATE chain.
+    Promise.resolve(result).then(
+      (response) => logUsage(response, false, null),
+      (err) => logUsage(null, true, err?.error?.type || err?.status?.toString() || err.constructor?.name || 'unknown'),
+    );
+
+    return result;
   };
 
   patchApplied = true;

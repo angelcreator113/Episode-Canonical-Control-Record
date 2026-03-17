@@ -295,6 +295,7 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
 }
 
 // ─── Arc progress bar ────────────────────────────────────────────────────────
+const ARC_SHORT_LABELS = { establishment: 'Estab.', pressure: 'Press.', crisis: 'Crisis', integration: 'Integ.' };
 function ArcProgress({ approvedStories, savedStories = [], stories = {} }) {
   const phases = ['establishment', 'pressure', 'crisis', 'integration'];
   const phaseRanges = { establishment: [1,10], pressure: [11,25], crisis: [26,40], integration: [41,50] };
@@ -308,8 +309,8 @@ function ArcProgress({ approvedStories, savedStories = [], stories = {} }) {
         const pct = Math.round((approved / total) * 100);
         return (
           <div key={phase} className="se-arc-phase">
-            <div className="se-arc-phase-label" style={{ color: PHASE_COLORS[phase] }}>
-              {PHASE_LABELS[phase]}
+            <div className="se-arc-phase-label" style={{ color: PHASE_COLORS[phase] }} title={PHASE_LABELS[phase]}>
+              {ARC_SHORT_LABELS[phase]}
             </div>
             <div className="se-arc-phase-bar">
               <div
@@ -1202,6 +1203,8 @@ export default function StoryEngine() {
   const [generatingNum, setGeneratingNum] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef(null);
+  const [backgroundJobId, setBackgroundJobId] = useState(null);
+  const backgroundPollRef = useRef(null);
   const [consistencyConflicts, setConsistencyConflicts] = useState([]);
   const [consistencyLoading, setConsistencyLoading] = useState(false);
   const [therapyMemories, setTherapyMemories] = useState([]);
@@ -1576,10 +1579,11 @@ export default function StoryEngine() {
       return;
     }
 
-    if (!window.confirm(`Generate ${ungenerated.length} remaining stories? This runs the full quality pipeline for each.`)) return;
+    if (!window.confirm(`Generate ${ungenerated.length} remaining stories? This runs the full quality pipeline for each and continues in the background.`)) return;
 
     setGenerating(true);
     setBatchGenProgress({ current: 0, total: ungenerated.length, currentTitle: ungenerated[0]?.title });
+    requestNotificationPermission();
 
     // Build previous stories from already approved/generated
     const previousStories = approvedStories
@@ -1591,7 +1595,7 @@ export default function StoryEngine() {
       }));
 
     try {
-      const response = await fetch(`${API_BASE}/memories/batch-generate`, {
+      const response = await fetch(`${API_BASE}/memories/batch-generate-background`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1601,56 +1605,247 @@ export default function StoryEngine() {
         }),
       });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const newStories = { ...stories };
+      if (!response.ok) throw new Error('Failed to start batch generation');
+      const { jobId, total } = await response.json();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Store in localStorage for resume on page navigation
+      localStorage.setItem('storyEngine_activeBatchJob', JSON.stringify({
+        jobId,
+        total,
+        characterKey: selectedChar,
+        startedAt: Date.now(),
+      }));
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+      // Track which stories we've already fetched to avoid re-fetching
+      const fetchedStories = new Set();
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
+      // Poll for progress
+      if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+      backgroundPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${API_BASE}/memories/batch-generate-status/${jobId}`);
+          if (!statusRes.ok) return;
+          const job = await statusRes.json();
+
+          // Update progress
+          setBatchGenProgress({
+            current: job.completed,
+            total: job.total,
+            currentTitle: job.currentTitle,
+          });
+
+          // Fetch any newly completed stories we haven't loaded yet
+          const newlyCompleted = (job.completedStories || []).filter(n => !fetchedStories.has(n));
+          for (const storyNum of newlyCompleted) {
             try {
-              const data = JSON.parse(line.slice(6));
-              if (line.includes('event: progress') || data.status === 'generating') {
-                setBatchGenProgress(prev => ({
-                  ...prev,
-                  current: data.completed || prev?.current || 0,
-                  currentTitle: data.title || prev?.currentTitle,
-                }));
+              const storyRes = await fetch(`${API_BASE}/memories/batch-generate-story/${jobId}/${storyNum}`);
+              if (storyRes.ok) {
+                const storyData = await storyRes.json();
+                fetchedStories.add(storyNum);
+                setStories(prev => {
+                  const next = { ...prev, [storyNum]: storyData };
+                  setCachedStories(selectedChar, next, approvedStories);
+                  return next;
+                });
               }
-              if (data.word_count && data.story_number) {
-                // Story completed — update the stories map
-                setBatchGenProgress(prev => ({
-                  ...prev,
-                  current: data.completed || (prev?.current || 0) + 1,
-                }));
-              }
-            } catch { /* skip unparseable SSE lines */ }
+            } catch { /* will retry next poll */ }
           }
-          if (line.startsWith('event: story_complete')) {
-            // Next line will have the data
-          }
-        }
-      }
 
-      // After stream ends, reload all stories from the pipeline results
-      // Re-fetch the story tasks to get fresh data
-      addToast(`Batch generation complete — ${ungenerated.length} stories generated`, 'success');
+          if (job.status === 'completed') {
+            clearInterval(backgroundPollRef.current);
+            backgroundPollRef.current = null;
+            localStorage.removeItem('storyEngine_activeBatchJob');
+            setGenerating(false);
+            setBatchGenProgress(null);
+            const errorCount = job.errors?.length || 0;
+            const successCount = job.total - errorCount;
+            addToast(`Batch complete — ${successCount} stories generated${errorCount ? `, ${errorCount} failed` : ''}`, 'success');
+            sendBrowserNotification('Batch Generation Complete', `${successCount}/${job.total} stories generated successfully.`);
+          }
+        } catch (_) {
+          // Network error — keep polling
+        }
+      }, 4000);
     } catch (e) {
       console.error('Batch generate error:', e);
-      addToast('Batch generation failed — some stories may not have been generated', 'error');
-    } finally {
+      addToast('Batch generation failed to start', 'error');
       setGenerating(false);
       setBatchGenProgress(null);
     }
   }
+
+  // Request browser notification permission on first generate
+  function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
+  // Send browser notification
+  function sendBrowserNotification(title, body) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const n = new Notification(title, { body, icon: '/favicon.ico' });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch (_) { /* mobile may not support */ }
+    }
+  }
+
+  // Handle completed background job
+  function handleJobComplete(data, storyNumber) {
+    if (data.fallback) {
+      addToast('Story generation failed — please try again.', 'error');
+    } else {
+      const nextStories = { ...stories, [storyNumber]: data };
+      setStories(nextStories);
+      setActiveStory(data);
+      setCachedStories(selectedChar, nextStories, approvedStories);
+      addToast(`Story ${storyNumber} generated successfully!`, 'success');
+      sendBrowserNotification('Story Ready', `Story ${storyNumber}: ${data.title || 'Untitled'} is ready for review.`);
+    }
+    setGenerating(false);
+    setGeneratingNum(null);
+    setBackgroundJobId(null);
+    localStorage.removeItem('storyEngine_activeJob');
+    stopTimer();
+  }
+
+  // Poll for background job status
+  function startPolling(jobId, storyNumber) {
+    if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+
+    backgroundPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/memories/pipeline-generate-status/${jobId}`);
+        if (!res.ok) return;
+        const job = await res.json();
+
+        if (job.status === 'completed') {
+          clearInterval(backgroundPollRef.current);
+          backgroundPollRef.current = null;
+          handleJobComplete(job.result, storyNumber);
+        } else if (job.status === 'failed') {
+          clearInterval(backgroundPollRef.current);
+          backgroundPollRef.current = null;
+          addToast(`Story ${storyNumber} generation failed: ${job.error}`, 'error');
+          sendBrowserNotification('Generation Failed', `Story ${storyNumber} failed to generate.`);
+          setGenerating(false);
+          setGeneratingNum(null);
+          setBackgroundJobId(null);
+          localStorage.removeItem('storyEngine_activeJob');
+          stopTimer();
+        }
+      } catch (_) {
+        // Network error — keep polling
+      }
+    }, 3000);
+  }
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+    };
+  }, []);
+
+  // Resume polling if we remount with an active background job
+  useEffect(() => {
+    if (backgroundJobId && !backgroundPollRef.current) {
+      startPolling(backgroundJobId, generatingNum);
+    }
+  }, [backgroundJobId]);
+
+  // On mount: check localStorage for active background jobs and resume
+  useEffect(() => {
+    // Check for single story job
+    try {
+      const saved = localStorage.getItem('storyEngine_activeJob');
+      if (saved) {
+        const { jobId, storyNumber, startedAt } = JSON.parse(saved);
+        if (Date.now() - startedAt > 30 * 60 * 1000) {
+          localStorage.removeItem('storyEngine_activeJob');
+        } else {
+          setGenerating(true);
+          setGeneratingNum(storyNumber);
+          setBackgroundJobId(jobId);
+          startTimer();
+          addToast(`Resuming Story ${storyNumber} generation...`, 'info');
+          return; // only one job at a time
+        }
+      }
+    } catch (_) {
+      localStorage.removeItem('storyEngine_activeJob');
+    }
+
+    // Check for batch job
+    try {
+      const saved = localStorage.getItem('storyEngine_activeBatchJob');
+      if (saved) {
+        const { jobId, total, startedAt } = JSON.parse(saved);
+        // Batch jobs can take hours — allow up to 6 hours
+        if (Date.now() - startedAt > 6 * 60 * 60 * 1000) {
+          localStorage.removeItem('storyEngine_activeBatchJob');
+          return;
+        }
+        setGenerating(true);
+        setBatchGenProgress({ current: 0, total, currentTitle: 'Resuming...' });
+        addToast('Resuming batch generation...', 'info');
+
+        // Start polling for batch status
+        const fetchedStories = new Set();
+        if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+        backgroundPollRef.current = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`${API_BASE}/memories/batch-generate-status/${jobId}`);
+            if (!statusRes.ok) {
+              // Job not found — it expired or server restarted
+              clearInterval(backgroundPollRef.current);
+              backgroundPollRef.current = null;
+              localStorage.removeItem('storyEngine_activeBatchJob');
+              setGenerating(false);
+              setBatchGenProgress(null);
+              addToast('Batch job expired — server may have restarted', 'warning');
+              return;
+            }
+            const job = await statusRes.json();
+
+            setBatchGenProgress({ current: job.completed, total: job.total, currentTitle: job.currentTitle });
+
+            // Fetch newly completed stories
+            const newlyCompleted = (job.completedStories || []).filter(n => !fetchedStories.has(n));
+            for (const storyNum of newlyCompleted) {
+              try {
+                const storyRes = await fetch(`${API_BASE}/memories/batch-generate-story/${jobId}/${storyNum}`);
+                if (storyRes.ok) {
+                  const storyData = await storyRes.json();
+                  fetchedStories.add(storyNum);
+                  setStories(prev => {
+                    const next = { ...prev, [storyNum]: storyData };
+                    setCachedStories(selectedChar, next, approvedStories);
+                    return next;
+                  });
+                }
+              } catch { /* retry next poll */ }
+            }
+
+            if (job.status === 'completed') {
+              clearInterval(backgroundPollRef.current);
+              backgroundPollRef.current = null;
+              localStorage.removeItem('storyEngine_activeBatchJob');
+              setGenerating(false);
+              setBatchGenProgress(null);
+              const errorCount = job.errors?.length || 0;
+              const successCount = job.total - errorCount;
+              addToast(`Batch complete — ${successCount} stories generated${errorCount ? `, ${errorCount} failed` : ''}`, 'success');
+              sendBrowserNotification('Batch Generation Complete', `${successCount}/${job.total} stories generated.`);
+            }
+          } catch (_) { /* network error — keep polling */ }
+        }, 4000);
+      }
+    } catch (_) {
+      localStorage.removeItem('storyEngine_activeBatchJob');
+    }
+  }, []);
 
   async function handleGenerate(task) {
     setGenerating(true);
@@ -1660,6 +1855,7 @@ export default function StoryEngine() {
     setConsistencyConflicts([]);
     setTherapyMemories([]);
     startTimer();
+    requestNotificationPermission();
 
     // On mobile, scroll to top so the generating indicator is visible
     if (window.innerWidth <= 900) {
@@ -1676,7 +1872,8 @@ export default function StoryEngine() {
           summary: stories[n]?.text?.slice(0, 800) || '',
         }));
 
-      const res = await fetch(`${API_BASE}/memories/pipeline-generate`, {
+      // Start as a background job so generation survives page navigation
+      const res = await fetch(`${API_BASE}/memories/pipeline-generate-background`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1687,22 +1884,21 @@ export default function StoryEngine() {
         }),
       });
 
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
+      if (!res.ok) throw new Error('Failed to start generation');
+      const { jobId } = await res.json();
 
-      if (data.fallback) {
-        addToast('Story generation failed — please try again.', 'error');
-        return;
-      }
-
-      const nextStories = { ...stories, [task.story_number]: data };
-      setStories(nextStories);
-      setActiveStory(data);
-      setCachedStories(selectedChar, nextStories, approvedStories);
+      // Store job ID and start polling
+      setBackgroundJobId(jobId);
+      localStorage.setItem('storyEngine_activeJob', JSON.stringify({
+        jobId,
+        storyNumber: task.story_number,
+        characterKey: selectedChar,
+        startedAt: Date.now(),
+      }));
+      startPolling(jobId, task.story_number);
     } catch (e) {
       console.error('handleGenerate error:', e);
       addToast('Story generation failed — please try again.', 'error');
-    } finally {
       setGenerating(false);
       setGeneratingNum(null);
       stopTimer();
@@ -2262,7 +2458,7 @@ export default function StoryEngine() {
                   ))}
                 </div>
                 <div className="se-nav-count">
-                  {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
+                  {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} {filteredTasks.length === 1 ? 'story' : 'stories'}
                 </div>
               </div>
             )}

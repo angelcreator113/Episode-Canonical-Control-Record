@@ -51,6 +51,12 @@ try {
   ({ buildKnowledgeInjection, getTechContext } = require('./franchiseBrainRoutes'));
 } catch { buildKnowledgeInjection = null; getTechContext = null; }
 
+// Arc tracking service — wound clock, stakes, visibility, David silence
+let buildArcContext, buildArcContextPromptSection, updateArcTracking;
+try {
+  ({ buildArcContext, buildArcContextPromptSection, updateArcTracking } = require('../services/arcTrackingService'));
+} catch { buildArcContext = null; buildArcContextPromptSection = null; updateArcTracking = null; }
+
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
 // Ensure dotenv is loaded before creating the client (PM2 may pass empty string)
@@ -5087,8 +5093,6 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
 
     try {
       stream = tryStreamModel('claude-sonnet-4-6');
-      // Test the stream by waiting for initial connection
-      // If the model is unavailable, the error fires before any tokens
     } catch (primaryErr) {
       console.error('Assistant stream primary model failed:', {
         message: primaryErr.message,
@@ -5096,7 +5100,6 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
         type: primaryErr.error?.type,
         name: primaryErr.name,
       });
-      // Fall back to previous model
       stream = tryStreamModel('claude-sonnet-4-20250514');
     }
 
@@ -7133,23 +7136,45 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
     const { Op } = require('sequelize');
     const { CharacterRegistry, RegistryCharacter } = require('../models');
 
-    const characters = await RegistryCharacter.findAll({
-      where: {
-        status: { [Op.in]: ['accepted', 'finalized'] },
-      },
-      include: [{
-        model: CharacterRegistry,
-        as: 'registry',
-        attributes: ['id', 'title', 'book_tag'],
-      }],
-      attributes: [
-        'id', 'character_key', 'display_name', 'icon', 'role_type',
-        'world',
-        'core_desire', 'core_fear', 'core_wound', 'description',
-        'career_status', 'portrait_url',
-      ],
-      order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
-    });
+    if (!RegistryCharacter) {
+      return res.json({ success: true, worlds: {}, total: 0 });
+    }
+
+    // Try with full columns first; fall back if sort_order/world don't exist yet
+    let characters;
+    try {
+      characters = await RegistryCharacter.findAll({
+        where: {
+          status: { [Op.in]: ['accepted', 'finalized'] },
+        },
+        include: [{
+          model: CharacterRegistry,
+          as: 'registry',
+          attributes: ['id', 'title', 'book_tag'],
+        }],
+        attributes: [
+          'id', 'character_key', 'display_name', 'icon', 'role_type',
+          'world',
+          'core_desire', 'core_fear', 'core_wound', 'description',
+          'career_status', 'portrait_url',
+        ],
+        order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
+      });
+    } catch (queryErr) {
+      // Fallback: columns like sort_order or world may not exist yet
+      console.warn('[story-engine-characters] full query failed, trying fallback:', queryErr.message);
+      characters = await RegistryCharacter.findAll({
+        where: {
+          status: { [Op.in]: ['accepted', 'finalized'] },
+        },
+        include: [{
+          model: CharacterRegistry,
+          as: 'registry',
+          attributes: ['id', 'title', 'book_tag'],
+        }],
+        order: [['display_name', 'ASC']],
+      });
+    }
 
     // Group by world column — never show 'unknown'
     const byWorld = {};
@@ -8182,6 +8207,160 @@ These influences are atmospheric. Characters don't announce who they follow — 
   }
 }
 
+// ─── Load arc tracking context ──────────────────────────────────────────────
+async function loadArcContext(characterKey) {
+  try {
+    if (!buildArcContext) return null;
+    const arcCtx = await buildArcContext(db, characterKey);
+    if (!arcCtx) return null;
+    return buildArcContextPromptSection ? buildArcContextPromptSection(arcCtx) : null;
+  } catch (err) {
+    console.warn('[loadArcContext] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load therapy profile ──────────────────────────────────────────────────
+async function loadTherapyProfile(characterKey) {
+  try {
+    const { CharacterTherapyProfile, RegistryCharacter } = require('../models');
+    if (!CharacterTherapyProfile) return null;
+
+    // Find the character's ID
+    const char = await RegistryCharacter.findOne({
+      where: { character_key: characterKey },
+      attributes: ['id'],
+    });
+    if (!char) return null;
+
+    const profile = await CharacterTherapyProfile.findOne({
+      where: { character_id: char.id },
+    });
+    if (!profile) return null;
+
+    const parts = [];
+    if (profile.primary_defense) parts.push(`Primary defense mechanism: ${profile.primary_defense}`);
+    // emotional_state is JSONB — extract meaningful fields
+    const emo = profile.emotional_state || {};
+    if (emo.current_state) parts.push(`Current emotional state: ${emo.current_state}`);
+    if (emo.dominant_emotion) parts.push(`Dominant emotion: ${emo.dominant_emotion}`);
+    if (emo.vulnerability_level) parts.push(`Vulnerability level: ${emo.vulnerability_level}`);
+    // baseline is JSONB — psychological baseline
+    const base = profile.baseline || {};
+    if (base.attachment_style) parts.push(`Attachment style: ${base.attachment_style}`);
+    if (base.core_wound) parts.push(`Core wound: ${base.core_wound}`);
+    if (base.coping_patterns) parts.push(`Coping patterns: ${Array.isArray(base.coping_patterns) ? base.coping_patterns.join(', ') : base.coping_patterns}`);
+    // known = things the character knows about herself
+    if (profile.known?.length) parts.push(`What she knows about herself: ${profile.known.join('; ')}`);
+    // sensed = things she senses but can't articulate
+    if (profile.sensed?.length) parts.push(`What she senses but can't name: ${profile.sensed.join('; ')}`);
+    // never_knows = blind spots
+    if (profile.never_knows?.length) parts.push(`Blind spots (she will never see these): ${profile.never_knows.join('; ')}`);
+
+    if (!parts.length) return null;
+
+    return `PSYCHOLOGICAL PROFILE (this is what a therapist would see — the character does NOT have this language for herself, but these patterns drive her behavior):\n${parts.join('\n')}`;
+  } catch (err) {
+    console.warn('[loadTherapyProfile] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load character growth logs ──────────────────────────────────────────────
+async function loadGrowthLogs(characterKey) {
+  try {
+    const { CharacterGrowthLog, RegistryCharacter } = require('../models');
+    if (!CharacterGrowthLog) return null;
+
+    // GrowthLog uses character_id (UUID), not character_key
+    const char = await RegistryCharacter.findOne({
+      where: { character_key: characterKey },
+      attributes: ['id'],
+    });
+    if (!char) return null;
+
+    const logs = await CharacterGrowthLog.findAll({
+      where: { character_id: char.id },
+      order: [['created_at', 'DESC']],
+      limit: 10,
+    });
+    if (!logs.length) return null;
+
+    const lines = logs.map(log => {
+      const parts = [`  • [${log.update_type}]`];
+      if (log.field_updated) parts.push(`${log.field_updated}:`);
+      if (log.new_value) parts.push(typeof log.new_value === 'string' ? log.new_value : JSON.stringify(log.new_value));
+      if (log.growth_source) parts.push(`(source: ${log.growth_source})`);
+      return parts.join(' ');
+    });
+
+    return `CHARACTER GROWTH (recent changes to who she is — these are cumulative, not temporary):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.warn('[loadGrowthLogs] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load franchise knowledge (world rules / lore) ───────────────────────────
+async function loadFranchiseKnowledge(characterKey) {
+  try {
+    const { FranchiseKnowledge } = require('../models');
+    if (!FranchiseKnowledge) return null;
+
+    const entries = await FranchiseKnowledge.findAll({
+      where: { status: 'active' },
+      order: [['severity', 'ASC'], ['created_at', 'DESC']],
+      limit: 15,
+    });
+    if (!entries.length) return null;
+
+    const lines = entries.map(e => {
+      const cat = e.category ? `[${e.category}] ` : '';
+      const sev = e.severity === 'critical' ? ' ⚠' : '';
+      return `  • ${cat}${e.title}${sev}: ${(e.content || '').slice(0, 200)}`;
+    });
+
+    return `WORLD RULES & FRANCHISE KNOWLEDGE (these are constraints — never contradict them):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.warn('[loadFranchiseKnowledge] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load world timeline events (non-canon, recent) ──────────────────────────
+async function loadRecentWorldEvents(characterKey) {
+  try {
+    const { WorldTimelineEvent } = require('../models');
+    if (!WorldTimelineEvent) return null;
+
+    const events = await WorldTimelineEvent.findAll({
+      where: { is_canon: false },
+      order: [['created_at', 'DESC']],
+      limit: 10,
+    });
+    if (!events.length) return null;
+
+    const relevant = events.filter(e => {
+      const involved = e.characters_involved || [];
+      return involved.some(c =>
+        (typeof c === 'string' && c === characterKey) ||
+        (typeof c === 'object' && (c.key === characterKey || c.character_key === characterKey))
+      );
+    });
+    if (!relevant.length) return null;
+
+    const lines = relevant.map(e => {
+      const date = e.story_date ? ` (${e.story_date})` : '';
+      return `  • ${e.event_name}${date}: ${e.event_description || ''}`;
+    });
+
+    return `RECENT WORLD EVENTS (what has been happening — these shape the character's current reality):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.warn('[loadRecentWorldEvents] error:', err?.message);
+    return null;
+  }
+}
+
 // ─── In-memory cache for story engine task arcs ───────────────────────────────
 const seTaskArcCache = new Map();
 
@@ -8443,12 +8622,29 @@ Format:
   ]
 }`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
-    });
+    let response;
+    try {
+      response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 16000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+      });
+    } catch (apiErr) {
+      const isRetryable = apiErr.status === 529 || apiErr.status === 503 || apiErr.status === 404;
+      console.error('[generate-story-tasks] primary model failed:', apiErr.status, apiErr.message);
+      if (isRetryable) {
+        await new Promise(r => setTimeout(r, 2000));
+        response = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 16000,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+        });
+      } else {
+        throw apiErr;
+      }
+    }
 
     const raw = response.content?.[0]?.text || '';
     let parsed;
@@ -8607,8 +8803,8 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
           } else {
             remainingOlder = older;
           }
-        } catch {
-          // Fallback to recency if relevance check fails
+        } catch (relErr) {
+          console.warn(`[relevance-check] Story ${storyNumber} for ${characterKey} failed: ${relErr?.message} — falling back to recency`);
           remainingOlder = older;
         }
       } else {
@@ -8632,7 +8828,7 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
     }
 
     // Load all context in parallel for speed
-    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence, voiceFingerprints] = await Promise.all([
+    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony, followInfluence, voiceFingerprints, arcContext, therapyProfile, growthLogs, franchiseKnowledge, recentWorldEvents] = await Promise.all([
       loadCharacterProfile(characterKey),
       loadStoryMemories(characterKey),
       loadWorldState(characterKey, dna.world),
@@ -8645,7 +8841,26 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
       loadDramaticIrony(characterKey),
       loadFollowInfluence(characterKey),
       loadVoiceFingerprints(characterKey),
+      loadArcContext(characterKey),
+      loadTherapyProfile(characterKey),
+      loadGrowthLogs(characterKey),
+      loadFranchiseKnowledge(characterKey),
+      loadRecentWorldEvents(characterKey),
     ]);
+
+    // ── Context presence logging ─────────────────────────────────────────────
+    const contextPresence = {
+      profile: !!dbProfile, memories: !!storyMemories, world: !!worldState,
+      relationships: !!relationships, threads: !!activeThreads, locations: !!locations,
+      canon: !!canonEvents, prose: !!proseStyle, voiceCards: !!voiceCards,
+      irony: !!dramaticIrony, follow: !!followInfluence, fingerprints: !!voiceFingerprints,
+      arc: !!arcContext, therapy: !!therapyProfile, growth: !!growthLogs,
+      franchise: !!franchiseKnowledge, worldEvents: !!recentWorldEvents,
+    };
+    const missingContext = Object.entries(contextPresence).filter(([, v]) => !v).map(([k]) => k);
+    if (missingContext.length > 0) {
+      console.log(`[generate-story] Story ${storyNumber} for ${characterKey} — missing context: ${missingContext.join(', ')}`);
+    }
 
     const profileSection = dbProfile
       ? `\n\nCHARACTER PROFILE FROM REGISTRY (ground the story in these details — this is who they really are):\n${dbProfile}`
@@ -8663,6 +8878,11 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
     const ironySection = dramaticIrony ? `\n\n${dramaticIrony}` : '';
     const followSection = followInfluence ? `\n\n${followInfluence}` : '';
     const fingerprintSection = voiceFingerprints ? `\n\n${voiceFingerprints}` : '';
+    const arcSection = arcContext ? `\n\n${arcContext}` : '';
+    const therapySection = therapyProfile ? `\n\n${therapyProfile}` : '';
+    const growthSection = growthLogs ? `\n\n${growthLogs}` : '';
+    const franchiseSection = franchiseKnowledge ? `\n\n${franchiseKnowledge}` : '';
+    const worldEventsSection = recentWorldEvents ? `\n\n${recentWorldEvents}` : '';
 
     // Build pacing analysis from recent stories to prevent repetitive structure
     let pacingSection = '';
@@ -8690,7 +8910,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${fingerprintSection}${ironySection}${followSection}${pacingSection}
+Recurring object: ${dna.recurring_object}${profileSection}${arcSection}${therapySection}${growthSection}${relationshipsSection}${memoriesSection}${worldSection}${worldEventsSection}${threadsSection}${locationsSection}${canonSection}${franchiseSection}${proseSection}${voiceCardsSection}${fingerprintSection}${ironySection}${followSection}${pacingSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -8793,8 +9013,20 @@ Write the complete story now. No preamble. Begin with the title, then the story.
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 2000,
         system: `You are a literary quality checker. Analyze the story and return ONLY valid JSON — no markdown, no commentary.`,
-        messages: [{ role: 'user', content: `Check this story for craft quality issues:
+        messages: [{ role: 'user', content: `Check this story for craft quality AND task brief adherence:
 
+TASK BRIEF REQUIREMENTS:
+- Phase: ${taskBrief.phase}
+- Story type: ${taskBrief.story_type}
+- Task: ${taskBrief.task || 'not specified'}
+- Obstacle: ${taskBrief.obstacle || 'not specified'}
+- Strength weaponized: ${taskBrief.strength_weaponized || 'not specified'}
+${taskBrief.emotional_start ? `- Emotional start: ${taskBrief.emotional_start}` : ''}
+${taskBrief.emotional_end ? `- Emotional end: ${taskBrief.emotional_end}` : ''}
+${taskBrief.primary_location ? `- Required location: ${taskBrief.primary_location}` : ''}
+${taskBrief.time_of_day ? `- Time of day: ${taskBrief.time_of_day}` : ''}
+
+STORY TEXT:
 ${storyText.slice(0, 6000)}
 
 Return JSON:
@@ -8802,11 +9034,19 @@ Return JSON:
   "pass": true|false,
   "score": 0-10,
   "issues": [
-    { "type": "telling_not_showing|flat_dialogue|rushed_ending|missing_interiority|summary_instead_of_scene|weak_emotional_arc", "location": "brief description of where", "fix": "specific suggestion" }
+    { "type": "telling_not_showing|flat_dialogue|rushed_ending|missing_interiority|summary_instead_of_scene|weak_emotional_arc|brief_mismatch", "location": "brief description of where", "fix": "specific suggestion" }
   ],
   "strengths": ["what works well — be specific"],
   "emotional_arc_delivered": true|false,
-  "all_domains_present": true|false
+  "all_domains_present": true|false,
+  "brief_adherence": {
+    "task_addressed": true|false,
+    "obstacle_present": true|false,
+    "strength_weaponized": true|false,
+    "emotional_arc_matches": true|false,
+    "location_used": true|false,
+    "phase_appropriate": true|false
+  }
 }
 
 Score guide: 8+ pass, 6-7 has fixable issues, below 6 needs rewrite.
@@ -8815,7 +9055,12 @@ Check specifically:
 2. Does dialogue do double duty (reveal character AND advance plot)?
 3. Is the emotional arc earned — does the ending shift feel real?
 4. Are all 4 life domains (career, romantic, family, friends) present?
-5. Is the ending a "quarter-inch shift" or a neat resolution?` }],
+5. Is the ending a "quarter-inch shift" or a neat resolution?
+6. Does the story actually address the TASK from the brief?
+7. Does the OBSTACLE appear and create real pressure?
+8. Is the specified STRENGTH weaponized (used as a tool, not just mentioned)?
+9. Does the emotional arc match START → END from the brief?
+10. Is the story appropriate for its PHASE (establishment=grounding, pressure=escalation, crisis=breaking point, integration=reckoning)?` }],
       });
 
       const qRaw = qualityCheck.content?.[0]?.text || '';
@@ -8901,6 +9146,16 @@ Return ONLY valid JSON:
           }).catch(() => {});
         }
 
+        // Save relationship changes
+        for (const rc of (extracted.relationship_changes || [])) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'relationship_change',
+            statement: `${(rc.characters || []).join(' ↔ ')}: ${rc.change} (now: ${rc.new_state})`,
+            confidence: 0.85, confirmed: false, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(rc.characters || []), category: `story_${storyNumber}`,
+          }).catch(() => {});
+        }
+
         // Save dramatic irony entries
         for (const di of (extracted.dramatic_irony || [])) {
           await StorytellerMemory.create({
@@ -8951,6 +9206,68 @@ Return ONLY valid JSON:
     // Fire and forget — don't block the story response
     autoExtract();
 
+    // ── Arc tracking update — every story, all parameters ──────────────────
+    const updateArc = async () => {
+      try {
+        if (!updateArcTracking) return;
+        // Detect intimacy and post content from the story text
+        const textLower = storyText.toLowerCase();
+        const intimateGenerated = /\b(kiss|touch|undress|naked|bed together|skin against|mouth on|between her legs|inside her)\b/i.test(storyText);
+        const intimateWithDavid = intimateGenerated && /\bdavid\b/i.test(storyText);
+        const postGenerated = /\b(posted|instagram|tiktok|onlyfans|went live|hit publish|uploaded)\b/i.test(textLower);
+        const phoneAppeared = /\b(phone|notification|screen lit|vibrated|text message|DM|direct message)\b/i.test(storyText);
+
+        await updateArcTracking(db, characterKey, {
+          storyNumber,
+          storyType: taskBrief.story_type,
+          phase: taskBrief.phase,
+          intimateGenerated,
+          intimateWithDavid,
+          postGenerated,
+          phoneAppeared,
+        });
+        console.log(`[arc-tracking] Story ${storyNumber} for ${characterKey}: updated (intimate=${intimateGenerated}, david=${intimateWithDavid}, post=${postGenerated}, phone=${phoneAppeared})`);
+      } catch (err) {
+        console.error('[arc-tracking] update error:', err?.message);
+      }
+    };
+    updateArc();
+
+    // ── Update active story threads — advance threads that were used ────────
+    const updateThreads = async () => {
+      try {
+        const { StoryThread } = require('../models');
+        if (!StoryThread) return;
+        // StoryThread uses characters_involved (JSONB array), not character_key
+        const threads = await StoryThread.findAll({
+          where: { status: 'active' },
+        });
+        // Filter to threads involving this character
+        const charThreads = threads.filter(t => {
+          const involved = t.characters_involved || [];
+          return involved.some(c =>
+            (typeof c === 'string' && c === characterKey) ||
+            (typeof c === 'object' && (c.key === characterKey || c.character_key === characterKey))
+          );
+        });
+        for (const thread of charThreads) {
+          // Check if the story text references this thread's topic
+          const threadKeywords = (thread.thread_name || '').split(/\s+/).filter(w => w.length > 3);
+          const mentioned = threadKeywords.some(kw => storyText.toLowerCase().includes(kw.toLowerCase()));
+          if (mentioned) {
+            const events = thread.key_events || [];
+            events.push({ story_number: storyNumber, title: taskBrief.title, note: 'auto-advanced' });
+            await thread.update({
+              key_events: events,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[update-threads] error:', err?.message);
+      }
+    };
+    updateThreads();
+
     return finish({
       story_number: storyNumber,
       character_key: characterKey,
@@ -8964,6 +9281,7 @@ Return ONLY valid JSON:
       new_character_name: taskBrief.new_character_name || null,
       new_character_role: taskBrief.new_character_role || null,
       auto_extraction: 'in_progress',
+      context_loaded: contextPresence,
       quality_report: typeof qualityReport !== 'undefined' ? qualityReport : null,
     });
 
@@ -9187,6 +9505,81 @@ router.post('/pipeline-generate', optionalAuth, async (req, res) => {
   }
 });
 
+// ─── In-memory background job store ──────────────────────────────────────────
+const backgroundJobs = new Map();
+
+// Clean up completed/failed jobs older than 1 hour
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [id, job] of backgroundJobs) {
+    if (job.completedAt && job.completedAt < cutoff) backgroundJobs.delete(id);
+  }
+}, 10 * 60 * 1000);
+
+// ─── POST /pipeline-generate-background ──────────────────────────────────────
+// Starts generation as a background job. Returns a jobId for polling.
+router.post('/pipeline-generate-background', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
+
+  if (!characterKey || !storyNumber || !taskBrief) {
+    return res.status(400).json({ error: 'characterKey, storyNumber, and taskBrief required' });
+  }
+
+  const jobId = `gen-${characterKey}-${storyNumber}-${Date.now()}`;
+
+  backgroundJobs.set(jobId, {
+    status: 'running',
+    characterKey,
+    storyNumber,
+    startedAt: Date.now(),
+    completedAt: null,
+    result: null,
+    error: null,
+  });
+
+  // Fire and forget — run the pipeline in the background
+  runPipeline({ characterKey, storyNumber, taskBrief, previousStories, useMultiVoice })
+    .then(result => {
+      const job = backgroundJobs.get(jobId);
+      if (job) {
+        job.status = 'completed';
+        job.result = result;
+        job.completedAt = Date.now();
+      }
+    })
+    .catch(err => {
+      console.error(`[pipeline-generate-background] job ${jobId} failed:`, err?.message);
+      const job = backgroundJobs.get(jobId);
+      if (job) {
+        job.status = 'failed';
+        job.error = err?.message || 'Pipeline failed';
+        job.completedAt = Date.now();
+      }
+    });
+
+  return res.json({ jobId, status: 'running' });
+});
+
+// ─── GET /pipeline-generate-status/:jobId ────────────────────────────────────
+// Poll for background generation status.
+router.get('/pipeline-generate-status/:jobId', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  return res.json({
+    jobId: req.params.jobId,
+    status: job.status,
+    storyNumber: job.storyNumber,
+    characterKey: job.characterKey,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    result: job.status === 'completed' ? job.result : null,
+    error: job.status === 'failed' ? job.error : null,
+    durationMs: job.completedAt ? job.completedAt - job.startedAt : Date.now() - job.startedAt,
+  });
+});
+
 // ─── POST /batch-generate ────────────────────────────────────────────────────
 // Generates multiple stories sequentially through the quality pipeline.
 // Uses SSE (Server-Sent Events) to stream progress to the frontend.
@@ -9282,6 +9675,128 @@ router.post('/batch-generate', optionalAuth, async (req, res) => {
   });
 
   res.end();
+});
+
+// ─── POST /batch-generate-background ──────────────────────────────────────────
+// Starts batch generation as a background job. Returns a jobId for polling.
+// Each story is generated sequentially, results accumulate in the job store.
+router.post('/batch-generate-background', optionalAuth, async (req, res) => {
+  const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
+
+  if (!characterKey || !taskBriefs?.length) {
+    return res.status(400).json({ error: 'characterKey and taskBriefs[] required' });
+  }
+
+  const jobId = `batch-${characterKey}-${Date.now()}`;
+  const total = taskBriefs.length;
+
+  backgroundJobs.set(jobId, {
+    status: 'running',
+    type: 'batch',
+    characterKey,
+    total,
+    completed: 0,
+    currentStoryNumber: taskBriefs[0]?.story_number,
+    currentTitle: taskBriefs[0]?.title,
+    startedAt: Date.now(),
+    completedAt: null,
+    results: {},
+    errors: [],
+  });
+
+  // Fire and forget — run all stories sequentially in the background
+  (async () => {
+    const job = backgroundJobs.get(jobId);
+    let previousStories = initialPrevious || [];
+
+    for (const taskBrief of taskBriefs) {
+      const storyNumber = taskBrief.story_number;
+      if (job) {
+        job.currentStoryNumber = storyNumber;
+        job.currentTitle = taskBrief.title;
+      }
+
+      try {
+        const result = await runPipeline({
+          characterKey,
+          storyNumber,
+          taskBrief,
+          previousStories,
+        });
+
+        if (job) {
+          job.completed++;
+          job.results[storyNumber] = result;
+        }
+
+        // Chain context forward
+        if (result?.text) {
+          previousStories = [
+            ...previousStories,
+            {
+              number: storyNumber,
+              title: result.title || taskBrief.title,
+              summary: (result.text || '').slice(0, 800),
+            },
+          ];
+        }
+      } catch (err) {
+        console.error(`[batch-generate-background] story ${storyNumber} failed:`, err?.message);
+        if (job) {
+          job.completed++;
+          job.errors.push({ story_number: storyNumber, error: err?.message });
+        }
+      }
+    }
+
+    if (job) {
+      job.status = 'completed';
+      job.completedAt = Date.now();
+    }
+  })();
+
+  return res.json({ jobId, status: 'running', total });
+});
+
+// ─── GET /batch-generate-status/:jobId ────────────────────────────────────────
+// Poll for background batch generation status.
+router.get('/batch-generate-status/:jobId', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+
+  return res.json({
+    jobId: req.params.jobId,
+    status: job.status,
+    type: job.type,
+    characterKey: job.characterKey,
+    total: job.total,
+    completed: job.completed,
+    currentStoryNumber: job.currentStoryNumber,
+    currentTitle: job.currentTitle,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    results: job.status === 'completed' ? job.results : null,
+    // Send partial results while running so frontend can show stories as they complete
+    completedStories: Object.keys(job.results || {}).map(Number),
+    errors: job.errors,
+    durationMs: job.completedAt ? job.completedAt - job.startedAt : Date.now() - job.startedAt,
+  });
+});
+
+// ─── GET /batch-generate-story/:jobId/:storyNumber ────────────────────────────
+// Fetch a single completed story from a running/completed batch job.
+router.get('/batch-generate-story/:jobId/:storyNumber', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  const story = job.results?.[req.params.storyNumber];
+  if (!story) {
+    return res.status(404).json({ error: 'Story not yet generated' });
+  }
+  return res.json(story);
 });
 
 // ─── POST /check-story-consistency ───────────────────────────────────────────

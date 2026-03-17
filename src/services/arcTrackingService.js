@@ -111,7 +111,14 @@ async function updateArcTracking(db, characterKey, options = {}) {
 // ── Build generation context ──────────────────────────────────────────
 // This is what gets injected into every generation prompt
 async function buildArcContext(db, characterKey) {
-  const arc = await db.CharacterArc.findOne({ where: { character_key: characterKey } });
+  if (!db.CharacterArc) return null;
+  let arc;
+  try {
+    arc = await db.CharacterArc.findOne({ where: { character_key: characterKey } });
+  } catch (err) {
+    console.warn('[buildArcContext] Query failed (table may not exist):', err.message);
+    return null;
+  }
   if (!arc) return null;
 
   return {

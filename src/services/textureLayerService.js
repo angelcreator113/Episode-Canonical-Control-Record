@@ -5,16 +5,30 @@ const { buildArcContext } = require('./arcTrackingService');
 
 const client = new Anthropic();
 const MODEL = 'claude-sonnet-4-20250514';
+const FALLBACK_MODEL = 'claude-sonnet-4-20250514';
 
-// ── Body relationship ENUM → narrative lookup ────────────────────────
-const BODY_RELATIONSHIP_NARRATIVES = {
-  currency:   'Her body is currency. She knows exactly what it is worth and in what rooms.',
-  discipline: 'Her body is something she manages. Control is the relationship.',
-  burden:     'Her body is something she carries. It costs her.',
-  stranger:   'Her body is unfamiliar to her. She lives slightly outside it.',
-  home:       'Her body is where she lives. She is comfortable in it in a way most women are not.',
-  evidence:   'Her body is proof of something. What it proves depends on who is looking.',
-};
+// Safe extraction of text from Claude response
+function extractText(response) {
+  if (!response?.content?.length || !response.content[0]?.text) {
+    throw new Error('AI returned empty or malformed response');
+  }
+  return extractText(response);
+}
+
+// Call Claude with model fallback on retryable errors
+async function callWithFallback(params) {
+  try {
+    return await client.messages.create({ model: MODEL, ...params });
+  } catch (err) {
+    const isRetryable = err.status === 529 || err.status === 503 || err.status === 404;
+    if (isRetryable) {
+      console.warn(`[textureLayerService] ${MODEL} failed (${err.status}), falling back to ${FALLBACK_MODEL}`);
+      await new Promise(r => setTimeout(r, 2000));
+      return await client.messages.create({ model: FALLBACK_MODEL, ...params });
+    }
+    throw err;
+  }
+}
 
 // ── Body relationship ENUM → narrative lookup ────────────────────────
 const BODY_RELATIONSHIP_NARRATIVES = {
@@ -130,15 +144,14 @@ ${typeInstructions[thoughtType]}
 
 Write only the thought. No preamble. No labels. No explanation.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await callWithFallback({
     max_tokens: 400,
     messages: [{ role: 'user', content: prompt }],
   });
 
   return {
     inner_thought_type: thoughtType,
-    inner_thought_text: response.content[0].text.trim(),
+    inner_thought_text: extractText(response),
   };
 }
 
@@ -186,13 +199,12 @@ Generate a conflict scene with FOUR PARTS. Return as JSON only:
 
 Return JSON only. No preamble.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await callWithFallback({
     max_tokens: 600,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const raw = response.content[0].text.trim()
+  const raw = extractText(response)
     .replace(/```json|```/g, '').trim();
 
   return JSON.parse(raw);
@@ -230,13 +242,12 @@ Rules:
 
 Write only the body narrator text. No labels. No preamble. Maximum 80 words.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await callWithFallback({
     max_tokens: 150,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  return { body_narrator_text: response.content[0].text.trim() };
+  return { body_narrator_text: extractText(response) };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -268,13 +279,12 @@ Generate a PRIVATE MOMENT. Return as JSON only:
 
 Return JSON only. No preamble.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await callWithFallback({
     max_tokens: 500,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const raw = response.content[0].text.trim()
+  const raw = extractText(response)
     .replace(/```json|```/g, '').trim();
 
   return JSON.parse(raw);
@@ -319,13 +329,12 @@ Generate the post and three audience responses. Return as JSON only:
 
 Return JSON only. No preamble.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await callWithFallback({
     max_tokens: 500,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const raw = response.content[0].text.trim()
+  const raw = extractText(response)
     .replace(/```json|```/g, '').trim();
 
   return JSON.parse(raw);
@@ -366,13 +375,12 @@ Rules:
 
 Write only the bleed text. No labels. No preamble.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await callWithFallback({
     max_tokens: 200,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  return { bleed_text: response.content[0].text.trim() };
+  return { bleed_text: extractText(response) };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -420,13 +428,12 @@ Examples of what Amber notices (not what to copy — what the tone is):
 
 Return JSON array only. No preamble.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await callWithFallback({
     max_tokens: 600,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const raw = response.content[0].text.trim()
+  const raw = extractText(response)
     .replace(/```json|```/g, '').trim();
 
   return JSON.parse(raw);
