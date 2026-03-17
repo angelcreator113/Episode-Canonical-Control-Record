@@ -9395,6 +9395,128 @@ router.post('/batch-generate', optionalAuth, async (req, res) => {
   res.end();
 });
 
+// ─── POST /batch-generate-background ──────────────────────────────────────────
+// Starts batch generation as a background job. Returns a jobId for polling.
+// Each story is generated sequentially, results accumulate in the job store.
+router.post('/batch-generate-background', optionalAuth, async (req, res) => {
+  const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
+
+  if (!characterKey || !taskBriefs?.length) {
+    return res.status(400).json({ error: 'characterKey and taskBriefs[] required' });
+  }
+
+  const jobId = `batch-${characterKey}-${Date.now()}`;
+  const total = taskBriefs.length;
+
+  backgroundJobs.set(jobId, {
+    status: 'running',
+    type: 'batch',
+    characterKey,
+    total,
+    completed: 0,
+    currentStoryNumber: taskBriefs[0]?.story_number,
+    currentTitle: taskBriefs[0]?.title,
+    startedAt: Date.now(),
+    completedAt: null,
+    results: {},
+    errors: [],
+  });
+
+  // Fire and forget — run all stories sequentially in the background
+  (async () => {
+    const job = backgroundJobs.get(jobId);
+    let previousStories = initialPrevious || [];
+
+    for (const taskBrief of taskBriefs) {
+      const storyNumber = taskBrief.story_number;
+      if (job) {
+        job.currentStoryNumber = storyNumber;
+        job.currentTitle = taskBrief.title;
+      }
+
+      try {
+        const result = await runPipeline({
+          characterKey,
+          storyNumber,
+          taskBrief,
+          previousStories,
+        });
+
+        if (job) {
+          job.completed++;
+          job.results[storyNumber] = result;
+        }
+
+        // Chain context forward
+        if (result?.text) {
+          previousStories = [
+            ...previousStories,
+            {
+              number: storyNumber,
+              title: result.title || taskBrief.title,
+              summary: (result.text || '').slice(0, 800),
+            },
+          ];
+        }
+      } catch (err) {
+        console.error(`[batch-generate-background] story ${storyNumber} failed:`, err?.message);
+        if (job) {
+          job.completed++;
+          job.errors.push({ story_number: storyNumber, error: err?.message });
+        }
+      }
+    }
+
+    if (job) {
+      job.status = 'completed';
+      job.completedAt = Date.now();
+    }
+  })();
+
+  return res.json({ jobId, status: 'running', total });
+});
+
+// ─── GET /batch-generate-status/:jobId ────────────────────────────────────────
+// Poll for background batch generation status.
+router.get('/batch-generate-status/:jobId', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+
+  return res.json({
+    jobId: req.params.jobId,
+    status: job.status,
+    type: job.type,
+    characterKey: job.characterKey,
+    total: job.total,
+    completed: job.completed,
+    currentStoryNumber: job.currentStoryNumber,
+    currentTitle: job.currentTitle,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    results: job.status === 'completed' ? job.results : null,
+    // Send partial results while running so frontend can show stories as they complete
+    completedStories: Object.keys(job.results || {}).map(Number),
+    errors: job.errors,
+    durationMs: job.completedAt ? job.completedAt - job.startedAt : Date.now() - job.startedAt,
+  });
+});
+
+// ─── GET /batch-generate-story/:jobId/:storyNumber ────────────────────────────
+// Fetch a single completed story from a running/completed batch job.
+router.get('/batch-generate-story/:jobId/:storyNumber', optionalAuth, (req, res) => {
+  const job = backgroundJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  const story = job.results?.[req.params.storyNumber];
+  if (!story) {
+    return res.status(404).json({ error: 'Story not yet generated' });
+  }
+  return res.json(story);
+});
+
 // ─── POST /check-story-consistency ───────────────────────────────────────────
 // When a story is edited, check for cascading contradictions in later stories.
 router.post('/check-story-consistency', optionalAuth, async (req, res) => {

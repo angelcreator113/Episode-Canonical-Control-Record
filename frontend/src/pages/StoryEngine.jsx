@@ -1579,10 +1579,11 @@ export default function StoryEngine() {
       return;
     }
 
-    if (!window.confirm(`Generate ${ungenerated.length} remaining stories? This runs the full quality pipeline for each.`)) return;
+    if (!window.confirm(`Generate ${ungenerated.length} remaining stories? This runs the full quality pipeline for each and continues in the background.`)) return;
 
     setGenerating(true);
     setBatchGenProgress({ current: 0, total: ungenerated.length, currentTitle: ungenerated[0]?.title });
+    requestNotificationPermission();
 
     // Build previous stories from already approved/generated
     const previousStories = approvedStories
@@ -1594,7 +1595,7 @@ export default function StoryEngine() {
       }));
 
     try {
-      const response = await fetch(`${API_BASE}/memories/batch-generate`, {
+      const response = await fetch(`${API_BASE}/memories/batch-generate-background`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1604,52 +1605,70 @@ export default function StoryEngine() {
         }),
       });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      const newStories = { ...stories };
+      if (!response.ok) throw new Error('Failed to start batch generation');
+      const { jobId, total } = await response.json();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Store in localStorage for resume on page navigation
+      localStorage.setItem('storyEngine_activeBatchJob', JSON.stringify({
+        jobId,
+        total,
+        characterKey: selectedChar,
+        startedAt: Date.now(),
+      }));
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+      // Track which stories we've already fetched to avoid re-fetching
+      const fetchedStories = new Set();
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
+      // Poll for progress
+      if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+      backgroundPollRef.current = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${API_BASE}/memories/batch-generate-status/${jobId}`);
+          if (!statusRes.ok) return;
+          const job = await statusRes.json();
+
+          // Update progress
+          setBatchGenProgress({
+            current: job.completed,
+            total: job.total,
+            currentTitle: job.currentTitle,
+          });
+
+          // Fetch any newly completed stories we haven't loaded yet
+          const newlyCompleted = (job.completedStories || []).filter(n => !fetchedStories.has(n));
+          for (const storyNum of newlyCompleted) {
             try {
-              const data = JSON.parse(line.slice(6));
-              if (line.includes('event: progress') || data.status === 'generating') {
-                setBatchGenProgress(prev => ({
-                  ...prev,
-                  current: data.completed || prev?.current || 0,
-                  currentTitle: data.title || prev?.currentTitle,
-                }));
+              const storyRes = await fetch(`${API_BASE}/memories/batch-generate-story/${jobId}/${storyNum}`);
+              if (storyRes.ok) {
+                const storyData = await storyRes.json();
+                fetchedStories.add(storyNum);
+                setStories(prev => {
+                  const next = { ...prev, [storyNum]: storyData };
+                  setCachedStories(selectedChar, next, approvedStories);
+                  return next;
+                });
               }
-              if (data.word_count && data.story_number) {
-                // Story completed — update the stories map
-                setBatchGenProgress(prev => ({
-                  ...prev,
-                  current: data.completed || (prev?.current || 0) + 1,
-                }));
-              }
-            } catch { /* skip unparseable SSE lines */ }
+            } catch { /* will retry next poll */ }
           }
-          if (line.startsWith('event: story_complete')) {
-            // Next line will have the data
-          }
-        }
-      }
 
-      // After stream ends, reload all stories from the pipeline results
-      // Re-fetch the story tasks to get fresh data
-      addToast(`Batch generation complete — ${ungenerated.length} stories generated`, 'success');
+          if (job.status === 'completed') {
+            clearInterval(backgroundPollRef.current);
+            backgroundPollRef.current = null;
+            localStorage.removeItem('storyEngine_activeBatchJob');
+            setGenerating(false);
+            setBatchGenProgress(null);
+            const errorCount = job.errors?.length || 0;
+            const successCount = job.total - errorCount;
+            addToast(`Batch complete — ${successCount} stories generated${errorCount ? `, ${errorCount} failed` : ''}`, 'success');
+            sendBrowserNotification('Batch Generation Complete', `${successCount}/${job.total} stories generated successfully.`);
+          }
+        } catch (_) {
+          // Network error — keep polling
+        }
+      }, 4000);
     } catch (e) {
       console.error('Batch generate error:', e);
-      addToast('Batch generation failed — some stories may not have been generated', 'error');
-    } finally {
+      addToast('Batch generation failed to start', 'error');
       setGenerating(false);
       setBatchGenProgress(null);
     }
@@ -1736,25 +1755,95 @@ export default function StoryEngine() {
     }
   }, [backgroundJobId]);
 
-  // On mount: check localStorage for an active background job and resume
+  // On mount: check localStorage for active background jobs and resume
   useEffect(() => {
+    // Check for single story job
     try {
       const saved = localStorage.getItem('storyEngine_activeJob');
-      if (!saved) return;
-      const { jobId, storyNumber, startedAt } = JSON.parse(saved);
-      // Ignore jobs older than 30 minutes
-      if (Date.now() - startedAt > 30 * 60 * 1000) {
-        localStorage.removeItem('storyEngine_activeJob');
-        return;
+      if (saved) {
+        const { jobId, storyNumber, startedAt } = JSON.parse(saved);
+        if (Date.now() - startedAt > 30 * 60 * 1000) {
+          localStorage.removeItem('storyEngine_activeJob');
+        } else {
+          setGenerating(true);
+          setGeneratingNum(storyNumber);
+          setBackgroundJobId(jobId);
+          startTimer();
+          addToast(`Resuming Story ${storyNumber} generation...`, 'info');
+          return; // only one job at a time
+        }
       }
-      // Resume: set state and start polling
-      setGenerating(true);
-      setGeneratingNum(storyNumber);
-      setBackgroundJobId(jobId);
-      startTimer();
-      addToast(`Resuming Story ${storyNumber} generation...`, 'info');
     } catch (_) {
       localStorage.removeItem('storyEngine_activeJob');
+    }
+
+    // Check for batch job
+    try {
+      const saved = localStorage.getItem('storyEngine_activeBatchJob');
+      if (saved) {
+        const { jobId, total, startedAt } = JSON.parse(saved);
+        // Batch jobs can take hours — allow up to 6 hours
+        if (Date.now() - startedAt > 6 * 60 * 60 * 1000) {
+          localStorage.removeItem('storyEngine_activeBatchJob');
+          return;
+        }
+        setGenerating(true);
+        setBatchGenProgress({ current: 0, total, currentTitle: 'Resuming...' });
+        addToast('Resuming batch generation...', 'info');
+
+        // Start polling for batch status
+        const fetchedStories = new Set();
+        if (backgroundPollRef.current) clearInterval(backgroundPollRef.current);
+        backgroundPollRef.current = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`${API_BASE}/memories/batch-generate-status/${jobId}`);
+            if (!statusRes.ok) {
+              // Job not found — it expired or server restarted
+              clearInterval(backgroundPollRef.current);
+              backgroundPollRef.current = null;
+              localStorage.removeItem('storyEngine_activeBatchJob');
+              setGenerating(false);
+              setBatchGenProgress(null);
+              addToast('Batch job expired — server may have restarted', 'warning');
+              return;
+            }
+            const job = await statusRes.json();
+
+            setBatchGenProgress({ current: job.completed, total: job.total, currentTitle: job.currentTitle });
+
+            // Fetch newly completed stories
+            const newlyCompleted = (job.completedStories || []).filter(n => !fetchedStories.has(n));
+            for (const storyNum of newlyCompleted) {
+              try {
+                const storyRes = await fetch(`${API_BASE}/memories/batch-generate-story/${jobId}/${storyNum}`);
+                if (storyRes.ok) {
+                  const storyData = await storyRes.json();
+                  fetchedStories.add(storyNum);
+                  setStories(prev => {
+                    const next = { ...prev, [storyNum]: storyData };
+                    setCachedStories(selectedChar, next, approvedStories);
+                    return next;
+                  });
+                }
+              } catch { /* retry next poll */ }
+            }
+
+            if (job.status === 'completed') {
+              clearInterval(backgroundPollRef.current);
+              backgroundPollRef.current = null;
+              localStorage.removeItem('storyEngine_activeBatchJob');
+              setGenerating(false);
+              setBatchGenProgress(null);
+              const errorCount = job.errors?.length || 0;
+              const successCount = job.total - errorCount;
+              addToast(`Batch complete — ${successCount} stories generated${errorCount ? `, ${errorCount} failed` : ''}`, 'success');
+              sendBrowserNotification('Batch Generation Complete', `${successCount}/${job.total} stories generated.`);
+            }
+          } catch (_) { /* network error — keep polling */ }
+        }, 4000);
+      }
+    } catch (_) {
+      localStorage.removeItem('storyEngine_activeBatchJob');
     }
   }, []);
 
