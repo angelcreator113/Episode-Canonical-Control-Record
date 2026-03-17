@@ -8734,6 +8734,11 @@ Format:
 // Streams step-by-step progress events as the arc is built.
 // Steps: loading_dna → loading_context → building_arc → parsing → saving → done
 router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
+  // Extend timeouts — arc generation calls Claude with max_tokens: 16000
+  // which can take 60-120s. Default proxy timeouts (30-60s) cause 502s.
+  if (req.setTimeout) req.setTimeout(300000);
+  if (res.setTimeout) res.setTimeout(300000);
+
   const { characterKey, forceRegenerate } = req.body;
 
   if (!characterKey) {
@@ -8748,13 +8753,26 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
     'X-Accel-Buffering': 'no', // disable nginx buffering
   });
 
+  // Send keepalive comments every 15s to prevent proxy timeouts
+  const keepalive = setInterval(() => {
+    try { res.write(': keepalive\n\n'); } catch (_) {}
+  }, 15000);
+
+  // Clean up on client disconnect
+  req.on('close', () => clearInterval(keepalive));
+
   const send = (step, data = {}) => {
     res.write(`data: ${JSON.stringify({ step, ...data })}\n\n`);
   };
 
+  const finish = () => {
+    clearInterval(keepalive);
+    res.end();
+  };
+
   const sendError = (message) => {
     res.write(`data: ${JSON.stringify({ step: 'error', message })}\n\n`);
-    res.end();
+    finish();
   };
 
   // Step 1: Load character DNA
@@ -8808,7 +8826,7 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
   // Cache check
   if (!forceRegenerate && seTaskArcCache.has(characterKey)) {
     send('done', { cached: true, ...seTaskArcCache.get(characterKey) });
-    return res.end();
+    return finish();
   }
 
   try {
@@ -9065,7 +9083,7 @@ Format:
 
     // Final: send the full result
     send('done', { cached: false, ...result });
-    res.end();
+    finish();
 
   } catch (err) {
     console.error('[generate-story-tasks-stream] error:', err?.message);
