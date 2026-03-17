@@ -8698,6 +8698,165 @@ Format:
   }
 });
 
+// ─── Narrative variety engine ──────────────────────────────────────────────────
+// Each story gets a unique combination of structure, POV, length, and technique
+// based on its position in the arc, phase, and story type.
+
+function buildCraftRules(storyNumber, taskBrief, dna) {
+  const phase = taskBrief.phase || 'establishment';
+  const storyType = taskBrief.story_type || 'internal';
+  const n = storyNumber || 1;
+
+  // ── Word count varies by phase and story position ──
+  const lengthRanges = {
+    establishment: { min: 2800, max: 4200 },  // shorter, grounding
+    pressure:      { min: 3500, max: 5500 },  // building, expanding
+    crisis:        { min: 4000, max: 6500 },  // longer, the big moments need room
+    integration:   { min: 2000, max: 5000 },  // widest range — some need brevity, some need space
+  };
+  // Key turning points get extra room
+  const isTurningPoint = [8, 9, 10, 11, 18, 19, 20, 21, 28, 29, 30, 31, 36, 37, 38, 39, 46, 47, 48, 49, 50].includes(n);
+  const range = lengthRanges[phase] || lengthRanges.establishment;
+  const wordMin = isTurningPoint ? range.min + 500 : range.min;
+  const wordMax = isTurningPoint ? range.max + 1000 : range.max;
+
+  // ── Domain focus — NOT all four in every story ──
+  const domainInstructions = {
+    establishment: 'All four life domains should be present — the reader is learning this world.',
+    pressure: `Focus on 2-3 domains that are actively colliding. The others can be present as background texture, not as active storylines. Go DEEP on the domains that matter most to this story's task.`,
+    crisis: `Focus on the 1-2 domains under maximum pressure. The others exist only as absence — what she is NOT attending to while this crisis unfolds. Depth over breadth.`,
+    integration: `Let the domains that need it breathe. Some stories in integration should go deep on ONE domain. Others should show how all four have been reshaped. Match the task.`,
+  };
+
+  // ── POV and narrative distance varies ──
+  const povOptions = [
+    { pov: 'close third person — deep in her interior', weight: 60 },
+    { pov: 'close third person — slightly pulled back, observational, almost cinematic', weight: 15 },
+    { pov: 'close third person — so deep it feels like first person without using "I"', weight: 15 },
+    { pov: 'close third person — with one section that shifts to another character\'s perspective (mark the shift with a section break)', weight: 10 },
+  ];
+  // Deterministic selection based on story number
+  const povSeed = (n * 7 + 3) % 100;
+  let povCumulative = 0;
+  let selectedPov = povOptions[0].pov;
+  for (const opt of povOptions) {
+    povCumulative += opt.weight;
+    if (povSeed < povCumulative) { selectedPov = opt.pov; break; }
+  }
+
+  // ── Narrative technique — varies by story type and position ──
+  const techniques = {
+    internal: [
+      'Standard scene-based narrative with deep interiority.',
+      'Open with the ending, then show how she got there. Non-linear — the reader knows the outcome, the tension is in the HOW.',
+      'A single continuous scene — real-time, no cuts, one unbroken sequence. Claustrophobic intimacy.',
+      'Alternate between the present action and a memory. Two timelines braided together, each illuminating the other.',
+      'Interior monologue interrupted by the external world. The story lives in her head, but reality keeps crashing in.',
+    ],
+    collision: [
+      'Standard scene-based narrative with escalating tension.',
+      'Dialogue-driven. This story is 50%+ conversation. The conflict lives in what people say and don\'t say.',
+      'Two parallel storylines that converge. Show both characters approaching the collision from their own angles before they meet.',
+      'The collision happens in the first paragraph. The rest of the story is the aftermath — what the collision broke open.',
+      'Ensemble scene — multiple characters in one space, overlapping conversations, competing needs. Like a dinner party that goes wrong.',
+    ],
+    wrong_win: [
+      'Standard scene-based narrative where success curdles.',
+      'Build the success as triumph for 80% of the story. The wrongness reveals itself in the final 20%. The reader should feel the floor tilt.',
+      'Frame it as a celebration or achievement story — then let one small detail unravel everything. The detail should have been visible all along.',
+      'Tell the story from the perspective of someone watching her win. They see what she can\'t.',
+      'Start with the aftermath of the win. Open with what it cost. Then show the winning.',
+    ],
+  };
+
+  const typeOpts = techniques[storyType] || techniques.internal;
+  const techIndex = (n * 13 + 5) % typeOpts.length;
+  const selectedTechnique = typeOpts[techIndex];
+
+  // ── Ending type varies by phase ──
+  const endingTypes = {
+    establishment: [
+      'End on a quiet shift — something small has changed that the reader notices before the character does.',
+      'End on a question the character asks herself that she couldn\'t have asked at the beginning.',
+      'End on a sensory detail that carries the weight of the whole story.',
+    ],
+    pressure: [
+      'End on an escalation — the last sentence should raise the stakes, not resolve them.',
+      'End mid-action. Cut the story off while something is still happening. Leave the reader leaning forward.',
+      'End on a silence — someone doesn\'t say the thing. The reader knows what it was.',
+    ],
+    crisis: [
+      'End on devastation. Something is broken. Let it be broken. Do not comfort the reader.',
+      'End on a choice. She decides. The reader doesn\'t know yet if she\'s right.',
+      'End on a reversal — what she thought was true isn\'t. The last paragraph reshapes every scene before it.',
+    ],
+    integration: [
+      'End on acceptance — not resolution. She sees something clearly that she couldn\'t before.',
+      'End on tenderness that hurts. A gentle moment that the reader knows is fragile.',
+      'End on the beginning of something new. Not hopeful — real. She is different now and she knows it.',
+      'End on a circular return to where story 1 began — but everything means something different now.',
+    ],
+  };
+
+  const endOpts = endingTypes[phase] || endingTypes.establishment;
+  const endIndex = (n * 11 + 2) % endOpts.length;
+  const selectedEnding = endOpts[endIndex];
+
+  // ── Scene structure varies ──
+  const sceneStructures = {
+    establishment: `SCENE STRUCTURE:
+This story needs 3-5 distinct scenes. Ground each in a specific place and time.
+- Open in the character's body. The task should be visible within the first 300 words.
+- Between scenes: SENSORY TRANSITIONS — ground each change in a physical detail.
+- Alternate TENSION and BREATH.`,
+
+    pressure: `SCENE STRUCTURE:
+This story needs 3-6 scenes. The pressure should build across scene breaks — each scene tighter than the last.
+- Open with forward momentum. Something is already in motion.
+- At least one scene should create collision between domains.
+- The character should be forced to act, choose, or reveal something.
+- Pacing: the screws tighten. Breaths get shorter.`,
+
+    crisis: `SCENE STRUCTURE:
+This story can have 1-7 scenes. Match the crisis. A single unbroken scene of confrontation. Or short sharp cuts between fragmenting realities. Let the structure mirror the pressure.
+- Open in the middle of it. No setup. The reader catches up.
+- At least one moment where the character's control breaks — something leaks through.
+- Structure should feel different from the stories around it. This is the peak. It should read like it.`,
+
+    integration: `SCENE STRUCTURE:
+This story needs 2-5 scenes. The pacing is different here — more breath, more space, but NOT less weight.
+- Open with stillness or aftermath. The storm has passed (or is passing).
+- At least one moment of genuine interiority — not reaction, but understanding.
+- Let scenes breathe. Longer beats. The reader needs to sit with what has happened.`,
+  };
+
+  const dialogueGuide = storyType === 'collision'
+    ? 'Dialogue ratio: 30-50%. This story lives in conversation. Let it.'
+    : storyType === 'wrong_win'
+      ? 'Dialogue ratio: 20-35%. The wrong win needs both action and the words people say when they think things are going well.'
+      : 'Dialogue ratio: 10-30%. This story lives in interiority. Dialogue is punctuation, not the main text.';
+
+  return `CRAFT RULES:
+- Length: ${wordMin}-${wordMax} words.
+- ${domainInstructions[phase]}
+- The TASK creates the clock. The obstacle hits inside the task.
+- The recurring object (${dna.recurring_object}) should appear naturally — not forced. If it doesn't fit this story, let it be absent.
+- POV: ${selectedPov}
+- Do not summarize. Show every scene. Trust the reader.
+- The character's desire line and fear line must both be active throughout.
+- ${dialogueGuide}
+- Every line of dialogue must do double duty — reveal character AND advance plot.
+- New character introductions: name, one physical detail, one line of dialogue that reveals their entire persona. No more than one paragraph.
+
+NARRATIVE APPROACH FOR THIS SPECIFIC STORY:
+${selectedTechnique}
+
+${sceneStructures[phase]}
+
+ENDING:
+${selectedEnding}`;
+}
+
 // ─── POST /generate-story ─────────────────────────────────────────────────────
 // Generates one complete short story (3300-4800 words) from a task brief.
 router.post('/generate-story', optionalAuth, async (req, res) => {
@@ -8944,26 +9103,7 @@ This is ADULT LITERARY FICTION for an adult readership. The author writes books 
 - Do NOT fade to black, cut away, or use euphemisms. If a scene matters enough to be in the story, it matters enough to be shown.
 - This is not erotica — sex serves character and plot. But it IS explicit adult fiction where nothing is sanitized.
 
-CRAFT RULES:
-- Length: 3300-4800 words. No shorter. No longer.
-- All four life domains must be active in every story — career, romantic, family, friends.
-- The TASK creates the clock. The obstacle hits inside the task.
-- The recurring object (${dna.recurring_object}) appears at least once.
-- Write in close third person — deep in her interior, but not first person.
-- End on a shift, not a resolution. The ground moves a quarter inch.
-- Do not summarize. Show every scene. Trust the reader.
-- The character\'s desire line and fear line must both be active throughout.
-- New character introductions: one paragraph only in the story — name, one physical detail, one line of dialogue that reveals their entire persona.
-
-SCENE STRUCTURE (a 3300-4800 word story needs 3-5 distinct scenes):
-- Scene 1 — GROUNDING: Open in the character\'s body, in a specific place. Establish the emotional starting point. The task should be visible within the first 300 words.
-- Scene 2 — COMPLICATION: The obstacle arrives or intensifies. At least one domain collides with another (e.g., career pressure bleeds into romantic tension). This is where the story earns its complexity.
-- Scene 3 — PRESSURE PEAK: The character is forced to act, choose, or reveal something she\'d rather keep hidden. This is where strengths get weaponized. Dialogue should carry emotional weight here.
-- Scene 4 (optional) — AFTERMATH/PIVOT: A quieter beat where the character processes what just happened. Interiority deepens. The recurring object may appear here.
-- Final scene — SHIFT: Not resolution. Something has moved — an understanding, a loss, a micro-betrayal, a tenderness she didn\'t expect. The reader feels the ground shift under them.
-- Between scenes: use SENSORY TRANSITIONS — don\'t just jump-cut. Ground each scene change in a physical detail (light changing, a sound, a smell, a body sensation).
-- Pacing rule: alternate TENSION and BREATH. After a high-pressure scene, give the reader (and character) a moment. After a quiet moment, tighten the screws.
-- Dialogue ratio: aim for 30-40% dialogue in collision stories, 15-25% in internal stories. Every line of dialogue must do double duty — reveal character AND advance plot.
+${buildCraftRules(storyNumber, taskBrief, dna)}
 
 MULTI-PLOT & CONTINUITY RULES:
 - If WORLD STATE is provided, naturally reference or intersect with other characters' storylines where organic. Don't force crossovers — let shared spaces (the same city, industry, social circle) create natural collisions.
@@ -9095,7 +9235,8 @@ Extract ALL of the following from the story text:
 4. DRAMATIC IRONY — things the READER now knows that one or more characters do NOT know
 5. OPEN MYSTERIES — new questions planted that the reader will want answered
 6. FORESHADOWING SEEDS — details, images, or moments that feel like they could pay off later
-7. SETTING DETAILS — any new sensory details about locations that should be remembered
+7. SETTING DETAILS — any new or enriched locations that appear in the story
+8. WORLD EVENTS — significant events that happen in the story that affect the world state
 
 Return ONLY valid JSON:
 {
@@ -9105,6 +9246,8 @@ Return ONLY valid JSON:
   "dramatic_irony": [{ "statement": "what the reader knows that characters don't", "characters_unaware": ["who doesn't know"] }],
   "open_mysteries": [{ "question": "what the reader is now wondering", "planted_in": "brief description of the moment" }],
   "foreshadow_seeds": [{ "detail": "the image/moment/detail", "potential_payoff": "what it could connect to later" }],
+  "new_locations": [{ "name": "location name", "description": "sensory description", "location_type": "interior|exterior|digital|vehicle", "narrative_role": "what role this place plays" }],
+  "world_events": [{ "event_name": "short name", "event_description": "what happened", "event_type": "plot|emotional|social|professional", "impact_level": "minor|moderate|major", "characters_involved": ["character_keys"] }],
   "therapy_opening": "one sentence a therapist could use to open the next session"
 }`;
 
@@ -9193,11 +9336,48 @@ Return ONLY valid JSON:
           }).catch(() => {});
         }
 
+        // Save new locations to WorldLocation
+        const { WorldLocation, WorldTimelineEvent } = require('../models');
+        for (const loc of (extracted.new_locations || [])) {
+          if (!loc.name) continue;
+          // Only create if this location doesn't already exist
+          const existing = await WorldLocation.findOne({ where: { name: loc.name } }).catch(() => null);
+          if (!existing) {
+            await WorldLocation.create({
+              name: loc.name,
+              description: loc.description || null,
+              location_type: ['interior', 'exterior', 'digital', 'vehicle'].includes(loc.location_type) ? loc.location_type : 'interior',
+              narrative_role: loc.narrative_role || null,
+              associated_characters: [characterKey],
+              sensory_details: loc.description ? { from_story: loc.description } : {},
+              metadata: { source_story: storyNumber, auto_extracted: true },
+            }).catch(e => console.warn('[auto-extract] location create error:', e?.message));
+          }
+        }
+
+        // Save world events to WorldTimelineEvent
+        for (const evt of (extracted.world_events || [])) {
+          if (!evt.event_name) continue;
+          await WorldTimelineEvent.create({
+            event_name: evt.event_name,
+            event_description: evt.event_description || null,
+            event_type: ['plot', 'emotional', 'social', 'professional'].includes(evt.event_type) ? evt.event_type : 'plot',
+            impact_level: ['minor', 'moderate', 'major'].includes(evt.impact_level) ? evt.impact_level : 'minor',
+            characters_involved: evt.characters_involved || [characterKey],
+            story_date: `Story ${storyNumber}`,
+            sort_order: storyNumber,
+            is_canon: true,
+            metadata: { source_story: storyNumber, character_key: characterKey, auto_extracted: true },
+          }).catch(e => console.warn('[auto-extract] event create error:', e?.message));
+        }
+
+        const locationCount = (extracted.new_locations || []).length;
+        const eventCount = (extracted.world_events || []).length;
         console.log(`[auto-extract] Story ${storyNumber} for ${characterKey}: extracted ${
           (extracted.pain_points?.length || 0) + (extracted.belief_shifts?.length || 0) +
           (extracted.dramatic_irony?.length || 0) + (extracted.open_mysteries?.length || 0) +
           (extracted.foreshadow_seeds?.length || 0)
-        } continuity items`);
+        } continuity items, ${locationCount} locations, ${eventCount} world events`);
       } catch (err) {
         console.error('[auto-extract] error:', err?.message);
       }
@@ -9267,6 +9447,43 @@ Return ONLY valid JSON:
       }
     };
     updateThreads();
+
+    // ── Auto-register new character if taskBrief says so ───────────────────
+    const registerNewCharacter = async () => {
+      try {
+        if (!taskBrief.new_character || !taskBrief.new_character_name) return;
+        const { RegistryCharacter } = require('../models');
+        const newKey = taskBrief.new_character_name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        // Check if already registered
+        const exists = await RegistryCharacter.findOne({ where: { character_key: newKey } });
+        if (exists) {
+          console.log(`[auto-register] Character "${newKey}" already exists — skipping`);
+          return;
+        }
+        // Find the registry_id from the current character
+        const parentChar = await RegistryCharacter.findOne({ where: { character_key: characterKey } });
+        if (!parentChar) return;
+
+        const roleType = (taskBrief.new_character_role || '').toLowerCase();
+        const validRoles = ['protagonist', 'pressure', 'mirror', 'support', 'shadow', 'special'];
+        const mappedRole = validRoles.includes(roleType) ? roleType : 'pressure';
+
+        await RegistryCharacter.create({
+          registry_id: parentChar.registry_id,
+          character_key: newKey,
+          display_name: taskBrief.new_character_name,
+          role_type: mappedRole,
+          role_label: taskBrief.new_character_role || null,
+          status: 'draft',
+          appearance_mode: 'on_page',
+          metadata: { auto_registered: true, source_story: storyNumber, introduced_by: characterKey },
+        });
+        console.log(`[auto-register] Created new character "${newKey}" (${taskBrief.new_character_name}) as ${mappedRole} from story ${storyNumber}`);
+      } catch (err) {
+        console.warn('[auto-register] error:', err?.message);
+      }
+    };
+    registerNewCharacter();
 
     return finish({
       story_number: storyNumber,
@@ -9354,6 +9571,34 @@ Return ONLY the revised story. Begin with the title, then the story. No preamble
     if (!revisedText || revisedText.length < 500) {
       return finish({ error: 'Revision produced insufficient output — try again.' });
     }
+
+    // Persist revision to StoryRevision table
+    try {
+      const db = require('../models');
+      if (db.StoryRevision && characterKey && storyNumber) {
+        // Find the StorytellerStory to get its UUID
+        const parentStory = await db.StorytellerStory?.findOne({
+          where: { character_key: characterKey, story_number: storyNumber },
+          attributes: ['id'],
+        }).catch(() => null);
+        if (parentStory) {
+          const lastRev = await db.StoryRevision.findOne({
+            where: { story_id: parentStory.id },
+            order: [['revision_number', 'DESC']],
+          }).catch(() => null);
+          await db.StoryRevision.create({
+            story_id: parentStory.id,
+            revision_number: (lastRev?.revision_number || 0) + 1,
+            text: revisedText,
+            word_count: revisedText.split(/\s+/).length,
+            revision_type: 'ai_rewrite',
+            revision_source: 'quality_gate',
+            change_summary: editorialNotes?.slice(0, 500),
+            metadata: { quality_score_before: qualityReport?.score || null },
+          }).catch(e => console.warn('[revise-story] revision save error:', e?.message));
+        }
+      }
+    } catch { /* StoryRevision table may not exist yet */ }
 
     return finish({
       story_number: storyNumber || null,
