@@ -7178,12 +7178,18 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
       } catch (fallbackErr) {
         // Last resort: no include, no association
         console.warn('[story-engine-characters] fallback also failed, trying bare query:', fallbackErr.message);
-        characters = await RegistryCharacter.findAll({
-          where: {
-            status: { [Op.in]: ['accepted', 'finalized'] },
-          },
-          order: [['display_name', 'ASC']],
-        });
+        try {
+          characters = await RegistryCharacter.findAll({
+            where: {
+              status: { [Op.in]: ['accepted', 'finalized'] },
+            },
+            order: [['display_name', 'ASC']],
+          });
+        } catch (bareErr) {
+          // Table may not exist yet — return empty results instead of 500
+          console.warn('[story-engine-characters] bare query also failed (table may not exist):', bareErr.message);
+          return res.json({ success: true, worlds: {}, total: 0 });
+        }
       }
     }
 
