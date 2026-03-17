@@ -8403,12 +8403,22 @@ router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) =
     if (existingStories.length > 0) {
       const tasks = existingStories.map(s => {
         const brief = s.task_brief || {};
+        // Determine phase from brief, story, or story_number position
+        const inferredPhase = brief.phase || s.phase || (
+          s.story_number <= 10 ? 'establishment' :
+          s.story_number <= 25 ? 'pressure' :
+          s.story_number <= 40 ? 'crisis' : 'integration'
+        );
+        // Infer story type from brief, story, or scene_brief
+        const inferredType = brief.story_type || s.story_type || (
+          s.scene_brief ? 'eval_scene' : 'internal'
+        );
         return {
           story_number: s.story_number,
-          title: brief.title || s.title,
-          phase: brief.phase || s.phase,
-          story_type: brief.story_type || s.story_type,
-          task: brief.task || `Story ${s.story_number}`,
+          title: brief.title || s.title || `Story ${s.story_number}`,
+          phase: inferredPhase,
+          story_type: inferredType,
+          task: brief.task || s.scene_brief || `Story ${s.story_number}`,
           obstacle: brief.obstacle || '',
           domains_active: brief.domains_active || [],
           strength_weaponized: brief.strength_weaponized || '',
@@ -8422,6 +8432,8 @@ router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) =
           new_character_role: s.new_character_role || null,
           therapy_seeds: brief.therapy_seeds || [],
           opening_line: brief.opening_line || s.opening_line || '',
+          // Track whether this task has a full brief or was reconstructed
+          has_full_brief: !!(brief.task && brief.obstacle),
         };
       });
       const result = {
@@ -9276,7 +9288,7 @@ Return ONLY valid JSON:
             character_id: charId, type: 'pain_point', statement: pp.statement,
             confidence: 0.85, confirmed: false, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify([pp.category]), category: pp.category, coaching_angle: pp.coaching_angle,
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] pain_point save error:`, e?.message));
         }
 
         // Save belief shifts
@@ -9286,35 +9298,73 @@ Return ONLY valid JSON:
             statement: `${bs.before} → ${bs.after} (triggered by: ${bs.trigger})`,
             confidence: 0.80, confirmed: false, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify(['belief_shift']), category: 'belief_shift',
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] belief_shift save error:`, e?.message));
         }
 
-        // Save relationship changes
+        // Save relationship changes — to both StorytellerMemory and CharacterRelationship
+        const { CharacterRelationship } = require('../models');
         for (const rc of (extracted.relationship_changes || [])) {
           await StorytellerMemory.create({
             character_id: charId, type: 'relationship_change',
             statement: `${(rc.characters || []).join(' ↔ ')}: ${rc.change} (now: ${rc.new_state})`,
             confidence: 0.85, confirmed: false, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify(rc.characters || []), category: `story_${storyNumber}`,
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] relationship_change save error:`, e?.message));
+
+          // Also update the CharacterRelationship model if both characters exist
+          if (CharacterRelationship && rc.characters?.length >= 2) {
+            try {
+              const charA = await RegistryCharacter.findOne({ where: { character_key: rc.characters[0] } });
+              const charB = await RegistryCharacter.findOne({ where: { character_key: rc.characters[1] } });
+              if (charA && charB) {
+                const rel = await CharacterRelationship.findOne({
+                  where: {
+                    [require('sequelize').Op.or]: [
+                      { character_id_a: charA.id, character_id_b: charB.id },
+                      { character_id_a: charB.id, character_id_b: charA.id },
+                    ],
+                  },
+                });
+                if (rel) {
+                  // Update existing relationship with new state
+                  const updates = {};
+                  if (rc.new_state) updates.situation = rc.new_state;
+                  if (rc.change) updates.notes = `${rel.notes ? rel.notes + '\n' : ''}[Story ${storyNumber}] ${rc.change}`;
+                  await rel.update(updates);
+                } else {
+                  // Create new relationship record
+                  await CharacterRelationship.create({
+                    character_id_a: charA.id,
+                    character_id_b: charB.id,
+                    relationship_type: rc.new_state || 'acquaintance',
+                    situation: rc.change,
+                    notes: `[Story ${storyNumber}] ${rc.change}`,
+                    confirmed: false,
+                  });
+                }
+              }
+            } catch (relErr) {
+              console.warn(`[auto-extract] CharacterRelationship update error:`, relErr?.message);
+            }
+          }
         }
 
         // Save dramatic irony entries
         for (const di of (extracted.dramatic_irony || [])) {
           await StorytellerMemory.create({
             character_id: charId, type: 'dramatic_irony', statement: di.statement,
-            confidence: 0.85, confirmed: true, source_ref: characterKey,
+            confidence: 0.85, confirmed: true, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify(di.characters_unaware || []), category: `story_${storyNumber}`,
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] dramatic_irony save error:`, e?.message));
         }
 
         // Save open mysteries
         for (const om of (extracted.open_mysteries || [])) {
           await StorytellerMemory.create({
             character_id: charId, type: 'open_mystery', statement: om.question,
-            confidence: 0.80, confirmed: true, source_ref: characterKey,
-            tags: JSON.stringify(['mystery']), category: `${storyNumber}`,
-          }).catch(() => {});
+            confidence: 0.80, confirmed: true, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(['mystery']), category: `story_${storyNumber}`,
+          }).catch(e => console.warn(`[auto-extract] open_mystery save error:`, e?.message));
         }
 
         // Save foreshadowing seeds
@@ -9322,9 +9372,9 @@ Return ONLY valid JSON:
           await StorytellerMemory.create({
             character_id: charId, type: 'foreshadow_seed',
             statement: `${fs.detail} — potential: ${fs.potential_payoff}`,
-            confidence: 0.75, confirmed: true, source_ref: characterKey,
-            tags: JSON.stringify(['foreshadow']), category: `${storyNumber}`,
-          }).catch(() => {});
+            confidence: 0.75, confirmed: true, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(['foreshadow']), category: `story_${storyNumber}`,
+          }).catch(e => console.warn(`[auto-extract] foreshadow save error:`, e?.message));
         }
 
         // Save therapy opening
@@ -9333,7 +9383,7 @@ Return ONLY valid JSON:
             character_id: charId, type: 'therapy_opening', statement: extracted.therapy_opening,
             confidence: 0.90, confirmed: false, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify(['therapy_opening']), category: 'therapy_opening',
-          }).catch(() => {});
+          }).catch(e => console.warn(`[auto-extract] therapy_opening save error:`, e?.message));
         }
 
         // Save new locations to WorldLocation

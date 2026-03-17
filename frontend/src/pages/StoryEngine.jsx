@@ -130,9 +130,10 @@ const PHASE_LABELS = {
 };
 
 const TYPE_ICONS = {
-  internal:  '◎',
-  collision: '⊕',
-  wrong_win: '◇',
+  internal:   '◎',
+  collision:  '⊕',
+  wrong_win:  '◇',
+  eval_scene: '📊',
 };
 
 // ─── World toggle ─────────────────────────────────────────────────────────────
@@ -660,26 +661,26 @@ function StoryPanel({
       <div className="se-story-brief-header" style={{ borderColor: charColor }}>
         <div className="se-story-brief-num">Story {task.story_number}</div>
         <div className="se-story-brief-title">{task.title}</div>
-        <div className="se-story-brief-phase" style={{ color: PHASE_COLORS[task.phase] }}>
-          {PHASE_LABELS[task.phase]} · {task.story_type}
+        <div className="se-story-brief-phase" style={{ color: PHASE_COLORS[task.phase] || '#888' }}>
+          {PHASE_LABELS[task.phase] || task.phase || '—'} · {task.story_type?.replace(/_/g, ' ') || '—'}
         </div>
       </div>
       <div className="se-story-brief-grid">
         <div className="se-story-brief-field">
           <div className="se-story-brief-label">Task</div>
-          <div className="se-story-brief-value">{task.task}</div>
+          <div className="se-story-brief-value">{task.task || '—'}</div>
         </div>
         <div className="se-story-brief-field">
           <div className="se-story-brief-label">Obstacle</div>
-          <div className="se-story-brief-value">{task.obstacle}</div>
+          <div className="se-story-brief-value">{task.obstacle || '—'}</div>
         </div>
         <div className="se-story-brief-field">
           <div className="se-story-brief-label">Strength Weaponized</div>
-          <div className="se-story-brief-value">{task.strength_weaponized}</div>
+          <div className="se-story-brief-value">{task.strength_weaponized || '—'}</div>
         </div>
         <div className="se-story-brief-field">
           <div className="se-story-brief-label">Opening Line</div>
-          <div className="se-story-brief-value se-story-brief-opening">"{task.opening_line}"</div>
+          <div className="se-story-brief-value se-story-brief-opening">{task.opening_line ? `"${task.opening_line}"` : '—'}</div>
         </div>
       </div>
       {task.new_character && (
@@ -2578,13 +2579,13 @@ export default function StoryEngine() {
                 </div>
                 <div className="se-insp-row">
                   <span className="se-insp-key">Phase</span>
-                  <span className="se-insp-val" style={{ color: PHASE_COLORS[activeTask.phase] }}>
-                    {PHASE_LABELS[activeTask.phase]}
+                  <span className="se-insp-val" style={{ color: PHASE_COLORS[activeTask.phase] || '#888' }}>
+                    {PHASE_LABELS[activeTask.phase] || activeTask.phase || '—'}
                   </span>
                 </div>
                 <div className="se-insp-row">
                   <span className="se-insp-key">Type</span>
-                  <span className="se-insp-val">{TYPE_ICONS[activeTask.story_type]} {activeTask.story_type?.replace('_', ' ')}</span>
+                  <span className="se-insp-val">{TYPE_ICONS[activeTask.story_type] || '○'} {activeTask.story_type?.replace(/_/g, ' ') || '—'}</span>
                 </div>
                 {activeStory && (
                   <>
