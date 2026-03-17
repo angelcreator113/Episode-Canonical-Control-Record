@@ -1500,6 +1500,53 @@ html, body {
   display: none;
 }
 
+/* Navigator-fitted arc generation status stepper */
+.se-navigator .se-arc-status {
+  padding: 14px 8px 10px;
+  gap: 10px;
+}
+
+.se-navigator .se-arc-status-steps {
+  max-width: 100%;
+}
+
+.se-navigator .se-arc-status-step {
+  flex-shrink: 1;
+  min-width: 0;
+  gap: 4px;
+}
+
+.se-navigator .se-arc-status-dot {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+}
+
+.se-navigator .se-arc-status-check {
+  font-size: 9px;
+}
+
+.se-navigator .se-arc-status-connector {
+  min-width: 8px;
+  margin-bottom: 16px;
+}
+
+.se-navigator .se-arc-status-label {
+  font-size: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 48px;
+  text-align: center;
+}
+
+.se-navigator .se-arc-status-message {
+  font-size: 11px;
+}
+
+.se-navigator .se-arc-status-elapsed {
+  font-size: 10px;
+}
+
 /* Inspector-fitted stat overrides */
 .se-inspector .se-stats-dashboard {
   padding: 0;
@@ -1511,13 +1558,22 @@ html, body {
 
 .se-inspector .se-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
 }
 
 .se-inspector .se-stat-card {
+  grid-column: span 2;
   padding: 8px 6px;
   min-width: 0;
+}
+
+.se-inspector .se-stat-card:nth-child(4) {
+  grid-column: 1 / span 3;
+}
+
+.se-inspector .se-stat-card:nth-child(5) {
+  grid-column: 4 / span 3;
 }
 
 .se-inspector .se-stat-value {
