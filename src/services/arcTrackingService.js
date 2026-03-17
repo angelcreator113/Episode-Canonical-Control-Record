@@ -119,7 +119,22 @@ async function buildArcContext(db, characterKey) {
     console.warn('[buildArcContext] Query failed (table may not exist):', err.message);
     return null;
   }
-  if (!arc) return null;
+  // Auto-initialize arc for new characters instead of returning null
+  if (!arc) {
+    try {
+      arc = await db.CharacterArc.create({
+        character_key: characterKey,
+        wound_clock: 75,
+        stakes_level: 1,
+        visibility_score: 20,
+        david_silence_counter: 0,
+        phone_appearances: 0,
+      });
+    } catch (createErr) {
+      console.warn('[buildArcContext] Could not auto-create arc:', createErr.message);
+      return null;
+    }
+  }
 
   return {
     wound_clock: arc.wound_clock,

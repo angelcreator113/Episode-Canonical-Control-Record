@@ -7163,17 +7163,28 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
     } catch (queryErr) {
       // Fallback: columns like sort_order or world may not exist yet
       console.warn('[story-engine-characters] full query failed, trying fallback:', queryErr.message);
-      characters = await RegistryCharacter.findAll({
-        where: {
-          status: { [Op.in]: ['accepted', 'finalized'] },
-        },
-        include: [{
-          model: CharacterRegistry,
-          as: 'registry',
-          attributes: ['id', 'title', 'book_tag'],
-        }],
-        order: [['display_name', 'ASC']],
-      });
+      try {
+        characters = await RegistryCharacter.findAll({
+          where: {
+            status: { [Op.in]: ['accepted', 'finalized'] },
+          },
+          include: [{
+            model: CharacterRegistry,
+            as: 'registry',
+            attributes: ['id', 'title', 'book_tag'],
+          }],
+          order: [['display_name', 'ASC']],
+        });
+      } catch (fallbackErr) {
+        // Last resort: no include, no association
+        console.warn('[story-engine-characters] fallback also failed, trying bare query:', fallbackErr.message);
+        characters = await RegistryCharacter.findAll({
+          where: {
+            status: { [Op.in]: ['accepted', 'finalized'] },
+          },
+          order: [['display_name', 'ASC']],
+        });
+      }
     }
 
     // Group by world column — never show 'unknown'
@@ -8456,6 +8467,11 @@ router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) =
 // ─── POST /generate-story-tasks ───────────────────────────────────────────────
 // Generates the 50-story task arc for a character before stories are written.
 router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
+  // Extend request timeout — this endpoint calls Claude with max_tokens: 16000
+  // which can take 60-90s. Default proxy timeouts (30-60s) cause 504s.
+  if (req.setTimeout) req.setTimeout(300000); // 5 minutes
+  if (res.setTimeout) res.setTimeout(300000);
+
   const { characterKey, forceRegenerate } = req.body;
 
   if (!characterKey) {
@@ -8516,20 +8532,18 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
   }
 
   try {
-    // Load rich profile from DB (for both hardcoded and dynamic characters)
-    const dbProfile = dynamicChar ? await loadCharacterProfile(characterKey) : await loadCharacterProfile(characterKey);
+    // Load all context in parallel to reduce total latency
+    const [dbProfile, storyMemories, worldState] = await Promise.all([
+      loadCharacterProfile(characterKey),
+      loadStoryMemories(characterKey),
+      loadWorldState(characterKey, dna.world),
+    ]);
     const profileSection = dbProfile
       ? `\n\nCHARACTER PROFILE FROM REGISTRY (use this to enrich every story brief — this is who they really are):\n${dbProfile}`
       : '';
-
-    // Load existing story memories to inform arc planning
-    const storyMemories = await loadStoryMemories(characterKey);
     const memoriesSection = storyMemories
       ? `\n\n${storyMemories}`
       : '';
-
-    // Load cross-character world state for collision story planning
-    const worldState = await loadWorldState(characterKey, dna.world);
     const worldSection = worldState
       ? `\n\n${worldState}`
       : '';
@@ -8648,7 +8662,7 @@ Format:
       if (isRetryable) {
         await new Promise(r => setTimeout(r, 2000));
         response = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 16000,
           system: systemPrompt,
           messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
