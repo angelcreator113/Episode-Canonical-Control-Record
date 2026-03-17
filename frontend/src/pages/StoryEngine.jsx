@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from '../components/StoryReviewPanel';
 import WriteModeAIWriter from '../components/WriteModeAIWriter';
@@ -97,7 +97,6 @@ function StoryPanel({
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
   const [saveStatus, setSaveStatus] = useState('saved');
-  const [evaluating, setEvaluating] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
 
   useEffect(() => {
@@ -195,26 +194,6 @@ function StoryPanel({
       .catch(err => console.warn('thread fetch failed:', err.message));
   }, [story?.story_number, selectedCharKey]);
 
-  const handleEvaluate = useCallback(async () => {
-    const id = story?.db_id || story?.id;
-    if (!id || evaluating) return;
-    setEvaluating(true);
-    try {
-      const res = await fetch(`${API_BASE}/memories/evaluate-stories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story_id: id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Evaluation failed');
-      if (data.evaluation) setEvalScore(data.evaluation);
-    } catch (err) {
-      console.error('evaluate failed:', err.message);
-    } finally {
-      setEvaluating(false);
-    }
-  }, [story?.db_id, story?.id, evaluating]);
-
   if (!story && !task) return (
     <div className={`se-story-panel se-story-section${storiesMinimized ? ' se-story-section--minimized' : ''}`}>
       <div className="se-story-section-header" onClick={() => onToggleStoriesMinimized()} role="button" tabIndex={0}>
@@ -283,11 +262,10 @@ function StoryPanel({
         <button
           className="se-btn"
           style={{ background: '#3D7A9B', color: '#fff', padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none' }}
-          onClick={handleEvaluate}
-          disabled={evaluating}
+          onClick={() => onEvaluate?.()}
           title="Evaluate with multi-voice scoring"
         >
-          {evaluating ? 'Evaluating…' : 'Evaluate'}
+          Evaluate
         </button>
       </div>
     </div>
@@ -386,8 +364,8 @@ function StoryPanel({
             <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
               {savingForLater ? 'Saving…' : 'Save for Later'}
             </button>
-            <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={handleEvaluate} disabled={evaluating} title="Evaluate with multi-voice scoring">
-              {evaluating ? 'Evaluating…' : 'Evaluate'}
+            <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={() => onEvaluate?.()} title="Evaluate with multi-voice scoring">
+              Evaluate
             </button>
             <button className="se-btn se-btn-approve" style={{ background: charColor }} onClick={() => onApprove(story, true)}>
               {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
@@ -834,7 +812,21 @@ export default function StoryEngine() {
               hasPrev={engine.hasPrevStory}
               hasNext={engine.hasNextStory}
               onExportStory={engine.handleExportStory}
-              onEvaluate={() => {}}
+              onEvaluate={() => {
+                const params = new URLSearchParams();
+                if (engine.activeStory?.text) params.set('text', '1');
+                if (engine.activeTask?.task) params.set('brief', engine.activeTask.task);
+                const charData = engine.selectedChar && engine.CHARACTERS[engine.selectedChar];
+                const world = charData?.world;
+                const sceneChars = world ? Object.keys(engine.CHARACTERS).filter(k => engine.CHARACTERS[k].world === world) : engine.selectedChar ? [engine.selectedChar] : [];
+                if (sceneChars.length) params.set('chars', sceneChars.join(','));
+                if (charData?.registry_id) params.set('registry_id', charData.registry_id);
+                const charNames = {};
+                sceneChars.forEach(k => { charNames[k] = engine.CHARACTERS[k]?.display_name || k; });
+                navigate(`/story-evaluation?${params.toString()}`, {
+                  state: { storyText: engine.activeStory?.text, taskBrief: engine.activeTask, activeWorld: engine.activeWorld || world, charNames, povChar: engine.selectedChar },
+                });
+              }}
               charObj={engine.char}
               selectedCharKey={engine.selectedChar}
               activeWorld={engine.activeWorld}
