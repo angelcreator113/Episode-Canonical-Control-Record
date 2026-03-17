@@ -1877,3 +1877,4 @@ module.exports.SocialProfileRelationship = SocialProfileRelationship;
 module.exports.AIUsageLog = AIUsageLog;
 module.exports.CharacterArc = CharacterArc;
 module.exports.StoryTexture = StoryTexture;
+module.exports.StoryTaskArc = StoryTaskArc;
