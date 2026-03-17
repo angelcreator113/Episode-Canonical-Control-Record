@@ -8803,8 +8803,8 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
           } else {
             remainingOlder = older;
           }
-        } catch {
-          // Fallback to recency if relevance check fails
+        } catch (relErr) {
+          console.warn(`[relevance-check] Story ${storyNumber} for ${characterKey} failed: ${relErr?.message} — falling back to recency`);
           remainingOlder = older;
         }
       } else {
@@ -9143,6 +9143,16 @@ Return ONLY valid JSON:
             statement: `${bs.before} → ${bs.after} (triggered by: ${bs.trigger})`,
             confidence: 0.80, confirmed: false, source_ref: `story_${storyNumber}`,
             tags: JSON.stringify(['belief_shift']), category: 'belief_shift',
+          }).catch(() => {});
+        }
+
+        // Save relationship changes
+        for (const rc of (extracted.relationship_changes || [])) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'relationship_change',
+            statement: `${(rc.characters || []).join(' ↔ ')}: ${rc.change} (now: ${rc.new_state})`,
+            confidence: 0.85, confirmed: false, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(rc.characters || []), category: `story_${storyNumber}`,
           }).catch(() => {});
         }
 
