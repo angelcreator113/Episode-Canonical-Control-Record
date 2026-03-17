@@ -8239,19 +8239,23 @@ async function loadTherapyProfile(characterKey) {
     if (!profile) return null;
 
     const parts = [];
-    if (profile.core_wound) parts.push(`Core wound: ${profile.core_wound}`);
-    if (profile.attachment_style) parts.push(`Attachment style: ${profile.attachment_style}`);
-    if (profile.defense_mechanisms) {
-      const mechs = Array.isArray(profile.defense_mechanisms) ? profile.defense_mechanisms : [profile.defense_mechanisms];
-      parts.push(`Defense mechanisms: ${mechs.join(', ')}`);
-    }
-    if (profile.therapeutic_direction) parts.push(`Therapeutic direction: ${profile.therapeutic_direction}`);
-    if (profile.psychological_age) parts.push(`Psychological age: ${profile.psychological_age}`);
-    if (profile.shadow_traits) {
-      const shadows = Array.isArray(profile.shadow_traits) ? profile.shadow_traits : [profile.shadow_traits];
-      parts.push(`Shadow traits (hidden from herself): ${shadows.join(', ')}`);
-    }
-    if (profile.coping_patterns) parts.push(`Coping patterns: ${profile.coping_patterns}`);
+    if (profile.primary_defense) parts.push(`Primary defense mechanism: ${profile.primary_defense}`);
+    // emotional_state is JSONB — extract meaningful fields
+    const emo = profile.emotional_state || {};
+    if (emo.current_state) parts.push(`Current emotional state: ${emo.current_state}`);
+    if (emo.dominant_emotion) parts.push(`Dominant emotion: ${emo.dominant_emotion}`);
+    if (emo.vulnerability_level) parts.push(`Vulnerability level: ${emo.vulnerability_level}`);
+    // baseline is JSONB — psychological baseline
+    const base = profile.baseline || {};
+    if (base.attachment_style) parts.push(`Attachment style: ${base.attachment_style}`);
+    if (base.core_wound) parts.push(`Core wound: ${base.core_wound}`);
+    if (base.coping_patterns) parts.push(`Coping patterns: ${Array.isArray(base.coping_patterns) ? base.coping_patterns.join(', ') : base.coping_patterns}`);
+    // known = things the character knows about herself
+    if (profile.known?.length) parts.push(`What she knows about herself: ${profile.known.join('; ')}`);
+    // sensed = things she senses but can't articulate
+    if (profile.sensed?.length) parts.push(`What she senses but can't name: ${profile.sensed.join('; ')}`);
+    // never_knows = blind spots
+    if (profile.never_knows?.length) parts.push(`Blind spots (she will never see these): ${profile.never_knows.join('; ')}`);
 
     if (!parts.length) return null;
 
@@ -8265,11 +8269,18 @@ async function loadTherapyProfile(characterKey) {
 // ─── Load character growth logs ──────────────────────────────────────────────
 async function loadGrowthLogs(characterKey) {
   try {
-    const { CharacterGrowthLog } = require('../models');
+    const { CharacterGrowthLog, RegistryCharacter } = require('../models');
     if (!CharacterGrowthLog) return null;
 
-    const logs = await CharacterGrowthLog.findAll({
+    // GrowthLog uses character_id (UUID), not character_key
+    const char = await RegistryCharacter.findOne({
       where: { character_key: characterKey },
+      attributes: ['id'],
+    });
+    if (!char) return null;
+
+    const logs = await CharacterGrowthLog.findAll({
+      where: { character_id: char.id },
       order: [['created_at', 'DESC']],
       limit: 10,
     });
@@ -8277,9 +8288,9 @@ async function loadGrowthLogs(characterKey) {
 
     const lines = logs.map(log => {
       const parts = [`  • [${log.update_type}]`];
-      if (log.field_changed) parts.push(`${log.field_changed}:`);
+      if (log.field_updated) parts.push(`${log.field_updated}:`);
       if (log.new_value) parts.push(typeof log.new_value === 'string' ? log.new_value : JSON.stringify(log.new_value));
-      if (log.source_story) parts.push(`(from story ${log.source_story})`);
+      if (log.growth_source) parts.push(`(source: ${log.growth_source})`);
       return parts.join(' ');
     });
 
@@ -8298,14 +8309,15 @@ async function loadFranchiseKnowledge(characterKey) {
 
     const entries = await FranchiseKnowledge.findAll({
       where: { status: 'active' },
-      order: [['priority', 'DESC'], ['created_at', 'DESC']],
+      order: [['severity', 'ASC'], ['created_at', 'DESC']],
       limit: 15,
     });
     if (!entries.length) return null;
 
     const lines = entries.map(e => {
       const cat = e.category ? `[${e.category}] ` : '';
-      return `  • ${cat}${e.title || e.knowledge_text?.slice(0, 80)}${e.knowledge_text ? ': ' + e.knowledge_text.slice(0, 200) : ''}`;
+      const sev = e.severity === 'critical' ? ' ⚠' : '';
+      return `  • ${cat}${e.title}${sev}: ${(e.content || '').slice(0, 200)}`;
     });
 
     return `WORLD RULES & FRANCHISE KNOWLEDGE (these are constraints — never contradict them):\n${lines.join('\n')}`;
@@ -9216,20 +9228,27 @@ Return ONLY valid JSON:
       try {
         const { StoryThread } = require('../models');
         if (!StoryThread) return;
+        // StoryThread uses characters_involved (JSONB array), not character_key
         const threads = await StoryThread.findAll({
-          where: { status: 'active', character_key: characterKey },
+          where: { status: 'active' },
         });
-        for (const thread of threads) {
+        // Filter to threads involving this character
+        const charThreads = threads.filter(t => {
+          const involved = t.characters_involved || [];
+          return involved.some(c =>
+            (typeof c === 'string' && c === characterKey) ||
+            (typeof c === 'object' && (c.key === characterKey || c.character_key === characterKey))
+          );
+        });
+        for (const thread of charThreads) {
           // Check if the story text references this thread's topic
-          const threadKeywords = (thread.title || '').split(/\s+/).filter(w => w.length > 3);
+          const threadKeywords = (thread.thread_name || '').split(/\s+/).filter(w => w.length > 3);
           const mentioned = threadKeywords.some(kw => storyText.toLowerCase().includes(kw.toLowerCase()));
           if (mentioned) {
             const events = thread.key_events || [];
             events.push({ story_number: storyNumber, title: taskBrief.title, note: 'auto-advanced' });
             await thread.update({
               key_events: events,
-              last_story_number: storyNumber,
-              updated_at: new Date(),
             });
           }
         }
