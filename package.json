@@ -4,6 +4,7 @@
   "description": "Episode metadata storage API for Prime Studios - Styling Adventures w Lala",
   "main": "src/app.js",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "dev": "cross-env NODE_ENV=development nodemon src/server.js",
     "start": "cross-env NODE_ENV=development node src/server.js",
     "worker": "node src/workers/start.js",

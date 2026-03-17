@@ -1,0 +1,13 @@
+#!/bin/bash
+# Pre-commit hook: blocks commits that introduce ungated cost patterns.
+# Install: git config core.hooksPath .githooks
+
+echo "[pre-commit] Running cost exposure audit..."
+
+if ! bash scripts/audit-cost-exposure.sh; then
+  echo ""
+  echo "Commit blocked — fix cost exposure issues above before committing."
+  exit 1
+fi
+
+echo "[pre-commit] Cost audit passed."
