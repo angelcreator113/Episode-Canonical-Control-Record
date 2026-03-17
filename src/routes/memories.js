@@ -8960,7 +8960,7 @@ Format:
     try {
       const stream = anthropic.messages.stream({
         model: 'claude-sonnet-4-6',
-        max_tokens: 16000,
+        max_tokens: 32000,
         system: systemPrompt,
         messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
       });
@@ -9005,7 +9005,7 @@ Format:
 
         const retryStream = anthropic.messages.stream({
           model: 'claude-sonnet-4-6',
-          max_tokens: 16000,
+          max_tokens: 32000,
           system: systemPrompt,
           messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
         });
@@ -9046,8 +9046,32 @@ Format:
       }
       parsed = JSON.parse(cleaned);
     } catch (parseErr) {
-      console.error('[generate-story-tasks-stream] JSON parse error:', parseErr.message);
-      return sendError(`Failed to parse arc from Claude: ${parseErr.message}`);
+      // Attempt truncated JSON recovery — close open arrays/objects
+      console.warn('[generate-story-tasks-stream] JSON parse failed, attempting truncated recovery:', parseErr.message);
+      try {
+        let cleaned = rawText.replace(/```json|```/g, '').trim();
+        const firstBrace = cleaned.indexOf('{');
+        if (firstBrace !== -1) cleaned = cleaned.slice(firstBrace);
+        // Remove any trailing partial object (after last complete } before a comma or incomplete field)
+        const lastCompleteObj = cleaned.lastIndexOf('}');
+        if (lastCompleteObj !== -1) {
+          cleaned = cleaned.slice(0, lastCompleteObj + 1);
+        }
+        // Close any remaining open brackets
+        const opens = (cleaned.match(/\[/g) || []).length;
+        const closes = (cleaned.match(/\]/g) || []).length;
+        cleaned += ']'.repeat(Math.max(0, opens - closes));
+        const openBraces = (cleaned.match(/\{/g) || []).length;
+        const closeBraces = (cleaned.match(/\}/g) || []).length;
+        cleaned += '}'.repeat(Math.max(0, openBraces - closeBraces));
+        parsed = JSON.parse(cleaned);
+        const recoveredCount = parsed.tasks?.length || 0;
+        console.log(`[generate-story-tasks-stream] Recovered ${recoveredCount} tasks from truncated response`);
+        send('parsing', { message: `Recovered ${recoveredCount}/50 briefs from truncated response` });
+      } catch (recoveryErr) {
+        console.error('[generate-story-tasks-stream] Recovery also failed:', recoveryErr.message);
+        return sendError(`Failed to parse arc from Claude: ${parseErr.message}`);
+      }
     }
 
     const taskCount = parsed.tasks?.length || 0;
