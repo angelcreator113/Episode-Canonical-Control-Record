@@ -1539,6 +1539,11 @@ html, body {
   gap: 4px;
 }
 
+/* Arc Tracking panel – force 2-col inside inspector */
+.se-inspector .arc-tracking-stats {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+
 .se-nav-top {
   padding: 12px 12px 10px;
 }
