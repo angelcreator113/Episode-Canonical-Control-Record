@@ -7,6 +7,7 @@
 // Set environment variables BEFORE mocking
 process.env.NODE_ENV = 'test';
 process.env.ANTHROPIC_API_KEY = 'test-api-key';
+process.env.FEED_SCHEDULER_ENABLED = 'true';
 
 // Mock logger
 jest.mock('../../../src/utils/logger', () => ({
