@@ -4794,12 +4794,48 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
   const systemPrompt = buildAmberSystemPrompt(contextSummary, knowledgeBlock);
 
   try {
-    const claudeResponse = await anthropic.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system:     systemPrompt,
-      messages:   conversationHistory,
-    });
+    // ── Call Claude with model fallback + retry for overloaded errors ──
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let claudeResponse;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`assistant-command: trying ${model} (attempt ${attempt + 1})`);
+          claudeResponse = await anthropic.messages.create({
+            model,
+            max_tokens: 2048,
+            system:     systemPrompt,
+            messages:   conversationHistory,
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`assistant-command: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`assistant-command: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!claudeResponse) {
+      return res.status(503).json({
+        reply: "I'm temporarily overloaded — please wait a moment and try again.",
+        action: null, refresh: null,
+        error: 'All models overloaded',
+        errorType: 'overloaded',
+        retryable: true,
+      });
+    }
 
     const raw   = claudeResponse.content[0].text.trim();
     
@@ -4852,19 +4888,49 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
     });
 
   } catch (err) {
-    console.error('Assistant command error:', err);
+    const status = err?.status || err?.error?.status;
+    console.error('Assistant command error:', {
+      message: err.message,
+      status,
+      type: err?.error?.type || err?.type,
+      name: err?.name,
+      stack: err?.stack?.split('\n').slice(0, 3).join('\n'),
+    });
 
-    // Provide a helpful message when the API key is the problem
-    const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
-    const reply = isAuthError
-      ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
-      : "Hmm, that didn't work — try again or rephrase it for me.";
+    // Classify the error for the frontend
+    let errorType = 'unknown';
+    let reply;
+    let retryable = false;
+
+    if (status === 401 || err.message?.includes('API key') || err.message?.includes('authentication')) {
+      errorType = 'auth';
+      reply = "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env.";
+    } else if (status === 429) {
+      errorType = 'rate_limit';
+      reply = "I'm being rate-limited — please wait a moment and try again.";
+      retryable = true;
+    } else if (status === 529 || status === 503) {
+      errorType = 'overloaded';
+      reply = "I'm temporarily overloaded — please wait a moment and try again.";
+      retryable = true;
+    } else if (status === 400) {
+      errorType = 'bad_request';
+      reply = `Request error: ${err.message || 'invalid request'}`;
+    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+      errorType = 'network';
+      reply = "I can't reach the AI service right now — check your network connection.";
+      retryable = true;
+    } else {
+      reply = `Something went wrong: ${err.message || 'unknown error'}. Try again or rephrase your request.`;
+    }
 
     return res.json({
       reply,
-      action:  null,
-      refresh: null,
-      error:   err.message,
+      action:    null,
+      refresh:   null,
+      error:     err.message,
+      errorType,
+      retryable,
     });
   }
 });
@@ -4974,12 +5040,35 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
   try {
     let fullText = '';
 
-    const stream = anthropic.messages.stream({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system:     systemPrompt,
-      messages:   conversationHistory,
-    });
+    // ── Try models with fallback ──
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let stream;
+    let streamModel;
+    for (const model of MODELS) {
+      try {
+        console.log(`assistant-stream: trying ${model}`);
+        stream = anthropic.messages.stream({
+          model,
+          max_tokens: 2048,
+          system:     systemPrompt,
+          messages:   conversationHistory,
+        });
+        streamModel = model;
+        break;
+      } catch (apiErr) {
+        const status = apiErr?.status || apiErr?.error?.status;
+        if (status === 529 || status === 503 || status === 404) {
+          console.log(`assistant-stream: ${model} status ${status}, trying next model`);
+          continue;
+        }
+        throw apiErr;
+      }
+    }
+
+    if (!stream) {
+      res.write(`data: ${JSON.stringify({ type: 'error', reply: "I'm temporarily overloaded — please wait a moment and try again.", errorType: 'overloaded', retryable: true })}\n\n`);
+      return res.end();
+    }
 
     // Handle client disconnect
     let aborted = false;
@@ -5041,15 +5130,39 @@ router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (
     res.end();
 
   } catch (err) {
-    console.error('Assistant stream error:', err);
-    const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
-    res.write(`data: ${JSON.stringify({
-      type:  'error',
-      reply: isAuthError
-        ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
-        : "Hmm, that didn't work — try again or rephrase it for me.",
-      error: err.message,
-    })}\n\n`);
+    const status = err?.status || err?.error?.status;
+    console.error('Assistant stream error:', {
+      message: err.message,
+      status,
+      type: err?.error?.type || err?.type,
+      name: err?.name,
+      stack: err?.stack?.split('\n').slice(0, 3).join('\n'),
+    });
+
+    let errorType = 'unknown';
+    let reply;
+    let retryable = false;
+
+    if (status === 401 || err.message?.includes('API key') || err.message?.includes('authentication')) {
+      errorType = 'auth';
+      reply = "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env.";
+    } else if (status === 429) {
+      errorType = 'rate_limit';
+      reply = "I'm being rate-limited — please wait a moment and try again.";
+      retryable = true;
+    } else if (status === 529 || status === 503) {
+      errorType = 'overloaded';
+      reply = "I'm temporarily overloaded — please wait a moment and try again.";
+      retryable = true;
+    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+      errorType = 'network';
+      reply = "I can't reach the AI service right now — check your network connection.";
+      retryable = true;
+    } else {
+      reply = `Something went wrong: ${err.message || 'unknown error'}. Try again or rephrase your request.`;
+    }
+
+    res.write(`data: ${JSON.stringify({ type: 'error', reply, error: err.message, errorType, retryable })}\n\n`);
     res.end();
   }
 });
