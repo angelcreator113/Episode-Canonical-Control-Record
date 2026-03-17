@@ -19,7 +19,25 @@ router.get('/arc-tracking/:characterKey', optionalAuth, async (req, res) => {
     const characterKey = req.params.characterKey;
 
     const context = await buildArcContext(db, characterKey);
-    if (!context) return res.status(404).json({ error: 'No arc found' });
+    if (!context) {
+      // Return a synthetic default context instead of 404 so the UI can render
+      return res.json({
+        context: {
+          wound_clock: 75,
+          wound_clock_narrative: 'Arc tracking not yet initialized for this character.',
+          stakes_level: 1,
+          stakes_narrative: 'Stakes tracking will begin when the first story is approved.',
+          visibility_score: 20,
+          visibility_narrative: 'Visibility tracking will begin when the first story is approved.',
+          david_silence_counter: 0,
+          phone_appearances: 0,
+          phone_weight: 'Her phone has not appeared yet in this arc.',
+          bleed_position: 'The Lala intrusion has not happened yet.',
+        },
+        arc_points: [],
+        synthetic: true,
+      });
+    }
 
     // Pull story-by-story data for visualization
     const stories = db.StorytellerStory ? await db.StorytellerStory.findAll({
