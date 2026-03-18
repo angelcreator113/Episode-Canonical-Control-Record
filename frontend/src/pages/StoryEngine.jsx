@@ -661,49 +661,6 @@ function StoryPanel({
 
             <div className="se-writing-tools">
               <div className="se-tools-section">
-                <div className="se-tools-section-title">AI Assistance</div>
-                <WriteModeAIWriter
-                  chapterId={String(story?.story_number || task?.story_number || '')}
-                  bookId={activeWorld || ''}
-                  selectedCharacter={charObj ? {
-                    id: charObj.id || selectedCharKey,
-                    name: charObj.display_name || charName,
-                    selected_name: charObj.display_name || charName,
-                    type: charObj.role_type, role: charObj.role_type,
-                    core_desire: charObj.core_desire, core_fear: charObj.core_fear,
-                    core_wound: charObj.core_wound, description: charObj.description,
-                  } : null}
-                  currentProse={editText}
-                  chapterContext={task ? {
-                    scene_goal: task.task, theme: task.title,
-                    emotional_arc_start: task.phase, emotional_arc_end: '', pov: charName || '',
-                  } : {}}
-                  onInsert={(text) => {
-                    const ta = textareaRef.current;
-                    if (ta) {
-                      const start = ta.selectionStart;
-                      const end = ta.selectionEnd;
-                      const before = editText.slice(0, start);
-                      const after = editText.slice(end);
-                      setEditText(before + text + after);
-                      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
-                    } else {
-                      setEditText(prev => prev + '\n\n' + text);
-                    }
-                  }}
-                  getSelectedText={() => {
-                    const ta = textareaRef.current;
-                    if (ta && ta.selectionStart !== ta.selectionEnd) return editText.slice(ta.selectionStart, ta.selectionEnd);
-                    return '';
-                  }}
-                  characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
-                    ...c, id: c.id || key, character_key: key, name: c.display_name,
-                  })) : []}
-                  onSelectCharacter={(c) => { setSelectedVoice(c?.character_key || c?.id); onSelectChar?.(c?.character_key || c?.id); }}
-                />
-              </div>
-
-              <div className="se-tools-section">
                 <div className="se-tools-section-title">Story Info</div>
                 <div className="se-tools-info-grid">
                   <div className="se-tools-info-row">
@@ -756,6 +713,49 @@ function StoryPanel({
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">AI Assistance</div>
+                <WriteModeAIWriter
+                  chapterId={String(story?.story_number || task?.story_number || '')}
+                  bookId={activeWorld || ''}
+                  selectedCharacter={charObj ? {
+                    id: charObj.id || selectedCharKey,
+                    name: charObj.display_name || charName,
+                    selected_name: charObj.display_name || charName,
+                    type: charObj.role_type, role: charObj.role_type,
+                    core_desire: charObj.core_desire, core_fear: charObj.core_fear,
+                    core_wound: charObj.core_wound, description: charObj.description,
+                  } : null}
+                  currentProse={editText}
+                  chapterContext={task ? {
+                    scene_goal: task.task, theme: task.title,
+                    emotional_arc_start: task.phase, emotional_arc_end: '', pov: charName || '',
+                  } : {}}
+                  onInsert={(text) => {
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      const start = ta.selectionStart;
+                      const end = ta.selectionEnd;
+                      const before = editText.slice(0, start);
+                      const after = editText.slice(end);
+                      setEditText(before + text + after);
+                      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                    } else {
+                      setEditText(prev => prev + '\n\n' + text);
+                    }
+                  }}
+                  getSelectedText={() => {
+                    const ta = textareaRef.current;
+                    if (ta && ta.selectionStart !== ta.selectionEnd) return editText.slice(ta.selectionStart, ta.selectionEnd);
+                    return '';
+                  }}
+                  characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
+                    ...c, id: c.id || key, character_key: key, name: c.display_name,
+                  })) : []}
+                  onSelectCharacter={(c) => { setSelectedVoice(c?.character_key || c?.id); onSelectChar?.(c?.character_key || c?.id); }}
+                />
               </div>
             </div>
           </div>
