@@ -420,6 +420,9 @@ export default function StoryEvaluationEngine() {
   const [editingApproved, setEditingApproved] = useState(false);
   const [approvedText, setApprovedText] = useState('');
 
+  // Session reset flag — triggers auto-fill re-fetch after clearing stale data
+  const [sessionCleared, setSessionCleared] = useState(0);
+
   // Side-by-side voice comparison
   const [viewMode, setViewMode] = useState('tab'); // 'tab' | 'sideBySide'
 
@@ -745,14 +748,16 @@ export default function StoryEvaluationEngine() {
     if (Object.keys(patch).length) setBrief(prev => ({ ...prev, ...patch }));
   }, []);
 
-  // ── Auto-fill registry + characters when brief is empty on mount ───
+  // ── Auto-fill registry + characters when brief is empty on mount or after session reset ───
   useEffect(() => {
     // Only auto-fill if we have no characters and no registry from URL params/router state
     if (brief.characters.length > 0 || brief.registry_id) return;
-    // Don't overwrite if session was restored with data
-    const saved = localStorage.getItem(SESSION_KEY);
-    if (saved) {
-      try { const s = JSON.parse(saved); if (s.brief?.characters?.length > 0) return; } catch {}
+    // Don't overwrite if session was restored with data (skip this check after explicit reset)
+    if (sessionCleared === 0) {
+      const saved = localStorage.getItem(SESSION_KEY);
+      if (saved) {
+        try { const s = JSON.parse(saved); if (s.brief?.characters?.length > 0) return; } catch {}
+      }
     }
 
     let cancelled = false;
@@ -779,7 +784,7 @@ export default function StoryEvaluationEngine() {
       } catch { /* network error — silent */ }
     })();
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionCleared]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!loading) return;
@@ -1224,7 +1229,7 @@ export default function StoryEvaluationEngine() {
               {elapsed}s elapsed
             </span>
           )}
-          {step !== 'brief' && !loading && (
+          {!loading && (
             <button
               onClick={() => {
                 if (!window.confirm('Start a new session? Current progress will be cleared.')) return;
@@ -1250,6 +1255,7 @@ export default function StoryEvaluationEngine() {
                 setApprovedText('');
                 setError(null);
                 localStorage.removeItem(SESSION_KEY);
+                setSessionCleared(c => c + 1);
               }}
               style={{
                 padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
@@ -2514,7 +2520,7 @@ export default function StoryEvaluationEngine() {
               <strong>{writeResult.registry_updates_applied}</strong> registry updates applied
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
-              <button onClick={() => { setStep('brief'); setBrief(EMPTY_BRIEF); setCharInput(''); setStories(null); setEvaluation(null); setStoryId(null); setWriteResult(null); setScoreOverrides(null); setEditingScores(false); setTokenUsage(null); setCharFetchStatus({}); setSceneRevelations(null); localStorage.removeItem(SESSION_KEY); }} style={ghostBtn()}>
+              <button onClick={() => { setStep('brief'); setBrief(EMPTY_BRIEF); setCharInput(''); setStories(null); setEvaluation(null); setStoryId(null); setWriteResult(null); setScoreOverrides(null); setEditingScores(false); setTokenUsage(null); setCharFetchStatus({}); setCharContext({}); setSceneRevelations(null); localStorage.removeItem(SESSION_KEY); setSessionCleared(c => c + 1); }} style={ghostBtn()}>
                 ◇ New Scene
               </button>
               <button onClick={() => navigate(-1)} style={{ ...ghostBtn(), borderColor: T.accent, color: T.accent }}>
