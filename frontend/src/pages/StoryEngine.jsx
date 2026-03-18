@@ -784,6 +784,8 @@ export default function StoryEngine() {
             generation={engine.generation}
             handleGenerateArc={engine.handleGenerateArc}
             handleGenerate={engine.handleGenerate}
+            handleGenerateNextChapter={engine.handleGenerateNextChapter}
+            generatingNextChapter={engine.generatingNextChapter}
             handleSelectTask={engine.handleSelectTask}
             phaseFilter={engine.phaseFilter}
             setPhaseFilter={engine.setPhaseFilter}
@@ -822,17 +824,23 @@ export default function StoryEngine() {
                 elapsed={engine.generation.elapsed}
               />
             </div>
+          ) : engine.generatingNextChapter ? (
+            <div className="se-canvas-generating">
+              <div className="se-generating-ring" style={{ borderTopColor: engine.char?.color }} />
+              <div className="se-generating-title">Generating Chapter {engine.tasks.length + 1} Brief…</div>
+              <div className="se-generating-sub">Building on {engine.tasks.length} previous {engine.tasks.length === 1 ? 'chapter' : 'chapters'}.</div>
+            </div>
           ) : !engine.tasksLoading && engine.tasks.length === 0 && !engine.activeStory ? (
             <div className="se-canvas-hero">
               <div className="se-hero-icon" style={{ color: engine.char?.color }}>{engine.char?.icon || '◇'}</div>
-              <div className="se-hero-title">Build {engine.char?.display_name ? `${engine.char.display_name}'s` : 'your'} story engine</div>
+              <div className="se-hero-title">Begin {engine.char?.display_name ? `${engine.char.display_name}'s` : 'your'} story</div>
               <div className="se-hero-text">
-                Generate a 50-story progression that moves from establishment through pressure, crisis, and integration.
+                Generate chapter briefs one at a time. Each new chapter builds on the ones before it.
               </div>
-              <button className="se-hero-btn" style={{ background: engine.char?.color || '#b0922e' }} onClick={() => engine.handleGenerateArc()}>
-                Generate Story Arc
+              <button className="se-hero-btn" style={{ background: engine.char?.color || '#b0922e' }} onClick={() => engine.handleGenerateNextChapter()} disabled={engine.generatingNextChapter}>
+                Generate Chapter 1
               </button>
-              <div className="se-hero-sub">Typically 2–3 minutes</div>
+              <div className="se-hero-sub">Typically 15–30 seconds per chapter</div>
             </div>
           ) : (
             <StoryPanel

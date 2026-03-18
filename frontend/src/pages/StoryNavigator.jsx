@@ -241,6 +241,7 @@ export default function StoryNavigator({
   tasks, tasksLoading, filteredTasks,
   activeTask, generation,
   handleGenerateArc, handleGenerate, handleSelectTask,
+  handleGenerateNextChapter, generatingNextChapter,
   phaseFilter, setPhaseFilter, searchQuery, setSearchQuery,
   batchMode, setBatchMode, batchSelected, setBatchSelected,
   handleBatchApprove, handleBatchToggle,
@@ -270,28 +271,21 @@ export default function StoryNavigator({
           <button
             className="se-nav-btn se-nav-btn--primary"
             style={{ background: char?.color || '#b0922e' }}
-            onClick={() => handleGenerateArc()}
+            onClick={() => handleGenerateNextChapter()}
+            disabled={generatingNextChapter}
           >
-            Generate Story Arc
+            {generatingNextChapter ? 'Generating…' : 'Generate Chapter 1'}
           </button>
         )}
-        {tasks.length > 0 && (
+        {tasks.length > 0 && tasks.length < 50 && (
           <>
             <button
               className="se-nav-btn se-nav-btn--generate"
               style={{ background: char?.color || '#b0922e' }}
-              onClick={generation.batchGenerate}
-              disabled={generation.generating}
+              onClick={() => handleGenerateNextChapter()}
+              disabled={generatingNextChapter}
             >
-              {generation.generating && generation.batchGenProgress
-                ? `${generation.batchGenProgress.current}/${generation.batchGenProgress.total}`
-                : 'Generate All'}
-            </button>
-            <button
-              className="se-nav-btn se-nav-btn--secondary"
-              onClick={() => { if (window.confirm('Regenerate entire arc?')) handleGenerateArc(true); }}
-            >
-              ↻
+              {generatingNextChapter ? 'Generating…' : `Generate Chapter ${tasks.length + 1}`}
             </button>
             <button
               className={`se-nav-btn se-nav-btn--secondary ${batchMode ? 'active' : ''}`}

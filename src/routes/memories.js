@@ -9610,6 +9610,174 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
   }
 });
 
+// ─── POST /generate-next-chapter ──────────────────────────────────────────────
+// Generates a SINGLE next chapter brief based on previously approved chapters.
+// Called automatically after chapter approval or manually for the first chapter.
+router.post('/generate-next-chapter', optionalAuth, async (req, res) => {
+  if (req.setTimeout) req.setTimeout(120000);
+  if (res.setTimeout) res.setTimeout(120000);
+
+  const { characterKey } = req.body;
+  if (!characterKey) return res.status(400).json({ error: 'characterKey required' });
+
+  try {
+    // Load character DNA
+    let dna = CHARACTER_DNA[characterKey];
+    if (!dna) {
+      const dbProfile = await loadCharacterProfile(characterKey);
+      if (!dbProfile) return res.status(400).json({ error: `No character DNA found for ${characterKey}` });
+      const { Op } = require('sequelize');
+      const { RegistryCharacter } = require('../models');
+      const charRow = await RegistryCharacter.findOne({
+        where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+        order: [['updated_at', 'DESC']],
+      });
+      if (!charRow) return res.status(400).json({ error: `No accepted character found for ${characterKey}` });
+      const plain = charRow.get({ plain: true });
+      dna = { display_name: plain.display_name, core_wound: plain.core_wound, core_desire: plain.core_desire, core_fear: plain.core_fear };
+    }
+
+    // Load existing tasks (approved chapters)
+    let existingTasks = [];
+    if (seTaskArcCache.has(characterKey)) {
+      existingTasks = seTaskArcCache.get(characterKey).tasks || [];
+    } else if (db.StoryTaskArc) {
+      const dbArc = await db.StoryTaskArc.findOne({ where: { character_key: characterKey } });
+      if (dbArc?.tasks?.length) existingTasks = dbArc.tasks;
+    }
+
+    // Load approved story texts for context
+    const approvedStories = await db.StorytellerStory.findAll({
+      where: { character_key: characterKey, status: 'approved' },
+      order: [['story_number', 'ASC']],
+      attributes: ['story_number', 'title', 'scene_brief', 'status'],
+    });
+
+    const nextChapterNum = existingTasks.length + 1;
+    if (nextChapterNum > 50) {
+      return res.json({ complete: true, message: 'All 50 chapters have been generated.' });
+    }
+
+    // Determine phase & arc position
+    const phase = nextChapterNum <= 10 ? 'establishment' :
+                  nextChapterNum <= 25 ? 'pressure' :
+                  nextChapterNum <= 40 ? 'crisis' : 'integration';
+    const woundClock = 75 + (nextChapterNum - 1);
+    const stakesLevel = nextChapterNum <= 10 ? Math.min(2, Math.ceil(nextChapterNum / 5)) :
+                        nextChapterNum <= 25 ? Math.min(5, 3 + Math.floor((nextChapterNum - 10) / 5)) :
+                        nextChapterNum <= 40 ? Math.min(8, 6 + Math.floor((nextChapterNum - 25) / 5)) :
+                        Math.min(10, 9 + Math.floor((nextChapterNum - 40) / 5));
+
+    // Build previous chapter summaries for context
+    const prevChapterContext = existingTasks.slice(-5).map(t => {
+      const sitSummary = (t.situations || []).map(s =>
+        `  - ${s.title || s.situation_type}: ${s.what_happens || ''}`
+      ).join('\n');
+      return `Chapter ${t.story_number}: "${t.title}" [${t.phase}] wound=${t.wound_clock || '?'} stakes=${t.stakes_level || '?'}
+  Theme: ${t.chapter_theme || '—'}
+  Arc: ${t.chapter_arc || '—'}
+  Situations:\n${sitSummary}`;
+    }).join('\n\n');
+
+    const userPrompt = `Generate exactly 1 chapter brief — Chapter ${nextChapterNum} of 50.
+
+PHASE: ${phase}
+WOUND CLOCK: ${woundClock}
+STAKES LEVEL: ${stakesLevel}
+
+${existingTasks.length > 0 ? `PREVIOUS CHAPTERS (last ${Math.min(5, existingTasks.length)} for continuity):
+${prevChapterContext}
+
+Build on what has been established. Do not repeat situations. Advance the story.
+${nextChapterNum > 1 ? `The previous chapter left her with: "${existingTasks[existingTasks.length - 1]?.chapter_arc || '—'}"` : ''}
+` : `This is Chapter 1. She enters mid-routine, not at a beginning.`}
+
+PHASE REQUIREMENTS FOR ${phase.toUpperCase()}:
+${phase === 'establishment' ? '- Heavy domestic + ambitious tones. Light digital. No reckoning yet.\n- Marcus does not appear until Chapter 3 minimum (Phase 1 only).\n- Establish her routine, world, wound, wanting.' :
+  phase === 'pressure' ? '- More digital + friction. Watching intensifies.\n- Marcus transitions from Phase 1 to Phase 2 around Chapters 14-16.\n- David\'s emotional labor becomes subtly visible.\n- The gap between real and online life has edges now.' :
+  phase === 'crisis' ? '- Heavy friction + reckoning. Digital feels uncanny.\n- Marcus fully Phase 3 — constant, repetitive, body-focused.\n- Nothing breaks dramatically. Everything shifts permanently.\n- Controlled tension only — never loud.' :
+  '- She is living as the uncontained version.\n- Marcus present but she is changing the terms.\n- Lala tone bleeds through starting Chapter 47.\n- Integration feels earned, not resolved.'}
+
+Return a single JSON object (NOT an array). No preamble. No markdown fences. No trailing text.
+
+Use this exact structure:
+{
+  "story_number": ${nextChapterNum},
+  "title": "Chapter title — evocative, not descriptive",
+  "phase": "${phase}",
+  "chapter_theme": "One sentence.",
+  "wound_clock": ${woundClock},
+  "stakes_level": ${stakesLevel},
+  "situations": [ 3-5 situation objects with situation_number, situation_type, tone, title, characters_present, what_happens, what_she_knows, what_she_doesnt_say, texture_layers, opening_line ],
+  "chapter_arc": "What this chapter leaves her with. One sentence.",
+  "david_presence": "present | background | absent | phone",
+  "marcus_phase": "none | phase_1 | phase_2 | phase_3",
+  "phone_appears": true/false,
+  "elias_notices": true/false,
+  "new_character": false,
+  "new_character_name": null,
+  "new_character_role": null
+}`;
+
+    const anthropic = getAnthropicClient();
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      system: ARC_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+
+    const rawText = response.content[0]?.text || '';
+    let chapter;
+    try {
+      let cleaned = rawText.replace(/```json|```/g, '').trim();
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+      }
+      chapter = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error('[generate-next-chapter] JSON parse failed:', parseErr.message);
+      return res.status(500).json({ error: 'Failed to parse chapter brief from Claude' });
+    }
+
+    // Ensure story_number is correct
+    chapter.story_number = nextChapterNum;
+
+    // Append to existing tasks
+    const updatedTasks = [...existingTasks, chapter];
+
+    // Update cache + DB
+    const result = {
+      character_key: characterKey,
+      display_name: dna.display_name || characterKey,
+      world: dna.world || null,
+      narrative_spine: null,
+      tasks: updatedTasks,
+    };
+    seTaskArcCache.set(characterKey, result);
+
+    try {
+      await db.StoryTaskArc.sync();
+      await db.StoryTaskArc.upsert({
+        character_key: characterKey,
+        display_name: result.display_name,
+        world: result.world,
+        narrative_spine: null,
+        tasks: updatedTasks,
+      });
+    } catch (persistErr) {
+      console.warn('[generate-next-chapter] DB persist failed:', persistErr.message);
+    }
+
+    res.json({ chapter, allTasks: updatedTasks, chapterNumber: nextChapterNum, totalGenerated: updatedTasks.length });
+  } catch (err) {
+    console.error('[generate-next-chapter] error:', err?.message);
+    res.status(500).json({ error: 'Chapter generation failed' });
+  }
+});
+
 // ─── Narrative variety engine ──────────────────────────────────────────────────
 // Each story gets a unique combination of structure, POV, length, and technique
 // based on its position in the arc, phase, and story type.
