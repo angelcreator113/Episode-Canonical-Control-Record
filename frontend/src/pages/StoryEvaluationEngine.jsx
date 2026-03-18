@@ -1252,7 +1252,7 @@ export default function StoryEvaluationEngine() {
               onClick={() => {
                 if (!window.confirm('Start a new session? Current progress will be cleared.')) return;
                 setBrief(EMPTY_BRIEF);
-                setToneDial('literary');
+                setToneDial(['literary']);
                 setStep('brief');
                 setStories(null);
                 setStoryId(null);
