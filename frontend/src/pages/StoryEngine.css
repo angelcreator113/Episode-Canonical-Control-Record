@@ -678,8 +678,8 @@ html, body {
 }
 
 .se-insp-section {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--se-border-light);
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
 }
 
 .se-insp-section:last-child {
@@ -689,10 +689,11 @@ html, body {
 .se-insp-label {
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--se-text-dim);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  opacity: 0.7;
 }
 
 .se-insp-row {
@@ -2904,20 +2905,22 @@ html, body {
 
 .se-story-header-title {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 500;
   color: var(--se-text);
-  margin-bottom: 6px;
-  line-height: 1.3;
+  margin-bottom: 8px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .se-story-header-meta {
   display: flex;
   gap: 8px;
-  font-size: 12px;
-  color: var(--se-text-muted);
+  font-size: 11px;
+  color: var(--se-text-dim);
   align-items: center;
   flex-wrap: wrap;
+  letter-spacing: 0.02em;
 }
 
 .se-reading-time {
@@ -3155,6 +3158,7 @@ html, body {
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
   min-height: 0;
+  background: #f8f5f0;
 }
 
 .se-story-body::-webkit-scrollbar {
@@ -3167,18 +3171,27 @@ html, body {
 }
 
 .se-story-text {
-  padding: 36px 56px;
-  max-width: 760px;
+  padding: 44px 64px;
+  max-width: 840px;
   margin: 0 auto;
+  background: #faf8f4;
+  border-radius: 2px;
+  box-shadow: 0 0 40px rgba(0,0,0,0.03);
 }
 
 .se-story-para {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 17px;
-  line-height: 1.9;
+  font-size: 18px;
+  line-height: 2;
   color: var(--se-text);
-  margin: 0 0 22px 0;
+  margin: 0 0 26px 0;
   text-indent: 2em;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.se-story-para:hover {
+  background: rgba(176, 146, 46, 0.03);
+  border-radius: 4px;
 }
 
 .se-story-para:first-child {
@@ -3706,7 +3719,7 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: var(--se-cream);
+  background: #f5f1ea;
 }
 
 .se-fullscreen-reading .se-workspace,
@@ -3717,6 +3730,7 @@ html, body {
 .se-fullscreen-reading .se-story-column,
 .se-fullscreen-reading .se-canvas {
   flex: 1;
+  background: #f5f1ea;
 }
 
 .se-fullscreen-reading .se-navigator,
@@ -3724,16 +3738,44 @@ html, body {
   display: none;
 }
 
+.se-fullscreen-reading .se-story-body {
+  background: #f5f1ea;
+}
+
 .se-fullscreen-reading .se-story-text {
-  max-width: 720px;
-  font-size: 19px;
-  padding: 52px 36px;
+  max-width: 680px;
+  padding: 64px 48px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .se-fullscreen-reading .se-story-para {
-  font-size: 19px;
-  line-height: 2;
-  margin-bottom: 28px;
+  font-size: 20px;
+  line-height: 2.1;
+  margin-bottom: 32px;
+  color: #2a2520;
+}
+
+.se-fullscreen-reading .se-story-para:hover {
+  background: transparent;
+}
+
+.se-fullscreen-reading .se-story-header {
+  background: #f5f1ea;
+  border-bottom-color: rgba(0,0,0,0.06);
+}
+
+.se-fullscreen-reading .se-story-header-actions .se-btn {
+  display: none;
+}
+
+.se-fullscreen-reading .se-story-header-actions .se-btn-reading-mode {
+  display: inline-flex;
+}
+
+.se-fullscreen-reading .se-page-nav {
+  background: #f5f1ea;
+  border-top-color: rgba(0,0,0,0.06);
 }
 
 /* ─────────────────────────────────────────
@@ -3842,6 +3884,325 @@ html, body {
   font-size: 10px;
   color: var(--se-text-dim);
   letter-spacing: 0.02em;
+}
+
+/* ─────────────────────────────────────────
+   Creative Tools Panel — grouped tool sections
+────────────────────────────────────────── */
+.se-insp-group {
+  margin-bottom: 4px;
+}
+
+.se-insp-group-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--se-text);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.01em;
+}
+
+.se-insp-group-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ─────────────────────────────────────────
+   Scene Pulse — emotional feedback
+────────────────────────────────────────── */
+.se-scene-pulse {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.se-pulse-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.se-pulse-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--se-text-dim);
+  min-width: 55px;
+}
+
+.se-pulse-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--se-text);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(176, 146, 46, 0.08);
+}
+
+.se-pulse-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--se-surface2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0 4px;
+}
+
+.se-pulse-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ─────────────────────────────────────────
+   Chapter Timeline / Progress Bar
+────────────────────────────────────────── */
+.se-chapter-timeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 4px;
+  margin: 8px 0 4px;
+}
+
+.se-timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--se-border);
+  background: var(--se-surface);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.se-timeline-dot.active {
+  border-color: var(--char-color, var(--se-gold));
+  background: var(--char-color, var(--se-gold));
+  box-shadow: 0 0 0 3px rgba(176, 146, 46, 0.15);
+}
+
+.se-timeline-dot.completed {
+  border-color: var(--se-success);
+  background: var(--se-success);
+}
+
+.se-timeline-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--se-border-light);
+  min-width: 4px;
+}
+
+.se-timeline-connector.completed {
+  background: var(--se-success);
+}
+
+.se-page-progress-bar {
+  width: 100%;
+  height: 3px;
+  background: var(--se-surface2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.se-page-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  background: var(--char-color, var(--se-gold));
+}
+
+/* ─────────────────────────────────────────
+   Micro-Interactions — Button Animations
+────────────────────────────────────────── */
+@keyframes se-btn-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(176, 146, 46, 0.3); }
+  70% { box-shadow: 0 0 0 8px rgba(176, 146, 46, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(176, 146, 46, 0); }
+}
+
+.se-btn-loading {
+  position: relative;
+  pointer-events: none;
+}
+
+.se-btn-loading::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  animation: se-spin 0.8s linear infinite;
+  opacity: 0.4;
+}
+
+/* Save status with personality */
+.se-save-indicator {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.se-save-evolving {
+  color: #059669;
+  background: rgba(16, 185, 129, 0.08);
+  animation: se-save-glow 2s ease-in-out;
+}
+
+@keyframes se-save-glow {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.2); }
+  50% { box-shadow: 0 0 8px 2px rgba(16, 185, 129, 0.15); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* ─────────────────────────────────────────
+   Text Selection Popup
+────────────────────────────────────────── */
+.se-text-selection-popup {
+  position: fixed;
+  z-index: 10001;
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--se-text);
+  border-radius: 8px;
+  box-shadow: var(--se-shadow-lg);
+  animation: se-popup-in 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes se-popup-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.se-text-selection-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.se-text-selection-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ─────────────────────────────────────────
+   Next Move Suggestion
+────────────────────────────────────────── */
+.se-next-move {
+  padding: 14px 18px;
+  background: rgba(176, 146, 46, 0.05);
+  border-top: 1px solid rgba(176, 146, 46, 0.12);
+  margin-top: auto;
+}
+
+.se-next-move-header {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--se-gold);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.se-next-move-text {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--se-text-muted);
+  line-height: 1.55;
+}
+
+.se-next-move-loading {
+  font-size: 11px;
+  color: var(--se-text-dim);
+  font-style: italic;
+}
+
+/* ─────────────────────────────────────────
+   Header arc stage + chapter progress
+────────────────────────────────────────── */
+.se-header-arc-stage {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(176, 146, 46, 0.08);
+  color: var(--se-gold);
+  white-space: nowrap;
+}
+
+.se-header-chapter {
+  font-size: 11px;
+  color: var(--se-text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.se-header-reading-time {
+  font-size: 10px;
+  color: var(--se-text-dim);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* Mode toggle (Read/Edit) in story header */
+.se-mode-toggle {
+  display: flex;
+  border-radius: 8px;
+  border: 1px solid var(--se-border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.se-mode-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: var(--se-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.se-mode-btn:first-child {
+  border-right: 1px solid var(--se-border);
+}
+
+.se-mode-btn.active {
+  background: var(--char-color, var(--se-gold));
+  color: #fff;
+}
+
+.se-mode-btn:hover:not(.active) {
+  background: var(--se-surface2);
+  color: var(--se-text);
 }
 
 /* ─────────────────────────────────────────

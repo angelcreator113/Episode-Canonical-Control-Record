@@ -116,9 +116,32 @@ function StoryPanel({
   const [currentPage, setCurrentPage] = useState(0);
   const [evalScore, setEvalScore] = useState(null);
   const [activeThreads, setActiveThreads] = useState([]);
+  const [selectionPopup, setSelectionPopup] = useState(null);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
+
+  // Text selection popup for reading mode
+  useEffect(() => {
+    const handleSelection = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !storyBodyRef.current?.contains(sel.anchorNode)) {
+        setSelectionPopup(null);
+        return;
+      }
+      const text = sel.toString().trim();
+      if (text.length < 3) { setSelectionPopup(null); return; }
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      setSelectionPopup({
+        text,
+        top: rect.top - 44,
+        left: rect.left + rect.width / 2,
+      });
+    };
+    document.addEventListener('mouseup', handleSelection);
+    return () => document.removeEventListener('mouseup', handleSelection);
+  }, []);
 
   const WORDS_PER_PAGE = 250;
   const pages = useMemo(() => {
@@ -309,7 +332,7 @@ function StoryPanel({
           </div>
           <div className="se-edit-header-right">
             <span className={`se-save-indicator se-save-${saveStatus}`}>
-              {saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved changes'}
+              {saveStatus === 'saved' ? 'Saved — your scene is evolving' : saveStatus === 'saving' ? 'Capturing your words…' : 'Unsaved changes'}
             </span>
             <button
               className="se-btn se-btn-save-primary"
@@ -337,14 +360,15 @@ function StoryPanel({
             <div className="se-story-header-title">{story.title}</div>
             <div className="se-story-header-meta">
               <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
+              <span className="se-header-arc-stage">
+                {story.phase === 'establishment' ? 'Establishing' : story.phase === 'pressure' ? 'Rising' : story.phase === 'crisis' ? 'Breaking' : story.phase === 'integration' ? 'Resolving' : story.phase || '—'}
+              </span>
               <span>·</span>
-              <span>{TYPE_ICONS[story.story_type]} {story.story_type}</span>
+              <span>Chapter {story.story_number}</span>
               <span>·</span>
               <span>{story.word_count?.toLocaleString() || '—'} words</span>
               {story.word_count > 0 && (
                 <>
-                  <span>·</span>
-                  <span>{Math.ceil(story.word_count / 250)} {Math.ceil(story.word_count / 250) === 1 ? 'page' : 'pages'}</span>
                   <span>·</span>
                   <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
                 </>
@@ -352,33 +376,48 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-story-header-actions">
-            <button className="se-btn se-btn-reading-mode" onClick={() => onToggleReadingMode?.()} title={readingMode ? 'Exit reading mode (Esc)' : 'Reading mode (F)'}>
-              {readingMode ? '⊟' : '⊞'}
-            </button>
-            <button className="se-btn se-btn-export" onClick={() => onExportStory?.(story)} title="Copy or download story">↗ Export</button>
-            <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
-            <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
-              {consistencyLoading ? '…' : 'Check'}
-            </button>
-            <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
-            <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
-              {savingForLater ? 'Saving…' : 'Save for Later'}
-            </button>
-            <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={() => onEvaluate?.()} title="Evaluate with multi-voice scoring">
-              Evaluate
-            </button>
-            <button className="se-btn se-btn-approve" style={{ background: charColor }} onClick={() => onApprove(story, true)}>
-              {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
-            </button>
-            {evalScore && (
-              <div className="se-eval-badge" style={{
-                fontSize: 10, padding: '3px 8px', borderRadius: 6,
-                background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
-                fontWeight: 600, marginLeft: -4,
-              }}>
-                {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
-              </div>
+            <div className="se-mode-toggle">
+              <button
+                className={`se-mode-btn ${!readingMode ? 'active' : ''}`}
+                onClick={() => { if (readingMode) onToggleReadingMode?.(); }}
+              >
+                Edit
+              </button>
+              <button
+                className={`se-mode-btn ${readingMode ? 'active' : ''}`}
+                onClick={() => { if (!readingMode) onToggleReadingMode?.(); }}
+              >
+                Read
+              </button>
+            </div>
+            {!readingMode && (
+              <>
+                <button className="se-btn se-btn-export" onClick={() => onExportStory?.(story)} title="Copy or download story">Export</button>
+                <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
+                <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
+                  {consistencyLoading ? '…' : 'Check'}
+                </button>
+                <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
+                <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
+                  {savingForLater ? 'Saving…' : 'Save Draft'}
+                </button>
+                <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={() => onEvaluate?.()} title="Evaluate with multi-voice scoring">
+                  Evaluate
+                </button>
+                <button className="se-btn se-btn-approve" style={{ background: charColor }} onClick={() => onApprove(story, true)}>
+                  {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
+                </button>
+                {evalScore && (
+                  <div className="se-eval-badge" style={{
+                    fontSize: 10, padding: '3px 8px', borderRadius: 6,
+                    background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                    color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
+                    fontWeight: 600, marginLeft: -4,
+                  }}>
+                    {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -530,7 +569,7 @@ function StoryPanel({
               </div>
 
               <div className="se-tools-section">
-                <div className="se-tools-section-title">AI Assistance</div>
+                <div className="se-tools-section-title">Creative Tools</div>
                 <WriteModeAIWriter
                   chapterId={String(story?.story_number || task?.story_number || '')}
                   bookId={activeWorld || ''}
@@ -582,11 +621,37 @@ function StoryPanel({
                   : <div key={i} className="se-story-spacer" />
               ))}
             </div>
+            {/* Text selection popup */}
+            {selectionPopup && !editing && (
+              <div className="se-text-selection-popup" style={{ top: selectionPopup.top, left: selectionPopup.left, transform: 'translateX(-50%)' }}>
+                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Rewrite</button>
+                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Deepen</button>
+                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Change Tone</button>
+              </div>
+            )}
             {totalPages > 1 && (
               <div className="se-page-nav">
-                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage === 0}>‹ Prev Page</button>
-                <span className="se-page-indicator">Page {currentPage + 1} of {totalPages}</span>
-                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage >= totalPages - 1}>Next Page ›</button>
+                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage === 0}>‹ Prev</button>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <div className="se-chapter-timeline">
+                    {Array.from({ length: Math.min(totalPages, 12) }, (_, i) => {
+                      const pageIdx = totalPages <= 12 ? i : Math.round(i * (totalPages - 1) / 11);
+                      return (
+                        <React.Fragment key={i}>
+                          {i > 0 && <div className={`se-timeline-connector${pageIdx <= currentPage ? ' completed' : ''}`} />}
+                          <div
+                            className={`se-timeline-dot${pageIdx === currentPage ? ' active' : pageIdx < currentPage ? ' completed' : ''}`}
+                            onClick={() => { setCurrentPage(pageIdx); storyBodyRef.current?.scrollTo(0, 0); }}
+                            style={{ cursor: 'pointer' }}
+                            title={`Page ${pageIdx + 1}`}
+                          />
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                  <span className="se-page-indicator" style={{ fontSize: 11 }}>Page {currentPage + 1} of {totalPages}</span>
+                </div>
+                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage >= totalPages - 1}>Next ›</button>
               </div>
             )}
           </>
@@ -665,7 +730,11 @@ export default function StoryEngine() {
               <span className="se-header-phase" style={{ color: PHASE_COLORS[engine.activeStory.phase] }}>
                 {PHASE_LABELS[engine.activeStory.phase]}
               </span>
+              <span className="se-header-chapter">Chapter {engine.activeStory.story_number}</span>
               <span className="se-header-words">{engine.activeStory.word_count?.toLocaleString()} words</span>
+              {engine.activeStory.word_count > 0 && (
+                <span className="se-header-reading-time">{getReadingTime(engine.activeStory.word_count)}</span>
+              )}
             </div>
           )}
           <div className="se-header-actions">
