@@ -24,6 +24,7 @@ function narrativeExtras(obj) {
   if (obj.dynamic) extras.dynamic = obj.dynamic;
   if (obj.fidelity_pattern) extras.fidelity_pattern = obj.fidelity_pattern;
   if (obj.layer) extras.layer = obj.layer;
+  if (obj.world) extras.world = obj.world;
   return JSON.stringify(extras);
 }
 
@@ -63,7 +64,7 @@ module.exports = {
         display_name: 'Elias',
         selected_name: 'Elias',
         role_type: 'support',
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 9,
         birth_year: 2016,
@@ -105,12 +106,13 @@ module.exports = {
         de_self_narrative_origin: 'I am the one who notices.',
         de_actual_narrative_gap: 'He is a child carrying adult awareness without adult tools.',
         de_blind_spot: 'He believes he can protect his mother by watching. He cannot.',
-        de_operative_cosmology: 'merit_based',
-        de_time_orientation: 'present_focused',
-        de_change_capacity: 'gradual',
+        de_operative_cosmology: 'deserving',        // original: merit_based
+        de_time_orientation: 'present_impulsive',   // original: present_focused
+        de_change_capacity: 'conditionally_open',   // original: gradual
 
         // Narrative fields → extra_fields JSONB
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'He is the first witness to her becoming. His quiet recognition is the one form of being seen that costs her nothing — and means everything.',
           tension_type: 'simmering',
@@ -131,7 +133,7 @@ module.exports = {
         display_name: 'Zion',
         selected_name: 'Zion',
         role_type: 'support',
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 5,
         birth_year: 2020,
@@ -172,11 +174,12 @@ module.exports = {
         de_self_narrative_origin: 'Everything is for me.',
         de_actual_narrative_gap: 'He is the purest thing in her life and the heaviest anchor.',
         de_blind_spot: 'He has no blind spot yet. That\'s what makes him dangerous to her ambition.',
-        de_operative_cosmology: 'chaotic',
-        de_time_orientation: 'present_focused',
-        de_change_capacity: 'resistant',
+        de_operative_cosmology: 'indifferent',        // original: chaotic
+        de_time_orientation: 'present_impulsive',    // original: present_focused
+        de_change_capacity: 'highly_rigid',          // original: resistant
 
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'He is the weight of being needed. Every time she reaches for expansion he pulls her back into the present tense. Not cruelly. Simply by existing.',
           tension_type: 'calm',
@@ -197,7 +200,7 @@ module.exports = {
         display_name: 'Imani',
         selected_name: 'Imani',
         role_type: 'support',  // 'confidant' not in ENUM → mapped to 'support'
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 34,
         birth_year: 1991,
@@ -239,10 +242,11 @@ module.exports = {
         de_actual_narrative_gap: 'She chose safety over scale and made peace with it — mostly.',
         de_blind_spot: 'She thinks her groundedness is wisdom. Sometimes it is the fear her mother left her.',
         de_operative_cosmology: 'relational',
-        de_time_orientation: 'present_focused',
-        de_change_capacity: 'gradual',
+        de_time_orientation: 'present_impulsive',    // original: present_focused
+        de_change_capacity: 'conditionally_open',    // original: gradual
 
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'The reality mirror. The only place JustAWoman doesn\'t have to be desirable, impressive, or watched. Her existence quietly asks: what if a good life is enough?',
           tension_type: 'calm',
@@ -266,7 +270,7 @@ module.exports = {
         display_name: 'Carolyn',
         selected_name: 'Carolyn',
         role_type: 'pressure',
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 61,
         birth_year: 1964,
@@ -307,11 +311,12 @@ module.exports = {
         de_self_narrative_origin: 'I built something real and I did it the right way.',
         de_actual_narrative_gap: 'She chose safety so completely that she can no longer recognize the cost of it.',
         de_blind_spot: 'She thinks she\'s grounding her daughter. She is the ceiling.',
-        de_operative_cosmology: 'merit_based',
+        de_operative_cosmology: 'deserving',          // original: merit_based
         de_time_orientation: 'past_anchored',
-        de_change_capacity: 'resistant',
+        de_change_capacity: 'highly_rigid',          // original: resistant
 
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'The voice of enough. The ceiling JustAWoman refuses to accept. Her love is real and her limitation is real and both are true simultaneously.',
           tension_type: 'simmering',
@@ -335,7 +340,7 @@ module.exports = {
         display_name: 'Elena Harper',
         selected_name: 'Elena',
         role_type: 'mirror',
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 38,
         birth_year: 1987,
@@ -376,11 +381,12 @@ module.exports = {
         de_self_narrative_origin: 'I am the standard.',
         de_actual_narrative_gap: 'She is afraid that if she stopped performing, there would be nothing underneath.',
         de_blind_spot: 'She thinks her discomfort with JustAWoman is about values. It\'s about hunger. She recognizes it and can\'t allow it.',
-        de_operative_cosmology: 'merit_based',
+        de_operative_cosmology: 'deserving',          // original: merit_based
         de_time_orientation: 'future_oriented',
-        de_change_capacity: 'resistant',
+        de_change_capacity: 'highly_rigid',          // original: resistant
 
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'The mirror JustAWoman refuses to become. Perfection as a cage dressed as a choice.',
           tension_type: 'simmering',
@@ -411,7 +417,7 @@ module.exports = {
         display_name: 'Brianna Cole',
         selected_name: 'Bri',
         role_type: 'support',  // 'friend' not in ENUM → mapped to 'support'
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 33,
         birth_year: 1992,
@@ -453,10 +459,11 @@ module.exports = {
         de_actual_narrative_gap: 'She is survival-mode parenting a life she didn\'t fully choose.',
         de_blind_spot: 'She sees JustAWoman as having it figured out. She is comparing her inside to JustAWoman\'s outside.',
         de_operative_cosmology: 'relational',
-        de_time_orientation: 'present_focused',
-        de_change_capacity: 'gradual',
+        de_time_orientation: 'present_impulsive',    // original: present_focused
+        de_change_capacity: 'conditionally_open',    // original: gradual
 
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'The chaos JustAWoman has not become. The warmth and the warning simultaneously.',
           tension_type: 'calm',
@@ -480,7 +487,7 @@ module.exports = {
         display_name: 'Tasha Greene',
         selected_name: 'Tasha',
         role_type: 'mirror',
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 40,
         birth_year: 1985,
@@ -521,11 +528,12 @@ module.exports = {
         de_self_narrative_origin: 'I\'m fine. I just got realistic.',
         de_actual_narrative_gap: 'She is grieving a version of herself she let go of too quietly.',
         de_blind_spot: 'She thinks her detachment is clarity. It is the wound performing as wisdom.',
-        de_operative_cosmology: 'fatalistic',
+        de_operative_cosmology: 'indifferent',        // original: fatalistic
         de_time_orientation: 'past_anchored',
-        de_change_capacity: 'resistant',
+        de_change_capacity: 'highly_rigid',          // original: resistant
 
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'The endpoint of quiet disappointment. What happens when effort fades and nobody notices. The mirror JustAWoman is most afraid of.',
           tension_type: 'fractured',
@@ -549,7 +557,7 @@ module.exports = {
         display_name: 'Ms. Caldwell',
         selected_name: 'Ms. Caldwell',
         role_type: 'pressure',
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 52,
         birth_year: 1973,
@@ -590,11 +598,12 @@ module.exports = {
         de_self_narrative_origin: 'I see children for who they are, not who their parents want them to be.',
         de_actual_narrative_gap: 'She sees children for who they are — and sometimes judges the parents for who she sees in them.',
         de_blind_spot: 'She believes objectivity. Her preference for "structured families" is a value judgment dressed as professional observation.',
-        de_operative_cosmology: 'merit_based',
-        de_time_orientation: 'present_focused',
-        de_change_capacity: 'gradual',
+        de_operative_cosmology: 'deserving',          // original: merit_based
+        de_time_orientation: 'present_impulsive',    // original: present_focused
+        de_change_capacity: 'conditionally_open',    // original: gradual
 
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'Institutional pressure. The place where JustAWoman\'s real life and social performance get evaluated by someone with no context for either.',
           tension_type: 'simmering',
@@ -618,7 +627,7 @@ module.exports = {
         display_name: 'Marcus',
         selected_name: 'Marcus',
         role_type: 'shadow',  // 'temptation' not in ENUM → mapped to 'shadow'
-        world: 'book-1',
+        // world: 'book-1' — stored in extra_fields (no world column on registry_characters)
         status: 'accepted',
         age: 41,
         birth_year: 1984,
@@ -659,11 +668,12 @@ module.exports = {
         de_self_narrative_origin: 'I treat women well. I just know what I want.',
         de_actual_narrative_gap: 'He does not see her. He sees a body he wants access to and he is methodical about acquiring it.',
         de_blind_spot: 'He believes the money makes the transaction mutual. It makes it possible. Not mutual.',
-        de_operative_cosmology: 'transactional',
-        de_time_orientation: 'present_focused',
-        de_change_capacity: 'resistant',
+        de_operative_cosmology: 'contractual',        // original: transactional
+        de_time_orientation: 'present_impulsive',    // original: present_focused
+        de_change_capacity: 'highly_rigid',          // original: resistant
 
         extra_fields: narrativeExtras({
+          world: 'book-1',
           layer: 'real-world',
           arc_role: 'The transactional mirror. He offers the reduction she sometimes wants — just a body, just desire, stripped of context. She is not confused about what this is. She chooses it.',
           tension_type: 'volatile',
