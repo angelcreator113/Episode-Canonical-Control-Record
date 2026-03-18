@@ -88,7 +88,7 @@ function StoryPanel({
   readingMode, onToggleReadingMode,
   writeMode, onToggleWriteMode,
   onNavigateStory, hasPrev, hasNext,
-  onExportStory,
+  onExportStory, onDelete,
   onEvaluate,
   charObj, selectedCharKey, activeWorld, allCharacters, onSelectChar,
   storiesMinimized, onToggleStoriesMinimized,
@@ -362,6 +362,9 @@ function StoryPanel({
             </button>
             <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
               {savingForLater ? 'Saving…' : 'Save for Later'}
+            </button>
+            <button className="se-btn se-btn-delete" style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) onDelete?.(story); }} title="Delete story">
+              Delete
             </button>
           </div>
         </div>
@@ -804,6 +807,7 @@ export default function StoryEngine() {
               hasPrev={engine.hasPrevStory}
               hasNext={engine.hasNextStory}
               onExportStory={engine.handleExportStory}
+              onDelete={engine.handleDelete}
               onEvaluate={(storyOrTask) => {
                 const params = new URLSearchParams();
                 if (engine.activeStory?.text) params.set('text', '1');
