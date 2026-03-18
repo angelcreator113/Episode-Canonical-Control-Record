@@ -2965,7 +2965,7 @@ html, body {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 20px 28px;
+  padding: 20px 60px 20px 28px; /* right-padding avoids AppAssistant FAB */
   border-bottom: 2px solid;
   flex-shrink: 0;
   gap: 16px;
@@ -3488,7 +3488,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
+  padding: 12px 60px 12px 24px; /* right-padding avoids AppAssistant FAB */
   border-bottom: 1px solid var(--se-border-light);
   background: #ffffff;
   flex-shrink: 0;
