@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from '../components/StoryReviewPanel';
 import WriteModeAIWriter from '../components/WriteModeAIWriter';
@@ -98,6 +98,68 @@ function StoryPanel({
   const [editText, setEditText] = useState(story?.text || '');
   const [saveStatus, setSaveStatus] = useState('saved');
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
+  const [voicesExpanded, setVoicesExpanded] = useState(false);
+
+  // ── Text-to-Speech state ──
+  const [ttsPlaying, setTtsPlaying] = useState(false);
+  const [ttsPaused, setTtsPaused] = useState(false);
+  const [ttsRate, setTtsRate] = useState(1);
+  const ttsUtteranceRef = useRef(null);
+
+  const handleTtsPlay = useCallback(() => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+
+    if (ttsPaused) {
+      synth.resume();
+      setTtsPaused(false);
+      setTtsPlaying(true);
+      return;
+    }
+
+    synth.cancel();
+    const text = editing ? editText : (story?.text || '');
+    if (!text.trim()) return;
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = ttsRate;
+    utterance.pitch = 1;
+
+    // Pick a natural-sounding voice if available
+    const voices = synth.getVoices();
+    const preferred = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
+                   || voices.find(v => v.lang.startsWith('en') && !v.localService)
+                   || voices.find(v => v.lang.startsWith('en'));
+    if (preferred) utterance.voice = preferred;
+
+    utterance.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
+    utterance.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
+
+    ttsUtteranceRef.current = utterance;
+    synth.speak(utterance);
+    setTtsPlaying(true);
+    setTtsPaused(false);
+  }, [editing, editText, story?.text, ttsPaused, ttsRate]);
+
+  const handleTtsPause = useCallback(() => {
+    const synth = window.speechSynthesis;
+    if (synth?.speaking) {
+      synth.pause();
+      setTtsPaused(true);
+      setTtsPlaying(false);
+    }
+  }, []);
+
+  const handleTtsStop = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    setTtsPlaying(false);
+    setTtsPaused(false);
+  }, []);
+
+  // Cleanup TTS on unmount or story change
+  useEffect(() => {
+    return () => window.speechSynthesis?.cancel();
+  }, [story?.story_number]);
 
   useEffect(() => {
     if (selectedCharKey) setSelectedVoice(selectedCharKey);
@@ -361,6 +423,20 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-edit-header-right">
+            <div className="se-tts-controls">
+              {!ttsPlaying && !ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">🔊</button>
+              )}
+              {ttsPlaying && (
+                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause">⏸</button>
+              )}
+              {ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume">▶</button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop">■</button>
+              )}
+            </div>
             <span className={`se-save-indicator se-save-${saveStatus}`}>
               {saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved changes'}
             </span>
@@ -405,6 +481,62 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-story-header-actions">
+            <div className="se-tts-controls">
+              {!ttsPlaying && !ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
+                  🔊 Listen
+                </button>
+              )}
+              {ttsPlaying && (
+                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause reading">
+                  ⏸ Pause
+                </button>
+              )}
+              {ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume reading">
+                  ▶ Resume
+                </button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">■</button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <select
+                  className="se-tts-speed"
+                  value={ttsRate}
+                  onChange={(e) => {
+                    const newRate = parseFloat(e.target.value);
+                    setTtsRate(newRate);
+                    // Restart with new rate
+                    handleTtsStop();
+                    setTimeout(() => {
+                      const synth = window.speechSynthesis;
+                      const text = editing ? editText : (story?.text || '');
+                      const u = new SpeechSynthesisUtterance(text);
+                      u.rate = newRate;
+                      const voices = synth.getVoices();
+                      const pref = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
+                                || voices.find(v => v.lang.startsWith('en') && !v.localService)
+                                || voices.find(v => v.lang.startsWith('en'));
+                      if (pref) u.voice = pref;
+                      u.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
+                      u.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
+                      synth.speak(u);
+                      setTtsPlaying(true);
+                      setTtsPaused(false);
+                    }, 100);
+                  }}
+                  title="Reading speed"
+                >
+                  <option value="0.5">0.5×</option>
+                  <option value="0.75">0.75×</option>
+                  <option value="1">1×</option>
+                  <option value="1.25">1.25×</option>
+                  <option value="1.5">1.5×</option>
+                  <option value="2">2×</option>
+                </select>
+              )}
+            </div>
             <button className="se-btn se-btn-reading-mode" onClick={() => onToggleReadingMode?.()} title={readingMode ? 'Exit reading mode (Esc)' : 'Reading mode (F)'}>
               {readingMode ? '⊟' : '⊞'}
             </button>
@@ -529,46 +661,6 @@ function StoryPanel({
 
             <div className="se-writing-tools">
               <div className="se-tools-section">
-                <div className="se-tools-section-title">Narrative Perspective</div>
-                <div className="se-tools-section-subtitle">Choose voice for AI edits</div>
-                <div className="se-voice-list">
-                  {allCharacters && Object.entries(allCharacters).map(([key, c]) => (
-                    <label
-                      key={key}
-                      className={`se-voice-option ${selectedVoice === key ? 'se-voice-active' : ''}`}
-                      onClick={() => { setSelectedVoice(key); onSelectChar?.(key); }}
-                    >
-                      <span className={`se-voice-radio ${selectedVoice === key ? 'se-voice-radio-on' : ''}`} />
-                      <span className="se-voice-name">{c.display_name || key}</span>
-                      {selectedVoice === key && <span className="se-voice-active-label">Writing tone applied</span>}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="se-tools-section">
-                <div className="se-tools-section-title">Story Info</div>
-                <div className="se-tools-info-grid">
-                  <div className="se-tools-info-row">
-                    <span className="se-tools-info-label">Type</span>
-                    <span className="se-tools-info-value" style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
-                  </div>
-                  <div className="se-tools-info-row">
-                    <span className="se-tools-info-label">Word Count</span>
-                    <span className="se-tools-info-value">{wordCount.toLocaleString()}</span>
-                  </div>
-                  <div className="se-tools-info-row">
-                    <span className="se-tools-info-label">Pages</span>
-                    <span className="se-tools-info-value">{editTotalPages}</span>
-                  </div>
-                  <div className="se-tools-info-row">
-                    <span className="se-tools-info-label">Reading Time</span>
-                    <span className="se-tools-info-value">{getReadingTime(wordCount)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="se-tools-section">
                 <div className="se-tools-section-title">AI Assistance</div>
                 <WriteModeAIWriter
                   chapterId={String(story?.story_number || task?.story_number || '')}
@@ -609,6 +701,61 @@ function StoryPanel({
                   })) : []}
                   onSelectCharacter={(c) => { setSelectedVoice(c?.character_key || c?.id); onSelectChar?.(c?.character_key || c?.id); }}
                 />
+              </div>
+
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">Story Info</div>
+                <div className="se-tools-info-grid">
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Type</span>
+                    <span className="se-tools-info-value" style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Word Count</span>
+                    <span className="se-tools-info-value">{wordCount.toLocaleString()}</span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Pages</span>
+                    <span className="se-tools-info-value">{editTotalPages}</span>
+                  </div>
+                  <div className="se-tools-info-row">
+                    <span className="se-tools-info-label">Reading Time</span>
+                    <span className="se-tools-info-value">{getReadingTime(wordCount)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="se-tools-section se-tools-section-voices">
+                <div
+                  className="se-tools-section-title se-tools-section-collapsible"
+                  onClick={() => setVoicesExpanded(v => !v)}
+                >
+                  <span>Narrative Perspective</span>
+                  <span className={`se-tools-chevron ${voicesExpanded ? '' : 'se-tools-chevron-collapsed'}`}>▾</span>
+                </div>
+                <div className="se-tools-section-subtitle">Choose voice for AI edits</div>
+                {selectedVoice && allCharacters?.[selectedVoice] && !voicesExpanded && (
+                  <div className="se-voice-selected-summary">
+                    <span className="se-voice-radio se-voice-radio-on" />
+                    <span className="se-voice-name">{allCharacters[selectedVoice].display_name || selectedVoice}</span>
+                    <span className="se-voice-active-label">Writing tone applied</span>
+                  </div>
+                )}
+                {voicesExpanded && (
+                  <div className="se-voice-list se-voice-list-scrollable">
+                    {allCharacters && Object.entries(allCharacters).map(([key, c]) => (
+                      <label
+                        key={key}
+                        className={`se-voice-option ${selectedVoice === key ? 'se-voice-active' : ''}`}
+                        onClick={() => { setSelectedVoice(key); onSelectChar?.(key); }}
+                      >
+                        <span className={`se-voice-radio ${selectedVoice === key ? 'se-voice-radio-on' : ''}`} />
+                        <span className="se-voice-name">{c.display_name || key}</span>
+                        {selectedVoice === key && <span className="se-voice-active-label">Writing tone applied</span>}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
