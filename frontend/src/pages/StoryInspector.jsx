@@ -1,5 +1,87 @@
-import React, { useState, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { PHASE_COLORS, PHASE_LABELS, TYPE_ICONS, WORLD_LABELS, getReadingTime, API_BASE } from './storyEngineConstants';
+
+// ─── Scene Pulse — emotional feedback ────────────────────────────────────────
+function ScenePulse({ story }) {
+  const text = story?.text || '';
+  const words = text.split(/\s+/).filter(Boolean);
+  const totalWords = words.length;
+
+  // Simple heuristic tone analysis based on text content
+  const tensionWords = ['but', 'however', 'yet', 'suddenly', 'despite', 'fear', 'danger', 'risk', 'threat', 'worried', 'anxious', 'nervous', 'tense', 'sharp', 'cold', 'dark'];
+  const calmWords = ['gently', 'softly', 'quietly', 'peace', 'warm', 'light', 'morning', 'breath', 'slow', 'calm', 'still', 'easy'];
+  const internalWords = ['thought', 'felt', 'wondered', 'remembered', 'knew', 'mind', 'heart', 'believed', 'imagined', 'realized'];
+  const dialogueCount = (text.match(/[""][^""]*[""]|"[^"]*"/g) || []).length;
+
+  const lowerText = text.toLowerCase();
+  const tensionScore = tensionWords.reduce((s, w) => s + (lowerText.split(w).length - 1), 0);
+  const calmScore = calmWords.reduce((s, w) => s + (lowerText.split(w).length - 1), 0);
+  const internalScore = internalWords.reduce((s, w) => s + (lowerText.split(w).length - 1), 0);
+
+  const intensity = totalWords > 0 ? Math.min(100, Math.round((tensionScore / (totalWords / 100)) * 15)) : 0;
+  const tone = tensionScore > calmScore * 1.5 ? 'Tension building' : calmScore > tensionScore * 1.5 ? 'Calm' : 'Controlled';
+  const focus = internalScore > dialogueCount * 1.5 ? 'Internal' : dialogueCount > internalScore * 1.5 ? 'Relational' : 'External';
+
+  const toneColor = tone === 'Tension building' ? '#B85C38' : tone === 'Calm' ? '#4A9B6F' : '#B8962E';
+
+  return (
+    <div className="se-scene-pulse">
+      <div className="se-pulse-row">
+        <span className="se-pulse-label">Tone</span>
+        <span className="se-pulse-value" style={{ background: `${toneColor}12`, color: toneColor }}>{tone}</span>
+      </div>
+      <div className="se-pulse-row">
+        <span className="se-pulse-label">Intensity</span>
+        <div className="se-pulse-bar">
+          <div className="se-pulse-bar-fill" style={{ width: `${intensity}%`, background: intensity > 60 ? '#B85C38' : intensity > 30 ? '#B8962E' : '#4A9B6F' }} />
+        </div>
+        <span style={{ fontSize: 10, color: '#9d968d', minWidth: 32, textAlign: 'right' }}>{intensity > 60 ? 'High' : intensity > 30 ? 'Medium' : 'Low'}</span>
+      </div>
+      <div className="se-pulse-row">
+        <span className="se-pulse-label">Focus</span>
+        <span className="se-pulse-value">{focus}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Next Move Suggestion ────────────────────────────────────────────────────
+function NextMoveSuggestion({ story, characterKey }) {
+  const [suggestion, setSuggestion] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setSuggestion(null);
+    if (!story?.id || !characterKey) return;
+    setLoading(true);
+    fetch(`${API_BASE}/story-health/story-sparks/${characterKey}`)
+      .then(r => r.json())
+      .then(d => {
+        const sparks = d.sparks || [];
+        if (sparks.length > 0) {
+          setSuggestion(sparks[0].suggestion || sparks[0].title || 'Continue developing the current scene arc.');
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [story?.id, characterKey]);
+
+  return (
+    <div className="se-next-move">
+      <div className="se-next-move-header">
+        <span>{'🔮'}</span>
+        <span>Suggested Next Move</span>
+      </div>
+      {loading ? (
+        <div className="se-next-move-loading">Reading the story arc…</div>
+      ) : suggestion ? (
+        <div className="se-next-move-text">{suggestion}</div>
+      ) : (
+        <div className="se-next-move-text">Select a story to see suggestions.</div>
+      )}
+    </div>
+  );
+}
 
 // ─── Lazy-loaded inspector panels (#6) ────────────────────────────────────────
 const ArcTrackingPanel = lazy(() => import('../components/ArcTrackingPanel'));
@@ -157,6 +239,14 @@ export default function StoryInspector({
         </section>
       )}
 
+      {/* Scene Pulse — emotional feedback */}
+      {activeStory && (
+        <section className="se-insp-section">
+          <div className="se-insp-label">Scene Pulse</div>
+          <ScenePulse story={activeStory} />
+        </section>
+      )}
+
       {/* Stats */}
       <section className="se-insp-section">
         <div className="se-insp-label">Stats</div>
@@ -214,6 +304,9 @@ export default function StoryInspector({
           ))}
         </section>
       )}
+
+      {/* Next Move Suggestion */}
+      {selectedChar && <NextMoveSuggestion story={activeStory} characterKey={selectedChar} />}
 
       {/* Keyboard hints */}
       <div className="se-insp-shortcuts">

@@ -76,6 +76,152 @@ function TherapySuggestions({ characterKey, apiBase }) {
   );
 }
 
+// ─── Bottom Writing Tools (compact toolbar below story content) ───────────────
+const BOTTOM_TOOLS = [
+  { id: 'continue', icon: '✨', label: 'Continue the moment', group: 'flow', action: 'continue', spinner: 'Expanding…' },
+  { id: 'deepen',   icon: '🧠', label: 'Deepen the scene',   group: 'flow', action: 'deepen',   spinner: 'Layering depth…' },
+  { id: 'nudge',    icon: '🎯', label: 'Refine tone',        group: 'refinement', action: 'nudge', spinner: 'Refining…' },
+  { id: 'rewrite',  icon: '🔄', label: 'Rework paragraph',   group: 'refinement', action: 'rewrite', spinner: 'Reworking…' },
+];
+
+function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, charColor, onInsertText, currentProse }) {
+  const [activeAction, setActiveAction] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [lengthMode, setLengthMode] = useState('paragraph');
+  const [copied, setCopied] = useState(false);
+
+  const accent = charColor || '#B8962E';
+  const charName = charObj?.display_name || selectedCharKey || '';
+
+  useEffect(() => {
+    setResult(null); setError(null); setActiveAction(null); setCopied(false);
+  }, [selectedCharKey]);
+
+  async function runTool(tool) {
+    if (!selectedCharKey || !story) return;
+    setActiveAction(tool.id);
+    setResult(null); setError(null); setLoading(true); setCopied(false);
+
+    const payload = {
+      chapter_id: String(story.story_number || ''),
+      book_id: activeWorld || '',
+      character_id: charObj?.id || selectedCharKey,
+      character: {
+        name: charName,
+        type: charObj?.role_type, role: charObj?.role_type,
+        core_desire: charObj?.core_desire, core_fear: charObj?.core_fear,
+        core_wound: charObj?.core_wound, description: charObj?.description,
+      },
+      recent_prose: (currentProse || story.text || '').slice(-600),
+      chapter_context: {},
+      action: tool.action,
+      length: lengthMode,
+    };
+
+    try {
+      const res = await fetch('/api/v1/memories/ai-writer-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      const text = data.content || data.prose || data.nudge || data.continuation || data.text || data.result || '';
+      if (text) setResult(text);
+      else setError('No content returned — try a different action.');
+    } catch {
+      setError('Generation failed. Check connection and try again.');
+    }
+    setLoading(false);
+  }
+
+  if (!story || !selectedCharKey) return null;
+
+  const flowTools = BOTTOM_TOOLS.filter(t => t.group === 'flow');
+  const refinementTools = BOTTOM_TOOLS.filter(t => t.group === 'refinement');
+
+  return (
+    <div className="se-bottom-tools">
+      <div className="se-bottom-tools-groups">
+        <div className="se-bottom-tools-group">
+          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon">✨</span> Writing Flow</div>
+          <div className="se-bottom-tools-row">
+            {flowTools.map(tool => (
+              <button
+                key={tool.id}
+                className={`se-bottom-tool-pill${activeAction === tool.id ? ' active' : ''}`}
+                style={{ '--tool-accent': accent }}
+                onClick={() => runTool(tool)}
+                disabled={loading}
+              >
+                <span className="se-bottom-tool-icon">{tool.icon}</span>
+                <span className="se-bottom-tool-label">
+                  {tool.label}
+                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner"> {tool.spinner}</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="se-bottom-tools-group">
+          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon">🎯</span> Refinement</div>
+          <div className="se-bottom-tools-row">
+            {refinementTools.map(tool => (
+              <button
+                key={tool.id}
+                className={`se-bottom-tool-pill${activeAction === tool.id ? ' active' : ''}`}
+                style={{ '--tool-accent': accent }}
+                onClick={() => runTool(tool)}
+                disabled={loading}
+              >
+                <span className="se-bottom-tool-icon">{tool.icon}</span>
+                <span className="se-bottom-tool-label">
+                  {tool.label}
+                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner"> {tool.spinner}</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="se-bottom-tools-length">
+        <button
+          className={`se-bottom-length-pill${lengthMode === 'full' ? ' active' : ''}`}
+          style={{ '--tool-accent': accent }}
+          onClick={() => setLengthMode('full')}
+        >¶ full</button>
+        <button
+          className={`se-bottom-length-pill${lengthMode === 'paragraph' ? ' active' : ''}`}
+          style={{ '--tool-accent': accent }}
+          onClick={() => setLengthMode('paragraph')}
+        >¶ Paragraphs</button>
+      </div>
+
+      {error && <div className="se-bottom-tools-error">{error}</div>}
+
+      {result && (
+        <div className="se-bottom-tools-result">
+          <div className="se-bottom-tools-result-header">
+            <span className="se-bottom-tools-result-title">Generated</span>
+            <div className="se-bottom-tools-result-actions">
+              <button className="se-bottom-tools-result-btn" onClick={() => { navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+              <button className="se-bottom-tools-result-btn se-bottom-tools-result-btn--insert" style={{ background: accent, color: '#fff' }} onClick={() => { onInsertText?.(result); setResult(null); }}>
+                Insert into story
+              </button>
+              <button className="se-bottom-tools-result-btn" onClick={() => setResult(null)}>Dismiss</button>
+            </div>
+          </div>
+          <div className="se-bottom-tools-result-text">{result}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Story reader / editor panel ──────────────────────────────────────────────
 function StoryPanel({
   story, task, charColor, charName,
@@ -178,9 +324,32 @@ function StoryPanel({
   const [currentPage, setCurrentPage] = useState(0);
   const [evalScore, setEvalScore] = useState(null);
   const [activeThreads, setActiveThreads] = useState([]);
+  const [selectionPopup, setSelectionPopup] = useState(null);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
+
+  // Text selection popup for reading mode
+  useEffect(() => {
+    const handleSelection = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !storyBodyRef.current?.contains(sel.anchorNode)) {
+        setSelectionPopup(null);
+        return;
+      }
+      const text = sel.toString().trim();
+      if (text.length < 3) { setSelectionPopup(null); return; }
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      setSelectionPopup({
+        text,
+        top: rect.top - 44,
+        left: rect.left + rect.width / 2,
+      });
+    };
+    document.addEventListener('mouseup', handleSelection);
+    return () => document.removeEventListener('mouseup', handleSelection);
+  }, []);
 
   const WORDS_PER_PAGE = 250;
   const pages = useMemo(() => {
@@ -438,7 +607,7 @@ function StoryPanel({
               )}
             </div>
             <span className={`se-save-indicator se-save-${saveStatus}`}>
-              {saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved changes'}
+              {saveStatus === 'saved' ? 'Saved — your scene is evolving' : saveStatus === 'saving' ? 'Capturing your words…' : 'Unsaved changes'}
             </span>
             <button
               className="se-btn se-btn-save-primary"
@@ -466,14 +635,15 @@ function StoryPanel({
             <div className="se-story-header-title">{story.title}</div>
             <div className="se-story-header-meta">
               <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
+              <span className="se-header-arc-stage">
+                {story.phase === 'establishment' ? 'Establishing' : story.phase === 'pressure' ? 'Rising' : story.phase === 'crisis' ? 'Breaking' : story.phase === 'integration' ? 'Resolving' : story.phase || '—'}
+              </span>
               <span>·</span>
-              <span>{TYPE_ICONS[story.story_type]} {story.story_type}</span>
+              <span>Chapter {story.story_number}</span>
               <span>·</span>
               <span>{story.word_count?.toLocaleString() || '—'} words</span>
               {story.word_count > 0 && (
                 <>
-                  <span>·</span>
-                  <span>{Math.ceil(story.word_count / 250)} {Math.ceil(story.word_count / 250) === 1 ? 'page' : 'pages'}</span>
                   <span>·</span>
                   <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
                 </>
@@ -481,6 +651,20 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-story-header-actions">
+            <div className="se-mode-toggle">
+              <button
+                className={`se-mode-btn ${!readingMode ? 'active' : ''}`}
+                onClick={() => { if (readingMode) onToggleReadingMode?.(); }}
+              >
+                Edit
+              </button>
+              <button
+                className={`se-mode-btn ${readingMode ? 'active' : ''}`}
+                onClick={() => { if (!readingMode) onToggleReadingMode?.(); }}
+              >
+                Read
+              </button>
+            </div>
             <div className="se-tts-controls">
               {!ttsPlaying && !ttsPaused && (
                 <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
@@ -507,7 +691,6 @@ function StoryPanel({
                   onChange={(e) => {
                     const newRate = parseFloat(e.target.value);
                     setTtsRate(newRate);
-                    // Restart with new rate
                     handleTtsStop();
                     setTimeout(() => {
                       const synth = window.speechSynthesis;
@@ -537,20 +720,37 @@ function StoryPanel({
                 </select>
               )}
             </div>
-            <button className="se-btn se-btn-reading-mode" onClick={() => onToggleReadingMode?.()} title={readingMode ? 'Exit reading mode (Esc)' : 'Reading mode (F)'}>
-              {readingMode ? '⊟' : '⊞'}
-            </button>
-            <button className="se-btn se-btn-export" onClick={() => onExportStory?.(story)} title="Copy or download story">↗ Export</button>
-            <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
-            <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
-              {consistencyLoading ? '…' : 'Check'}
-            </button>
-            <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
-              {savingForLater ? 'Saving…' : 'Save for Later'}
-            </button>
-            <button className="se-btn se-btn-delete" style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) onDelete?.(story); }} title="Delete story">
-              Delete
-            </button>
+            {!readingMode && (
+              <>
+                <button className="se-btn se-btn-export" onClick={() => onExportStory?.(story)} title="Copy or download story">Export</button>
+                <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
+                <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
+                  {consistencyLoading ? '…' : 'Check'}
+                </button>
+                <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
+                  {savingForLater ? 'Saving…' : 'Save Draft'}
+                </button>
+                <button className="se-btn se-btn-delete" style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) onDelete?.(story); }} title="Delete story">
+                  Delete
+                </button>
+                <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={() => onEvaluate?.()} title="Evaluate with multi-voice scoring">
+                  Evaluate
+                </button>
+                <button className="se-btn se-btn-approve" style={{ background: charColor }} onClick={() => onApprove(story, true)}>
+                  {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
+                </button>
+                {evalScore && (
+                  <div className="se-eval-badge" style={{
+                    fontSize: 10, padding: '3px 8px', borderRadius: 6,
+                    background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                    color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
+                    fontWeight: 600, marginLeft: -4,
+                  }}>
+                    {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -657,52 +857,30 @@ function StoryPanel({
                   </button>
                 </div>
               )}
+              <BottomWritingTools
+                story={story}
+                charObj={charObj}
+                selectedCharKey={selectedCharKey}
+                activeWorld={activeWorld}
+                charColor={charColor}
+                currentProse={editText}
+                onInsertText={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = editText.slice(0, start);
+                    const after = editText.slice(end);
+                    setEditText(before + text + after);
+                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                  } else {
+                    setEditText(prev => prev + '\n\n' + text);
+                  }
+                }}
+              />
             </div>
 
             <div className="se-writing-tools">
-              <div className="se-tools-section">
-                <div className="se-tools-section-title">AI Assistance</div>
-                <WriteModeAIWriter
-                  chapterId={String(story?.story_number || task?.story_number || '')}
-                  bookId={activeWorld || ''}
-                  selectedCharacter={charObj ? {
-                    id: charObj.id || selectedCharKey,
-                    name: charObj.display_name || charName,
-                    selected_name: charObj.display_name || charName,
-                    type: charObj.role_type, role: charObj.role_type,
-                    core_desire: charObj.core_desire, core_fear: charObj.core_fear,
-                    core_wound: charObj.core_wound, description: charObj.description,
-                  } : null}
-                  currentProse={editText}
-                  chapterContext={task ? {
-                    scene_goal: task.task, theme: task.title,
-                    emotional_arc_start: task.phase, emotional_arc_end: '', pov: charName || '',
-                  } : {}}
-                  onInsert={(text) => {
-                    const ta = textareaRef.current;
-                    if (ta) {
-                      const start = ta.selectionStart;
-                      const end = ta.selectionEnd;
-                      const before = editText.slice(0, start);
-                      const after = editText.slice(end);
-                      setEditText(before + text + after);
-                      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
-                    } else {
-                      setEditText(prev => prev + '\n\n' + text);
-                    }
-                  }}
-                  getSelectedText={() => {
-                    const ta = textareaRef.current;
-                    if (ta && ta.selectionStart !== ta.selectionEnd) return editText.slice(ta.selectionStart, ta.selectionEnd);
-                    return '';
-                  }}
-                  characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
-                    ...c, id: c.id || key, character_key: key, name: c.display_name,
-                  })) : []}
-                  onSelectCharacter={(c) => { setSelectedVoice(c?.character_key || c?.id); onSelectChar?.(c?.character_key || c?.id); }}
-                />
-              </div>
-
               <div className="se-tools-section">
                 <div className="se-tools-section-title">Story Info</div>
                 <div className="se-tools-info-grid">
@@ -757,6 +935,49 @@ function StoryPanel({
                   </div>
                 )}
               </div>
+
+              <div className="se-tools-section">
+                <div className="se-tools-section-title">Creative Tools</div>
+                <WriteModeAIWriter
+                  chapterId={String(story?.story_number || task?.story_number || '')}
+                  bookId={activeWorld || ''}
+                  selectedCharacter={charObj ? {
+                    id: charObj.id || selectedCharKey,
+                    name: charObj.display_name || charName,
+                    selected_name: charObj.display_name || charName,
+                    type: charObj.role_type, role: charObj.role_type,
+                    core_desire: charObj.core_desire, core_fear: charObj.core_fear,
+                    core_wound: charObj.core_wound, description: charObj.description,
+                  } : null}
+                  currentProse={editText}
+                  chapterContext={task ? {
+                    scene_goal: task.task, theme: task.title,
+                    emotional_arc_start: task.phase, emotional_arc_end: '', pov: charName || '',
+                  } : {}}
+                  onInsert={(text) => {
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      const start = ta.selectionStart;
+                      const end = ta.selectionEnd;
+                      const before = editText.slice(0, start);
+                      const after = editText.slice(end);
+                      setEditText(before + text + after);
+                      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                    } else {
+                      setEditText(prev => prev + '\n\n' + text);
+                    }
+                  }}
+                  getSelectedText={() => {
+                    const ta = textareaRef.current;
+                    if (ta && ta.selectionStart !== ta.selectionEnd) return editText.slice(ta.selectionStart, ta.selectionEnd);
+                    return '';
+                  }}
+                  characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
+                    ...c, id: c.id || key, character_key: key, name: c.display_name,
+                  })) : []}
+                  onSelectCharacter={(c) => { setSelectedVoice(c?.character_key || c?.id); onSelectChar?.(c?.character_key || c?.id); }}
+                />
+              </div>
             </div>
           </div>
         ) : (
@@ -768,16 +989,56 @@ function StoryPanel({
                   : <div key={i} className="se-story-spacer" />
               ))}
             </div>
+            {/* Text selection popup */}
+            {selectionPopup && !editing && (
+              <div className="se-text-selection-popup" style={{ top: selectionPopup.top, left: selectionPopup.left, transform: 'translateX(-50%)' }}>
+                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Rewrite</button>
+                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Deepen</button>
+                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Change Tone</button>
+              </div>
+            )}
             {totalPages > 1 && (
               <div className="se-page-nav">
-                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage === 0}>‹ Prev Page</button>
-                <span className="se-page-indicator">Page {currentPage + 1} of {totalPages}</span>
-                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage >= totalPages - 1}>Next Page ›</button>
+                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage === 0}>‹ Prev</button>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <div className="se-chapter-timeline">
+                    {Array.from({ length: Math.min(totalPages, 12) }, (_, i) => {
+                      const pageIdx = totalPages <= 12 ? i : Math.round(i * (totalPages - 1) / 11);
+                      return (
+                        <React.Fragment key={i}>
+                          {i > 0 && <div className={`se-timeline-connector${pageIdx <= currentPage ? ' completed' : ''}`} />}
+                          <div
+                            className={`se-timeline-dot${pageIdx === currentPage ? ' active' : pageIdx < currentPage ? ' completed' : ''}`}
+                            onClick={() => { setCurrentPage(pageIdx); storyBodyRef.current?.scrollTo(0, 0); }}
+                            style={{ cursor: 'pointer' }}
+                            title={`Page ${pageIdx + 1}`}
+                          />
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                  <span className="se-page-indicator" style={{ fontSize: 11 }}>Page {currentPage + 1} of {totalPages}</span>
+                </div>
+                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage >= totalPages - 1}>Next ›</button>
               </div>
             )}
           </>
         )}
       </div>
+
+      {!editing && story && (
+        <BottomWritingTools
+          story={story}
+          charObj={charObj}
+          selectedCharKey={selectedCharKey}
+          activeWorld={activeWorld}
+          charColor={charColor}
+          onInsertText={(text) => {
+            setEditText((story.text || '') + '\n\n' + text);
+            setEditing(true);
+          }}
+        />
+      )}
 
       {!editing && therapyMemories?.length > 0 && (
         <div className="se-therapy-panel">
@@ -851,7 +1112,11 @@ export default function StoryEngine() {
               <span className="se-header-phase" style={{ color: PHASE_COLORS[engine.activeStory.phase] }}>
                 {PHASE_LABELS[engine.activeStory.phase]}
               </span>
+              <span className="se-header-chapter">Chapter {engine.activeStory.story_number}</span>
               <span className="se-header-words">{engine.activeStory.word_count?.toLocaleString()} words</span>
+              {engine.activeStory.word_count > 0 && (
+                <span className="se-header-reading-time">{getReadingTime(engine.activeStory.word_count)}</span>
+              )}
             </div>
           )}
           <div className="se-header-actions">
