@@ -3662,6 +3662,14 @@ html, body {
   overflow: hidden;
 }
 
+/* When story-body contains the edit layout, prevent body-level scrolling
+   so each panel (canvas + sidebar) scrolls independently */
+.se-story-body:has(.se-edit-layout) {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Left: Writing Canvas (70%) */
 .se-edit-canvas {
   flex: 7;
@@ -3726,6 +3734,7 @@ html, body {
   flex: 3;
   min-width: 280px;
   max-width: 360px;
+  min-height: 0;
   border-left: 1px solid var(--se-border-light);
   background: linear-gradient(180deg, #faf8f5 0%, #f5f3ef 100%);
   overflow-y: auto;
