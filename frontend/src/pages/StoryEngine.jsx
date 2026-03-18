@@ -84,7 +84,7 @@ const BOTTOM_TOOLS = [
   { id: 'rewrite',  icon: '🔄', label: 'Rework paragraph',   group: 'refinement', action: 'rewrite', spinner: 'Reworking…' },
 ];
 
-function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, charColor, onInsertText }) {
+function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, charColor, onInsertText, currentProse }) {
   const [activeAction, setActiveAction] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -114,7 +114,7 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
         core_desire: charObj?.core_desire, core_fear: charObj?.core_fear,
         core_wound: charObj?.core_wound, description: charObj?.description,
       },
-      recent_prose: (story.text || '').slice(-600),
+      recent_prose: (currentProse || story.text || '').slice(-600),
       chapter_context: {},
       action: tool.action,
       length: lengthMode,
@@ -857,6 +857,27 @@ function StoryPanel({
                   </button>
                 </div>
               )}
+              <BottomWritingTools
+                story={story}
+                charObj={charObj}
+                selectedCharKey={selectedCharKey}
+                activeWorld={activeWorld}
+                charColor={charColor}
+                currentProse={editText}
+                onInsertText={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = editText.slice(0, start);
+                    const after = editText.slice(end);
+                    setEditText(before + text + after);
+                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
+                  } else {
+                    setEditText(prev => prev + '\n\n' + text);
+                  }
+                }}
+              />
             </div>
 
             <div className="se-writing-tools">
