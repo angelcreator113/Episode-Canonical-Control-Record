@@ -2843,6 +2843,123 @@ html, body {
   border-bottom: none;
 }
 
+/* ─── Situation cards ─────────────────────────────────────────────── */
+.se-situations-list {
+  margin-bottom: 8px;
+}
+
+.se-situation-card {
+  border: 1px solid var(--se-border-light);
+  border-radius: var(--se-radius);
+  background: var(--se-cream);
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.se-situation-card:hover {
+  border-color: var(--se-border);
+}
+
+.se-situation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--se-border-light);
+  flex-wrap: wrap;
+}
+
+.se-situation-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--se-border);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.se-situation-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--se-text);
+  flex: 1;
+}
+
+.se-situation-tone {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7c3aed;
+  background: rgba(139, 92, 246, 0.08);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.se-situation-type {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--se-text-dim);
+  background: var(--se-border-light);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.se-situation-body {
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--se-text-muted);
+  line-height: 1.6;
+}
+
+.se-situation-subtext {
+  padding: 0 14px 10px;
+  font-size: 11.5px;
+  color: var(--se-text-dim);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.se-situation-subtext strong {
+  color: var(--se-text-muted);
+}
+
+.se-situation-chars {
+  padding: 6px 14px 10px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.se-situation-char-tag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: rgba(61, 122, 155, 0.08);
+  color: #3D7A9B;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.se-situation-opening {
+  padding: 8px 14px 12px;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-size: 12px;
+  color: var(--se-text-muted);
+  border-top: 1px solid var(--se-border-light);
+}
+
 /* story header */
 .se-story-header {
   display: flex;

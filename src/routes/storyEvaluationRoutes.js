@@ -1206,9 +1206,12 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
     const storyC = resultC.content?.[0]?.text || '';
 
     // Persist as a StorytellerStory record
+    const charKey = (characters_in_scene || ['ensemble'])[0];
+    const maxNum = await db.StorytellerStory.max('story_number', { where: { character_key: charKey } });
+    const nextStoryNumber = (maxNum || 0) + 1;
     const story = await db.StorytellerStory.create({
-      character_key: (characters_in_scene || ['ensemble'])[0],
-      story_number: 0,
+      character_key: charKey,
+      story_number: nextStoryNumber,
       title: `Eval Scene — ${(scene_brief || '').slice(0, 80)}`,
       text: '',
       phase: 'establishment',

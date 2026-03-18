@@ -31,7 +31,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
 
 let Anthropic;
 try {
@@ -192,7 +192,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 /**
  * DELETE /:id — Delete story
  */
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', optionalAuth, async (req, res) => {
   try {
     const db = require('../models');
     const story = await db.StorytellerStory.findByPk(req.params.id);

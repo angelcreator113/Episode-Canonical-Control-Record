@@ -613,6 +613,32 @@ export default function useStoryEngine() {
     return () => clearTimeout(timer);
   }, [rejectedStory]);
 
+  // --- Delete ---
+  const handleDelete = useCallback(async (story) => {
+    if (!story) return;
+    // Delete from DB if it has a db_id
+    if (story.db_id) {
+      try {
+        await fetch(`${API_BASE}/stories/${story.db_id}`, {
+          method: 'DELETE', headers: authHeaders(),
+        });
+      } catch (e) { console.error('story delete error:', e); }
+    }
+    // Remove from local state
+    setStories(prev => {
+      const next = { ...prev };
+      delete next[story.story_number];
+      const nextApproved = approvedStories.filter(n => n !== story.story_number);
+      setApprovedStories(nextApproved);
+      setSavedStories(prev => prev.filter(n => n !== story.story_number));
+      setCachedStories(selectedChar, next, nextApproved);
+      return next;
+    });
+    setActiveStory(null);
+    setActiveTask(tasks.find(t => t.story_number === story.story_number) || null);
+    addToast('Story deleted', 'info');
+  }, [selectedChar, approvedStories, tasks, addToast]);
+
   // --- Edit ---
   const handleEdit = useCallback(async (story, newText) => {
     const updated = { ...story, text: newText, word_count: newText.split(/\s+/).length };
@@ -778,7 +804,7 @@ export default function useStoryEngine() {
     handleGenerate,
 
     // Actions
-    handleApprove, handleReject, handleUndoReject,
+    handleApprove, handleReject, handleUndoReject, handleDelete,
     handleEdit, handleCheckConsistency, handleAddToRegistry,
     handleSaveForLater, handleExportStory,
     handleBatchApprove, handleBatchToggle,
