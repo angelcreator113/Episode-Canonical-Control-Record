@@ -222,29 +222,88 @@ function StoryPanel({
   if (task && !story) return (
     <div className="se-story-panel se-story-brief">
       <div className="se-story-brief-header" style={{ borderColor: charColor }}>
-        <div className="se-story-brief-num">Story {task.story_number}</div>
+        <div className="se-story-brief-num">Chapter {task.story_number}</div>
         <div className="se-story-brief-title">{task.title}</div>
         <div className="se-story-brief-phase" style={{ color: PHASE_COLORS[task.phase] || '#888' }}>
-          {PHASE_LABELS[task.phase] || task.phase || '—'} · {task.story_type?.replace(/_/g, ' ') || '—'}
+          {PHASE_LABELS[task.phase] || task.phase || '—'}
+          {task.wound_clock != null && <> · Wound Clock {task.wound_clock}</>}
+          {task.stakes_level != null && <> · Stakes {task.stakes_level}</>}
         </div>
       </div>
-      <div className="se-story-brief-grid">
-        <div className="se-story-brief-field">
-          <div className="se-story-brief-label">Task</div>
-          <div className="se-story-brief-value">{task.task || '—'}</div>
+      {task.chapter_theme && (
+        <div className="se-story-brief-field" style={{ marginBottom: 16 }}>
+          <div className="se-story-brief-label">Chapter Theme</div>
+          <div className="se-story-brief-value">{task.chapter_theme}</div>
         </div>
-        <div className="se-story-brief-field">
-          <div className="se-story-brief-label">Obstacle</div>
-          <div className="se-story-brief-value">{task.obstacle || '—'}</div>
+      )}
+      {task.situations?.length > 0 && (
+        <div className="se-situations-list">
+          <div className="se-story-brief-label" style={{ marginBottom: 10 }}>
+            Situations ({task.situations.length})
+          </div>
+          {task.situations.map((s, i) => {
+            const isObj = typeof s === 'object';
+            if (!isObj) return (
+              <div key={i} className="se-situation-card">
+                <div className="se-situation-header">
+                  <span className="se-situation-num">{i + 1}</span>
+                  <span className="se-situation-title">{s}</span>
+                </div>
+              </div>
+            );
+            return (
+              <div key={i} className="se-situation-card">
+                <div className="se-situation-header">
+                  <span className="se-situation-num">{s.situation_number || i + 1}</span>
+                  <span className="se-situation-title">{s.title || s.situation_type || `Situation ${i + 1}`}</span>
+                  {s.tone && <span className="se-situation-tone">{s.tone}</span>}
+                  {s.situation_type && s.title && (
+                    <span className="se-situation-type">{s.situation_type.replace(/_/g, ' ')}</span>
+                  )}
+                </div>
+                {s.what_happens && (
+                  <div className="se-situation-body">{s.what_happens}</div>
+                )}
+                {(s.what_she_knows || s.what_she_doesnt_say) && (
+                  <div className="se-situation-subtext">
+                    {s.what_she_knows && <div><strong>She knows:</strong> {s.what_she_knows}</div>}
+                    {s.what_she_doesnt_say && <div><strong>She doesn't say:</strong> {s.what_she_doesnt_say}</div>}
+                  </div>
+                )}
+                {s.characters_present?.length > 0 && (
+                  <div className="se-situation-chars">
+                    {s.characters_present.map((c, ci) => (
+                      <span key={ci} className="se-situation-char-tag">{c}</span>
+                    ))}
+                  </div>
+                )}
+                {s.opening_line && (
+                  <div className="se-situation-opening">"{s.opening_line}"</div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div className="se-story-brief-field">
-          <div className="se-story-brief-label">Strength Weaponized</div>
-          <div className="se-story-brief-value">{task.strength_weaponized || '—'}</div>
+      )}
+      {task.chapter_arc && (
+        <div className="se-story-brief-field" style={{ marginTop: 16 }}>
+          <div className="se-story-brief-label">Chapter Arc</div>
+          <div className="se-story-brief-value">{task.chapter_arc}</div>
         </div>
-        <div className="se-story-brief-field">
-          <div className="se-story-brief-label">Opening Line</div>
-          <div className="se-story-brief-value se-story-brief-opening">{task.opening_line ? `"${task.opening_line}"` : '—'}</div>
-        </div>
+      )}
+      <div className="se-story-brief-grid" style={{ marginTop: 16 }}>
+        {task.david_presence && (
+          <div className="se-story-brief-field">
+            <div className="se-story-brief-label">David</div>
+            <div className="se-story-brief-value">{task.david_presence}</div>
+          </div>
+        )}
+        {task.marcus_phase && task.marcus_phase !== 'none' && (
+          <div className="se-story-brief-field">
+            <div className="se-story-brief-label">Marcus</div>
+            <div className="se-story-brief-value">{task.marcus_phase.replace(/_/g, ' ')}</div>
+          </div>
+        )}
       </div>
       {task.new_character && (
         <div className="se-story-brief-new-char">
@@ -252,12 +311,6 @@ function StoryPanel({
           <span>{task.new_character_name} — {task.new_character_role}</span>
         </div>
       )}
-      <div className="se-story-brief-therapy">
-        <div className="se-story-brief-label">Therapy Seeds</div>
-        {(task.therapy_seeds || []).map((seed, i) => (
-          <div key={i} className="se-therapy-seed">{seed}</div>
-        ))}
-      </div>
       <div style={{ padding: '16px 20px', borderTop: '1px solid #e8e4d8', display: 'flex', gap: 10 }}>
         <button
           className="se-btn"
