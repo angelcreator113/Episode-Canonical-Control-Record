@@ -696,6 +696,7 @@ export default function StoryEngine() {
                       <button onClick={() => engine.handleSaveForLater(engine.activeStory)}>Save Draft</button>
                       <button onClick={() => engine.handleCheckConsistency(engine.activeStory)}>Check Consistency</button>
                       <button onClick={() => engine.setReadingMode(prev => !prev)}>Reading Mode</button>
+                      <button style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) engine.handleDelete(engine.activeStory); }}>Delete</button>
                     </div>
                   )}
                 </div>
