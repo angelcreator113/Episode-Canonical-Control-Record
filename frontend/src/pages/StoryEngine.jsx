@@ -76,6 +76,152 @@ function TherapySuggestions({ characterKey, apiBase }) {
   );
 }
 
+// ─── Bottom Writing Tools (compact toolbar below story content) ───────────────
+const BOTTOM_TOOLS = [
+  { id: 'continue', icon: '✨', label: 'Continue the moment', group: 'flow', action: 'continue', spinner: 'Expanding…' },
+  { id: 'deepen',   icon: '🧠', label: 'Deepen the scene',   group: 'flow', action: 'deepen',   spinner: 'Layering depth…' },
+  { id: 'nudge',    icon: '🎯', label: 'Refine tone',        group: 'refinement', action: 'nudge', spinner: 'Refining…' },
+  { id: 'rewrite',  icon: '🔄', label: 'Rework paragraph',   group: 'refinement', action: 'rewrite', spinner: 'Reworking…' },
+];
+
+function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, charColor, onInsertText }) {
+  const [activeAction, setActiveAction] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [lengthMode, setLengthMode] = useState('paragraph');
+  const [copied, setCopied] = useState(false);
+
+  const accent = charColor || '#B8962E';
+  const charName = charObj?.display_name || selectedCharKey || '';
+
+  useEffect(() => {
+    setResult(null); setError(null); setActiveAction(null); setCopied(false);
+  }, [selectedCharKey]);
+
+  async function runTool(tool) {
+    if (!selectedCharKey || !story) return;
+    setActiveAction(tool.id);
+    setResult(null); setError(null); setLoading(true); setCopied(false);
+
+    const payload = {
+      chapter_id: String(story.story_number || ''),
+      book_id: activeWorld || '',
+      character_id: charObj?.id || selectedCharKey,
+      character: {
+        name: charName,
+        type: charObj?.role_type, role: charObj?.role_type,
+        core_desire: charObj?.core_desire, core_fear: charObj?.core_fear,
+        core_wound: charObj?.core_wound, description: charObj?.description,
+      },
+      recent_prose: (story.text || '').slice(-600),
+      chapter_context: {},
+      action: tool.action,
+      length: lengthMode,
+    };
+
+    try {
+      const res = await fetch('/api/v1/memories/ai-writer-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      const text = data.content || data.prose || data.nudge || data.continuation || data.text || data.result || '';
+      if (text) setResult(text);
+      else setError('No content returned — try a different action.');
+    } catch {
+      setError('Generation failed. Check connection and try again.');
+    }
+    setLoading(false);
+  }
+
+  if (!story || !selectedCharKey) return null;
+
+  const flowTools = BOTTOM_TOOLS.filter(t => t.group === 'flow');
+  const refinementTools = BOTTOM_TOOLS.filter(t => t.group === 'refinement');
+
+  return (
+    <div className="se-bottom-tools">
+      <div className="se-bottom-tools-groups">
+        <div className="se-bottom-tools-group">
+          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon">✨</span> Writing Flow</div>
+          <div className="se-bottom-tools-row">
+            {flowTools.map(tool => (
+              <button
+                key={tool.id}
+                className={`se-bottom-tool-pill${activeAction === tool.id ? ' active' : ''}`}
+                style={{ '--tool-accent': accent }}
+                onClick={() => runTool(tool)}
+                disabled={loading}
+              >
+                <span className="se-bottom-tool-icon">{tool.icon}</span>
+                <span className="se-bottom-tool-label">
+                  {tool.label}
+                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner"> {tool.spinner}</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="se-bottom-tools-group">
+          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon">🎯</span> Refinement</div>
+          <div className="se-bottom-tools-row">
+            {refinementTools.map(tool => (
+              <button
+                key={tool.id}
+                className={`se-bottom-tool-pill${activeAction === tool.id ? ' active' : ''}`}
+                style={{ '--tool-accent': accent }}
+                onClick={() => runTool(tool)}
+                disabled={loading}
+              >
+                <span className="se-bottom-tool-icon">{tool.icon}</span>
+                <span className="se-bottom-tool-label">
+                  {tool.label}
+                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner"> {tool.spinner}</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="se-bottom-tools-length">
+        <button
+          className={`se-bottom-length-pill${lengthMode === 'full' ? ' active' : ''}`}
+          style={{ '--tool-accent': accent }}
+          onClick={() => setLengthMode('full')}
+        >¶ full</button>
+        <button
+          className={`se-bottom-length-pill${lengthMode === 'paragraph' ? ' active' : ''}`}
+          style={{ '--tool-accent': accent }}
+          onClick={() => setLengthMode('paragraph')}
+        >¶ Paragraphs</button>
+      </div>
+
+      {error && <div className="se-bottom-tools-error">{error}</div>}
+
+      {result && (
+        <div className="se-bottom-tools-result">
+          <div className="se-bottom-tools-result-header">
+            <span className="se-bottom-tools-result-title">Generated</span>
+            <div className="se-bottom-tools-result-actions">
+              <button className="se-bottom-tools-result-btn" onClick={() => { navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+              <button className="se-bottom-tools-result-btn se-bottom-tools-result-btn--insert" style={{ background: accent, color: '#fff' }} onClick={() => { onInsertText?.(result); setResult(null); }}>
+                Insert into story
+              </button>
+              <button className="se-bottom-tools-result-btn" onClick={() => setResult(null)}>Dismiss</button>
+            </div>
+          </div>
+          <div className="se-bottom-tools-result-text">{result}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Story reader / editor panel ──────────────────────────────────────────────
 function StoryPanel({
   story, task, charColor, charName,
@@ -858,6 +1004,20 @@ function StoryPanel({
           </>
         )}
       </div>
+
+      {!editing && story && (
+        <BottomWritingTools
+          story={story}
+          charObj={charObj}
+          selectedCharKey={selectedCharKey}
+          activeWorld={activeWorld}
+          charColor={charColor}
+          onInsertText={(text) => {
+            setEditText((story.text || '') + '\n\n' + text);
+            setEditing(true);
+          }}
+        />
+      )}
 
       {!editing && therapyMemories?.length > 0 && (
         <div className="se-therapy-panel">
