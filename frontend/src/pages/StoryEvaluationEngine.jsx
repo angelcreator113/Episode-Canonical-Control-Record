@@ -206,34 +206,55 @@ function composeBrief(b) {
   ].filter(Boolean).join(' ');
 }
 
-const briefInputStyle = {
-  width: '100%', padding: '10px 12px', background: T.surfaceAlt,
-  border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
-  fontSize: 13, outline: 'none', boxSizing: 'border-box',
-};
-
-const briefTextareaStyle = {
-  ...briefInputStyle, padding: '12px 14px', fontSize: 13.5,
-  lineHeight: 1.7, fontFamily: 'Georgia,serif', resize: 'vertical',
-};
+// briefInputStyle and briefTextareaStyle are computed inside the component
+// so they pick up the current theme value after darkMode toggles.
 
 // ── API helpers ───────────────────────────────────────────────────────────
-async function apiPost(endpoint, body) {
-  const res = await fetch(`${API}/${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
+function authHeaders() {
+  const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h.Authorization = `Bearer ${token}`;
+  return h;
 }
 
-async function apiGet(endpoint) {
-  const res = await fetch(`${API}/${endpoint}`);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
+async function apiPost(endpoint, body, { timeoutMs = 30000 } = {}) {
+  const ctrl = new AbortController();
+  const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(`${API}/${endpoint}`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timed out — please try again');
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function apiGet(endpoint, { timeoutMs = 30000 } = {}) {
+  const ctrl = new AbortController();
+  const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(`${API}/${endpoint}`, {
+      headers: authHeaders(),
+      signal: ctrl.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timed out — please try again');
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // ── Spinner ───────────────────────────────────────────────────────────────
@@ -438,6 +459,17 @@ export default function StoryEvaluationEngine() {
   // Update module-level T synchronously during render (not in useEffect)
   // so sub-components and style objects always see current theme
   Object.assign(T, darkMode ? T_DARK : T_LIGHT);
+
+  const briefInputStyle = {
+    width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+    border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+    fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  const briefTextareaStyle = {
+    ...briefInputStyle, padding: '12px 14px', fontSize: 13.5,
+    lineHeight: 1.7, fontFamily: 'Georgia,serif', resize: 'vertical',
+  };
+
   useEffect(() => {
     try { localStorage.setItem(DARK_KEY, darkMode ? '1' : '0'); } catch { /* quota */ }
   }, [darkMode]);
@@ -461,9 +493,12 @@ export default function StoryEvaluationEngine() {
       winner: sessionData.evaluation?.winner || null,
       winner_reason: sessionData.evaluation?.winner_reason || '',
       scores: sessionData.evaluation?.scores || null,
+      approved_version: sessionData.evaluation?.approved_version || '',
       approved_preview: (sessionData.evaluation?.approved_version || '').slice(0, 200),
       story_id: sessionData.storyId,
       brief_summary: (sessionData.brief?.situation || '').slice(0, 150),
+      brief: sessionData.brief || null,
+      toneDial: sessionData.toneDial || ['literary'],
     };
     setHistoryEntries(prev => {
       const next = [entry, ...prev].slice(0, 50); // keep last 50
@@ -473,8 +508,21 @@ export default function StoryEvaluationEngine() {
   }, []);
 
   const loadFromHistory = useCallback((entry) => {
-    // History is read-only snapshot — just show the scores/approved text
+    if (!window.confirm('Load this evaluation? Current progress will be replaced.')) return;
     setHistoryOpen(false);
+    if (entry.brief) {
+      setBrief(prev => ({ ...EMPTY_BRIEF, ...entry.brief }));
+    } else if (entry.scene_title || entry.characters?.length) {
+      setBrief(prev => ({ ...EMPTY_BRIEF, scene_title: entry.scene_title || '', characters: entry.characters || [] }));
+    }
+    if (entry.toneDial) {
+      setToneDial(Array.isArray(entry.toneDial) ? entry.toneDial : [entry.toneDial]);
+    } else if (entry.tone) {
+      setToneDial(entry.tone.split(/,\s*/).filter(Boolean));
+    }
+    if (entry.scores) setEvaluation({ scores: entry.scores, winner: entry.winner, winner_reason: entry.winner_reason, approved_version: entry.approved_version || '' });
+    if (entry.story_id) setStoryId(entry.story_id);
+    if (entry.scores) setStep('evaluate');
   }, []);
 
   const clearHistory = useCallback(() => {
@@ -941,7 +989,7 @@ export default function StoryEvaluationEngine() {
         must_include: brief.must_include || undefined,
         never_include: brief.never_include || undefined,
         chapter_id: chapterId || undefined,
-      });
+      }, { timeoutMs: 180000 });
       setStoryId(data.story_id);
       setStories(data.stories);
       setTokenUsage(data.token_usage || null);
@@ -956,7 +1004,7 @@ export default function StoryEvaluationEngine() {
     if (!storyId) return;
     setError(null); setLoading(true);
     try {
-      const data = await apiPost('evaluate-stories', { story_id: storyId });
+      const data = await apiPost('evaluate-stories', { story_id: storyId }, { timeoutMs: 180000 });
       setEvaluation(data.evaluation);
       setScoreOverrides(null);
       setEditingScores(false);
@@ -974,7 +1022,7 @@ export default function StoryEvaluationEngine() {
     if (!storyId) return;
     setError(null); setLoading(true);
     try {
-      const data = await apiPost('propose-memory', { story_id: storyId });
+      const data = await apiPost('propose-memory', { story_id: storyId }, { timeoutMs: 120000 });
       setPlotMemories(data.proposals?.plot_memories || []);
       setRevelations(data.proposals?.character_revelations || []);
       setSelectedPlot(new Set(Array.from({ length: (data.proposals?.plot_memories || []).length }, (_, i) => i)));
@@ -988,7 +1036,7 @@ export default function StoryEvaluationEngine() {
     if (!storyId) return;
     setError(null); setLoading(true);
     try {
-      const data = await apiPost('propose-registry-update', { story_id: storyId });
+      const data = await apiPost('propose-registry-update', { story_id: storyId }, { timeoutMs: 120000 });
       setRegUpdates(data.proposals || []);
       setSelectedReg(new Set(Array.from({ length: (data.proposals || []).length }, (_, i) => i)));
       setStep('registry');
@@ -1014,7 +1062,7 @@ export default function StoryEvaluationEngine() {
         chapter_id: chapterId.trim(),
         confirmed_memories: confirmedMems,
         confirmed_registry_updates: confirmedReg,
-      });
+      }, { timeoutMs: 120000 });
       setWriteResult(data);
       setStep('writeback');
     } catch (err) { setError(err.message); }
@@ -1029,6 +1077,7 @@ export default function StoryEvaluationEngine() {
 
   // ── Regenerate (re-run 3 voices with same brief) ─────────────────────
   const handleRegenerate = useCallback(async () => {
+    if (!window.confirm('Regenerate all 3 voices? This will make new AI calls.')) return;
     setError(null); setLoading(true);
     try {
       const composed = composeBrief(brief);
@@ -1037,7 +1086,7 @@ export default function StoryEvaluationEngine() {
         characters_in_scene: brief.characters,
         registry_id: brief.registry_id || undefined,
         tone_dial: toneDial,
-      });
+      }, { timeoutMs: 180000 });
       setStoryId(data.story_id);
       setStories(data.stories);
       setTokenUsage(data.token_usage || null);
@@ -1062,7 +1111,7 @@ export default function StoryEvaluationEngine() {
       parts.push(`\n## Evaluation\n**Winner: ${evaluation.winner}** — ${evaluation.winner_reason}\n`);
       VOICES.forEach(v => {
         const sc = evaluation.scores?.[v.id];
-        if (sc) parts.push(`\n### ${v.label}: ${sc.total}/60\n${sc.summary}\n`);
+        if (sc) parts.push(`\n### ${v.label}: ${sc.total}/90\n${sc.summary}\n`);
       });
       if (evaluation.approved_version) parts.push(`\n## Approved Version\n\n${evaluation.approved_version}\n`);
     }
@@ -1094,7 +1143,7 @@ export default function StoryEvaluationEngine() {
       parts.push(`<p><strong>Winner: ${evaluation.winner}</strong> — ${evaluation.winner_reason || ''}</p>`);
       VOICES.forEach(v => {
         const sc = evaluation.scores?.[v.id];
-        if (sc) parts.push(`<p style="font-size:12px"><strong>${v.label}:</strong> ${sc.total}/60 — ${sc.summary || ''}</p>`);
+        if (sc) parts.push(`<p style="font-size:12px"><strong>${v.label}:</strong> ${sc.total}/90 — ${sc.summary || ''}</p>`);
       });
       if (evaluation.approved_version) {
         parts.push(`<hr/><h2 style="font-family:Georgia,serif">Approved Version</h2>`);
@@ -1416,9 +1465,9 @@ export default function StoryEvaluationEngine() {
                           if (!sc) return null;
                           return (
                             <div key={voice} style={{ marginBottom: 6 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: T.text, marginBottom: 2 }}>{voice.replace('voice_', 'V').toUpperCase()}: {sc.total}/60</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: T.text, marginBottom: 2 }}>{voice.replace('voice_', 'V').toUpperCase()}: {sc.total}/90</div>
                               <div style={{ height: 8, borderRadius: 4, background: T.border, overflow: 'hidden' }}>
-                                <div style={{ width: `${(sc.total / 60) * 100}%`, height: '100%', background: voice === entry.winner ? T.green : T.accent, borderRadius: 4, transition: 'width 0.4s' }} />
+                                <div style={{ width: `${(sc.total / 90) * 100}%`, height: '100%', background: voice === entry.winner ? T.green : T.accent, borderRadius: 4, transition: 'width 0.4s' }} />
                               </div>
                             </div>
                           );
@@ -1856,7 +1905,6 @@ export default function StoryEvaluationEngine() {
                 {briefCompleteness(brief) < 60
                   ? `Brief ${briefCompleteness(brief)}% complete — fill in: ${
                       [
-                        !brief.protagonist ? 'protagonist' : '',
                         !brief.situation ? 'situation' : '',
                         !brief.content_name ? 'content name' : '',
                         !brief.content_type ? 'content type' : '',
