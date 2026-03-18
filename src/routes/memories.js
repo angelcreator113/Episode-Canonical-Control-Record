@@ -7427,6 +7427,276 @@ const SE_DB_KEY_MAP = {
   lala:       ['lala'],
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// BOOK 1 — 24-CHARACTER ECOSYSTEM INTELLIGENCE
+// This is the canonical architecture for JustAWoman's arc generation.
+// ═══════════════════════════════════════════════════════════════════════════════
+const BOOK1_ECOSYSTEM = `
+BOOK 1 — 24-CHARACTER ECOSYSTEM
+
+THE REAL WORLD (Daily Life):
+- JustAWoman — protagonist. Content creator building toward legendary. Confident but untethered.
+- David Morgan — the husband. Safety without hunger. Solutions architect. Supportive but his practicality lands like doubt.
+- Elias — quiet witness, age 9. Sees more than he says. Support character.
+- Zion — loud anchor, age 5. Pulls her back into the present. Support character.
+- Dana / The Witness — real friend, sees clearly. Lifestyle content creator who shares opinions publicly without softening.
+- Carolyn — mother. Voice of enough. Pressure character.
+- Elena Harper — perfection as performance. Mirror character.
+- Bri Cole — chaos and survival. Support character.
+- Tasha Greene — detachment after trying. Mirror character.
+- Ms. Caldwell — Cedar Grove teacher. Pressure character.
+- Alexandra 'Alex' Morrison — local achievement standard, real-world pressure. Pressure character.
+
+THE DIGITAL / SOCIAL LAYER:
+- Marcus — the paying man. Reduction as freedom. Shadow character. He pays for access, treats her body as product, reinforces the algorithm's logic with money.
+- Jasmine Rodriguez — her past self, unpolished ambition. Mirror character.
+- Thomas Hart — intellectual engagement, non-sexual mirror. Mirror character.
+- Victoria Sterling — proof of concept, slightly ahead. Support character.
+- James 'Jamie' Castellano — empty attention, no investment. Shadow character.
+- Ryan Blackwell — male entitlement, boundary pusher. Shadow character.
+- Nia Vale / The Comparison Creator — the messy one. Goes fully explicit on a live — intentionally, not accidentally. Escalation mirror. (See ESCALATION SYSTEM below.)
+- The Customer — proof she already has impact. Support character, finalized.
+- The Algorithm — NOT a character with a voice. Environmental pressure system. (See ALGORITHM SYSTEM below.)
+
+THE BRIDGE ZONE (Danger / Disruption):
+- Liam Sullivan — real-world viable alternative, not fantasy. Special character.
+- Jade / The Almost-Mentor — clarity she's not ready for, appears then disappears. Shadow character.
+- Imani — reality mirror, the life she could choose. Support character.
+
+───────────────────────────────────────────
+THE ALGORITHM (Environmental Pressure System)
+───────────────────────────────────────────
+The Algorithm is NOT a literal speaking character.
+It is a systemic force that behaves like a character without having a voice.
+
+How it appears in the story:
+1. VISIBILITY SHIFTS — a post performs better than usual, a post dies unexpectedly, certain content gets pushed
+2. PATTERN REINFORCEMENT — the more she leans into something, the more she sees it. Her feed becomes more sexual, more aspirational, more extreme.
+3. PRESSURE WITHOUT LANGUAGE — it never says anything. But it creates moments like: "this worked — do more of this" / "this didn't work — disappear"
+
+Functional role:
+- Amplifies her body more than her mind
+- Rewards visibility over depth
+- Pushes her toward escalation without instruction
+
+It does NOT care about her life, her marriage, or consequences.
+It only cares about engagement.
+
+Narrative effect: subtle nudging, invisible escalation, feedback loops.
+Key line: "It never tells her what to do. It just shows her what works."
+
+Reference it as: an environmental pressure system that rewards certain versions of her and ignores others.
+
+───────────────────────────────────────────
+NIA VALE — THE ESCALATION MIRROR
+───────────────────────────────────────────
+Same content lane as JustAWoman. More extreme. Less restrained. Less concerned with perception.
+Exists in her feed, occasionally in lives, algorithmically adjacent.
+
+THE KEY SCENE: She goes fully explicit on a live. Not accidental. Not sloppy. Intentional.
+JustAWoman watches the entire thing. Does not exit. Does not comment. Does not engage. But does not look away.
+
+Core wound: She is not chosen unless she escalates beyond comfort.
+Core desire: To be undeniable without losing control.
+
+What she has that JustAWoman doesn't: no hesitation, no internal negotiation, no need to remain respectable.
+What she lacks: control, containment, long-term structure.
+
+JustAWoman does NOT think: "I would never do that."
+She thinks: "I could."
+
+After watching: she becomes quieter, more focused, slightly more aware of her own restraint. She does NOT spiral. She adjusts.
+
+Function: The escalation mirror. Shows where the algorithm leads, what visibility requires at the extreme, what happens when control is removed.
+
+───────────────────────────────────────────
+THE CLOSED ESCALATION LOOP
+───────────────────────────────────────────
+The Algorithm → pressure (rewards escalation)
+Nia Vale → example (shows what escalation looks like)
+Marcus / The Paying Man → reinforcement (pays for the escalated version)
+
+Together they form a closed escalation loop around her.
+The Algorithm rewards Nia heavily. JustAWoman sees Nia's visibility, engagement, reach — and understands: "This is what works."
+Marcus reinforces by paying for access, treating her body as product, confirming the algorithm's logic with money.
+
+This loop must be woven across the 50 stories — not as a single plot, but as atmospheric pressure that builds.
+`;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ARC SYSTEM PROMPT BUILDER
+// Constructs the full system prompt for arc generation.
+// ═══════════════════════════════════════════════════════════════════════════════
+function buildArcSystemPrompt({ dna, profileSection, memoriesSection, worldSection }) {
+  const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
+  const isBook1 = dna.world === 'book1' || dna.world === 'book-1';
+
+  return `You are building a 50-story arc for ${dna.display_name}.
+
+CHARACTER DNA:
+- Display name: ${dna.display_name}
+- Role: ${dna.role_type || 'protagonist'}
+- Job: ${dna.job}
+- Desire line: ${dna.desire_line}
+- Fear line: ${dna.fear_line}
+- Wound: ${dna.wound}
+- Strengths: ${strengthsList}
+- Job antagonist: ${dna.job_antagonist}
+- Personal antagonist: ${dna.personal_antagonist}
+- Recurring object: ${dna.recurring_object}
+- Career domain: ${dna.domains.career}
+- Romantic domain: ${dna.domains.romantic}
+- Family domain: ${dna.domains.family}
+- Friends domain: ${dna.domains.friends}${profileSection}${memoriesSection}${worldSection}
+${isBook1 ? '\n' + BOOK1_ECOSYSTEM : ''}
+CHAPTER ARCHITECTURE:
+Each story is one chapter. Each chapter contains 3-5 SITUATIONS that flow in this order:
+  domestic → driver → collision → escalation → intimate close
+
+- DOMESTIC: The real life. Kitchen table. Kids. David. The version of her that exists before the phone comes out.
+- DRIVER: The thing that pulls her into the digital world. A notification. A comment. A DM. A post that performs. A post that dies.
+- COLLISION: Two worlds touching. The domestic and the digital pressing against each other. A paying man's message while David is in the room. A live while the kids are asleep.
+- ESCALATION: The moment the story moves past where it was. Something shifts — visibility, boundary, desire, risk. The quarter-inch movement.
+- INTIMATE CLOSE: Not always sexual. The moment where she is alone with what just happened. Could be breath. Could be the phone face-down on the nightstand. Could be David's hand on her back when he doesn't know what she just did.
+
+Not every chapter needs all 5 situations. Minimum 3. The arc determines which situations dominate:
+- Establishment chapters: heavy domestic, light escalation
+- Pressure chapters: heavy driver + collision
+- Crisis chapters: heavy escalation, domestic becomes thin
+- Integration chapters: all five present, rebalanced
+
+TONE SYSTEM — 9 TONES MAPPED TO SITUATIONS:
+Each situation within a chapter carries its own tone. The tone shifts WITHIN the chapter, not just between chapters.
+1. literary — psychological depth, subtext, thematic resonance (default for domestic)
+2. thriller — pacing, stakes escalation, hooks (for driver moments)
+3. lyrical — sensory language, metaphor, emotional texture (for intimate close)
+4. intimate — closeness, body language, breath, desire (for escalation toward connection)
+5. dark — tension, moral ambiguity, unflinching honesty (for collision with shadow characters)
+6. warm — connection, humour, earned tenderness (for family / support moments)
+7. confessional — interior monologue, raw truth, the thing she won't say out loud (for internal reckoning)
+8. ambient — systemic, atmospheric, the algorithm at work, no dialogue (for algorithm-pressure moments)
+9. charged — sexual tension without sex, the space between doing and not doing (for paying man / boundary scenes)
+
+WOUND CLOCK:
+Starts at 75. Increments with every approved story. It is not a countdown — it is accumulated weight.
+- Below 80: She has been at this for years. The trying is part of who she is now.
+- 80-89: Consistency is reflex. But the right room hasn't found her yet and she knows it.
+- 90-99: She has built something real. The right someone hasn't looked yet.
+- 100-109: The trying has weight. Not desperation. Weight.
+- 110-119: She is past the point where other women would have stopped.
+- 120+: The clock does not stop. She does not stop. These are the same thing.
+
+STAKES SYSTEM — 1 to 10 across 50 stories:
+Stakes escalate naturally: approximately 1 level per 5 stories.
+- 1-2: Small recoverable risks — a moment, an opportunity, a post
+- 3-4: Being seen wrong. The gap between her real life and her online presence
+- 5-6: David's trust. The boundary between real life and what she's built online. The domestic frame pressing against expansion.
+- 7-8: The men in her DMs knowing where she lives. The confident version she's building requires not looking too closely at certain things.
+- 9: Lala. The container she built for her confidence. If it breaks before she understands what it was, she loses both.
+- 10: Everything she has been. The woman at the dinner table and the woman men open their wallets for are the same woman. They are about to find out if that is survivable.
+
+BLEED — STORY 47:
+At story 47, Lala's register bleeds through JustAWoman's voice. This is NOT Lala speaking. It is Lala's frequency appearing in JustAWoman's narration — styled, confident, unbothered, slightly uncanny. Like a door left open. The story brief for story 47 MUST flag: "bleed_active: true".
+
+NARRATIVE SPINE (design this FIRST, then build all 50 stories around it):
+Before generating individual story briefs, you MUST design a narrative spine — the throughline that makes 50 stories feel like ONE story.
+
+1. CENTRAL DRAMATIC QUESTION — one question the reader carries from story 1 to story 50. This question should feel unanswerable until the final stories.
+
+2. KEY TURNING POINTS — 5 structural pivots:
+   - The Inciting Fracture (stories 8-12): something cracks that cannot be uncracked
+   - The False Summit (stories 18-22): she gets what she thought she wanted, and it tastes wrong
+   - The Betrayal/Revelation (stories 28-32): a truth she cannot unknow — about herself, someone she loves, or both
+   - The Crucible (stories 36-40): everything converges — career, relationship, identity — she cannot keep them separate
+   - The Quiet Shift (stories 46-50): not a triumph, not a collapse — a rearrangement of what matters
+
+3. SUBPLOT ARCS — each domain (career, romantic, family, friends) gets its own mini-arc with beginning, middle, and end WITHIN the 50 stories. Subplot arcs intersect at turning points.
+
+4. RECURRING MOTIFS — 2-3 images, objects, or phrases that recur across the arc with shifting meaning.
+
+ARC PHASES:
+- Stories 1-10: ESTABLISHMENT — who she is, her rhythms, her world. Introduce the ecosystem. The Algorithm begins shaping her feed quietly.
+- Stories 11-25: PRESSURE — obstacles hit harder, strengths used against her. The Algorithm's loop tightens. Marcus enters. Nia appears in her feed. The escalation loop begins forming.
+- Stories 26-40: CRISIS — something load-bearing breaks. The escalation loop is fully operational. Nia's live happens. David's silence has weight. The gap between domestic and digital becomes structural.
+- Stories 41-50: INTEGRATION — she comes out different. The loop breaks or she breaks. Lala emerges (story 47 bleed). The rearrangement.
+
+STORY TYPES (rotate: internal, collision, wrong_win):
+- internal: single character facing obstacle alone, psychological
+- collision: two characters with different worldviews hitting each other — USE the 24-character ecosystem
+- wrong_win: character succeeds at exactly the wrong moment, it costs something
+
+RULES:
+- Every story must include all four domains: career, romantic, family, friends
+- Every story has a concrete TASK the character is trying to complete (creates the clock)
+- The task must be specific and real — not "work on content" but "film a 90-second reel before Noah wakes up"
+- Obstacles come from character DNA — specifically from strengths being used against her
+- Stories 1-50 feel like a journey: story 1 and story 50 are recognizably the same person but shifted
+- Adult themes: real marriage tension, financial stress, sexuality, exhaustion, ambition, loneliness
+- New characters can be introduced (max 1 per story) — flag them with new_character: true
+- Each story is 3300-4800 words
+- USE the 24-character ecosystem for collision stories — don't invent strangers when the world already has people
+- The Algorithm appears through visibility shifts and feed changes, NEVER through dialogue
+- Nia Vale appears in pressure/crisis phases — the key scene (her live) should land between stories 28-35
+- Marcus (the paying man) should appear by story 15 and his pressure should build through crisis
+- The escalation loop (Algorithm + Nia + Marcus) should be woven as atmospheric pressure, not a single plot thread
+- If ACCUMULATED PAIN POINTS or BELIEF SHIFTS are provided, build on them — don't repeat, deepen
+- Multiple plotlines interweave — career, romantic, family, friendship — each with its own mini-arc
+- Every story needs an EMOTIONAL ARC — where she starts emotionally and where she ends. Quarter-inch shifts.
+- Every story needs a SPECIFIC SETTING — a real place with weather, time of day, atmosphere
+- Every story should specify which SITUATIONS it contains (from: domestic, driver, collision, escalation, intimate_close)
+- Every story should specify its PRIMARY TONE and TONE SHIFTS within the chapter
+
+Return ONLY valid JSON — no preamble, no markdown.
+Format:
+{
+  "narrative_spine": {
+    "central_dramatic_question": "the one question the reader carries across all 50 stories",
+    "turning_points": [
+      { "name": "string", "story_range": "e.g. 8-12", "description": "what happens and why it changes everything" }
+    ],
+    "subplot_arcs": {
+      "career": "beginning → middle → end of the career subplot",
+      "romantic": "beginning → middle → end of the romantic subplot",
+      "family": "beginning → middle → end of the family subplot",
+      "friends": "beginning → middle → end of the friends subplot"
+    },
+    "recurring_motifs": ["motif 1 and how its meaning shifts", "motif 2 and how its meaning shifts"],
+    "escalation_loop_arc": "how the Algorithm + Nia + Marcus loop forms, tightens, and resolves across 50 stories"
+  },
+  "tasks": [
+    {
+      "story_number": 1,
+      "title": "string",
+      "phase": "establishment|pressure|crisis|integration",
+      "story_type": "internal|collision|wrong_win",
+      "task": "the specific thing she is trying to complete in this story",
+      "obstacle": "what hits her inside that task",
+      "domains_active": ["career", "romantic", "family", "friends"],
+      "situations": ["domestic", "driver", "collision", "escalation", "intimate_close"],
+      "primary_tone": "literary|thriller|lyrical|intimate|dark|warm|confessional|ambient|charged",
+      "tone_shifts": ["tone at opening → tone at close"],
+      "strength_weaponized": "which strength gets used against her and how",
+      "emotional_start": "where the character is emotionally at the opening — specific feeling, not generic",
+      "emotional_end": "where she lands — the quarter-inch shift. Must differ from start",
+      "wound_clock_position": "number — where the wound clock is for this story",
+      "stakes_level": "1-10",
+      "primary_location": "the main setting for this story — specific place name or type",
+      "time_of_day": "morning|afternoon|evening|night|spans_full_day",
+      "season_weather": "what the weather/season feels like — grounds the sensory world",
+      "ecosystem_characters": ["character_keys from the 24-character ecosystem present in this story"],
+      "algorithm_pressure": "how The Algorithm manifests in this story (null if not present)",
+      "escalation_loop_active": false,
+      "bleed_active": false,
+      "new_character": false,
+      "new_character_name": null,
+      "new_character_role": null,
+      "therapy_seeds": ["pain point 1", "pain point 2"],
+      "opening_line": "suggested first line of the story"
+    }
+  ]
+}`;
+}
+
 // ─── Load rich character profile from DB ──────────────────────────────────────
 async function loadCharacterProfile(characterKey) {
   // First try the explicit SE_DB_KEY_MAP for legacy characters
@@ -8971,7 +9241,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
     try {
       response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 16000,
+        max_tokens: 32000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       });
@@ -8982,7 +9252,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
         await new Promise(r => setTimeout(r, 2000));
         response = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
-          max_tokens: 16000,
+          max_tokens: 32000,
           system: systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
         });

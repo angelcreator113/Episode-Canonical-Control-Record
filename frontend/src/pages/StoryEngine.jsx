@@ -812,10 +812,11 @@ export default function StoryEngine() {
               hasPrev={engine.hasPrevStory}
               hasNext={engine.hasNextStory}
               onExportStory={engine.handleExportStory}
-              onEvaluate={() => {
+              onEvaluate={(storyOrTask) => {
                 const params = new URLSearchParams();
                 if (engine.activeStory?.text) params.set('text', '1');
-                if (engine.activeTask?.task) params.set('brief', engine.activeTask.task);
+                const brief = storyOrTask?.task || engine.activeTask?.task;
+                if (brief) params.set('brief', brief);
                 const charData = engine.selectedChar && engine.CHARACTERS[engine.selectedChar];
                 const world = charData?.world;
                 const sceneChars = world ? Object.keys(engine.CHARACTERS).filter(k => engine.CHARACTERS[k].world === world) : engine.selectedChar ? [engine.selectedChar] : [];
@@ -824,7 +825,7 @@ export default function StoryEngine() {
                 const charNames = {};
                 sceneChars.forEach(k => { charNames[k] = engine.CHARACTERS[k]?.display_name || k; });
                 navigate(`/story-evaluation?${params.toString()}`, {
-                  state: { storyText: engine.activeStory?.text, taskBrief: engine.activeTask, activeWorld: engine.activeWorld || world, charNames, povChar: engine.selectedChar },
+                  state: { storyText: engine.activeStory?.text, taskBrief: storyOrTask || engine.activeTask, activeWorld: engine.activeWorld || world, charNames, povChar: engine.selectedChar },
                 });
               }}
               charObj={engine.char}
