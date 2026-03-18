@@ -61,12 +61,15 @@ function buildVoiceSystem(dossiers) {
 
 // ── Tone dial modifiers ───────────────────────────────────────────────────
 const TONE_MODIFIERS = {
-  literary:   'Prioritise psychological depth, subtext, and thematic resonance. Sentence-level craft matters most.',
-  thriller:   'Prioritise pacing, stakes escalation, and chapter-end hooks. Keep sentences taut.',
-  lyrical:    'Prioritise sensory language, metaphor, and emotional texture. Let prose breathe.',
-  intimate:   'Prioritise closeness — body language, breath, silence, desire. Every distance is a choice.',
-  dark:       'Prioritise tension, moral ambiguity, and unflinching honesty. No comfort, only truth.',
-  warm:       'Prioritise connection, humour, and earned tenderness. Light that knows about darkness.',
+  literary:      'Prioritise psychological depth, subtext, and thematic resonance. Sentence-level craft matters most.',
+  thriller:      'Prioritise pacing, stakes escalation, and chapter-end hooks. Keep sentences taut.',
+  lyrical:       'Prioritise sensory language, metaphor, and emotional texture. Let prose breathe.',
+  intimate:      'Prioritise closeness — body language, breath, silence, desire. Every distance is a choice.',
+  dark:          'Prioritise tension, moral ambiguity, and unflinching honesty. No comfort, only truth.',
+  warm:          'Prioritise connection, humour, and earned tenderness. Light that knows about darkness.',
+  confessional:  'Prioritise raw honesty, direct address, breaking the frame. The character speaks as if no one is watching — then realises someone is.',
+  ambient:       'Prioritise atmosphere, slow-burn, texture over plot. The scene breathes. Meaning accumulates in the spaces.',
+  charged:       'Prioritise electric tension, desire held back, everything about to happen. The air between people is the story.',
 };
 
 // ── Voice-specific tone assignments (all 6 tones covered) ────────────────────
@@ -124,8 +127,15 @@ function buildDramaticIronyHints(dossiers) {
 function buildGenerationPrompt({ scene_brief, voice_key, characters_in_scene, charBlocks, tone_dial, dossiers, must_include, never_include }) {
   const tones = VOICE_TONES[voice_key] || ['literary'];
   const toneMod = tones.map(t => TONE_MODIFIERS[t]).join(' ');
-  // Layer the writer's chosen tone_dial on top of the voice's assigned tones
-  const dialMod = (tone_dial && TONE_MODIFIERS[tone_dial]) ? `\nWRITER\'S TONE DIAL: ${TONE_MODIFIERS[tone_dial]}` : '';
+  // Layer the writer's chosen tone_dial(s) on top of the voice's assigned tones
+  // tone_dial can be a string (legacy) or array (new multi-select)
+  const dialTones = Array.isArray(tone_dial) ? tone_dial : (tone_dial ? [tone_dial] : []);
+  const dialMod = dialTones
+    .map(t => TONE_MODIFIERS[t])
+    .filter(Boolean)
+    .map(m => `WRITER'S TONE DIAL: ${m}`)
+    .join('\n');
+  const dialBlock = dialMod ? `\n${dialMod}` : '';
   const deepHint = buildDynamicDeepHints(dossiers, voice_key);
   const ironyHint = buildDramaticIronyHints(dossiers);
 
@@ -134,7 +144,7 @@ function buildGenerationPrompt({ scene_brief, voice_key, characters_in_scene, ch
   if (must_include) constraints += `\nMUST INCLUDE in this scene: ${must_include}`;
   if (never_include) constraints += `\nNEVER INCLUDE in this scene: ${never_include}`;
 
-  return `TONE: ${toneMod}${dialMod}
+  return `TONE: ${toneMod}${dialBlock}
 
 You are writing ONE of THREE blind perspectives of the same scene. Two other voices are writing their own versions simultaneously. Do NOT try to cover everything — lean HARD into your voice's specialty. Assume the other voices will handle what you skip. Be distinctive, not comprehensive.
 
@@ -1207,7 +1217,7 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       chapter_id: chapter_id || null,
       book_id: book_id || null,
       scene_brief,
-      tone_dial: tone_dial || 'literary',
+      tone_dial: Array.isArray(tone_dial) ? tone_dial.join(', ') : (tone_dial || 'literary'),
       characters_in_scene,
       must_include: must_include || null,
       never_include: never_include || null,
@@ -1221,7 +1231,7 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
         story_type: 'eval_scene',
         title: `Eval Scene — ${(scene_brief || '').slice(0, 80)}`,
         obstacle: 'Evaluation scene — multi-voice comparison',
-        tone_dial: tone_dial || 'literary',
+        tone_dial: Array.isArray(tone_dial) ? tone_dial.join(', ') : (tone_dial || 'literary'),
         characters_in_scene,
       },
     });
