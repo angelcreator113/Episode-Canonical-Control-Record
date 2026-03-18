@@ -22,21 +22,21 @@ const ACTIONS = [
   {
     id:       'continue',
     icon:     '✨',
-    label:    'Continue',
+    label:    'Continue the moment',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'continue',
   },
   {
     id:       'deepen',
-    icon:     '🔍',
-    label:    'Deepen',
+    icon:     '🧠',
+    label:    'Deepen the scene',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'deepen',
   },
   {
     id:       'nudge',
-    icon:     '💡',
-    label:    'Nudge',
+    icon:     '🎯',
+    label:    'Refine tone',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'nudge',
   },
@@ -322,9 +322,9 @@ export default function WriteModeAIWriter({
               onClick={runRewrite}
               disabled={loading}
             >
-              <span style={s.toolIcon}>{'✏️'}</span>
+              <span style={s.toolIcon}>{'🔄'}</span>
               <span style={s.toolLabel}>
-                Rewrite
+                Rework paragraph
                 {loading && activeAction === 'rewrite' && (
                   <span style={s.spinner}> {'◌'}</span>
                 )}
@@ -360,7 +360,7 @@ export default function WriteModeAIWriter({
 
           {/* Mic hint */}
           <div style={s.micHint}>
-            Tap mic to speak — or use AI tools above
+            Tap mic to speak — or use creative tools above
           </div>
         </div>
       )}

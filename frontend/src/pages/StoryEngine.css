@@ -3554,8 +3554,8 @@ html, body {
 
 .se-edit-header-title {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--se-text);
   white-space: nowrap;
   overflow: hidden;
@@ -3656,30 +3656,32 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--se-bg);
+  background: #f3f0ea;
 }
 
 .se-edit-canvas .se-story-editor {
   flex: 1;
   width: 100%;
-  max-width: 760px;
-  margin: 24px auto;
+  max-width: 840px;
+  margin: 32px auto;
   height: 100%;
   background: #fffffe;
   border: none;
   outline: none;
   resize: none;
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 18px;
-  line-height: 1.8;
+  font-size: 18.5px;
+  line-height: 2;
   color: var(--se-text);
-  padding: 56px 48px;
+  padding: 64px 56px;
   box-sizing: border-box;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.03);
-  border-radius: 2px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.03);
+  border-radius: 3px;
+  letter-spacing: 0.005em;
+  word-spacing: 0.02em;
 }
 
 .se-edit-canvas .se-story-editor::-webkit-scrollbar {
@@ -3693,12 +3695,12 @@ html, body {
 
 .se-edit-canvas .se-page-nav {
   border-top: none;
-  max-width: 760px;
-  margin: 0 auto 24px;
+  max-width: 840px;
+  margin: 0 auto 32px;
   width: 100%;
   background: #fffffe;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-  border-radius: 2px;
+  border-radius: 3px;
   padding: 12px 20px;
   display: flex;
   align-items: center;
@@ -3730,8 +3732,8 @@ html, body {
 
 /* Writing Tools sections */
 .se-tools-section {
-  padding: 20px;
-  border-bottom: 1px solid var(--se-border-light);
+  padding: 22px 20px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
   position: relative;
 }
 
@@ -3754,12 +3756,12 @@ html, body {
 
 .se-tools-section-title {
   font-family: 'DM Sans', sans-serif;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--se-text-muted);
-  margin-bottom: 6px;
+  letter-spacing: 0.1em;
+  color: var(--se-text);
+  margin-bottom: 8px;
 }
 
 .se-tools-section-subtitle {
