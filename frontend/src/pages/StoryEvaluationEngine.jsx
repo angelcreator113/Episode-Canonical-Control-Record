@@ -182,7 +182,8 @@ function extractContentFromTask(taskText) {
 }
 
 function briefCompleteness(b) {
-  const filled = BRIEF_REQUIRED.filter(k => k === 'characters' ? b.characters.length > 0 : (b[k] || '').trim());
+  const chars = Array.isArray(b.characters) ? b.characters : [];
+  const filled = BRIEF_REQUIRED.filter(k => k === 'characters' ? chars.length > 0 : (b[k] || '').trim());
   return Math.round((filled.length / BRIEF_REQUIRED.length) * 100);
 }
 
@@ -205,34 +206,55 @@ function composeBrief(b) {
   ].filter(Boolean).join(' ');
 }
 
-const briefInputStyle = {
-  width: '100%', padding: '10px 12px', background: T.surfaceAlt,
-  border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
-  fontSize: 13, outline: 'none', boxSizing: 'border-box',
-};
-
-const briefTextareaStyle = {
-  ...briefInputStyle, padding: '12px 14px', fontSize: 13.5,
-  lineHeight: 1.7, fontFamily: 'Georgia,serif', resize: 'vertical',
-};
+// briefInputStyle and briefTextareaStyle are computed inside the component
+// so they pick up the current theme value after darkMode toggles.
 
 // ── API helpers ───────────────────────────────────────────────────────────
-async function apiPost(endpoint, body) {
-  const res = await fetch(`${API}/${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
+function authHeaders() {
+  const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h.Authorization = `Bearer ${token}`;
+  return h;
 }
 
-async function apiGet(endpoint) {
-  const res = await fetch(`${API}/${endpoint}`);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
+async function apiPost(endpoint, body, { timeoutMs = 30000 } = {}) {
+  const ctrl = new AbortController();
+  const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(`${API}/${endpoint}`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timed out — please try again');
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function apiGet(endpoint, { timeoutMs = 30000 } = {}) {
+  const ctrl = new AbortController();
+  const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(`${API}/${endpoint}`, {
+      headers: authHeaders(),
+      signal: ctrl.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timed out — please try again');
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // ── Spinner ───────────────────────────────────────────────────────────────
@@ -376,7 +398,10 @@ export default function StoryEvaluationEngine() {
   const [charInput, setCharInput] = useState('');
   const [charContext, setCharContext] = useState({}); // { character_key: { living_context, relationships, display_name } }
   const [charFetchStatus, setCharFetchStatus] = useState({}); // { character_key: 'loading'|'loaded'|'failed' }
-  const updateBrief = (key, val) => setBrief(prev => ({ ...prev, [key]: val }));
+  const updateBrief = (key, val) => setBrief(prev => ({
+    ...prev,
+    [key]: key === 'characters' ? (Array.isArray(val) ? val : []) : val,
+  }));
 
   // Tone dial — multi-select (array of tone IDs)
   const [toneDial, setToneDial] = useState(['literary']);
@@ -434,6 +459,17 @@ export default function StoryEvaluationEngine() {
   // Update module-level T synchronously during render (not in useEffect)
   // so sub-components and style objects always see current theme
   Object.assign(T, darkMode ? T_DARK : T_LIGHT);
+
+  const briefInputStyle = {
+    width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+    border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+    fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  const briefTextareaStyle = {
+    ...briefInputStyle, padding: '12px 14px', fontSize: 13.5,
+    lineHeight: 1.7, fontFamily: 'Georgia,serif', resize: 'vertical',
+  };
+
   useEffect(() => {
     try { localStorage.setItem(DARK_KEY, darkMode ? '1' : '0'); } catch { /* quota */ }
   }, [darkMode]);
@@ -457,9 +493,12 @@ export default function StoryEvaluationEngine() {
       winner: sessionData.evaluation?.winner || null,
       winner_reason: sessionData.evaluation?.winner_reason || '',
       scores: sessionData.evaluation?.scores || null,
+      approved_version: sessionData.evaluation?.approved_version || '',
       approved_preview: (sessionData.evaluation?.approved_version || '').slice(0, 200),
       story_id: sessionData.storyId,
       brief_summary: (sessionData.brief?.situation || '').slice(0, 150),
+      brief: sessionData.brief || null,
+      toneDial: sessionData.toneDial || ['literary'],
     };
     setHistoryEntries(prev => {
       const next = [entry, ...prev].slice(0, 50); // keep last 50
@@ -469,8 +508,21 @@ export default function StoryEvaluationEngine() {
   }, []);
 
   const loadFromHistory = useCallback((entry) => {
-    // History is read-only snapshot — just show the scores/approved text
+    if (!window.confirm('Load this evaluation? Current progress will be replaced.')) return;
     setHistoryOpen(false);
+    if (entry.brief) {
+      setBrief(prev => ({ ...EMPTY_BRIEF, ...entry.brief }));
+    } else if (entry.scene_title || entry.characters?.length) {
+      setBrief(prev => ({ ...EMPTY_BRIEF, scene_title: entry.scene_title || '', characters: entry.characters || [] }));
+    }
+    if (entry.toneDial) {
+      setToneDial(Array.isArray(entry.toneDial) ? entry.toneDial : [entry.toneDial]);
+    } else if (entry.tone) {
+      setToneDial(entry.tone.split(/,\s*/).filter(Boolean));
+    }
+    if (entry.scores) setEvaluation({ scores: entry.scores, winner: entry.winner, winner_reason: entry.winner_reason, approved_version: entry.approved_version || '' });
+    if (entry.story_id) setStoryId(entry.story_id);
+    if (entry.scores) setStep('evaluate');
   }, []);
 
   const clearHistory = useCallback(() => {
@@ -517,12 +569,12 @@ export default function StoryEvaluationEngine() {
         const s = JSON.parse(saved);
         if (s.brief) {
           // Ensure characters is always an array (guards against corrupt localStorage)
-          if (s.brief.characters && !Array.isArray(s.brief.characters)) {
+          if (!Array.isArray(s.brief.characters)) {
             s.brief.characters = typeof s.brief.characters === 'string'
               ? s.brief.characters.split(',').map(c => c.trim()).filter(Boolean)
               : [];
           }
-          setBrief(s.brief);
+          setBrief({ ...EMPTY_BRIEF, ...s.brief });
         }
         if (s.toneDial) setToneDial(Array.isArray(s.toneDial) ? s.toneDial : [s.toneDial]);
         if (s.step) setStep(s.step);
@@ -590,21 +642,50 @@ export default function StoryEvaluationEngine() {
 
       // ── ① Situation — rich multi-situation description ──
       const sitParts = [];
+      if (task.chapter_theme) sitParts.push(`Chapter theme: ${task.chapter_theme}`);
       if (task.task) sitParts.push(task.task);
       if (task.situations?.length) {
-        const sitLabels = {
-          domestic: 'DOMESTIC — the real life before the phone comes out',
-          driver: 'DRIVER — what pulls her into the digital world',
-          collision: 'COLLISION — two worlds pressing against each other',
-          escalation: 'ESCALATION — the moment something shifts past where it was',
-          intimate_close: 'INTIMATE CLOSE — alone with what just happened',
-        };
-        sitParts.push('');
-        sitParts.push(`Chapter situations (${task.situations.length}):`);
-        task.situations.forEach(s => {
-          sitParts.push(`• ${sitLabels[s] || s}`);
-        });
+        // New arc format: situations are objects with situation_type, tone, what_happens, etc.
+        const isObjectFormat = typeof task.situations[0] === 'object';
+        if (isObjectFormat) {
+          sitParts.push('');
+          sitParts.push(`Chapter situations (${task.situations.length}):`);
+          task.situations.forEach((s, i) => {
+            const label = s.title || s.situation_type || `Situation ${i + 1}`;
+            const tone = s.tone ? ` [${s.tone}]` : '';
+            sitParts.push(`\n${i + 1}. ${label}${tone}`);
+            if (s.what_happens) sitParts.push(`   ${s.what_happens}`);
+            if (s.what_she_knows) sitParts.push(`   She knows: ${s.what_she_knows}`);
+            if (s.what_she_doesnt_say) sitParts.push(`   She doesn't say: ${s.what_she_doesnt_say}`);
+          });
+          // Collect characters from all situations
+          const sitChars = new Set();
+          task.situations.forEach(s => {
+            (s.characters_present || []).forEach(c => sitChars.add(c));
+          });
+          if (sitChars.size && (!patch.characters || !patch.characters.length)) {
+            patch.characters = [...sitChars];
+          }
+          // Extract opening line from first situation
+          const firstOpening = task.situations[0]?.opening_line;
+          if (firstOpening && !task.opening_line) patch.must_include = `Opening line: "${firstOpening}"`;
+        } else {
+          // Old format: situations are strings like "domestic", "driver"
+          const sitLabels = {
+            domestic: 'DOMESTIC — the real life before the phone comes out',
+            driver: 'DRIVER — what pulls her into the digital world',
+            collision: 'COLLISION — two worlds pressing against each other',
+            escalation: 'ESCALATION — the moment something shifts past where it was',
+            intimate_close: 'INTIMATE CLOSE — alone with what just happened',
+          };
+          sitParts.push('');
+          sitParts.push(`Chapter situations (${task.situations.length}):`);
+          task.situations.forEach(s => {
+            sitParts.push(`• ${sitLabels[s] || s}`);
+          });
+        }
       }
+      if (task.chapter_arc) sitParts.push(`\nChapter must leave her with: ${task.chapter_arc}`);
       if (task.obstacle) sitParts.push(`\nObstacle: ${task.obstacle}`);
       if (task.emotional_start && task.emotional_end) {
         sitParts.push(`Emotional arc: ${task.emotional_start} → ${task.emotional_end}`);
@@ -630,8 +711,10 @@ export default function StoryEvaluationEngine() {
         const phaseDesc = { establishment: 'Early chapters — world and characters being established', pressure: 'Pressure building — complications tightening', crisis: 'Crisis phase — everything converging', integration: 'Integration — processing what has happened' };
         histParts.push(phaseDesc[task.phase] || `Phase: ${task.phase}`);
       }
-      if (task.story_number) histParts.push(`Story ${task.story_number} of the arc`);
-      if (task.wound_clock_position) histParts.push(`Wound clock at ${task.wound_clock_position} — ${task.wound_clock_position <= 3 ? 'early exposure' : task.wound_clock_position <= 6 ? 'deepening pressure' : task.wound_clock_position <= 8 ? 'approaching crisis' : 'near breaking point'}`);
+      if (task.story_number) histParts.push(`Chapter ${task.story_number} of the arc`);
+      // Support both old (wound_clock_position) and new (wound_clock) field names
+      const woundClock = task.wound_clock_position || task.wound_clock;
+      if (woundClock) histParts.push(`Wound clock at ${woundClock} — ${woundClock <= 80 ? 'early exposure' : woundClock <= 95 ? 'deepening pressure' : woundClock <= 110 ? 'approaching crisis' : 'near breaking point'}`);
       if (histParts.length) patch.content_history = histParts.join('. ') + '.';
       // Why it matters — derive from emotional stakes + strength + domains
       const whyParts = [];
@@ -665,13 +748,25 @@ export default function StoryEvaluationEngine() {
         patch.support_system = `Characters present: ${supportParts.join(', ')}`;
         if (task.escalation_loop_active) patch.support_system += '. Escalation loop active — Algorithm + Nia + Marcus creating compound pressure.';
         if (task.new_character_name) patch.support_system += `. New character entering: ${task.new_character_name} (${task.new_character_role || 'role TBD'}).`;
+      } else if (task.situations?.length && typeof task.situations[0] === 'object') {
+        // New format: collect characters from situation objects
+        const sitCharSet = new Set();
+        task.situations.forEach(s => (s.characters_present || []).forEach(c => sitCharSet.add(c)));
+        if (sitCharSet.size) {
+          patch.support_system = `Characters present: ${[...sitCharSet].join(', ')}`;
+        }
       }
 
-      // Deadline context — phase + wound clock + stakes
+      // Deadline context — phase + wound clock + stakes + character presence
       const deadlineParts = [];
       if (task.phase) deadlineParts.push(`Phase: ${task.phase}`);
-      if (task.wound_clock_position) deadlineParts.push(`Wound clock: ${task.wound_clock_position}`);
+      const wc = task.wound_clock_position || task.wound_clock;
+      if (wc) deadlineParts.push(`Wound clock: ${wc}`);
       if (task.stakes_level) deadlineParts.push(`Stakes: ${task.stakes_level}/10`);
+      if (task.david_presence) deadlineParts.push(`David: ${task.david_presence}`);
+      if (task.marcus_phase && task.marcus_phase !== 'none') deadlineParts.push(`Marcus: ${task.marcus_phase.replace('_', ' ')}`);
+      if (task.elias_notices) deadlineParts.push('Elias notices something');
+      if (task.phone_appears) deadlineParts.push('Phone appears');
       if (deadlineParts.length) patch.deadline_context = deadlineParts.join('. ');
 
       if (task.phase) {
@@ -680,11 +775,16 @@ export default function StoryEvaluationEngine() {
       }
 
       // ── ④ Emotional Architecture ──
-      // Internal conflict — obstacle + algorithm pressure + domain tensions
+      // Internal conflict — obstacle + algorithm pressure + domain tensions + what she knows
       const conflictParts = [];
       if (task.obstacle) conflictParts.push(task.obstacle);
       if (task.algorithm_pressure && task.obstacle !== task.algorithm_pressure) conflictParts.push(`Algorithm compounding: ${task.algorithm_pressure}`);
       if (task.bleed_active) conflictParts.push('Fourth wall permeable — the character senses something beyond the story');
+      // New format: extract what_she_knows from situations for internal conflict
+      if (task.situations?.length && typeof task.situations[0] === 'object') {
+        const knows = task.situations.map(s => s.what_she_knows).filter(Boolean);
+        if (knows.length) conflictParts.push(`She knows: ${knows.join('; ')}`);
+      }
       if (conflictParts.length) patch.internal_conflict = conflictParts.join('. ');
 
       // What failure means — strength weaponized + stakes context
@@ -694,21 +794,33 @@ export default function StoryEvaluationEngine() {
       if (task.escalation_loop_active) failParts.push('Escalation loop means every small failure compounds into the next scene');
       if (failParts.length) patch.what_failure_means = failParts.join('. ') + '.';
 
-      // Emotional stakes — therapy seeds + emotional arc + wound clock
+      // Emotional stakes — therapy seeds + emotional arc + wound clock + what she doesn't say
       const emotionalParts = [];
       if (task.therapy_seeds?.length) emotionalParts.push(task.therapy_seeds.join('. '));
       if (task.emotional_start && task.emotional_end) emotionalParts.push(`Emotional arc: ${task.emotional_start} → ${task.emotional_end}`);
       else if (task.emotional_start) emotionalParts.push(`Starting emotion: ${task.emotional_start}`);
-      if (task.wound_clock_position >= 7) emotionalParts.push(`Wound clock at ${task.wound_clock_position} — core wound fully exposed`);
+      const wcEmotional = task.wound_clock_position || task.wound_clock;
+      if (wcEmotional >= 100) emotionalParts.push(`Wound clock at ${wcEmotional} — core wound fully exposed`);
       if (task.bleed_active) emotionalParts.push('Bleed active — emotional boundaries dissolving');
+      // New format: extract what_she_doesnt_say from situations
+      if (task.situations?.length && typeof task.situations[0] === 'object') {
+        const unsaid = task.situations.map(s => s.what_she_doesnt_say).filter(Boolean);
+        if (unsaid.length) emotionalParts.push(`What she doesn't say: ${unsaid.join('; ')}`);
+      }
       if (emotionalParts.length) patch.emotional_stakes = emotionalParts.join('. ');
 
-      // World context — world, story_type, new characters, bleed
+      // World context — world, story_type, new characters, bleed, texture layers
       const ctxParts = [];
       if (st.activeWorld) ctxParts.push(`World: ${st.activeWorld}`);
       if (task.story_type) ctxParts.push(`Story type: ${task.story_type}`);
       if (task.new_character_name) ctxParts.push(`New character: ${task.new_character_name} (${task.new_character_role || 'role TBD'})`);
       if (task.bleed_active) ctxParts.push('BLEED ACTIVE — fourth wall permeable');
+      // Collect texture layers from new-format situations
+      if (task.situations?.length && typeof task.situations[0] === 'object') {
+        const textures = new Set();
+        task.situations.forEach(s => (s.texture_layers || []).forEach(t => textures.add(t)));
+        if (textures.size) ctxParts.push(`Texture layers: ${[...textures].join(', ')}`);
+      }
       if (ctxParts.length) patch.world_context = ctxParts.join('. ') + '.';
 
       // Must include — opening line
@@ -729,11 +841,22 @@ export default function StoryEvaluationEngine() {
       }
       // Map situations to their natural tones if we don't have enough
       if (toneSet.length < 2 && task.situations?.length) {
-        const sitToneMap = { domestic: 'warm', driver: 'charged', collision: 'thriller', escalation: 'dark', intimate_close: 'intimate' };
-        task.situations.forEach(s => {
-          const t = sitToneMap[s];
-          if (t && !toneSet.includes(t)) toneSet.push(t);
-        });
+        const isObjSits = typeof task.situations[0] === 'object';
+        if (isObjSits) {
+          // New format: situation objects have a tone field (DOMESTIC, INTIMATE, etc.)
+          const arcToneMap = { DOMESTIC: 'warm', AMBITIOUS: 'charged', INTIMATE: 'intimate', DIGITAL: 'ambient', FRICTION: 'thriller', WATCHING: 'dark', LALA: 'lyrical', MOM: 'warm', RECKONING: 'confessional' };
+          task.situations.forEach(s => {
+            const t = arcToneMap[s.tone] || arcToneMap[s.tone?.toUpperCase()];
+            if (t && !toneSet.includes(t)) toneSet.push(t);
+          });
+        } else {
+          // Old format: situation strings
+          const sitToneMap = { domestic: 'warm', driver: 'charged', collision: 'thriller', escalation: 'dark', intimate_close: 'intimate' };
+          task.situations.forEach(s => {
+            const t = sitToneMap[s];
+            if (t && !toneSet.includes(t)) toneSet.push(t);
+          });
+        }
       }
       if (toneSet.length) setToneDial(toneSet);
     }
@@ -753,7 +876,13 @@ export default function StoryEvaluationEngine() {
       }
     }
 
-    if (Object.keys(patch).length) setBrief(prev => ({ ...prev, ...patch }));
+    if (Object.keys(patch).length) {
+      if (patch.characters && !Array.isArray(patch.characters)) {
+        patch.characters = typeof patch.characters === 'string'
+          ? patch.characters.split(',').map(c => c.trim()).filter(Boolean) : [];
+      }
+      setBrief(prev => ({ ...prev, ...patch }));
+    }
   }, []);
 
   // ── Auto-fill registry + characters when brief is empty on mount or after session reset ───
@@ -931,7 +1060,7 @@ export default function StoryEvaluationEngine() {
         must_include: brief.must_include || undefined,
         never_include: brief.never_include || undefined,
         chapter_id: chapterId || undefined,
-      });
+      }, { timeoutMs: 180000 });
       setStoryId(data.story_id);
       setStories(data.stories);
       setTokenUsage(data.token_usage || null);
@@ -946,7 +1075,7 @@ export default function StoryEvaluationEngine() {
     if (!storyId) return;
     setError(null); setLoading(true);
     try {
-      const data = await apiPost('evaluate-stories', { story_id: storyId });
+      const data = await apiPost('evaluate-stories', { story_id: storyId }, { timeoutMs: 180000 });
       setEvaluation(data.evaluation);
       setScoreOverrides(null);
       setEditingScores(false);
@@ -964,7 +1093,7 @@ export default function StoryEvaluationEngine() {
     if (!storyId) return;
     setError(null); setLoading(true);
     try {
-      const data = await apiPost('propose-memory', { story_id: storyId });
+      const data = await apiPost('propose-memory', { story_id: storyId }, { timeoutMs: 120000 });
       setPlotMemories(data.proposals?.plot_memories || []);
       setRevelations(data.proposals?.character_revelations || []);
       setSelectedPlot(new Set(Array.from({ length: (data.proposals?.plot_memories || []).length }, (_, i) => i)));
@@ -978,7 +1107,7 @@ export default function StoryEvaluationEngine() {
     if (!storyId) return;
     setError(null); setLoading(true);
     try {
-      const data = await apiPost('propose-registry-update', { story_id: storyId });
+      const data = await apiPost('propose-registry-update', { story_id: storyId }, { timeoutMs: 120000 });
       setRegUpdates(data.proposals || []);
       setSelectedReg(new Set(Array.from({ length: (data.proposals || []).length }, (_, i) => i)));
       setStep('registry');
@@ -1004,7 +1133,7 @@ export default function StoryEvaluationEngine() {
         chapter_id: chapterId.trim(),
         confirmed_memories: confirmedMems,
         confirmed_registry_updates: confirmedReg,
-      });
+      }, { timeoutMs: 120000 });
       setWriteResult(data);
       setStep('writeback');
     } catch (err) { setError(err.message); }
@@ -1019,6 +1148,7 @@ export default function StoryEvaluationEngine() {
 
   // ── Regenerate (re-run 3 voices with same brief) ─────────────────────
   const handleRegenerate = useCallback(async () => {
+    if (!window.confirm('Regenerate all 3 voices? This will make new AI calls.')) return;
     setError(null); setLoading(true);
     try {
       const composed = composeBrief(brief);
@@ -1027,7 +1157,7 @@ export default function StoryEvaluationEngine() {
         characters_in_scene: brief.characters,
         registry_id: brief.registry_id || undefined,
         tone_dial: toneDial,
-      });
+      }, { timeoutMs: 180000 });
       setStoryId(data.story_id);
       setStories(data.stories);
       setTokenUsage(data.token_usage || null);
@@ -1052,7 +1182,7 @@ export default function StoryEvaluationEngine() {
       parts.push(`\n## Evaluation\n**Winner: ${evaluation.winner}** — ${evaluation.winner_reason}\n`);
       VOICES.forEach(v => {
         const sc = evaluation.scores?.[v.id];
-        if (sc) parts.push(`\n### ${v.label}: ${sc.total}/60\n${sc.summary}\n`);
+        if (sc) parts.push(`\n### ${v.label}: ${sc.total}/90\n${sc.summary}\n`);
       });
       if (evaluation.approved_version) parts.push(`\n## Approved Version\n\n${evaluation.approved_version}\n`);
     }
@@ -1084,7 +1214,7 @@ export default function StoryEvaluationEngine() {
       parts.push(`<p><strong>Winner: ${evaluation.winner}</strong> — ${evaluation.winner_reason || ''}</p>`);
       VOICES.forEach(v => {
         const sc = evaluation.scores?.[v.id];
-        if (sc) parts.push(`<p style="font-size:12px"><strong>${v.label}:</strong> ${sc.total}/60 — ${sc.summary || ''}</p>`);
+        if (sc) parts.push(`<p style="font-size:12px"><strong>${v.label}:</strong> ${sc.total}/90 — ${sc.summary || ''}</p>`);
       });
       if (evaluation.approved_version) {
         parts.push(`<hr/><h2 style="font-family:Georgia,serif">Approved Version</h2>`);
@@ -1205,10 +1335,8 @@ export default function StoryEvaluationEngine() {
   // ── Render ───────────────────────────────────────────────────────────
   return (
     <div className="see-page" style={{
-      height: '100vh', background: T.bg, color: T.text,
+      minHeight: '100%', background: T.bg, color: T.text,
       fontFamily: "'Inter','Segoe UI',system-ui,sans-serif",
-      overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-      overscrollBehaviorY: 'contain',
     }}>
       {/* Header */}
       <div className="see-header" style={{
@@ -1244,7 +1372,7 @@ export default function StoryEvaluationEngine() {
               onClick={() => {
                 if (!window.confirm('Start a new session? Current progress will be cleared.')) return;
                 setBrief(EMPTY_BRIEF);
-                setToneDial('literary');
+                setToneDial(['literary']);
                 setStep('brief');
                 setStories(null);
                 setStoryId(null);
@@ -1408,9 +1536,9 @@ export default function StoryEvaluationEngine() {
                           if (!sc) return null;
                           return (
                             <div key={voice} style={{ marginBottom: 6 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: T.text, marginBottom: 2 }}>{voice.replace('voice_', 'V').toUpperCase()}: {sc.total}/60</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: T.text, marginBottom: 2 }}>{voice.replace('voice_', 'V').toUpperCase()}: {sc.total}/90</div>
                               <div style={{ height: 8, borderRadius: 4, background: T.border, overflow: 'hidden' }}>
-                                <div style={{ width: `${(sc.total / 60) * 100}%`, height: '100%', background: voice === entry.winner ? T.green : T.accent, borderRadius: 4, transition: 'width 0.4s' }} />
+                                <div style={{ width: `${(sc.total / 90) * 100}%`, height: '100%', background: voice === entry.winner ? T.green : T.accent, borderRadius: 4, transition: 'width 0.4s' }} />
                               </div>
                             </div>
                           );
@@ -1848,7 +1976,6 @@ export default function StoryEvaluationEngine() {
                 {briefCompleteness(brief) < 60
                   ? `Brief ${briefCompleteness(brief)}% complete — fill in: ${
                       [
-                        !brief.protagonist ? 'protagonist' : '',
                         !brief.situation ? 'situation' : '',
                         !brief.content_name ? 'content name' : '',
                         !brief.content_type ? 'content type' : '',

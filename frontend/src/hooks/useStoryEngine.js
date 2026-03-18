@@ -401,6 +401,43 @@ export default function useStoryEngine() {
     }
   }, [selectedChar, addToast]);
 
+  // --- Generate next chapter brief (single chapter, sequential) ---
+  const [generatingNextChapter, setGeneratingNextChapter] = useState(false);
+  const handleGenerateNextChapter = useCallback(async () => {
+    if (generatingNextChapter) return;
+    setGeneratingNextChapter(true);
+    try {
+      const res = await fetch(`${API_BASE}/memories/generate-next-chapter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characterKey: selectedChar }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to generate next chapter');
+      }
+      const data = await res.json();
+      if (data.complete) {
+        addToast('All 50 chapters have been generated!', 'info');
+        return;
+      }
+      const updatedTasks = data.allTasks || [];
+      setTasks(updatedTasks);
+      setCachedTasks(selectedChar, updatedTasks);
+      // Set the new chapter as active
+      if (data.chapter) {
+        setActiveTask(data.chapter);
+        setActiveStory(null);
+        addToast(`Chapter ${data.chapterNumber} brief generated`, 'success');
+      }
+    } catch (e) {
+      console.error('generateNextChapter error:', e);
+      addToast(e.message || 'Failed to generate next chapter', 'error');
+    } finally {
+      setGeneratingNextChapter(false);
+    }
+  }, [generatingNextChapter, selectedChar, addToast]);
+
   // --- Generate single story ---
   const handleGenerate = useCallback(async (task) => {
     setActiveTask(task);
@@ -461,12 +498,12 @@ export default function useStoryEngine() {
     setSavedStories(prev => [...new Set([...prev, story.story_number])]);
     setCachedStories(selectedChar, stories, nextApproved);
 
-    // Auto-advance optimistically
-    const nextUnwritten = tasks.find(
+    // Check if there's already a next task generated (advance to it)
+    const nextExisting = tasks.find(
       t => t.story_number > story.story_number && !stories[t.story_number] && !nextApproved.includes(t.story_number)
     );
-    if (nextUnwritten) {
-      setActiveTask(nextUnwritten);
+    if (nextExisting) {
+      setActiveTask(nextExisting);
       setActiveStory(null);
     }
 
@@ -575,6 +612,37 @@ export default function useStoryEngine() {
 
     // Wait for all post-approval tasks (but don't block UI — it's already updated)
     await Promise.allSettled(postApprovalTasks);
+
+    // Auto-generate next chapter brief if no next task exists
+    const hasNextTask = tasks.some(
+      t => t.story_number > story.story_number && !stories[t.story_number] && !nextApproved.includes(t.story_number)
+    );
+    if (!hasNextTask && tasks.length < 50) {
+      // Fire-and-forget — generates next chapter in background
+      addToast('Generating next chapter brief…', 'info');
+      try {
+        const nextRes = await fetch(`${API_BASE}/memories/generate-next-chapter`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ characterKey: selectedChar }),
+        });
+        if (nextRes.ok) {
+          const nextData = await nextRes.json();
+          if (nextData.chapter && nextData.allTasks) {
+            setTasks(nextData.allTasks);
+            setCachedTasks(selectedChar, nextData.allTasks);
+            setActiveTask(nextData.chapter);
+            setActiveStory(null);
+            addToast(`Chapter ${nextData.chapterNumber} brief ready`, 'success');
+          } else if (nextData.complete) {
+            addToast('All 50 chapters generated!', 'info');
+          }
+        }
+      } catch (e) {
+        console.error('auto-generate next chapter error:', e);
+      }
+    }
+
     setProcessingStory(null);
   }, [processingStory, approvedStories, selectedChar, stories, tasks, char, addToast]);
 
@@ -612,6 +680,32 @@ export default function useStoryEngine() {
     const timer = setTimeout(() => setRejectedStory(null), 10000);
     return () => clearTimeout(timer);
   }, [rejectedStory]);
+
+  // --- Delete ---
+  const handleDelete = useCallback(async (story) => {
+    if (!story) return;
+    // Delete from DB if it has a db_id
+    if (story.db_id) {
+      try {
+        await fetch(`${API_BASE}/stories/${story.db_id}`, {
+          method: 'DELETE', headers: authHeaders(),
+        });
+      } catch (e) { console.error('story delete error:', e); }
+    }
+    // Remove from local state
+    setStories(prev => {
+      const next = { ...prev };
+      delete next[story.story_number];
+      const nextApproved = approvedStories.filter(n => n !== story.story_number);
+      setApprovedStories(nextApproved);
+      setSavedStories(prev => prev.filter(n => n !== story.story_number));
+      setCachedStories(selectedChar, next, nextApproved);
+      return next;
+    });
+    setActiveStory(null);
+    setActiveTask(tasks.find(t => t.story_number === story.story_number) || null);
+    addToast('Story deleted', 'info');
+  }, [selectedChar, approvedStories, tasks, addToast]);
 
   // --- Edit ---
   const handleEdit = useCallback(async (story, newText) => {
@@ -769,6 +863,7 @@ export default function useStoryEngine() {
     tasks, tasksLoading, filteredTasks,
     activeTask, setActiveTask, activeStory, setActiveStory,
     handleSelectTask, handleGenerateArc, arcProgress,
+    handleGenerateNextChapter, generatingNextChapter,
 
     // Stories
     stories, approvedStories, savedStories,
@@ -778,7 +873,7 @@ export default function useStoryEngine() {
     handleGenerate,
 
     // Actions
-    handleApprove, handleReject, handleUndoReject,
+    handleApprove, handleReject, handleUndoReject, handleDelete,
     handleEdit, handleCheckConsistency, handleAddToRegistry,
     handleSaveForLater, handleExportStory,
     handleBatchApprove, handleBatchToggle,

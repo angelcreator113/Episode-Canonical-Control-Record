@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from '../components/StoryReviewPanel';
 import WriteModeAIWriter from '../components/WriteModeAIWriter';
@@ -88,7 +88,7 @@ function StoryPanel({
   readingMode, onToggleReadingMode,
   writeMode, onToggleWriteMode,
   onNavigateStory, hasPrev, hasNext,
-  onExportStory,
+  onExportStory, onDelete,
   onEvaluate,
   charObj, selectedCharKey, activeWorld, allCharacters, onSelectChar,
   storiesMinimized, onToggleStoriesMinimized,
@@ -98,6 +98,68 @@ function StoryPanel({
   const [editText, setEditText] = useState(story?.text || '');
   const [saveStatus, setSaveStatus] = useState('saved');
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
+  const [voicesExpanded, setVoicesExpanded] = useState(false);
+
+  // ── Text-to-Speech state ──
+  const [ttsPlaying, setTtsPlaying] = useState(false);
+  const [ttsPaused, setTtsPaused] = useState(false);
+  const [ttsRate, setTtsRate] = useState(1);
+  const ttsUtteranceRef = useRef(null);
+
+  const handleTtsPlay = useCallback(() => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+
+    if (ttsPaused) {
+      synth.resume();
+      setTtsPaused(false);
+      setTtsPlaying(true);
+      return;
+    }
+
+    synth.cancel();
+    const text = editing ? editText : (story?.text || '');
+    if (!text.trim()) return;
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = ttsRate;
+    utterance.pitch = 1;
+
+    // Pick a natural-sounding voice if available
+    const voices = synth.getVoices();
+    const preferred = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
+                   || voices.find(v => v.lang.startsWith('en') && !v.localService)
+                   || voices.find(v => v.lang.startsWith('en'));
+    if (preferred) utterance.voice = preferred;
+
+    utterance.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
+    utterance.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
+
+    ttsUtteranceRef.current = utterance;
+    synth.speak(utterance);
+    setTtsPlaying(true);
+    setTtsPaused(false);
+  }, [editing, editText, story?.text, ttsPaused, ttsRate]);
+
+  const handleTtsPause = useCallback(() => {
+    const synth = window.speechSynthesis;
+    if (synth?.speaking) {
+      synth.pause();
+      setTtsPaused(true);
+      setTtsPlaying(false);
+    }
+  }, []);
+
+  const handleTtsStop = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    setTtsPlaying(false);
+    setTtsPaused(false);
+  }, []);
+
+  // Cleanup TTS on unmount or story change
+  useEffect(() => {
+    return () => window.speechSynthesis?.cancel();
+  }, [story?.story_number]);
 
   useEffect(() => {
     if (selectedCharKey) setSelectedVoice(selectedCharKey);
@@ -245,29 +307,88 @@ function StoryPanel({
   if (task && !story) return (
     <div className="se-story-panel se-story-brief">
       <div className="se-story-brief-header" style={{ borderColor: charColor }}>
-        <div className="se-story-brief-num">Story {task.story_number}</div>
+        <div className="se-story-brief-num">Chapter {task.story_number}</div>
         <div className="se-story-brief-title">{task.title}</div>
         <div className="se-story-brief-phase" style={{ color: PHASE_COLORS[task.phase] || '#888' }}>
-          {PHASE_LABELS[task.phase] || task.phase || '—'} · {task.story_type?.replace(/_/g, ' ') || '—'}
+          {PHASE_LABELS[task.phase] || task.phase || '—'}
+          {task.wound_clock != null && <> · Wound Clock {task.wound_clock}</>}
+          {task.stakes_level != null && <> · Stakes {task.stakes_level}</>}
         </div>
       </div>
-      <div className="se-story-brief-grid">
-        <div className="se-story-brief-field">
-          <div className="se-story-brief-label">Task</div>
-          <div className="se-story-brief-value">{task.task || '—'}</div>
+      {task.chapter_theme && (
+        <div className="se-story-brief-field" style={{ marginBottom: 16 }}>
+          <div className="se-story-brief-label">Chapter Theme</div>
+          <div className="se-story-brief-value">{task.chapter_theme}</div>
         </div>
-        <div className="se-story-brief-field">
-          <div className="se-story-brief-label">Obstacle</div>
-          <div className="se-story-brief-value">{task.obstacle || '—'}</div>
+      )}
+      {task.situations?.length > 0 && (
+        <div className="se-situations-list">
+          <div className="se-story-brief-label" style={{ marginBottom: 10 }}>
+            Situations ({task.situations.length})
+          </div>
+          {task.situations.map((s, i) => {
+            const isObj = typeof s === 'object';
+            if (!isObj) return (
+              <div key={i} className="se-situation-card">
+                <div className="se-situation-header">
+                  <span className="se-situation-num">{i + 1}</span>
+                  <span className="se-situation-title">{s}</span>
+                </div>
+              </div>
+            );
+            return (
+              <div key={i} className="se-situation-card">
+                <div className="se-situation-header">
+                  <span className="se-situation-num">{s.situation_number || i + 1}</span>
+                  <span className="se-situation-title">{s.title || s.situation_type || `Situation ${i + 1}`}</span>
+                  {s.tone && <span className="se-situation-tone">{s.tone}</span>}
+                  {s.situation_type && s.title && (
+                    <span className="se-situation-type">{s.situation_type.replace(/_/g, ' ')}</span>
+                  )}
+                </div>
+                {s.what_happens && (
+                  <div className="se-situation-body">{s.what_happens}</div>
+                )}
+                {(s.what_she_knows || s.what_she_doesnt_say) && (
+                  <div className="se-situation-subtext">
+                    {s.what_she_knows && <div><strong>She knows:</strong> {s.what_she_knows}</div>}
+                    {s.what_she_doesnt_say && <div><strong>She doesn't say:</strong> {s.what_she_doesnt_say}</div>}
+                  </div>
+                )}
+                {s.characters_present?.length > 0 && (
+                  <div className="se-situation-chars">
+                    {s.characters_present.map((c, ci) => (
+                      <span key={ci} className="se-situation-char-tag">{c}</span>
+                    ))}
+                  </div>
+                )}
+                {s.opening_line && (
+                  <div className="se-situation-opening">"{s.opening_line}"</div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div className="se-story-brief-field">
-          <div className="se-story-brief-label">Strength Weaponized</div>
-          <div className="se-story-brief-value">{task.strength_weaponized || '—'}</div>
+      )}
+      {task.chapter_arc && (
+        <div className="se-story-brief-field" style={{ marginTop: 16 }}>
+          <div className="se-story-brief-label">Chapter Arc</div>
+          <div className="se-story-brief-value">{task.chapter_arc}</div>
         </div>
-        <div className="se-story-brief-field">
-          <div className="se-story-brief-label">Opening Line</div>
-          <div className="se-story-brief-value se-story-brief-opening">{task.opening_line ? `"${task.opening_line}"` : '—'}</div>
-        </div>
+      )}
+      <div className="se-story-brief-grid" style={{ marginTop: 16 }}>
+        {task.david_presence && (
+          <div className="se-story-brief-field">
+            <div className="se-story-brief-label">David</div>
+            <div className="se-story-brief-value">{task.david_presence}</div>
+          </div>
+        )}
+        {task.marcus_phase && task.marcus_phase !== 'none' && (
+          <div className="se-story-brief-field">
+            <div className="se-story-brief-label">Marcus</div>
+            <div className="se-story-brief-value">{task.marcus_phase.replace(/_/g, ' ')}</div>
+          </div>
+        )}
       </div>
       {task.new_character && (
         <div className="se-story-brief-new-char">
@@ -275,12 +396,6 @@ function StoryPanel({
           <span>{task.new_character_name} — {task.new_character_role}</span>
         </div>
       )}
-      <div className="se-story-brief-therapy">
-        <div className="se-story-brief-label">Therapy Seeds</div>
-        {(task.therapy_seeds || []).map((seed, i) => (
-          <div key={i} className="se-therapy-seed">{seed}</div>
-        ))}
-      </div>
       <div style={{ padding: '16px 20px', borderTop: '1px solid #e8e4d8', display: 'flex', gap: 10 }}>
         <button
           className="se-btn"
@@ -331,6 +446,20 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-edit-header-right">
+            <div className="se-tts-controls">
+              {!ttsPlaying && !ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">🔊</button>
+              )}
+              {ttsPlaying && (
+                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause">⏸</button>
+              )}
+              {ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume">▶</button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop">■</button>
+              )}
+            </div>
             <span className={`se-save-indicator se-save-${saveStatus}`}>
               {saveStatus === 'saved' ? 'Saved — your scene is evolving' : saveStatus === 'saving' ? 'Capturing your words…' : 'Unsaved changes'}
             </span>
@@ -390,6 +519,61 @@ function StoryPanel({
                 Read
               </button>
             </div>
+            <div className="se-tts-controls">
+              {!ttsPlaying && !ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
+                  🔊 Listen
+                </button>
+              )}
+              {ttsPlaying && (
+                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause reading">
+                  ⏸ Pause
+                </button>
+              )}
+              {ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume reading">
+                  ▶ Resume
+                </button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">■</button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <select
+                  className="se-tts-speed"
+                  value={ttsRate}
+                  onChange={(e) => {
+                    const newRate = parseFloat(e.target.value);
+                    setTtsRate(newRate);
+                    handleTtsStop();
+                    setTimeout(() => {
+                      const synth = window.speechSynthesis;
+                      const text = editing ? editText : (story?.text || '');
+                      const u = new SpeechSynthesisUtterance(text);
+                      u.rate = newRate;
+                      const voices = synth.getVoices();
+                      const pref = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
+                                || voices.find(v => v.lang.startsWith('en') && !v.localService)
+                                || voices.find(v => v.lang.startsWith('en'));
+                      if (pref) u.voice = pref;
+                      u.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
+                      u.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
+                      synth.speak(u);
+                      setTtsPlaying(true);
+                      setTtsPaused(false);
+                    }, 100);
+                  }}
+                  title="Reading speed"
+                >
+                  <option value="0.5">0.5×</option>
+                  <option value="0.75">0.75×</option>
+                  <option value="1">1×</option>
+                  <option value="1.25">1.25×</option>
+                  <option value="1.5">1.5×</option>
+                  <option value="2">2×</option>
+                </select>
+              )}
+            </div>
             {!readingMode && (
               <>
                 <button className="se-btn se-btn-export" onClick={() => onExportStory?.(story)} title="Copy or download story">Export</button>
@@ -397,9 +581,11 @@ function StoryPanel({
                 <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
                   {consistencyLoading ? '…' : 'Check'}
                 </button>
-                <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
                 <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
                   {savingForLater ? 'Saving…' : 'Save Draft'}
+                </button>
+                <button className="se-btn se-btn-delete" style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) onDelete?.(story); }} title="Delete story">
+                  Delete
                 </button>
                 <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={() => onEvaluate?.()} title="Evaluate with multi-voice scoring">
                   Evaluate
@@ -529,24 +715,6 @@ function StoryPanel({
 
             <div className="se-writing-tools">
               <div className="se-tools-section">
-                <div className="se-tools-section-title">Narrative Perspective</div>
-                <div className="se-tools-section-subtitle">Choose voice for AI edits</div>
-                <div className="se-voice-list">
-                  {allCharacters && Object.entries(allCharacters).map(([key, c]) => (
-                    <label
-                      key={key}
-                      className={`se-voice-option ${selectedVoice === key ? 'se-voice-active' : ''}`}
-                      onClick={() => { setSelectedVoice(key); onSelectChar?.(key); }}
-                    >
-                      <span className={`se-voice-radio ${selectedVoice === key ? 'se-voice-radio-on' : ''}`} />
-                      <span className="se-voice-name">{c.display_name || key}</span>
-                      {selectedVoice === key && <span className="se-voice-active-label">Writing tone applied</span>}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="se-tools-section">
                 <div className="se-tools-section-title">Story Info</div>
                 <div className="se-tools-info-grid">
                   <div className="se-tools-info-row">
@@ -566,6 +734,39 @@ function StoryPanel({
                     <span className="se-tools-info-value">{getReadingTime(wordCount)}</span>
                   </div>
                 </div>
+              </div>
+
+              <div className="se-tools-section se-tools-section-voices">
+                <div
+                  className="se-tools-section-title se-tools-section-collapsible"
+                  onClick={() => setVoicesExpanded(v => !v)}
+                >
+                  <span>Narrative Perspective</span>
+                  <span className={`se-tools-chevron ${voicesExpanded ? '' : 'se-tools-chevron-collapsed'}`}>▾</span>
+                </div>
+                <div className="se-tools-section-subtitle">Choose voice for AI edits</div>
+                {selectedVoice && allCharacters?.[selectedVoice] && !voicesExpanded && (
+                  <div className="se-voice-selected-summary">
+                    <span className="se-voice-radio se-voice-radio-on" />
+                    <span className="se-voice-name">{allCharacters[selectedVoice].display_name || selectedVoice}</span>
+                    <span className="se-voice-active-label">Writing tone applied</span>
+                  </div>
+                )}
+                {voicesExpanded && (
+                  <div className="se-voice-list se-voice-list-scrollable">
+                    {allCharacters && Object.entries(allCharacters).map(([key, c]) => (
+                      <label
+                        key={key}
+                        className={`se-voice-option ${selectedVoice === key ? 'se-voice-active' : ''}`}
+                        onClick={() => { setSelectedVoice(key); onSelectChar?.(key); }}
+                      >
+                        <span className={`se-voice-radio ${selectedVoice === key ? 'se-voice-radio-on' : ''}`} />
+                        <span className="se-voice-name">{c.display_name || key}</span>
+                        {selectedVoice === key && <span className="se-voice-active-label">Writing tone applied</span>}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="se-tools-section">
@@ -745,10 +946,18 @@ export default function StoryEngine() {
                   onClick={() => {
                     const params = new URLSearchParams();
                     if (engine.activeStory?.text) params.set('text', '1');
-                    if (engine.activeTask?.task) params.set('brief', engine.activeTask.task);
                     const charData = engine.selectedChar && engine.CHARACTERS[engine.selectedChar];
                     const world = charData?.world;
-                    const sceneChars = world ? Object.keys(engine.CHARACTERS).filter(k => engine.CHARACTERS[k].world === world) : engine.selectedChar ? [engine.selectedChar] : [];
+                    // Collect characters from task situations + world characters
+                    const sitChars = new Set();
+                    if (engine.activeTask?.situations?.length) {
+                      engine.activeTask.situations.forEach(s => {
+                        (s.characters_present || []).forEach(c => sitChars.add(c));
+                      });
+                    }
+                    const worldChars = world ? Object.keys(engine.CHARACTERS).filter(k => engine.CHARACTERS[k].world === world) : engine.selectedChar ? [engine.selectedChar] : [];
+                    worldChars.forEach(c => sitChars.add(c));
+                    const sceneChars = [...sitChars];
                     if (sceneChars.length) params.set('chars', sceneChars.join(','));
                     if (charData?.registry_id) params.set('registry_id', charData.registry_id);
                     const charNames = {};
@@ -774,6 +983,7 @@ export default function StoryEngine() {
                       <button onClick={() => engine.handleSaveForLater(engine.activeStory)}>Save Draft</button>
                       <button onClick={() => engine.handleCheckConsistency(engine.activeStory)}>Check Consistency</button>
                       <button onClick={() => engine.setReadingMode(prev => !prev)}>Reading Mode</button>
+                      <button style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) engine.handleDelete(engine.activeStory); }}>Delete</button>
                     </div>
                   )}
                 </div>
@@ -805,6 +1015,8 @@ export default function StoryEngine() {
             generation={engine.generation}
             handleGenerateArc={engine.handleGenerateArc}
             handleGenerate={engine.handleGenerate}
+            handleGenerateNextChapter={engine.handleGenerateNextChapter}
+            generatingNextChapter={engine.generatingNextChapter}
             handleSelectTask={engine.handleSelectTask}
             phaseFilter={engine.phaseFilter}
             setPhaseFilter={engine.setPhaseFilter}
@@ -843,17 +1055,23 @@ export default function StoryEngine() {
                 elapsed={engine.generation.elapsed}
               />
             </div>
+          ) : engine.generatingNextChapter ? (
+            <div className="se-canvas-generating">
+              <div className="se-generating-ring" style={{ borderTopColor: engine.char?.color }} />
+              <div className="se-generating-title">Generating Chapter {engine.tasks.length + 1} Brief…</div>
+              <div className="se-generating-sub">Building on {engine.tasks.length} previous {engine.tasks.length === 1 ? 'chapter' : 'chapters'}.</div>
+            </div>
           ) : !engine.tasksLoading && engine.tasks.length === 0 && !engine.activeStory ? (
             <div className="se-canvas-hero">
               <div className="se-hero-icon" style={{ color: engine.char?.color }}>{engine.char?.icon || '◇'}</div>
-              <div className="se-hero-title">Build {engine.char?.display_name ? `${engine.char.display_name}'s` : 'your'} story engine</div>
+              <div className="se-hero-title">Begin {engine.char?.display_name ? `${engine.char.display_name}'s` : 'your'} story</div>
               <div className="se-hero-text">
-                Generate a 50-story progression that moves from establishment through pressure, crisis, and integration.
+                Generate chapter briefs one at a time. Each new chapter builds on the ones before it.
               </div>
-              <button className="se-hero-btn" style={{ background: engine.char?.color || '#b0922e' }} onClick={() => engine.handleGenerateArc()}>
-                Generate Story Arc
+              <button className="se-hero-btn" style={{ background: engine.char?.color || '#b0922e' }} onClick={() => engine.handleGenerateNextChapter()} disabled={engine.generatingNextChapter}>
+                Generate Chapter 1
               </button>
-              <div className="se-hero-sub">Typically 2–3 minutes</div>
+              <div className="se-hero-sub">Typically 15–30 seconds per chapter</div>
             </div>
           ) : (
             <StoryPanel
@@ -881,6 +1099,7 @@ export default function StoryEngine() {
               hasPrev={engine.hasPrevStory}
               hasNext={engine.hasNextStory}
               onExportStory={engine.handleExportStory}
+              onDelete={engine.handleDelete}
               onEvaluate={(storyOrTask) => {
                 const params = new URLSearchParams();
                 if (engine.activeStory?.text) params.set('text', '1');

@@ -305,32 +305,6 @@ export default function StoryInspector({
         </section>
       )}
 
-      {/* Writing actions */}
-      {activeStory && (
-        <section className="se-insp-section se-insp-actions">
-          <div className="se-insp-label">Actions</div>
-          <div className="se-insp-action-group">
-            <button className="se-insp-btn" onClick={() => setWriteMode(v => !v)}>
-              {writeMode ? 'Exit Edit' : 'Edit'}
-            </button>
-            <button className="se-insp-btn" onClick={() => handleSaveForLater(activeStory)} disabled={savingForLater}>
-              {savingForLater ? 'Saving…' : 'Save Draft'}
-            </button>
-            <button className="se-insp-btn" onClick={() => setReadingMode(prev => !prev)}>
-              {readingMode ? 'Exit Reading' : 'Reading Mode'}
-            </button>
-          </div>
-          <div className="se-insp-action-final">
-            <button className="se-insp-btn se-insp-btn--approve" style={{ background: char?.color }} onClick={() => setApproveConfirm(activeStory)}>
-              Approve
-            </button>
-            <button className="se-insp-btn se-insp-btn--reject" onClick={() => handleReject(activeStory)}>
-              Reject
-            </button>
-          </div>
-        </section>
-      )}
-
       {/* Next Move Suggestion */}
       {selectedChar && <NextMoveSuggestion story={activeStory} characterKey={selectedChar} />}
 
