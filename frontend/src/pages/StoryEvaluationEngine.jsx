@@ -182,7 +182,8 @@ function extractContentFromTask(taskText) {
 }
 
 function briefCompleteness(b) {
-  const filled = BRIEF_REQUIRED.filter(k => k === 'characters' ? b.characters.length > 0 : (b[k] || '').trim());
+  const chars = Array.isArray(b.characters) ? b.characters : [];
+  const filled = BRIEF_REQUIRED.filter(k => k === 'characters' ? chars.length > 0 : (b[k] || '').trim());
   return Math.round((filled.length / BRIEF_REQUIRED.length) * 100);
 }
 
@@ -376,7 +377,10 @@ export default function StoryEvaluationEngine() {
   const [charInput, setCharInput] = useState('');
   const [charContext, setCharContext] = useState({}); // { character_key: { living_context, relationships, display_name } }
   const [charFetchStatus, setCharFetchStatus] = useState({}); // { character_key: 'loading'|'loaded'|'failed' }
-  const updateBrief = (key, val) => setBrief(prev => ({ ...prev, [key]: val }));
+  const updateBrief = (key, val) => setBrief(prev => ({
+    ...prev,
+    [key]: key === 'characters' ? (Array.isArray(val) ? val : []) : val,
+  }));
 
   // Tone dial — multi-select (array of tone IDs)
   const [toneDial, setToneDial] = useState(['literary']);
@@ -517,12 +521,12 @@ export default function StoryEvaluationEngine() {
         const s = JSON.parse(saved);
         if (s.brief) {
           // Ensure characters is always an array (guards against corrupt localStorage)
-          if (s.brief.characters && !Array.isArray(s.brief.characters)) {
+          if (!Array.isArray(s.brief.characters)) {
             s.brief.characters = typeof s.brief.characters === 'string'
               ? s.brief.characters.split(',').map(c => c.trim()).filter(Boolean)
               : [];
           }
-          setBrief(s.brief);
+          setBrief({ ...EMPTY_BRIEF, ...s.brief });
         }
         if (s.toneDial) setToneDial(Array.isArray(s.toneDial) ? s.toneDial : [s.toneDial]);
         if (s.step) setStep(s.step);
@@ -753,7 +757,13 @@ export default function StoryEvaluationEngine() {
       }
     }
 
-    if (Object.keys(patch).length) setBrief(prev => ({ ...prev, ...patch }));
+    if (Object.keys(patch).length) {
+      if (patch.characters && !Array.isArray(patch.characters)) {
+        patch.characters = typeof patch.characters === 'string'
+          ? patch.characters.split(',').map(c => c.trim()).filter(Boolean) : [];
+      }
+      setBrief(prev => ({ ...prev, ...patch }));
+    }
   }, []);
 
   // ── Auto-fill registry + characters when brief is empty on mount or after session reset ───
