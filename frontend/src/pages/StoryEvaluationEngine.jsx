@@ -515,7 +515,15 @@ export default function StoryEvaluationEngine() {
       const saved = localStorage.getItem(SESSION_KEY);
       if (saved) {
         const s = JSON.parse(saved);
-        if (s.brief) setBrief(s.brief);
+        if (s.brief) {
+          // Ensure characters is always an array (guards against corrupt localStorage)
+          if (s.brief.characters && !Array.isArray(s.brief.characters)) {
+            s.brief.characters = typeof s.brief.characters === 'string'
+              ? s.brief.characters.split(',').map(c => c.trim()).filter(Boolean)
+              : [];
+          }
+          setBrief(s.brief);
+        }
         if (s.toneDial) setToneDial(Array.isArray(s.toneDial) ? s.toneDial : [s.toneDial]);
         if (s.step) setStep(s.step);
         if (s.storyId) setStoryId(s.storyId);
@@ -1344,7 +1352,7 @@ export default function StoryEvaluationEngine() {
                     </div>
                   </div>
                   <div style={{ fontSize: 10, color: T.textDim, marginBottom: 4 }}>
-                    {entry.characters.slice(0, 4).join(', ')}{entry.characters.length > 4 ? ` +${entry.characters.length - 4}` : ''} · {entry.tone}
+                    {(entry.characters || []).slice(0, 4).join(', ')}{(entry.characters || []).length > 4 ? ` +${entry.characters.length - 4}` : ''} · {entry.tone}
                   </div>
                   {entry.winner && (
                     <div style={{ fontSize: 10, color: T.green, fontWeight: 600 }}>
