@@ -659,10 +659,18 @@ export default function StoryEngine() {
                   onClick={() => {
                     const params = new URLSearchParams();
                     if (engine.activeStory?.text) params.set('text', '1');
-                    if (engine.activeTask?.task) params.set('brief', engine.activeTask.task);
                     const charData = engine.selectedChar && engine.CHARACTERS[engine.selectedChar];
                     const world = charData?.world;
-                    const sceneChars = world ? Object.keys(engine.CHARACTERS).filter(k => engine.CHARACTERS[k].world === world) : engine.selectedChar ? [engine.selectedChar] : [];
+                    // Collect characters from task situations + world characters
+                    const sitChars = new Set();
+                    if (engine.activeTask?.situations?.length) {
+                      engine.activeTask.situations.forEach(s => {
+                        (s.characters_present || []).forEach(c => sitChars.add(c));
+                      });
+                    }
+                    const worldChars = world ? Object.keys(engine.CHARACTERS).filter(k => engine.CHARACTERS[k].world === world) : engine.selectedChar ? [engine.selectedChar] : [];
+                    worldChars.forEach(c => sitChars.add(c));
+                    const sceneChars = [...sitChars];
                     if (sceneChars.length) params.set('chars', sceneChars.join(','));
                     if (charData?.registry_id) params.set('registry_id', charData.registry_id);
                     const charNames = {};

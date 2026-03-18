@@ -642,21 +642,50 @@ export default function StoryEvaluationEngine() {
 
       // ── ① Situation — rich multi-situation description ──
       const sitParts = [];
+      if (task.chapter_theme) sitParts.push(`Chapter theme: ${task.chapter_theme}`);
       if (task.task) sitParts.push(task.task);
       if (task.situations?.length) {
-        const sitLabels = {
-          domestic: 'DOMESTIC — the real life before the phone comes out',
-          driver: 'DRIVER — what pulls her into the digital world',
-          collision: 'COLLISION — two worlds pressing against each other',
-          escalation: 'ESCALATION — the moment something shifts past where it was',
-          intimate_close: 'INTIMATE CLOSE — alone with what just happened',
-        };
-        sitParts.push('');
-        sitParts.push(`Chapter situations (${task.situations.length}):`);
-        task.situations.forEach(s => {
-          sitParts.push(`• ${sitLabels[s] || s}`);
-        });
+        // New arc format: situations are objects with situation_type, tone, what_happens, etc.
+        const isObjectFormat = typeof task.situations[0] === 'object';
+        if (isObjectFormat) {
+          sitParts.push('');
+          sitParts.push(`Chapter situations (${task.situations.length}):`);
+          task.situations.forEach((s, i) => {
+            const label = s.title || s.situation_type || `Situation ${i + 1}`;
+            const tone = s.tone ? ` [${s.tone}]` : '';
+            sitParts.push(`\n${i + 1}. ${label}${tone}`);
+            if (s.what_happens) sitParts.push(`   ${s.what_happens}`);
+            if (s.what_she_knows) sitParts.push(`   She knows: ${s.what_she_knows}`);
+            if (s.what_she_doesnt_say) sitParts.push(`   She doesn't say: ${s.what_she_doesnt_say}`);
+          });
+          // Collect characters from all situations
+          const sitChars = new Set();
+          task.situations.forEach(s => {
+            (s.characters_present || []).forEach(c => sitChars.add(c));
+          });
+          if (sitChars.size && (!patch.characters || !patch.characters.length)) {
+            patch.characters = [...sitChars];
+          }
+          // Extract opening line from first situation
+          const firstOpening = task.situations[0]?.opening_line;
+          if (firstOpening && !task.opening_line) patch.must_include = `Opening line: "${firstOpening}"`;
+        } else {
+          // Old format: situations are strings like "domestic", "driver"
+          const sitLabels = {
+            domestic: 'DOMESTIC — the real life before the phone comes out',
+            driver: 'DRIVER — what pulls her into the digital world',
+            collision: 'COLLISION — two worlds pressing against each other',
+            escalation: 'ESCALATION — the moment something shifts past where it was',
+            intimate_close: 'INTIMATE CLOSE — alone with what just happened',
+          };
+          sitParts.push('');
+          sitParts.push(`Chapter situations (${task.situations.length}):`);
+          task.situations.forEach(s => {
+            sitParts.push(`• ${sitLabels[s] || s}`);
+          });
+        }
       }
+      if (task.chapter_arc) sitParts.push(`\nChapter must leave her with: ${task.chapter_arc}`);
       if (task.obstacle) sitParts.push(`\nObstacle: ${task.obstacle}`);
       if (task.emotional_start && task.emotional_end) {
         sitParts.push(`Emotional arc: ${task.emotional_start} → ${task.emotional_end}`);
@@ -682,8 +711,10 @@ export default function StoryEvaluationEngine() {
         const phaseDesc = { establishment: 'Early chapters — world and characters being established', pressure: 'Pressure building — complications tightening', crisis: 'Crisis phase — everything converging', integration: 'Integration — processing what has happened' };
         histParts.push(phaseDesc[task.phase] || `Phase: ${task.phase}`);
       }
-      if (task.story_number) histParts.push(`Story ${task.story_number} of the arc`);
-      if (task.wound_clock_position) histParts.push(`Wound clock at ${task.wound_clock_position} — ${task.wound_clock_position <= 3 ? 'early exposure' : task.wound_clock_position <= 6 ? 'deepening pressure' : task.wound_clock_position <= 8 ? 'approaching crisis' : 'near breaking point'}`);
+      if (task.story_number) histParts.push(`Chapter ${task.story_number} of the arc`);
+      // Support both old (wound_clock_position) and new (wound_clock) field names
+      const woundClock = task.wound_clock_position || task.wound_clock;
+      if (woundClock) histParts.push(`Wound clock at ${woundClock} — ${woundClock <= 80 ? 'early exposure' : woundClock <= 95 ? 'deepening pressure' : woundClock <= 110 ? 'approaching crisis' : 'near breaking point'}`);
       if (histParts.length) patch.content_history = histParts.join('. ') + '.';
       // Why it matters — derive from emotional stakes + strength + domains
       const whyParts = [];
@@ -717,13 +748,25 @@ export default function StoryEvaluationEngine() {
         patch.support_system = `Characters present: ${supportParts.join(', ')}`;
         if (task.escalation_loop_active) patch.support_system += '. Escalation loop active — Algorithm + Nia + Marcus creating compound pressure.';
         if (task.new_character_name) patch.support_system += `. New character entering: ${task.new_character_name} (${task.new_character_role || 'role TBD'}).`;
+      } else if (task.situations?.length && typeof task.situations[0] === 'object') {
+        // New format: collect characters from situation objects
+        const sitCharSet = new Set();
+        task.situations.forEach(s => (s.characters_present || []).forEach(c => sitCharSet.add(c)));
+        if (sitCharSet.size) {
+          patch.support_system = `Characters present: ${[...sitCharSet].join(', ')}`;
+        }
       }
 
-      // Deadline context — phase + wound clock + stakes
+      // Deadline context — phase + wound clock + stakes + character presence
       const deadlineParts = [];
       if (task.phase) deadlineParts.push(`Phase: ${task.phase}`);
-      if (task.wound_clock_position) deadlineParts.push(`Wound clock: ${task.wound_clock_position}`);
+      const wc = task.wound_clock_position || task.wound_clock;
+      if (wc) deadlineParts.push(`Wound clock: ${wc}`);
       if (task.stakes_level) deadlineParts.push(`Stakes: ${task.stakes_level}/10`);
+      if (task.david_presence) deadlineParts.push(`David: ${task.david_presence}`);
+      if (task.marcus_phase && task.marcus_phase !== 'none') deadlineParts.push(`Marcus: ${task.marcus_phase.replace('_', ' ')}`);
+      if (task.elias_notices) deadlineParts.push('Elias notices something');
+      if (task.phone_appears) deadlineParts.push('Phone appears');
       if (deadlineParts.length) patch.deadline_context = deadlineParts.join('. ');
 
       if (task.phase) {
@@ -732,11 +775,16 @@ export default function StoryEvaluationEngine() {
       }
 
       // ── ④ Emotional Architecture ──
-      // Internal conflict — obstacle + algorithm pressure + domain tensions
+      // Internal conflict — obstacle + algorithm pressure + domain tensions + what she knows
       const conflictParts = [];
       if (task.obstacle) conflictParts.push(task.obstacle);
       if (task.algorithm_pressure && task.obstacle !== task.algorithm_pressure) conflictParts.push(`Algorithm compounding: ${task.algorithm_pressure}`);
       if (task.bleed_active) conflictParts.push('Fourth wall permeable — the character senses something beyond the story');
+      // New format: extract what_she_knows from situations for internal conflict
+      if (task.situations?.length && typeof task.situations[0] === 'object') {
+        const knows = task.situations.map(s => s.what_she_knows).filter(Boolean);
+        if (knows.length) conflictParts.push(`She knows: ${knows.join('; ')}`);
+      }
       if (conflictParts.length) patch.internal_conflict = conflictParts.join('. ');
 
       // What failure means — strength weaponized + stakes context
@@ -746,21 +794,33 @@ export default function StoryEvaluationEngine() {
       if (task.escalation_loop_active) failParts.push('Escalation loop means every small failure compounds into the next scene');
       if (failParts.length) patch.what_failure_means = failParts.join('. ') + '.';
 
-      // Emotional stakes — therapy seeds + emotional arc + wound clock
+      // Emotional stakes — therapy seeds + emotional arc + wound clock + what she doesn't say
       const emotionalParts = [];
       if (task.therapy_seeds?.length) emotionalParts.push(task.therapy_seeds.join('. '));
       if (task.emotional_start && task.emotional_end) emotionalParts.push(`Emotional arc: ${task.emotional_start} → ${task.emotional_end}`);
       else if (task.emotional_start) emotionalParts.push(`Starting emotion: ${task.emotional_start}`);
-      if (task.wound_clock_position >= 7) emotionalParts.push(`Wound clock at ${task.wound_clock_position} — core wound fully exposed`);
+      const wcEmotional = task.wound_clock_position || task.wound_clock;
+      if (wcEmotional >= 100) emotionalParts.push(`Wound clock at ${wcEmotional} — core wound fully exposed`);
       if (task.bleed_active) emotionalParts.push('Bleed active — emotional boundaries dissolving');
+      // New format: extract what_she_doesnt_say from situations
+      if (task.situations?.length && typeof task.situations[0] === 'object') {
+        const unsaid = task.situations.map(s => s.what_she_doesnt_say).filter(Boolean);
+        if (unsaid.length) emotionalParts.push(`What she doesn't say: ${unsaid.join('; ')}`);
+      }
       if (emotionalParts.length) patch.emotional_stakes = emotionalParts.join('. ');
 
-      // World context — world, story_type, new characters, bleed
+      // World context — world, story_type, new characters, bleed, texture layers
       const ctxParts = [];
       if (st.activeWorld) ctxParts.push(`World: ${st.activeWorld}`);
       if (task.story_type) ctxParts.push(`Story type: ${task.story_type}`);
       if (task.new_character_name) ctxParts.push(`New character: ${task.new_character_name} (${task.new_character_role || 'role TBD'})`);
       if (task.bleed_active) ctxParts.push('BLEED ACTIVE — fourth wall permeable');
+      // Collect texture layers from new-format situations
+      if (task.situations?.length && typeof task.situations[0] === 'object') {
+        const textures = new Set();
+        task.situations.forEach(s => (s.texture_layers || []).forEach(t => textures.add(t)));
+        if (textures.size) ctxParts.push(`Texture layers: ${[...textures].join(', ')}`);
+      }
       if (ctxParts.length) patch.world_context = ctxParts.join('. ') + '.';
 
       // Must include — opening line
@@ -781,11 +841,22 @@ export default function StoryEvaluationEngine() {
       }
       // Map situations to their natural tones if we don't have enough
       if (toneSet.length < 2 && task.situations?.length) {
-        const sitToneMap = { domestic: 'warm', driver: 'charged', collision: 'thriller', escalation: 'dark', intimate_close: 'intimate' };
-        task.situations.forEach(s => {
-          const t = sitToneMap[s];
-          if (t && !toneSet.includes(t)) toneSet.push(t);
-        });
+        const isObjSits = typeof task.situations[0] === 'object';
+        if (isObjSits) {
+          // New format: situation objects have a tone field (DOMESTIC, INTIMATE, etc.)
+          const arcToneMap = { DOMESTIC: 'warm', AMBITIOUS: 'charged', INTIMATE: 'intimate', DIGITAL: 'ambient', FRICTION: 'thriller', WATCHING: 'dark', LALA: 'lyrical', MOM: 'warm', RECKONING: 'confessional' };
+          task.situations.forEach(s => {
+            const t = arcToneMap[s.tone] || arcToneMap[s.tone?.toUpperCase()];
+            if (t && !toneSet.includes(t)) toneSet.push(t);
+          });
+        } else {
+          // Old format: situation strings
+          const sitToneMap = { domestic: 'warm', driver: 'charged', collision: 'thriller', escalation: 'dark', intimate_close: 'intimate' };
+          task.situations.forEach(s => {
+            const t = sitToneMap[s];
+            if (t && !toneSet.includes(t)) toneSet.push(t);
+          });
+        }
       }
       if (toneSet.length) setToneDial(toneSet);
     }
