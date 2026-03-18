@@ -9621,8 +9621,17 @@ router.post('/generate-next-chapter', optionalAuth, async (req, res) => {
   if (!characterKey) return res.status(400).json({ error: 'characterKey required' });
 
   try {
-    // Load character DNA
+    // Load character DNA — resolve DB key → seed key via SE_DB_KEY_MAP
     let dna = CHARACTER_DNA[characterKey];
+    if (!dna) {
+      // Reverse lookup: DB key (e.g. 'just-a-woman') → seed key (e.g. 'justawoman')
+      for (const [seedKey, dbKeys] of Object.entries(SE_DB_KEY_MAP)) {
+        if (dbKeys.includes(characterKey)) {
+          dna = CHARACTER_DNA[seedKey];
+          break;
+        }
+      }
+    }
     if (!dna) {
       const dbProfile = await loadCharacterProfile(characterKey);
       if (!dbProfile) return res.status(400).json({ error: `No character DNA found for ${characterKey}` });
@@ -9642,16 +9651,25 @@ router.post('/generate-next-chapter', optionalAuth, async (req, res) => {
     if (seTaskArcCache.has(characterKey)) {
       existingTasks = seTaskArcCache.get(characterKey).tasks || [];
     } else if (db.StoryTaskArc) {
-      const dbArc = await db.StoryTaskArc.findOne({ where: { character_key: characterKey } });
-      if (dbArc?.tasks?.length) existingTasks = dbArc.tasks;
+      try {
+        const dbArc = await db.StoryTaskArc.unscoped().findOne({ where: { character_key: characterKey } });
+        if (dbArc?.tasks?.length) existingTasks = dbArc.tasks;
+      } catch (arcErr) {
+        console.warn('[generate-next-chapter] StoryTaskArc query failed:', arcErr.message);
+      }
     }
 
     // Load approved story texts for context
-    const approvedStories = await db.StorytellerStory.findAll({
-      where: { character_key: characterKey, status: 'approved' },
-      order: [['story_number', 'ASC']],
-      attributes: ['story_number', 'title', 'scene_brief', 'status'],
-    });
+    let approvedStories = [];
+    try {
+      approvedStories = await db.StorytellerStory.unscoped().findAll({
+        where: { character_key: characterKey, status: 'approved' },
+        order: [['story_number', 'ASC']],
+        attributes: ['story_number', 'title', 'scene_brief', 'status'],
+      });
+    } catch (storyErr) {
+      console.warn('[generate-next-chapter] StorytellerStory query failed:', storyErr.message);
+    }
 
     const nextChapterNum = existingTasks.length + 1;
     if (nextChapterNum > 50) {
@@ -9719,8 +9737,8 @@ Use this exact structure:
   "new_character_role": null
 }`;
 
-    const anthropic = getAnthropicClient();
-    const response = await anthropic.messages.create({
+    const anthropicClient = new Anthropic();
+    const response = await anthropicClient.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: ARC_SYSTEM_PROMPT,
@@ -9774,7 +9792,8 @@ Use this exact structure:
     res.json({ chapter, allTasks: updatedTasks, chapterNumber: nextChapterNum, totalGenerated: updatedTasks.length });
   } catch (err) {
     console.error('[generate-next-chapter] error:', err?.message);
-    res.status(500).json({ error: 'Chapter generation failed' });
+    console.error('[generate-next-chapter] stack:', err?.stack?.split('\n').slice(0, 5).join('\n'));
+    res.status(500).json({ error: 'Chapter generation failed', detail: err?.message });
   }
 });
 
