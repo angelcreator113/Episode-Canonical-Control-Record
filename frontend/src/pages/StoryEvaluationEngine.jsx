@@ -1192,10 +1192,8 @@ export default function StoryEvaluationEngine() {
   // ── Render ───────────────────────────────────────────────────────────
   return (
     <div className="see-page" style={{
-      height: '100vh', background: T.bg, color: T.text,
+      minHeight: '100%', background: T.bg, color: T.text,
       fontFamily: "'Inter','Segoe UI',system-ui,sans-serif",
-      overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-      overscrollBehaviorY: 'contain',
     }}>
       {/* Header */}
       <div className="see-header" style={{

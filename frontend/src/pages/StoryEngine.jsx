@@ -360,26 +360,9 @@ function StoryPanel({
             <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
               {consistencyLoading ? '…' : 'Check'}
             </button>
-            <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
             <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
               {savingForLater ? 'Saving…' : 'Save for Later'}
             </button>
-            <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={() => onEvaluate?.()} title="Evaluate with multi-voice scoring">
-              Evaluate
-            </button>
-            <button className="se-btn se-btn-approve" style={{ background: charColor }} onClick={() => onApprove(story, true)}>
-              {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
-            </button>
-            {evalScore && (
-              <div className="se-eval-badge" style={{
-                fontSize: 10, padding: '3px 8px', borderRadius: 6,
-                background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
-                fontWeight: 600, marginLeft: -4,
-              }}>
-                {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
-              </div>
-            )}
           </div>
         </div>
       )}
