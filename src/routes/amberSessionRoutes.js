@@ -338,6 +338,94 @@ router.post('/speak', optionalAuth, speakLimiter, async (req, res) => {
   }
 });
 
+// ── Rate limiter for /read-story — fewer requests, larger payloads ───────────
+const readStoryLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  message: { error: 'Story reader rate limit reached. Try again later.' },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/amber/read-story
+// Takes full story text, chunks into paragraphs, synthesizes each via
+// ElevenLabs, concatenates audio buffers, returns single audio/mpeg.
+// Body: { text: "...", voice_id?: "..." }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/read-story', optionalAuth, readStoryLimiter, async (req, res) => {
+  const { text, voice_id } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'text required' });
+  if (!ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ElevenLabs not configured' });
+
+  // Split into paragraph chunks (~1000 chars max, break at paragraph boundaries)
+  const paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+  const chunks = [];
+  let current = '';
+
+  for (const para of paragraphs) {
+    if (current.length + para.length + 2 > 1000 && current.length > 0) {
+      chunks.push(current.trim());
+      current = para;
+    } else {
+      current += (current ? '\n\n' : '') + para;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+
+  // Cap at 30 chunks (~30,000 chars / ~5,000 words) to control costs
+  if (chunks.length > 30) {
+    chunks.length = 30;
+  }
+
+  try {
+    const voiceId = voice_id || ELEVENLABS_VOICE_ID;
+    const audioBuffers = [];
+
+    for (const chunk of chunks) {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key':   ELEVENLABS_API_KEY,
+            'Content-Type': 'application/json',
+            'Accept':       'audio/mpeg',
+          },
+          body: JSON.stringify({
+            text: chunk,
+            model_id: 'eleven_turbo_v2',
+            voice_settings: {
+              stability:         0.55,
+              similarity_boost:  0.78,
+              style:             0.20,
+              use_speaker_boost: true,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`ElevenLabs error on chunk: ${err}`);
+      }
+
+      const buffer = await response.arrayBuffer();
+      audioBuffers.push(Buffer.from(buffer));
+    }
+
+    const combined = Buffer.concat(audioBuffers);
+    res.set({
+      'Content-Type':   'audio/mpeg',
+      'Content-Length':  combined.length,
+      'Cache-Control':  'no-cache',
+    });
+    return res.send(combined);
+  } catch (err) {
+    console.error('[Amber read-story error]', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/v1/amber/status
 // Quick health check — what is Amber currently aware of

@@ -44,8 +44,8 @@ function TherapySuggestions({ characterKey, apiBase }) {
   if (!suggestions?.suggestions?.length) return null;
   return (
     <div style={{
-      margin: '0 14px 12px', padding: 12, borderRadius: 10,
-      background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)',
+      margin: '0 auto', padding: '12px 48px', maxWidth: 760,
+      background: 'transparent', border: 'none', borderTop: '1px solid rgba(139,92,246,0.12)',
     }}>
       <div
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
@@ -238,40 +238,120 @@ function StoryPanel({
   onEvaluate,
   charObj, selectedCharKey, activeWorld, allCharacters, onSelectChar,
   storiesMinimized, onToggleStoriesMinimized,
+  focusMode, onToggleFocusMode,
 }) {
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
-  const [editText, setEditText] = useState(story?.text || '');
-  const [saveStatus, setSaveStatus] = useState('saved');
+  const [editText, setEditTextRaw] = useState(story?.text || '');
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'idle' | 'saving' | 'saved'
+  const [lastSavedText, setLastSavedText] = useState(story?.text || '');
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
   const [voicesExpanded, setVoicesExpanded] = useState(false);
 
-  // ── Text-to-Speech state ──
+  // Undo/redo history for AI insertions and edits
+  const undoStackRef = useRef([story?.text || '']);
+  const redoStackRef = useRef([]);
+  const lastSnapshotRef = useRef(Date.now());
+
+  const setEditText = useCallback((valOrFn) => {
+    setEditTextRaw(prev => {
+      const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn;
+      // Snapshot every 3 seconds of typing, or immediately for AI insertions (large changes)
+      const now = Date.now();
+      const isLargeChange = Math.abs(next.length - prev.length) > 20;
+      if (isLargeChange || now - lastSnapshotRef.current > 3000) {
+        undoStackRef.current.push(prev);
+        if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+        redoStackRef.current = [];
+        lastSnapshotRef.current = now;
+      }
+      return next;
+    });
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (undoStackRef.current.length === 0) return;
+    setEditTextRaw(prev => {
+      redoStackRef.current.push(prev);
+      return undoStackRef.current.pop();
+    });
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    if (redoStackRef.current.length === 0) return;
+    setEditTextRaw(prev => {
+      undoStackRef.current.push(prev);
+      return redoStackRef.current.pop();
+    });
+  }, []);
+
+  // ── Text-to-Speech state (ElevenLabs with browser fallback) ──
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsPaused, setTtsPaused] = useState(false);
   const [ttsRate, setTtsRate] = useState(1);
+  const [ttsLoading, setTtsLoading] = useState(false);
   const ttsUtteranceRef = useRef(null);
+  const ttsAudioRef = useRef(null);
+  const ttsUsingElevenLabs = useRef(false);
 
-  const handleTtsPlay = useCallback(() => {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
+  const handleTtsPlay = useCallback(async () => {
+    const text = editing ? editText : (story?.text || '');
+    if (!text.trim()) return;
 
+    // Resume if paused
     if (ttsPaused) {
-      synth.resume();
+      if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+        ttsAudioRef.current.play();
+      } else {
+        window.speechSynthesis?.resume();
+      }
       setTtsPaused(false);
       setTtsPlaying(true);
       return;
     }
 
-    synth.cancel();
-    const text = editing ? editText : (story?.text || '');
-    if (!text.trim()) return;
+    // Stop any existing playback
+    handleTtsStop();
 
+    // Try ElevenLabs first
+    setTtsLoading(true);
+    try {
+      const res = await fetch('/api/v1/amber/read-story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.playbackRate = ttsRate;
+        audio.onended = () => { setTtsPlaying(false); setTtsPaused(false); URL.revokeObjectURL(url); };
+        audio.onerror = () => { setTtsPlaying(false); setTtsPaused(false); URL.revokeObjectURL(url); };
+        ttsAudioRef.current = audio;
+        ttsUsingElevenLabs.current = true;
+        setTtsLoading(false);
+        audio.play();
+        setTtsPlaying(true);
+        setTtsPaused(false);
+        return;
+      }
+    } catch {
+      // ElevenLabs unavailable — fall through to browser TTS
+    }
+
+    // Browser TTS fallback
+    setTtsLoading(false);
+    ttsUsingElevenLabs.current = false;
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+
+    synth.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = ttsRate;
     utterance.pitch = 1;
 
-    // Pick a natural-sounding voice if available
     const voices = synth.getVoices();
     const preferred = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
                    || voices.find(v => v.lang.startsWith('en') && !v.localService)
@@ -288,23 +368,44 @@ function StoryPanel({
   }, [editing, editText, story?.text, ttsPaused, ttsRate]);
 
   const handleTtsPause = useCallback(() => {
-    const synth = window.speechSynthesis;
-    if (synth?.speaking) {
-      synth.pause();
+    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
       setTtsPaused(true);
       setTtsPlaying(false);
+    } else {
+      const synth = window.speechSynthesis;
+      if (synth?.speaking) {
+        synth.pause();
+        setTtsPaused(true);
+        setTtsPlaying(false);
+      }
     }
   }, []);
 
   const handleTtsStop = useCallback(() => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+      if (ttsAudioRef.current.src) URL.revokeObjectURL(ttsAudioRef.current.src);
+      ttsAudioRef.current = null;
+    }
     window.speechSynthesis?.cancel();
+    ttsUsingElevenLabs.current = false;
     setTtsPlaying(false);
     setTtsPaused(false);
+    setTtsLoading(false);
   }, []);
 
   // Cleanup TTS on unmount or story change
   useEffect(() => {
-    return () => window.speechSynthesis?.cancel();
+    return () => {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        if (ttsAudioRef.current.src) URL.revokeObjectURL(ttsAudioRef.current.src);
+        ttsAudioRef.current = null;
+      }
+      window.speechSynthesis?.cancel();
+    };
   }, [story?.story_number]);
 
   useEffect(() => {
@@ -313,18 +414,16 @@ function StoryPanel({
 
   useEffect(() => {
     setSaveStatus('saved');
+    setLastSavedText(story?.text || '');
   }, [story?.story_number]);
 
-  useEffect(() => {
-    if (editing && editText !== (story?.text || '')) {
-      setSaveStatus('unsaved');
-    }
-  }, [editText, editing, story?.text]);
+  const hasUnsavedChanges = editing && editText !== lastSavedText;
 
   const [currentPage, setCurrentPage] = useState(0);
   const [evalScore, setEvalScore] = useState(null);
   const [activeThreads, setActiveThreads] = useState([]);
   const [selectionPopup, setSelectionPopup] = useState(null);
+  const [activeParaIndex, setActiveParaIndex] = useState(null);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
@@ -607,83 +706,116 @@ function StoryPanel({
   const nextMoveSuggestion = useMemo(() => {
     if (!scenePulse) return null;
     const { tone, intensity, focus } = scenePulse;
-    if (tone === 'Calm' && intensity === 'Low') return 'Introduce subtle tension or an unexpected detail to raise stakes';
-    if (tone === 'Tension' && intensity === 'High') return 'Allow a moment of breath — a quiet reflection before the next beat';
-    if (focus === 'Internal' && intensity !== 'High') return 'Ground the scene with external action or dialogue to balance the introspection';
-    if (focus === 'Relational') return 'Deepen the subtext — let unspoken feelings surface through gesture or silence';
-    if (tone === 'Controlled') return 'Push toward a revelation or shift in perspective to build momentum';
-    if (focus === 'External') return 'Turn inward — explore what this moment means to the character emotionally';
-    return 'Consider a sensory detail or environmental shift to anchor the reader';
-  }, [scenePulse]);
+    const name = charName || 'the character';
+    if (tone === 'Calm' && intensity === 'Low') return `This scene is calm — consider adding tension through ${name}'s unspoken fears or an unexpected arrival`;
+    if (tone === 'Tension' && intensity === 'High') return `High tension — give ${name} a moment of breath, a quiet reflection before the next beat`;
+    if (focus === 'Internal' && intensity !== 'High') return `${name} is deep in thought — ground the scene with external action or dialogue to balance`;
+    if (focus === 'Relational') return `The focus is relational — let ${name}'s unspoken feelings surface through gesture or silence`;
+    if (tone === 'Controlled') return `${name}'s composure is holding — push toward a revelation that cracks the surface`;
+    if (focus === 'External') return `Lots of action — turn inward and explore what this moment means to ${name} emotionally`;
+    return `Consider a sensory detail that anchors ${name} in this specific place and time`;
+  }, [scenePulse, charName]);
 
-  const handleSave = async () => {
+  // Use refs so callbacks always see latest values
+  const editTextRef = useRef(editText);
+  editTextRef.current = editText;
+  const saveStatusRef = useRef(saveStatus);
+  saveStatusRef.current = saveStatus;
+
+  const handleSave = useCallback(async (opts = {}) => {
+    if (saveStatusRef.current === 'saving') return;
+    const textToSave = editTextRef.current;
     setSaveStatus('saving');
     try {
-      await onEdit(story, editText);
+      await onEdit(story, textToSave);
+      setLastSavedText(textToSave);
       setSaveStatus('saved');
-      setEditing(false);
+      if (opts.closeAfter) setEditing(false);
     } catch (e) {
-      setSaveStatus('unsaved');
+      setSaveStatus('idle');
     }
-  };
+  }, [story, onEdit]);
+
+  // Autosave — debounce 2s after each edit
+  const autosaveTimerRef = useRef(null);
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      handleSave();
+    }, 2000);
+    return () => clearTimeout(autosaveTimerRef.current);
+  }, [editText, hasUnsavedChanges, handleSave]);
+
+  // Keyboard shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo
+  useEffect(() => {
+    if (!editing) return;
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+      if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editing, handleSave, handleUndo, handleRedo]);
 
   return (
-    <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''}`}>
+    <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''} ${focusMode ? 'se-focus-mode' : ''}`}>
       {editing ? (
         <div className="se-edit-header">
           <div className="se-edit-header-left">
             <button
               className="se-edit-back"
-              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
+              onClick={() => {
+                if (hasUnsavedChanges) {
+                  if (!window.confirm('You have unsaved changes. Discard them?')) return;
+                }
+                setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
+              }}
             >
-              ← Back to Story Engine
+              ← Back
             </button>
-            <div className="se-edit-header-info">
-              <span className="se-edit-header-title">{story.title}</span>
+            <span className="se-edit-header-title">{story.title}</span>
+            <span className="se-edit-header-meta">
+              Ch {story.story_number}{totalChapters ? `/${totalChapters}` : ''}
               <span className="se-edit-header-dot">·</span>
-              <span className="se-edit-chapter-progress">Ch {story.story_number}{totalChapters ? ` of ${totalChapters}` : ''}</span>
-              <span className="se-edit-header-dot">·</span>
-              <span className="se-edit-arc-stage">{arcStage.icon} {arcStage.label}</span>
-              <span className="se-edit-header-dot">·</span>
-              <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
-              <span className="se-edit-header-dot">·</span>
-              <span>{wordCount.toLocaleString()} words</span>
-              <span className="se-edit-header-dot">·</span>
-              <span>{getReadingTime(wordCount)}</span>
-            </div>
+              {wordCount.toLocaleString()} words
+            </span>
           </div>
           <div className="se-edit-header-right">
-            <div className="se-mode-toggle">
-              <button className={`se-mode-btn ${editing ? 'se-mode-btn-active' : ''}`} onClick={() => {}}>✍️ Edit</button>
-              <button className={`se-mode-btn ${readingMode ? 'se-mode-btn-active' : ''}`} onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); onToggleReadingMode?.(); }}>📖 Read</button>
-            </div>
-            <div className="se-tts-controls">
-              {!ttsPlaying && !ttsPaused && (
-                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">🔊</button>
-              )}
-              {ttsPlaying && (
-                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause">⏸</button>
-              )}
-              {ttsPaused && (
-                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume">▶</button>
-              )}
-              {(ttsPlaying || ttsPaused) && (
-                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop">■</button>
-              )}
-            </div>
-            <span className={`se-save-indicator se-save-${saveStatus}`}>
-              {saveStatus === 'saved' ? 'Saved — your scene is evolving' : saveStatus === 'saving' ? 'Capturing your words…' : 'Unsaved changes'}
-            </span>
             <button
-              className="se-btn se-btn-save-primary"
-              style={{ background: charColor }}
-              onClick={handleSave}
+              className={`se-btn se-btn-focus-toggle ${focusMode ? 'active' : ''}`}
+              onClick={() => onToggleFocusMode?.()}
+              title={focusMode ? 'Exit focus mode' : 'Focus mode — hide panels, center text'}
             >
-              Save
+              {focusMode ? 'Full View' : 'Focus'}
+            </button>
+            <button
+              className={`se-btn se-btn-save-primary ${!hasUnsavedChanges && saveStatus !== 'saving' ? 'se-btn-save-saved' : ''}`}
+              style={{ background: hasUnsavedChanges ? charColor : undefined }}
+              onClick={() => handleSave()}
+              disabled={saveStatus === 'saving' || !hasUnsavedChanges}
+            >
+              {saveStatus === 'saving' ? 'Saving…' : hasUnsavedChanges ? 'Save Now' : '✓ Saved'}
             </button>
             <button
               className="se-btn se-btn-cancel-light"
-              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
+              onClick={() => {
+                if (hasUnsavedChanges) {
+                  if (!window.confirm('You have unsaved changes. Discard them?')) return;
+                }
+                setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
+                if (focusMode) onToggleFocusMode?.();
+              }}
             >
               Cancel
             </button>
@@ -716,38 +848,42 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-story-header-actions">
-            <div className="se-mode-toggle">
-              <button
-                className={`se-mode-btn ${!readingMode ? 'active' : ''}`}
-                onClick={() => { if (readingMode) onToggleReadingMode?.(); }}
-              >
-                Edit
-              </button>
-              <button
-                className={`se-mode-btn ${readingMode ? 'active' : ''}`}
-                onClick={() => { if (!readingMode) onToggleReadingMode?.(); }}
-              >
-                Read
-              </button>
-            </div>
+            <button
+              className={`se-btn se-btn-focus-toggle ${focusMode ? 'active' : ''}`}
+              onClick={() => onToggleFocusMode?.()}
+              title={focusMode ? 'Exit focus mode' : 'Focus mode'}
+            >
+              {focusMode ? 'Full View' : 'Focus'}
+            </button>
+            <button
+              className="se-btn se-btn-edit-story"
+              onClick={() => { if (readingMode) onToggleReadingMode?.(); setEditing(true); }}
+            >
+              Edit
+            </button>
             <div className="se-tts-controls">
-              {!ttsPlaying && !ttsPaused && (
+              {!ttsPlaying && !ttsPaused && !ttsLoading && (
                 <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
-                  🔊 Listen
+                  Listen
+                </button>
+              )}
+              {ttsLoading && (
+                <button className="se-btn se-btn-tts" disabled title="Loading audio…">
+                  <span className="se-spinner" style={{ width: 12, height: 12, display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} /> Loading…
                 </button>
               )}
               {ttsPlaying && (
                 <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause reading">
-                  ⏸ Pause
+                  Pause
                 </button>
               )}
               {ttsPaused && (
                 <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume reading">
-                  ▶ Resume
+                  Resume
                 </button>
               )}
               {(ttsPlaying || ttsPaused) && (
-                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">■</button>
+                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">Stop</button>
               )}
               {(ttsPlaying || ttsPaused) && (
                 <select
@@ -756,66 +892,41 @@ function StoryPanel({
                   onChange={(e) => {
                     const newRate = parseFloat(e.target.value);
                     setTtsRate(newRate);
-                    handleTtsStop();
-                    setTimeout(() => {
-                      const synth = window.speechSynthesis;
-                      const text = editing ? editText : (story?.text || '');
-                      const u = new SpeechSynthesisUtterance(text);
-                      u.rate = newRate;
-                      const voices = synth.getVoices();
-                      const pref = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
-                                || voices.find(v => v.lang.startsWith('en') && !v.localService)
-                                || voices.find(v => v.lang.startsWith('en'));
-                      if (pref) u.voice = pref;
-                      u.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
-                      u.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
-                      synth.speak(u);
-                      setTtsPlaying(true);
-                      setTtsPaused(false);
-                    }, 100);
+                    // For ElevenLabs audio, just change playback rate live
+                    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+                      ttsAudioRef.current.playbackRate = newRate;
+                    } else {
+                      // For browser TTS, must restart with new rate
+                      handleTtsStop();
+                      setTimeout(() => {
+                        const synth = window.speechSynthesis;
+                        const text = editing ? editText : (story?.text || '');
+                        const u = new SpeechSynthesisUtterance(text);
+                        u.rate = newRate;
+                        const voices = synth.getVoices();
+                        const pref = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
+                                  || voices.find(v => v.lang.startsWith('en') && !v.localService)
+                                  || voices.find(v => v.lang.startsWith('en'));
+                        if (pref) u.voice = pref;
+                        u.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
+                        u.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
+                        synth.speak(u);
+                        setTtsPlaying(true);
+                        setTtsPaused(false);
+                      }, 100);
+                    }
                   }}
                   title="Reading speed"
                 >
-                  <option value="0.5">0.5×</option>
-                  <option value="0.75">0.75×</option>
-                  <option value="1">1×</option>
-                  <option value="1.25">1.25×</option>
-                  <option value="1.5">1.5×</option>
-                  <option value="2">2×</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
                 </select>
               )}
             </div>
-            {!readingMode && (
-              <>
-                <button className="se-btn se-btn-export" onClick={() => onExportStory?.(story)} title="Copy or download story">Export</button>
-                <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
-                <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
-                  {consistencyLoading ? '…' : 'Check'}
-                </button>
-                <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
-                  {savingForLater ? 'Saving…' : 'Save Draft'}
-                </button>
-                <button className="se-btn se-btn-delete" style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) onDelete?.(story); }} title="Delete story">
-                  Delete
-                </button>
-                <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={() => onEvaluate?.()} title="Evaluate with multi-voice scoring">
-                  Evaluate
-                </button>
-                <button className="se-btn se-btn-approve" style={{ background: charColor }} onClick={() => onApprove(story, true)}>
-                  {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
-                </button>
-                {evalScore && (
-                  <div className="se-eval-badge" style={{
-                    fontSize: 10, padding: '3px 8px', borderRadius: 6,
-                    background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                    color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
-                    fontWeight: 600, marginLeft: -4,
-                  }}>
-                    {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
-                  </div>
-                )}
-              </>
-            )}
           </div>
         </div>
       )}
@@ -922,30 +1033,10 @@ function StoryPanel({
                   </button>
                 </div>
               )}
-              <BottomWritingTools
-                story={story}
-                charObj={charObj}
-                selectedCharKey={selectedCharKey}
-                activeWorld={activeWorld}
-                charColor={charColor}
-                currentProse={editText}
-                onInsertText={(text) => {
-                  const ta = textareaRef.current;
-                  if (ta) {
-                    const start = ta.selectionStart;
-                    const end = ta.selectionEnd;
-                    const before = editText.slice(0, start);
-                    const after = editText.slice(end);
-                    setEditText(before + text + after);
-                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
-                  } else {
-                    setEditText(prev => prev + '\n\n' + text);
-                  }
-                }}
-              />
+              {/* Writing tools live in the sidebar — no duplication here */}
             </div>
 
-            <div className="se-writing-tools">
+            {!focusMode && <div className="se-writing-tools">
               {/* Scene Pulse */}
               {scenePulse && (
                 <div className="se-tools-section se-scene-pulse-section">
@@ -1102,100 +1193,81 @@ function StoryPanel({
                   <div className="se-next-move">{nextMoveSuggestion}</div>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         ) : (
           <>
-            <div className="se-story-text" ref={storyBodyRef}>
+            <div className={`se-story-text ${focusMode ? 'se-story-text--focus' : ''}`} ref={storyBodyRef}>
               {(pages[currentPage] || []).map((para, i) => (
                 para.trim()
-                  ? <p key={i} className="se-story-para">{para}</p>
+                  ? <p
+                      key={i}
+                      className={`se-story-para ${activeParaIndex === i ? 'se-para-active' : ''} ${activeParaIndex !== null && activeParaIndex !== i ? 'se-para-dimmed' : ''}`}
+                      onMouseEnter={() => setActiveParaIndex(i)}
+                      onMouseLeave={() => setActiveParaIndex(null)}
+                    >{para}</p>
                   : <div key={i} className="se-story-spacer" />
               ))}
             </div>
-            {/* Text selection popup */}
+            {/* Inline editing toolbar — appears on text selection */}
             {selectionPopup && !editing && (
-              <div className="se-text-selection-popup" style={{ top: selectionPopup.top, left: selectionPopup.left, transform: 'translateX(-50%)' }}>
-                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Rewrite</button>
-                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Deepen</button>
-                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Change Tone</button>
+              <div className="se-inline-toolbar" style={{ top: selectionPopup.top, left: selectionPopup.left }}>
+                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
+                  <span className="se-inline-btn-icon">&#10024;</span> Continue from here
+                </button>
+                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
+                  <span className="se-inline-btn-icon">&#129504;</span> Deepen this
+                </button>
+                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
+                  <span className="se-inline-btn-icon">&#127919;</span> Refine tone
+                </button>
+                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
+                  <span className="se-inline-btn-icon">&#128260;</span> Rewrite
+                </button>
               </div>
             )}
-            {totalPages > 1 && (
-              <div className="se-page-nav">
-                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage === 0}>‹ Prev</button>
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <div className="se-chapter-timeline">
-                    {Array.from({ length: Math.min(totalPages, 12) }, (_, i) => {
-                      const pageIdx = totalPages <= 12 ? i : Math.round(i * (totalPages - 1) / 11);
-                      return (
-                        <React.Fragment key={i}>
-                          {i > 0 && <div className={`se-timeline-connector${pageIdx <= currentPage ? ' completed' : ''}`} />}
-                          <div
-                            className={`se-timeline-dot${pageIdx === currentPage ? ' active' : pageIdx < currentPage ? ' completed' : ''}`}
-                            onClick={() => { setCurrentPage(pageIdx); storyBodyRef.current?.scrollTo(0, 0); }}
-                            style={{ cursor: 'pointer' }}
-                            title={`Page ${pageIdx + 1}`}
-                          />
-                        </React.Fragment>
-                      );
-                    })}
+
+            {!editing && selectedCharKey && <TherapySuggestions characterKey={selectedCharKey} apiBase={API_BASE} />}
+
+            {!editing && therapyMemories?.length > 0 && (
+              <div className="se-therapy-panel">
+                <div className="se-therapy-title">Therapy Room Feeds</div>
+                {therapyMemories.map((m, i) => (
+                  <div key={i} className="se-therapy-memory">
+                    <span className="se-therapy-category">{m.category?.replace(/_/g, ' ')}</span>
+                    <span className="se-therapy-statement">{m.statement}</span>
                   </div>
-                  <span className="se-page-indicator" style={{ fontSize: 11 }}>Page {currentPage + 1} of {totalPages}</span>
-                </div>
-                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage >= totalPages - 1}>Next ›</button>
+                ))}
+                {therapyLoading && <div className="se-therapy-loading">Extracting memories…</div>}
+              </div>
+            )}
+
+            {!editing && registryUpdate && (
+              <div className="se-registry-update">
+                <span className="se-registry-icon">🔄</span>
+                <span className="se-registry-text">{registryUpdate}</span>
               </div>
             )}
           </>
         )}
       </div>
 
+      {/* ── Pinned bottom controls (always visible) ── */}
       {!editing && story && (
-        <BottomWritingTools
-          story={story}
-          charObj={charObj}
-          selectedCharKey={selectedCharKey}
-          activeWorld={activeWorld}
-          charColor={charColor}
-          onInsertText={(text) => {
-            setEditText((story.text || '') + '\n\n' + text);
-            setEditing(true);
-          }}
-        />
-      )}
-
-      {!editing && therapyMemories?.length > 0 && (
-        <div className="se-therapy-panel">
-          <div className="se-therapy-title">Therapy Room Feeds</div>
-          {therapyMemories.map((m, i) => (
-            <div key={i} className="se-therapy-memory">
-              <span className="se-therapy-category">{m.category?.replace(/_/g, ' ')}</span>
-              <span className="se-therapy-statement">{m.statement}</span>
-            </div>
-          ))}
-          {therapyLoading && <div className="se-therapy-loading">Extracting memories…</div>}
+        <div className="se-pinned-controls">
+          <StoryReviewPanel
+            story={story}
+            characterKey={story.character_key}
+            taskBrief={task}
+            charColor={charColor}
+            onApproved={(saved) => { console.log('Story approved & persisted', saved.id); onApprove(story); }}
+            onRejected={(saved) => { console.log('Story rejected & persisted', saved.id); onReject(story); }}
+            onSaved={(saved) => { console.log('Story saved', saved.id); }}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={(page) => { setCurrentPage(page); storyBodyRef.current?.scrollTo(0, 0); }}
+          />
         </div>
-      )}
-
-      {!editing && selectedCharKey && <TherapySuggestions characterKey={selectedCharKey} apiBase={API_BASE} />}
-
-      {!editing && registryUpdate && (
-        <div className="se-registry-update">
-          <span className="se-registry-icon">🔄</span>
-          <span className="se-registry-text">{registryUpdate}</span>
-        </div>
-      )}
-
-      {story && !editing && (
-        <StoryReviewPanel
-          story={story}
-          characterKey={story.character_key}
-          taskBrief={task}
-          charColor={charColor}
-          onApproved={(saved) => { console.log('Story approved & persisted', saved.id); onApprove(story); }}
-          onRejected={(saved) => { console.log('Story rejected & persisted', saved.id); onReject(story); }}
-          onSaved={(saved) => { console.log('Story saved', saved.id); }}
-        />
       )}
     </div>
   );
@@ -1205,6 +1277,7 @@ function StoryPanel({
 export default function StoryEngine() {
   const navigate = useNavigate();
   const engine = useStoryEngine();
+  const [focusMode, setFocusMode] = useState(false);
 
   // --- Keyboard shortcuts (#5) ---
   useKeyboardShortcuts(useMemo(() => ({
@@ -1217,11 +1290,11 @@ export default function StoryEngine() {
   }), [engine.navigateStory, engine.activeStory, engine.handleSaveForLater, engine.setReadingMode, engine.setApproveConfirm]));
 
   return (
-    <div className={`se-page ${engine.readingMode ? 'se-fullscreen-reading' : ''} ${engine.writeMode ? 'se-write-mode' : ''}`}>
+    <div className={`se-page ${engine.readingMode ? 'se-fullscreen-reading' : ''} ${engine.writeMode ? 'se-write-mode' : ''} ${focusMode ? 'se-focus-active' : ''}`}>
       <ToastContainer toasts={engine.toasts} onDismiss={engine.dismissToast} />
 
       {/* ── Header ── */}
-      {!engine.readingMode && (
+      {!engine.readingMode && !focusMode && (
         <header className="se-header">
           <div className="se-header-nav">
             <button className="se-header-back" onClick={() => navigate('/')}>←</button>
@@ -1303,7 +1376,7 @@ export default function StoryEngine() {
       {/* ── Three-panel body ── */}
       <div className="se-panels">
         {/* Left: Story Navigator */}
-        {!engine.readingMode && (
+        {!engine.readingMode && !focusMode && (
           <StoryNavigator
             CHARACTERS={engine.CHARACTERS}
             charsLoading={engine.charsLoading}
@@ -1429,12 +1502,14 @@ export default function StoryEngine() {
               onSelectChar={engine.setSelectedChar}
               storiesMinimized={engine.storiesMinimized}
               onToggleStoriesMinimized={() => engine.setStoriesMinimized(m => !m)}
+              focusMode={focusMode}
+              onToggleFocusMode={() => setFocusMode(f => !f)}
             />
           )}
         </main>
 
         {/* Right: Inspector */}
-        {!engine.readingMode && (
+        {!engine.readingMode && !focusMode && (
           <StoryInspector
             activeTask={engine.activeTask}
             activeStory={engine.activeStory}
@@ -1467,42 +1542,30 @@ export default function StoryEngine() {
 
       {/* Amber notification — scene eligibility */}
       {engine.amberNotification?.type === 'scene_eligible' && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, width: 340,
-          background: '#fff', border: '1px solid #e8dcf5', borderRadius: 14,
-          boxShadow: '0 8px 32px rgba(168,137,200,0.18)', padding: '16px 18px',
-          zIndex: 500, animation: 'ws-slide-up 0.22s ease',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #d4789a, #a889c8)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14, color: '#fff', fontWeight: 700,
-            }}>A</div>
+        <div className="se-amber-notification">
+          <div className="se-amber-header">
+            <div className="se-amber-avatar">A</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Amber</div>
-              <div style={{ fontSize: 10, color: '#9999b3' }}>Story {engine.amberNotification.story_number} approved</div>
+              <div className="se-amber-name">Amber</div>
+              <div className="se-amber-sub">Story {engine.amberNotification.story_number} approved</div>
             </div>
-            <button onClick={() => engine.setAmberNotification(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9999b3', fontSize: 16 }}>×</button>
+            <button className="se-amber-close" onClick={() => engine.setAmberNotification(null)}>&times;</button>
           </div>
-          <div style={{ fontSize: 12, color: '#5a5a7a', lineHeight: 1.6, marginBottom: 12 }}>
-            <strong style={{ color: '#1a1a2e' }}>
+          <div className="se-amber-body">
+            <strong className="se-amber-chars">
               {engine.amberNotification.eligibility.charA.name}
               {engine.amberNotification.eligibility.charB ? ` & ${engine.amberNotification.eligibility.charB.name}` : ''}
             </strong>
-            {' '}— this story ends at a door.{' '}
-            <span style={{ color: '#a889c8' }}>{engine.amberNotification.eligibility.scene_type?.replace(/_/g, ' ')}</span>
-            {' '}· intensity: <span style={{ color: '#d4789a' }}>{engine.amberNotification.eligibility.intensity}</span>
-            {engine.amberNotification.eligibility.location && <span style={{ color: '#7ab3d4' }}> · {engine.amberNotification.eligibility.location}</span>}
+            {' '}&mdash; this story ends at a door.{' '}
+            <span className="se-amber-scene-type">{engine.amberNotification.eligibility.scene_type?.replace(/_/g, ' ')}</span>
+            {' '}&middot; intensity: <span className="se-amber-intensity">{engine.amberNotification.eligibility.intensity}</span>
+            {engine.amberNotification.eligibility.location && <span className="se-amber-location"> &middot; {engine.amberNotification.eligibility.location}</span>}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { navigate('/scene-studio', { state: { autoPopulate: engine.amberNotification.eligibility } }); engine.setAmberNotification(null); }}
-              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: '#a889c8', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+          <div className="se-amber-actions">
+            <button className="se-amber-btn se-amber-btn--primary" onClick={() => { navigate('/scene-studio', { state: { autoPopulate: engine.amberNotification.eligibility } }); engine.setAmberNotification(null); }}>
               Generate Scene
             </button>
-            <button onClick={() => engine.setAmberNotification(null)}
-              style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', color: '#9999b3', border: '1px solid #e8e0f0', cursor: 'pointer', fontSize: 12 }}>
+            <button className="se-amber-btn se-amber-btn--secondary" onClick={() => engine.setAmberNotification(null)}>
               Skip
             </button>
           </div>
@@ -1511,21 +1574,19 @@ export default function StoryEngine() {
 
       {/* Approval confirmation modal */}
       {engine.approveConfirm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => engine.setApproveConfirm(null)}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '24px 28px', width: 380, boxShadow: '0 12px 40px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>
+        <div className="se-modal-backdrop" onClick={() => engine.setApproveConfirm(null)}>
+          <div className="se-modal-card" onClick={e => e.stopPropagation()}>
+            <div className="se-modal-title">
               Approve Story {engine.approveConfirm.story_number}?
             </div>
-            <div style={{ fontSize: 13, color: '#5a5a7a', marginBottom: 16, lineHeight: 1.6 }}>
-              "{engine.approveConfirm.title}" — This will extract memories, update registry, generate texture layers, and check scene eligibility.
+            <div className="se-modal-body">
+              &ldquo;{engine.approveConfirm.title}&rdquo; &mdash; This will extract memories, update registry, generate texture layers, and check scene eligibility.
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => engine.setApproveConfirm(null)}
-                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #e0dcd4', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#666' }}>
+            <div className="se-modal-actions">
+              <button className="se-modal-btn se-modal-btn--cancel" onClick={() => engine.setApproveConfirm(null)}>
                 Cancel
               </button>
-              <button onClick={() => { engine.handleApprove(engine.approveConfirm); engine.setApproveConfirm(null); }}
-                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: engine.char?.color || '#9a7d1e', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+              <button className="se-modal-btn se-modal-btn--confirm" style={{ background: engine.char?.color || '#9a7d1e' }} onClick={() => { engine.handleApprove(engine.approveConfirm); engine.setApproveConfirm(null); }}>
                 Approve
               </button>
             </div>
@@ -1535,51 +1596,34 @@ export default function StoryEngine() {
 
       {/* Batch progress indicator */}
       {engine.batchProgress && (
-        <div style={{
-          position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
-          background: '#fff', border: '1px solid #e0dcd4', borderRadius: 10,
-          padding: '10px 20px', zIndex: 550, boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-          display: 'flex', alignItems: 'center', gap: 12, fontSize: 13,
-        }}>
+        <div className="se-fixed-toast se-fixed-toast--top">
           <div className="se-spinner" style={{ width: 16, height: 16, borderTopColor: engine.char?.color }} />
-          <span>Approving {engine.batchProgress.current}/{engine.batchProgress.total}…</span>
-          <div style={{ width: 80, height: 4, background: '#eee', borderRadius: 2 }}>
-            <div style={{ width: `${(engine.batchProgress.current / engine.batchProgress.total) * 100}%`, height: '100%', background: engine.char?.color || '#9a7d1e', borderRadius: 2, transition: 'width 0.3s ease' }} />
+          <span>Approving {engine.batchProgress.current}/{engine.batchProgress.total}&hellip;</span>
+          <div className="se-progress-track">
+            <div className="se-progress-fill" style={{ width: `${(engine.batchProgress.current / engine.batchProgress.total) * 100}%`, background: engine.char?.color || '#9a7d1e' }} />
           </div>
         </div>
       )}
 
       {/* Batch generation progress */}
       {engine.generation.batchGenProgress && (
-        <div style={{
-          position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
-          background: '#1c1917', color: '#faf8f4', border: '1px solid #333',
-          borderRadius: 10, padding: '10px 20px', zIndex: 550,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-          display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, maxWidth: 420,
-        }}>
+        <div className="se-fixed-toast se-fixed-toast--top se-fixed-toast--dark">
           <div className="se-spinner" style={{ width: 16, height: 16, borderTopColor: engine.char?.color || '#b0922e' }} />
           <div>
             <div style={{ fontWeight: 600 }}>Generating {engine.generation.batchGenProgress.current}/{engine.generation.batchGenProgress.total}</div>
-            {engine.generation.batchGenProgress.currentTitle && <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{engine.generation.batchGenProgress.currentTitle}</div>}
+            {engine.generation.batchGenProgress.currentTitle && <div className="se-fixed-toast-sub">{engine.generation.batchGenProgress.currentTitle}</div>}
           </div>
-          <div style={{ width: 80, height: 4, background: '#333', borderRadius: 2, marginLeft: 'auto' }}>
-            <div style={{ width: `${(engine.generation.batchGenProgress.current / engine.generation.batchGenProgress.total) * 100}%`, height: '100%', background: engine.char?.color || '#b0922e', borderRadius: 2, transition: 'width 0.3s ease' }} />
+          <div className="se-progress-track se-progress-track--dark" style={{ marginLeft: 'auto' }}>
+            <div className="se-progress-fill" style={{ width: `${(engine.generation.batchGenProgress.current / engine.generation.batchGenProgress.total) * 100}%`, background: engine.char?.color || '#b0922e' }} />
           </div>
         </div>
       )}
 
       {/* Undo rejected story */}
       {engine.rejectedStory && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#1a1a2e', color: '#fff', borderRadius: 10,
-          padding: '10px 16px', zIndex: 550, display: 'flex', alignItems: 'center', gap: 12,
-          fontSize: 13, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-        }}>
+        <div className="se-fixed-toast se-fixed-toast--bottom se-fixed-toast--dark">
           <span>Story {engine.rejectedStory.story.story_number} rejected</span>
-          <button onClick={engine.handleUndoReject}
-            style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+          <button className="se-undo-btn" onClick={engine.handleUndoReject}>
             Undo
           </button>
         </div>
@@ -1587,54 +1631,48 @@ export default function StoryEngine() {
 
       {/* Inline texture preview */}
       {engine.lastTexture && !engine.amberTextureNotes && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, width: 360,
-          background: '#fff', border: '1px solid #e8dcf5', borderRadius: 14,
-          boxShadow: '0 8px 32px rgba(168,137,200,0.18)', padding: '16px 18px',
-          zIndex: 498, maxHeight: '50vh', overflowY: 'auto', animation: 'ws-slide-up 0.22s ease',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Texture — Story {engine.lastTexture.story_number}</div>
-            <button onClick={() => engine.setLastTexture(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9999b3', fontSize: 16 }}>&times;</button>
+        <div className="se-amber-notification se-amber-notification--texture">
+          <div className="se-amber-header">
+            <div className="se-amber-name">Texture &mdash; Story {engine.lastTexture.story_number}</div>
+            <button className="se-amber-close" onClick={() => engine.setLastTexture(null)}>&times;</button>
           </div>
           {engine.lastTexture.texture?.inner_thought_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0922e', marginBottom: 4 }}>Inner Thought ({engine.lastTexture.texture.inner_thought_type?.replace('_', ' ')})</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6, fontStyle: 'italic' }}>{engine.lastTexture.texture.inner_thought_text.slice(0, 200)}{engine.lastTexture.texture.inner_thought_text.length > 200 ? '…' : ''}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#b0922e' }}>Inner Thought ({engine.lastTexture.texture.inner_thought_type?.replace('_', ' ')})</div>
+              <div className="se-texture-text" style={{ fontStyle: 'italic' }}>{engine.lastTexture.texture.inner_thought_text.slice(0, 200)}{engine.lastTexture.texture.inner_thought_text.length > 200 ? '\u2026' : ''}</div>
             </div>
           )}
           {engine.lastTexture.texture?.body_narrator_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#d4789a', marginBottom: 4 }}>Body Narrator</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.body_narrator_text}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#d4789a' }}>Body Narrator</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.body_narrator_text}</div>
             </div>
           )}
           {engine.lastTexture.texture?.conflict_surface_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#c0392b', marginBottom: 4 }}>Conflict</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.conflict_surface_text}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#c0392b' }}>Conflict</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.conflict_surface_text}</div>
             </div>
           )}
           {engine.lastTexture.texture?.private_moment_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#7c3aed', marginBottom: 4 }}>Private Moment</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.private_moment_text.slice(0, 200)}{engine.lastTexture.texture.private_moment_text.length > 200 ? '…' : ''}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#7c3aed' }}>Private Moment</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.private_moment_text.slice(0, 200)}{engine.lastTexture.texture.private_moment_text.length > 200 ? '\u2026' : ''}</div>
             </div>
           )}
           {engine.lastTexture.texture?.post_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0d9668', marginBottom: 4 }}>Post ({engine.lastTexture.texture.post_platform})</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.post_text}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#0d9668' }}>Post ({engine.lastTexture.texture.post_platform})</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.post_text}</div>
             </div>
           )}
           {engine.lastTexture.texture?.bleed_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#546678', marginBottom: 4 }}>Bleed</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.bleed_text}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#546678' }}>Bleed</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.bleed_text}</div>
             </div>
           )}
-          <button onClick={() => { navigate(`/texture-review/${engine.lastTexture.story_number}?char=${engine.selectedChar}`); engine.setLastTexture(null); }}
-            style={{ width: '100%', padding: '8px 0', borderRadius: 8, background: '#a889c8', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, marginTop: 4 }}>
+          <button className="se-amber-btn se-amber-btn--primary" style={{ width: '100%', marginTop: 4 }} onClick={() => { navigate(`/texture-review/${engine.lastTexture.story_number}?char=${engine.selectedChar}`); engine.setLastTexture(null); }}>
             Full Texture Review
           </button>
         </div>
@@ -1642,49 +1680,28 @@ export default function StoryEngine() {
 
       {/* Amber texture notes */}
       {engine.amberTextureNotes && (
-        <div style={{
-          position: 'fixed', bottom: engine.amberNotification ? 220 : 24, right: 24, width: 360,
-          background: '#fff', border: '1px solid #e8dcf5', borderRadius: 14,
-          boxShadow: '0 8px 32px rgba(168,137,200,0.18)', padding: '16px 18px',
-          zIndex: 499, animation: 'ws-slide-up 0.22s ease', maxHeight: '60vh', overflowY: 'auto',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #d4789a, #a889c8)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14, color: '#fff', fontWeight: 700,
-            }}>A</div>
+        <div className={`se-amber-notification se-amber-notification--notes ${engine.amberNotification ? 'se-amber-notification--stacked' : ''}`}>
+          <div className="se-amber-header">
+            <div className="se-amber-avatar">A</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Amber read Story {engine.amberTextureNotes.story_number}</div>
-              <div style={{ fontSize: 10, color: '#9999b3' }}>"{engine.amberTextureNotes.story_title}"</div>
+              <div className="se-amber-name">Amber read Story {engine.amberTextureNotes.story_number}</div>
+              <div className="se-amber-sub">&ldquo;{engine.amberTextureNotes.story_title}&rdquo;</div>
             </div>
-            <button onClick={() => engine.setAmberTextureNotes(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9999b3', fontSize: 16 }}>&times;</button>
+            <button className="se-amber-close" onClick={() => engine.setAmberTextureNotes(null)}>&times;</button>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="se-amber-notes-list">
             {engine.amberTextureNotes.notes.map((note, i) => (
-              <div key={i} style={{
-                padding: '10px 12px',
-                background: note.type === 'warning' ? '#fdf0f4' : note.type === 'contradiction' ? '#f6f1fc' : note.type === 'opportunity' ? '#f0f8fd' : '#fafafa',
-                borderRadius: 8,
-                border: `1px solid ${note.type === 'warning' ? '#f5dce6' : note.type === 'contradiction' ? '#e8dcf5' : note.type === 'opportunity' ? '#daeef9' : '#f2eef8'}`,
-              }}>
-                <div style={{
-                  fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                  color: note.type === 'warning' ? '#d4789a' : note.type === 'contradiction' ? '#a889c8' : note.type === 'opportunity' ? '#7ab3d4' : '#9999b3',
-                  marginBottom: 4,
-                }}>{note.type}</div>
-                <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{note.note}</div>
+              <div key={i} className={`se-amber-note se-amber-note--${note.type}`}>
+                <div className="se-amber-note-type">{note.type}</div>
+                <div className="se-amber-note-text">{note.note}</div>
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={() => { navigate(`/texture-review/${engine.amberTextureNotes.story_number}?char=${engine.selectedChar}`); engine.setAmberTextureNotes(null); }}
-              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: '#a889c8', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+          <div className="se-amber-actions">
+            <button className="se-amber-btn se-amber-btn--primary" onClick={() => { navigate(`/texture-review/${engine.amberTextureNotes.story_number}?char=${engine.selectedChar}`); engine.setAmberTextureNotes(null); }}>
               Review Texture
             </button>
-            <button onClick={() => engine.setAmberTextureNotes(null)}
-              style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', color: '#9999b3', border: '1px solid #e8e0f0', cursor: 'pointer', fontSize: 12 }}>
+            <button className="se-amber-btn se-amber-btn--secondary" onClick={() => engine.setAmberTextureNotes(null)}>
               Later
             </button>
           </div>

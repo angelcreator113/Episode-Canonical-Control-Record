@@ -16,7 +16,7 @@
  *   onSaved      — callback after any save
  *   charColor    — accent color for the character
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './StoryReviewPanel.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -29,9 +29,10 @@ export default function StoryReviewPanel({
   onRejected,
   onSaved,
   charColor = '#9a7d1e',
+  currentPage = 0,
+  totalPages = 1,
+  onPageChange,
 }) {
-  const [editText, setEditText] = useState(story?.text || '');
-  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedVersion, setSavedVersion] = useState(null);
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
@@ -39,7 +40,6 @@ export default function StoryReviewPanel({
   const [editorNotes, setEditorNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
 
-  const autoSaveTimer = useRef(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -49,8 +49,6 @@ export default function StoryReviewPanel({
 
   // Sync when story prop changes
   useEffect(() => {
-    setEditText(story?.text || '');
-    setEditing(false);
     setSaveStatus('idle');
     setEditorNotes('');
   }, [story?.story_number, story?.text]);
@@ -73,41 +71,6 @@ export default function StoryReviewPanel({
     })();
   }, [characterKey, story?.story_number]);
 
-  // Auto-save debounce
-  const triggerAutoSave = useCallback((text) => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(async () => {
-      if (!mountedRef.current || !dbStory) return;
-      setSaveStatus('saving');
-      try {
-        const res = await fetch(`${API_BASE}/stories/auto-save`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            character_key: characterKey,
-            story_number: story.story_number,
-            text,
-            editor_notes: editorNotes || undefined,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (mountedRef.current) {
-            setSavedVersion(data.version);
-            setSaveStatus('saved');
-            setTimeout(() => {
-              if (mountedRef.current) setSaveStatus('idle');
-            }, 2000);
-          }
-        } else {
-          if (mountedRef.current) setSaveStatus('error');
-        }
-      } catch {
-        if (mountedRef.current) setSaveStatus('error');
-      }
-    }, 2000);
-  }, [characterKey, story?.story_number, dbStory, editorNotes]);
-
   // Full save (creates if not exists)
   async function handleSave() {
     if (!story) return;
@@ -121,10 +84,10 @@ export default function StoryReviewPanel({
           character_key: characterKey,
           story_number: story.story_number,
           title: story.title,
-          text: editText,
+          text: story.text,
           phase: story.phase,
           story_type: story.story_type,
-          word_count: editText.split(/\s+/).length,
+          word_count: (story.text || '').split(/\s+/).length,
           task_brief: taskBrief,
           new_character: story.new_character,
           new_character_name: story.new_character_name,
@@ -186,14 +149,9 @@ export default function StoryReviewPanel({
     onRejected?.(story);
   }
 
-  function handleTextChange(newText) {
-    setEditText(newText);
-    if (dbStory) triggerAutoSave(newText);
-  }
-
   if (!story) return null;
 
-  const wordCount = editText.split(/\s+/).filter(Boolean).length;
+  const wordCount = (story.text || '').split(/\s+/).filter(Boolean).length;
   const isPersisted = !!dbStory;
   const isApproved = dbStory?.status === 'approved';
 
@@ -226,22 +184,32 @@ export default function StoryReviewPanel({
             <span className="se-review-error">Save failed</span>
           )}
         </div>
+        {totalPages > 1 && onPageChange && (
+          <div className="se-review-page-nav">
+            <button
+              className="se-review-page-btn"
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage === 0}
+            >
+              ‹ Prev
+            </button>
+            <span className="se-review-page-indicator">
+              {currentPage + 1} / {totalPages}
+            </span>
+            <button
+              className="se-review-page-btn"
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages - 1}
+            >
+              Next ›
+            </button>
+          </div>
+        )}
+
         <div className="se-review-status-right">
           <span className="se-review-wc">{wordCount.toLocaleString()} words</span>
         </div>
       </div>
-
-      {/* Editor area — only shown when editing (read-only view is in StoryPanel's paginated body) */}
-      {editing && (
-        <div className="se-review-editor-wrap">
-          <textarea
-            className="se-review-textarea"
-            value={editText}
-            onChange={(e) => handleTextChange(e.target.value)}
-            spellCheck
-          />
-        </div>
-      )}
 
       {/* Notes toggle */}
       {showNotes && (
@@ -264,40 +232,16 @@ export default function StoryReviewPanel({
           {showNotes ? 'Hide Notes' : 'Notes'}
         </button>
 
-        {editing && (
-          <button
-            className="se-review-btn se-review-btn-cancel"
-            onClick={() => { setEditing(false); setEditText(story.text); }}
-          >
-            Cancel
-          </button>
-        )}
-
         <div style={{ flex: 1 }} />
 
         {!isApproved && (
-          <>
-            <button
-              className="se-review-btn se-review-btn-reject"
-              onClick={handleReject}
-            >
-              Reject
-            </button>
-            <button
-              className="se-review-btn se-review-btn-save"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {saving ? 'Saving…' : isPersisted ? 'Update' : 'Save'}
-            </button>
-            <button
-              className="se-review-btn se-review-btn-approve"
-              style={{ background: charColor }}
-              onClick={handleApprove}
-            >
-              Approve
-            </button>
-          </>
+          <button
+            className="se-review-btn se-review-btn-save"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : isPersisted ? 'Update' : 'Save'}
+          </button>
         )}
       </div>
     </div>
