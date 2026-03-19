@@ -1133,31 +1133,6 @@ function StoryPanel({
       {/* ── Pinned bottom controls (always visible) ── */}
       {!editing && story && (
         <div className="se-pinned-controls">
-          {totalPages > 1 && (
-            <div className="se-page-nav">
-              <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage === 0}>‹ Prev</button>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div className="se-chapter-timeline">
-                  {Array.from({ length: Math.min(totalPages, 12) }, (_, i) => {
-                    const pageIdx = totalPages <= 12 ? i : Math.round(i * (totalPages - 1) / 11);
-                    return (
-                      <React.Fragment key={i}>
-                        {i > 0 && <div className={`se-timeline-connector${pageIdx <= currentPage ? ' completed' : ''}`} />}
-                        <div
-                          className={`se-timeline-dot${pageIdx === currentPage ? ' active' : pageIdx < currentPage ? ' completed' : ''}`}
-                          onClick={() => { setCurrentPage(pageIdx); storyBodyRef.current?.scrollTo(0, 0); }}
-                          style={{ cursor: 'pointer' }}
-                          title={`Page ${pageIdx + 1}`}
-                        />
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-                <span className="se-page-indicator" style={{ fontSize: 11 }}>Page {currentPage + 1} of {totalPages}</span>
-              </div>
-              <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage >= totalPages - 1}>Next ›</button>
-            </div>
-          )}
           <BottomWritingTools
             story={story}
             charObj={charObj}
@@ -1177,6 +1152,9 @@ function StoryPanel({
             onApproved={(saved) => { console.log('Story approved & persisted', saved.id); onApprove(story); }}
             onRejected={(saved) => { console.log('Story rejected & persisted', saved.id); onReject(story); }}
             onSaved={(saved) => { console.log('Story saved', saved.id); }}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={(page) => { setCurrentPage(page); storyBodyRef.current?.scrollTo(0, 0); }}
           />
         </div>
       )}

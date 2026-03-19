@@ -3294,12 +3294,6 @@ html, body {
   background: var(--se-surface);
 }
 
-.se-pinned-controls .se-page-nav {
-  border-top: none;
-  padding: 6px 24px;
-  gap: 12px;
-}
-
 .se-pinned-controls .se-bottom-tools {
   border-top: 1px solid rgba(28, 24, 20, 0.06);
   padding: 8px 24px 8px;
