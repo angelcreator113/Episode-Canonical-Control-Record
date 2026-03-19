@@ -393,6 +393,38 @@
   }
 }
 
+/* ── Focus states ────────────────────────────────────────────────────── */
+.se-review-btn:focus-visible,
+.se-review-page-btn:focus-visible,
+.se-review-btn-notes:focus-visible {
+  outline: 2px solid #b0922e;
+  outline-offset: 2px;
+}
+
+/* ── Active states for touch ──────────────────────────────────────────── */
+.se-review-page-btn:active:not(:disabled) {
+  background: rgba(176, 146, 46, 0.08);
+}
+
+.se-review-btn-save:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .se-review-saved-flash,
+  .se-review-saving {
+    animation: none;
+  }
+}
+
+/* ── Print ────────────────────────────────────────────────────────────── */
+@media print {
+  .se-review-panel {
+    display: none !important;
+  }
+}
+
 /* ── Safe-area insets ────────────────────────────────────────────────────── */
 @supports (padding: env(safe-area-inset-bottom)) {
   .se-review-actions {

@@ -158,7 +158,7 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 300px;
+  max-width: min(400px, 50vw);
 }
 
 .se-header-phase {
@@ -3793,6 +3793,7 @@ html, body {
   scrollbar-color: var(--se-border) transparent;
   display: flex;
   flex-direction: column;
+  transition: max-height 0.3s ease;
 }
 
 /* Mobile tools toggle button — hidden on desktop */
@@ -6864,5 +6865,258 @@ html, body {
   .se-modal-card {
     max-height: 90vh;
     overflow-y: auto;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Accessibility: Focus states for keyboard navigation
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-nav-btn:focus-visible,
+.se-nav-pill:focus-visible,
+.se-btn:focus-visible,
+.se-btn-nav:focus-visible,
+.se-header-btn:focus-visible,
+.se-header-back:focus-visible,
+.se-edit-back:focus-visible,
+.se-btn-page:focus-visible,
+.se-mobile-toggle:focus-visible,
+.se-mobile-tools-toggle:focus-visible,
+.se-bottom-tool-pill:focus-visible,
+.se-bottom-length-pill:focus-visible,
+.se-review-btn:focus-visible,
+.se-review-page-btn:focus-visible,
+.se-modal-btn:focus-visible,
+.se-inline-btn:focus-visible,
+.se-insp-toggle:focus-visible,
+.se-more-dropdown button:focus-visible {
+  outline: 2px solid var(--se-gold, #b0922e);
+  outline-offset: 2px;
+}
+
+/* Dark outline for buttons that already have gold backgrounds */
+.se-header-btn--approve:focus-visible,
+.se-btn-approve:focus-visible,
+.se-modal-btn--confirm:focus-visible {
+  outline-color: #1c1917;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Therapy Suggestions — extracted from inline styles
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-therapy-suggestions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px 0;
+  min-height: 32px;
+}
+
+.se-therapy-suggestions-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+}
+
+.se-therapy-suggestions-chevron {
+  font-size: 10px;
+  color: var(--se-text-dim, #999);
+}
+
+.se-therapy-suggestions-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.se-therapy-suggestion-item {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  padding: 4px 0;
+}
+
+.se-therapy-suggestion-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.se-therapy-suggestion-name {
+  font-weight: 500;
+  color: var(--se-text, #333);
+}
+
+.se-therapy-suggestion-desc {
+  color: var(--se-text-muted, #888);
+  font-size: 10px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Story Brief — evaluate actions bar
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-story-brief-actions {
+  padding: 16px 20px;
+  border-top: 1px solid var(--se-border-light, #e8e4d8);
+  display: flex;
+  gap: 10px;
+}
+
+.se-btn-evaluate {
+  background: #3D7A9B;
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+
+.se-btn-evaluate:hover {
+  opacity: 0.85;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tablet: story text max-width for readability
+   ──────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 769px) and (max-width: 1100px) {
+  .se-story-text {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Hover & active state improvements
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Touch-friendly active states */
+.se-btn-page:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.se-review-page-btn:active:not(:disabled) {
+  background: var(--se-surface2, #efebe6);
+}
+
+.se-task-card:active {
+  transform: scale(0.99);
+}
+
+.se-bottom-tool-pill:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Scrollbar-gutter to prevent layout shift */
+.se-char-dropdown-list {
+  scrollbar-gutter: stable;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Reduced motion: respect user preferences
+   ──────────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .se-writing-tools {
+    transition: none;
+  }
+
+  .se-inline-toolbar,
+  .se-toast,
+  .se-modal-card,
+  .se-amber-notification,
+  .se-generating-ring,
+  .se-arc-status-pulse {
+    animation: none;
+  }
+
+  .se-bottom-tool-pill,
+  .se-btn-page,
+  .se-task-card {
+    transition: none;
+  }
+
+  .se-navigator,
+  .se-inspector {
+    transition: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Print styles
+   ──────────────────────────────────────────────────────────────────────────── */
+@media print {
+  .se-header,
+  .se-navigator,
+  .se-inspector,
+  .se-pinned-controls,
+  .se-mobile-deck,
+  .se-drawer-backdrop,
+  .se-toast-container,
+  .se-amber-notification,
+  .se-inline-toolbar,
+  .se-story-header-actions,
+  .se-bottom-tools,
+  .se-mobile-tools-toggle,
+  .se-writing-tools,
+  .se-therapy-suggestions,
+  .se-active-threads,
+  .se-task-list,
+  .se-modal-backdrop {
+    display: none !important;
+  }
+
+  .se-page {
+    height: auto;
+    overflow: visible;
+    background: white;
+  }
+
+  .se-panels {
+    display: block;
+  }
+
+  .se-canvas {
+    width: 100%;
+  }
+
+  .se-story-panel {
+    overflow: visible;
+    height: auto;
+  }
+
+  .se-story-body {
+    overflow: visible;
+  }
+
+  .se-story-header {
+    border-bottom: 1px solid #ccc;
+    padding: 16px 0;
+    page-break-after: avoid;
+  }
+
+  .se-story-header-title {
+    font-size: 24px;
+    color: #000;
+  }
+
+  .se-story-text {
+    padding: 24px 0;
+    max-width: none;
+  }
+
+  .se-story-para {
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #000;
+    page-break-inside: avoid;
+  }
+
+  .se-workspace {
+    overflow: visible;
   }
 }

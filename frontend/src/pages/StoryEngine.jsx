@@ -45,25 +45,27 @@ function TherapySuggestions({ characterKey, apiBase }) {
   return (
     <div className="se-therapy-suggestions">
       <div
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+        className="se-therapy-suggestions-header"
         onClick={() => setExpanded(e => !e)}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed' }}>
+        <span className="se-therapy-suggestions-title">
           Story Suggestions ({suggestions.suggestions.length})
         </span>
-        <span style={{ fontSize: 10, color: '#999' }}>{expanded ? '▾' : '▸'}</span>
+        <span className="se-therapy-suggestions-chevron">{expanded ? '▾' : '▸'}</span>
       </div>
       {expanded && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="se-therapy-suggestions-list">
           {suggestions.suggestions.map((s, i) => (
-            <div key={s.title || i} style={{ display: 'flex', gap: 8, fontSize: 11, padding: '4px 0' }}>
-              <span style={{
-                width: 6, height: 6, borderRadius: '50%', marginTop: 4, flexShrink: 0,
-                background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
-              }} />
+            <div key={s.title || i} className="se-therapy-suggestion-item">
+              <span
+                className="se-therapy-suggestion-dot"
+                style={{
+                  background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
+                }}
+              />
               <div>
-                <div style={{ fontWeight: 500, color: '#333' }}>{s.title}</div>
-                <div style={{ color: '#888', fontSize: 10 }}>{s.description}</div>
+                <div className="se-therapy-suggestion-name">{s.title}</div>
+                <div className="se-therapy-suggestion-desc">{s.description}</div>
               </div>
             </div>
           ))}
@@ -639,10 +641,9 @@ function StoryPanel({
           <span>{task.new_character_name} — {task.new_character_role}</span>
         </div>
       )}
-      <div style={{ padding: '16px 20px', borderTop: '1px solid #e8e4d8', display: 'flex', gap: 10 }}>
+      <div className="se-story-brief-actions">
         <button
-          className="se-btn"
-          style={{ background: '#3D7A9B', color: '#fff', padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none' }}
+          className="se-btn se-btn-evaluate"
           onClick={() => onEvaluate?.()}
           title="Evaluate with multi-voice scoring"
         >
