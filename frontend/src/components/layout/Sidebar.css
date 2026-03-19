@@ -425,6 +425,10 @@
 @media (max-width: 1279px) {
   .ps-sidebar-close { display: flex; }
   .ps-collapse-btn { display: none; }
+  /* Hide sidebar from layout when not open as mobile drawer */
+  .ps-sidebar:not(.ps-sidebar-open) {
+    display: none;
+  }
 }
 
 /* ── BRAND ACTIONS ───────────────────────────────────────────────────── */
