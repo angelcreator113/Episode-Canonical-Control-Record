@@ -276,28 +276,13 @@ export default function StoryReviewPanel({
         <div style={{ flex: 1 }} />
 
         {!isApproved && (
-          <>
-            <button
-              className="se-review-btn se-review-btn-reject"
-              onClick={handleReject}
-            >
-              Reject
-            </button>
-            <button
-              className="se-review-btn se-review-btn-save"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {saving ? 'Saving…' : isPersisted ? 'Update' : 'Save'}
-            </button>
-            <button
-              className="se-review-btn se-review-btn-approve"
-              style={{ background: charColor }}
-              onClick={handleApprove}
-            >
-              Approve
-            </button>
-          </>
+          <button
+            className="se-review-btn se-review-btn-save"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : isPersisted ? 'Update' : 'Save'}
+          </button>
         )}
       </div>
     </div>

@@ -44,8 +44,8 @@ function TherapySuggestions({ characterKey, apiBase }) {
   if (!suggestions?.suggestions?.length) return null;
   return (
     <div style={{
-      margin: '0 14px 12px', padding: 12, borderRadius: 10,
-      background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)',
+      margin: '0 auto', padding: '12px 48px', maxWidth: 760,
+      background: 'transparent', border: 'none', borderTop: '1px solid rgba(139,92,246,0.12)',
     }}>
       <div
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
@@ -719,7 +719,7 @@ function StoryPanel({
             <div className="se-mode-toggle">
               <button
                 className={`se-mode-btn ${!readingMode ? 'active' : ''}`}
-                onClick={() => { if (readingMode) onToggleReadingMode?.(); }}
+                onClick={() => { if (readingMode) onToggleReadingMode?.(); setEditing(true); }}
               >
                 Edit
               </button>
@@ -788,7 +788,6 @@ function StoryPanel({
             {!readingMode && (
               <>
                 <button className="se-btn se-btn-export" onClick={() => onExportStory?.(story)} title="Copy or download story">Export</button>
-                <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
                 <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
                   {consistencyLoading ? '…' : 'Check'}
                 </button>
@@ -798,22 +797,6 @@ function StoryPanel({
                 <button className="se-btn se-btn-delete" style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) onDelete?.(story); }} title="Delete story">
                   Delete
                 </button>
-                <button className="se-btn" style={{ background: '#3D7A9B', color: '#fff' }} onClick={() => onEvaluate?.()} title="Evaluate with multi-voice scoring">
-                  Evaluate
-                </button>
-                <button className="se-btn se-btn-approve" style={{ background: charColor }} onClick={() => onApprove(story, true)}>
-                  {evalScore ? `Approve (${evalScore.overall_score})` : 'Approve'}
-                </button>
-                {evalScore && (
-                  <div className="se-eval-badge" style={{
-                    fontSize: 10, padding: '3px 8px', borderRadius: 6,
-                    background: evalScore.overall_score >= 70 ? 'rgba(16,185,129,0.1)' : evalScore.overall_score >= 50 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                    color: evalScore.overall_score >= 70 ? '#059669' : evalScore.overall_score >= 50 ? '#d97706' : '#dc2626',
-                    fontWeight: 600, marginLeft: -4,
-                  }}>
-                    {evalScore.overall_score >= 70 ? '✓ Strong' : evalScore.overall_score >= 50 ? '~ Fair' : '✕ Needs work'}
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -1148,55 +1131,55 @@ function StoryPanel({
             )}
           </>
         )}
+
+        {!editing && story && (
+          <BottomWritingTools
+            story={story}
+            charObj={charObj}
+            selectedCharKey={selectedCharKey}
+            activeWorld={activeWorld}
+            charColor={charColor}
+            onInsertText={(text) => {
+              setEditText((story.text || '') + '\n\n' + text);
+              setEditing(true);
+            }}
+          />
+        )}
+
+        {!editing && selectedCharKey && <TherapySuggestions characterKey={selectedCharKey} apiBase={API_BASE} />}
+
+        {!editing && therapyMemories?.length > 0 && (
+          <div className="se-therapy-panel">
+            <div className="se-therapy-title">Therapy Room Feeds</div>
+            {therapyMemories.map((m, i) => (
+              <div key={i} className="se-therapy-memory">
+                <span className="se-therapy-category">{m.category?.replace(/_/g, ' ')}</span>
+                <span className="se-therapy-statement">{m.statement}</span>
+              </div>
+            ))}
+            {therapyLoading && <div className="se-therapy-loading">Extracting memories…</div>}
+          </div>
+        )}
+
+        {!editing && registryUpdate && (
+          <div className="se-registry-update">
+            <span className="se-registry-icon">🔄</span>
+            <span className="se-registry-text">{registryUpdate}</span>
+          </div>
+        )}
+
+        {story && !editing && (
+          <StoryReviewPanel
+            story={story}
+            characterKey={story.character_key}
+            taskBrief={task}
+            charColor={charColor}
+            onApproved={(saved) => { console.log('Story approved & persisted', saved.id); onApprove(story); }}
+            onRejected={(saved) => { console.log('Story rejected & persisted', saved.id); onReject(story); }}
+            onSaved={(saved) => { console.log('Story saved', saved.id); }}
+          />
+        )}
       </div>
-
-      {!editing && story && (
-        <BottomWritingTools
-          story={story}
-          charObj={charObj}
-          selectedCharKey={selectedCharKey}
-          activeWorld={activeWorld}
-          charColor={charColor}
-          onInsertText={(text) => {
-            setEditText((story.text || '') + '\n\n' + text);
-            setEditing(true);
-          }}
-        />
-      )}
-
-      {!editing && therapyMemories?.length > 0 && (
-        <div className="se-therapy-panel">
-          <div className="se-therapy-title">Therapy Room Feeds</div>
-          {therapyMemories.map((m, i) => (
-            <div key={i} className="se-therapy-memory">
-              <span className="se-therapy-category">{m.category?.replace(/_/g, ' ')}</span>
-              <span className="se-therapy-statement">{m.statement}</span>
-            </div>
-          ))}
-          {therapyLoading && <div className="se-therapy-loading">Extracting memories…</div>}
-        </div>
-      )}
-
-      {!editing && selectedCharKey && <TherapySuggestions characterKey={selectedCharKey} apiBase={API_BASE} />}
-
-      {!editing && registryUpdate && (
-        <div className="se-registry-update">
-          <span className="se-registry-icon">🔄</span>
-          <span className="se-registry-text">{registryUpdate}</span>
-        </div>
-      )}
-
-      {story && !editing && (
-        <StoryReviewPanel
-          story={story}
-          characterKey={story.character_key}
-          taskBrief={task}
-          charColor={charColor}
-          onApproved={(saved) => { console.log('Story approved & persisted', saved.id); onApprove(story); }}
-          onRejected={(saved) => { console.log('Story rejected & persisted', saved.id); onReject(story); }}
-          onSaved={(saved) => { console.log('Story saved', saved.id); }}
-        />
-      )}
     </div>
   );
 }

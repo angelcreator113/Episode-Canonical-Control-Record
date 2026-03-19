@@ -3275,7 +3275,7 @@ html, body {
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
   min-height: 0;
-  background: #f8f5f0;
+  background: #faf8f4;
 }
 
 .se-story-body::-webkit-scrollbar {
@@ -3291,9 +3291,9 @@ html, body {
   padding: 36px 56px;
   max-width: 840px;
   margin: 0 auto;
-  background: #faf8f4;
-  border-radius: 2px;
-  box-shadow: 0 0 40px rgba(0,0,0,0.03);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .se-story-para {
@@ -5435,11 +5435,11 @@ html, body {
 .se-bottom-tools {
   max-width: 760px;
   width: 100%;
-  margin: 0 auto 24px;
-  background: #fffffe;
+  margin: 0 auto;
+  background: transparent;
   border-top: 1px solid rgba(28, 24, 20, 0.06);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-  border-radius: 0 0 2px 2px;
+  box-shadow: none;
+  border-radius: 0;
   padding: 16px 48px 20px;
   box-sizing: border-box;
 }
