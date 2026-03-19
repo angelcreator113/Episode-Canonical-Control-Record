@@ -3795,6 +3795,29 @@ html, body {
   flex-direction: column;
 }
 
+/* Mobile tools toggle button — hidden on desktop */
+.se-mobile-tools-toggle {
+  display: none;
+  width: 100%;
+  padding: 10px 16px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--se-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  min-height: 44px;
+}
+
+.se-mobile-tools-toggle:active {
+  background: var(--se-surface2);
+}
+
 .se-writing-tools::-webkit-scrollbar {
   width: 6px;
 }
@@ -5088,9 +5111,18 @@ html, body {
     min-width: 0;
     border-left: none;
     border-top: 1px solid var(--se-border-light);
-    max-height: 40vh;
     flex: 0 0 auto;
+    overflow: hidden;
+    max-height: 44px; /* collapsed: only show toggle button */
+  }
+
+  .se-writing-tools--mobile-open {
+    max-height: 50vh;
     overflow-y: auto;
+  }
+
+  .se-mobile-tools-toggle {
+    display: flex;
   }
 
   .se-edit-header {
@@ -5192,7 +5224,8 @@ html, body {
 
   .se-story-editor { padding: 14px 12px; }
   .se-edit-canvas .se-story-editor { padding: 14px 12px; font-size: 15px; }
-  .se-writing-tools { max-height: 40vh; }
+  .se-writing-tools { max-height: 44px; }
+  .se-writing-tools--mobile-open { max-height: 50vh; overflow-y: auto; }
   .se-voice-option { padding: 8px 10px; }
 
   /* Navigator/Inspector drawers: full width on small phones */
