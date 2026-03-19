@@ -3287,6 +3287,26 @@ html, body {
   border-radius: 999px;
 }
 
+/* ── Pinned bottom controls (pagination + AI tools + review) ── */
+.se-pinned-controls {
+  flex-shrink: 0;
+  border-top: 1px solid var(--se-border-light);
+  background: var(--se-surface);
+  max-height: 45%;
+  overflow-y: auto;
+}
+
+.se-pinned-controls .se-page-nav {
+  border-top: none;
+}
+
+.se-pinned-controls .se-bottom-tools {
+  border-top: 1px solid rgba(28, 24, 20, 0.06);
+  padding-top: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 0;
+}
+
 .se-story-text {
   padding: 36px 56px;
   max-width: 840px;
@@ -4823,6 +4843,14 @@ html, body {
 
   .se-story-body {
     display: block;
+    overflow: visible;
+  }
+
+  .se-pinned-controls {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    max-height: none;
     overflow: visible;
   }
 
