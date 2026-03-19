@@ -1104,35 +1104,60 @@ function StoryPanel({
                 <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Change Tone</button>
               </div>
             )}
-            {totalPages > 1 && (
-              <div className="se-page-nav">
-                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage === 0}>‹ Prev</button>
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <div className="se-chapter-timeline">
-                    {Array.from({ length: Math.min(totalPages, 12) }, (_, i) => {
-                      const pageIdx = totalPages <= 12 ? i : Math.round(i * (totalPages - 1) / 11);
-                      return (
-                        <React.Fragment key={i}>
-                          {i > 0 && <div className={`se-timeline-connector${pageIdx <= currentPage ? ' completed' : ''}`} />}
-                          <div
-                            className={`se-timeline-dot${pageIdx === currentPage ? ' active' : pageIdx < currentPage ? ' completed' : ''}`}
-                            onClick={() => { setCurrentPage(pageIdx); storyBodyRef.current?.scrollTo(0, 0); }}
-                            style={{ cursor: 'pointer' }}
-                            title={`Page ${pageIdx + 1}`}
-                          />
-                        </React.Fragment>
-                      );
-                    })}
+
+            {!editing && selectedCharKey && <TherapySuggestions characterKey={selectedCharKey} apiBase={API_BASE} />}
+
+            {!editing && therapyMemories?.length > 0 && (
+              <div className="se-therapy-panel">
+                <div className="se-therapy-title">Therapy Room Feeds</div>
+                {therapyMemories.map((m, i) => (
+                  <div key={i} className="se-therapy-memory">
+                    <span className="se-therapy-category">{m.category?.replace(/_/g, ' ')}</span>
+                    <span className="se-therapy-statement">{m.statement}</span>
                   </div>
-                  <span className="se-page-indicator" style={{ fontSize: 11 }}>Page {currentPage + 1} of {totalPages}</span>
-                </div>
-                <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage >= totalPages - 1}>Next ›</button>
+                ))}
+                {therapyLoading && <div className="se-therapy-loading">Extracting memories…</div>}
+              </div>
+            )}
+
+            {!editing && registryUpdate && (
+              <div className="se-registry-update">
+                <span className="se-registry-icon">🔄</span>
+                <span className="se-registry-text">{registryUpdate}</span>
               </div>
             )}
           </>
         )}
+      </div>
 
-        {!editing && story && (
+      {/* ── Pinned bottom controls (always visible) ── */}
+      {!editing && story && (
+        <div className="se-pinned-controls">
+          {totalPages > 1 && (
+            <div className="se-page-nav">
+              <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage === 0}>‹ Prev</button>
+              <div style={{ flex: 1, textAlign: 'center' }}>
+                <div className="se-chapter-timeline">
+                  {Array.from({ length: Math.min(totalPages, 12) }, (_, i) => {
+                    const pageIdx = totalPages <= 12 ? i : Math.round(i * (totalPages - 1) / 11);
+                    return (
+                      <React.Fragment key={i}>
+                        {i > 0 && <div className={`se-timeline-connector${pageIdx <= currentPage ? ' completed' : ''}`} />}
+                        <div
+                          className={`se-timeline-dot${pageIdx === currentPage ? ' active' : pageIdx < currentPage ? ' completed' : ''}`}
+                          onClick={() => { setCurrentPage(pageIdx); storyBodyRef.current?.scrollTo(0, 0); }}
+                          style={{ cursor: 'pointer' }}
+                          title={`Page ${pageIdx + 1}`}
+                        />
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+                <span className="se-page-indicator" style={{ fontSize: 11 }}>Page {currentPage + 1} of {totalPages}</span>
+              </div>
+              <button className="se-btn se-btn-page" onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }} disabled={currentPage >= totalPages - 1}>Next ›</button>
+            </div>
+          )}
           <BottomWritingTools
             story={story}
             charObj={charObj}
@@ -1144,31 +1169,6 @@ function StoryPanel({
               setEditing(true);
             }}
           />
-        )}
-
-        {!editing && selectedCharKey && <TherapySuggestions characterKey={selectedCharKey} apiBase={API_BASE} />}
-
-        {!editing && therapyMemories?.length > 0 && (
-          <div className="se-therapy-panel">
-            <div className="se-therapy-title">Therapy Room Feeds</div>
-            {therapyMemories.map((m, i) => (
-              <div key={i} className="se-therapy-memory">
-                <span className="se-therapy-category">{m.category?.replace(/_/g, ' ')}</span>
-                <span className="se-therapy-statement">{m.statement}</span>
-              </div>
-            ))}
-            {therapyLoading && <div className="se-therapy-loading">Extracting memories…</div>}
-          </div>
-        )}
-
-        {!editing && registryUpdate && (
-          <div className="se-registry-update">
-            <span className="se-registry-icon">🔄</span>
-            <span className="se-registry-text">{registryUpdate}</span>
-          </div>
-        )}
-
-        {story && !editing && (
           <StoryReviewPanel
             story={story}
             characterKey={story.character_key}
@@ -1178,8 +1178,8 @@ function StoryPanel({
             onRejected={(saved) => { console.log('Story rejected & persisted', saved.id); onReject(story); }}
             onSaved={(saved) => { console.log('Story saved', saved.id); }}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
