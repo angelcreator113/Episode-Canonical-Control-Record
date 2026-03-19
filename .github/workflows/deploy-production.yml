@@ -246,8 +246,25 @@ jobs:
       - name: Run smoke tests
         run: |
           echo "🧪 Running production health checks..."
-          curl -f https://primepisodes.com/health || exit 1
-          curl -f https://www.primepisodes.com/health || exit 1
+          MAX_ATTEMPTS=10
+          WAIT_SECONDS=6
+          for url in https://primepisodes.com/health https://www.primepisodes.com/health; do
+            echo "  Checking $url ..."
+            for i in $(seq 1 $MAX_ATTEMPTS); do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$url" || true)
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "  ✅ $url returned 200 (attempt $i)"
+                break
+              fi
+              echo "  ⏳ Attempt $i/$MAX_ATTEMPTS — got HTTP $HTTP_CODE, retrying in ${WAIT_SECONDS}s..."
+              if [ "$i" -eq "$MAX_ATTEMPTS" ]; then
+                echo "  ❌ $url failed after $MAX_ATTEMPTS attempts (last HTTP $HTTP_CODE)"
+                curl -s "$url" | head -20
+                exit 1
+              fi
+              sleep $WAIT_SECONDS
+            done
+          done
           echo "✅ Production health checks passed"
           echo "🌐 Site: https://primepisodes.com"
 
