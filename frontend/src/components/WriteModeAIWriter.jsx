@@ -23,6 +23,8 @@ const ACTIONS = [
     id:       'continue',
     icon:     '✨',
     label:    'Continue the moment',
+    shortLabel: 'Continue',
+    group:    'flow',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'continue',
   },
@@ -30,6 +32,8 @@ const ACTIONS = [
     id:       'deepen',
     icon:     '🧠',
     label:    'Deepen the scene',
+    shortLabel: 'Deepen',
+    group:    'flow',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'deepen',
   },
@@ -37,6 +41,8 @@ const ACTIONS = [
     id:       'nudge',
     icon:     '🎯',
     label:    'Refine tone',
+    shortLabel: 'Nudge',
+    group:    'refinement',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'nudge',
   },
@@ -283,11 +289,16 @@ export default function WriteModeAIWriter({
         )}
       </div>
 
-      {/* AI Tools toolbar */}
+      {/* Creative Tools */}
       {!result && !rewriteOptions && (
         <div style={s.toolbar}>
+          {/* Writing Flow group */}
+          <div style={s.groupHeader}>
+            <span style={s.groupIcon}>✨</span>
+            <span style={s.groupLabel}>Writing Flow</span>
+          </div>
           <div style={s.toolRow}>
-            {ACTIONS.map(action => (
+            {ACTIONS.filter(a => a.group === 'flow').map(action => (
               <button
                 key={action.id}
                 style={{
@@ -305,7 +316,38 @@ export default function WriteModeAIWriter({
                 <span style={s.toolLabel}>
                   {action.label}
                   {loading && activeAction === action.id && (
-                    <span style={s.spinner}> {'◌'}</span>
+                    <span style={s.spinner}>{activeAction === 'continue' ? ' Expanding the moment…' : ' Layering depth…'}</span>
+                  )}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Refinement group */}
+          <div style={{ ...s.groupHeader, marginTop: 12 }}>
+            <span style={s.groupIcon}>🎯</span>
+            <span style={s.groupLabel}>Refinement</span>
+          </div>
+          <div style={s.toolRow}>
+            {ACTIONS.filter(a => a.group === 'refinement').map(action => (
+              <button
+                key={action.id}
+                style={{
+                  ...s.toolPill,
+                  background:  activeAction === action.id && loading
+                               ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                  borderColor: activeAction === action.id
+                               ? accent : 'rgba(28,24,20,0.10)',
+                  opacity:     loading && activeAction !== action.id ? 0.5 : 1,
+                }}
+                onClick={() => runAction(action)}
+                disabled={loading}
+              >
+                <span style={s.toolIcon}>{action.icon}</span>
+                <span style={s.toolLabel}>
+                  {action.label}
+                  {loading && activeAction === action.id && (
+                    <span style={s.spinner}> Refining…</span>
                   )}
                 </span>
               </button>
@@ -326,7 +368,7 @@ export default function WriteModeAIWriter({
               <span style={s.toolLabel}>
                 Rework paragraph
                 {loading && activeAction === 'rewrite' && (
-                  <span style={s.spinner}> {'◌'}</span>
+                  <span style={s.spinner}> Reworking…</span>
                 )}
               </span>
             </button>
@@ -575,12 +617,29 @@ const s = {
     lineHeight: 1.5,
   },
 
-  // AI Tools toolbar
+  // Creative Tools toolbar
   toolbar: {
     display:       'flex',
     flexDirection: 'column',
     padding:       '12px 14px',
-    gap:           10,
+    gap:           8,
+  },
+  groupHeader: {
+    display:        'flex',
+    alignItems:     'center',
+    gap:            6,
+    marginBottom:   2,
+  },
+  groupIcon: {
+    fontSize:   13,
+    lineHeight: 1,
+  },
+  groupLabel: {
+    fontSize:      11,
+    fontWeight:    600,
+    color:         INK,
+    letterSpacing: '0.01em',
+    fontFamily:    "'DM Mono', monospace",
   },
   toolRow: {
     display:        'flex',
