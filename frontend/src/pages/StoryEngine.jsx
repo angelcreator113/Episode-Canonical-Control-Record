@@ -247,32 +247,73 @@ function StoryPanel({
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
   const [voicesExpanded, setVoicesExpanded] = useState(false);
 
-  // ── Text-to-Speech state ──
+  // ── Text-to-Speech state (ElevenLabs with browser fallback) ──
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsPaused, setTtsPaused] = useState(false);
   const [ttsRate, setTtsRate] = useState(1);
+  const [ttsLoading, setTtsLoading] = useState(false);
   const ttsUtteranceRef = useRef(null);
+  const ttsAudioRef = useRef(null);
+  const ttsUsingElevenLabs = useRef(false);
 
-  const handleTtsPlay = useCallback(() => {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
+  const handleTtsPlay = useCallback(async () => {
+    const text = editing ? editText : (story?.text || '');
+    if (!text.trim()) return;
 
+    // Resume if paused
     if (ttsPaused) {
-      synth.resume();
+      if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+        ttsAudioRef.current.play();
+      } else {
+        window.speechSynthesis?.resume();
+      }
       setTtsPaused(false);
       setTtsPlaying(true);
       return;
     }
 
-    synth.cancel();
-    const text = editing ? editText : (story?.text || '');
-    if (!text.trim()) return;
+    // Stop any existing playback
+    handleTtsStop();
 
+    // Try ElevenLabs first
+    setTtsLoading(true);
+    try {
+      const res = await fetch('/api/v1/amber/read-story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.playbackRate = ttsRate;
+        audio.onended = () => { setTtsPlaying(false); setTtsPaused(false); URL.revokeObjectURL(url); };
+        audio.onerror = () => { setTtsPlaying(false); setTtsPaused(false); URL.revokeObjectURL(url); };
+        ttsAudioRef.current = audio;
+        ttsUsingElevenLabs.current = true;
+        setTtsLoading(false);
+        audio.play();
+        setTtsPlaying(true);
+        setTtsPaused(false);
+        return;
+      }
+    } catch {
+      // ElevenLabs unavailable — fall through to browser TTS
+    }
+
+    // Browser TTS fallback
+    setTtsLoading(false);
+    ttsUsingElevenLabs.current = false;
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+
+    synth.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = ttsRate;
     utterance.pitch = 1;
 
-    // Pick a natural-sounding voice if available
     const voices = synth.getVoices();
     const preferred = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
                    || voices.find(v => v.lang.startsWith('en') && !v.localService)
@@ -289,23 +330,44 @@ function StoryPanel({
   }, [editing, editText, story?.text, ttsPaused, ttsRate]);
 
   const handleTtsPause = useCallback(() => {
-    const synth = window.speechSynthesis;
-    if (synth?.speaking) {
-      synth.pause();
+    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
       setTtsPaused(true);
       setTtsPlaying(false);
+    } else {
+      const synth = window.speechSynthesis;
+      if (synth?.speaking) {
+        synth.pause();
+        setTtsPaused(true);
+        setTtsPlaying(false);
+      }
     }
   }, []);
 
   const handleTtsStop = useCallback(() => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+      if (ttsAudioRef.current.src) URL.revokeObjectURL(ttsAudioRef.current.src);
+      ttsAudioRef.current = null;
+    }
     window.speechSynthesis?.cancel();
+    ttsUsingElevenLabs.current = false;
     setTtsPlaying(false);
     setTtsPaused(false);
+    setTtsLoading(false);
   }, []);
 
   // Cleanup TTS on unmount or story change
   useEffect(() => {
-    return () => window.speechSynthesis?.cancel();
+    return () => {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        if (ttsAudioRef.current.src) URL.revokeObjectURL(ttsAudioRef.current.src);
+        ttsAudioRef.current = null;
+      }
+      window.speechSynthesis?.cancel();
+    };
   }, [story?.story_number]);
 
   useEffect(() => {
@@ -656,16 +718,19 @@ function StoryPanel({
             >
               {focusMode ? 'Full View' : 'Focus'}
             </button>
-            <span className={`se-save-indicator se-save-${saveStatus}`}>
-              {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving…' : '● Unsaved'}
-            </span>
-            <button
-              className="se-btn se-btn-save-primary"
-              style={{ background: charColor }}
-              onClick={handleSave}
-            >
-              Save
-            </button>
+            {saveStatus === 'saved' ? (
+              <span className="se-save-indicator se-save-saved">✓ Saved</span>
+            ) : saveStatus === 'saving' ? (
+              <span className="se-save-indicator se-save-saving">Saving…</span>
+            ) : (
+              <button
+                className="se-btn se-btn-save-primary"
+                style={{ background: charColor }}
+                onClick={handleSave}
+              >
+                Save
+              </button>
+            )}
             <button
               className="se-btn se-btn-cancel-light"
               onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); if (focusMode) onToggleFocusMode?.(); }}
@@ -715,9 +780,14 @@ function StoryPanel({
               Edit
             </button>
             <div className="se-tts-controls">
-              {!ttsPlaying && !ttsPaused && (
+              {!ttsPlaying && !ttsPaused && !ttsLoading && (
                 <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
                   Listen
+                </button>
+              )}
+              {ttsLoading && (
+                <button className="se-btn se-btn-tts" disabled title="Loading audio…">
+                  <span className="se-spinner" style={{ width: 12, height: 12, display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} /> Loading…
                 </button>
               )}
               {ttsPlaying && (
@@ -740,23 +810,29 @@ function StoryPanel({
                   onChange={(e) => {
                     const newRate = parseFloat(e.target.value);
                     setTtsRate(newRate);
-                    handleTtsStop();
-                    setTimeout(() => {
-                      const synth = window.speechSynthesis;
-                      const text = editing ? editText : (story?.text || '');
-                      const u = new SpeechSynthesisUtterance(text);
-                      u.rate = newRate;
-                      const voices = synth.getVoices();
-                      const pref = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
-                                || voices.find(v => v.lang.startsWith('en') && !v.localService)
-                                || voices.find(v => v.lang.startsWith('en'));
-                      if (pref) u.voice = pref;
-                      u.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
-                      u.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
-                      synth.speak(u);
-                      setTtsPlaying(true);
-                      setTtsPaused(false);
-                    }, 100);
+                    // For ElevenLabs audio, just change playback rate live
+                    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+                      ttsAudioRef.current.playbackRate = newRate;
+                    } else {
+                      // For browser TTS, must restart with new rate
+                      handleTtsStop();
+                      setTimeout(() => {
+                        const synth = window.speechSynthesis;
+                        const text = editing ? editText : (story?.text || '');
+                        const u = new SpeechSynthesisUtterance(text);
+                        u.rate = newRate;
+                        const voices = synth.getVoices();
+                        const pref = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
+                                  || voices.find(v => v.lang.startsWith('en') && !v.localService)
+                                  || voices.find(v => v.lang.startsWith('en'));
+                        if (pref) u.voice = pref;
+                        u.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
+                        u.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
+                        synth.speak(u);
+                        setTtsPlaying(true);
+                        setTtsPaused(false);
+                      }, 100);
+                    }
                   }}
                   title="Reading speed"
                 >
