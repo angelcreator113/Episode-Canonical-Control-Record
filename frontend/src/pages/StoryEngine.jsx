@@ -805,6 +805,70 @@ function StoryPanel({
             </span>
           </div>
           <div className="se-edit-header-right">
+            <div className="se-tts-controls">
+              {!ttsPlaying && !ttsPaused && !ttsLoading && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
+                  Listen
+                </button>
+              )}
+              {ttsLoading && (
+                <button className="se-btn se-btn-tts" disabled title="Loading audio…">
+                  <span className="se-spinner" style={{ width: 12, height: 12, display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} /> Loading…
+                </button>
+              )}
+              {ttsPlaying && (
+                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause reading">
+                  Pause
+                </button>
+              )}
+              {ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume reading">
+                  Resume
+                </button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">Stop</button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <select
+                  className="se-tts-speed"
+                  value={ttsRate}
+                  onChange={(e) => {
+                    const newRate = parseFloat(e.target.value);
+                    setTtsRate(newRate);
+                    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+                      ttsAudioRef.current.playbackRate = newRate;
+                    } else {
+                      handleTtsStop();
+                      setTimeout(() => {
+                        const synth = window.speechSynthesis;
+                        const text = editing ? editText : (story?.text || '');
+                        const u = new SpeechSynthesisUtterance(text);
+                        u.rate = newRate;
+                        const voices = synth.getVoices();
+                        const pref = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
+                                  || voices.find(v => v.lang.startsWith('en') && !v.localService)
+                                  || voices.find(v => v.lang.startsWith('en'));
+                        if (pref) u.voice = pref;
+                        u.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
+                        u.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
+                        synth.speak(u);
+                        setTtsPlaying(true);
+                        setTtsPaused(false);
+                      }, 100);
+                    }
+                  }}
+                  title="Reading speed"
+                >
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
+                </select>
+              )}
+            </div>
             <button
               className={`se-btn se-btn-focus-toggle ${focusMode ? 'active' : ''}`}
               onClick={() => onToggleFocusMode?.()}
