@@ -214,8 +214,23 @@ fi
 
 echo "✅ App is online!"
 echo "🧪 Testing health endpoint..."
-sleep 3
-curl -v http://localhost:3000/health 2>&1 | head -30 || echo "⚠️ Health check failed"
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  sleep 3
+  HTTP_CODE=$(curl -s -o /tmp/health_response.json -w "%{http_code}" http://localhost:3000/health || echo "000")
+  if [ "$HTTP_CODE" = "200" ]; then
+    echo "✅ Health check passed (attempt $i)"
+    cat /tmp/health_response.json
+    echo ""
+    break
+  fi
+  echo "  ⏳ Attempt $i/10 — HTTP $HTTP_CODE, waiting..."
+  if [ "$i" -eq "10" ]; then
+    echo "❌ Health check failed after 10 attempts (last HTTP $HTTP_CODE)"
+    cat /tmp/health_response.json 2>/dev/null || true
+    pm2 logs episode-api --lines 30 --nostream
+    exit 1
+  fi
+done
 
 echo "✅ Production deployment complete!"
 echo "📊 Application status:"

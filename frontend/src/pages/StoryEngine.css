@@ -158,7 +158,7 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 300px;
+  max-width: min(400px, 50vw);
 }
 
 .se-header-phase {
@@ -3419,6 +3419,10 @@ html, body {
   box-sizing: border-box;
 }
 
+.se-story-editor::placeholder {
+  color: rgba(28, 24, 20, 0.35);
+}
+
 /* ─────────────────────────────────────────
    Therapy
 ────────────────────────────────────────── */
@@ -3652,7 +3656,7 @@ html, body {
   border-radius: 8px;
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.15s, box-shadow 0.2s, opacity 0.15s, transform 0.15s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   letter-spacing: 0.02em;
 }
@@ -3675,6 +3679,13 @@ html, body {
   color: #22c55e !important;
   box-shadow: none;
   cursor: default;
+  animation: se-save-pulse 0.4s ease-out;
+}
+
+@keyframes se-save-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.04); }
+  100% { transform: scale(1); }
 }
 
 .se-btn-cancel-light {
@@ -3685,7 +3696,7 @@ html, body {
   border-radius: 8px;
   border: 1px solid var(--se-border);
   background: transparent;
-  color: var(--se-text-muted);
+  color: var(--se-text);
   cursor: pointer;
   transition: all 0.2s;
   letter-spacing: 0.01em;
@@ -3781,11 +3792,78 @@ html, body {
   justify-content: space-between;
 }
 
+/* ─── Quick AI tools bar (mobile edit mode) ───────────────────────────── */
+.se-edit-quick-tools {
+  display: none; /* Hidden on desktop — sidebar has the tools */
+}
+
+@media (max-width: 768px) {
+  .se-edit-quick-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px 16px;
+    justify-content: center;
+    border-top: 1px solid var(--se-border-light, #e8e4d8);
+    background: linear-gradient(180deg, #fdfcf9 0%, #f8f6f2 100%);
+  }
+}
+
+.se-edit-quick-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(28, 24, 20, 0.12);
+  background: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--se-text, #1C1814);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 44px;
+  flex: 1 1 calc(50% - 4px);
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.se-edit-quick-pill:hover:not(:disabled) {
+  border-color: var(--pill-accent, #B8962E);
+  background: color-mix(in srgb, var(--pill-accent, #B8962E) 8%, #fff);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.se-edit-quick-pill:active:not(:disabled) {
+  transform: scale(0.97);
+  background: color-mix(in srgb, var(--pill-accent, #B8962E) 12%, #fff);
+}
+
+.se-edit-quick-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.se-edit-quick-pill:focus-visible {
+  outline: 2px solid var(--pill-accent, #B8962E);
+  outline-offset: 2px;
+}
+
+/* On very small phones, make pills full width */
+@media (max-width: 360px) {
+  .se-edit-quick-pill {
+    flex: 1 1 100%;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+}
+
 /* Right: Writing Tools Panel (30%) */
 .se-writing-tools {
   flex: 3;
-  min-width: 280px;
-  max-width: 360px;
+  min-width: 300px;
+  max-width: 380px;
   min-height: 0;
   border-left: 1px solid var(--se-border-light);
   background: linear-gradient(180deg, #faf8f5 0%, #f5f3ef 100%);
@@ -3794,15 +3872,16 @@ html, body {
   scrollbar-color: var(--se-border) transparent;
   display: flex;
   flex-direction: column;
+  transition: max-height 0.3s ease;
 }
 
 /* Mobile tools toggle button — hidden on desktop */
 .se-mobile-tools-toggle {
   display: none;
   width: 100%;
-  padding: 10px 16px;
+  padding: 12px 16px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--se-text-muted);
   background: transparent;
@@ -3812,11 +3891,12 @@ html, body {
   gap: 6px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  min-height: 44px;
+  min-height: 48px;
 }
 
 .se-mobile-tools-toggle:active {
   background: var(--se-surface2);
+  border-bottom: 2px solid var(--se-gold, #B8962E);
 }
 
 .se-writing-tools::-webkit-scrollbar {
@@ -5223,8 +5303,8 @@ html, body {
   .se-story-brief-title { font-size: 20px; }
   .se-story-panel .se-story-brief { padding: 16px 12px; }
 
-  .se-story-editor { padding: 14px 12px; }
-  .se-edit-canvas .se-story-editor { padding: 14px 12px; font-size: 15px; }
+  .se-story-editor { padding: 18px 14px; }
+  .se-edit-canvas .se-story-editor { padding: 18px 14px; font-size: 16px; }
   .se-writing-tools { max-height: 44px; }
   .se-writing-tools--mobile-open { max-height: 50vh; overflow-y: auto; }
   .se-voice-option { padding: 8px 10px; }
@@ -5365,8 +5445,8 @@ html, body {
 
   .se-btn-page {
     font-size: 11px;
-    padding: 6px 12px;
-    min-height: 30px;
+    padding: 8px 14px;
+    min-height: 44px;
   }
 
   .se-page-indicator {
@@ -5699,7 +5779,7 @@ html, body {
   border-top: 1px solid rgba(28, 24, 20, 0.06);
   box-shadow: none;
   border-radius: 0;
-  padding: 16px 48px 20px;
+  padding: 16px clamp(16px, 5vw, 48px) 20px;
   box-sizing: border-box;
 }
 
@@ -5779,8 +5859,9 @@ html, body {
 }
 
 .se-bottom-tool-pill:disabled {
-  opacity: 0.4;
-  cursor: default;
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: rgba(28, 24, 20, 0.5);
 }
 
 .se-bottom-tool-icon {
@@ -5793,9 +5874,9 @@ html, body {
 }
 
 .se-bottom-tool-spinner {
-  font-weight: 400;
-  font-style: italic;
-  color: rgba(28, 24, 20, 0.45);
+  font-weight: 500;
+  font-style: normal;
+  color: rgba(28, 24, 20, 0.6);
   animation: se-bottom-pulse 1.5s ease-in-out infinite;
 }
 
@@ -5875,6 +5956,7 @@ html, body {
 .se-bottom-tools-result-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .se-bottom-tools-result-btn {
@@ -6865,5 +6947,308 @@ html, body {
   .se-modal-card {
     max-height: 90vh;
     overflow-y: auto;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Accessibility: Focus states for keyboard navigation
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-nav-btn:focus-visible,
+.se-nav-pill:focus-visible,
+.se-btn:focus-visible,
+.se-btn-nav:focus-visible,
+.se-header-btn:focus-visible,
+.se-header-back:focus-visible,
+.se-edit-back:focus-visible,
+.se-btn-page:focus-visible,
+.se-mobile-toggle:focus-visible,
+.se-mobile-tools-toggle:focus-visible,
+.se-bottom-tool-pill:focus-visible,
+.se-bottom-length-pill:focus-visible,
+.se-review-btn:focus-visible,
+.se-review-page-btn:focus-visible,
+.se-modal-btn:focus-visible,
+.se-inline-btn:focus-visible,
+.se-insp-toggle:focus-visible,
+.se-more-dropdown button:focus-visible {
+  outline: 2px solid var(--se-gold, #b0922e);
+  outline-offset: 2px;
+}
+
+/* Dark outline for buttons that already have gold backgrounds */
+.se-header-btn--approve:focus-visible,
+.se-btn-approve:focus-visible,
+.se-modal-btn--confirm:focus-visible {
+  outline-color: #1c1917;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Therapy Suggestions — extracted from inline styles
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-therapy-suggestions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px 0;
+  min-height: 32px;
+}
+
+.se-therapy-suggestions-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+}
+
+.se-therapy-suggestions-chevron {
+  font-size: 10px;
+  color: var(--se-text-dim, #999);
+}
+
+.se-therapy-suggestions-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.se-therapy-suggestion-item {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  padding: 4px 0;
+}
+
+.se-therapy-suggestion-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.se-therapy-suggestion-name {
+  font-weight: 500;
+  color: var(--se-text, #333);
+}
+
+.se-therapy-suggestion-desc {
+  color: var(--se-text-muted, #888);
+  font-size: 10px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Story Brief — evaluate actions bar
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-story-brief-actions {
+  padding: 16px 20px;
+  border-top: 1px solid var(--se-border-light, #e8e4d8);
+  display: flex;
+  gap: 10px;
+}
+
+.se-btn-evaluate {
+  background: #3D7A9B;
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+
+.se-btn-evaluate:hover {
+  opacity: 0.85;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tablet: story text max-width for readability
+   ──────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 769px) and (max-width: 1100px) {
+  .se-story-text {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  .se-writing-tools {
+    max-width: 300px;
+    min-width: 240px;
+  }
+
+  .se-tools-section {
+    padding: 14px 12px;
+  }
+
+  .se-bottom-tool-pill {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+}
+
+/* Mobile: result text and buttons */
+@media (max-width: 600px) {
+  .se-bottom-tools-result-text {
+    max-height: 180px;
+    font-size: 14px;
+    padding: 12px;
+  }
+
+  .se-bottom-tools-result-btn {
+    flex: 1;
+    min-width: 70px;
+    text-align: center;
+  }
+
+  .se-bottom-tools-result-btn--insert {
+    flex: 1 1 100%;
+  }
+
+  .se-bottom-tools-result-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Large screens: wider writing tools sidebar
+   ──────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 1400px) {
+  .se-writing-tools {
+    max-width: 420px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Hover & active state improvements
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Touch-friendly active states */
+.se-btn-page:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.se-review-page-btn:active:not(:disabled) {
+  background: var(--se-surface2, #efebe6);
+}
+
+.se-task-card:active {
+  transform: scale(0.99);
+}
+
+.se-bottom-tool-pill:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Scrollbar-gutter to prevent layout shift */
+.se-char-dropdown-list {
+  scrollbar-gutter: stable;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Reduced motion: respect user preferences
+   ──────────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .se-writing-tools {
+    transition: none;
+  }
+
+  .se-inline-toolbar,
+  .se-toast,
+  .se-modal-card,
+  .se-amber-notification,
+  .se-generating-ring,
+  .se-arc-status-pulse,
+  .se-bottom-tool-spinner,
+  .se-btn-save-primary.se-btn-save-saved {
+    animation: none;
+  }
+
+  .se-bottom-tool-pill,
+  .se-btn-page,
+  .se-task-card {
+    transition: none;
+  }
+
+  .se-navigator,
+  .se-inspector {
+    transition: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Print styles
+   ──────────────────────────────────────────────────────────────────────────── */
+@media print {
+  .se-header,
+  .se-navigator,
+  .se-inspector,
+  .se-pinned-controls,
+  .se-mobile-deck,
+  .se-drawer-backdrop,
+  .se-toast-container,
+  .se-amber-notification,
+  .se-inline-toolbar,
+  .se-story-header-actions,
+  .se-bottom-tools,
+  .se-edit-quick-tools,
+  .se-mobile-tools-toggle,
+  .se-writing-tools,
+  .se-therapy-suggestions,
+  .se-active-threads,
+  .se-task-list,
+  .se-modal-backdrop {
+    display: none !important;
+  }
+
+  .se-page {
+    height: auto;
+    overflow: visible;
+    background: white;
+  }
+
+  .se-panels {
+    display: block;
+  }
+
+  .se-canvas {
+    width: 100%;
+  }
+
+  .se-story-panel {
+    overflow: visible;
+    height: auto;
+  }
+
+  .se-story-body {
+    overflow: visible;
+  }
+
+  .se-story-header {
+    border-bottom: 1px solid #ccc;
+    padding: 16px 0;
+    page-break-after: avoid;
+  }
+
+  .se-story-header-title {
+    font-size: 24px;
+    color: #000;
+  }
+
+  .se-story-text {
+    padding: 24px 0;
+    max-width: none;
+  }
+
+  .se-story-para {
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #000;
+    page-break-inside: avoid;
+  }
+
+  .se-workspace {
+    overflow: visible;
   }
 }

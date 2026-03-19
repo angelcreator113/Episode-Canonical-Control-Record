@@ -16,7 +16,7 @@
  *   onInsert: function(text) — inserts generated text into the editor
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 
 const ACTIONS = [
   {
@@ -24,6 +24,7 @@ const ACTIONS = [
     icon:     '✨',
     label:    'Continue the moment',
     shortLabel: 'Continue',
+    shortcut: 'Ctrl+1',
     group:    'flow',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'continue',
@@ -33,6 +34,7 @@ const ACTIONS = [
     icon:     '🧠',
     label:    'Deepen the scene',
     shortLabel: 'Deepen',
+    shortcut: 'Ctrl+2',
     group:    'flow',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'deepen',
@@ -42,6 +44,7 @@ const ACTIONS = [
     icon:     '🎯',
     label:    'Refine tone',
     shortLabel: 'Nudge',
+    shortcut: 'Ctrl+3',
     group:    'refinement',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'nudge',
@@ -55,7 +58,7 @@ const TYPE_COLORS = {
   special:  '#B8962E',
 };
 
-export default function WriteModeAIWriter({
+const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
   chapterId,
   bookId,
   selectedCharacter,
@@ -65,7 +68,8 @@ export default function WriteModeAIWriter({
   characters = [],
   onSelectCharacter,
   getSelectedText,
-}) {
+  cursorContext,
+}, ref) {
   const [activeAction, setActiveAction] = useState(null);
   const [result,       setResult]       = useState(null);
   const [editedResult, setEditedResult] = useState(null);
@@ -75,6 +79,17 @@ export default function WriteModeAIWriter({
   const [lengthMode,   setLengthMode]   = useState('paragraph');
   const [rewriteOptions, setRewriteOptions] = useState(null);
   const retryRef = useRef(false);
+
+  // Expose triggerAction for keyboard shortcuts from parent
+  useImperativeHandle(ref, () => ({
+    triggerAction: (actionId) => {
+      if (loading) return;
+      const action = ACTIONS.find(a => a.id === actionId);
+      if (action) runAction(action);
+      else if (actionId === 'rewrite') runRewrite();
+    },
+    get isLoading() { return loading; },
+  }), [loading]);
 
   const accent   = TYPE_COLORS[selectedCharacter?.type] || '#B8962E';
   const charName = selectedCharacter?.selected_name || selectedCharacter?.name;
@@ -289,15 +304,23 @@ export default function WriteModeAIWriter({
         )}
       </div>
 
+      {/* Cursor context — shows where text will be inserted */}
+      {cursorContext && !result && !rewriteOptions && (
+        <div style={s.cursorContext}>
+          <div style={s.cursorContextLabel}>Inserting at cursor:</div>
+          <div style={s.cursorContextText}>…{cursorContext}…</div>
+        </div>
+      )}
+
       {/* Creative Tools */}
       {!result && !rewriteOptions && (
         <div style={s.toolbar}>
           {/* Writing Flow group */}
           <div style={s.groupHeader}>
-            <span style={s.groupIcon}>✨</span>
+            <span style={s.groupIcon} aria-hidden="true">✨</span>
             <span style={s.groupLabel}>Writing Flow</span>
           </div>
-          <div style={s.toolRow}>
+          <div style={s.toolRow} role="group" aria-label="Writing flow tools">
             {ACTIONS.filter(a => a.group === 'flow').map(action => (
               <button
                 key={action.id}
@@ -311,12 +334,15 @@ export default function WriteModeAIWriter({
                 }}
                 onClick={() => runAction(action)}
                 disabled={loading}
+                aria-label={action.label}
+                aria-busy={loading && activeAction === action.id}
+                title={`${action.label} (${action.shortcut})`}
               >
-                <span style={s.toolIcon}>{action.icon}</span>
+                <span style={s.toolIcon} aria-hidden="true">{action.icon}</span>
                 <span style={s.toolLabel}>
                   {action.label}
                   {loading && activeAction === action.id && (
-                    <span style={s.spinner}>{activeAction === 'continue' ? ' Expanding the moment…' : ' Layering depth…'}</span>
+                    <span style={s.spinner} role="status" aria-live="polite">{activeAction === 'continue' ? ' Expanding the moment…' : ' Layering depth…'}</span>
                   )}
                 </span>
               </button>
@@ -328,7 +354,7 @@ export default function WriteModeAIWriter({
             <span style={s.groupIcon}>🎯</span>
             <span style={s.groupLabel}>Refinement</span>
           </div>
-          <div style={s.toolRow}>
+          <div style={s.toolRow} role="group" aria-label="Refinement tools">
             {ACTIONS.filter(a => a.group === 'refinement').map(action => (
               <button
                 key={action.id}
@@ -342,12 +368,15 @@ export default function WriteModeAIWriter({
                 }}
                 onClick={() => runAction(action)}
                 disabled={loading}
+                aria-label={action.label}
+                aria-busy={loading && activeAction === action.id}
+                title={`${action.label} (${action.shortcut})`}
               >
-                <span style={s.toolIcon}>{action.icon}</span>
+                <span style={s.toolIcon} aria-hidden="true">{action.icon}</span>
                 <span style={s.toolLabel}>
                   {action.label}
                   {loading && activeAction === action.id && (
-                    <span style={s.spinner}> Refining…</span>
+                    <span style={s.spinner} role="status" aria-live="polite"> Refining…</span>
                   )}
                 </span>
               </button>
@@ -363,19 +392,22 @@ export default function WriteModeAIWriter({
               }}
               onClick={runRewrite}
               disabled={loading}
+              aria-label="Rework paragraph"
+              aria-busy={loading && activeAction === 'rewrite'}
+              title="Rework paragraph (Ctrl+4) — select text first"
             >
-              <span style={s.toolIcon}>{'🔄'}</span>
+              <span style={s.toolIcon} aria-hidden="true">{'🔄'}</span>
               <span style={s.toolLabel}>
                 Rework paragraph
                 {loading && activeAction === 'rewrite' && (
-                  <span style={s.spinner}> Reworking…</span>
+                  <span style={s.spinner} role="status" aria-live="polite"> Reworking…</span>
                 )}
               </span>
             </button>
           </div>
 
           {/* Length toggle */}
-          <div style={s.lengthRow}>
+          <div style={s.lengthRow} role="group" aria-label="Output length">
             <button
               style={{
                 ...s.lengthPill,
@@ -384,6 +416,8 @@ export default function WriteModeAIWriter({
                 borderColor: lengthMode === 'full' ? accent : 'rgba(28,24,20,0.10)',
               }}
               onClick={() => setLengthMode('full')}
+              aria-pressed={lengthMode === 'full'}
+              title="Generate full-length content"
             >
               ¶ full
             </button>
@@ -395,6 +429,8 @@ export default function WriteModeAIWriter({
                 borderColor: lengthMode === 'paragraph' ? accent : 'rgba(28,24,20,0.10)',
               }}
               onClick={() => setLengthMode('paragraph')}
+              aria-pressed={lengthMode === 'paragraph'}
+              title="Generate paragraph-length content"
             >
               ¶ Paragraphs
             </button>
@@ -409,10 +445,10 @@ export default function WriteModeAIWriter({
 
       {/* Rewrite options */}
       {rewriteOptions && (
-        <div style={s.rewritePanel}>
+        <div style={s.rewritePanel} role="region" aria-label="Rewrite options">
           <div style={s.resultHeader}>
             <div style={{ ...s.resultAction, color: accent }}>Pick a rewrite</div>
-            <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
+            <button style={s.discardBtn} onClick={handleDiscard} aria-label="Dismiss rewrite options">{'✕'}</button>
           </div>
           {rewriteOptions.map((opt, i) => (
             <button
@@ -431,12 +467,12 @@ export default function WriteModeAIWriter({
 
       {/* Result */}
       {result && (
-        <div style={s.resultPanel}>
+        <div style={s.resultPanel} role="region" aria-label="Generated content" aria-live="polite">
           <div style={s.resultHeader}>
             <div style={{ ...s.resultAction, color: accent }}>
               {activeAction === 'rewrite' ? 'Rewrite' : (ACTIONS.find(a => a.id === activeAction)?.label || 'Generated')}
             </div>
-            <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
+            <button style={s.discardBtn} onClick={handleDiscard} aria-label="Discard generated content">{'✕'}</button>
           </div>
 
           <textarea
@@ -445,9 +481,10 @@ export default function WriteModeAIWriter({
             onChange={e => setEditedResult(e.target.value)}
             rows={6}
             placeholder="Edit before inserting…"
+            aria-label="Edit generated content before inserting into manuscript"
           />
           {loading && (
-            <div style={s.retryLoading}>Generating new version…</div>
+            <div style={s.retryLoading} role="status" aria-live="polite">Generating new version…</div>
           )}
 
           <div style={s.resultActions}>
@@ -474,12 +511,14 @@ export default function WriteModeAIWriter({
       )}
 
       {error && (
-        <div style={s.error}>{error}</div>
+        <div style={s.error} role="alert" aria-live="assertive">{error}</div>
       )}
 
     </div>
   );
-}
+});
+
+export default WriteModeAIWriter;
 
 
 // ── STYLES ────────────────────────────────────────────────────────────
@@ -615,6 +654,32 @@ const s = {
     fontSize:   10,
     color:      INK_MID,
     lineHeight: 1.5,
+  },
+
+  // Cursor context — shows where insertion will happen
+  cursorContext: {
+    padding:      '8px 14px',
+    borderBottom: '1px solid rgba(28,24,20,0.06)',
+    background:   'rgba(28,24,20,0.02)',
+  },
+  cursorContextLabel: {
+    fontFamily: "'DM Sans', sans-serif",
+    fontSize:   10,
+    fontWeight:  600,
+    color:       INK_MID,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    marginBottom: 4,
+  },
+  cursorContextText: {
+    fontFamily: "'Lora', Georgia, serif",
+    fontSize:   12,
+    color:       INK,
+    lineHeight:  1.5,
+    overflow:    'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace:  'nowrap',
+    opacity:     0.7,
   },
 
   // Creative Tools toolbar

@@ -45,25 +45,27 @@ function TherapySuggestions({ characterKey, apiBase }) {
   return (
     <div className="se-therapy-suggestions">
       <div
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+        className="se-therapy-suggestions-header"
         onClick={() => setExpanded(e => !e)}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#7c3aed' }}>
+        <span className="se-therapy-suggestions-title">
           Story Suggestions ({suggestions.suggestions.length})
         </span>
-        <span style={{ fontSize: 10, color: '#999' }}>{expanded ? '▾' : '▸'}</span>
+        <span className="se-therapy-suggestions-chevron">{expanded ? '▾' : '▸'}</span>
       </div>
       {expanded && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="se-therapy-suggestions-list">
           {suggestions.suggestions.map((s, i) => (
-            <div key={s.title || i} style={{ display: 'flex', gap: 8, fontSize: 11, padding: '4px 0' }}>
-              <span style={{
-                width: 6, height: 6, borderRadius: '50%', marginTop: 4, flexShrink: 0,
-                background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
-              }} />
+            <div key={s.title || i} className="se-therapy-suggestion-item">
+              <span
+                className="se-therapy-suggestion-dot"
+                style={{
+                  background: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#999',
+                }}
+              />
               <div>
-                <div style={{ fontWeight: 500, color: '#333' }}>{s.title}</div>
-                <div style={{ color: '#888', fontSize: 10 }}>{s.description}</div>
+                <div className="se-therapy-suggestion-name">{s.title}</div>
+                <div className="se-therapy-suggestion-desc">{s.description}</div>
               </div>
             </div>
           ))}
@@ -142,8 +144,8 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
     <div className="se-bottom-tools">
       <div className="se-bottom-tools-groups">
         <div className="se-bottom-tools-group">
-          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon">✨</span> Writing Flow</div>
-          <div className="se-bottom-tools-row">
+          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon" aria-hidden="true">✨</span> Writing Flow</div>
+          <div className="se-bottom-tools-row" role="group" aria-label="Writing flow tools">
             {flowTools.map(tool => (
               <button
                 key={tool.id}
@@ -151,19 +153,21 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
                 style={{ '--tool-accent': accent }}
                 onClick={() => runTool(tool)}
                 disabled={loading}
+                aria-label={tool.label}
+                aria-busy={loading && activeAction === tool.id}
               >
-                <span className="se-bottom-tool-icon">{tool.icon}</span>
+                <span className="se-bottom-tool-icon" aria-hidden="true">{tool.icon}</span>
                 <span className="se-bottom-tool-label">
                   {tool.label}
-                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner"> {tool.spinner}</span>}
+                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner" role="status" aria-live="polite"> {tool.spinner}</span>}
                 </span>
               </button>
             ))}
           </div>
         </div>
         <div className="se-bottom-tools-group">
-          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon">🎯</span> Refinement</div>
-          <div className="se-bottom-tools-row">
+          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon" aria-hidden="true">🎯</span> Refinement</div>
+          <div className="se-bottom-tools-row" role="group" aria-label="Refinement tools">
             {refinementTools.map(tool => (
               <button
                 key={tool.id}
@@ -171,11 +175,13 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
                 style={{ '--tool-accent': accent }}
                 onClick={() => runTool(tool)}
                 disabled={loading}
+                aria-label={tool.label}
+                aria-busy={loading && activeAction === tool.id}
               >
-                <span className="se-bottom-tool-icon">{tool.icon}</span>
+                <span className="se-bottom-tool-icon" aria-hidden="true">{tool.icon}</span>
                 <span className="se-bottom-tool-label">
                   {tool.label}
-                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner"> {tool.spinner}</span>}
+                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner" role="status" aria-live="polite"> {tool.spinner}</span>}
                 </span>
               </button>
             ))}
@@ -183,33 +189,37 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
         </div>
       </div>
 
-      <div className="se-bottom-tools-length">
+      <div className="se-bottom-tools-length" role="group" aria-label="Output length">
         <button
           className={`se-bottom-length-pill${lengthMode === 'full' ? ' active' : ''}`}
           style={{ '--tool-accent': accent }}
           onClick={() => setLengthMode('full')}
+          aria-pressed={lengthMode === 'full'}
+          title="Generate full-length content"
         >¶ full</button>
         <button
           className={`se-bottom-length-pill${lengthMode === 'paragraph' ? ' active' : ''}`}
           style={{ '--tool-accent': accent }}
           onClick={() => setLengthMode('paragraph')}
+          aria-pressed={lengthMode === 'paragraph'}
+          title="Generate paragraph-length content"
         >¶ Paragraphs</button>
       </div>
 
-      {error && <div className="se-bottom-tools-error">{error}</div>}
+      {error && <div className="se-bottom-tools-error" role="alert" aria-live="assertive">{error}</div>}
 
       {result && (
-        <div className="se-bottom-tools-result">
+        <div className="se-bottom-tools-result" role="region" aria-label="Generated content" aria-live="polite">
           <div className="se-bottom-tools-result-header">
             <span className="se-bottom-tools-result-title">Generated</span>
             <div className="se-bottom-tools-result-actions">
-              <button className="se-bottom-tools-result-btn" onClick={() => { navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
-                {copied ? 'Copied!' : 'Copy'}
+              <button className="se-bottom-tools-result-btn" onClick={() => { navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 3000); }} aria-live="polite">
+                {copied ? '✓ Copied!' : 'Copy'}
               </button>
               <button className="se-bottom-tools-result-btn se-bottom-tools-result-btn--insert" style={{ background: accent, color: '#fff' }} onClick={() => { onInsertText?.(result); setResult(null); }}>
                 Insert into story
               </button>
-              <button className="se-bottom-tools-result-btn" onClick={() => setResult(null)}>Dismiss</button>
+              <button className="se-bottom-tools-result-btn" onClick={() => setResult(null)} aria-label="Dismiss generated content">Dismiss</button>
             </div>
           </div>
           <div className="se-bottom-tools-result-text">{result}</div>
@@ -424,6 +434,7 @@ function StoryPanel({
   const [activeParaIndex, setActiveParaIndex] = useState(null);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
+  const aiWriterRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
 
   // Text selection popup for reading mode
@@ -648,10 +659,9 @@ function StoryPanel({
           <span>{task.new_character_name} — {task.new_character_role}</span>
         </div>
       )}
-      <div style={{ padding: '16px 20px', borderTop: '1px solid #e8e4d8', display: 'flex', gap: 10 }}>
+      <div className="se-story-brief-actions">
         <button
-          className="se-btn"
-          style={{ background: '#3D7A9B', color: '#fff', padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none' }}
+          className="se-btn se-btn-evaluate"
           onClick={() => onEvaluate?.()}
           title="Evaluate with multi-voice scoring"
         >
@@ -758,7 +768,7 @@ function StoryPanel({
     return () => clearTimeout(autosaveTimerRef.current);
   }, [editText, hasUnsavedChanges, handleSave]);
 
-  // Keyboard shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo
+  // Keyboard shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo, Ctrl+1/2/3/4 AI tools
   useEffect(() => {
     if (!editing) return;
     const handleKeyDown = (e) => {
@@ -774,6 +784,15 @@ function StoryPanel({
         e.preventDefault();
         handleRedo();
       }
+      // AI writing tools: Ctrl+1 Continue, Ctrl+2 Deepen, Ctrl+3 Refine, Ctrl+4 Rewrite
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+        const toolMap = { '1': 'continue', '2': 'deepen', '3': 'nudge', '4': 'rewrite' };
+        const actionId = toolMap[e.key];
+        if (actionId && aiWriterRef.current) {
+          e.preventDefault();
+          aiWriterRef.current.triggerAction(actionId);
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -782,10 +801,11 @@ function StoryPanel({
   return (
     <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''} ${focusMode ? 'se-focus-mode' : ''}`}>
       {editing ? (
-        <div className="se-edit-header">
+        <div className="se-edit-header" role="toolbar" aria-label="Edit controls">
           <div className="se-edit-header-left">
             <button
               className="se-edit-back"
+              aria-label="Back to story view"
               onClick={() => {
                 if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
@@ -879,6 +899,8 @@ function StoryPanel({
               style={{ background: hasUnsavedChanges ? charColor : undefined }}
               onClick={() => handleSave()}
               disabled={saveStatus === 'saving'}
+              aria-live="polite"
+              aria-atomic="true"
             >
               {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : hasUnsavedChanges ? 'Save Now' : 'Save'}
             </button>
@@ -1058,11 +1080,13 @@ function StoryPanel({
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 spellCheck
+                aria-label="Story manuscript editor"
               />
               {editTotalPages > 1 && (
                 <div className="se-page-nav">
                   <button
                     className="se-btn se-btn-page"
+                    aria-label={`Previous page (page ${currentPage} of ${editTotalPages})`}
                     onClick={() => {
                       setCurrentPage(p => {
                         const next = p - 1;
@@ -1081,9 +1105,10 @@ function StoryPanel({
                   >
                     ← Previous
                   </button>
-                  <span className="se-page-indicator">Page {currentPage + 1} of {editTotalPages}</span>
+                  <span className="se-page-indicator" aria-live="polite">Page {currentPage + 1} of {editTotalPages}</span>
                   <button
                     className="se-btn se-btn-page"
+                    aria-label={`Next page (page ${currentPage + 2} of ${editTotalPages})`}
                     onClick={() => {
                       setCurrentPage(p => {
                         const next = p + 1;
@@ -1104,13 +1129,54 @@ function StoryPanel({
                   </button>
                 </div>
               )}
-              {/* Writing tools live in the sidebar — no duplication here */}
+              {/* Compact AI tools bar — visible on mobile below editor */}
+              <div className="se-edit-quick-tools" role="group" aria-label="Quick AI tools">
+                <button
+                  className="se-edit-quick-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('continue')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Continue the moment (Ctrl+1)"
+                >
+                  <span aria-hidden="true">✨</span> Continue
+                </button>
+                <button
+                  className="se-edit-quick-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('deepen')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Deepen the scene (Ctrl+2)"
+                >
+                  <span aria-hidden="true">🧠</span> Deepen
+                </button>
+                <button
+                  className="se-edit-quick-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('nudge')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Refine tone (Ctrl+3)"
+                >
+                  <span aria-hidden="true">🎯</span> Refine
+                </button>
+                <button
+                  className="se-edit-quick-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('rewrite')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Rework paragraph (Ctrl+4) — select text first"
+                >
+                  <span aria-hidden="true">🔄</span> Rework
+                </button>
+              </div>
             </div>
 
-            {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`}>
+            {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`} id="writing-tools-panel" role="region" aria-label="Writing tools">
               <button
                 className="se-mobile-tools-toggle"
                 onClick={() => setMobileToolsOpen(v => !v)}
+                aria-expanded={mobileToolsOpen}
+                aria-controls="writing-tools-panel"
+                title={mobileToolsOpen ? 'Collapse writing tools panel' : 'Expand writing tools panel'}
               >
                 {mobileToolsOpen ? '▾ Hide Tools' : '▸ Writing Tools'}
               </button>
@@ -1223,6 +1289,15 @@ function StoryPanel({
               <div className="se-tools-section">
                 <div className="se-tools-section-title">Creative Tools</div>
                 <WriteModeAIWriter
+                  ref={aiWriterRef}
+                  cursorContext={(() => {
+                    const ta = textareaRef.current;
+                    if (!ta || !editText) return '';
+                    const pos = ta.selectionStart || 0;
+                    const start = Math.max(0, pos - 40);
+                    const end = Math.min(editText.length, pos + 40);
+                    return editText.slice(start, end).replace(/\n/g, ' ').trim();
+                  })()}
                   chapterId={String(story?.story_number || task?.story_number || '')}
                   bookId={activeWorld || ''}
                   selectedCharacter={charObj ? {
@@ -1250,6 +1325,8 @@ function StoryPanel({
                     } else {
                       setEditText(prev => prev + '\n\n' + text);
                     }
+                    // Auto-collapse tools on mobile after insertion
+                    setMobileToolsOpen(false);
                   }}
                   getSelectedText={() => {
                     const ta = textareaRef.current;

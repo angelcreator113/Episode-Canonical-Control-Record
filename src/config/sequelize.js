@@ -190,10 +190,13 @@ const production = {
   },
   dialectOptions: {
     ...baseConfig.dialectOptions,
-    ssl: {
-      require: true,
-      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
-    },
+    ssl:
+      process.env.DB_SSL === 'false'
+        ? false
+        : {
+            require: true,
+            rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true',
+          },
     // Statement timeout (30 seconds)
     statement_timeout: 30000,
   },
