@@ -3800,9 +3800,9 @@ html, body {
 .se-mobile-tools-toggle {
   display: none;
   width: 100%;
-  padding: 10px 16px;
+  padding: 12px 16px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--se-text-muted);
   background: transparent;
@@ -3812,11 +3812,12 @@ html, body {
   gap: 6px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  min-height: 44px;
+  min-height: 48px;
 }
 
 .se-mobile-tools-toggle:active {
   background: var(--se-surface2);
+  border-bottom: 2px solid var(--se-gold, #B8962E);
 }
 
 .se-writing-tools::-webkit-scrollbar {
@@ -5699,7 +5700,7 @@ html, body {
   border-top: 1px solid rgba(28, 24, 20, 0.06);
   box-shadow: none;
   border-radius: 0;
-  padding: 16px 48px 20px;
+  padding: 16px clamp(16px, 5vw, 48px) 20px;
   box-sizing: border-box;
 }
 
@@ -5779,8 +5780,9 @@ html, body {
 }
 
 .se-bottom-tool-pill:disabled {
-  opacity: 0.4;
-  cursor: default;
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: rgba(28, 24, 20, 0.5);
 }
 
 .se-bottom-tool-icon {
@@ -5793,9 +5795,9 @@ html, body {
 }
 
 .se-bottom-tool-spinner {
-  font-weight: 400;
-  font-style: italic;
-  color: rgba(28, 24, 20, 0.45);
+  font-weight: 500;
+  font-style: normal;
+  color: rgba(28, 24, 20, 0.6);
   animation: se-bottom-pulse 1.5s ease-in-out infinite;
 }
 
@@ -5875,6 +5877,7 @@ html, body {
 .se-bottom-tools-result-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .se-bottom-tools-result-btn {
@@ -6989,6 +6992,44 @@ html, body {
     max-width: 680px;
     margin: 0 auto;
   }
+
+  .se-writing-tools {
+    max-width: 300px;
+    min-width: 240px;
+  }
+
+  .se-tools-section {
+    padding: 14px 12px;
+  }
+
+  .se-bottom-tool-pill {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+}
+
+/* Mobile: result text and buttons */
+@media (max-width: 600px) {
+  .se-bottom-tools-result-text {
+    max-height: 180px;
+    font-size: 14px;
+    padding: 12px;
+  }
+
+  .se-bottom-tools-result-btn {
+    flex: 1;
+    min-width: 70px;
+    text-align: center;
+  }
+
+  .se-bottom-tools-result-btn--insert {
+    flex: 1 1 100%;
+  }
+
+  .se-bottom-tools-result-header {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -7030,7 +7071,8 @@ html, body {
   .se-modal-card,
   .se-amber-notification,
   .se-generating-ring,
-  .se-arc-status-pulse {
+  .se-arc-status-pulse,
+  .se-bottom-tool-spinner {
     animation: none;
   }
 
