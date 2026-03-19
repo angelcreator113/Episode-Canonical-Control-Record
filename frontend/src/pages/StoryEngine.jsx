@@ -1384,42 +1384,30 @@ export default function StoryEngine() {
 
       {/* Amber notification — scene eligibility */}
       {engine.amberNotification?.type === 'scene_eligible' && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, width: 340,
-          background: '#fff', border: '1px solid #e8dcf5', borderRadius: 14,
-          boxShadow: '0 8px 32px rgba(168,137,200,0.18)', padding: '16px 18px',
-          zIndex: 500, animation: 'ws-slide-up 0.22s ease',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #d4789a, #a889c8)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14, color: '#fff', fontWeight: 700,
-            }}>A</div>
+        <div className="se-amber-notification">
+          <div className="se-amber-header">
+            <div className="se-amber-avatar">A</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Amber</div>
-              <div style={{ fontSize: 10, color: '#9999b3' }}>Story {engine.amberNotification.story_number} approved</div>
+              <div className="se-amber-name">Amber</div>
+              <div className="se-amber-sub">Story {engine.amberNotification.story_number} approved</div>
             </div>
-            <button onClick={() => engine.setAmberNotification(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9999b3', fontSize: 16 }}>×</button>
+            <button className="se-amber-close" onClick={() => engine.setAmberNotification(null)}>&times;</button>
           </div>
-          <div style={{ fontSize: 12, color: '#5a5a7a', lineHeight: 1.6, marginBottom: 12 }}>
-            <strong style={{ color: '#1a1a2e' }}>
+          <div className="se-amber-body">
+            <strong className="se-amber-chars">
               {engine.amberNotification.eligibility.charA.name}
               {engine.amberNotification.eligibility.charB ? ` & ${engine.amberNotification.eligibility.charB.name}` : ''}
             </strong>
-            {' '}— this story ends at a door.{' '}
-            <span style={{ color: '#a889c8' }}>{engine.amberNotification.eligibility.scene_type?.replace(/_/g, ' ')}</span>
-            {' '}· intensity: <span style={{ color: '#d4789a' }}>{engine.amberNotification.eligibility.intensity}</span>
-            {engine.amberNotification.eligibility.location && <span style={{ color: '#7ab3d4' }}> · {engine.amberNotification.eligibility.location}</span>}
+            {' '}&mdash; this story ends at a door.{' '}
+            <span className="se-amber-scene-type">{engine.amberNotification.eligibility.scene_type?.replace(/_/g, ' ')}</span>
+            {' '}&middot; intensity: <span className="se-amber-intensity">{engine.amberNotification.eligibility.intensity}</span>
+            {engine.amberNotification.eligibility.location && <span className="se-amber-location"> &middot; {engine.amberNotification.eligibility.location}</span>}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { navigate('/scene-studio', { state: { autoPopulate: engine.amberNotification.eligibility } }); engine.setAmberNotification(null); }}
-              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: '#a889c8', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+          <div className="se-amber-actions">
+            <button className="se-amber-btn se-amber-btn--primary" onClick={() => { navigate('/scene-studio', { state: { autoPopulate: engine.amberNotification.eligibility } }); engine.setAmberNotification(null); }}>
               Generate Scene
             </button>
-            <button onClick={() => engine.setAmberNotification(null)}
-              style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', color: '#9999b3', border: '1px solid #e8e0f0', cursor: 'pointer', fontSize: 12 }}>
+            <button className="se-amber-btn se-amber-btn--secondary" onClick={() => engine.setAmberNotification(null)}>
               Skip
             </button>
           </div>
@@ -1428,21 +1416,19 @@ export default function StoryEngine() {
 
       {/* Approval confirmation modal */}
       {engine.approveConfirm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => engine.setApproveConfirm(null)}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '24px 28px', width: 380, boxShadow: '0 12px 40px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>
+        <div className="se-modal-backdrop" onClick={() => engine.setApproveConfirm(null)}>
+          <div className="se-modal-card" onClick={e => e.stopPropagation()}>
+            <div className="se-modal-title">
               Approve Story {engine.approveConfirm.story_number}?
             </div>
-            <div style={{ fontSize: 13, color: '#5a5a7a', marginBottom: 16, lineHeight: 1.6 }}>
-              "{engine.approveConfirm.title}" — This will extract memories, update registry, generate texture layers, and check scene eligibility.
+            <div className="se-modal-body">
+              &ldquo;{engine.approveConfirm.title}&rdquo; &mdash; This will extract memories, update registry, generate texture layers, and check scene eligibility.
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => engine.setApproveConfirm(null)}
-                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #e0dcd4', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#666' }}>
+            <div className="se-modal-actions">
+              <button className="se-modal-btn se-modal-btn--cancel" onClick={() => engine.setApproveConfirm(null)}>
                 Cancel
               </button>
-              <button onClick={() => { engine.handleApprove(engine.approveConfirm); engine.setApproveConfirm(null); }}
-                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: engine.char?.color || '#9a7d1e', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+              <button className="se-modal-btn se-modal-btn--confirm" style={{ background: engine.char?.color || '#9a7d1e' }} onClick={() => { engine.handleApprove(engine.approveConfirm); engine.setApproveConfirm(null); }}>
                 Approve
               </button>
             </div>
@@ -1452,51 +1438,34 @@ export default function StoryEngine() {
 
       {/* Batch progress indicator */}
       {engine.batchProgress && (
-        <div style={{
-          position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
-          background: '#fff', border: '1px solid #e0dcd4', borderRadius: 10,
-          padding: '10px 20px', zIndex: 550, boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-          display: 'flex', alignItems: 'center', gap: 12, fontSize: 13,
-        }}>
+        <div className="se-fixed-toast se-fixed-toast--top">
           <div className="se-spinner" style={{ width: 16, height: 16, borderTopColor: engine.char?.color }} />
-          <span>Approving {engine.batchProgress.current}/{engine.batchProgress.total}…</span>
-          <div style={{ width: 80, height: 4, background: '#eee', borderRadius: 2 }}>
-            <div style={{ width: `${(engine.batchProgress.current / engine.batchProgress.total) * 100}%`, height: '100%', background: engine.char?.color || '#9a7d1e', borderRadius: 2, transition: 'width 0.3s ease' }} />
+          <span>Approving {engine.batchProgress.current}/{engine.batchProgress.total}&hellip;</span>
+          <div className="se-progress-track">
+            <div className="se-progress-fill" style={{ width: `${(engine.batchProgress.current / engine.batchProgress.total) * 100}%`, background: engine.char?.color || '#9a7d1e' }} />
           </div>
         </div>
       )}
 
       {/* Batch generation progress */}
       {engine.generation.batchGenProgress && (
-        <div style={{
-          position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
-          background: '#1c1917', color: '#faf8f4', border: '1px solid #333',
-          borderRadius: 10, padding: '10px 20px', zIndex: 550,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-          display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, maxWidth: 420,
-        }}>
+        <div className="se-fixed-toast se-fixed-toast--top se-fixed-toast--dark">
           <div className="se-spinner" style={{ width: 16, height: 16, borderTopColor: engine.char?.color || '#b0922e' }} />
           <div>
             <div style={{ fontWeight: 600 }}>Generating {engine.generation.batchGenProgress.current}/{engine.generation.batchGenProgress.total}</div>
-            {engine.generation.batchGenProgress.currentTitle && <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{engine.generation.batchGenProgress.currentTitle}</div>}
+            {engine.generation.batchGenProgress.currentTitle && <div className="se-fixed-toast-sub">{engine.generation.batchGenProgress.currentTitle}</div>}
           </div>
-          <div style={{ width: 80, height: 4, background: '#333', borderRadius: 2, marginLeft: 'auto' }}>
-            <div style={{ width: `${(engine.generation.batchGenProgress.current / engine.generation.batchGenProgress.total) * 100}%`, height: '100%', background: engine.char?.color || '#b0922e', borderRadius: 2, transition: 'width 0.3s ease' }} />
+          <div className="se-progress-track se-progress-track--dark" style={{ marginLeft: 'auto' }}>
+            <div className="se-progress-fill" style={{ width: `${(engine.generation.batchGenProgress.current / engine.generation.batchGenProgress.total) * 100}%`, background: engine.char?.color || '#b0922e' }} />
           </div>
         </div>
       )}
 
       {/* Undo rejected story */}
       {engine.rejectedStory && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#1a1a2e', color: '#fff', borderRadius: 10,
-          padding: '10px 16px', zIndex: 550, display: 'flex', alignItems: 'center', gap: 12,
-          fontSize: 13, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-        }}>
+        <div className="se-fixed-toast se-fixed-toast--bottom se-fixed-toast--dark">
           <span>Story {engine.rejectedStory.story.story_number} rejected</span>
-          <button onClick={engine.handleUndoReject}
-            style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+          <button className="se-undo-btn" onClick={engine.handleUndoReject}>
             Undo
           </button>
         </div>
@@ -1504,54 +1473,48 @@ export default function StoryEngine() {
 
       {/* Inline texture preview */}
       {engine.lastTexture && !engine.amberTextureNotes && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, width: 360,
-          background: '#fff', border: '1px solid #e8dcf5', borderRadius: 14,
-          boxShadow: '0 8px 32px rgba(168,137,200,0.18)', padding: '16px 18px',
-          zIndex: 498, maxHeight: '50vh', overflowY: 'auto', animation: 'ws-slide-up 0.22s ease',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Texture — Story {engine.lastTexture.story_number}</div>
-            <button onClick={() => engine.setLastTexture(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9999b3', fontSize: 16 }}>&times;</button>
+        <div className="se-amber-notification se-amber-notification--texture">
+          <div className="se-amber-header">
+            <div className="se-amber-name">Texture &mdash; Story {engine.lastTexture.story_number}</div>
+            <button className="se-amber-close" onClick={() => engine.setLastTexture(null)}>&times;</button>
           </div>
           {engine.lastTexture.texture?.inner_thought_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0922e', marginBottom: 4 }}>Inner Thought ({engine.lastTexture.texture.inner_thought_type?.replace('_', ' ')})</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6, fontStyle: 'italic' }}>{engine.lastTexture.texture.inner_thought_text.slice(0, 200)}{engine.lastTexture.texture.inner_thought_text.length > 200 ? '…' : ''}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#b0922e' }}>Inner Thought ({engine.lastTexture.texture.inner_thought_type?.replace('_', ' ')})</div>
+              <div className="se-texture-text" style={{ fontStyle: 'italic' }}>{engine.lastTexture.texture.inner_thought_text.slice(0, 200)}{engine.lastTexture.texture.inner_thought_text.length > 200 ? '\u2026' : ''}</div>
             </div>
           )}
           {engine.lastTexture.texture?.body_narrator_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#d4789a', marginBottom: 4 }}>Body Narrator</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.body_narrator_text}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#d4789a' }}>Body Narrator</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.body_narrator_text}</div>
             </div>
           )}
           {engine.lastTexture.texture?.conflict_surface_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#c0392b', marginBottom: 4 }}>Conflict</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.conflict_surface_text}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#c0392b' }}>Conflict</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.conflict_surface_text}</div>
             </div>
           )}
           {engine.lastTexture.texture?.private_moment_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#7c3aed', marginBottom: 4 }}>Private Moment</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.private_moment_text.slice(0, 200)}{engine.lastTexture.texture.private_moment_text.length > 200 ? '…' : ''}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#7c3aed' }}>Private Moment</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.private_moment_text.slice(0, 200)}{engine.lastTexture.texture.private_moment_text.length > 200 ? '\u2026' : ''}</div>
             </div>
           )}
           {engine.lastTexture.texture?.post_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0d9668', marginBottom: 4 }}>Post ({engine.lastTexture.texture.post_platform})</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.post_text}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#0d9668' }}>Post ({engine.lastTexture.texture.post_platform})</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.post_text}</div>
             </div>
           )}
           {engine.lastTexture.texture?.bleed_text && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#546678', marginBottom: 4 }}>Bleed</div>
-              <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{engine.lastTexture.texture.bleed_text}</div>
+            <div className="se-texture-block">
+              <div className="se-texture-label" style={{ color: '#546678' }}>Bleed</div>
+              <div className="se-texture-text">{engine.lastTexture.texture.bleed_text}</div>
             </div>
           )}
-          <button onClick={() => { navigate(`/texture-review/${engine.lastTexture.story_number}?char=${engine.selectedChar}`); engine.setLastTexture(null); }}
-            style={{ width: '100%', padding: '8px 0', borderRadius: 8, background: '#a889c8', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, marginTop: 4 }}>
+          <button className="se-amber-btn se-amber-btn--primary" style={{ width: '100%', marginTop: 4 }} onClick={() => { navigate(`/texture-review/${engine.lastTexture.story_number}?char=${engine.selectedChar}`); engine.setLastTexture(null); }}>
             Full Texture Review
           </button>
         </div>
@@ -1559,49 +1522,28 @@ export default function StoryEngine() {
 
       {/* Amber texture notes */}
       {engine.amberTextureNotes && (
-        <div style={{
-          position: 'fixed', bottom: engine.amberNotification ? 220 : 24, right: 24, width: 360,
-          background: '#fff', border: '1px solid #e8dcf5', borderRadius: 14,
-          boxShadow: '0 8px 32px rgba(168,137,200,0.18)', padding: '16px 18px',
-          zIndex: 499, animation: 'ws-slide-up 0.22s ease', maxHeight: '60vh', overflowY: 'auto',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #d4789a, #a889c8)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14, color: '#fff', fontWeight: 700,
-            }}>A</div>
+        <div className={`se-amber-notification se-amber-notification--notes ${engine.amberNotification ? 'se-amber-notification--stacked' : ''}`}>
+          <div className="se-amber-header">
+            <div className="se-amber-avatar">A</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Amber read Story {engine.amberTextureNotes.story_number}</div>
-              <div style={{ fontSize: 10, color: '#9999b3' }}>"{engine.amberTextureNotes.story_title}"</div>
+              <div className="se-amber-name">Amber read Story {engine.amberTextureNotes.story_number}</div>
+              <div className="se-amber-sub">&ldquo;{engine.amberTextureNotes.story_title}&rdquo;</div>
             </div>
-            <button onClick={() => engine.setAmberTextureNotes(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#9999b3', fontSize: 16 }}>&times;</button>
+            <button className="se-amber-close" onClick={() => engine.setAmberTextureNotes(null)}>&times;</button>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="se-amber-notes-list">
             {engine.amberTextureNotes.notes.map((note, i) => (
-              <div key={i} style={{
-                padding: '10px 12px',
-                background: note.type === 'warning' ? '#fdf0f4' : note.type === 'contradiction' ? '#f6f1fc' : note.type === 'opportunity' ? '#f0f8fd' : '#fafafa',
-                borderRadius: 8,
-                border: `1px solid ${note.type === 'warning' ? '#f5dce6' : note.type === 'contradiction' ? '#e8dcf5' : note.type === 'opportunity' ? '#daeef9' : '#f2eef8'}`,
-              }}>
-                <div style={{
-                  fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                  color: note.type === 'warning' ? '#d4789a' : note.type === 'contradiction' ? '#a889c8' : note.type === 'opportunity' ? '#7ab3d4' : '#9999b3',
-                  marginBottom: 4,
-                }}>{note.type}</div>
-                <div style={{ fontSize: 12, color: '#3a3a5a', lineHeight: 1.6 }}>{note.note}</div>
+              <div key={i} className={`se-amber-note se-amber-note--${note.type}`}>
+                <div className="se-amber-note-type">{note.type}</div>
+                <div className="se-amber-note-text">{note.note}</div>
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={() => { navigate(`/texture-review/${engine.amberTextureNotes.story_number}?char=${engine.selectedChar}`); engine.setAmberTextureNotes(null); }}
-              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: '#a889c8', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+          <div className="se-amber-actions">
+            <button className="se-amber-btn se-amber-btn--primary" onClick={() => { navigate(`/texture-review/${engine.amberTextureNotes.story_number}?char=${engine.selectedChar}`); engine.setAmberTextureNotes(null); }}>
               Review Texture
             </button>
-            <button onClick={() => engine.setAmberTextureNotes(null)}
-              style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', color: '#9999b3', border: '1px solid #e8e0f0', cursor: 'pointer', fontSize: 12 }}>
+            <button className="se-amber-btn se-amber-btn--secondary" onClick={() => engine.setAmberTextureNotes(null)}>
               Later
             </button>
           </div>
