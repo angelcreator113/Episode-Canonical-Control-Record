@@ -3707,32 +3707,36 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #f3f0ea;
+  background: #fafafa;
 }
 
 .se-edit-canvas .se-story-editor {
   flex: 1;
   width: 100%;
-  max-width: 840px;
-  margin: 32px auto;
+  max-width: 780px;
+  margin: 16px auto;
   height: 100%;
-  background: #fffffe;
+  background: #FFFFFF;
   border: none;
   outline: none;
   resize: none;
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 18.5px;
+  font-size: 18px;
   line-height: 2;
   color: var(--se-text);
-  padding: 64px 56px;
+  padding: 48px 48px;
   box-sizing: border-box;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--se-border) transparent;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.03);
-  border-radius: 3px;
+  scrollbar-color: transparent transparent;
+  box-shadow: none;
+  border-radius: 0;
   letter-spacing: 0.005em;
   word-spacing: 0.02em;
+}
+
+.se-edit-canvas .se-story-editor:hover {
+  scrollbar-color: rgba(0,0,0,0.1) transparent;
 }
 
 .se-edit-canvas .se-story-editor::-webkit-scrollbar {
@@ -3740,8 +3744,12 @@ html, body {
 }
 
 .se-edit-canvas .se-story-editor::-webkit-scrollbar-thumb {
-  background: var(--se-border);
+  background: transparent;
   border-radius: 999px;
+}
+
+.se-edit-canvas .se-story-editor:hover::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.1);
 }
 
 .se-edit-canvas .se-page-nav {
@@ -4418,7 +4426,7 @@ html, body {
 
 /* ── Active paragraph writing glow ── */
 .se-edit-canvas .se-story-editor:focus {
-  box-shadow: 0 1px 6px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.03), 0 0 0 2px rgba(176, 146, 46, 0.12);
+  box-shadow: none;
 }
 
 /* ── Micro-interaction: button press feedback ── */
@@ -5686,4 +5694,129 @@ html, body {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--se-border, #ddd) transparent;
+}
+
+/* ─────────────────────────────────────────
+   Fix 2: Inline Editing Toolbar
+   Floating actions on text selection
+────────────────────────────────────────── */
+.se-inline-toolbar {
+  position: fixed;
+  z-index: 10001;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: #1C1814;
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.06);
+  transform: translateX(-50%);
+  animation: se-toolbar-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes se-toolbar-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.92); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+.se-inline-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.se-inline-btn:hover {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+}
+
+.se-inline-btn-icon {
+  font-size: 13px;
+}
+
+/* ─────────────────────────────────────────
+   Fix 4: Focus Mode
+   Distraction-free writing/reading
+────────────────────────────────────────── */
+.se-btn-focus-toggle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--se-border);
+  background: transparent;
+  color: var(--se-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.03em;
+}
+
+.se-btn-focus-toggle:hover {
+  border-color: var(--se-text-dim);
+  color: var(--se-text);
+}
+
+.se-btn-focus-toggle.active {
+  background: rgba(176,146,46,0.08);
+  border-color: rgba(176,146,46,0.3);
+  color: var(--se-gold);
+}
+
+/* Focus mode: story text gets wider, more padding */
+.se-story-text--focus {
+  max-width: 660px;
+  padding: 64px 32px;
+}
+
+/* Focus mode: edit canvas fills the space */
+.se-focus-mode .se-edit-layout {
+  justify-content: center;
+}
+
+.se-focus-mode .se-edit-canvas {
+  flex: 1;
+  max-width: 100%;
+}
+
+.se-focus-mode .se-edit-canvas .se-story-editor {
+  max-width: 700px;
+  padding: 64px 40px;
+  margin: 0 auto;
+}
+
+/* ─────────────────────────────────────────
+   Fix 6: Cursor Awareness
+   Highlight active paragraph, dim others
+────────────────────────────────────────── */
+.se-story-para {
+  transition: opacity 0.3s ease, background 0.3s ease;
+}
+
+.se-para-active {
+  background: rgba(176,146,46,0.03);
+  border-radius: 4px;
+}
+
+.se-para-dimmed {
+  opacity: 0.45;
+}
+
+.se-story-text:hover .se-para-dimmed {
+  opacity: 0.45;
+}
+
+/* Remove the old hover effect — cursor awareness replaces it */
+.se-story-para:hover {
+  background: transparent;
 }

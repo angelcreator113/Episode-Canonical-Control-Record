@@ -238,6 +238,7 @@ function StoryPanel({
   onEvaluate,
   charObj, selectedCharKey, activeWorld, allCharacters, onSelectChar,
   storiesMinimized, onToggleStoriesMinimized,
+  focusMode, onToggleFocusMode,
 }) {
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
@@ -325,6 +326,7 @@ function StoryPanel({
   const [evalScore, setEvalScore] = useState(null);
   const [activeThreads, setActiveThreads] = useState([]);
   const [selectionPopup, setSelectionPopup] = useState(null);
+  const [activeParaIndex, setActiveParaIndex] = useState(null);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
@@ -607,14 +609,15 @@ function StoryPanel({
   const nextMoveSuggestion = useMemo(() => {
     if (!scenePulse) return null;
     const { tone, intensity, focus } = scenePulse;
-    if (tone === 'Calm' && intensity === 'Low') return 'Introduce subtle tension or an unexpected detail to raise stakes';
-    if (tone === 'Tension' && intensity === 'High') return 'Allow a moment of breath — a quiet reflection before the next beat';
-    if (focus === 'Internal' && intensity !== 'High') return 'Ground the scene with external action or dialogue to balance the introspection';
-    if (focus === 'Relational') return 'Deepen the subtext — let unspoken feelings surface through gesture or silence';
-    if (tone === 'Controlled') return 'Push toward a revelation or shift in perspective to build momentum';
-    if (focus === 'External') return 'Turn inward — explore what this moment means to the character emotionally';
-    return 'Consider a sensory detail or environmental shift to anchor the reader';
-  }, [scenePulse]);
+    const name = charName || 'the character';
+    if (tone === 'Calm' && intensity === 'Low') return `This scene is calm — consider adding tension through ${name}'s unspoken fears or an unexpected arrival`;
+    if (tone === 'Tension' && intensity === 'High') return `High tension — give ${name} a moment of breath, a quiet reflection before the next beat`;
+    if (focus === 'Internal' && intensity !== 'High') return `${name} is deep in thought — ground the scene with external action or dialogue to balance`;
+    if (focus === 'Relational') return `The focus is relational — let ${name}'s unspoken feelings surface through gesture or silence`;
+    if (tone === 'Controlled') return `${name}'s composure is holding — push toward a revelation that cracks the surface`;
+    if (focus === 'External') return `Lots of action — turn inward and explore what this moment means to ${name} emotionally`;
+    return `Consider a sensory detail that anchors ${name} in this specific place and time`;
+  }, [scenePulse, charName]);
 
   const handleSave = async () => {
     setSaveStatus('saving');
@@ -628,7 +631,7 @@ function StoryPanel({
   };
 
   return (
-    <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''}`}>
+    <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''} ${focusMode ? 'se-focus-mode' : ''}`}>
       {editing ? (
         <div className="se-edit-header">
           <div className="se-edit-header-left">
@@ -646,6 +649,13 @@ function StoryPanel({
             </span>
           </div>
           <div className="se-edit-header-right">
+            <button
+              className={`se-btn se-btn-focus-toggle ${focusMode ? 'active' : ''}`}
+              onClick={() => onToggleFocusMode?.()}
+              title={focusMode ? 'Exit focus mode' : 'Focus mode — hide panels, center text'}
+            >
+              {focusMode ? 'Full View' : 'Focus'}
+            </button>
             <span className={`se-save-indicator se-save-${saveStatus}`}>
               {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving…' : '● Unsaved'}
             </span>
@@ -658,7 +668,7 @@ function StoryPanel({
             </button>
             <button
               className="se-btn se-btn-cancel-light"
-              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
+              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); if (focusMode) onToggleFocusMode?.(); }}
             >
               Cancel
             </button>
@@ -691,6 +701,13 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-story-header-actions">
+            <button
+              className={`se-btn se-btn-focus-toggle ${focusMode ? 'active' : ''}`}
+              onClick={() => onToggleFocusMode?.()}
+              title={focusMode ? 'Exit focus mode' : 'Focus mode'}
+            >
+              {focusMode ? 'Full View' : 'Focus'}
+            </button>
             <button
               className="se-btn se-btn-edit-story"
               onClick={() => { if (readingMode) onToggleReadingMode?.(); setEditing(true); }}
@@ -858,30 +875,10 @@ function StoryPanel({
                   </button>
                 </div>
               )}
-              <BottomWritingTools
-                story={story}
-                charObj={charObj}
-                selectedCharKey={selectedCharKey}
-                activeWorld={activeWorld}
-                charColor={charColor}
-                currentProse={editText}
-                onInsertText={(text) => {
-                  const ta = textareaRef.current;
-                  if (ta) {
-                    const start = ta.selectionStart;
-                    const end = ta.selectionEnd;
-                    const before = editText.slice(0, start);
-                    const after = editText.slice(end);
-                    setEditText(before + text + after);
-                    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + text.length; ta.focus(); }, 0);
-                  } else {
-                    setEditText(prev => prev + '\n\n' + text);
-                  }
-                }}
-              />
+              {/* Writing tools live in the sidebar — no duplication here */}
             </div>
 
-            <div className="se-writing-tools">
+            {!focusMode && <div className="se-writing-tools">
               {/* Scene Pulse */}
               {scenePulse && (
                 <div className="se-tools-section se-scene-pulse-section">
@@ -1038,23 +1035,37 @@ function StoryPanel({
                   <div className="se-next-move">{nextMoveSuggestion}</div>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         ) : (
           <>
-            <div className="se-story-text" ref={storyBodyRef}>
+            <div className={`se-story-text ${focusMode ? 'se-story-text--focus' : ''}`} ref={storyBodyRef}>
               {(pages[currentPage] || []).map((para, i) => (
                 para.trim()
-                  ? <p key={i} className="se-story-para">{para}</p>
+                  ? <p
+                      key={i}
+                      className={`se-story-para ${activeParaIndex === i ? 'se-para-active' : ''} ${activeParaIndex !== null && activeParaIndex !== i ? 'se-para-dimmed' : ''}`}
+                      onMouseEnter={() => setActiveParaIndex(i)}
+                      onMouseLeave={() => setActiveParaIndex(null)}
+                    >{para}</p>
                   : <div key={i} className="se-story-spacer" />
               ))}
             </div>
-            {/* Text selection popup */}
+            {/* Inline editing toolbar — appears on text selection */}
             {selectionPopup && !editing && (
-              <div className="se-text-selection-popup" style={{ top: selectionPopup.top, left: selectionPopup.left, transform: 'translateX(-50%)' }}>
-                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Rewrite</button>
-                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Deepen</button>
-                <button className="se-text-selection-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>Change Tone</button>
+              <div className="se-inline-toolbar" style={{ top: selectionPopup.top, left: selectionPopup.left }}>
+                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
+                  <span className="se-inline-btn-icon">&#10024;</span> Continue from here
+                </button>
+                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
+                  <span className="se-inline-btn-icon">&#129504;</span> Deepen this
+                </button>
+                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
+                  <span className="se-inline-btn-icon">&#127919;</span> Refine tone
+                </button>
+                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
+                  <span className="se-inline-btn-icon">&#128260;</span> Rewrite
+                </button>
               </div>
             )}
 
@@ -1108,6 +1119,7 @@ function StoryPanel({
 export default function StoryEngine() {
   const navigate = useNavigate();
   const engine = useStoryEngine();
+  const [focusMode, setFocusMode] = useState(false);
 
   // --- Keyboard shortcuts (#5) ---
   useKeyboardShortcuts(useMemo(() => ({
@@ -1120,11 +1132,11 @@ export default function StoryEngine() {
   }), [engine.navigateStory, engine.activeStory, engine.handleSaveForLater, engine.setReadingMode, engine.setApproveConfirm]));
 
   return (
-    <div className={`se-page ${engine.readingMode ? 'se-fullscreen-reading' : ''} ${engine.writeMode ? 'se-write-mode' : ''}`}>
+    <div className={`se-page ${engine.readingMode ? 'se-fullscreen-reading' : ''} ${engine.writeMode ? 'se-write-mode' : ''} ${focusMode ? 'se-focus-active' : ''}`}>
       <ToastContainer toasts={engine.toasts} onDismiss={engine.dismissToast} />
 
       {/* ── Header ── */}
-      {!engine.readingMode && (
+      {!engine.readingMode && !focusMode && (
         <header className="se-header">
           <div className="se-header-nav">
             <button className="se-header-back" onClick={() => navigate('/')}>←</button>
@@ -1206,7 +1218,7 @@ export default function StoryEngine() {
       {/* ── Three-panel body ── */}
       <div className="se-panels">
         {/* Left: Story Navigator */}
-        {!engine.readingMode && (
+        {!engine.readingMode && !focusMode && (
           <StoryNavigator
             CHARACTERS={engine.CHARACTERS}
             charsLoading={engine.charsLoading}
@@ -1332,12 +1344,14 @@ export default function StoryEngine() {
               onSelectChar={engine.setSelectedChar}
               storiesMinimized={engine.storiesMinimized}
               onToggleStoriesMinimized={() => engine.setStoriesMinimized(m => !m)}
+              focusMode={focusMode}
+              onToggleFocusMode={() => setFocusMode(f => !f)}
             />
           )}
         </main>
 
         {/* Right: Inspector */}
-        {!engine.readingMode && (
+        {!engine.readingMode && !focusMode && (
           <StoryInspector
             activeTask={engine.activeTask}
             activeStory={engine.activeStory}
