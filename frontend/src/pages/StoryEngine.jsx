@@ -636,43 +636,18 @@ function StoryPanel({
               className="se-edit-back"
               onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
             >
-              ← Back to Story Engine
+              ← Back
             </button>
-            <div className="se-edit-header-info">
-              <span className="se-edit-header-title">{story.title}</span>
+            <span className="se-edit-header-title">{story.title}</span>
+            <span className="se-edit-header-meta">
+              Ch {story.story_number}{totalChapters ? `/${totalChapters}` : ''}
               <span className="se-edit-header-dot">·</span>
-              <span className="se-edit-chapter-progress">Ch {story.story_number}{totalChapters ? ` of ${totalChapters}` : ''}</span>
-              <span className="se-edit-header-dot">·</span>
-              <span className="se-edit-arc-stage">{arcStage.icon} {arcStage.label}</span>
-              <span className="se-edit-header-dot">·</span>
-              <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
-              <span className="se-edit-header-dot">·</span>
-              <span>{wordCount.toLocaleString()} words</span>
-              <span className="se-edit-header-dot">·</span>
-              <span>{getReadingTime(wordCount)}</span>
-            </div>
+              {wordCount.toLocaleString()} words
+            </span>
           </div>
           <div className="se-edit-header-right">
-            <div className="se-mode-toggle">
-              <button className={`se-mode-btn ${editing ? 'se-mode-btn-active' : ''}`} onClick={() => {}}>✍️ Edit</button>
-              <button className={`se-mode-btn ${readingMode ? 'se-mode-btn-active' : ''}`} onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); onToggleReadingMode?.(); }}>📖 Read</button>
-            </div>
-            <div className="se-tts-controls">
-              {!ttsPlaying && !ttsPaused && (
-                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">🔊</button>
-              )}
-              {ttsPlaying && (
-                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause">⏸</button>
-              )}
-              {ttsPaused && (
-                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume">▶</button>
-              )}
-              {(ttsPlaying || ttsPaused) && (
-                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop">■</button>
-              )}
-            </div>
             <span className={`se-save-indicator se-save-${saveStatus}`}>
-              {saveStatus === 'saved' ? 'Saved — your scene is evolving' : saveStatus === 'saving' ? 'Capturing your words…' : 'Unsaved changes'}
+              {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving…' : '● Unsaved'}
             </span>
             <button
               className="se-btn se-btn-save-primary"
@@ -716,38 +691,30 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-story-header-actions">
-            <div className="se-mode-toggle">
-              <button
-                className={`se-mode-btn ${!readingMode ? 'active' : ''}`}
-                onClick={() => { if (readingMode) onToggleReadingMode?.(); setEditing(true); }}
-              >
-                Edit
-              </button>
-              <button
-                className={`se-mode-btn ${readingMode ? 'active' : ''}`}
-                onClick={() => { if (!readingMode) onToggleReadingMode?.(); }}
-              >
-                Read
-              </button>
-            </div>
+            <button
+              className="se-btn se-btn-edit-story"
+              onClick={() => { if (readingMode) onToggleReadingMode?.(); setEditing(true); }}
+            >
+              Edit
+            </button>
             <div className="se-tts-controls">
               {!ttsPlaying && !ttsPaused && (
                 <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
-                  🔊 Listen
+                  Listen
                 </button>
               )}
               {ttsPlaying && (
                 <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause reading">
-                  ⏸ Pause
+                  Pause
                 </button>
               )}
               {ttsPaused && (
                 <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume reading">
-                  ▶ Resume
+                  Resume
                 </button>
               )}
               {(ttsPlaying || ttsPaused) && (
-                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">■</button>
+                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">Stop</button>
               )}
               {(ttsPlaying || ttsPaused) && (
                 <select
@@ -776,29 +743,15 @@ function StoryPanel({
                   }}
                   title="Reading speed"
                 >
-                  <option value="0.5">0.5×</option>
-                  <option value="0.75">0.75×</option>
-                  <option value="1">1×</option>
-                  <option value="1.25">1.25×</option>
-                  <option value="1.5">1.5×</option>
-                  <option value="2">2×</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
                 </select>
               )}
             </div>
-            {!readingMode && (
-              <>
-                <button className="se-btn se-btn-export" onClick={() => onExportStory?.(story)} title="Copy or download story">Export</button>
-                <button className="se-btn se-btn-consistency" onClick={() => onCheckConsistency(story)} disabled={consistencyLoading}>
-                  {consistencyLoading ? '…' : 'Check'}
-                </button>
-                <button className="se-btn se-btn-save-later" onClick={() => onSaveForLater(story)} disabled={savingForLater}>
-                  {savingForLater ? 'Saving…' : 'Save Draft'}
-                </button>
-                <button className="se-btn se-btn-delete" style={{ color: '#c0392b' }} onClick={() => { if (window.confirm('Delete this story permanently?')) onDelete?.(story); }} title="Delete story">
-                  Delete
-                </button>
-              </>
-            )}
           </div>
         </div>
       )}
@@ -1133,17 +1086,6 @@ function StoryPanel({
       {/* ── Pinned bottom controls (always visible) ── */}
       {!editing && story && (
         <div className="se-pinned-controls">
-          <BottomWritingTools
-            story={story}
-            charObj={charObj}
-            selectedCharKey={selectedCharKey}
-            activeWorld={activeWorld}
-            charColor={charColor}
-            onInsertText={(text) => {
-              setEditText((story.text || '') + '\n\n' + text);
-              setEditing(true);
-            }}
-          />
           <StoryReviewPanel
             story={story}
             characterKey={story.character_key}
