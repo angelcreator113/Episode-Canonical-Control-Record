@@ -3656,10 +3656,17 @@ html, body {
   letter-spacing: 0.02em;
 }
 
-.se-btn-save-primary:hover {
+.se-btn-save-primary:hover:not(:disabled) {
   opacity: 0.92;
   transform: translateY(-1px);
   box-shadow: 0 3px 8px rgba(0,0,0,0.18);
+}
+
+.se-btn-save-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
 }
 
 .se-btn-cancel-light {

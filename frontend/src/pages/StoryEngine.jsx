@@ -242,10 +242,47 @@ function StoryPanel({
 }) {
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
-  const [editText, setEditText] = useState(story?.text || '');
+  const [editText, setEditTextRaw] = useState(story?.text || '');
   const [saveStatus, setSaveStatus] = useState('saved');
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
   const [voicesExpanded, setVoicesExpanded] = useState(false);
+
+  // Undo/redo history for AI insertions and edits
+  const undoStackRef = useRef([story?.text || '']);
+  const redoStackRef = useRef([]);
+  const lastSnapshotRef = useRef(Date.now());
+
+  const setEditText = useCallback((valOrFn) => {
+    setEditTextRaw(prev => {
+      const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn;
+      // Snapshot every 3 seconds of typing, or immediately for AI insertions (large changes)
+      const now = Date.now();
+      const isLargeChange = Math.abs(next.length - prev.length) > 20;
+      if (isLargeChange || now - lastSnapshotRef.current > 3000) {
+        undoStackRef.current.push(prev);
+        if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+        redoStackRef.current = [];
+        lastSnapshotRef.current = now;
+      }
+      return next;
+    });
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (undoStackRef.current.length === 0) return;
+    setEditTextRaw(prev => {
+      redoStackRef.current.push(prev);
+      return undoStackRef.current.pop();
+    });
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    if (redoStackRef.current.length === 0) return;
+    setEditTextRaw(prev => {
+      undoStackRef.current.push(prev);
+      return redoStackRef.current.pop();
+    });
+  }, []);
 
   // ── Text-to-Speech state (ElevenLabs with browser fallback) ──
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -681,16 +718,50 @@ function StoryPanel({
     return `Consider a sensory detail that anchors ${name} in this specific place and time`;
   }, [scenePulse, charName]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async (opts = {}) => {
+    if (saveStatus === 'saving') return;
     setSaveStatus('saving');
     try {
       await onEdit(story, editText);
       setSaveStatus('saved');
-      setEditing(false);
+      // Stay in edit mode unless explicitly closing
+      if (opts.closeAfter) setEditing(false);
     } catch (e) {
       setSaveStatus('unsaved');
     }
-  };
+  }, [story, editText, saveStatus, onEdit]);
+
+  // Autosave — debounce 2s after each edit
+  const autosaveTimerRef = useRef(null);
+  useEffect(() => {
+    if (!editing || editText === (story?.text || '')) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      handleSave();
+    }, 2000);
+    return () => clearTimeout(autosaveTimerRef.current);
+  }, [editText, editing]);
+
+  // Keyboard shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo
+  useEffect(() => {
+    if (!editing) return;
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+      if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editing, handleSave, handleUndo, handleRedo]);
 
   return (
     <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''} ${focusMode ? 'se-focus-mode' : ''}`}>
@@ -699,7 +770,12 @@ function StoryPanel({
           <div className="se-edit-header-left">
             <button
               className="se-edit-back"
-              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); }}
+              onClick={() => {
+                if (saveStatus === 'unsaved' && editText !== (story?.text || '')) {
+                  if (!window.confirm('You have unsaved changes. Discard them?')) return;
+                }
+                setEditing(false); setEditText(story.text); setSaveStatus('saved');
+              }}
             >
               ← Back
             </button>
@@ -718,22 +794,26 @@ function StoryPanel({
             >
               {focusMode ? 'Full View' : 'Focus'}
             </button>
-            {saveStatus === 'saved' ? (
-              <span className="se-save-indicator se-save-saved">✓ Saved</span>
-            ) : saveStatus === 'saving' ? (
-              <span className="se-save-indicator se-save-saving">Saving…</span>
-            ) : (
-              <button
-                className="se-btn se-btn-save-primary"
-                style={{ background: charColor }}
-                onClick={handleSave}
-              >
-                Save
-              </button>
-            )}
+            <span className={`se-save-indicator se-save-${saveStatus}`}>
+              {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving…' : ''}
+            </span>
+            <button
+              className="se-btn se-btn-save-primary"
+              style={{ background: charColor }}
+              onClick={() => handleSave()}
+              disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+            >
+              Save
+            </button>
             <button
               className="se-btn se-btn-cancel-light"
-              onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); if (focusMode) onToggleFocusMode?.(); }}
+              onClick={() => {
+                if (saveStatus === 'unsaved' && editText !== (story?.text || '')) {
+                  if (!window.confirm('You have unsaved changes. Discard them?')) return;
+                }
+                setEditing(false); setEditText(story.text); setSaveStatus('saved');
+                if (focusMode) onToggleFocusMode?.();
+              }}
             >
               Cancel
             </button>
