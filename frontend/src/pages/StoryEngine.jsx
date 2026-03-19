@@ -718,18 +718,24 @@ function StoryPanel({
     return `Consider a sensory detail that anchors ${name} in this specific place and time`;
   }, [scenePulse, charName]);
 
+  // Use refs so callbacks always see latest values
+  const editTextRef = useRef(editText);
+  editTextRef.current = editText;
+  const saveStatusRef = useRef(saveStatus);
+  saveStatusRef.current = saveStatus;
+
   const handleSave = useCallback(async (opts = {}) => {
-    if (saveStatus === 'saving') return;
+    if (saveStatusRef.current === 'saving') return;
+    const textToSave = editTextRef.current;
     setSaveStatus('saving');
     try {
-      await onEdit(story, editText);
+      await onEdit(story, textToSave);
       setSaveStatus('saved');
-      // Stay in edit mode unless explicitly closing
       if (opts.closeAfter) setEditing(false);
     } catch (e) {
       setSaveStatus('unsaved');
     }
-  }, [story, editText, saveStatus, onEdit]);
+  }, [story, onEdit]);
 
   // Autosave — debounce 2s after each edit
   const autosaveTimerRef = useRef(null);
@@ -740,7 +746,7 @@ function StoryPanel({
       handleSave();
     }, 2000);
     return () => clearTimeout(autosaveTimerRef.current);
-  }, [editText, editing]);
+  }, [editText, editing, handleSave, story?.text]);
 
   // Keyboard shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo
   useEffect(() => {
@@ -794,16 +800,13 @@ function StoryPanel({
             >
               {focusMode ? 'Full View' : 'Focus'}
             </button>
-            <span className={`se-save-indicator se-save-${saveStatus}`}>
-              {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving…' : ''}
-            </span>
             <button
-              className="se-btn se-btn-save-primary"
-              style={{ background: charColor }}
+              className={`se-btn se-btn-save-primary ${saveStatus === 'saved' ? 'se-btn-save-saved' : ''}`}
+              style={{ background: saveStatus === 'saved' ? undefined : charColor }}
               onClick={() => handleSave()}
-              disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+              disabled={saveStatus === 'saving'}
             >
-              Save
+              {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : 'Save Now'}
             </button>
             <button
               className="se-btn se-btn-cancel-light"
