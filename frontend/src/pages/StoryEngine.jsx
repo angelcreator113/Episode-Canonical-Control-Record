@@ -496,13 +496,22 @@ function StoryPanel({
   }, [editing, editTotalPages, currentPage]);
 
   useEffect(() => {
-    setEditText(story?.text || '');
-    setCurrentPage(0);
-    if (prevStoryRef.current != null && prevStoryRef.current !== story?.story_number) {
+    // Only reset editor text when navigating to a different story,
+    // NOT when the same story object updates after a save.
+    const storyNum = story?.story_number;
+    const isNewStory = prevStoryRef.current != null && prevStoryRef.current !== storyNum;
+    if (isNewStory) {
       if (onToggleWriteMode) onToggleWriteMode(false);
     }
-    prevStoryRef.current = story?.story_number;
-  }, [story, onToggleWriteMode]);
+    // Reset text when story changes and we're NOT actively editing,
+    // or when it's a completely different story.
+    if (!editing || isNewStory) {
+      setEditText(story?.text || '');
+      setLastSavedText(story?.text || '');
+      setCurrentPage(0);
+    }
+    prevStoryRef.current = storyNum;
+  }, [story, onToggleWriteMode, editing]);
 
   useEffect(() => {
     setEvalScore(null);
@@ -803,7 +812,7 @@ function StoryPanel({
               className={`se-btn se-btn-save-primary ${!hasUnsavedChanges && saveStatus !== 'saving' ? 'se-btn-save-saved' : ''}`}
               style={{ background: hasUnsavedChanges ? charColor : undefined }}
               onClick={() => handleSave()}
-              disabled={saveStatus === 'saving' || !hasUnsavedChanges}
+              disabled={saveStatus === 'saving'}
             >
               {saveStatus === 'saving' ? 'Saving…' : hasUnsavedChanges ? 'Save Now' : '✓ Saved'}
             </button>
