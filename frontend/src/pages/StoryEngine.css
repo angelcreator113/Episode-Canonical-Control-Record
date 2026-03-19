@@ -4248,6 +4248,36 @@ html, body {
   color: var(--se-text);
 }
 
+/* ── Scene Pulse — tone/intensity/focus layout ── */
+.se-scene-pulse {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.se-pulse-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.se-pulse-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--se-text-muted);
+  min-width: 56px;
+  flex-shrink: 0;
+}
+
+.se-pulse-value {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+
 /* ── Scene Pulse — tone/intensity/focus badges ── */
 .se-scene-pulse-section::before {
   background: #9B7FD4;
@@ -4503,6 +4533,8 @@ html, body {
   }
 
   .se-header-phase { display: none; }
+  .se-header-chapter { display: none; }
+  .se-header-reading-time { display: none; }
   .se-header-words { font-size: 10px; }
 
   .se-header-actions {
@@ -4976,6 +5008,41 @@ html, body {
   .se-shortcuts-hint { display: none; }
   .se-sidebar-shortcuts { display: none; }
   .se-insp-shortcuts { display: none; }
+
+  /* ── Header: hide Evaluate on mobile to reduce crowding ── */
+  .se-header-btn--evaluate { display: none; }
+
+  /* ── Edit header: stack for mobile ── */
+  .se-edit-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .se-edit-header-left {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .se-edit-back::after {
+    display: none;
+  }
+
+  .se-edit-header-right {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .se-edit-header-right .se-btn {
+    min-height: 36px;
+    font-size: 12px;
+  }
 }
 
 /* ─────────────────────────────────────────
@@ -5134,6 +5201,143 @@ html, body {
   .se-inspector {
     width: 100%;
     max-width: 100vw;
+  }
+
+  /* ── Header: hide non-essential items, improve button sizing ── */
+  .se-header-btn--evaluate { display: none; }
+  .se-header-btn--more { display: none; }
+
+  .se-header-actions {
+    gap: 3px;
+  }
+
+  .se-header-btn--approve {
+    border-radius: 6px;
+  }
+
+  .se-header-btn--reject {
+    font-size: 9px;
+    padding: 4px 6px;
+  }
+
+  /* ── Edit header: stack vertically on small phones ── */
+  .se-edit-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .se-edit-header-left {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .se-edit-header-title {
+    font-size: 14px;
+    max-width: 180px;
+  }
+
+  .se-edit-header-meta {
+    font-size: 11px;
+  }
+
+  .se-edit-back {
+    font-size: 12px;
+    padding: 4px 8px 4px 2px;
+  }
+
+  .se-edit-back::after {
+    display: none;
+  }
+
+  .se-edit-header-right {
+    width: 100%;
+    display: flex;
+    gap: 6px;
+    justify-content: stretch;
+  }
+
+  .se-edit-header-right .se-btn {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+    font-size: 11px;
+    padding: 8px 6px;
+    min-height: 36px;
+  }
+
+  .se-edit-header-right .se-btn-save-primary {
+    flex: 1.5;
+  }
+
+  /* ── Writing tools on small phones: tighter padding ── */
+  .se-tools-section {
+    padding: 14px 12px;
+  }
+
+  .se-tools-section-title {
+    font-size: 11px;
+  }
+
+  .se-tools-info-label {
+    font-size: 10px;
+  }
+
+  .se-tools-info-value {
+    font-size: 12px;
+  }
+
+  /* ── Scene Pulse on small phones ── */
+  .se-pulse-label {
+    min-width: 48px;
+    font-size: 10px;
+  }
+
+  .se-pulse-value {
+    font-size: 11px;
+    padding: 2px 8px;
+  }
+
+  /* ── Story header: more compact at 480px ── */
+  .se-story-header-meta {
+    font-size: 10px;
+    gap: 2px 4px;
+  }
+
+  .se-story-header-actions {
+    gap: 4px;
+  }
+
+  .se-story-header-actions .se-btn {
+    font-size: 11px;
+    padding: 7px 10px;
+    min-height: 34px;
+  }
+
+  .se-story-header-actions .se-btn-approve {
+    font-size: 13px;
+    padding: 10px 14px;
+    min-height: 40px;
+  }
+
+  /* ── Page nav on small phones ── */
+  .se-page-nav {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .se-btn-page {
+    font-size: 11px;
+    padding: 6px 12px;
+    min-height: 30px;
+  }
+
+  .se-page-indicator {
+    font-size: 10px;
   }
 }
 

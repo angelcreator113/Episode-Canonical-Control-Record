@@ -273,20 +273,61 @@
 
 @media (max-width: 480px) {
   .se-review-status-bar {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
     gap: 6px;
     padding: 8px 10px;
   }
 
+  .se-review-status-left {
+    flex: 0 0 auto;
+  }
+
+  .se-review-page-nav {
+    flex: 1;
+    justify-content: center;
+    gap: 6px;
+    margin: 0;
+  }
+
+  .se-review-page-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+    min-height: 28px;
+  }
+
+  .se-review-page-indicator {
+    font-size: 10px;
+  }
+
+  .se-review-status-right {
+    flex: 0 0 auto;
+  }
+
+  .se-review-wc {
+    font-size: 10px;
+  }
+
+  .se-review-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
   .se-review-actions {
     padding: 8px 10px;
+    gap: 6px;
   }
 
   .se-review-btn {
     padding: 8px 12px;
     font-size: 11px;
     min-height: 40px;
+  }
+
+  .se-review-btn-save {
+    flex: 1;
   }
 
   .se-review-notes-input {
