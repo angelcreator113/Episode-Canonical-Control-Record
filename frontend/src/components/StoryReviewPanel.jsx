@@ -29,6 +29,9 @@ export default function StoryReviewPanel({
   onRejected,
   onSaved,
   charColor = '#9a7d1e',
+  currentPage = 0,
+  totalPages = 1,
+  onPageChange,
 }) {
   const [editText, setEditText] = useState(story?.text || '');
   const [editing, setEditing] = useState(false);
@@ -226,6 +229,28 @@ export default function StoryReviewPanel({
             <span className="se-review-error">Save failed</span>
           )}
         </div>
+        {totalPages > 1 && onPageChange && (
+          <div className="se-review-page-nav">
+            <button
+              className="se-review-page-btn"
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage === 0}
+            >
+              ‹ Prev
+            </button>
+            <span className="se-review-page-indicator">
+              {currentPage + 1} / {totalPages}
+            </span>
+            <button
+              className="se-review-page-btn"
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages - 1}
+            >
+              Next ›
+            </button>
+          </div>
+        )}
+
         <div className="se-review-status-right">
           <span className="se-review-wc">{wordCount.toLocaleString()} words</span>
         </div>
