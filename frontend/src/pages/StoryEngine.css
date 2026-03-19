@@ -3292,19 +3292,35 @@ html, body {
   flex-shrink: 0;
   border-top: 1px solid var(--se-border-light);
   background: var(--se-surface);
-  max-height: 45%;
-  overflow-y: auto;
 }
 
 .se-pinned-controls .se-page-nav {
   border-top: none;
+  padding: 6px 24px;
+  gap: 12px;
 }
 
 .se-pinned-controls .se-bottom-tools {
   border-top: 1px solid rgba(28, 24, 20, 0.06);
-  padding-top: 12px;
-  padding-bottom: 12px;
+  padding: 8px 24px 8px;
   margin-bottom: 0;
+}
+
+.se-pinned-controls .se-bottom-tools::before {
+  display: none;
+}
+
+.se-pinned-controls .se-bottom-tools-groups {
+  gap: 16px;
+}
+
+.se-pinned-controls .se-bottom-tools-group {
+  gap: 4px;
+}
+
+.se-pinned-controls .se-bottom-tools-length {
+  margin-top: 6px;
+  padding-top: 6px;
 }
 
 .se-story-text {
