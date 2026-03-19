@@ -144,8 +144,8 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
     <div className="se-bottom-tools">
       <div className="se-bottom-tools-groups">
         <div className="se-bottom-tools-group">
-          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon">✨</span> Writing Flow</div>
-          <div className="se-bottom-tools-row">
+          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon" aria-hidden="true">✨</span> Writing Flow</div>
+          <div className="se-bottom-tools-row" role="group" aria-label="Writing flow tools">
             {flowTools.map(tool => (
               <button
                 key={tool.id}
@@ -153,19 +153,21 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
                 style={{ '--tool-accent': accent }}
                 onClick={() => runTool(tool)}
                 disabled={loading}
+                aria-label={tool.label}
+                aria-busy={loading && activeAction === tool.id}
               >
-                <span className="se-bottom-tool-icon">{tool.icon}</span>
+                <span className="se-bottom-tool-icon" aria-hidden="true">{tool.icon}</span>
                 <span className="se-bottom-tool-label">
                   {tool.label}
-                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner"> {tool.spinner}</span>}
+                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner" role="status" aria-live="polite"> {tool.spinner}</span>}
                 </span>
               </button>
             ))}
           </div>
         </div>
         <div className="se-bottom-tools-group">
-          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon">🎯</span> Refinement</div>
-          <div className="se-bottom-tools-row">
+          <div className="se-bottom-tools-group-label"><span className="se-bottom-tools-group-icon" aria-hidden="true">🎯</span> Refinement</div>
+          <div className="se-bottom-tools-row" role="group" aria-label="Refinement tools">
             {refinementTools.map(tool => (
               <button
                 key={tool.id}
@@ -173,11 +175,13 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
                 style={{ '--tool-accent': accent }}
                 onClick={() => runTool(tool)}
                 disabled={loading}
+                aria-label={tool.label}
+                aria-busy={loading && activeAction === tool.id}
               >
-                <span className="se-bottom-tool-icon">{tool.icon}</span>
+                <span className="se-bottom-tool-icon" aria-hidden="true">{tool.icon}</span>
                 <span className="se-bottom-tool-label">
                   {tool.label}
-                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner"> {tool.spinner}</span>}
+                  {loading && activeAction === tool.id && <span className="se-bottom-tool-spinner" role="status" aria-live="polite"> {tool.spinner}</span>}
                 </span>
               </button>
             ))}
@@ -185,33 +189,37 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
         </div>
       </div>
 
-      <div className="se-bottom-tools-length">
+      <div className="se-bottom-tools-length" role="group" aria-label="Output length">
         <button
           className={`se-bottom-length-pill${lengthMode === 'full' ? ' active' : ''}`}
           style={{ '--tool-accent': accent }}
           onClick={() => setLengthMode('full')}
+          aria-pressed={lengthMode === 'full'}
+          title="Generate full-length content"
         >¶ full</button>
         <button
           className={`se-bottom-length-pill${lengthMode === 'paragraph' ? ' active' : ''}`}
           style={{ '--tool-accent': accent }}
           onClick={() => setLengthMode('paragraph')}
+          aria-pressed={lengthMode === 'paragraph'}
+          title="Generate paragraph-length content"
         >¶ Paragraphs</button>
       </div>
 
-      {error && <div className="se-bottom-tools-error">{error}</div>}
+      {error && <div className="se-bottom-tools-error" role="alert" aria-live="assertive">{error}</div>}
 
       {result && (
-        <div className="se-bottom-tools-result">
+        <div className="se-bottom-tools-result" role="region" aria-label="Generated content" aria-live="polite">
           <div className="se-bottom-tools-result-header">
             <span className="se-bottom-tools-result-title">Generated</span>
             <div className="se-bottom-tools-result-actions">
-              <button className="se-bottom-tools-result-btn" onClick={() => { navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
-                {copied ? 'Copied!' : 'Copy'}
+              <button className="se-bottom-tools-result-btn" onClick={() => { navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 3000); }} aria-live="polite">
+                {copied ? '✓ Copied!' : 'Copy'}
               </button>
               <button className="se-bottom-tools-result-btn se-bottom-tools-result-btn--insert" style={{ background: accent, color: '#fff' }} onClick={() => { onInsertText?.(result); setResult(null); }}>
                 Insert into story
               </button>
-              <button className="se-bottom-tools-result-btn" onClick={() => setResult(null)}>Dismiss</button>
+              <button className="se-bottom-tools-result-btn" onClick={() => setResult(null)} aria-label="Dismiss generated content">Dismiss</button>
             </div>
           </div>
           <div className="se-bottom-tools-result-text">{result}</div>
@@ -1108,10 +1116,13 @@ function StoryPanel({
               {/* Writing tools live in the sidebar — no duplication here */}
             </div>
 
-            {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`}>
+            {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`} id="writing-tools-panel" role="region" aria-label="Writing tools">
               <button
                 className="se-mobile-tools-toggle"
                 onClick={() => setMobileToolsOpen(v => !v)}
+                aria-expanded={mobileToolsOpen}
+                aria-controls="writing-tools-panel"
+                title={mobileToolsOpen ? 'Collapse writing tools panel' : 'Expand writing tools panel'}
               >
                 {mobileToolsOpen ? '▾ Hide Tools' : '▸ Writing Tools'}
               </button>
