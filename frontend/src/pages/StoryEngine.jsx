@@ -243,7 +243,7 @@ function StoryPanel({
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditTextRaw] = useState(story?.text || '');
-  const [saveStatus, setSaveStatus] = useState('saved'); // 'idle' | 'saving' | 'saved'
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
   const [lastSavedText, setLastSavedText] = useState(story?.text || '');
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
   const [voicesExpanded, setVoicesExpanded] = useState(false);
@@ -413,7 +413,7 @@ function StoryPanel({
   }, [selectedCharKey]);
 
   useEffect(() => {
-    setSaveStatus('saved');
+    setSaveStatus('idle');
     setLastSavedText(story?.text || '');
   }, [story?.story_number]);
 
@@ -496,13 +496,22 @@ function StoryPanel({
   }, [editing, editTotalPages, currentPage]);
 
   useEffect(() => {
-    setEditText(story?.text || '');
-    setCurrentPage(0);
-    if (prevStoryRef.current != null && prevStoryRef.current !== story?.story_number) {
+    // Only reset editor text when navigating to a different story,
+    // NOT when the same story object updates after a save.
+    const storyNum = story?.story_number;
+    const isNewStory = prevStoryRef.current != null && prevStoryRef.current !== storyNum;
+    if (isNewStory) {
       if (onToggleWriteMode) onToggleWriteMode(false);
     }
-    prevStoryRef.current = story?.story_number;
-  }, [story, onToggleWriteMode]);
+    // Reset text when story changes and we're NOT actively editing,
+    // or when it's a completely different story.
+    if (!editing || isNewStory) {
+      setEditText(story?.text || '');
+      setLastSavedText(story?.text || '');
+      setCurrentPage(0);
+    }
+    prevStoryRef.current = storyNum;
+  }, [story, onToggleWriteMode, editing]);
 
   useEffect(() => {
     setEvalScore(null);
@@ -722,6 +731,7 @@ function StoryPanel({
   const saveStatusRef = useRef(saveStatus);
   saveStatusRef.current = saveStatus;
 
+  const savedFlashRef = useRef(null);
   const handleSave = useCallback(async (opts = {}) => {
     if (saveStatusRef.current === 'saving') return;
     const textToSave = editTextRef.current;
@@ -730,6 +740,9 @@ function StoryPanel({
       await onEdit(story, textToSave);
       setLastSavedText(textToSave);
       setSaveStatus('saved');
+      // Flash "✓ Saved" briefly, then revert to idle so button shows "Save"
+      if (savedFlashRef.current) clearTimeout(savedFlashRef.current);
+      savedFlashRef.current = setTimeout(() => setSaveStatus('idle'), 1500);
       if (opts.closeAfter) setEditing(false);
     } catch (e) {
       setSaveStatus('idle');
@@ -792,6 +805,70 @@ function StoryPanel({
             </span>
           </div>
           <div className="se-edit-header-right">
+            <div className="se-tts-controls">
+              {!ttsPlaying && !ttsPaused && !ttsLoading && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
+                  Listen
+                </button>
+              )}
+              {ttsLoading && (
+                <button className="se-btn se-btn-tts" disabled title="Loading audio…">
+                  <span className="se-spinner" style={{ width: 12, height: 12, display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} /> Loading…
+                </button>
+              )}
+              {ttsPlaying && (
+                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause reading">
+                  Pause
+                </button>
+              )}
+              {ttsPaused && (
+                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume reading">
+                  Resume
+                </button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">Stop</button>
+              )}
+              {(ttsPlaying || ttsPaused) && (
+                <select
+                  className="se-tts-speed"
+                  value={ttsRate}
+                  onChange={(e) => {
+                    const newRate = parseFloat(e.target.value);
+                    setTtsRate(newRate);
+                    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+                      ttsAudioRef.current.playbackRate = newRate;
+                    } else {
+                      handleTtsStop();
+                      setTimeout(() => {
+                        const synth = window.speechSynthesis;
+                        const text = editing ? editText : (story?.text || '');
+                        const u = new SpeechSynthesisUtterance(text);
+                        u.rate = newRate;
+                        const voices = synth.getVoices();
+                        const pref = voices.find(v => v.name.includes('Natural') || v.name.includes('Online'))
+                                  || voices.find(v => v.lang.startsWith('en') && !v.localService)
+                                  || voices.find(v => v.lang.startsWith('en'));
+                        if (pref) u.voice = pref;
+                        u.onend = () => { setTtsPlaying(false); setTtsPaused(false); };
+                        u.onerror = () => { setTtsPlaying(false); setTtsPaused(false); };
+                        synth.speak(u);
+                        setTtsPlaying(true);
+                        setTtsPaused(false);
+                      }, 100);
+                    }
+                  }}
+                  title="Reading speed"
+                >
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
+                </select>
+              )}
+            </div>
             <button
               className={`se-btn se-btn-focus-toggle ${focusMode ? 'active' : ''}`}
               onClick={() => onToggleFocusMode?.()}
@@ -800,12 +877,12 @@ function StoryPanel({
               {focusMode ? 'Full View' : 'Focus'}
             </button>
             <button
-              className={`se-btn se-btn-save-primary ${!hasUnsavedChanges && saveStatus !== 'saving' ? 'se-btn-save-saved' : ''}`}
+              className={`se-btn se-btn-save-primary ${saveStatus === 'saved' ? 'se-btn-save-saved' : ''} ${hasUnsavedChanges ? 'se-save-unsaved' : ''}`}
               style={{ background: hasUnsavedChanges ? charColor : undefined }}
               onClick={() => handleSave()}
-              disabled={saveStatus === 'saving' || !hasUnsavedChanges}
+              disabled={saveStatus === 'saving'}
             >
-              {saveStatus === 'saving' ? 'Saving…' : hasUnsavedChanges ? 'Save Now' : '✓ Saved'}
+              {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : hasUnsavedChanges ? 'Save Now' : 'Save'}
             </button>
             <button
               className="se-btn se-btn-cancel-light"
