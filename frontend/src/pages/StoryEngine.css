@@ -3791,6 +3791,73 @@ html, body {
   justify-content: space-between;
 }
 
+/* ─── Quick AI tools bar (mobile edit mode) ───────────────────────────── */
+.se-edit-quick-tools {
+  display: none; /* Hidden on desktop — sidebar has the tools */
+}
+
+@media (max-width: 768px) {
+  .se-edit-quick-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px 16px;
+    justify-content: center;
+    border-top: 1px solid var(--se-border-light, #e8e4d8);
+    background: linear-gradient(180deg, #fdfcf9 0%, #f8f6f2 100%);
+  }
+}
+
+.se-edit-quick-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(28, 24, 20, 0.12);
+  background: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--se-text, #1C1814);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 44px;
+  flex: 1 1 calc(50% - 4px);
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.se-edit-quick-pill:hover:not(:disabled) {
+  border-color: var(--pill-accent, #B8962E);
+  background: color-mix(in srgb, var(--pill-accent, #B8962E) 8%, #fff);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.se-edit-quick-pill:active:not(:disabled) {
+  transform: scale(0.97);
+  background: color-mix(in srgb, var(--pill-accent, #B8962E) 12%, #fff);
+}
+
+.se-edit-quick-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.se-edit-quick-pill:focus-visible {
+  outline: 2px solid var(--pill-accent, #B8962E);
+  outline-offset: 2px;
+}
+
+/* On very small phones, make pills full width */
+@media (max-width: 360px) {
+  .se-edit-quick-pill {
+    flex: 1 1 100%;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+}
+
 /* Right: Writing Tools Panel (30%) */
 .se-writing-tools {
   flex: 3;
@@ -7124,6 +7191,7 @@ html, body {
   .se-inline-toolbar,
   .se-story-header-actions,
   .se-bottom-tools,
+  .se-edit-quick-tools,
   .se-mobile-tools-toggle,
   .se-writing-tools,
   .se-therapy-suggestions,

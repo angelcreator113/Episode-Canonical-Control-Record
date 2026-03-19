@@ -1052,7 +1052,45 @@ function StoryPanel({
                   </button>
                 </div>
               )}
-              {/* Writing tools live in the sidebar — no duplication here */}
+              {/* Compact AI tools bar — visible on mobile below editor */}
+              <div className="se-edit-quick-tools" role="group" aria-label="Quick AI tools">
+                <button
+                  className="se-edit-quick-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('continue')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Continue the moment (Ctrl+1)"
+                >
+                  <span aria-hidden="true">✨</span> Continue
+                </button>
+                <button
+                  className="se-edit-quick-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('deepen')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Deepen the scene (Ctrl+2)"
+                >
+                  <span aria-hidden="true">🧠</span> Deepen
+                </button>
+                <button
+                  className="se-edit-quick-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('nudge')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Refine tone (Ctrl+3)"
+                >
+                  <span aria-hidden="true">🎯</span> Refine
+                </button>
+                <button
+                  className="se-edit-quick-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('rewrite')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Rework paragraph (Ctrl+4) — select text first"
+                >
+                  <span aria-hidden="true">🔄</span> Rework
+                </button>
+              </div>
             </div>
 
             {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`} id="writing-tools-panel" role="region" aria-label="Writing tools">
