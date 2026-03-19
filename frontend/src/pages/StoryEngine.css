@@ -3569,8 +3569,8 @@ html, body {
 
 .se-edit-header-title {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--se-text);
   white-space: nowrap;
   overflow: hidden;
@@ -3601,8 +3601,9 @@ html, body {
 }
 
 .se-save-saved {
-  color: #7a6c2a;
-  background: rgba(176, 146, 46, 0.08);
+  color: #059669;
+  background: rgba(16, 185, 129, 0.08);
+  animation: se-save-glow 2s ease-in-out;
 }
 
 .se-save-saving {
@@ -3678,34 +3679,33 @@ html, body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: var(--se-bg);
-  scrollbar-width: thin;
-  scrollbar-color: var(--se-border) transparent;
+  overflow: hidden;
+  background: #f3f0ea;
 }
 
 .se-edit-canvas .se-story-editor {
   flex: 1;
   width: 100%;
-  max-width: 760px;
-  margin: 12px auto 0;
+  max-width: 840px;
+  margin: 32px auto;
   height: 100%;
   background: #fffffe;
   border: none;
   outline: none;
   resize: none;
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 18px;
-  line-height: 1.8;
+  font-size: 18.5px;
+  line-height: 2;
   color: var(--se-text);
-  padding: 28px 48px;
+  padding: 64px 56px;
   box-sizing: border-box;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.03);
-  border-radius: 2px 2px 0 0;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.03);
+  border-radius: 3px;
+  letter-spacing: 0.005em;
+  word-spacing: 0.02em;
 }
 
 .se-edit-canvas .se-story-editor::-webkit-scrollbar {
@@ -3719,12 +3719,12 @@ html, body {
 
 .se-edit-canvas .se-page-nav {
   border-top: none;
-  max-width: 760px;
-  margin: 0 auto 24px;
+  max-width: 840px;
+  margin: 0 auto 32px;
   width: 100%;
   background: #fffffe;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-  border-radius: 0;
+  border-radius: 3px;
   padding: 12px 20px;
   display: flex;
   align-items: center;
@@ -3757,8 +3757,8 @@ html, body {
 
 /* Writing Tools sections */
 .se-tools-section {
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--se-border-light);
+  padding: 22px 20px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
   position: relative;
 }
 
@@ -3781,12 +3781,12 @@ html, body {
 
 .se-tools-section-title {
   font-family: 'DM Sans', sans-serif;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--se-text-muted);
-  margin-bottom: 6px;
+  letter-spacing: 0.1em;
+  color: var(--se-text);
+  margin-bottom: 8px;
 }
 
 .se-tools-section-subtitle {
@@ -4072,11 +4072,6 @@ html, body {
 
 /* Save status with personality */
 .se-save-indicator {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 6px;
   transition: all 0.3s ease;
 }
 
@@ -4228,9 +4223,195 @@ html, body {
   color: #fff;
 }
 
-.se-mode-btn:hover:not(.active) {
+.se-mode-btn-active {
+  background: rgba(176, 146, 46, 0.12);
+  color: var(--se-gold);
+  font-weight: 700;
+}
+
+.se-mode-btn:hover:not(.active):not(.se-mode-btn-active) {
   background: var(--se-surface2);
   color: var(--se-text);
+}
+
+/* ── Scene Pulse — tone/intensity/focus badges ── */
+.se-scene-pulse-section::before {
+  background: #9B7FD4;
+}
+
+.se-pulse-tone-calm {
+  background: rgba(74, 155, 111, 0.12);
+  color: #4A9B6F;
+}
+
+.se-pulse-tone-tension {
+  background: rgba(184, 92, 56, 0.12);
+  color: #B85C38;
+}
+
+.se-pulse-tone-controlled {
+  background: rgba(176, 146, 46, 0.10);
+  color: #8b7a2e;
+}
+
+.se-pulse-value-sm {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--se-text-muted);
+  min-width: 36px;
+  text-align: right;
+}
+
+.se-pulse-bar-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(0,0,0,0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0 6px;
+}
+
+.se-pulse-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.se-pulse-intensity-low {
+  width: 25%;
+  background: #4A9B6F;
+}
+
+.se-pulse-intensity-medium {
+  width: 55%;
+  background: #E08C3A;
+}
+
+.se-pulse-intensity-high {
+  width: 88%;
+  background: #B85C38;
+}
+
+/* ── Chapter Timeline (new dot-bar variant) ── */
+.se-chapter-timeline-section::before {
+  background: #E08C3A;
+}
+
+.se-timeline-bar {
+  width: 100%;
+  height: 3px;
+  background: rgba(0,0,0,0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.se-timeline-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.se-timeline-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.se-timeline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--se-border);
+  background: var(--se-surface);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.se-timeline-dot-current {
+  border-color: transparent;
+  box-shadow: 0 0 0 3px rgba(176, 146, 46, 0.18);
+  transform: scale(1.3);
+}
+
+.se-timeline-dot-past {
+  border-color: var(--se-success);
+  background: var(--se-success);
+}
+
+.se-timeline-more {
+  font-size: 10px;
+  color: var(--se-text-dim);
+  margin-left: 2px;
+}
+
+.se-timeline-label {
+  font-size: 11px;
+  color: var(--se-text-muted);
+  font-style: italic;
+}
+
+/* ── Edit header: chapter progress & arc stage ── */
+.se-edit-chapter-progress {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--se-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.se-edit-arc-stage {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--se-gold);
+}
+
+/* ── Next Move — creative suggestion ── */
+.se-next-move-section {
+  background: rgba(139, 92, 246, 0.03);
+}
+
+.se-next-move-section::before {
+  background: #7c3aed;
+}
+
+.se-next-move-section .se-next-move {
+  font-family: 'Lora', 'Playfair Display', Georgia, serif;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--se-text-muted);
+  line-height: 1.6;
+  padding: 8px 12px;
+  background: rgba(139, 92, 246, 0.04);
+  border-radius: 8px;
+  border-left: 3px solid rgba(139, 92, 246, 0.2);
+}
+
+/* ── Active paragraph writing glow ── */
+.se-edit-canvas .se-story-editor:focus {
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.03), 0 0 0 2px rgba(176, 146, 46, 0.12);
+}
+
+/* ── Micro-interaction: button press feedback ── */
+.se-btn:active {
+  transform: scale(0.97);
+}
+
+.se-btn-save-primary:active {
+  transform: scale(0.97);
+  box-shadow: 0 0 0 3px rgba(176, 146, 46, 0.2);
+}
+
+/* ── Generating state creative messages ── */
+@keyframes se-writing-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.se-generating-title {
+  animation: se-writing-pulse 2s ease-in-out infinite;
 }
 
 /* ─────────────────────────────────────────

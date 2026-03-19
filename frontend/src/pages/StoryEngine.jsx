@@ -224,7 +224,7 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
 
 // ─── Story reader / editor panel ──────────────────────────────────────────────
 function StoryPanel({
-  story, task, charColor, charName,
+  story, task, charColor, charName, totalChapters,
   onApprove, onReject, onEdit, onCheckConsistency,
   onSaveForLater, savingForLater,
   consistencyConflicts, consistencyLoading,
@@ -559,6 +559,63 @@ function StoryPanel({
     ? editText.split(/\s+/).filter(Boolean).length
     : (story.word_count || 0);
 
+  // ── Arc Stage computation ──
+  const arcStage = useMemo(() => {
+    const num = story?.story_number || 1;
+    const total = totalChapters || num;
+    const pct = total > 0 ? num / total : 0;
+    if (pct <= 0.2) return { label: 'Establishment', icon: '🌱' };
+    if (pct <= 0.45) return { label: 'Rising', icon: '📈' };
+    if (pct <= 0.65) return { label: 'Confrontation', icon: '⚡' };
+    if (pct <= 0.85) return { label: 'Breaking', icon: '🔥' };
+    return { label: 'Resolution', icon: '🌅' };
+  }, [story?.story_number, totalChapters]);
+
+  // ── Scene Pulse (heuristic text analysis) ──
+  const scenePulse = useMemo(() => {
+    const text = (editing ? editText : story?.text || '').toLowerCase();
+    const words = text.split(/\s+/).filter(Boolean);
+    const wc = words.length;
+    if (wc < 10) return null;
+
+    // Tone detection
+    const tensionWords = ['scream', 'shatter', 'broke', 'rage', 'fear', 'panic', 'blood', 'fight', 'slash', 'fire', 'crash', 'dark', 'death', 'danger', 'threat', 'storm', 'trembl', 'shook', 'violent', 'desperate'];
+    const calmWords = ['gentle', 'soft', 'quiet', 'peace', 'calm', 'warm', 'light', 'smile', 'laugh', 'comfort', 'ease', 'still', 'tender', 'rest', 'glow', 'serene', 'breath'];
+    const tensionCount = tensionWords.reduce((n, w) => n + (text.match(new RegExp(w, 'gi')) || []).length, 0);
+    const calmCount = calmWords.reduce((n, w) => n + (text.match(new RegExp(w, 'gi')) || []).length, 0);
+    const toneRatio = wc > 0 ? (tensionCount - calmCount) / Math.sqrt(wc) : 0;
+    const tone = toneRatio > 0.3 ? 'Tension' : toneRatio < -0.15 ? 'Calm' : 'Controlled';
+
+    // Intensity (exclamation density + short sentences)
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const exclamations = (text.match(/!/g) || []).length;
+    const avgSentenceLen = sentences.length > 0 ? wc / sentences.length : wc;
+    const intensityScore = Math.min(1, (exclamations / Math.max(1, sentences.length)) * 2 + (avgSentenceLen < 8 ? 0.3 : 0));
+    const intensity = intensityScore > 0.6 ? 'High' : intensityScore > 0.25 ? 'Medium' : 'Low';
+
+    // Focus (internal vs external vs relational)
+    const internalWords = ['thought', 'felt', 'remembered', 'wondered', 'knew', 'believed', 'mind', 'heart', 'soul', 'dream', 'imagine', 'sense', 'fear', 'hope', 'wish'];
+    const relationalWords = ['said', 'told', 'asked', 'replied', 'whispered', 'called', 'together', 'between', 'they', 'we', 'touch', 'embrace', 'held', 'love'];
+    const internalCount = internalWords.reduce((n, w) => n + (text.match(new RegExp('\\b' + w, 'gi')) || []).length, 0);
+    const relationalCount = relationalWords.reduce((n, w) => n + (text.match(new RegExp('\\b' + w, 'gi')) || []).length, 0);
+    const focus = internalCount > relationalCount * 1.3 ? 'Internal' : relationalCount > internalCount * 1.3 ? 'Relational' : 'External';
+
+    return { tone, intensity, focus };
+  }, [editing, editText, story?.text]);
+
+  // ── Next Move suggestion (heuristic) ──
+  const nextMoveSuggestion = useMemo(() => {
+    if (!scenePulse) return null;
+    const { tone, intensity, focus } = scenePulse;
+    if (tone === 'Calm' && intensity === 'Low') return 'Introduce subtle tension or an unexpected detail to raise stakes';
+    if (tone === 'Tension' && intensity === 'High') return 'Allow a moment of breath — a quiet reflection before the next beat';
+    if (focus === 'Internal' && intensity !== 'High') return 'Ground the scene with external action or dialogue to balance the introspection';
+    if (focus === 'Relational') return 'Deepen the subtext — let unspoken feelings surface through gesture or silence';
+    if (tone === 'Controlled') return 'Push toward a revelation or shift in perspective to build momentum';
+    if (focus === 'External') return 'Turn inward — explore what this moment means to the character emotionally';
+    return 'Consider a sensory detail or environmental shift to anchor the reader';
+  }, [scenePulse]);
+
   const handleSave = async () => {
     setSaveStatus('saving');
     try {
@@ -584,6 +641,10 @@ function StoryPanel({
             <div className="se-edit-header-info">
               <span className="se-edit-header-title">{story.title}</span>
               <span className="se-edit-header-dot">·</span>
+              <span className="se-edit-chapter-progress">Ch {story.story_number}{totalChapters ? ` of ${totalChapters}` : ''}</span>
+              <span className="se-edit-header-dot">·</span>
+              <span className="se-edit-arc-stage">{arcStage.icon} {arcStage.label}</span>
+              <span className="se-edit-header-dot">·</span>
               <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
               <span className="se-edit-header-dot">·</span>
               <span>{wordCount.toLocaleString()} words</span>
@@ -592,6 +653,10 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-edit-header-right">
+            <div className="se-mode-toggle">
+              <button className={`se-mode-btn ${editing ? 'se-mode-btn-active' : ''}`} onClick={() => {}}>✍️ Edit</button>
+              <button className={`se-mode-btn ${readingMode ? 'se-mode-btn-active' : ''}`} onClick={() => { setEditing(false); setEditText(story.text); setSaveStatus('saved'); onToggleReadingMode?.(); }}>📖 Read</button>
+            </div>
             <div className="se-tts-controls">
               {!ttsPlaying && !ttsPaused && (
                 <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">🔊</button>
@@ -881,6 +946,57 @@ function StoryPanel({
             </div>
 
             <div className="se-writing-tools">
+              {/* Scene Pulse */}
+              {scenePulse && (
+                <div className="se-tools-section se-scene-pulse-section">
+                  <div className="se-tools-section-title">Scene Pulse</div>
+                  <div className="se-scene-pulse">
+                    <div className="se-pulse-row">
+                      <span className="se-pulse-label">Tone</span>
+                      <span className={`se-pulse-value se-pulse-tone-${scenePulse.tone.toLowerCase()}`}>{scenePulse.tone}</span>
+                    </div>
+                    <div className="se-pulse-row">
+                      <span className="se-pulse-label">Intensity</span>
+                      <div className="se-pulse-bar-track">
+                        <div className={`se-pulse-bar-fill se-pulse-intensity-${scenePulse.intensity.toLowerCase()}`} />
+                      </div>
+                      <span className="se-pulse-value-sm">{scenePulse.intensity}</span>
+                    </div>
+                    <div className="se-pulse-row">
+                      <span className="se-pulse-label">Focus</span>
+                      <span className="se-pulse-value">{scenePulse.focus}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Chapter Timeline */}
+              {totalChapters > 1 && (
+                <div className="se-tools-section se-chapter-timeline-section">
+                  <div className="se-tools-section-title">Chapter Progress</div>
+                  <div className="se-chapter-timeline">
+                    <div className="se-timeline-bar">
+                      <div className="se-timeline-fill" style={{ width: `${Math.min(100, ((story.story_number || 1) / totalChapters) * 100)}%`, background: charColor || 'var(--se-gold)' }} />
+                    </div>
+                    <div className="se-timeline-dots">
+                      {Array.from({ length: Math.min(totalChapters, 12) }, (_, i) => {
+                        const chNum = i + 1;
+                        const isCurrent = chNum === (story.story_number || 1);
+                        const isPast = chNum < (story.story_number || 1);
+                        return (
+                          <span key={i} className={`se-timeline-dot ${isCurrent ? 'se-timeline-dot-current' : isPast ? 'se-timeline-dot-past' : ''}`}
+                            style={isCurrent ? { background: charColor || 'var(--se-gold)' } : {}}
+                            title={`Chapter ${chNum}`}
+                          />
+                        );
+                      })}
+                      {totalChapters > 12 && <span className="se-timeline-more">+{totalChapters - 12}</span>}
+                    </div>
+                    <div className="se-timeline-label">{arcStage.icon} {arcStage.label} Phase</div>
+                  </div>
+                </div>
+              )}
+
               <div className="se-tools-section">
                 <div className="se-tools-section-title">Story Info</div>
                 <div className="se-tools-info-grid">
@@ -978,6 +1094,14 @@ function StoryPanel({
                   onSelectCharacter={(c) => { setSelectedVoice(c?.character_key || c?.id); onSelectChar?.(c?.character_key || c?.id); }}
                 />
               </div>
+
+              {/* Next Move suggestion */}
+              {nextMoveSuggestion && (
+                <div className="se-tools-section se-next-move-section">
+                  <div className="se-tools-section-title">🔮 Suggested Next Move</div>
+                  <div className="se-next-move">{nextMoveSuggestion}</div>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -1260,6 +1384,7 @@ export default function StoryEngine() {
               task={engine.activeTask}
               charColor={engine.char?.color}
               charName={engine.char?.display_name}
+              totalChapters={engine.tasks.length}
               onApprove={(story, needsConfirm) => needsConfirm ? engine.setApproveConfirm(story) : engine.handleApprove(story)}
               onReject={engine.handleReject}
               onEdit={engine.handleEdit}

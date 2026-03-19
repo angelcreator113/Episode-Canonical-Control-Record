@@ -402,7 +402,7 @@ export default function WriteModeAIWriter({
 
           {/* Mic hint */}
           <div style={s.micHint}>
-            Tap mic to speak — or use AI tools above
+            Tap mic to speak — or use creative tools above
           </div>
         </div>
       )}
