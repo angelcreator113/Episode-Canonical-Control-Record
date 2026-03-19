@@ -243,7 +243,8 @@ function StoryPanel({
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditTextRaw] = useState(story?.text || '');
-  const [saveStatus, setSaveStatus] = useState('saved');
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'idle' | 'saving' | 'saved'
+  const [lastSavedText, setLastSavedText] = useState(story?.text || '');
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
   const [voicesExpanded, setVoicesExpanded] = useState(false);
 
@@ -413,13 +414,10 @@ function StoryPanel({
 
   useEffect(() => {
     setSaveStatus('saved');
+    setLastSavedText(story?.text || '');
   }, [story?.story_number]);
 
-  useEffect(() => {
-    if (editing && editText !== (story?.text || '')) {
-      setSaveStatus('unsaved');
-    }
-  }, [editText, editing, story?.text]);
+  const hasUnsavedChanges = editing && editText !== lastSavedText;
 
   const [currentPage, setCurrentPage] = useState(0);
   const [evalScore, setEvalScore] = useState(null);
@@ -730,23 +728,24 @@ function StoryPanel({
     setSaveStatus('saving');
     try {
       await onEdit(story, textToSave);
+      setLastSavedText(textToSave);
       setSaveStatus('saved');
       if (opts.closeAfter) setEditing(false);
     } catch (e) {
-      setSaveStatus('unsaved');
+      setSaveStatus('idle');
     }
   }, [story, onEdit]);
 
   // Autosave — debounce 2s after each edit
   const autosaveTimerRef = useRef(null);
   useEffect(() => {
-    if (!editing || editText === (story?.text || '')) return;
+    if (!hasUnsavedChanges) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
       handleSave();
     }, 2000);
     return () => clearTimeout(autosaveTimerRef.current);
-  }, [editText, editing, handleSave, story?.text]);
+  }, [editText, hasUnsavedChanges, handleSave]);
 
   // Keyboard shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo
   useEffect(() => {
@@ -777,10 +776,10 @@ function StoryPanel({
             <button
               className="se-edit-back"
               onClick={() => {
-                if (saveStatus === 'unsaved' && editText !== (story?.text || '')) {
+                if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
                 }
-                setEditing(false); setEditText(story.text); setSaveStatus('saved');
+                setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
               }}
             >
               ← Back
@@ -801,20 +800,20 @@ function StoryPanel({
               {focusMode ? 'Full View' : 'Focus'}
             </button>
             <button
-              className={`se-btn se-btn-save-primary ${saveStatus === 'saved' ? 'se-btn-save-saved' : ''}`}
-              style={{ background: saveStatus === 'saved' ? undefined : charColor }}
+              className={`se-btn se-btn-save-primary ${!hasUnsavedChanges && saveStatus !== 'saving' ? 'se-btn-save-saved' : ''}`}
+              style={{ background: hasUnsavedChanges ? charColor : undefined }}
               onClick={() => handleSave()}
-              disabled={saveStatus === 'saving'}
+              disabled={saveStatus === 'saving' || !hasUnsavedChanges}
             >
-              {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : 'Save Now'}
+              {saveStatus === 'saving' ? 'Saving…' : hasUnsavedChanges ? 'Save Now' : '✓ Saved'}
             </button>
             <button
               className="se-btn se-btn-cancel-light"
               onClick={() => {
-                if (saveStatus === 'unsaved' && editText !== (story?.text || '')) {
+                if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
                 }
-                setEditing(false); setEditText(story.text); setSaveStatus('saved');
+                setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
                 if (focusMode) onToggleFocusMode?.();
               }}
             >

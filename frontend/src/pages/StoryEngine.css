@@ -3674,7 +3674,6 @@ html, body {
   color: #22c55e !important;
   box-shadow: none;
   cursor: default;
-  pointer-events: none;
 }
 
 .se-btn-cancel-light {
