@@ -243,7 +243,7 @@ function StoryPanel({
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditTextRaw] = useState(story?.text || '');
-  const [saveStatus, setSaveStatus] = useState('saved'); // 'idle' | 'saving' | 'saved'
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
   const [lastSavedText, setLastSavedText] = useState(story?.text || '');
   const [selectedVoice, setSelectedVoice] = useState(selectedCharKey || null);
   const [voicesExpanded, setVoicesExpanded] = useState(false);
@@ -413,7 +413,7 @@ function StoryPanel({
   }, [selectedCharKey]);
 
   useEffect(() => {
-    setSaveStatus('saved');
+    setSaveStatus('idle');
     setLastSavedText(story?.text || '');
   }, [story?.story_number]);
 
@@ -731,6 +731,7 @@ function StoryPanel({
   const saveStatusRef = useRef(saveStatus);
   saveStatusRef.current = saveStatus;
 
+  const savedFlashRef = useRef(null);
   const handleSave = useCallback(async (opts = {}) => {
     if (saveStatusRef.current === 'saving') return;
     const textToSave = editTextRef.current;
@@ -739,6 +740,9 @@ function StoryPanel({
       await onEdit(story, textToSave);
       setLastSavedText(textToSave);
       setSaveStatus('saved');
+      // Flash "✓ Saved" briefly, then revert to idle so button shows "Save"
+      if (savedFlashRef.current) clearTimeout(savedFlashRef.current);
+      savedFlashRef.current = setTimeout(() => setSaveStatus('idle'), 1500);
       if (opts.closeAfter) setEditing(false);
     } catch (e) {
       setSaveStatus('idle');
@@ -809,12 +813,12 @@ function StoryPanel({
               {focusMode ? 'Full View' : 'Focus'}
             </button>
             <button
-              className={`se-btn se-btn-save-primary ${!hasUnsavedChanges && saveStatus !== 'saving' ? 'se-btn-save-saved' : ''}`}
+              className={`se-btn se-btn-save-primary ${saveStatus === 'saved' ? 'se-btn-save-saved' : ''} ${hasUnsavedChanges ? 'se-save-unsaved' : ''}`}
               style={{ background: hasUnsavedChanges ? charColor : undefined }}
               onClick={() => handleSave()}
               disabled={saveStatus === 'saving'}
             >
-              {saveStatus === 'saving' ? 'Saving…' : hasUnsavedChanges ? 'Save Now' : '✓ Saved'}
+              {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : hasUnsavedChanges ? 'Save Now' : 'Save'}
             </button>
             <button
               className="se-btn se-btn-cancel-light"
