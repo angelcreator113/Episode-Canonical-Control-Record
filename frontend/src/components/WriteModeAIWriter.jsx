@@ -297,7 +297,7 @@ export default function WriteModeAIWriter({
             <span style={s.groupIcon}>✨</span>
             <span style={s.groupLabel}>Writing Flow</span>
           </div>
-          <div style={s.toolRow}>
+          <div style={s.toolRow} role="group" aria-label="Writing flow tools">
             {ACTIONS.filter(a => a.group === 'flow').map(action => (
               <button
                 key={action.id}
@@ -311,12 +311,14 @@ export default function WriteModeAIWriter({
                 }}
                 onClick={() => runAction(action)}
                 disabled={loading}
+                aria-label={action.label}
+                aria-busy={loading && activeAction === action.id}
               >
-                <span style={s.toolIcon}>{action.icon}</span>
+                <span style={s.toolIcon} aria-hidden="true">{action.icon}</span>
                 <span style={s.toolLabel}>
                   {action.label}
                   {loading && activeAction === action.id && (
-                    <span style={s.spinner}>{activeAction === 'continue' ? ' Expanding the moment…' : ' Layering depth…'}</span>
+                    <span style={s.spinner} role="status" aria-live="polite">{activeAction === 'continue' ? ' Expanding the moment…' : ' Layering depth…'}</span>
                   )}
                 </span>
               </button>
@@ -328,7 +330,7 @@ export default function WriteModeAIWriter({
             <span style={s.groupIcon}>🎯</span>
             <span style={s.groupLabel}>Refinement</span>
           </div>
-          <div style={s.toolRow}>
+          <div style={s.toolRow} role="group" aria-label="Refinement tools">
             {ACTIONS.filter(a => a.group === 'refinement').map(action => (
               <button
                 key={action.id}
@@ -342,12 +344,14 @@ export default function WriteModeAIWriter({
                 }}
                 onClick={() => runAction(action)}
                 disabled={loading}
+                aria-label={action.label}
+                aria-busy={loading && activeAction === action.id}
               >
-                <span style={s.toolIcon}>{action.icon}</span>
+                <span style={s.toolIcon} aria-hidden="true">{action.icon}</span>
                 <span style={s.toolLabel}>
                   {action.label}
                   {loading && activeAction === action.id && (
-                    <span style={s.spinner}> Refining…</span>
+                    <span style={s.spinner} role="status" aria-live="polite"> Refining…</span>
                   )}
                 </span>
               </button>
@@ -363,19 +367,21 @@ export default function WriteModeAIWriter({
               }}
               onClick={runRewrite}
               disabled={loading}
+              aria-label="Rework paragraph"
+              aria-busy={loading && activeAction === 'rewrite'}
             >
-              <span style={s.toolIcon}>{'🔄'}</span>
+              <span style={s.toolIcon} aria-hidden="true">{'🔄'}</span>
               <span style={s.toolLabel}>
                 Rework paragraph
                 {loading && activeAction === 'rewrite' && (
-                  <span style={s.spinner}> Reworking…</span>
+                  <span style={s.spinner} role="status" aria-live="polite"> Reworking…</span>
                 )}
               </span>
             </button>
           </div>
 
           {/* Length toggle */}
-          <div style={s.lengthRow}>
+          <div style={s.lengthRow} role="group" aria-label="Output length">
             <button
               style={{
                 ...s.lengthPill,
@@ -384,6 +390,8 @@ export default function WriteModeAIWriter({
                 borderColor: lengthMode === 'full' ? accent : 'rgba(28,24,20,0.10)',
               }}
               onClick={() => setLengthMode('full')}
+              aria-pressed={lengthMode === 'full'}
+              title="Generate full-length content"
             >
               ¶ full
             </button>
@@ -395,6 +403,8 @@ export default function WriteModeAIWriter({
                 borderColor: lengthMode === 'paragraph' ? accent : 'rgba(28,24,20,0.10)',
               }}
               onClick={() => setLengthMode('paragraph')}
+              aria-pressed={lengthMode === 'paragraph'}
+              title="Generate paragraph-length content"
             >
               ¶ Paragraphs
             </button>
@@ -409,10 +419,10 @@ export default function WriteModeAIWriter({
 
       {/* Rewrite options */}
       {rewriteOptions && (
-        <div style={s.rewritePanel}>
+        <div style={s.rewritePanel} role="region" aria-label="Rewrite options">
           <div style={s.resultHeader}>
             <div style={{ ...s.resultAction, color: accent }}>Pick a rewrite</div>
-            <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
+            <button style={s.discardBtn} onClick={handleDiscard} aria-label="Dismiss rewrite options">{'✕'}</button>
           </div>
           {rewriteOptions.map((opt, i) => (
             <button
@@ -431,12 +441,12 @@ export default function WriteModeAIWriter({
 
       {/* Result */}
       {result && (
-        <div style={s.resultPanel}>
+        <div style={s.resultPanel} role="region" aria-label="Generated content" aria-live="polite">
           <div style={s.resultHeader}>
             <div style={{ ...s.resultAction, color: accent }}>
               {activeAction === 'rewrite' ? 'Rewrite' : (ACTIONS.find(a => a.id === activeAction)?.label || 'Generated')}
             </div>
-            <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
+            <button style={s.discardBtn} onClick={handleDiscard} aria-label="Discard generated content">{'✕'}</button>
           </div>
 
           <textarea
@@ -445,9 +455,10 @@ export default function WriteModeAIWriter({
             onChange={e => setEditedResult(e.target.value)}
             rows={6}
             placeholder="Edit before inserting…"
+            aria-label="Edit generated content before inserting into manuscript"
           />
           {loading && (
-            <div style={s.retryLoading}>Generating new version…</div>
+            <div style={s.retryLoading} role="status" aria-live="polite">Generating new version…</div>
           )}
 
           <div style={s.resultActions}>
@@ -474,7 +485,7 @@ export default function WriteModeAIWriter({
       )}
 
       {error && (
-        <div style={s.error}>{error}</div>
+        <div style={s.error} role="alert" aria-live="assertive">{error}</div>
       )}
 
     </div>

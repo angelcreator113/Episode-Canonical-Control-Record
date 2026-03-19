@@ -778,10 +778,11 @@ function StoryPanel({
   return (
     <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''} ${focusMode ? 'se-focus-mode' : ''}`}>
       {editing ? (
-        <div className="se-edit-header">
+        <div className="se-edit-header" role="toolbar" aria-label="Edit controls">
           <div className="se-edit-header-left">
             <button
               className="se-edit-back"
+              aria-label="Back to story view"
               onClick={() => {
                 if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
@@ -811,6 +812,8 @@ function StoryPanel({
               style={{ background: hasUnsavedChanges ? charColor : undefined }}
               onClick={() => handleSave()}
               disabled={saveStatus === 'saving' || !hasUnsavedChanges}
+              aria-live="polite"
+              aria-atomic="true"
             >
               {saveStatus === 'saving' ? 'Saving…' : hasUnsavedChanges ? 'Save Now' : '✓ Saved'}
             </button>
@@ -990,11 +993,13 @@ function StoryPanel({
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 spellCheck
+                aria-label="Story manuscript editor"
               />
               {editTotalPages > 1 && (
                 <div className="se-page-nav">
                   <button
                     className="se-btn se-btn-page"
+                    aria-label={`Previous page (page ${currentPage} of ${editTotalPages})`}
                     onClick={() => {
                       setCurrentPage(p => {
                         const next = p - 1;
@@ -1013,9 +1018,10 @@ function StoryPanel({
                   >
                     ← Previous
                   </button>
-                  <span className="se-page-indicator">Page {currentPage + 1} of {editTotalPages}</span>
+                  <span className="se-page-indicator" aria-live="polite">Page {currentPage + 1} of {editTotalPages}</span>
                   <button
                     className="se-btn se-btn-page"
+                    aria-label={`Next page (page ${currentPage + 2} of ${editTotalPages})`}
                     onClick={() => {
                       setCurrentPage(p => {
                         const next = p + 1;

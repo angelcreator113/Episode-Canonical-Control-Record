@@ -3419,6 +3419,10 @@ html, body {
   box-sizing: border-box;
 }
 
+.se-story-editor::placeholder {
+  color: rgba(28, 24, 20, 0.35);
+}
+
 /* ─────────────────────────────────────────
    Therapy
 ────────────────────────────────────────── */
@@ -3651,7 +3655,7 @@ html, body {
   border-radius: 8px;
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.15s, box-shadow 0.2s, opacity 0.15s, transform 0.15s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   letter-spacing: 0.02em;
 }
@@ -3674,6 +3678,13 @@ html, body {
   color: #22c55e !important;
   box-shadow: none;
   cursor: default;
+  animation: se-save-pulse 0.4s ease-out;
+}
+
+@keyframes se-save-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.04); }
+  100% { transform: scale(1); }
 }
 
 .se-btn-cancel-light {
@@ -3684,7 +3695,7 @@ html, body {
   border-radius: 8px;
   border: 1px solid var(--se-border);
   background: transparent;
-  color: var(--se-text-muted);
+  color: var(--se-text);
   cursor: pointer;
   transition: all 0.2s;
   letter-spacing: 0.01em;
@@ -5224,8 +5235,8 @@ html, body {
   .se-story-brief-title { font-size: 20px; }
   .se-story-panel .se-story-brief { padding: 16px 12px; }
 
-  .se-story-editor { padding: 14px 12px; }
-  .se-edit-canvas .se-story-editor { padding: 14px 12px; font-size: 15px; }
+  .se-story-editor { padding: 18px 14px; }
+  .se-edit-canvas .se-story-editor { padding: 18px 14px; font-size: 16px; }
   .se-writing-tools { max-height: 44px; }
   .se-writing-tools--mobile-open { max-height: 50vh; overflow-y: auto; }
   .se-voice-option { padding: 8px 10px; }
@@ -5366,8 +5377,8 @@ html, body {
 
   .se-btn-page {
     font-size: 11px;
-    padding: 6px 12px;
-    min-height: 30px;
+    padding: 8px 14px;
+    min-height: 44px;
   }
 
   .se-page-indicator {
@@ -7072,7 +7083,8 @@ html, body {
   .se-amber-notification,
   .se-generating-ring,
   .se-arc-status-pulse,
-  .se-bottom-tool-spinner {
+  .se-bottom-tool-spinner,
+  .se-btn-save-primary.se-btn-save-saved {
     animation: none;
   }
 
