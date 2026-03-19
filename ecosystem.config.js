@@ -100,6 +100,12 @@ module.exports = {
         ...sharedEnv,
         EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
         EXPORT_MAX_CONCURRENT_JOBS: '1',
+      },
+      env_production: {
+        ...sharedEnv,
+        NODE_ENV: 'production',
+        EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
+        EXPORT_MAX_CONCURRENT_JOBS: '1',
       }
     }
   ]
