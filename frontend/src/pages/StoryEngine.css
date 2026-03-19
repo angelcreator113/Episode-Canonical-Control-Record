@@ -6406,3 +6406,464 @@ html, body {
 .se-undo-btn:hover {
   background: rgba(255,255,255,0.1);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Toast Notification System
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-toast-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 380px;
+  width: calc(100% - 32px);
+  pointer-events: none;
+}
+
+.se-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--se-surface, #fff);
+  border: 1px solid var(--se-border-light, #ece9e4);
+  box-shadow: var(--se-shadow-md);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--se-text, #1c1917);
+  pointer-events: auto;
+  animation: se-toast-in 0.25s ease;
+}
+
+@keyframes se-toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.se-toast-success { border-left: 3px solid var(--se-success, #10b981); }
+.se-toast-error { border-left: 3px solid var(--se-danger, #ef4444); }
+.se-toast-info { border-left: 3px solid var(--se-info, #3b82f6); }
+.se-toast-warning { border-left: 3px solid #f59e0b; }
+
+.se-toast-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.se-toast-msg {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.se-toast-close {
+  background: none;
+  border: none;
+  color: var(--se-text-dim, #9d968d);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  min-width: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.se-toast-close:hover {
+  background: rgba(0,0,0,0.06);
+  color: var(--se-text);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Therapy Suggestions (replaces inline styles)
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-therapy-suggestions {
+  margin: 0 auto;
+  padding: 12px 48px;
+  max-width: 760px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgba(139, 92, 246, 0.12);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Active Threads bar (replaces inline styles)
+   ──────────────────────────────────────────────────────────────────────────── */
+.se-active-threads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(176, 146, 46, 0.04);
+  border-bottom: 1px solid var(--se-border-light);
+  font-size: 11px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Comprehensive Responsive Improvements
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Safe-area insets for notched devices ─────────────────────────────────── */
+@supports (padding: env(safe-area-inset-top)) {
+  .se-header {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  .se-pinned-controls {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .se-toast-container {
+    top: max(16px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+  }
+
+  .se-amber-notification {
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    right: max(24px, env(safe-area-inset-right));
+  }
+}
+
+/* ── Mobile: 900px — text & layout improvements ───────────────────────────── */
+@media (max-width: 900px) {
+  .se-therapy-suggestions {
+    padding: 10px 16px;
+  }
+
+  .se-active-threads {
+    padding: 8px 12px;
+    gap: 5px;
+  }
+
+  /* Better touch targets for nav buttons */
+  .se-btn-nav {
+    min-height: 40px;
+    min-width: 44px;
+  }
+
+  /* Ensure conflict descriptions don't overflow */
+  .se-conflict-desc {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Text selection popup: overflow-scroll on mobile */
+  .se-inline-toolbar {
+    max-width: calc(100vw - 24px);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .se-inline-btn {
+    font-size: 11px;
+    padding: 8px 10px;
+    min-height: 40px;
+  }
+
+  /* Bottom writing tools result buttons */
+  .se-bottom-tools-result-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .se-bottom-tools-result-btn {
+    min-height: 36px;
+    padding: 6px 10px;
+  }
+}
+
+/* ── Mobile: 768px — modals and toasts ────────────────────────────────────── */
+@media (max-width: 768px) {
+  .se-modal-card {
+    max-width: calc(100vw - 32px);
+    width: calc(100vw - 32px);
+    padding: 20px;
+  }
+
+  .se-modal-title {
+    font-size: 15px;
+  }
+
+  .se-modal-body {
+    font-size: 13px;
+  }
+
+  .se-modal-actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .se-modal-btn {
+    width: 100%;
+    text-align: center;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .se-toast-container {
+    right: 8px;
+    left: 8px;
+    max-width: none;
+    width: auto;
+  }
+
+  .se-toast {
+    font-size: 12px;
+    padding: 10px 12px;
+  }
+
+  /* Amber notification: full-width on mobile */
+  .se-amber-notification {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: 16px;
+  }
+
+  .se-amber-notification--texture,
+  .se-amber-notification--notes {
+    width: auto;
+  }
+}
+
+/* ── Mobile: 480px — tight phone screens ──────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Reduce text-indent for readability on narrow screens */
+  .se-story-para {
+    text-indent: 1.2em;
+  }
+
+  /* Tighter story text padding */
+  .se-story-text {
+    padding: 16px 12px 32px;
+  }
+
+  .se-story-text--focus {
+    padding: 24px 14px;
+  }
+
+  /* Inline toolbar: scrollable on small phones */
+  .se-inline-toolbar {
+    max-width: calc(100vw - 16px);
+  }
+
+  .se-inline-btn {
+    font-size: 10px;
+    padding: 7px 8px;
+    gap: 3px;
+  }
+
+  .se-inline-btn-icon {
+    font-size: 11px;
+  }
+
+  /* Therapy suggestions tighter */
+  .se-therapy-suggestions {
+    padding: 8px 12px;
+  }
+
+  /* Active threads compact */
+  .se-active-threads {
+    padding: 6px 10px;
+    gap: 4px;
+    font-size: 10px;
+  }
+
+  /* Toast compact */
+  .se-toast {
+    font-size: 11px;
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+
+  /* Bottom writing tools */
+  .se-bottom-tools {
+    padding: 12px 10px;
+  }
+
+  .se-bottom-tool-pill {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .se-bottom-tools-result-text {
+    font-size: 14px;
+    padding: 12px;
+    max-height: 200px;
+  }
+
+  .se-bottom-tools-result-btn {
+    font-size: 10px;
+    min-height: 34px;
+  }
+}
+
+/* ── Ultra-small: 360px — iPhone SE, Galaxy A-series ──────────────────────── */
+@media (max-width: 360px) {
+  .se-header {
+    padding: 4px 8px;
+    gap: 3px;
+    min-height: 40px;
+  }
+
+  .se-header-back {
+    font-size: 11px;
+    padding: 4px;
+    min-height: 28px;
+  }
+
+  .se-header-title {
+    font-size: 12px;
+    max-width: 100px;
+  }
+
+  .se-header-words { display: none; }
+
+  .se-header-btn {
+    font-size: 8px;
+    padding: 3px 5px;
+    min-height: 26px;
+  }
+
+  .se-header-btn--approve {
+    font-size: 9px;
+    padding: 4px 8px;
+  }
+
+  .se-story-header {
+    padding: 10px;
+    gap: 6px;
+  }
+
+  .se-story-header-title {
+    font-size: 16px;
+  }
+
+  .se-story-header-meta {
+    font-size: 10px;
+    gap: 2px 4px;
+  }
+
+  .se-story-text {
+    padding: 14px 10px 28px;
+  }
+
+  .se-story-para {
+    font-size: 14px;
+    line-height: 1.75;
+    margin-bottom: 16px;
+    text-indent: 1em;
+  }
+
+  .se-edit-header {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .se-edit-header-title {
+    font-size: 13px;
+    max-width: 140px;
+  }
+
+  .se-modal-card {
+    padding: 16px;
+    max-width: calc(100vw - 16px);
+    width: calc(100vw - 16px);
+    border-radius: 12px;
+  }
+
+  .se-modal-title {
+    font-size: 14px;
+  }
+
+  .se-review-page-btn {
+    padding: 3px 6px;
+    font-size: 9px;
+  }
+
+  .se-review-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+}
+
+/* ── Landscape mobile — compact header, shorter toolbars ──────────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+  .se-header {
+    min-height: 36px;
+    padding: 3px 12px;
+  }
+
+  .se-header-back {
+    min-height: 28px;
+    font-size: 11px;
+  }
+
+  .se-header-btn {
+    min-height: 26px;
+    padding: 3px 8px;
+    font-size: 9px;
+  }
+
+  .se-story-header {
+    padding: 8px 14px;
+    gap: 6px;
+  }
+
+  .se-story-header-title {
+    font-size: 16px;
+  }
+
+  .se-story-header-actions .se-btn {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  .se-story-header-actions .se-btn-approve {
+    min-height: 34px;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .se-story-text {
+    padding: 12px 18px 24px;
+  }
+
+  .se-edit-header {
+    padding: 6px 12px;
+    gap: 4px;
+  }
+
+  .se-edit-header-right .se-btn {
+    min-height: 30px;
+  }
+
+  .se-writing-tools {
+    max-height: 35vh;
+  }
+
+  .se-writing-tools--mobile-open {
+    max-height: 35vh;
+  }
+
+  .se-pinned-controls {
+    max-height: 30vh;
+    overflow-y: auto;
+  }
+
+  /* Keep modals compact in landscape */
+  .se-modal-card {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
