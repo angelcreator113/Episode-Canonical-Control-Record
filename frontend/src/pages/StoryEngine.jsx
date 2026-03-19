@@ -422,6 +422,7 @@ function StoryPanel({
   const [currentPage, setCurrentPage] = useState(0);
   const [evalScore, setEvalScore] = useState(null);
   const [activeThreads, setActiveThreads] = useState([]);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [selectionPopup, setSelectionPopup] = useState(null);
   const [activeParaIndex, setActiveParaIndex] = useState(null);
   const textareaRef = useRef(null);
@@ -1113,7 +1114,13 @@ function StoryPanel({
               {/* Writing tools live in the sidebar — no duplication here */}
             </div>
 
-            {!focusMode && <div className="se-writing-tools">
+            {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`}>
+              <button
+                className="se-mobile-tools-toggle"
+                onClick={() => setMobileToolsOpen(v => !v)}
+              >
+                {mobileToolsOpen ? '▾ Hide Tools' : '▸ Writing Tools'}
+              </button>
               {/* Scene Pulse */}
               {scenePulse && (
                 <div className="se-tools-section se-scene-pulse-section">
