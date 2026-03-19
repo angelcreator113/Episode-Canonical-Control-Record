@@ -3663,10 +3663,18 @@ html, body {
 }
 
 .se-btn-save-primary:disabled {
-  opacity: 0.45;
+  opacity: 0.65;
   cursor: default;
   transform: none;
   box-shadow: none;
+}
+
+.se-btn-save-primary.se-btn-save-saved {
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #22c55e !important;
+  box-shadow: none;
+  cursor: default;
+  pointer-events: none;
 }
 
 .se-btn-cancel-light {
