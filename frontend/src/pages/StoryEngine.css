@@ -3649,6 +3649,7 @@ html, body {
 
 .se-btn-save-primary {
   color: #fff !important;
+  background: #6b7280;
   border: none !important;
   font-weight: 700;
   padding: 8px 22px;
