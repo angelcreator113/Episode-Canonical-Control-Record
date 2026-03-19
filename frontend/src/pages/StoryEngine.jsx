@@ -43,10 +43,7 @@ function TherapySuggestions({ characterKey, apiBase }) {
 
   if (!suggestions?.suggestions?.length) return null;
   return (
-    <div style={{
-      margin: '0 auto', padding: '12px 48px', maxWidth: 760,
-      background: 'transparent', border: 'none', borderTop: '1px solid rgba(139,92,246,0.12)',
-    }}>
+    <div className="se-therapy-suggestions">
       <div
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
         onClick={() => setExpanded(e => !e)}
@@ -422,6 +419,7 @@ function StoryPanel({
   const [currentPage, setCurrentPage] = useState(0);
   const [evalScore, setEvalScore] = useState(null);
   const [activeThreads, setActiveThreads] = useState([]);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [selectionPopup, setSelectionPopup] = useState(null);
   const [activeParaIndex, setActiveParaIndex] = useState(null);
   const textareaRef = useRef(null);
@@ -1031,11 +1029,7 @@ function StoryPanel({
       )}
 
       {activeThreads.length > 0 && !editing && (
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 14px',
-          background: 'rgba(176,146,46,0.04)', borderBottom: '1px solid var(--se-border-light)',
-          fontSize: 11,
-        }}>
+        <div className="se-active-threads">
           <span style={{ color: '#999', fontWeight: 600, marginRight: 4 }}>Active Threads:</span>
           {activeThreads.slice(0, 5).map(t => (
             <span key={t.id} style={{
@@ -1113,7 +1107,13 @@ function StoryPanel({
               {/* Writing tools live in the sidebar — no duplication here */}
             </div>
 
-            {!focusMode && <div className="se-writing-tools">
+            {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`}>
+              <button
+                className="se-mobile-tools-toggle"
+                onClick={() => setMobileToolsOpen(v => !v)}
+              >
+                {mobileToolsOpen ? '▾ Hide Tools' : '▸ Writing Tools'}
+              </button>
               {/* Scene Pulse */}
               {scenePulse && (
                 <div className="se-tools-section se-scene-pulse-section">
@@ -1288,7 +1288,7 @@ function StoryPanel({
             </div>
             {/* Inline editing toolbar — appears on text selection */}
             {selectionPopup && !editing && (
-              <div className="se-inline-toolbar" style={{ top: selectionPopup.top, left: selectionPopup.left }}>
+              <div className="se-inline-toolbar" style={{ top: selectionPopup.top, left: Math.min(Math.max(selectionPopup.left, 100), window.innerWidth - 100) }}>
                 <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
                   <span className="se-inline-btn-icon">&#10024;</span> Continue from here
                 </button>
