@@ -16,7 +16,7 @@
  *   onInsert: function(text) — inserts generated text into the editor
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 
 const ACTIONS = [
   {
@@ -24,6 +24,7 @@ const ACTIONS = [
     icon:     '✨',
     label:    'Continue the moment',
     shortLabel: 'Continue',
+    shortcut: 'Ctrl+1',
     group:    'flow',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'continue',
@@ -33,6 +34,7 @@ const ACTIONS = [
     icon:     '🧠',
     label:    'Deepen the scene',
     shortLabel: 'Deepen',
+    shortcut: 'Ctrl+2',
     group:    'flow',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'deepen',
@@ -42,6 +44,7 @@ const ACTIONS = [
     icon:     '🎯',
     label:    'Refine tone',
     shortLabel: 'Nudge',
+    shortcut: 'Ctrl+3',
     group:    'refinement',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'nudge',
@@ -55,7 +58,7 @@ const TYPE_COLORS = {
   special:  '#B8962E',
 };
 
-export default function WriteModeAIWriter({
+const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
   chapterId,
   bookId,
   selectedCharacter,
@@ -65,7 +68,8 @@ export default function WriteModeAIWriter({
   characters = [],
   onSelectCharacter,
   getSelectedText,
-}) {
+  cursorContext,
+}, ref) {
   const [activeAction, setActiveAction] = useState(null);
   const [result,       setResult]       = useState(null);
   const [editedResult, setEditedResult] = useState(null);
@@ -75,6 +79,17 @@ export default function WriteModeAIWriter({
   const [lengthMode,   setLengthMode]   = useState('paragraph');
   const [rewriteOptions, setRewriteOptions] = useState(null);
   const retryRef = useRef(false);
+
+  // Expose triggerAction for keyboard shortcuts from parent
+  useImperativeHandle(ref, () => ({
+    triggerAction: (actionId) => {
+      if (loading) return;
+      const action = ACTIONS.find(a => a.id === actionId);
+      if (action) runAction(action);
+      else if (actionId === 'rewrite') runRewrite();
+    },
+    get isLoading() { return loading; },
+  }), [loading]);
 
   const accent   = TYPE_COLORS[selectedCharacter?.type] || '#B8962E';
   const charName = selectedCharacter?.selected_name || selectedCharacter?.name;
@@ -289,12 +304,20 @@ export default function WriteModeAIWriter({
         )}
       </div>
 
+      {/* Cursor context — shows where text will be inserted */}
+      {cursorContext && !result && !rewriteOptions && (
+        <div style={s.cursorContext}>
+          <div style={s.cursorContextLabel}>Inserting at cursor:</div>
+          <div style={s.cursorContextText}>…{cursorContext}…</div>
+        </div>
+      )}
+
       {/* Creative Tools */}
       {!result && !rewriteOptions && (
         <div style={s.toolbar}>
           {/* Writing Flow group */}
           <div style={s.groupHeader}>
-            <span style={s.groupIcon}>✨</span>
+            <span style={s.groupIcon} aria-hidden="true">✨</span>
             <span style={s.groupLabel}>Writing Flow</span>
           </div>
           <div style={s.toolRow} role="group" aria-label="Writing flow tools">
@@ -313,6 +336,7 @@ export default function WriteModeAIWriter({
                 disabled={loading}
                 aria-label={action.label}
                 aria-busy={loading && activeAction === action.id}
+                title={`${action.label} (${action.shortcut})`}
               >
                 <span style={s.toolIcon} aria-hidden="true">{action.icon}</span>
                 <span style={s.toolLabel}>
@@ -346,6 +370,7 @@ export default function WriteModeAIWriter({
                 disabled={loading}
                 aria-label={action.label}
                 aria-busy={loading && activeAction === action.id}
+                title={`${action.label} (${action.shortcut})`}
               >
                 <span style={s.toolIcon} aria-hidden="true">{action.icon}</span>
                 <span style={s.toolLabel}>
@@ -369,6 +394,7 @@ export default function WriteModeAIWriter({
               disabled={loading}
               aria-label="Rework paragraph"
               aria-busy={loading && activeAction === 'rewrite'}
+              title="Rework paragraph (Ctrl+4) — select text first"
             >
               <span style={s.toolIcon} aria-hidden="true">{'🔄'}</span>
               <span style={s.toolLabel}>
@@ -490,7 +516,9 @@ export default function WriteModeAIWriter({
 
     </div>
   );
-}
+});
+
+export default WriteModeAIWriter;
 
 
 // ── STYLES ────────────────────────────────────────────────────────────
@@ -626,6 +654,32 @@ const s = {
     fontSize:   10,
     color:      INK_MID,
     lineHeight: 1.5,
+  },
+
+  // Cursor context — shows where insertion will happen
+  cursorContext: {
+    padding:      '8px 14px',
+    borderBottom: '1px solid rgba(28,24,20,0.06)',
+    background:   'rgba(28,24,20,0.02)',
+  },
+  cursorContextLabel: {
+    fontFamily: "'DM Sans', sans-serif",
+    fontSize:   10,
+    fontWeight:  600,
+    color:       INK_MID,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    marginBottom: 4,
+  },
+  cursorContextText: {
+    fontFamily: "'Lora', Georgia, serif",
+    fontSize:   12,
+    color:       INK,
+    lineHeight:  1.5,
+    overflow:    'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace:  'nowrap',
+    opacity:     0.7,
   },
 
   // Creative Tools toolbar

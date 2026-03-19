@@ -3794,8 +3794,8 @@ html, body {
 /* Right: Writing Tools Panel (30%) */
 .se-writing-tools {
   flex: 3;
-  min-width: 280px;
-  max-width: 360px;
+  min-width: 300px;
+  max-width: 380px;
   min-height: 0;
   border-left: 1px solid var(--se-border-light);
   background: linear-gradient(180deg, #faf8f5 0%, #f5f3ef 100%);
@@ -7040,6 +7040,15 @@ html, body {
   .se-bottom-tools-result-header {
     flex-direction: column;
     gap: 8px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Large screens: wider writing tools sidebar
+   ──────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 1400px) {
+  .se-writing-tools {
+    max-width: 420px;
   }
 }
 

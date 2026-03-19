@@ -434,6 +434,7 @@ function StoryPanel({
   const [activeParaIndex, setActiveParaIndex] = useState(null);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
+  const aiWriterRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
 
   // Text selection popup for reading mode
@@ -754,7 +755,7 @@ function StoryPanel({
     return () => clearTimeout(autosaveTimerRef.current);
   }, [editText, hasUnsavedChanges, handleSave]);
 
-  // Keyboard shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo
+  // Keyboard shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo, Ctrl+1/2/3/4 AI tools
   useEffect(() => {
     if (!editing) return;
     const handleKeyDown = (e) => {
@@ -769,6 +770,15 @@ function StoryPanel({
       if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
         e.preventDefault();
         handleRedo();
+      }
+      // AI writing tools: Ctrl+1 Continue, Ctrl+2 Deepen, Ctrl+3 Refine, Ctrl+4 Rewrite
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+        const toolMap = { '1': 'continue', '2': 'deepen', '3': 'nudge', '4': 'rewrite' };
+        const actionId = toolMap[e.key];
+        if (actionId && aiWriterRef.current) {
+          e.preventDefault();
+          aiWriterRef.current.triggerAction(actionId);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1164,6 +1174,15 @@ function StoryPanel({
               <div className="se-tools-section">
                 <div className="se-tools-section-title">Creative Tools</div>
                 <WriteModeAIWriter
+                  ref={aiWriterRef}
+                  cursorContext={(() => {
+                    const ta = textareaRef.current;
+                    if (!ta || !editText) return '';
+                    const pos = ta.selectionStart || 0;
+                    const start = Math.max(0, pos - 40);
+                    const end = Math.min(editText.length, pos + 40);
+                    return editText.slice(start, end).replace(/\n/g, ' ').trim();
+                  })()}
                   chapterId={String(story?.story_number || task?.story_number || '')}
                   bookId={activeWorld || ''}
                   selectedCharacter={charObj ? {
@@ -1191,6 +1210,8 @@ function StoryPanel({
                     } else {
                       setEditText(prev => prev + '\n\n' + text);
                     }
+                    // Auto-collapse tools on mobile after insertion
+                    setMobileToolsOpen(false);
                   }}
                   getSelectedText={() => {
                     const ta = textareaRef.current;
