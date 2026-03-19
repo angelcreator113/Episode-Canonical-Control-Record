@@ -161,12 +161,6 @@ export DATABASE_URL="${DATABASE_URL}"
 export NODE_ENV=production
 npm run migrate:up || echo "⚠️  Migrations completed with warnings"
 
-# Run migrations
-echo "🗄️  Running database migrations..."
-export DATABASE_URL="${DATABASE_URL}"
-export NODE_ENV=production
-npm run migrate:up || echo "⚠️  Migrations completed with warnings"
-
 # Restart backend application
 echo "🔄 Restarting backend application..."
 export PORT=3000
@@ -188,8 +182,8 @@ sleep 1
 
 # Start with ecosystem config if it exists, otherwise start manually
 if [ -f ecosystem.config.js ]; then
-  echo "📋 Starting with ecosystem config..."
-  pm2 start ecosystem.config.js --update-env
+  echo "📋 Starting with ecosystem config (production)..."
+  pm2 start ecosystem.config.js --env production --update-env
 else
   echo "📋 Starting with direct PM2 command..."
   if [ -f src/server.js ]; then

@@ -71,6 +71,15 @@ module.exports = {
         API_VERSION: 'v1',
         APP_NAME: 'Episode Metadata API (Development)',
         ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
+      },
+      env_production: {
+        ...sharedEnv,
+        PORT: 3000,
+        HOST: '0.0.0.0',
+        NODE_ENV: 'production',
+        API_VERSION: 'v1',
+        APP_NAME: 'Episode Metadata API (Production)',
+        ALLOWED_ORIGINS: 'https://primepisodes.com,https://www.primepisodes.com',
       }
     },
     {
