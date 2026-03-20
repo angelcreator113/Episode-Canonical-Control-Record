@@ -54,7 +54,7 @@ html, body {
 
 .app-main-wrapper.full-screen .app-content {
   padding: 0;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background-color: transparent;
 }

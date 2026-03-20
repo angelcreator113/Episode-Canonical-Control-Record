@@ -6,7 +6,7 @@
 /* ── Page Shell ── */
 .home-page {
   background: #faf8f6;
-  min-height: 100vh;
+  min-height: 100dvh;
   font-family: 'DM Sans', sans-serif;
   color: #3d342a;
   font-size: 16px;

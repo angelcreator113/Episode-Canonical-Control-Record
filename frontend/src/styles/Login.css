@@ -6,7 +6,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #faf9f7;
   font-family: 'DM Sans', sans-serif;
   position: relative;

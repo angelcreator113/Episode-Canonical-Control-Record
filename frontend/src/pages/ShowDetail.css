@@ -1,7 +1,7 @@
 /* frontend/src/pages/ShowDetail.css - UPDATED with Tab Styles - v1.1 */
 
 .show-detail {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #f8fafc;
   pointer-events: auto;
 }

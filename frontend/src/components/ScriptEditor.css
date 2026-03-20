@@ -1802,7 +1802,7 @@
 
   /* Root — fill available viewport */
   .se-root {
-    min-height: calc(100vh - 260px);
+    min-height: calc(100dvh - 260px);
     min-height: calc(100dvh - 260px);
     border-radius: 8px;
   }

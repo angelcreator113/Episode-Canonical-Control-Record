@@ -1,7 +1,7 @@
 /* Wardrobe Analytics Page Styles */
 
 .wardrobe-analytics-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding-bottom: 2rem;
 }
@@ -488,7 +488,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  min-height: 100dvh;
   font-size: 1.2rem;
   color: white;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

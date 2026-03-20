@@ -1381,7 +1381,7 @@
 @media (max-width: 768px) {
   .re-shell {
     height: auto;
-    min-height: 100vh;
+    min-height: 100dvh;
   }
   .re-body {
     flex-direction: column;

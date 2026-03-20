@@ -2,7 +2,7 @@
 .audit-log-page {
   padding: 2rem 1rem;
   background-color: var(--light);
-  min-height: calc(100vh - 100px);
+  min-height: calc(100dvh - 100px);
 }
 
 .audit-container {
