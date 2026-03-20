@@ -1381,14 +1381,16 @@
 @media (max-width: 768px) {
   .re-shell {
     height: auto;
-    min-height: 100vh;
+    min-height: 0; /* don't force full viewport — may be embedded in a tab */
   }
   .re-body {
+    flex: none;
     flex-direction: column;
     overflow: visible;
   }
   .re-sidebar {
     width: 100%;
+    flex: none;
     min-width: 0;
     border-right: none;
     border-bottom: 1.5px solid var(--ps-border);
@@ -1397,19 +1399,32 @@
   }
   .re-sidebar-chars {
     display: flex;
+    flex: none;
     flex-wrap: wrap;
     gap: 4px;
     padding: 6px 10px;
   }
   .re-canvas {
-    min-height: 400px;
+    flex: none;
+    min-height: 250px;
+    overflow: visible;
+  }
+  .re-view {
+    flex: none;
+    overflow: visible;
   }
   .re-inspector-panel {
     width: 100%;
+    flex: none;
     min-width: 0;
     border-left: none;
     border-top: 1.5px solid var(--ps-border);
-    max-height: 50vh;
+    max-height: none;
+    overflow-y: visible;
+  }
+  .re-inspector-body {
+    flex: none;
+    overflow-y: visible;
   }
   .re-header {
     flex-wrap: wrap;
@@ -1451,27 +1466,47 @@
    ═══════════════════════════════════════════════════════════════════════ */
 @media (max-width: 480px) {
   .re-header {
-    padding: 8px 10px;
-    gap: 8px;
+    padding: 6px 8px;
+    gap: 4px;
   }
-  .re-wordmark {
-    font-size: 14px;
+  .re-header-left {
+    display: none; /* hide "Relationship Engine v2" — redundant inside WorldStudio tab */
+  }
+  .re-tab-rail {
+    width: 100%;
+    gap: 2px;
+    justify-content: center;
   }
   .cg-tab-btn {
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+  .re-header-actions {
+    gap: 4px;
+    width: 100%;
+    justify-content: center;
+  }
+  .re-header-actions .re-btn-ghost,
+  .re-header-actions .re-btn-outline {
+    padding: 4px 8px;
+    font-size: 11px;
   }
   .re-sidebar {
-    max-height: 150px;
+    max-height: 120px;
+  }
+  .re-sidebar-section {
+    padding: 6px 8px 4px;
   }
   .re-canvas {
-    min-height: 300px;
+    min-height: 200px;
   }
   .re-inspector-panel {
-    max-height: 40vh;
+    max-height: none;
+    overflow-y: visible;
   }
   .re-sub-header {
-    padding: 6px 10px;
+    padding: 4px 8px;
+    gap: 6px;
   }
   .re-sub-title {
     font-size: 13px;

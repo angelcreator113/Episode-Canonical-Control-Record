@@ -9,7 +9,7 @@
 .character-profile {
   display: grid;
   grid-template-columns: 220px 1fr;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #fafaf9;
   font-family: 'DM Sans', sans-serif;
 }
@@ -25,7 +25,7 @@
   gap: 12px;
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
 }
 
@@ -173,7 +173,7 @@
 .profile-main {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ── Tab Bar ───────────────────────────────────────────────────────────────── */

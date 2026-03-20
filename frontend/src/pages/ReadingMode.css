@@ -10,7 +10,7 @@
 
 /* ── Fix 100vh on mobile browsers ──────────────────────────────────── */
 .rm-shell {
-  min-height: 100vh !important;
+  min-height: 100dvh !important;
   min-height: 100dvh !important;
 }
 

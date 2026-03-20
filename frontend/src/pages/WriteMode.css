@@ -973,7 +973,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 160px);
+  min-height: calc(100dvh - 160px);
   min-height: calc(100dvh - 160px);
   overflow-x: hidden;
   overflow-wrap: break-word;
@@ -2828,7 +2828,7 @@
   right: 0;
   width: 360px;
   max-width: 90vw;
-  height: 100vh;
+  height: 100dvh;
   height: 100dvh;
   background: #FAF7F0;
   border-left: 1px solid rgba(28, 24, 20, 0.12);

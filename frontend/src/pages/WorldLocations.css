@@ -1,7 +1,7 @@
 /* WorldLocations.css — Prime Studios design system */
 
 .wl-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #fafafa;
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   color: #1a1a1a;

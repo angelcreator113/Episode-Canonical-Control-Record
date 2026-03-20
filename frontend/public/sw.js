@@ -8,7 +8,7 @@
  *   - Story content saved explicitly via postMessage from the app
  */
 
-const CACHE_NAME = 'lalaverse-v2';
+const CACHE_NAME = 'lalaverse-v3';
 const STORY_CACHE = 'lalaverse-stories-v1';
 
 // ── Install: skip waiting to activate immediately ──────────────────────
@@ -42,11 +42,17 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+          }
           return res;
         })
-        .catch(() => caches.match(request) || caches.match('/index.html'))
+        .catch(() =>
+          caches.match(request)
+            .then((r) => r || caches.match('/index.html'))
+            .then((r) => r || new Response('Offline', { status: 503, statusText: 'Service Unavailable' }))
+        )
     );
     return;
   }
@@ -56,11 +62,19 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+          }
           return res;
         })
-        .catch(() => caches.match(request))
+        .catch(() =>
+          caches.match(request)
+            .then((r) => r || new Response('{"error":"offline"}', {
+              status: 503,
+              headers: { 'Content-Type': 'application/json' },
+            }))
+        )
     );
     return;
   }
@@ -86,11 +100,16 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((res) => {
-        const clone = res.clone();
-        caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+        }
         return res;
       })
-      .catch(() => caches.match(request))
+      .catch(() =>
+        caches.match(request)
+          .then((r) => r || new Response('', { status: 503 }))
+      )
   );
 });
 

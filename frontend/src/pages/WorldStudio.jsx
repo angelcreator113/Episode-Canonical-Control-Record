@@ -1145,16 +1145,20 @@ export default function WorldStudio() {
 
       {/* ── Feed tab ────────────────────────────────────────────── */}
       {studioTab === 'feed' && (
-        <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Feed Generator…</div>}>
-          <SocialProfileGenerator embedded={true} worldTag={worldTag} />
-        </Suspense>
+        <div className="ws4-feed-tab">
+          <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Feed Generator…</div>}>
+            <SocialProfileGenerator embedded={true} worldTag={worldTag} />
+          </Suspense>
+        </div>
       )}
 
       {/* ── Relationships tab ─────────────────────────────────────── */}
       {studioTab === 'relationships' && (
-        <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Relationship Engine…</div>}>
-          <RelationshipEngine />
-        </Suspense>
+        <div className="ws4-relationships-tab">
+          <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Relationship Engine…</div>}>
+            <RelationshipEngine />
+          </Suspense>
+        </div>
       )}
 
       {/* ── Characters tab ────────────────────────────────────────── */}

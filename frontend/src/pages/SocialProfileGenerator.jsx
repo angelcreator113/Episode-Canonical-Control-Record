@@ -301,7 +301,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     es.addEventListener('started',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'processing'}));}catch{}});
     es.addEventListener('profile_generating',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,current:d.current,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('profile_complete',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,total:d.total,status:'processing'}));}catch{}});
-    es.addEventListener('profile_failed',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing'}));}catch{}});
+    es.addEventListener('profile_failed',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing',lastError:d.error||p?.lastError}));}catch{}});
     es.addEventListener('cancelled',()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
     es.addEventListener('done',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch{}localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
     es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}}catch{}},3000);});
@@ -315,7 +315,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   const startJobPolling = (id,total)=>{localStorage.setItem('spg_active_job',id);setActiveJob({id,status:'pending',total:total||0,completed:0,failed:0});connectJobSSE(id);};
   const dismissJob = ()=>{setActiveJob(null);localStorage.removeItem('spg_active_job');if(sseRef.current){sseRef.current.close();sseRef.current=null;}};
-  const cancelJob = async()=>{if(!activeJob?.id)return;setCancellingJob(true);try{await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`,{method:'POST',headers:authHeaders()});}catch{}finally{setCancellingJob(false);}};
+  const cancelJob = async()=>{if(!activeJob?.id)return;setCancellingJob(true);try{const res=await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`,{method:'POST',headers:authHeaders()});if(!res.ok){const d=await res.json().catch(()=>({}));if(d.error&&/already/.test(d.error)){try{const jr=await fetch(`${API}/bulk/jobs/${activeJob.id}`,{headers:authHeaders()});const jd=await jr.json();if(jd.job){setActiveJob(jd.job);localStorage.removeItem('spg_active_job');loadProfiles();}}catch{}}}}catch{}finally{setCancellingJob(false);}};
 
   const showToast = (message,type='success')=>{clearTimeout(toastTimer.current);setToast({message,type});toastTimer.current=setTimeout(()=>setToast(null),4000);};
 
@@ -628,7 +628,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   // ────────────────────────────────────────────────────────────────────
   return (
-    <div style={{display:'flex',flexDirection:'column',...(embedded?{flex:1,minHeight:0}:{minHeight:'100vh'}),background:C.surfaceAlt,fontFamily:C.font}}>
+    <div style={{display:'flex',flexDirection:'column',...(embedded?{flex:'1 1 auto',minHeight:0}:{minHeight:'100vh'}),background:C.surfaceAlt,fontFamily:C.font}}>
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
@@ -714,9 +714,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
       {activeJob && (
         <div style={{background:activeJob.status==='completed'?'#e8f5ee':activeJob.status==='failed'?'#fde8e8':C.lavLight,borderBottom:`1px solid ${C.border}`,padding:'10px 24px',display:'flex',alignItems:'center',gap:12,fontSize:13}}>
           <span style={{flex:1,color:activeJob.status==='completed'?'#2d7a50':activeJob.status==='failed'?'#8a2020':C.inkMid}}>
-            {activeJob.status==='processing'&&<>⟳ Generating… {(activeJob.completed||0)+(activeJob.failed||0)}/{activeJob.total||0} processed{activeJob.completed>0?` (${activeJob.completed} created)`:''}{activeJob.failed>0?`, ${activeJob.failed} failed`:''}</>}
+            {activeJob.status==='processing'&&<>⟳ Generating… {(activeJob.completed||0)+(activeJob.failed||0)}/{activeJob.total||0} processed{activeJob.completed>0?` (${activeJob.completed} created)`:''}{activeJob.failed>0?<>, {activeJob.failed} failed{activeJob.lastError?<span style={{fontSize:11,color:'#c0392b',marginLeft:4}}>({activeJob.lastError})</span>:null}</>:null}</>}
             {activeJob.status==='pending'&&<>⟳ Job queued — waiting to start…</>}
-            {activeJob.status==='completed'&&<>✓ Generation complete — {activeJob.completed}/{activeJob.total} profiles created{activeJob.failed>0?` (${activeJob.failed} failed)`:''}</>}
+            {activeJob.status==='completed'&&<>✓ Generation complete — {activeJob.completed}/{activeJob.total} profiles created{activeJob.failed>0?<> ({activeJob.failed} failed{activeJob.lastError?<span style={{fontSize:11,color:'#c0392b',marginLeft:4}}>— {activeJob.lastError}</span>:null})</>:null}</>}
             {activeJob.status==='cancelled'&&<>⊘ Job cancelled — {activeJob.completed||0}/{activeJob.total||0} generated</>}
             {activeJob.status==='failed'&&<>✕ Job failed{activeJob.error_message?`: ${activeJob.error_message}`:''}</>}
           </span>
@@ -759,14 +759,15 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             <button onClick={previewAutoSparks} disabled={previewLoading||autoGenRunning} style={{padding:'7px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,background:'transparent',color:C.inkMid,cursor:previewLoading?'wait':'pointer'}}>
               {previewLoading?<><Spinner/> Previewing…</>:'Preview Sparks'}
             </button>
-            <button onClick={runAutoGenerate} disabled={autoGenRunning} style={{
+            <button onClick={runAutoGenerate} disabled={autoGenRunning||stats.total>=feedCap} style={{
               padding:'8px 22px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',
-              cursor:autoGenRunning?'not-allowed':'pointer',
+              cursor:autoGenRunning||stats.total>=feedCap?'not-allowed':'pointer',
+              opacity:stats.total>=feedCap&&!autoGenRunning?0.5:1,
               background:autoGenRunning?C.border:stats.total>=feedCap?'#c0392b':C.lavender,
               color:autoGenRunning?C.inkLight:'#fff',
               display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
             }}>
-              {autoGenRunning?<><Spinner/> Generating…</>:stats.total>=feedCap?`Generate ${autoGenCount} (cap exceeded)`:`Generate ${autoGenCount} Creators`}
+              {autoGenRunning?<><Spinner/> Generating…</>:stats.total>=feedCap?`Cap Reached (${feedCap}/${feedCap})`:`Generate ${autoGenCount} Creators`}
             </button>
             <span style={{fontSize:11,color:C.inkLight,marginLeft:'auto'}}>AI generates handles, vibes, and full profiles automatically</span>
           </div>

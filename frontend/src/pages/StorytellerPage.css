@@ -1595,7 +1595,7 @@
 .st-editor-layout {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100dvh;
   min-height: 100dvh;
   color: var(--st-ambient-ink, var(--st-ink));
   position: relative;
@@ -1980,7 +1980,7 @@
   flex-direction: column;
   position: sticky;
   top: var(--st-topbar-h);
-  height: calc(100vh - var(--st-topbar-h));
+  height: calc(100dvh - var(--st-topbar-h));
   height: calc(100dvh - var(--st-topbar-h));
   overflow: hidden;          /* no global scroll — scroll lives in st-nav-scroll */
   z-index: 1;
@@ -3022,7 +3022,7 @@ button.st-nav-section-clickable:hover {
   position: sticky;
   top: calc(var(--st-topbar-h) + 20px);
   height: fit-content;
-  max-height: calc(100vh - var(--st-topbar-h) - 40px);
+  max-height: calc(100dvh - var(--st-topbar-h) - 40px);
   max-height: calc(100dvh - var(--st-topbar-h) - 40px);
   overflow-y: auto;
 }
@@ -3461,7 +3461,7 @@ button.st-nav-section-clickable:hover {
     top: var(--st-topbar-h);
     left: 0;
     width: var(--st-nav-w);
-    height: calc(100vh - var(--st-topbar-h));
+    height: calc(100dvh - var(--st-topbar-h));
     height: calc(100dvh - var(--st-topbar-h));
     z-index: 60;
     background: var(--st-surface);

@@ -1,5 +1,5 @@
 .show-management-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   padding: clamp(0.75rem, 2vw, 2rem);
 }

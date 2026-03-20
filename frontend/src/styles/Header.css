@@ -211,6 +211,15 @@
   }
 }
 
+/* Mobile/Tablet: sticky header so it stays visible while body scrolls */
+@media (max-width: 1279px) {
+  .header {
+    position: sticky;
+    top: 0;
+    background: linear-gradient(180deg, #FAFAFE 0%, #F8F9FE 100%);
+  }
+}
+
 /* Landscape Mobile/Tablet */
 @media (max-width: 1279px) and (orientation: landscape) {
   .header {

@@ -22,7 +22,7 @@
   --serif:       'Cormorant Garamond', 'Georgia', serif;
   --sans:        'DM Sans', 'Inter', -apple-system, sans-serif;
 
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--ink);
   display: flex;

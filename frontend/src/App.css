@@ -13,17 +13,6 @@ html, body {
   background: #F8F9FE;
 }
 
-/* Allow pull-to-refresh and native scroll on mobile */
-@media (max-width: 1024px) {
-  html, body {
-    overflow-x: hidden;
-    overflow-y: hidden; /* keep .app-content as the sole scroller */
-    overscroll-behavior-y: auto;
-    -webkit-overflow-scrolling: touch;
-    max-width: 100vw;
-  }
-}
-
 .app-layout {
   display: flex;
   height: 100dvh; /* better on mobile than 100vh */
@@ -54,7 +43,7 @@ html, body {
 
 .app-main-wrapper.full-screen .app-content {
   padding: 0;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background-color: transparent;
 }
@@ -77,21 +66,19 @@ html, body {
 @media (max-width: 1279px) {
   .app-layout {
     flex-direction: row;
-    height: 100dvh;
   }
 
   .app-main-wrapper {
     flex: 1;
     width: 100%;
     min-width: 0;
-    overflow: hidden;
   }
 }
 
 .app-content {
   flex: 1;
   width: 100%;
-  height: 100%;
+  min-height: 0;    /* allow flex item to shrink below content size */
   overflow-y: auto; /* main scroll lives here */
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -355,10 +342,58 @@ body.page-story-engine .app-content {
   .app-footer {
     display: none;
   }
-  
+
   .app-content,
   .app-content > * {
     padding: 0;
+  }
+}
+
+/* ── Mobile scroll fix ──────────────────────────────────────────────────
+   MUST come after all base rules so it actually overrides them.
+   On mobile the body becomes the scroll container instead of .app-content.
+   This enables native pull-to-refresh, auto-hiding browser chrome on
+   scroll, and prevents content from being clipped inside nested
+   overflow:hidden wrappers.
+   Full-screen modes (timeline, scene-composer, write-mode, etc.) opt out
+   and keep their own contained scrolling via .full-screen overrides.
+   ──────────────────────────────────────────────────────────────────────── */
+@media (max-width: 1279px) {
+  html, body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100vw;
+  }
+
+  .app-layout {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .app-main-wrapper {
+    overflow: visible;
+    height: auto;
+  }
+
+  .app-content {
+    overflow: visible;
+    height: auto;
+  }
+
+  /* Full-screen pages still need contained scrolling */
+  .app-main-wrapper.full-screen {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-main-wrapper.full-screen .app-content {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

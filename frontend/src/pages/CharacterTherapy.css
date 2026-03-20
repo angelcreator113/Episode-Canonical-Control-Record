@@ -9,7 +9,7 @@
 
 .therapy-container {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   background: #fdf8f6;
   color: #3a2e2e;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -857,7 +857,7 @@
     left: -280px;
     width: 280px;
     min-width: 280px;
-    height: 100vh;
+    height: 100dvh;
     z-index: 50;
     transition: left 0.25s ease;
     background: linear-gradient(180deg, #fff5f2, #fef0ec);

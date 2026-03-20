@@ -3,7 +3,7 @@
    ================================ */
 
 .composition-library {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #0a0a0f;
   padding: 24px;
 }

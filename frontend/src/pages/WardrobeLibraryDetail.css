@@ -3,7 +3,7 @@
 .wardrobe-library-detail {
   padding: 2rem;
   background: #f8f9fa;
-  min-height: calc(100vh - 120px);
+  min-height: calc(100dvh - 120px);
 }
 
 .detail-header {
@@ -337,7 +337,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 200px);
+  min-height: calc(100dvh - 200px);
 }
 
 .error-message h2 {

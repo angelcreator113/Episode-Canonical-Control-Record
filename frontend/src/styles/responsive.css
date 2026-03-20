@@ -1875,3 +1875,40 @@
   h2 { font-size: 1rem !important; }
   h3 { font-size: 0.9rem !important; }
 }
+
+
+/* ============================================================
+   32. MOBILE SCROLL SAFETY — Prevent scroll-blocking on touch
+   ============================================================
+   Ensure .app-content always remains the primary scroll container
+   and pages inside it can scroll freely on mobile devices.
+   ============================================================ */
+
+/* Mobile scroll safety removed — App.css ≤1279px switches to body-scroll
+   mode (html,body overflow-y:auto; .app-content overflow:visible).
+   The previous !important override here conflicted with that model,
+   creating a zero-height scroll container.                              */
+@media (max-width: 1024px) {
+  /* Full-screen pages that manage their own scroll */
+  body.page-story-engine .app-content {
+    overflow: hidden !important;
+  }
+
+  /* Child pages flow naturally into body scroll */
+  .app-content > *:not(.scene-composer-full):not(.se-page) {
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+
+/* Touch devices: ensure momentum scrolling on all scroll containers */
+@media (hover: none) and (pointer: coarse) {
+  .app-content,
+  .ps-nav,
+  [style*="overflow-y: auto"],
+  [style*="overflow-y: scroll"],
+  [class*="-scroll"],
+  [class*="_scroll"] {
+    -webkit-overflow-scrolling: touch;
+  }
+}

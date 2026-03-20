@@ -226,6 +226,20 @@ router.post('/auto-generate-job', optionalAuth, async (req, res) => {
   }
 
   try {
+    // Check cap before creating a job — reject early if feed is full
+    const FEED_CAPS = { real_world: 443, lalaverse: 200 };
+    const cap = FEED_CAPS[layer] || 443;
+    const currentCount = await db.SocialProfile.count({
+      where: { feed_layer: layer, lalaverse_cap_exempt: false },
+    });
+    if (currentCount >= cap) {
+      return res.status(409).json({
+        error: `Feed cap reached (${currentCount}/${cap}). Delete or exempt profiles to generate more.`,
+        current: currentCount,
+        cap,
+      });
+    }
+
     // Create a job record so progress is persisted in the DB
     const job = await db.BulkImportJob.create({
       status: 'pending',

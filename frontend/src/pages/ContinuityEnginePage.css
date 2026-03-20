@@ -26,7 +26,7 @@
 
   font-family: 'DM Mono', monospace;
   color: var(--text);
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   background-image:
     linear-gradient(var(--grid) 1px, transparent 1px),
@@ -35,7 +35,7 @@
 }
 
 /* ── Shell ─────────────────────────────────────────────── */
-.ce-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.ce-shell { display: flex; flex-direction: column; min-height: 100dvh; }
 
 /* ── Topbar ────────────────────────────────────────────── */
 .ce-topbar {
@@ -107,7 +107,7 @@
   border-right: 1px solid var(--border);
   padding: 24px 0;
   overflow-y: auto;
-  max-height: calc(100vh - 53px);
+  max-height: calc(100dvh - 53px);
   position: sticky;
   top: 53px;
 }
@@ -186,7 +186,7 @@
   flex: 1;
   padding: 32px 40px;
   overflow-y: auto;
-  max-height: calc(100vh - 53px);
+  max-height: calc(100dvh - 53px);
 }
 
 /* ── Timeline list (landing) ───────────────────────────── */

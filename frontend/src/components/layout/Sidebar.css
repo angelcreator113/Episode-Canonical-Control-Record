@@ -28,7 +28,7 @@
 /* ── SHELL ───────────────────────────────────────────────────────────── */
 .ps-sidebar {
   width: var(--ps-sidebar-w);
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--ps-surface);
   border-right: 1px solid var(--ps-border);
   display: flex;
@@ -383,6 +383,8 @@
   width: auto;
 }
 
+.ps-sidebar-collapsed .ps-nav-label,
+.ps-sidebar-collapsed .ps-nav-chevron,
 .ps-sidebar-collapsed .ps-zone-label,
 .ps-sidebar-collapsed .ps-progress-block,
 .ps-sidebar-collapsed .ps-user-info {

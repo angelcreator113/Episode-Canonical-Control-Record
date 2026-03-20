@@ -32,7 +32,7 @@
 }
 
 .cse-root {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--cse-bg);
   color: var(--cse-ink);
   font-family: var(--cse-font-sans);
@@ -142,7 +142,7 @@
   padding: 20px 0;
   overflow-y: auto;
   background: var(--cse-card);
-  height: calc(100vh - 80px);
+  height: calc(100dvh - 80px);
   position: sticky;
   top: 80px;
 }
@@ -204,7 +204,7 @@
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
-  min-height: calc(100vh - 80px);
+  min-height: calc(100dvh - 80px);
 }
 
 .cse-editor-empty {
@@ -650,7 +650,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--cse-font-mono);
   font-size: 14px;
   color: var(--cse-muted);

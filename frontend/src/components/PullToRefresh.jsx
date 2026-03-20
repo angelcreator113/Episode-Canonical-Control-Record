@@ -1,7 +1,8 @@
 /**
  * PullToRefresh.jsx
- * Provides pull-to-refresh gesture for standalone PWA mode (no browser chrome).
- * Only activates when the page is scrolled to the top and the user pulls down.
+ * Provides pull-to-refresh gesture on mobile devices.
+ * Activates when the scroll container (.app-content) is at the top and the user pulls down.
+ * On desktop, the browser's native refresh (F5 / Cmd+R) is sufficient.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -14,17 +15,24 @@ export default function PullToRefresh() {
   const startY = useRef(0);
   const active = useRef(false);
 
-  // Only enable in standalone mode (PWA) where there's no browser refresh
-  const isStandalone =
+  // Enable on any touch device (mobile / tablet), not just standalone PWA
+  const isTouchDevice =
     typeof window !== 'undefined' &&
-    (window.navigator.standalone === true ||
-      window.matchMedia('(display-mode: standalone)').matches);
+    ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
+  const getScrollTop = useCallback(() => {
+    // On mobile the body is the scroll container; on desktop .app-content is.
+    // Check both and return whichever is non-zero (or the body fallback).
+    const appContent = document.querySelector('.app-content');
+    const contentScroll = appContent ? appContent.scrollTop : 0;
+    return Math.max(window.scrollY, document.documentElement.scrollTop, contentScroll);
+  }, []);
 
   const onTouchStart = useCallback((e) => {
-    if (window.scrollY > 5) return; // only when at top
+    if (getScrollTop() > 5) return; // only when scroll container is at top
     startY.current = e.touches[0].clientY;
     active.current = true;
-  }, []);
+  }, [getScrollTop]);
 
   const onTouchMove = useCallback((e) => {
     if (!active.current) return;
@@ -45,7 +53,7 @@ export default function PullToRefresh() {
   }, [pullDistance]);
 
   useEffect(() => {
-    if (!isStandalone) return;
+    if (!isTouchDevice) return;
     document.addEventListener('touchstart', onTouchStart, { passive: true });
     document.addEventListener('touchmove', onTouchMove, { passive: true });
     document.addEventListener('touchend', onTouchEnd);
@@ -54,9 +62,9 @@ export default function PullToRefresh() {
       document.removeEventListener('touchmove', onTouchMove);
       document.removeEventListener('touchend', onTouchEnd);
     };
-  }, [isStandalone, onTouchStart, onTouchMove, onTouchEnd]);
+  }, [isTouchDevice, onTouchStart, onTouchMove, onTouchEnd]);
 
-  if (!isStandalone || !pulling || pullDistance < 5) return null;
+  if (!isTouchDevice || !pulling || pullDistance < 5) return null;
 
   const ready = pullDistance >= THRESHOLD;
 
