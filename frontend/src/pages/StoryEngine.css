@@ -5114,36 +5114,54 @@ html, body {
   /* ── Header: hide Evaluate on mobile to reduce crowding ── */
   .se-header-btn--evaluate { display: none; }
 
-  /* ── Edit header: stack for mobile ── */
+  /* ── Edit header: single compact row on mobile ── */
   .se-edit-header {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 10px 14px;
+    flex-direction: row;
+    align-items: center;
+    padding: 6px 10px;
     gap: 8px;
   }
 
   .se-edit-header-left {
     flex-direction: row;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    width: 100%;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
   }
 
   .se-edit-back::after {
     display: none;
   }
 
+  .se-edit-header-title {
+    font-size: 14px;
+    max-width: 120px;
+  }
+
+  .se-edit-header-meta {
+    display: none;
+  }
+
+  /* Hide TTS and Focus on mobile — they crowd the edit bar */
+  .se-edit-header-right .se-tts-controls {
+    display: none;
+  }
+
+  .se-edit-header-right .se-btn-focus-toggle {
+    display: none;
+  }
+
   .se-edit-header-right {
-    width: 100%;
     display: flex;
-    gap: 8px;
-    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .se-edit-header-right .se-btn {
-    min-height: 36px;
-    font-size: 12px;
+    min-height: 32px;
+    font-size: 11px;
+    padding: 4px 10px;
   }
 }
 
@@ -5197,7 +5215,7 @@ html, body {
   }
 
   .se-writing-tools--mobile-open {
-    max-height: 50vh;
+    max-height: 35vh;
     overflow-y: auto;
   }
 
@@ -5305,7 +5323,7 @@ html, body {
   .se-story-editor { padding: 18px 14px; }
   .se-edit-canvas .se-story-editor { padding: 18px 14px; font-size: 16px; }
   .se-writing-tools { max-height: 44px; }
-  .se-writing-tools--mobile-open { max-height: 50vh; overflow-y: auto; }
+  .se-writing-tools--mobile-open { max-height: 35vh; overflow-y: auto; }
   .se-voice-option { padding: 8px 10px; }
 
   /* Navigator/Inspector drawers: full width on small phones */
@@ -5332,58 +5350,60 @@ html, body {
     padding: 4px 6px;
   }
 
-  /* ── Edit header: stack vertically on small phones ── */
+  /* ── Edit header: compact single row on small phones ── */
   .se-edit-header {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 10px 12px;
-    gap: 8px;
+    flex-direction: row;
+    align-items: center;
+    padding: 4px 8px;
+    gap: 4px;
   }
 
   .se-edit-header-left {
     flex-direction: row;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    width: 100%;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
   }
 
   .se-edit-header-title {
-    font-size: 14px;
-    max-width: 180px;
+    font-size: 13px;
+    max-width: 100px;
   }
 
   .se-edit-header-meta {
-    font-size: 11px;
+    display: none;
   }
 
   .se-edit-back {
-    font-size: 12px;
-    padding: 4px 8px 4px 2px;
+    font-size: 11px;
+    padding: 4px 6px 4px 0;
   }
 
   .se-edit-back::after {
     display: none;
   }
 
+  .se-edit-header-right .se-tts-controls {
+    display: none;
+  }
+
+  .se-edit-header-right .se-btn-focus-toggle {
+    display: none;
+  }
+
   .se-edit-header-right {
-    width: 100%;
     display: flex;
-    gap: 6px;
-    justify-content: stretch;
+    gap: 4px;
+    flex-shrink: 0;
   }
 
   .se-edit-header-right .se-btn {
-    flex: 1;
     text-align: center;
     justify-content: center;
-    font-size: 11px;
-    padding: 8px 6px;
-    min-height: 36px;
-  }
-
-  .se-edit-header-right .se-btn-save-primary {
-    flex: 1.5;
+    font-size: 10px;
+    padding: 4px 8px;
+    min-height: 30px;
   }
 
   /* ── Writing tools on small phones: tighter padding ── */
