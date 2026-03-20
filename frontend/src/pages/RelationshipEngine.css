@@ -1381,7 +1381,7 @@
 @media (max-width: 768px) {
   .re-shell {
     height: auto;
-    min-height: 100dvh;
+    min-height: 0; /* don't force full viewport — may be embedded in a tab */
   }
   .re-body {
     flex-direction: column;
@@ -1402,7 +1402,7 @@
     padding: 6px 10px;
   }
   .re-canvas {
-    min-height: 400px;
+    min-height: 250px;
   }
   .re-inspector-panel {
     width: 100%;
@@ -1483,7 +1483,7 @@
     padding: 6px 8px 4px;
   }
   .re-canvas {
-    min-height: 350px;
+    min-height: 200px;
   }
   .re-inspector-panel {
     max-height: 40vh;
