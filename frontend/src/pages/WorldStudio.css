@@ -1049,30 +1049,38 @@
   .ws4-sidebar { width: 220px; }
   .ws4-demo-grid { grid-template-columns: 1fr; }
 }
-@media (max-width: 680px) {
-  /*
-   * Mobile single-scroll fix.
-   * .app-content (App.css) is the ONLY scroll container.
-   * Everything below it must use overflow:visible so content
-   * flows into .app-content's scroller naturally.
-   */
+
+/*
+ * Tablet / body-scroll mode (matches App.css 1279px breakpoint).
+ * At ≤1279px App.css switches to body-scroll (overflow:visible on
+ * .app-content). WorldStudio must unlock its own scroll containers
+ * so content flows into the body scroller instead of being trapped
+ * behind overflow:hidden.
+ */
+@media (max-width: 1279px) {
   .ws4-page { height: auto !important; min-height: 0 !important; overflow: visible !important; }
   .ws4-body { flex: none !important; flex-direction: column; overflow: visible !important; }
-  .ws4-sidebar { width: 100%; flex: none !important; overflow: visible !important; border-right: none; border-bottom: 1px solid var(--ws4-border); }
+  .ws4-sidebar { flex: none !important; overflow: visible !important; border-right: none; border-bottom: 1px solid var(--ws4-border); }
   .ws4-sidebar-inner { flex: none !important; overflow: visible !important; }
   .ws4-char-list { flex: none !important; max-height: none !important; overflow: visible !important; }
-  .ws4-main { flex: none !important; overflow: visible !important; padding: 16px; }
+  .ws4-main { flex: none !important; overflow: visible !important; }
   /* Feed & Relationships tabs: use auto height in body-scroll mode */
   .ws4-feed-tab,
   .ws4-relationships-tab { flex: none !important; min-height: auto !important; overflow: visible !important; }
+  .ws4-want-grid { grid-template-columns: 1fr; }
+  .ws4-form-two-col { grid-template-columns: 1fr; }
+}
+
+/* Phone-only layout: stack sidebar above main, compact UI */
+@media (max-width: 680px) {
+  .ws4-sidebar { width: 100%; }
+  .ws4-main { padding: 16px; }
   .ws4-header-row { gap: 8px; }
   .ws4-header-title-block { min-width: auto; }
   .ws4-world-switcher { display: none; }
   .ws4-header-actions { flex-wrap: wrap; gap: 6px; }
   .ws4-header-actions .ws4-btn:not(.ws4-btn-primary) { display: none; }
   .ws4-header-actions .ws4-btn-primary { font-size: 12px; padding: 6px 12px; white-space: nowrap; }
-  .ws4-want-grid { grid-template-columns: 1fr; }
-  .ws4-form-two-col { grid-template-columns: 1fr; }
 }
 
 /* ── PAGE-LEVEL TABS (World Studio v4.1) ─────────────────────────────── */
