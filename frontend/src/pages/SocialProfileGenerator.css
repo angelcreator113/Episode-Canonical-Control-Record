@@ -43,7 +43,7 @@
 .spg-page {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  /* min-height is set via inline style (100vh standalone, 0 when embedded) */
   background: var(--ps-surface-alt);
   font-family: var(--ps-font);
   color: var(--ps-ink);
@@ -558,12 +558,6 @@
 }
 
 @media (max-width: 480px) {
-  /* ── Global: tighter horizontal padding on all SPG sections ────── */
-  .spg-page div[style*="padding"][style*="24px"] {
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-  }
-
   /* ── Header: compact title + badge ─────────────────────────────── */
   .spg-header {
     padding: 12px 12px !important;
@@ -691,6 +685,22 @@
   .spg-card-grid {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
+  }
+
+  /* ── Advanced filters bar: tighter padding ───────────────────── */
+  .spg-filters-bar {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* ── Bulk action bar: compact ───────────────────────────────── */
+  .spg-bulk-bar {
+    padding: 8px 12px !important;
+  }
+
+  /* ── Main content area: tighter padding ─────────────────────── */
+  .spg-content-area {
+    padding: 12px 12px !important;
   }
 
   /* ── Empty state: less padding ─────────────────────────────────── */
