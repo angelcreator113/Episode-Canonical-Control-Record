@@ -40,7 +40,7 @@
 .ws4-page {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: 100%;
   overflow: hidden;
   background: var(--ws4-bg);
   color: var(--ws4-text);
