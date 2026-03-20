@@ -21,9 +21,11 @@ export default function PullToRefresh() {
     ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   const getScrollTop = useCallback(() => {
-    // .app-content is the actual scroll container (html/body have overflow:hidden)
-    const el = document.querySelector('.app-content');
-    return el ? el.scrollTop : window.scrollY;
+    // On mobile the body is the scroll container; on desktop .app-content is.
+    // Check both and return whichever is non-zero (or the body fallback).
+    const appContent = document.querySelector('.app-content');
+    const contentScroll = appContent ? appContent.scrollTop : 0;
+    return Math.max(window.scrollY, document.documentElement.scrollTop, contentScroll);
   }, []);
 
   const onTouchStart = useCallback((e) => {
