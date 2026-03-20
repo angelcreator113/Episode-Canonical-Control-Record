@@ -51,6 +51,7 @@ const sharedEnv = {
 
 module.exports = {
   apps: [
+    // === PRODUCTION apps (port 3000) ===
     {
       name: 'episode-api',
       script: '/home/ubuntu/episode-metadata/src/server.js',
@@ -107,6 +108,49 @@ module.exports = {
         EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
         EXPORT_MAX_CONCURRENT_JOBS: '1',
       }
+    },
+    // === DEV apps (port 3002) — keeps dev.primepisodes.com alive ===
+    {
+      name: 'episode-api-dev',
+      script: '/home/ubuntu/episode-metadata/src/server.js',
+      cwd: '/home/ubuntu/episode-metadata',
+      interpreter: 'node',
+      interpreter_args: '',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      error_file: '/home/ubuntu/episode-metadata/logs/dev-error.log',
+      out_file: '/home/ubuntu/episode-metadata/logs/dev-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      env: {
+        ...sharedEnv,
+        PORT: 3002,
+        HOST: '0.0.0.0',
+        API_VERSION: 'v1',
+        APP_NAME: 'Episode Metadata API (Development)',
+        ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
+      },
+    },
+    {
+      name: 'episode-worker-dev',
+      script: '/home/ubuntu/episode-metadata/src/workers/start.js',
+      cwd: '/home/ubuntu/episode-metadata',
+      interpreter: 'node',
+      interpreter_args: '',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '2G',
+      error_file: '/home/ubuntu/episode-metadata/logs/dev-worker-error.log',
+      out_file: '/home/ubuntu/episode-metadata/logs/dev-worker-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      env: {
+        ...sharedEnv,
+        EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
+        EXPORT_MAX_CONCURRENT_JOBS: '1',
+      },
     }
   ]
 };
