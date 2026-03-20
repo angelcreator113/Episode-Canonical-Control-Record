@@ -59,11 +59,42 @@ export default function useGenerationJob({ selectedChar, tasks, stories, approve
   // --- Single story poll ---
   const startSinglePoll = useCallback((jobId, storyNumber) => {
     if (pollRef.current) clearInterval(pollRef.current);
+    let notFoundCount = 0;
+    const pollStartedAt = Date.now();
+    const MAX_POLL_MS = 10 * 60 * 1000; // 10 minutes max
 
     pollRef.current = setInterval(async () => {
+      // Safety: give up after 10 minutes of polling
+      if (Date.now() - pollStartedAt > MAX_POLL_MS) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+        localStorage.removeItem('storyEngine_activeJob');
+        addToast('Story generation timed out — please try again.', 'error');
+        setGenerating(false);
+        setGeneratingNum(null);
+        stopTimer();
+        return;
+      }
+
       try {
         const res = await fetch(`${API_BASE}/memories/pipeline-generate-status/${jobId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          // Job not found (404) — server may have restarted and lost the in-memory job
+          if (res.status === 404) {
+            notFoundCount++;
+            if (notFoundCount >= 3) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+              localStorage.removeItem('storyEngine_activeJob');
+              addToast('Story generation was lost — the server may have restarted. Please try again.', 'error');
+              setGenerating(false);
+              setGeneratingNum(null);
+              stopTimer();
+            }
+          }
+          return;
+        }
+        notFoundCount = 0; // reset on success
         const job = await res.json();
 
         if (job.status === 'completed') {
