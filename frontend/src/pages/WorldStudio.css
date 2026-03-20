@@ -1101,18 +1101,18 @@
   background: transparent;
   font-size: 13px;
   font-weight: 500;
-  color: var(--ws4-ink-dim);
+  color: var(--ws4-muted);
   cursor: pointer;
-  font-family: var(--ws4-font);
+  font-family: inherit;
   transition: all 0.14s ease;
   white-space: nowrap;
 }
 .ws4-page-tab:hover {
-  background: var(--ws4-lav-soft);
+  background: var(--ws4-lav-light);
   color: var(--ws4-lav);
 }
 .ws4-page-tab-active {
-  background: var(--ws4-lav-soft);
+  background: var(--ws4-lav-light);
   border-color: var(--ws4-lav);
   color: var(--ws4-lav);
   font-weight: 600;
