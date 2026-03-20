@@ -172,18 +172,23 @@ if ! command -v pm2 &> /dev/null; then
   npm install -g pm2
 fi
 
-# Stop any existing processes
-pm2 stop all || true
-pm2 delete all || true
+# Stop existing production processes (preserve dev processes)
+echo "📋 Stopping production processes..."
+pm2 stop episode-api episode-worker 2>/dev/null || true
+pm2 delete episode-api episode-worker 2>/dev/null || true
 sleep 2
-pkill -f "node.*app.js" || true
-pkill -f "node.*episode" || true
-sleep 1
 
 # Start with ecosystem config if it exists, otherwise start manually
 if [ -f ecosystem.config.js ]; then
-  echo "📋 Starting with ecosystem config (production)..."
-  pm2 start ecosystem.config.js --env production --update-env
+  echo "📋 Starting with ecosystem config (production + dev)..."
+  pm2 start ecosystem.config.js --only episode-api --env production --update-env
+  pm2 start ecosystem.config.js --only episode-worker --env production --update-env
+  # Also ensure dev processes are running (port 3002 for dev.primepisodes.com)
+  if ! pm2 list | grep -q "episode-api-dev.*online"; then
+    echo "📋 Starting dev processes..."
+    pm2 start ecosystem.config.js --only episode-api-dev --update-env
+    pm2 start ecosystem.config.js --only episode-worker-dev --update-env
+  fi
 else
   echo "📋 Starting with direct PM2 command..."
   if [ -f src/server.js ]; then
