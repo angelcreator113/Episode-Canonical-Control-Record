@@ -315,7 +315,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   const startJobPolling = (id,total)=>{localStorage.setItem('spg_active_job',id);setActiveJob({id,status:'pending',total:total||0,completed:0,failed:0});connectJobSSE(id);};
   const dismissJob = ()=>{setActiveJob(null);localStorage.removeItem('spg_active_job');if(sseRef.current){sseRef.current.close();sseRef.current=null;}};
-  const cancelJob = async()=>{if(!activeJob?.id)return;setCancellingJob(true);try{await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`,{method:'POST',headers:authHeaders()});}catch{}finally{setCancellingJob(false);}};
+  const cancelJob = async()=>{if(!activeJob?.id)return;setCancellingJob(true);try{const res=await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`,{method:'POST',headers:authHeaders()});if(!res.ok){const d=await res.json().catch(()=>({}));if(d.error&&/already/.test(d.error)){try{const jr=await fetch(`${API}/bulk/jobs/${activeJob.id}`,{headers:authHeaders()});const jd=await jr.json();if(jd.job){setActiveJob(jd.job);localStorage.removeItem('spg_active_job');loadProfiles();}}catch{}}}}catch{}finally{setCancellingJob(false);}};
 
   const showToast = (message,type='success')=>{clearTimeout(toastTimer.current);setToast({message,type});toastTimer.current=setTimeout(()=>setToast(null),4000);};
 
