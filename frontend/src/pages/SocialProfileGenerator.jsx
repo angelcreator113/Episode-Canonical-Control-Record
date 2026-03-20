@@ -635,11 +635,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     <div style={{display:'flex',flexDirection:'column',...(embedded?{flex:'1 1 auto',minHeight:0}:{minHeight:'100vh'}),background:C.surfaceAlt,fontFamily:C.font}}>
 
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
+      <div className="spg-header" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:14}}>
           <div>
-            <div style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed <span style={{fontSize:12,fontWeight:600,color:C.pink,background:'#f9e4ec',padding:'2px 8px',borderRadius:4,marginLeft:6,verticalAlign:'middle',letterSpacing:'0.3px'}}>{protagonist.icon} {protagonist.context.name}</span></div>
-            <div style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — {protagonist.context.name === 'Lala' ? "Lala's inherited digital world" : "JustAWoman's real-world online ecosystem"}</div>
+            <div className="spg-header-title" style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:2}}>📱 The Feed <span style={{fontSize:12,fontWeight:600,color:C.pink,background:'#f9e4ec',padding:'2px 8px',borderRadius:4,marginLeft:6,verticalAlign:'middle',letterSpacing:'0.3px'}}>{protagonist.icon} {protagonist.context.name}</span></div>
+            <div className="spg-header-sub" style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — {protagonist.context.name === 'Lala' ? "Lala's inherited digital world" : "JustAWoman's real-world online ecosystem"}</div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {/* Protagonist switcher — hidden when embedded in WorldStudio */}
@@ -675,36 +675,36 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             <>
               {/* Lala's Feed: show combined total, then native/cap, then shared */}
               <div style={{display:'flex',alignItems:'baseline',gap:6}}>
-                <span style={{fontSize:22,fontWeight:700,color:C.lavender,lineHeight:1}}>{nativeTotal+crossoverCount}</span>
-                <span style={{fontSize:12,color:C.inkLight}}>Profiles</span>
+                <span className="spg-stat-number-lg" style={{fontSize:22,fontWeight:700,color:C.lavender,lineHeight:1}}>{nativeTotal+crossoverCount}</span>
+                <span className="spg-stat-label" style={{fontSize:12,color:C.inkLight}}>Profiles</span>
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:6,paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
-                <span style={{fontSize:16,fontWeight:700,color:C.lavender,lineHeight:1}}>{nativeTotal}</span>
-                <span style={{fontSize:11,color:C.inkLight}}>/ {feedCap} native</span>
+                <span className="spg-stat-number" style={{fontSize:16,fontWeight:700,color:C.lavender,lineHeight:1}}>{nativeTotal}</span>
+                <span className="spg-stat-label" style={{fontSize:11,color:C.inkLight}}>/ {feedCap} native</span>
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:6}}>
-                <span style={{fontSize:16,fontWeight:700,color:C.blue,lineHeight:1}}>{crossoverCount}</span>
-                <span style={{fontSize:11,color:C.inkLight}}>shared</span>
+                <span className="spg-stat-number" style={{fontSize:16,fontWeight:700,color:C.blue,lineHeight:1}}>{crossoverCount}</span>
+                <span className="spg-stat-label" style={{fontSize:11,color:C.inkLight}}>shared</span>
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:6,paddingLeft:12,borderLeft:`1px solid ${C.border}`}}>
-                <span style={{fontSize:16,fontWeight:700,color:C.inkMid,lineHeight:1}}>{stats.generated||0}</span>
-                <span style={{fontSize:11,color:C.inkLight}}>Generated</span>
+                <span className="spg-stat-number" style={{fontSize:16,fontWeight:700,color:C.inkMid,lineHeight:1}}>{stats.generated||0}</span>
+                <span className="spg-stat-label" style={{fontSize:11,color:C.inkLight}}>Generated</span>
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:6}}>
-                <span style={{fontSize:16,fontWeight:700,color:'#2d7a50',lineHeight:1}}>{tabCounts.finalized||0}</span>
-                <span style={{fontSize:11,color:C.inkLight}}>Finalized</span>
+                <span className="spg-stat-number" style={{fontSize:16,fontWeight:700,color:'#2d7a50',lineHeight:1}}>{tabCounts.finalized||0}</span>
+                <span className="spg-stat-label" style={{fontSize:11,color:C.inkLight}}>Finalized</span>
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:6}}>
-                <span style={{fontSize:16,fontWeight:700,color:C.pink,lineHeight:1}}>{tabCounts.crossed||0}</span>
-                <span style={{fontSize:11,color:C.inkLight}}>Crossed</span>
+                <span className="spg-stat-number" style={{fontSize:16,fontWeight:700,color:C.pink,lineHeight:1}}>{tabCounts.crossed||0}</span>
+                <span className="spg-stat-label" style={{fontSize:11,color:C.inkLight}}>Crossed</span>
               </div>
             </>
           ):(
             <>
               {[['Profiles',stats.total,stats.total>=feedCap?'#c0392b':stats.total>=(feedCap-23)?'#e67e22':C.blue],['Generated',stats.generated,C.inkMid],['Finalized',stats.finalized,'#2d7a50'],['Crossed',stats.crossed,C.pink]].map(([label,val,color])=>(
                 <div key={label} style={{display:'flex',alignItems:'baseline',gap:6}}>
-                  <span style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{val||0}</span>
-                  <span style={{fontSize:12,color:C.inkLight}}>{label==='Profiles'?`/ ${feedCap}`:label}</span>
+                  <span className="spg-stat-number-lg" style={{fontSize:22,fontWeight:700,color,lineHeight:1}}>{val||0}</span>
+                  <span className="spg-stat-label" style={{fontSize:12,color:C.inkLight}}>{label==='Profiles'?`/ ${feedCap}`:label}</span>
                 </div>
               ))}
             </>
@@ -935,7 +935,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
                 </button>
               ))}
             </div>
-            <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
+            <div className="spg-toolbar-controls" style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
               {/* Export dropdown */}
               <ExportDropdown exporting={exporting} onExport={exportProfiles}/>
               <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Search handle or name…" style={{padding:'6px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:200,minWidth:0,flex:'1 1 120px'}}/>

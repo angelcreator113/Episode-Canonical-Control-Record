@@ -585,10 +585,55 @@
 }
 
 @media (max-width: 480px) {
-  /* Job banner: stack text, progress bar, and cancel button vertically */
+  /* ── Global: tighter horizontal padding on all SPG sections ────── */
+  .spg-page div[style*="padding"][style*="24px"] {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* ── Header: compact title + badge ─────────────────────────────── */
+  .spg-header {
+    padding: 12px 12px !important;
+  }
+  .spg-header-title {
+    font-size: 16px !important;
+  }
+  .spg-header-sub {
+    font-size: 12px !important;
+  }
+
+  /* ── Feed layer switcher: compact ──────────────────────────────── */
+  .spg-feed-switcher {
+    flex-wrap: wrap !important;
+  }
+  .spg-feed-switcher > button {
+    font-size: 11px !important;
+    padding: 5px 10px !important;
+  }
+
+  /* ── Stats row: wrap + smaller font sizes ──────────────────────── */
+  .spg-stats-row {
+    flex-wrap: wrap !important;
+    gap: 6px 12px !important;
+  }
+  .spg-stats-row > div {
+    border-left: none !important;
+    padding-left: 0 !important;
+  }
+  .spg-stats-row .spg-stat-number {
+    font-size: 16px !important;
+  }
+  .spg-stats-row .spg-stat-number-lg {
+    font-size: 18px !important;
+  }
+  .spg-stats-row .spg-stat-label {
+    font-size: 10px !important;
+  }
+
+  /* ── Job banner: vertical stack ────────────────────────────────── */
   .spg-job-banner-wrap {
     flex-wrap: wrap !important;
-    padding: 10px 14px !important;
+    padding: 10px 12px !important;
     gap: 8px !important;
   }
   .spg-job-banner-wrap > span:first-child {
@@ -600,24 +645,33 @@
     flex-basis: 100% !important;
   }
 
-  /* Stats row: wrap into a compact grid */
-  .spg-stats-row {
-    flex-wrap: wrap !important;
-    gap: 8px 16px !important;
+  /* ── Auto-generate bar: compact ────────────────────────────────── */
+  .spg-autogen-bar {
+    padding: 10px 12px !important;
   }
-  .spg-stats-row > div {
-    border-left: none !important;
-    padding-left: 0 !important;
+  .spg-autogen-row {
+    gap: 8px !important;
+  }
+  .spg-autogen-row > span:last-child {
+    display: none !important;
   }
 
-  /* Filter tabs: horizontal scroll instead of wrapping/truncation */
+  /* ── Toolbar: full-width stacking ──────────────────────────────── */
+  .spg-toolbar {
+    padding: 8px 12px !important;
+    gap: 6px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  /* ── Filter tabs: horizontal scroll ────────────────────────────── */
   .spg-filter-tabs {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    flex-shrink: 0 !important;
     flex-wrap: nowrap !important;
-    max-width: 100% !important;
+    width: 100% !important;
+    padding-bottom: 2px !important;
   }
   .spg-filter-tabs::-webkit-scrollbar {
     display: none;
@@ -625,16 +679,17 @@
   .spg-filter-tabs > button {
     white-space: nowrap !important;
     flex-shrink: 0 !important;
+    padding: 4px 10px !important;
+    font-size: 11px !important;
   }
 
-  /* View mode tabs: horizontal scroll */
+  /* ── View mode tabs: horizontal scroll ─────────────────────────── */
   .spg-view-tabs {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    flex-shrink: 0 !important;
     flex-wrap: nowrap !important;
-    max-width: 100% !important;
+    width: 100% !important;
     margin-left: 0 !important;
   }
   .spg-view-tabs::-webkit-scrollbar {
@@ -643,51 +698,30 @@
   .spg-view-tabs > button {
     white-space: nowrap !important;
     flex-shrink: 0 !important;
+    padding: 4px 8px !important;
+    font-size: 10px !important;
   }
 
-  /* Toolbar: stack rows vertically */
-  .spg-toolbar {
-    padding: 8px 12px !important;
-    gap: 8px !important;
-  }
-  .spg-toolbar > div:last-child {
+  /* ── Toolbar controls: full width row ──────────────────────────── */
+  .spg-toolbar-controls {
     margin-left: 0 !important;
     width: 100% !important;
+    flex-wrap: wrap !important;
   }
-  .spg-toolbar > div:last-child input {
+  .spg-toolbar-controls input {
     width: 100% !important;
     min-width: 0 !important;
+    flex: 1 1 100% !important;
   }
 
-  /* Auto-generate bar: compact padding, let items wrap naturally */
-  .spg-autogen-bar {
-    padding: 12px 14px !important;
-  }
-  .spg-autogen-row {
-    gap: 8px !important;
-  }
-  .spg-autogen-row > span:last-child {
-    display: none !important; /* hide helper text on mobile */
-  }
-
-  /* Card grid: single column on narrow screens */
+  /* ── Card grid: single column ──────────────────────────────────── */
   .spg-card-grid {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
   }
 
-  /* Reduce horizontal padding on all section bars */
-  .spg-page > div[style*="padding"] {
-    padding-left: 14px !important;
-    padding-right: 14px !important;
-  }
-
-  /* Feed layer switcher: allow wrapping */
-  .spg-feed-switcher {
-    flex-wrap: wrap !important;
-  }
-  .spg-feed-switcher > button {
-    font-size: 11px !important;
-    padding: 5px 10px !important;
+  /* ── Empty state: less padding ─────────────────────────────────── */
+  .spg-empty {
+    padding: 32px 16px;
   }
 }

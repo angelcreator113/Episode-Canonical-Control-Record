@@ -318,6 +318,10 @@ body.page-story-engine .app-content {
   .ps-sidebar button, .ps-sidebar a {
     min-height: unset;
   }
+  /* SocialProfileGenerator has many small pill-buttons / tab buttons */
+  .spg-page button, .spg-page a, .spg-page input, .spg-page select {
+    min-height: unset;
+  }
 }
 
 /* Landscape Mobile */
