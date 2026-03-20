@@ -1884,21 +1884,17 @@
    and pages inside it can scroll freely on mobile devices.
    ============================================================ */
 
+/* Mobile scroll safety removed — App.css ≤1279px switches to body-scroll
+   mode (html,body overflow-y:auto; .app-content overflow:visible).
+   The previous !important override here conflicted with that model,
+   creating a zero-height scroll container.                              */
 @media (max-width: 1024px) {
-  /* Guarantee the main content area is scrollable */
-  .app-content {
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
-  }
-
-  /* Full-screen pages that manage their own scroll override above */
+  /* Full-screen pages that manage their own scroll */
   body.page-story-engine .app-content {
     overflow: hidden !important;
   }
 
-  /* Prevent child pages from accidentally blocking scroll
-     by capping height to the available flex space */
+  /* Child pages flow naturally into body scroll */
   .app-content > *:not(.scene-composer-full):not(.se-page) {
     max-height: none;
     overflow-y: visible;
