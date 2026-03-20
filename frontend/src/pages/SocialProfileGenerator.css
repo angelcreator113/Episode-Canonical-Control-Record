@@ -298,36 +298,9 @@
   color: var(--ps-ink-light);
 }
 
-/* ── Job banner ────────────────────────────────────────────────────── */
-.spg-job-banner {
-  padding: 10px 24px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-  font-family: var(--ps-font);
-  border-bottom: 1px solid var(--ps-border);
-}
-
-.spg-job-banner.active   { background: var(--ps-lav-light); color: var(--ps-ink-mid); }
-.spg-job-banner.done     { background: #e8f5ee; color: #2d7a50; }
-.spg-job-banner.failed   { background: #fde8e8; color: #8a2020; }
-.spg-job-banner.cancelled { background: #f0f0f5; color: #6b6a80; }
-
-.spg-job-progress-bar {
-  width: 200px;
-  height: 4px;
-  background: rgba(255,255,255,0.5);
-  border-radius: 2px;
-  overflow: hidden;
+/* ── Job banner (wraps inline-styled status bar) ─────────────────── */
+.spg-job-progress-inline {
   flex-shrink: 0;
-}
-
-.spg-job-progress-fill {
-  height: 100%;
-  background: var(--ps-lavender);
-  border-radius: 2px;
-  transition: width 0.5s ease;
 }
 
 /* ── Detail panel ──────────────────────────────────────────────────── */

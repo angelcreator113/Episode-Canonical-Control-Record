@@ -632,7 +632,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   // ────────────────────────────────────────────────────────────────────
   return (
-    <div style={{display:'flex',flexDirection:'column',...(embedded?{flex:'1 1 auto',minHeight:0}:{minHeight:'100vh'}),background:C.surfaceAlt,fontFamily:C.font}}>
+    <div className="spg-page" style={{display:'flex',flexDirection:'column',...(embedded?{flex:'1 1 auto',minHeight:0}:{minHeight:'100vh'}),background:C.surfaceAlt,fontFamily:C.font}}>
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="spg-header" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
