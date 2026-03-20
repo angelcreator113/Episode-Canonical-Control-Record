@@ -383,6 +383,8 @@
   width: auto;
 }
 
+.ps-sidebar-collapsed .ps-nav-label,
+.ps-sidebar-collapsed .ps-nav-chevron,
 .ps-sidebar-collapsed .ps-zone-label,
 .ps-sidebar-collapsed .ps-progress-block,
 .ps-sidebar-collapsed .ps-user-info {
