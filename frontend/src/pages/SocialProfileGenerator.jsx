@@ -632,7 +632,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   // ────────────────────────────────────────────────────────────────────
   return (
-    <div style={{display:'flex',flexDirection:'column',...(embedded?{flex:'1 1 auto',minHeight:0}:{minHeight:'100vh'}),background:C.surfaceAlt,fontFamily:C.font}}>
+    <div className="spg-page" style={{display:'flex',flexDirection:'column',...(embedded?{flex:'1 1 auto',minHeight:0}:{minHeight:'100vh'}),background:C.surfaceAlt,fontFamily:C.font}}>
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="spg-header" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px',flexShrink:0}}>
@@ -954,7 +954,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
           </div>
 
           {/* Advanced Filters toggle + panel */}
-          <div style={{borderBottom:`1px solid ${C.border}`,padding:'0 24px'}}>
+          <div className="spg-filters-bar" style={{borderBottom:`1px solid ${C.border}`,padding:'0 24px'}}>
             <button onClick={()=>setShowFilters(f=>!f)} style={{padding:'5px 12px',fontSize:11,fontWeight:600,cursor:'pointer',background:'transparent',color:C.lavender,border:'none',display:'flex',alignItems:'center',gap:4}}>
               {showFilters?'Hide':'Show'} Advanced Filters
               {(filterArchetypes.length+filterPlatforms.length+(filterCategory?1:0)+(filterRelevanceMin!==''?1:0)+(filterRelevanceMax!==''?1:0)+(filterAdultContent!==null?1:0))>0&&
@@ -1012,7 +1012,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
           {/* Bulk action bar */}
           {bulkMode && (
-            <div style={{background:C.lavLight,borderBottom:`1px solid ${C.lavender}40`,padding:'8px 24px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
+            <div className="spg-bulk-bar" style={{background:C.lavLight,borderBottom:`1px solid ${C.lavender}40`,padding:'8px 24px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
               <button onClick={()=>setSelectedIds(new Set(profiles.map(p=>p.id)))} style={sBtnSm}>Select Page ({profiles.length})</button>
               {totalCount>profiles.length&&<button onClick={()=>setSelectAllPages(true)} style={sBtnSm}>Select All {totalCount}</button>}
               {(selectedIds.size>0||selectAllPages)&&<span style={{fontSize:12,color:C.lavender,fontWeight:700}}>{selectAllPages?`All ${totalCount}`:selectedIds.size} selected</span>}
@@ -1025,7 +1025,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </div>
           )}
 
-          <div style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
+          <div className="spg-content-area" style={{flex:1,padding:'16px 24px',overflowY:'auto'}}>
             <FeedPagination {...paginationProps}/>
             {/* JustAWoman's pinned record — Lala's Feed only */}
             {feedLayer==='lalaverse'&&justAwomanProfile&&page===1&&!search&&(

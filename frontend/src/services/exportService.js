@@ -15,8 +15,9 @@ let socket = null;
  */
 export function getSocket() {
   if (!socket) {
-    const baseURL = import.meta.env.VITE_API_BASE || 'http://localhost:3002';
-    socket = io(baseURL, {
+    // Use relative URL so the request goes to the same host the page was loaded from
+    const baseURL = import.meta.env.VITE_API_BASE || '';
+    socket = io(baseURL || window.location.origin, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
       reconnection: true,

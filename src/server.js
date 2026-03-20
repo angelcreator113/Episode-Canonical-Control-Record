@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const http = require('http');
 const app = require('./app');
+const { corsOptions } = require('./app');
 const db = require('./models');
 const sequelize = db.sequelize;
 const { initializeSocket } = require('./sockets');
@@ -185,7 +186,7 @@ async function startServer() {
 
     // Initialize Socket.io
     console.log('🔌 Initializing Socket.io...');
-    initializeSocket(httpServer);
+    initializeSocket(httpServer, corsOptions);
 
     // Start HTTP server
     server = httpServer;
