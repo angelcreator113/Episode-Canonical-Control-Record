@@ -3,6 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const os = require('os');
 
 // Only load .env if not running via PM2 with ecosystem config
 if (!process.env.PM2_HOME) {
@@ -120,50 +121,65 @@ app.get('/ping', (req, res) => {
 });
 
 // CORS MUST come BEFORE helmet
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow all localhost origins and specified domains
-      const allowedOrigins = [
-        'http://localhost:3000',
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://localhost:5175',
-        'http://localhost:5176',
-        'http://127.0.0.1:5173',
-        'http://127.0.0.1:5174',
-        'http://127.0.0.1:5175',
-        'http://127.0.0.1:5176',
-        'http://127.0.0.1:3000',
-        'http://primepisodes.com',
-        'https://primepisodes.com',
-        'http://www.primepisodes.com',
-        'https://www.primepisodes.com',
-        'http://api.primepisodes.com',
-        'https://api.primepisodes.com',
-        'http://dev.primepisodes.com',
-        'https://dev.primepisodes.com',
-        'http://primepisodes-alb-1912818060.us-east-1.elb.amazonaws.com',
-        'http://52.91.217.230',
-        'http://3.94.166.174',
-      ];
 
-      // Allow requests without origin (like from curl or development environments)
-      // or if origin is in the allowed list
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log('❌ CORS Rejected - Origin:', origin);
-        callback(new Error('Not allowed by CORS'));
+// Build the allowed origins list, including LAN IPs for mobile device access
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  'http://127.0.0.1:5175',
+  'http://127.0.0.1:5176',
+  'http://127.0.0.1:3000',
+  'http://primepisodes.com',
+  'https://primepisodes.com',
+  'http://www.primepisodes.com',
+  'https://www.primepisodes.com',
+  'http://api.primepisodes.com',
+  'https://api.primepisodes.com',
+  'http://dev.primepisodes.com',
+  'https://dev.primepisodes.com',
+  'http://primepisodes-alb-1912818060.us-east-1.elb.amazonaws.com',
+  'http://52.91.217.230',
+  'http://3.94.166.174',
+];
+
+// Auto-detect LAN IPs so mobile devices on the same network are allowed
+const devPorts = [3000, 3001, 3002, 5173, 5174, 5175, 5176];
+const interfaces = os.networkInterfaces();
+for (const iface of Object.values(interfaces)) {
+  for (const addr of iface) {
+    if (addr.family === 'IPv4' && !addr.internal) {
+      for (const port of devPorts) {
+        allowedOrigins.push(`http://${addr.address}:${port}`);
       }
-    },
-    credentials: true,
-    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 200, // Some legacy browsers (IE11) require this
-  })
-);
+    }
+  }
+}
+console.log('🌐 CORS allowed origins:', allowedOrigins.length, 'entries (including LAN IPs)');
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests without origin (like from curl or development environments)
+    // or if origin is in the allowed list
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('❌ CORS Rejected - Origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200, // Some legacy browsers (IE11) require this
+};
+
+app.use(cors(corsOptions));
 
 // Handle preflight requests for all routes
 app.options(/(.*)/, cors());
@@ -1521,3 +1537,4 @@ app.use(errorHandler);
 
 // Export app for use in server.js or testing
 module.exports = app;
+module.exports.corsOptions = corsOptions;

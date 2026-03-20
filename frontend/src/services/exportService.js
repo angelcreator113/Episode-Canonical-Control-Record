@@ -15,7 +15,7 @@ let socket = null;
  */
 export function getSocket() {
   if (!socket) {
-    const baseURL = import.meta.env.VITE_API_BASE || 'http://localhost:3002';
+    const baseURL = import.meta.env.VITE_API_BASE || window.location.origin;
     socket = io(baseURL, {
       transports: ['websocket', 'polling'],
       autoConnect: true,

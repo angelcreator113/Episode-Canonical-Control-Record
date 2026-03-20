@@ -12,17 +12,20 @@ let io = null;
  * @param {import('http').Server} httpServer - The HTTP server instance
  * @returns {Server} Socket.io server instance
  */
-function initializeSocket(httpServer) {
-  const corsOrigins = (process.env.SOCKET_IO_CORS_ORIGIN || 'http://localhost:5174')
-    .split(',')
-    .map((s) => s.trim());
+function initializeSocket(httpServer, corsOpts) {
+  // Reuse the HTTP CORS config if provided, otherwise fall back to env/defaults
+  const socketCors = corsOpts
+    ? { origin: corsOpts.origin, methods: ['GET', 'POST'], credentials: true }
+    : {
+        origin: (process.env.SOCKET_IO_CORS_ORIGIN || 'http://localhost:5174')
+          .split(',')
+          .map((s) => s.trim()),
+        methods: ['GET', 'POST'],
+        credentials: true,
+      };
 
   io = new Server(httpServer, {
-    cors: {
-      origin: corsOrigins,
-      methods: ['GET', 'POST'],
-      credentials: true,
-    },
+    cors: socketCors,
     transports: ['websocket', 'polling'],
     pingInterval: 25000,
     pingTimeout: 20000,
