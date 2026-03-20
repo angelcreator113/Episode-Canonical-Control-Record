@@ -108,3 +108,5 @@ exports-temp/*
 frontend-build.tar.gz
 *.bak
 nul
+
+Episode-Canonical-Control-Record/
