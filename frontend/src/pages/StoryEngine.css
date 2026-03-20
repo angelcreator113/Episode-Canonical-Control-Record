@@ -1,4 +1,4 @@
-/*
+﻿/*
    StoryEngine.css
    Three-panel layout: Navigator | Canvas | Inspector
    Aesthetic: editorial / premium / warm paper + polished utility
@@ -4593,6 +4593,25 @@ html, body {
    Responsive: 900px (mobile breakpoint)
 ────────────────────────────────────────── */
 @media (max-width: 900px) {
+  /* ── Eliminate 300ms tap delay on all interactive elements ── */
+  .se-btn,
+  .se-btn-nav,
+  .se-header-btn,
+  .se-header-back,
+  .se-edit-back,
+  .se-mobile-toggle,
+  .se-mobile-tools-toggle,
+  .se-filter-pill,
+  .se-task-card,
+  .se-task-generate-btn,
+  .se-review-btn,
+  .se-review-page-btn,
+  .se-btn-page,
+  .se-modal-btn,
+  .se-inline-btn {
+    touch-action: manipulation;
+  }
+
   /* ── Page shell ── */
   .se-page,
   .se-page.se-write-mode {
@@ -4703,6 +4722,7 @@ html, body {
     transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
     box-shadow: none;
     border-right: 1px solid var(--se-border);
+    overscroll-behavior: contain;
   }
 
   .se-navigator.se-drawer-open {
@@ -4722,6 +4742,7 @@ html, body {
     transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
     box-shadow: none;
     border-left: 1px solid var(--se-border);
+    overscroll-behavior: contain;
   }
 
   .se-inspector.se-drawer-open {
@@ -4736,6 +4757,10 @@ html, body {
   .se-canvas {
     flex: 1;
     width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   /* ── Workspace: scrollable area fills remaining height ── */
@@ -4935,6 +4960,7 @@ html, body {
     margin-top: 0;
     order: -1;
     min-height: 0;
+    overscroll-behavior: auto;
   }
 
   .se-story-column:has(.se-story-section) {
@@ -4972,6 +4998,7 @@ html, body {
   .se-story-body {
     display: block;
     overflow: visible;
+    min-height: 0;
   }
 
   .se-pinned-controls {
@@ -4980,6 +5007,7 @@ html, body {
     z-index: 10;
     max-height: none;
     overflow: visible;
+    background: var(--se-surface);
   }
 
   .se-write-mode .se-story-body {
@@ -5013,6 +5041,9 @@ html, body {
     padding: 14px 16px 12px;
     gap: 10px;
     border-bottom-width: 2px;
+    position: sticky;
+    top: 0;
+    z-index: 8;
   }
 
   .se-story-header-left { width: 100%; }
@@ -5083,6 +5114,8 @@ html, body {
   .se-story-text {
     padding: 24px 18px 40px;
     max-width: none;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
   .se-story-para {
@@ -5223,27 +5256,11 @@ html, body {
     display: flex;
   }
 
-  .se-edit-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 10px 14px;
-  }
-
-  .se-edit-header-left {
-    width: 100%;
-    flex-direction: column;
-    gap: 6px;
-  }
-
+  /* Edit header: keep compact row from 900px breakpoint.
+     Only override padding, not layout direction. */
   .se-edit-header-info {
     flex-wrap: wrap;
     gap: 4px 8px;
-  }
-
-  .se-edit-header-right {
-    width: 100%;
-    justify-content: flex-end;
   }
 
   .se-story-brief { padding: 20px 16px; }
@@ -6819,7 +6836,7 @@ html, body {
   .se-header-back {
     font-size: 11px;
     padding: 4px;
-    min-height: 28px;
+    min-height: 36px;
   }
 
   .se-header-title {
@@ -6832,12 +6849,13 @@ html, body {
   .se-header-btn {
     font-size: 8px;
     padding: 3px 5px;
-    min-height: 26px;
+    min-height: 32px;
   }
 
   .se-header-btn--approve {
     font-size: 9px;
     padding: 4px 8px;
+    min-height: 36px;
   }
 
   .se-story-header {
