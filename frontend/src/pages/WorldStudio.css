@@ -1057,14 +1057,14 @@
    * flows into .app-content's scroller naturally.
    */
   .ws4-page { height: auto !important; min-height: 0 !important; overflow: visible !important; }
-  .ws4-body { flex-direction: column; overflow: visible !important; }
-  .ws4-sidebar { width: 100%; flex-shrink: 0; overflow: visible !important; border-right: none; border-bottom: 1px solid var(--ws4-border); }
-  .ws4-sidebar-inner { overflow: visible !important; }
-  .ws4-char-list { max-height: none !important; overflow: visible !important; }
-  .ws4-main { flex: none; overflow: visible !important; padding: 16px; }
+  .ws4-body { flex: none !important; flex-direction: column; overflow: visible !important; }
+  .ws4-sidebar { width: 100%; flex: none !important; overflow: visible !important; border-right: none; border-bottom: 1px solid var(--ws4-border); }
+  .ws4-sidebar-inner { flex: none !important; overflow: visible !important; }
+  .ws4-char-list { flex: none !important; max-height: none !important; overflow: visible !important; }
+  .ws4-main { flex: none !important; overflow: visible !important; padding: 16px; }
   /* Feed & Relationships tabs: use auto height in body-scroll mode */
   .ws4-feed-tab,
-  .ws4-relationships-tab { flex: none; min-height: auto; overflow: visible; }
+  .ws4-relationships-tab { flex: none !important; min-height: auto !important; overflow: visible !important; }
   .ws4-header-row { gap: 8px; }
   .ws4-header-title-block { min-width: auto; }
   .ws4-world-switcher { display: none; }

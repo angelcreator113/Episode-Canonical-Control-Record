@@ -1384,11 +1384,13 @@
     min-height: 0; /* don't force full viewport — may be embedded in a tab */
   }
   .re-body {
+    flex: none;
     flex-direction: column;
     overflow: visible;
   }
   .re-sidebar {
     width: 100%;
+    flex: none;
     min-width: 0;
     border-right: none;
     border-bottom: 1.5px solid var(--ps-border);
@@ -1397,19 +1399,23 @@
   }
   .re-sidebar-chars {
     display: flex;
+    flex: none;
     flex-wrap: wrap;
     gap: 4px;
     padding: 6px 10px;
   }
   .re-canvas {
+    flex: none;
     min-height: 250px;
     overflow: visible;
   }
   .re-view {
+    flex: none;
     overflow: visible;
   }
   .re-inspector-panel {
     width: 100%;
+    flex: none;
     min-width: 0;
     border-left: none;
     border-top: 1.5px solid var(--ps-border);
@@ -1417,6 +1423,7 @@
     overflow-y: visible;
   }
   .re-inspector-body {
+    flex: none;
     overflow-y: visible;
   }
   .re-header {
