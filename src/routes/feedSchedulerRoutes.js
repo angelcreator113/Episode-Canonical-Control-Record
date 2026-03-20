@@ -271,12 +271,17 @@ router.post('/auto-generate-job', optionalAuth, async (req, res) => {
 // Runs autoGenerateBatch server-side, updating the BulkImportJob record and
 // pushing SSE events so the frontend can track progress (even after reconnect).
 function processAutoGenInBackground(jobId, db, layer, count) {
-  // Import the SSE notifier from bulk routes (if available) or use a no-op
+  // Import the SSE notifier from bulk routes
   let notifyJobSSE;
   try {
     const bulkRoutes = require('./socialProfileBulkRoutes');
-    notifyJobSSE = bulkRoutes.notifyJobSSE || (() => {});
-  } catch {
+    notifyJobSSE = bulkRoutes.notifyJobSSE;
+    if (!notifyJobSSE) {
+      console.warn(`[FeedScheduler] notifyJobSSE not exported from socialProfileBulkRoutes — SSE events will be lost`);
+      notifyJobSSE = () => {};
+    }
+  } catch (err) {
+    console.error(`[FeedScheduler] Failed to import socialProfileBulkRoutes:`, err.message);
     notifyJobSSE = () => {};
   }
 

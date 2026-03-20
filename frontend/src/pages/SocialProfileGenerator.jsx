@@ -298,6 +298,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     const es=new EventSource(`${API}/bulk/jobs/${jobId}/stream`);
     sseRef.current=es;
     es.addEventListener('connected',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,id:jobId}));}catch{}});
+    es.addEventListener('status',e=>{try{const d=JSON.parse(e.data);const job=d.job||d;const s=job.status||'pending';setActiveJob(p=>({...p,id:jobId,status:s,completed:job.completed??p?.completed??0,failed:job.failed??p?.failed??0,total:job.total??p?.total??0}));if(['completed','failed','cancelled'].includes(s)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}catch{}});
     es.addEventListener('started',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'processing'}));}catch{}});
     es.addEventListener('profile_generating',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,current:d.current,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('profile_complete',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,total:d.total,status:'processing'}));}catch{}});
@@ -305,6 +306,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     es.addEventListener('cancelled',()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
     es.addEventListener('done',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch{}localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
     es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}}catch{}},3000);});
+    // Safety-net: if still pending after 4s, poll REST to catch missed SSE events
+    const pendingFallback=setTimeout(async()=>{try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job&&d.job.status!=='pending'){setActiveJob(prev=>{if(prev?.status==='pending')return{...prev,...d.job};return prev;});if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},4000);
+    const origClose=es.close.bind(es);es.close=()=>{clearTimeout(pendingFallback);origClose();};
   },[loadProfiles]);
 
   useEffect(()=>{
