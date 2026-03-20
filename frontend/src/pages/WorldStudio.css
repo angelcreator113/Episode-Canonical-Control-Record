@@ -1062,7 +1062,12 @@
   .ws4-sidebar-inner { overflow: visible !important; }
   .ws4-char-list { max-height: none !important; overflow: visible !important; }
   .ws4-main { flex: none; overflow: visible !important; padding: 16px; }
+  .ws4-header-row { gap: 8px; }
+  .ws4-header-title-block { min-width: auto; }
+  .ws4-world-switcher { display: none; }
+  .ws4-header-actions { flex-wrap: wrap; gap: 6px; }
   .ws4-header-actions .ws4-btn:not(.ws4-btn-primary) { display: none; }
+  .ws4-header-actions .ws4-btn-primary { font-size: 12px; padding: 6px 12px; white-space: nowrap; }
   .ws4-want-grid { grid-template-columns: 1fr; }
   .ws4-form-two-col { grid-template-columns: 1fr; }
 }
