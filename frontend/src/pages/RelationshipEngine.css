@@ -1403,13 +1403,21 @@
   }
   .re-canvas {
     min-height: 250px;
+    overflow: visible;
+  }
+  .re-view {
+    overflow: visible;
   }
   .re-inspector-panel {
     width: 100%;
     min-width: 0;
     border-left: none;
     border-top: 1.5px solid var(--ps-border);
-    max-height: 50vh;
+    max-height: none;
+    overflow-y: visible;
+  }
+  .re-inspector-body {
+    overflow-y: visible;
   }
   .re-header {
     flex-wrap: wrap;
@@ -1486,7 +1494,8 @@
     min-height: 200px;
   }
   .re-inspector-panel {
-    max-height: 40vh;
+    max-height: none;
+    overflow-y: visible;
   }
   .re-sub-header {
     padding: 4px 8px;

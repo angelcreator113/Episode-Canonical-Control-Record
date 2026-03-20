@@ -1062,6 +1062,9 @@
   .ws4-sidebar-inner { overflow: visible !important; }
   .ws4-char-list { max-height: none !important; overflow: visible !important; }
   .ws4-main { flex: none; overflow: visible !important; padding: 16px; }
+  /* Feed & Relationships tabs: use auto height in body-scroll mode */
+  .ws4-feed-tab,
+  .ws4-relationships-tab { flex: none; min-height: auto; overflow: visible; }
   .ws4-header-row { gap: 8px; }
   .ws4-header-title-block { min-width: auto; }
   .ws4-world-switcher { display: none; }
