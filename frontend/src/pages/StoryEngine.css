@@ -6338,6 +6338,118 @@ html, body {
     font-size: 10px;
     padding: 2px 8px;
   }
+  .se-mode-toggle {
+    gap: 0;
+  }
+  .se-mode-toggle-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+}
+
+/* ─────────────────────────────────────────
+   Unified Mode Toggle — segmented control
+────────────────────────────────────────── */
+.se-mode-toggle {
+  display: flex;
+  align-items: center;
+  background: var(--se-surface2, #f5f3ef);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--se-border-light, #e5e2db);
+}
+
+.se-mode-toggle-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--se-text-muted, #8b8680);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.se-mode-toggle-btn:hover:not(.se-mode-toggle-btn--active) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--se-text, #1C1814);
+}
+
+.se-mode-toggle-btn--active {
+  background: #ffffff;
+  color: var(--se-text, #1C1814);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  cursor: default;
+}
+
+/* TTS inline controls next to toggle */
+.se-tts-inline-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─────────────────────────────────────────
+   Focus modifier icon — not a mode, an overlay
+────────────────────────────────────────── */
+.se-focus-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--se-border, #d4d1cc);
+  background: transparent;
+  color: var(--se-text-muted, #8b8680);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.se-focus-icon:hover {
+  border-color: var(--se-gold, #B8962E);
+  color: var(--se-gold, #B8962E);
+  background: rgba(184, 150, 46, 0.06);
+}
+
+.se-focus-icon--active {
+  background: var(--se-gold, #B8962E);
+  color: #fff;
+  border-color: var(--se-gold, #B8962E);
+}
+
+.se-focus-icon--active:hover {
+  background: #a6841f;
+  color: #fff;
+}
+
+/* ─────────────────────────────────────────
+   Simplified inline nudge (single button)
+────────────────────────────────────────── */
+.se-inline-toolbar--nudge {
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.se-inline-toolbar--nudge .se-inline-btn {
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+
+/* ─────────────────────────────────────────
+   Read mode: inert paragraphs (no hover effects)
+────────────────────────────────────────── */
+.se-story-para {
+  cursor: default;
+  user-select: text;
 }
 
 .se-amber-actions {

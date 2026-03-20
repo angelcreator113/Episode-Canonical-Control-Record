@@ -889,11 +889,12 @@ function StoryPanel({
               )}
             </div>
             <button
-              className={`se-btn se-btn-focus-toggle ${focusMode ? 'active' : ''}`}
+              className={`se-focus-icon ${focusMode ? 'se-focus-icon--active' : ''}`}
               onClick={() => onToggleFocusMode?.()}
-              title={focusMode ? 'Exit focus mode' : 'Focus mode — hide panels, center text'}
+              title={focusMode ? 'Exit focus mode' : 'Focus — hide panels, center text'}
+              aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'}
             >
-              {focusMode ? 'Full View' : 'Focus'}
+              {focusMode ? '◉' : '○'}
             </button>
             <button
               className={`se-btn se-btn-save-primary ${saveStatus === 'saved' ? 'se-btn-save-saved' : ''} ${hasUnsavedChanges ? 'se-save-unsaved' : ''}`}
@@ -923,7 +924,6 @@ function StoryPanel({
         <div className="se-story-header" style={{ borderBottomColor: charColor }}>
           <div className="se-story-header-left">
             <div className="se-story-nav-row">
-              <span className="se-mode-badge se-mode-badge--read">📖 Reading</span>
               <button className="se-btn se-btn-nav" onClick={() => onNavigateStory?.(-1)} disabled={!hasPrev} title="Previous story (←)">‹ Prev</button>
               <div className="se-story-header-num">Story {story.story_number}</div>
               <button className="se-btn se-btn-nav" onClick={() => onNavigateStory?.(1)} disabled={!hasNext} title="Next story (→)">Next ›</button>
@@ -947,55 +947,48 @@ function StoryPanel({
             </div>
           </div>
           <div className="se-story-header-actions">
-            <button
-              className={`se-btn se-btn-focus-toggle ${focusMode ? 'active' : ''}`}
-              onClick={() => onToggleFocusMode?.()}
-              title={focusMode ? 'Exit focus mode' : 'Focus mode'}
-            >
-              {focusMode ? 'Full View' : 'Focus'}
-            </button>
-            <button
-              className="se-btn se-btn-edit-story"
-              onClick={() => { if (readingMode) onToggleReadingMode?.(); setEditing(true); }}
-            >
-              ✏️ Edit Story
-            </button>
-            <div className="se-tts-controls">
-              {!ttsPlaying && !ttsPaused && !ttsLoading && (
-                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Read aloud">
-                  Listen
-                </button>
-              )}
-              {ttsLoading && (
-                <button className="se-btn se-btn-tts" disabled title="Loading audio…">
-                  <span className="se-spinner" style={{ width: 12, height: 12, display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} /> Loading…
-                </button>
-              )}
-              {ttsPlaying && (
-                <button className="se-btn se-btn-tts se-btn-tts-active" onClick={handleTtsPause} title="Pause reading">
-                  Pause
-                </button>
-              )}
-              {ttsPaused && (
-                <button className="se-btn se-btn-tts" onClick={handleTtsPlay} title="Resume reading">
-                  Resume
-                </button>
-              )}
-              {(ttsPlaying || ttsPaused) && (
+            {/* ── Unified mode toggle ── */}
+            <div className="se-mode-toggle" role="tablist" aria-label="Story mode">
+              <button
+                className="se-mode-toggle-btn se-mode-toggle-btn--active"
+                role="tab"
+                aria-selected="true"
+                title="Reading mode — view formatted text"
+              >
+                📖 Read
+              </button>
+              <button
+                className="se-mode-toggle-btn"
+                role="tab"
+                aria-selected="false"
+                onClick={() => { if (readingMode) onToggleReadingMode?.(); setEditing(true); }}
+                title="Edit mode — write and revise"
+              >
+                ✏️ Edit
+              </button>
+              <button
+                className={`se-mode-toggle-btn ${ttsPlaying || ttsPaused ? 'se-mode-toggle-btn--active' : ''}`}
+                role="tab"
+                aria-selected={ttsPlaying || ttsPaused}
+                onClick={ttsPlaying ? handleTtsPause : handleTtsPlay}
+                title={ttsPlaying ? 'Pause listening' : ttsPaused ? 'Resume listening' : 'Listen — read aloud'}
+              >
+                🎧 {ttsPlaying ? 'Pause' : ttsPaused ? 'Resume' : 'Listen'}
+              </button>
+            </div>
+            {/* TTS controls when playing */}
+            {(ttsPlaying || ttsPaused) && (
+              <div className="se-tts-inline-controls">
                 <button className="se-btn se-btn-tts-stop" onClick={handleTtsStop} title="Stop reading">Stop</button>
-              )}
-              {(ttsPlaying || ttsPaused) && (
                 <select
                   className="se-tts-speed"
                   value={ttsRate}
                   onChange={(e) => {
                     const newRate = parseFloat(e.target.value);
                     setTtsRate(newRate);
-                    // For ElevenLabs audio, just change playback rate live
                     if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
                       ttsAudioRef.current.playbackRate = newRate;
                     } else {
-                      // For browser TTS, must restart with new rate
                       handleTtsStop();
                       setTimeout(() => {
                         const synth = window.speechSynthesis;
@@ -1024,8 +1017,17 @@ function StoryPanel({
                   <option value="1.5">1.5x</option>
                   <option value="2">2x</option>
                 </select>
-              )}
-            </div>
+              </div>
+            )}
+            {/* Focus as a modifier icon */}
+            <button
+              className={`se-focus-icon ${focusMode ? 'se-focus-icon--active' : ''}`}
+              onClick={() => onToggleFocusMode?.()}
+              title={focusMode ? 'Exit focus mode' : 'Focus — hide panels, center text'}
+              aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'}
+            >
+              {focusMode ? '◉' : '○'}
+            </button>
           </div>
         </div>
       )}
@@ -1366,27 +1368,16 @@ function StoryPanel({
                 return (
                   <p
                     key={i}
-                    className={`se-story-para ${activeParaIndex === i ? 'se-para-active' : ''} ${activeParaIndex !== null && activeParaIndex !== i ? 'se-para-dimmed' : ''}`}
-                    onMouseEnter={() => setActiveParaIndex(i)}
-                    onMouseLeave={() => setActiveParaIndex(null)}
+                    className="se-story-para"
                   >{trimmed}</p>
                 );
               })}
             </div>
-            {/* Inline editing toolbar — appears on text selection */}
+            {/* Subtle edit nudge on text selection */}
             {selectionPopup && !editing && (
-              <div className="se-inline-toolbar" style={{ top: selectionPopup.top, left: Math.min(Math.max(selectionPopup.left, 100), window.innerWidth - 100) }}>
+              <div className="se-inline-toolbar se-inline-toolbar--nudge" style={{ top: selectionPopup.top, left: Math.min(Math.max(selectionPopup.left, 100), window.innerWidth - 100) }}>
                 <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
-                  <span className="se-inline-btn-icon">&#10024;</span> Continue from here
-                </button>
-                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
-                  <span className="se-inline-btn-icon">&#129504;</span> Deepen this
-                </button>
-                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
-                  <span className="se-inline-btn-icon">&#127919;</span> Refine tone
-                </button>
-                <button className="se-inline-btn" onClick={() => { setEditing(true); setSelectionPopup(null); }}>
-                  <span className="se-inline-btn-icon">&#128260;</span> Rewrite
+                  ✏️ Edit this section
                 </button>
               </div>
             )}
