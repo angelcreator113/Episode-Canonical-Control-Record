@@ -155,6 +155,54 @@ echo "Verifying index.html has script tags:"
 grep -o '<script[^>]*src="[^"]*"' dist/index.html || echo "⚠️ No script tags found!"
 cd ..
 
+# Deploy frontend files to web root
+echo "🎨 Deploying frontend to /var/www/html..."
+sudo rm -rf /var/www/html/*
+sudo cp -r frontend/dist/* /var/www/html/
+sudo chown -R www-data:www-data /var/www/html
+sudo chmod 755 /var/www/html /var/www/html/assets 2>/dev/null || true
+echo "✓ Frontend files deployed"
+
+# Deploy production nginx config (SSE streaming, 300s timeouts)
+echo "🔧 Deploying nginx config..."
+if [ -f nginx/episode-prod.conf ]; then
+  # Deploy production config as a separate site (don't overwrite dev config)
+  # Check if certbot SSL is already configured for the production site
+  if [ -f /etc/nginx/sites-enabled/episode-prod ] && grep -q "ssl_certificate" /etc/nginx/sites-enabled/episode-prod; then
+    echo "  SSL detected in existing config — preserving SSL, updating proxy settings only"
+    # Update proxy settings in-place instead of overwriting (preserve certbot SSL)
+    sudo sed -i 's/proxy_read_timeout [0-9]*s;/proxy_read_timeout 300s;/' /etc/nginx/sites-enabled/episode-prod
+    sudo sed -i 's/proxy_send_timeout [0-9]*s;/proxy_send_timeout 300s;/' /etc/nginx/sites-enabled/episode-prod
+    # Add proxy_buffering off if not already present
+    if ! grep -q "proxy_buffering off" /etc/nginx/sites-enabled/episode-prod; then
+      sudo sed -i '/proxy_read_timeout/a\        proxy_buffering off;            # Required for SSE streaming' /etc/nginx/sites-enabled/episode-prod
+    fi
+    # Add timeouts if not already present
+    if ! grep -q "proxy_read_timeout" /etc/nginx/sites-enabled/episode-prod; then
+      sudo sed -i '/proxy_http_version/a\        proxy_read_timeout 300s;\n        proxy_send_timeout 300s;\n        proxy_buffering off;' /etc/nginx/sites-enabled/episode-prod
+    fi
+  else
+    sudo cp nginx/episode-prod.conf /etc/nginx/sites-enabled/episode-prod
+    echo "  Deployed fresh config — run 'sudo certbot --nginx -d primepisodes.com -d www.primepisodes.com' for SSL"
+  fi
+  # Also update dev config proxy settings if present (both sites share the server)
+  if [ -f /etc/nginx/sites-enabled/episode ]; then
+    if ! grep -q "proxy_buffering off" /etc/nginx/sites-enabled/episode; then
+      sudo sed -i '/proxy_read_timeout/a\        proxy_buffering off;            # Required for SSE streaming' /etc/nginx/sites-enabled/episode
+      echo "  Updated dev nginx config with proxy_buffering off"
+    fi
+  fi
+  if sudo nginx -t 2>&1; then
+    sudo systemctl reload nginx
+    echo "✓ Nginx config deployed and reloaded"
+  else
+    echo "⚠️  Nginx config test failed — keeping existing config"
+    sudo rm -f /etc/nginx/sites-enabled/episode-prod
+  fi
+else
+  echo "⚠️  No nginx/episode-prod.conf found — skipping nginx deploy"
+fi
+
 # Run migrations
 echo "🗄️  Running database migrations..."
 export DATABASE_URL="${DATABASE_URL}"
