@@ -8,7 +8,7 @@
  *   - Story content saved explicitly via postMessage from the app
  */
 
-const CACHE_NAME = 'lalaverse-v2';
+const CACHE_NAME = 'lalaverse-v3';
 const STORY_CACHE = 'lalaverse-stories-v1';
 
 // ── Install: skip waiting to activate immediately ──────────────────────
@@ -46,7 +46,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((c) => c.put(request, clone));
           return res;
         })
-        .catch(() => caches.match(request) || caches.match('/index.html'))
+        .catch(() => caches.match(request).then((r) => r || caches.match('/index.html')))
     );
     return;
   }
