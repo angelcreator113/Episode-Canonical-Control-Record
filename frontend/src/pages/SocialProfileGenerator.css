@@ -583,3 +583,111 @@
     grid-template-columns: 1fr !important;
   }
 }
+
+@media (max-width: 480px) {
+  /* Job banner: stack text, progress bar, and cancel button vertically */
+  .spg-job-banner-wrap {
+    flex-wrap: wrap !important;
+    padding: 10px 14px !important;
+    gap: 8px !important;
+  }
+  .spg-job-banner-wrap > span:first-child {
+    flex-basis: 100% !important;
+    font-size: 12px !important;
+  }
+  .spg-job-banner-wrap .spg-job-progress-inline {
+    width: 100% !important;
+    flex-basis: 100% !important;
+  }
+
+  /* Stats row: wrap into a compact grid */
+  .spg-stats-row {
+    flex-wrap: wrap !important;
+    gap: 8px 16px !important;
+  }
+  .spg-stats-row > div {
+    border-left: none !important;
+    padding-left: 0 !important;
+  }
+
+  /* Filter tabs: horizontal scroll instead of wrapping/truncation */
+  .spg-filter-tabs {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-shrink: 0 !important;
+    flex-wrap: nowrap !important;
+    max-width: 100% !important;
+  }
+  .spg-filter-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .spg-filter-tabs > button {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* View mode tabs: horizontal scroll */
+  .spg-view-tabs {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-shrink: 0 !important;
+    flex-wrap: nowrap !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+  }
+  .spg-view-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .spg-view-tabs > button {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Toolbar: stack rows vertically */
+  .spg-toolbar {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+  .spg-toolbar > div:last-child {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  .spg-toolbar > div:last-child input {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Auto-generate bar: compact padding, let items wrap naturally */
+  .spg-autogen-bar {
+    padding: 12px 14px !important;
+  }
+  .spg-autogen-row {
+    gap: 8px !important;
+  }
+  .spg-autogen-row > span:last-child {
+    display: none !important; /* hide helper text on mobile */
+  }
+
+  /* Card grid: single column on narrow screens */
+  .spg-card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Reduce horizontal padding on all section bars */
+  .spg-page > div[style*="padding"] {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* Feed layer switcher: allow wrapping */
+  .spg-feed-switcher {
+    flex-wrap: wrap !important;
+  }
+  .spg-feed-switcher > button {
+    font-size: 11px !important;
+    padding: 5px 10px !important;
+  }
+}

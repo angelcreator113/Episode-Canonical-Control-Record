@@ -658,7 +658,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
           </div>
         </div>
         {/* Feed layer switcher */}
-        <div style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
+        <div className="spg-feed-switcher" style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
           <button onClick={()=>{setFeedLayer('real_world');setPage(1);setProtagonist(PROTAGONISTS[0]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='real_world'?C.blue:'transparent',color:feedLayer==='real_world'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             JustAWoman's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='real_world'?`${stats.total}/${feedCap}`:''}</span>
@@ -670,7 +670,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
         </div>
 
         {/* Stats */}
-        <div style={{display:'flex',gap:20,alignItems:'center'}}>
+        <div className="spg-stats-row" style={{display:'flex',gap:20,alignItems:'center',flexWrap:'wrap'}}>
           {feedLayer==='lalaverse'&&crossoverCount>0?(
             <>
               {/* Lala's Feed: show combined total, then native/cap, then shared */}
@@ -716,7 +716,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
       {/* ── Job Banner ──────────────────────────────────────────── */}
       {activeJob && (
-        <div style={{background:activeJob.status==='completed'?'#e8f5ee':activeJob.status==='failed'?'#fde8e8':C.lavLight,borderBottom:`1px solid ${C.border}`,padding:'10px 24px',display:'flex',alignItems:'center',gap:12,fontSize:13}}>
+        <div className="spg-job-banner-wrap" style={{background:activeJob.status==='completed'?'#e8f5ee':activeJob.status==='failed'?'#fde8e8':C.lavLight,borderBottom:`1px solid ${C.border}`,padding:'10px 24px',display:'flex',alignItems:'center',gap:12,fontSize:13}}>
           <span style={{flex:1,color:activeJob.status==='completed'?'#2d7a50':activeJob.status==='failed'?'#8a2020':C.inkMid}}>
             {activeJob.status==='processing'&&<>⟳ Generating… {(activeJob.completed||0)+(activeJob.failed||0)}/{activeJob.total||0} processed{activeJob.completed>0?` (${activeJob.completed} created)`:''}{activeJob.failed>0?<>, {activeJob.failed} failed{activeJob.lastError?<span style={{fontSize:11,color:'#c0392b',marginLeft:4}}>({activeJob.lastError})</span>:null}</>:null}</>}
             {activeJob.status==='pending'&&<>⟳ Job queued — waiting to start…</>}
@@ -725,7 +725,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             {activeJob.status==='failed'&&<>✕ Job failed{activeJob.error_message?`: ${activeJob.error_message}`:''}</>}
           </span>
           {['processing','pending'].includes(activeJob.status)&&(
-            <div style={{width:200,height:4,background:C.border,borderRadius:2,overflow:'hidden'}}>
+            <div className="spg-job-progress-inline" style={{width:200,height:4,background:C.border,borderRadius:2,overflow:'hidden'}}>
               <div style={{height:'100%',background:activeJob.failed>0?`linear-gradient(90deg,${C.lavender},#e67e22)`:C.lavender,transition:'width 0.5s',width:`${activeJob.total?(((activeJob.completed||0)+(activeJob.failed||0))/activeJob.total)*100:0}%`}}/>
             </div>
           )}
@@ -745,9 +745,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
       {view==='feed' && <>
         {/* ── Auto-Generate Bar ──────────────────────────────── */}
-        <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px'}}>
+        <div className="spg-autogen-bar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px'}}>
           {/* Primary: Auto-Generate */}
-          <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          <div className="spg-autogen-row" style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
             <div style={{fontSize:12,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em'}}>
               Auto-Generate
             </div>
@@ -910,9 +910,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
         {/* ── Content ─────────────────────────────────────────── */}
         <div style={{flex:1,display:'flex',flexDirection:'column'}}>
           {/* Toolbar */}
-          <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'10px 24px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
+          <div className="spg-toolbar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'10px 24px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
             {/* Status filters */}
-            <div style={{display:'flex',gap:4}}>
+            <div className="spg-filter-tabs" style={{display:'flex',gap:4}}>
               {[null,'generated','finalized','crossed','archived'].map(s=>{
                 const cnt=s?(tabCounts[s]||0):tabCounts.total;
                 const isActive=filterStatus===s;
@@ -927,7 +927,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
               })}
             </div>
             {/* View mode switcher */}
-            <div style={{display:'flex',gap:2,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:2,border:`1px solid ${C.border}`,marginLeft:8}}>
+            <div className="spg-view-tabs" style={{display:'flex',gap:2,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:2,border:`1px solid ${C.border}`,marginLeft:8}}>
               {[['grid','Grid'],['timeline','Timeline'],['follows','Follows'],['moments','Moments'],['dashboard','Dashboard'],['graph','Graph'],['templates','Templates'],['automation','Automation']].map(([k,l])=>(
                 <button key={k} onClick={()=>{setFeedView(k);if(k==='follows')loadFollowStats();if(k==='automation')loadAutoStatus();if(k==='dashboard')loadDiversity();if(k==='moments')loadMoments();if(k==='graph')loadSuggestions();if(k==='templates')loadTemplates();}} style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
                   background:feedView===k?C.lavender:'transparent',color:feedView===k?'#fff':C.inkLight,transition:'all 0.15s'}}>
@@ -938,7 +938,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
               {/* Export dropdown */}
               <ExportDropdown exporting={exporting} onExport={exportProfiles}/>
-              <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Search handle or name…" style={{padding:'6px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:200}}/>
+              <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Search handle or name…" style={{padding:'6px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:200,minWidth:0,flex:'1 1 120px'}}/>
               <select value={sortBy} onChange={e=>changeSort(e.target.value)} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,background:C.surface}}>
                 <option value="score">Score ↓</option>
                 <option value="newest">Newest</option>
@@ -1060,7 +1060,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             )}
             {/* ── GRID VIEW ── */}
             {!loading&&profiles.length>0&&feedView==='grid' && (
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:16}}>
+              <div className="spg-card-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:16}}>
                 {profiles.map(p=>{
                   const d=fp(p);
                   const isChecked=selectAllPages||selectedIds.has(p.id);
