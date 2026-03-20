@@ -3055,19 +3055,22 @@ html, body {
 .se-btn-edit-story {
   font-family: 'DM Sans', sans-serif;
   font-size: 12px;
-  font-weight: 600;
-  padding: 6px 16px;
+  font-weight: 700;
+  padding: 7px 18px;
   border-radius: 6px;
-  border: 1px solid var(--se-border);
-  background: transparent;
-  color: var(--se-text-muted);
+  border: 2px solid var(--se-gold, #B8962E);
+  background: rgba(184, 150, 46, 0.08);
+  color: var(--se-gold, #B8962E);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  letter-spacing: 0.02em;
 }
 .se-btn-edit-story:hover {
-  background: var(--se-surface2);
-  color: var(--se-text);
-  border-color: var(--se-text-dim);
+  background: var(--se-gold, #B8962E);
+  color: #fff;
+  border-color: var(--se-gold, #B8962E);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(184, 150, 46, 0.3);
 }
 
 /* ─────────────────────────────────────────
@@ -3546,10 +3549,11 @@ html, body {
   justify-content: space-between;
   padding: 10px 60px 10px 20px; /* right-padding avoids AppAssistant FAB */
   border-bottom: 1px solid var(--se-border-light);
-  background: linear-gradient(180deg, #fffefa 0%, #faf8f4 100%);
+  background: linear-gradient(180deg, #fff8ef 0%, #faf5ec 100%);
   flex-shrink: 0;
   gap: 12px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  border-left: 4px solid var(--se-gold, #B8962E);
 }
 
 .se-edit-header-left {
@@ -3732,7 +3736,8 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fafafa;
+  background: #faf8f2;
+  border-top: 3px solid var(--se-gold, #B8962E);
 }
 
 .se-edit-canvas .se-story-editor {
@@ -6267,6 +6272,53 @@ html, body {
 
 .se-amber-location {
   color: #7ab3d4;
+}
+
+/* ─────────────────────────────────────────
+   Mode Badges — clear view vs edit indicator
+────────────────────────────────────────── */
+.se-mode-badge {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.se-mode-badge--read {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.se-mode-badge--edit {
+  background: rgba(184, 150, 46, 0.12);
+  color: #9a7d1a;
+  border: 1px solid rgba(184, 150, 46, 0.3);
+  animation: se-edit-badge-pulse 2s ease-in-out;
+}
+
+@keyframes se-edit-badge-pulse {
+  0% { transform: scale(1); }
+  20% { transform: scale(1.08); }
+  40% { transform: scale(1); }
+}
+
+/* View mode header — add subtle left accent for reading */
+.se-story-header {
+  border-left: 4px solid rgba(59, 130, 246, 0.4);
+}
+
+/* ── Mobile: badges compact ── */
+@media (max-width: 600px) {
+  .se-mode-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
 }
 
 .se-amber-actions {

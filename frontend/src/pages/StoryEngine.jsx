@@ -805,7 +805,7 @@ function StoryPanel({
           <div className="se-edit-header-left">
             <button
               className="se-edit-back"
-              aria-label="Back to story view"
+              aria-label="Back to reading view"
               onClick={() => {
                 if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
@@ -813,8 +813,9 @@ function StoryPanel({
                 setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
               }}
             >
-              ← Back
+              ← Exit Edit
             </button>
+            <span className="se-mode-badge se-mode-badge--edit">✏️ Editing</span>
             <span className="se-edit-header-title">{story.title}</span>
             <span className="se-edit-header-meta">
               Ch {story.story_number}{totalChapters ? `/${totalChapters}` : ''}
@@ -922,6 +923,7 @@ function StoryPanel({
         <div className="se-story-header" style={{ borderBottomColor: charColor }}>
           <div className="se-story-header-left">
             <div className="se-story-nav-row">
+              <span className="se-mode-badge se-mode-badge--read">📖 Reading</span>
               <button className="se-btn se-btn-nav" onClick={() => onNavigateStory?.(-1)} disabled={!hasPrev} title="Previous story (←)">‹ Prev</button>
               <div className="se-story-header-num">Story {story.story_number}</div>
               <button className="se-btn se-btn-nav" onClick={() => onNavigateStory?.(1)} disabled={!hasNext} title="Next story (→)">Next ›</button>
@@ -956,7 +958,7 @@ function StoryPanel({
               className="se-btn se-btn-edit-story"
               onClick={() => { if (readingMode) onToggleReadingMode?.(); setEditing(true); }}
             >
-              Edit
+              ✏️ Edit Story
             </button>
             <div className="se-tts-controls">
               {!ttsPlaying && !ttsPaused && !ttsLoading && (
