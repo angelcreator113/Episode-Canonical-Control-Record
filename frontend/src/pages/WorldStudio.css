@@ -1046,7 +1046,6 @@
 
 /* ── RESPONSIVE ───────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  .ws4-sidebar { width: 220px; }
   .ws4-demo-grid { grid-template-columns: 1fr; }
 }
 
@@ -1060,7 +1059,7 @@
 @media (max-width: 1279px) {
   .ws4-page { height: auto !important; min-height: 0 !important; overflow: visible !important; }
   .ws4-body { flex: none !important; flex-direction: column; overflow: visible !important; }
-  .ws4-sidebar { flex: none !important; overflow: visible !important; border-right: none; border-bottom: 1px solid var(--ws4-border); }
+  .ws4-sidebar { width: 100% !important; flex: none !important; overflow: visible !important; border-right: none; border-bottom: 1px solid var(--ws4-border); }
   .ws4-sidebar-inner { flex: none !important; overflow: visible !important; }
   .ws4-char-list { flex: none !important; max-height: none !important; overflow: visible !important; }
   .ws4-main { flex: none !important; overflow: visible !important; }
@@ -1071,9 +1070,8 @@
   .ws4-form-two-col { grid-template-columns: 1fr; }
 }
 
-/* Phone-only layout: stack sidebar above main, compact UI */
+/* Phone-only layout: compact UI */
 @media (max-width: 680px) {
-  .ws4-sidebar { width: 100%; }
   .ws4-main { padding: 16px; }
   .ws4-header-row { gap: 8px; }
   .ws4-header-title-block { min-width: auto; }
