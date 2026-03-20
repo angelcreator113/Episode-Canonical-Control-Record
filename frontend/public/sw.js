@@ -50,7 +50,8 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() =>
           caches.match(request)
-            .then((r) => r || caches.match('/index.html'))
+            .catch(() => undefined)
+            .then((r) => r || caches.match('/index.html').catch(() => undefined))
             .then((r) => r || new Response('Offline', { status: 503, statusText: 'Service Unavailable' }))
         )
     );
@@ -70,6 +71,7 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() =>
           caches.match(request)
+            .catch(() => undefined)
             .then((r) => r || new Response('{"error":"offline"}', {
               status: 503,
               headers: { 'Content-Type': 'application/json' },
@@ -82,16 +84,19 @@ self.addEventListener('fetch', (event) => {
   // Hashed static assets (/assets/*): cache-first (Vite content-hashes these)
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((res) => {
-          if (res.ok) {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(request, clone)).catch(() => {});
-          }
-          return res;
-        });
-      })
+      caches.match(request)
+        .catch(() => undefined)
+        .then((cached) => {
+          if (cached) return cached;
+          return fetch(request).then((res) => {
+            if (res.ok) {
+              const clone = res.clone();
+              caches.open(CACHE_NAME).then((c) => c.put(request, clone)).catch(() => {});
+            }
+            return res;
+          });
+        })
+        .catch(() => new Response('', { status: 503 }))
     );
     return;
   }
@@ -108,6 +113,7 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() =>
         caches.match(request)
+          .catch(() => undefined)
           .then((r) => r || new Response('', { status: 503 }))
       )
   );
