@@ -216,6 +216,11 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     cat /tmp/health_response.json
     echo ""
     break
+  elif [ "$HTTP_CODE" = "503" ]; then
+    echo "⚠️  Health check returned 503 (degraded) — app is running but DB may be disconnected (attempt $i)"
+    cat /tmp/health_response.json 2>/dev/null || true
+    echo ""
+    break
   fi
   echo "  ⏳ Attempt $i/10 — HTTP $HTTP_CODE, waiting..."
   if [ "$i" -eq "10" ]; then

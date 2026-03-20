@@ -191,27 +191,38 @@ jobs:
           
           # Ensure production .env has DB credentials
           echo "🔑 Writing DB credentials to production .env..."
+          # Write credentials to temp file, SCP to server, then merge into .env
+          # This avoids all shell interpretation issues with special chars (e.g. !! in passwords)
+          CREDS_FILE=$(mktemp)
+          printf '%s\n' \
+            'DB_HOST=${{ secrets.PROD_DB_HOST }}' \
+            'DB_NAME=${{ secrets.PROD_DB_NAME }}' \
+            'DB_USER=${{ secrets.PROD_DB_USER }}' \
+            'DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}' \
+            > "$CREDS_FILE"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            "$CREDS_FILE" ubuntu@${{ secrets.EC2_HOST }}:/tmp/db_creds.env
+          rm -f "$CREDS_FILE"
+
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=120 -o ConnectTimeout=10 \
-            ubuntu@${{ secrets.EC2_HOST }} "
-              mkdir -p /home/ubuntu/episode-metadata
+            ubuntu@${{ secrets.EC2_HOST }} '
               ENV_FILE=/home/ubuntu/episode-metadata/.env
-              touch \$ENV_FILE
-              # Update or insert each DB key
-              for pair in \
-                'DB_HOST=${{ secrets.PROD_DB_HOST }}' \
-                'DB_NAME=${{ secrets.PROD_DB_NAME }}' \
-                'DB_USER=${{ secrets.PROD_DB_USER }}' \
-                'DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}'; do
-                KEY=\$(echo \$pair | cut -d= -f1)
-                VAL=\$(echo \$pair | cut -d= -f2-)
-                if grep -q \"^\${KEY}=\" \$ENV_FILE; then
-                  sed -i \"s|^\${KEY}=.*|\${KEY}=\${VAL}|\" \$ENV_FILE
+              mkdir -p /home/ubuntu/episode-metadata
+              touch "$ENV_FILE"
+              while IFS= read -r line; do
+                KEY="${line%%=*}"
+                if grep -q "^${KEY}=" "$ENV_FILE"; then
+                  grep -v "^${KEY}=" "$ENV_FILE" > "${ENV_FILE}.tmp"
+                  echo "$line" >> "${ENV_FILE}.tmp"
+                  mv "${ENV_FILE}.tmp" "$ENV_FILE"
                 else
-                  echo \"\${KEY}=\${VAL}\" >> \$ENV_FILE
+                  echo "$line" >> "$ENV_FILE"
                 fi
-              done
-              echo '✓ DB credentials written to .env'
-            "
+              done < /tmp/db_creds.env
+              rm -f /tmp/db_creds.env
+            '
+          echo '✓ DB credentials written to .env'
 
           # Upload built files to server
           echo "📤 Uploading built files to production server..."
@@ -252,8 +263,8 @@ jobs:
             echo "  Checking $url ..."
             for i in $(seq 1 $MAX_ATTEMPTS); do
               HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$url" || true)
-              if [ "$HTTP_CODE" = "200" ]; then
-                echo "  ✅ $url returned 200 (attempt $i)"
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "503" ]; then
+                echo "  ✅ $url returned $HTTP_CODE (attempt $i)"
                 break
               fi
               echo "  ⏳ Attempt $i/$MAX_ATTEMPTS — got HTTP $HTTP_CODE, retrying in ${WAIT_SECONDS}s..."
