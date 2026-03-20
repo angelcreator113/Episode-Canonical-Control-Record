@@ -546,22 +546,140 @@
   }
 }
 
-/* ── Responsive ────────────────────────────────────────────────────── */
-@media (max-width: 768px) {
+/* ═══════════════════════════════════════════════════════════════════════
+   Responsive breakpoints — aligned with App.css tiers
+   ─────────────────────────────────────────────────────────────────────
+   Tier              Range             Horiz padding   Grid cols
+   ─────────────────────────────────────────────────────────────────────
+   Large Desktop     ≥ 1440px          (default 24px)  auto-fill 260px
+   Desktop           1025–1439px       (default 24px)  auto-fill 260px
+   Tablet            769–1024px        18px            2-col fixed
+   Phablet / Mobile  481–768px         14px            1-col
+   Small Mobile      ≤ 480px           12px            1-col
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Tablet: 769px – 1024px ──────────────────────────────────────── */
+@media (max-width: 1024px) {
+  /* Moderate padding reduction */
+  .spg-header          { padding: 14px 18px !important; }
+  .spg-autogen-bar     { padding: 14px 18px !important; }
+  .spg-toolbar         { padding: 10px 18px !important; }
+  .spg-filters-bar     { padding-left: 18px !important; padding-right: 18px !important; }
+  .spg-bulk-bar        { padding: 8px 18px !important; }
+  .spg-content-area    { padding: 14px 18px !important; }
+  .spg-job-banner-wrap { padding: 10px 18px !important; }
+
+  /* 2-column card grid */
+  .spg-card-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  /* Panels: single column */
   .spg-advanced-panel {
     grid-template-columns: 1fr;
   }
-
   .spg-detail > div[style*="grid-template-columns: 1fr 1fr"] {
     grid-template-columns: 1fr !important;
   }
+
+  /* Stats: slightly tighter */
+  .spg-stats-row {
+    gap: 14px !important;
+  }
 }
 
-@media (max-width: 480px) {
-  /* ── Header: compact title + badge ─────────────────────────────── */
-  .spg-header {
-    padding: 12px 12px !important;
+/* ── Phablet / Mobile: 481px – 768px ─────────────────────────────── */
+@media (max-width: 768px) {
+  /* Tighter padding */
+  .spg-header          { padding: 12px 14px !important; }
+  .spg-autogen-bar     { padding: 12px 14px !important; }
+  .spg-toolbar         { padding: 8px 14px !important; }
+  .spg-filters-bar     { padding-left: 14px !important; padding-right: 14px !important; }
+  .spg-bulk-bar        { padding: 8px 14px !important; }
+  .spg-content-area    { padding: 14px 14px !important; }
+  .spg-job-banner-wrap { padding: 10px 14px !important; }
+
+  /* Single-column card grid */
+  .spg-card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
   }
+
+  /* Header: smaller text */
+  .spg-header-title {
+    font-size: 17px !important;
+  }
+
+  /* Stats row: allow wrapping */
+  .spg-stats-row {
+    flex-wrap: wrap !important;
+    gap: 8px 14px !important;
+  }
+  .spg-stats-row > div {
+    border-left: none !important;
+    padding-left: 0 !important;
+  }
+  .spg-stats-row .spg-stat-number-lg {
+    font-size: 20px !important;
+  }
+
+  /* Toolbar: wrap controls below tabs */
+  .spg-toolbar {
+    flex-wrap: wrap !important;
+  }
+  .spg-toolbar-controls {
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  /* Filter & view tabs: horizontal scroll */
+  .spg-filter-tabs,
+  .spg-view-tabs {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap !important;
+  }
+  .spg-filter-tabs::-webkit-scrollbar,
+  .spg-view-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .spg-filter-tabs > button,
+  .spg-view-tabs > button {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* View tabs: detach from inline margin */
+  .spg-view-tabs {
+    margin-left: 0 !important;
+  }
+
+  /* Auto-generate: hide helper text */
+  .spg-autogen-row > span:last-child {
+    display: none !important;
+  }
+
+  /* Empty state */
+  .spg-empty {
+    padding: 40px 20px;
+  }
+}
+
+/* ── Small Mobile: ≤ 480px ───────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Tightest padding */
+  .spg-header          { padding: 10px 12px !important; }
+  .spg-autogen-bar     { padding: 10px 12px !important; }
+  .spg-toolbar         { padding: 8px 12px !important; }
+  .spg-filters-bar     { padding-left: 12px !important; padding-right: 12px !important; }
+  .spg-bulk-bar        { padding: 8px 12px !important; }
+  .spg-content-area    { padding: 12px 12px !important; }
+  .spg-job-banner-wrap { padding: 10px 12px !important; }
+
+  /* Header: compact */
   .spg-header-title {
     font-size: 16px !important;
   }
@@ -569,7 +687,7 @@
     font-size: 12px !important;
   }
 
-  /* ── Feed layer switcher: compact ──────────────────────────────── */
+  /* Feed layer switcher: wrap */
   .spg-feed-switcher {
     flex-wrap: wrap !important;
   }
@@ -578,14 +696,9 @@
     padding: 5px 10px !important;
   }
 
-  /* ── Stats row: wrap + smaller font sizes ──────────────────────── */
+  /* Stats row: compact */
   .spg-stats-row {
-    flex-wrap: wrap !important;
     gap: 6px 12px !important;
-  }
-  .spg-stats-row > div {
-    border-left: none !important;
-    padding-left: 0 !important;
   }
   .spg-stats-row .spg-stat-number {
     font-size: 16px !important;
@@ -597,10 +710,9 @@
     font-size: 10px !important;
   }
 
-  /* ── Job banner: vertical stack ────────────────────────────────── */
+  /* Job banner: vertical stack */
   .spg-job-banner-wrap {
     flex-wrap: wrap !important;
-    padding: 10px 12px !important;
     gap: 8px !important;
   }
   .spg-job-banner-wrap > span:first-child {
@@ -612,98 +724,43 @@
     flex-basis: 100% !important;
   }
 
-  /* ── Auto-generate bar: compact ────────────────────────────────── */
-  .spg-autogen-bar {
-    padding: 10px 12px !important;
-  }
+  /* Auto-generate row: tight */
   .spg-autogen-row {
     gap: 8px !important;
   }
-  .spg-autogen-row > span:last-child {
-    display: none !important;
-  }
 
-  /* ── Toolbar: full-width stacking ──────────────────────────────── */
+  /* Toolbar: vertical stack */
   .spg-toolbar {
-    padding: 8px 12px !important;
-    gap: 6px !important;
     flex-direction: column !important;
     align-items: stretch !important;
+    gap: 6px !important;
   }
 
-  /* ── Filter tabs: horizontal scroll ────────────────────────────── */
-  .spg-filter-tabs {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    flex-wrap: nowrap !important;
-    width: 100% !important;
-    padding-bottom: 2px !important;
-  }
-  .spg-filter-tabs::-webkit-scrollbar {
-    display: none;
-  }
+  /* Filter tabs: smaller text */
   .spg-filter-tabs > button {
-    white-space: nowrap !important;
-    flex-shrink: 0 !important;
     padding: 4px 10px !important;
     font-size: 11px !important;
   }
 
-  /* ── View mode tabs: horizontal scroll ─────────────────────────── */
-  .spg-view-tabs {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    flex-wrap: nowrap !important;
-    width: 100% !important;
-    margin-left: 0 !important;
-  }
-  .spg-view-tabs::-webkit-scrollbar {
-    display: none;
-  }
+  /* View tabs: smaller text */
   .spg-view-tabs > button {
-    white-space: nowrap !important;
-    flex-shrink: 0 !important;
     padding: 4px 8px !important;
     font-size: 10px !important;
   }
 
-  /* ── Toolbar controls: full width row ──────────────────────────── */
-  .spg-toolbar-controls {
-    margin-left: 0 !important;
-    width: 100% !important;
-    flex-wrap: wrap !important;
-  }
+  /* Toolbar controls: full width, search stretches */
   .spg-toolbar-controls input {
     width: 100% !important;
     min-width: 0 !important;
     flex: 1 1 100% !important;
   }
 
-  /* ── Card grid: single column ──────────────────────────────────── */
+  /* Card grid: tighter gap */
   .spg-card-grid {
-    grid-template-columns: 1fr !important;
     gap: 10px !important;
   }
 
-  /* ── Advanced filters bar: tighter padding ───────────────────── */
-  .spg-filters-bar {
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-  }
-
-  /* ── Bulk action bar: compact ───────────────────────────────── */
-  .spg-bulk-bar {
-    padding: 8px 12px !important;
-  }
-
-  /* ── Main content area: tighter padding ─────────────────────── */
-  .spg-content-area {
-    padding: 12px 12px !important;
-  }
-
-  /* ── Empty state: less padding ─────────────────────────────────── */
+  /* Empty state: compact */
   .spg-empty {
     padding: 32px 16px;
   }
