@@ -76,6 +76,22 @@ function TherapySuggestions({ characterKey, apiBase }) {
 }
 
 // ─── Bottom Writing Tools (compact toolbar below story content) ───────────────
+// ─── Strip markdown artifacts from story text for clean editing ───────────────
+function cleanMarkdownForEditor(text) {
+  if (!text) return '';
+  return text
+    .split('\n')
+    .map(line => {
+      const trimmed = line.trim();
+      // Convert markdown headings to plain text (preserve as bold-looking title)
+      if (/^#{1,3}\s+/.test(trimmed)) return trimmed.replace(/^#{1,3}\s+/, '');
+      // Convert markdown hr to empty line (already visual separator)
+      if (/^---+$/.test(trimmed)) return '';
+      return line;
+    })
+    .join('\n');
+}
+
 const BOTTOM_TOOLS = [
   { id: 'continue', icon: '✨', label: 'Continue the moment', group: 'flow', action: 'continue', spinner: 'Expanding…' },
   { id: 'deepen',   icon: '🧠', label: 'Deepen the scene',   group: 'flow', action: 'deepen',   spinner: 'Layering depth…' },
@@ -515,7 +531,7 @@ function StoryPanel({
     // Reset text when story changes and we're NOT actively editing,
     // or when it's a completely different story.
     if (!editing || isNewStory) {
-      setEditText(story?.text || '');
+      setEditText(cleanMarkdownForEditor(story?.text || ''));
       setLastSavedText(story?.text || '');
       setCurrentPage(0);
     }
@@ -810,17 +826,21 @@ function StoryPanel({
                 if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
                 }
-                setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
+                setEditing(false); setEditText(cleanMarkdownForEditor(story.text)); setSaveStatus('saved'); setLastSavedText(story?.text || '');
               }}
             >
               ← Exit Edit
             </button>
             <span className="se-mode-badge se-mode-badge--edit">✏️ Editing</span>
             <span className="se-edit-header-title">{story.title}</span>
+          </div>
+          <div className="se-edit-header-line2">
             <span className="se-edit-header-meta">
               Ch {story.story_number}{totalChapters ? `/${totalChapters}` : ''}
               <span className="se-edit-header-dot">·</span>
               {wordCount.toLocaleString()} words
+              <span className="se-edit-header-dot">·</span>
+              {editTotalPages} {editTotalPages === 1 ? 'page' : 'pages'}
             </span>
           </div>
           <div className="se-edit-header-right">
@@ -912,7 +932,7 @@ function StoryPanel({
                 if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
                 }
-                setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
+                setEditing(false); setEditText(cleanMarkdownForEditor(story.text)); setSaveStatus('saved'); setLastSavedText(story?.text || '');
                 if (focusMode) onToggleFocusMode?.();
               }}
             >
@@ -1078,6 +1098,9 @@ function StoryPanel({
         {editing ? (
           <div className="se-edit-layout">
             <div className="se-edit-canvas">
+              <div className="se-editor-gutter">
+                <div className="se-gutter-line" />
+              </div>
               <textarea
                 ref={textareaRef}
                 className="se-story-editor"
@@ -1086,6 +1109,45 @@ function StoryPanel({
                 spellCheck
                 aria-label="Story manuscript editor"
               />
+              {/* Floating AI Quick Tools — always visible */}
+              <div className="se-floating-tools" role="group" aria-label="Quick AI tools">
+                <button
+                  className="se-float-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('continue')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Continue the moment (Ctrl+1)"
+                >
+                  <span aria-hidden="true">✨</span> Continue
+                </button>
+                <button
+                  className="se-float-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('deepen')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Deepen the scene (Ctrl+2)"
+                >
+                  <span aria-hidden="true">🧠</span> Deepen
+                </button>
+                <button
+                  className="se-float-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('nudge')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Refine tone (Ctrl+3)"
+                >
+                  <span aria-hidden="true">🎯</span> Refine
+                </button>
+                <button
+                  className="se-float-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('rewrite')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Rework paragraph (Ctrl+4) — select text first"
+                >
+                  <span aria-hidden="true">🔄</span> Rework
+                </button>
+              </div>
               {editTotalPages > 1 && (
                 <div className="se-page-nav">
                   <button
@@ -1133,57 +1195,14 @@ function StoryPanel({
                   </button>
                 </div>
               )}
-              {/* Compact AI tools bar — visible on mobile below editor */}
-              <div className="se-edit-quick-tools" role="group" aria-label="Quick AI tools">
-                <button
-                  className="se-edit-quick-pill"
-                  style={{ '--pill-accent': charColor || '#B8962E' }}
-                  onClick={() => aiWriterRef.current?.triggerAction('continue')}
-                  disabled={aiWriterRef.current?.isLoading}
-                  title="Continue the moment (Ctrl+1)"
-                >
-                  <span aria-hidden="true">✨</span> Continue
-                </button>
-                <button
-                  className="se-edit-quick-pill"
-                  style={{ '--pill-accent': charColor || '#B8962E' }}
-                  onClick={() => aiWriterRef.current?.triggerAction('deepen')}
-                  disabled={aiWriterRef.current?.isLoading}
-                  title="Deepen the scene (Ctrl+2)"
-                >
-                  <span aria-hidden="true">🧠</span> Deepen
-                </button>
-                <button
-                  className="se-edit-quick-pill"
-                  style={{ '--pill-accent': charColor || '#B8962E' }}
-                  onClick={() => aiWriterRef.current?.triggerAction('nudge')}
-                  disabled={aiWriterRef.current?.isLoading}
-                  title="Refine tone (Ctrl+3)"
-                >
-                  <span aria-hidden="true">🎯</span> Refine
-                </button>
-                <button
-                  className="se-edit-quick-pill"
-                  style={{ '--pill-accent': charColor || '#B8962E' }}
-                  onClick={() => aiWriterRef.current?.triggerAction('rewrite')}
-                  disabled={aiWriterRef.current?.isLoading}
-                  title="Rework paragraph (Ctrl+4) — select text first"
-                >
-                  <span aria-hidden="true">🔄</span> Rework
-                </button>
-              </div>
             </div>
 
             {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`} id="writing-tools-panel" role="region" aria-label="Writing tools">
-              <button
-                className="se-mobile-tools-toggle"
-                onClick={() => setMobileToolsOpen(v => !v)}
-                aria-expanded={mobileToolsOpen}
-                aria-controls="writing-tools-panel"
-                title={mobileToolsOpen ? 'Collapse writing tools panel' : 'Expand writing tools panel'}
-              >
-                {mobileToolsOpen ? '▾ Hide Tools' : '▸ Writing Tools'}
-              </button>
+              {/* Mobile bottom sheet handle */}
+              <div className="se-sheet-handle" onClick={() => setMobileToolsOpen(v => !v)} aria-expanded={mobileToolsOpen} role="button" tabIndex={0}>
+                <div className="se-sheet-handle-bar" />
+                <span className="se-sheet-handle-label">{mobileToolsOpen ? 'Hide Writing Tools' : 'Writing Tools'}</span>
+              </div>
               {/* Scene Pulse */}
               {scenePulse && (
                 <div className="se-tools-section se-scene-pulse-section">

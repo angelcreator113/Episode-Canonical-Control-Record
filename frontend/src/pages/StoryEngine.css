@@ -7397,6 +7397,307 @@ html, body {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   EDIT MODE ENHANCEMENTS
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── 1. Edit Header: Two-row layout (meta on second line) ─────────────── */
+.se-edit-header {
+  flex-wrap: wrap;
+}
+
+.se-edit-header-line2 {
+  width: 100%;
+  padding: 0 0 2px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.se-edit-header-line2 .se-edit-header-meta {
+  font-size: 11px;
+  color: var(--se-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── 2. Edit Canvas Gutter ────────────────────────────────────────────── */
+.se-edit-canvas {
+  position: relative;
+}
+
+.se-editor-gutter {
+  position: absolute;
+  top: 3px; /* below gold border */
+  left: 0;
+  width: 48px;
+  height: calc(100% - 3px);
+  background: linear-gradient(90deg, #f3efe7 0%, #faf8f2 100%);
+  border-right: 1px solid rgba(184, 150, 46, 0.15);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.se-gutter-line {
+  position: absolute;
+  left: 36px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(184, 150, 46, 0.2);
+}
+
+/* Shift the editor to make room for the gutter */
+.se-edit-canvas .se-story-editor {
+  padding-left: 64px;
+}
+
+/* ─── 3. Floating AI Toolbar ───────────────────────────────────────────── */
+.se-floating-tools {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(250, 248, 242, 0) 0%, rgba(250, 248, 242, 0.95) 20%, #faf8f2 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(184, 150, 46, 0.12);
+}
+
+.se-float-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(28, 24, 20, 0.1);
+  background: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--se-text, #1C1814);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+}
+
+.se-float-pill:hover:not(:disabled) {
+  border-color: var(--pill-accent, #B8962E);
+  background: color-mix(in srgb, var(--pill-accent, #B8962E) 8%, #fff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.se-float-pill:active:not(:disabled) {
+  transform: scale(0.97) translateY(0);
+  background: color-mix(in srgb, var(--pill-accent, #B8962E) 14%, #fff);
+}
+
+.se-float-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ─── 4. Bottom Sheet Handle (mobile writing tools) ────────────────────── */
+.se-sheet-handle {
+  display: none; /* shown only on mobile */
+}
+
+.se-sheet-handle-bar {
+  width: 36px;
+  height: 4px;
+  background: var(--se-border-strong, #c4bfb3);
+  border-radius: 2px;
+}
+
+.se-sheet-handle-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--se-text-muted);
+}
+
+/* ─── 5. Mobile-specific enhancements ──────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Gutter: narrower on mobile */
+  .se-editor-gutter {
+    width: 28px;
+  }
+
+  .se-gutter-line {
+    left: 20px;
+  }
+
+  .se-edit-canvas .se-story-editor {
+    padding-left: 36px;
+  }
+
+  /* Floating tools: compact pills */
+  .se-floating-tools {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .se-float-pill {
+    font-size: 11px;
+    padding: 8px 10px;
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  /* Edit header compact */
+  .se-edit-header {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .se-edit-header-left {
+    gap: 8px;
+  }
+
+  .se-edit-header-line2 {
+    padding-left: 0;
+  }
+
+  /* Bottom Sheet Writing Tools */
+  .se-writing-tools {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    max-width: none;
+    min-width: 0;
+    border-left: none;
+    border-top: none;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
+    max-height: 52px; /* just the handle */
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+  }
+
+  .se-writing-tools--mobile-open {
+    max-height: 55vh;
+    overflow-y: auto;
+  }
+
+  .se-sheet-handle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px 8px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .se-mobile-tools-toggle {
+    display: none; /* replaced by sheet handle */
+  }
+
+  /* Give editor content bottom padding to avoid overlap with bottom sheet */
+  .se-edit-canvas .se-story-editor {
+    padding-bottom: 80px;
+  }
+
+  /* Old quick tools are now replaced by floating bar */
+  .se-edit-quick-tools {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Compact edit header: single-line */
+  .se-edit-header {
+    padding: 6px 10px;
+    gap: 4px;
+    border-left-width: 3px;
+  }
+
+  .se-edit-header-left {
+    gap: 6px;
+  }
+
+  .se-edit-header-title {
+    font-size: 13px;
+    max-width: 110px;
+  }
+
+  .se-edit-header-line2 {
+    padding-left: 0;
+  }
+
+  .se-edit-header-line2 .se-edit-header-meta {
+    font-size: 10px;
+  }
+
+  .se-mode-badge--edit {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+
+  .se-edit-back {
+    font-size: 11px;
+    padding: 4px 8px 4px 0;
+  }
+
+  /* Floating tools: 2x2 grid on small screens */
+  .se-floating-tools {
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .se-float-pill {
+    flex: 1 1 calc(50% - 2px);
+    font-size: 11px;
+    padding: 7px 8px;
+    min-height: 38px;
+  }
+
+  /* Gutter */
+  .se-editor-gutter {
+    width: 20px;
+  }
+
+  .se-gutter-line {
+    left: 14px;
+  }
+
+  .se-edit-canvas .se-story-editor {
+    padding-left: 28px;
+    padding-bottom: 80px;
+  }
+}
+
+@media (max-width: 360px) {
+  .se-float-pill {
+    font-size: 10px;
+    padding: 6px 6px;
+  }
+
+  .se-editor-gutter {
+    width: 16px;
+  }
+
+  .se-gutter-line {
+    left: 10px;
+  }
+
+  .se-edit-canvas .se-story-editor {
+    padding-left: 22px;
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Print styles
    ──────────────────────────────────────────────────────────────────────────── */
@@ -7413,6 +7714,9 @@ html, body {
   .se-story-header-actions,
   .se-bottom-tools,
   .se-edit-quick-tools,
+  .se-floating-tools,
+  .se-editor-gutter,
+  .se-sheet-handle,
   .se-mobile-tools-toggle,
   .se-writing-tools,
   .se-therapy-suggestions,
