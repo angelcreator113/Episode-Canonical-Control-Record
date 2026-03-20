@@ -54,7 +54,7 @@ const CENTER_TABS = [
   { id: 'structure', label: 'Structure' },
   { id: 'scenes',    label: 'Scenes'    },
   { id: 'memory',    label: 'Memory'    },
-  { id: 'lala',      label: 'Lala'      },
+  { id: 'lala',      label: 'Emergence' },
   { id: 'export',    label: 'Export'    },
 ];
 
@@ -176,6 +176,9 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   // History / version snapshots
   const [history,        setHistory]        = useState([]); // [{prose, label, timestamp}]
   const [showHistory,    setShowHistory]    = useState(false);
+
+  // Help modal
+  const [showHelp,       setShowHelp]       = useState(false);
 
   // Quick character switch
   const [showCharQuick,  setShowCharQuick]  = useState(false);
@@ -1530,6 +1533,14 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           >
             {'ℹ'}
           </button>
+
+          <button
+            className="wm-help-btn"
+            onClick={() => setShowHelp(true)}
+            title="Keyboard shortcuts & help"
+          >
+            {'?'}
+          </button>
         </div>
       </header>
       )}
@@ -1890,6 +1901,40 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                 })}
               </div>
             ) : (
+              <>
+              {/* ── Welcome guide for empty chapters ── */}
+              {!prose.trim() && !generating && !editMode && (
+                <div className="wm-welcome-guide">
+                  <div className="wm-welcome-title">How would you like to begin?</div>
+                  <div className="wm-welcome-options">
+                    <button className="wm-welcome-option" onClick={() => proseTextareaRef.current?.focus()}>
+                      <span className="wm-welcome-option-icon">{'✍'}</span>
+                      <span className="wm-welcome-option-label">Type</span>
+                      <span className="wm-welcome-option-desc">Start writing in your own words</span>
+                    </button>
+                    <button className="wm-welcome-option" onClick={toggleListening}>
+                      <span className="wm-welcome-option-icon">{'🎙'}</span>
+                      <span className="wm-welcome-option-label">Speak</span>
+                      <span className="wm-welcome-option-desc">Dictate and AI transforms it into prose</span>
+                    </button>
+                    <button className="wm-welcome-option" onClick={handleContinue}>
+                      <span className="wm-welcome-option-icon">{'✨'}</span>
+                      <span className="wm-welcome-option-label">AI Start</span>
+                      <span className="wm-welcome-option-desc">Generate an opening based on your chapter plan</span>
+                    </button>
+                  </div>
+                  <div className="wm-welcome-workflow">
+                    <span className="wm-welcome-step">Write</span>
+                    <span className="wm-welcome-arrow">{'→'}</span>
+                    <span className="wm-welcome-step">Review</span>
+                    <span className="wm-welcome-arrow">{'→'}</span>
+                    <span className="wm-welcome-step">Approve</span>
+                  </div>
+                  <div className="wm-welcome-tip">
+                    Fill in the <strong>Chapter Plan</strong> on the right to give AI better context
+                  </div>
+                </div>
+              )}
               <textarea
                 className="wm-prose-area"
                 ref={proseTextareaRef}
@@ -1899,7 +1944,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                 spellCheck={false}
                 readOnly={generating}
               />
-            )}
+              </>
+            )}}
 
           </div>
 
@@ -2022,25 +2068,31 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
             className={`wm-ai-btn${aiAction === 'continue' ? ' active' : ''}`}
             onClick={handleContinue}
             disabled={generating}
-            title={!prose.trim() ? 'Generate an opening for this chapter' : 'Continue writing'}
+            title={!prose.trim() ? 'Generate an opening for this chapter' : 'Continue writing from where you left off'}
           >
-            <span className="wm-ai-icon">{"✨"}</span> Continue
+            <span className="wm-ai-icon">{"✨"}</span>
+            <span className="wm-ai-btn-label">Continue</span>
+            <span className="wm-ai-btn-desc">{!prose.trim() ? 'Start chapter' : 'Keep going'}</span>
           </button>
           <button
             className={`wm-ai-btn${aiAction === 'deepen' ? ' active' : ''}`}
             onClick={handleDeepen}
             disabled={generating || !prose.trim()}
-            title={!prose.trim() ? 'Write something first — then Deepen will enrich your text' : 'Deepen the prose'}
+            title={!prose.trim() ? 'Write something first — then Deepen will enrich your text' : 'Add sensory detail and emotional depth to your prose'}
           >
-            <span className="wm-ai-icon">{"🔍"}</span> Deepen
+            <span className="wm-ai-icon">{"🔍"}</span>
+            <span className="wm-ai-btn-label">Deepen</span>
+            <span className="wm-ai-btn-desc">Enrich details</span>
           </button>
           <button
             className={`wm-ai-btn${aiAction === 'nudge' ? ' active' : ''}`}
             onClick={handleNudge}
             disabled={generating}
-            title="Get a creative writing prompt"
+            title="Get a creative writing prompt — not inserted, just a suggestion"
           >
-            <span className="wm-ai-icon">{"💡"}</span> Nudge
+            <span className="wm-ai-icon">{"💡"}</span>
+            <span className="wm-ai-btn-label">Nudge</span>
+            <span className="wm-ai-btn-desc">Get a prompt</span>
           </button>
           {proseBeforeAi !== null && !generating && (
             <button className="wm-ai-btn wm-undo-ai" onClick={undoAi}>
@@ -2187,12 +2239,12 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
 
           <div className="wm-bottom-hint">
             {listening
-              ? 'Tap mic to stop & write'
+              ? 'Listening… tap mic to stop and convert to prose'
               : generating
-              ? (aiAction === 'continue' ? 'Continuing…' : aiAction === 'deepen' ? 'Deepening…' : 'Writing your story…')
+              ? (aiAction === 'continue' ? 'Continuing your story…' : aiAction === 'deepen' ? 'Enriching your prose…' : 'Writing…')
               : prose
-              ? 'Tap mic to speak — or use AI tools above'
-              : 'Tap mic to speak, or type and use AI tools'}
+              ? 'When ready, tap → Review to approve your lines'
+              : 'Tap mic to dictate, or just start typing above'}
           </div>
 
           {prose.length > 20 && (
@@ -2556,6 +2608,63 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
               }}>
                 {prose ? 'Save & Leave' : 'Leave'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── HELP / SHORTCUTS MODAL ── */}
+      {showHelp && (
+        <div className="wm-modal-overlay" onClick={() => setShowHelp(false)}>
+          <div className="wm-modal wm-help-modal" onClick={e => e.stopPropagation()}>
+            <div className="wm-modal-title">Write Mode Guide</div>
+            <button className="wm-help-close" onClick={() => setShowHelp(false)}>{'×'}</button>
+
+            <div className="wm-help-section">
+              <div className="wm-help-section-title">Workflow</div>
+              <div className="wm-help-flow">
+                <span className="wm-help-flow-step"><strong>Write</strong> your prose</span>
+                <span className="wm-help-flow-arrow">{'→'}</span>
+                <span className="wm-help-flow-step">Click <strong>→ Review</strong></span>
+                <span className="wm-help-flow-arrow">{'→'}</span>
+                <span className="wm-help-flow-step"><strong>Approve</strong> each line</span>
+              </div>
+              <div className="wm-help-note">Approved lines become the final version of your chapter.</div>
+            </div>
+
+            <div className="wm-help-section">
+              <div className="wm-help-section-title">AI Tools</div>
+              <div className="wm-help-tools">
+                <div className="wm-help-tool"><span className="wm-help-tool-icon">{'✨'}</span><strong>Continue</strong> — AI writes the next passage, continuing from your prose</div>
+                <div className="wm-help-tool"><span className="wm-help-tool-icon">{'🔍'}</span><strong>Deepen</strong> — Enriches your text with sensory detail and emotional depth</div>
+                <div className="wm-help-tool"><span className="wm-help-tool-icon">{'💡'}</span><strong>Nudge</strong> — Gives you a creative prompt (not inserted into your text)</div>
+                <div className="wm-help-tool"><span className="wm-help-tool-icon">{'🎙'}</span><strong>Voice</strong> — Speak your ideas; AI transforms them into narrative prose</div>
+                <div className="wm-help-tool"><span className="wm-help-tool-icon">{'¶'}</span><strong>Paragraphs</strong> — Select any paragraph to rewrite, expand, or delete it</div>
+              </div>
+            </div>
+
+            <div className="wm-help-section">
+              <div className="wm-help-section-title">Keyboard Shortcuts</div>
+              <div className="wm-help-shortcuts">
+                <div className="wm-help-shortcut"><kbd>Ctrl+Enter</kbd><span>Continue</span></div>
+                <div className="wm-help-shortcut"><kbd>Ctrl+D</kbd><span>Deepen</span></div>
+                <div className="wm-help-shortcut"><kbd>Ctrl+S</kbd><span>Save draft</span></div>
+                <div className="wm-help-shortcut"><kbd>Ctrl+B</kbd><span>Toggle Contents sidebar</span></div>
+                <div className="wm-help-shortcut"><kbd>Ctrl+[</kbd><span>Previous chapter</span></div>
+                <div className="wm-help-shortcut"><kbd>Ctrl+]</kbd><span>Next chapter</span></div>
+                <div className="wm-help-shortcut"><kbd>F11</kbd><span>Focus mode</span></div>
+                <div className="wm-help-shortcut"><kbd>Esc</kbd><span>Close panel / exit mode</span></div>
+              </div>
+            </div>
+
+            <div className="wm-help-section">
+              <div className="wm-help-section-title">Panels</div>
+              <div className="wm-help-tools">
+                <div className="wm-help-tool"><strong>Chapter Plan</strong> — Set scene goal, theme, emotional arc, and POV to guide AI</div>
+                <div className="wm-help-tool"><strong>{'✦'} Write</strong> — AI Writer that writes in a specific character's voice</div>
+                <div className="wm-help-tool"><strong>Contents</strong> — Navigate chapters, reorder, and manage sections</div>
+                <div className="wm-help-tool"><strong>Snapshots</strong> — Auto-saved before each AI action; restore any version</div>
+              </div>
             </div>
           </div>
         </div>

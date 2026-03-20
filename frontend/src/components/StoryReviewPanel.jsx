@@ -166,7 +166,7 @@ export default function StoryReviewPanel({
             </span>
           ) : (
             <span className="se-review-badge se-review-badge-unsaved">
-              ● Unsaved
+              Draft — not yet saved
             </span>
           )}
           {isApproved && (
