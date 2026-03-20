@@ -1354,16 +1354,24 @@ function StoryPanel({
         ) : (
           <>
             <div className={`se-story-text ${focusMode ? 'se-story-text--focus' : ''}`} ref={storyBodyRef}>
-              {(pages[currentPage] || []).map((para, i) => (
-                para.trim()
-                  ? <p
-                      key={i}
-                      className={`se-story-para ${activeParaIndex === i ? 'se-para-active' : ''} ${activeParaIndex !== null && activeParaIndex !== i ? 'se-para-dimmed' : ''}`}
-                      onMouseEnter={() => setActiveParaIndex(i)}
-                      onMouseLeave={() => setActiveParaIndex(null)}
-                    >{para}</p>
-                  : <div key={i} className="se-story-spacer" />
-              ))}
+              {(pages[currentPage] || []).map((para, i) => {
+                const trimmed = para.trim();
+                if (!trimmed) return <div key={i} className="se-story-spacer" />;
+                // Strip markdown artifacts for clean reading view
+                if (/^---+$/.test(trimmed)) return <hr key={i} className="se-story-divider" />;
+                if (/^#{1,3}\s/.test(trimmed)) {
+                  const heading = trimmed.replace(/^#{1,3}\s+/, '');
+                  return <h3 key={i} className="se-story-heading">{heading}</h3>;
+                }
+                return (
+                  <p
+                    key={i}
+                    className={`se-story-para ${activeParaIndex === i ? 'se-para-active' : ''} ${activeParaIndex !== null && activeParaIndex !== i ? 'se-para-dimmed' : ''}`}
+                    onMouseEnter={() => setActiveParaIndex(i)}
+                    onMouseLeave={() => setActiveParaIndex(null)}
+                  >{trimmed}</p>
+                );
+              })}
             </div>
             {/* Inline editing toolbar — appears on text selection */}
             {selectionPopup && !editing && (
