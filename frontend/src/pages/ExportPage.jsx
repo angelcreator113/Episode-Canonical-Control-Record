@@ -104,7 +104,7 @@ function ExportPage() {
   const loadEpisodeData = async () => {
     setLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002/api/v1';
+      const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
       // Fetch episode
       const epRes = await api.get(`/api/v1/episodes/${episodeId}`);

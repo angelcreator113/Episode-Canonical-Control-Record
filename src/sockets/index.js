@@ -12,17 +12,21 @@ let io = null;
  * @param {import('http').Server} httpServer - The HTTP server instance
  * @returns {Server} Socket.io server instance
  */
-function initializeSocket(httpServer) {
-  const corsOrigins = (process.env.SOCKET_IO_CORS_ORIGIN || 'http://localhost:5174')
-    .split(',')
-    .map((s) => s.trim());
+function initializeSocket(httpServer, corsOptions) {
+  // Reuse the app-level CORS config so mobile IPs are allowed for WebSockets too.
+  // Falls back to env var / localhost if corsOptions isn't passed.
+  const corsConfig = corsOptions
+    ? { origin: corsOptions.origin, methods: ['GET', 'POST'], credentials: true }
+    : {
+        origin: (process.env.SOCKET_IO_CORS_ORIGIN || 'http://localhost:5174')
+          .split(',')
+          .map((s) => s.trim()),
+        methods: ['GET', 'POST'],
+        credentials: true,
+      };
 
   io = new Server(httpServer, {
-    cors: {
-      origin: corsOrigins,
-      methods: ['GET', 'POST'],
-      credentials: true,
-    },
+    cors: corsConfig,
     transports: ['websocket', 'polling'],
     pingInterval: 25000,
     pingTimeout: 20000,
