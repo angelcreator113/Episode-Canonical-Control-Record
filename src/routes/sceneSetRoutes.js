@@ -197,6 +197,36 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
   }
 });
 
+// ─── DELETE /:id/angles/:angleId  — soft-delete a single angle ──────────────
+
+router.delete('/:id/angles/:angleId', optionalAuth, async (req, res) => {
+  try {
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: req.params.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+    await angle.destroy();
+    res.json({ success: true, message: 'Angle deleted' });
+  } catch (err) {
+    console.error('Scene Sets DELETE /:id/angles/:angleId error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── DELETE /:id/angles  — delete all angles for a scene set ─────────────────
+
+router.delete('/:id/angles', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    const count = await SceneAngle.destroy({ where: { scene_set_id: set.id } });
+    res.json({ success: true, message: `Deleted ${count} angles` });
+  } catch (err) {
+    console.error('Scene Sets DELETE /:id/angles error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── GET /by-type/:sceneType  — filter by scene_type ─────────────────────────
 
 router.get('/by-type/:sceneType', optionalAuth, async (req, res) => {

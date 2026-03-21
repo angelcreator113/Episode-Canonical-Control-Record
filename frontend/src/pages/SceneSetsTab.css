@@ -410,6 +410,32 @@
   background: #EDE7F6;
 }
 
+.scene-sets-btn-delete {
+  background: none;
+  color: #999;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.scene-sets-btn-delete:hover {
+  color: #C62828;
+  border-color: #FFCDD2;
+  background: #FFF5F5;
+}
+
+.scene-sets-btn-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ── Seed / Script ─────────────────────────────────────────────────────── */
 
 .scene-sets-seed-info {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2 } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -173,7 +173,7 @@ function formatTime(secs) {
 
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, generatingId, generationProgress }) {
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || null;
@@ -251,6 +251,17 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, gen
                 ) : (
                   <><Sparkles size={12} /> Generate All Angles</>
                 )}
+              </button>
+            )}
+
+            {totalAngles > 0 && (
+              <button
+                onClick={() => onDeleteAllAngles(set)}
+                disabled={isGenerating}
+                className="scene-sets-btn-delete"
+                title="Delete all angles and regenerate clean"
+              >
+                <RotateCcw size={12} /> Reset Angles
               </button>
             )}
 
@@ -423,6 +434,20 @@ export default function SceneSetsTab() {
     }
   };
 
+  const handleDeleteAllAngles = async (set) => {
+    const count = set.angles?.length || 0;
+    if (count === 0) return;
+    if (!window.confirm(`Delete all ${count} angles for "${set.name}"? They will be soft-deleted and can be recovered.`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      showToast(`Deleted ${count} angles — create new ones or regenerate`);
+      fetchSets();
+    } catch {
+      showToast('Failed to delete angles', 'error');
+    }
+  };
+
   const filtered = filterType === 'ALL'
     ? sets
     : sets.filter(s => s.scene_type === filterType);
@@ -558,6 +583,7 @@ export default function SceneSetsTab() {
               onGenerateBase={handleGenerateBase}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
+              onDeleteAllAngles={handleDeleteAllAngles}
               generatingId={generatingId}
               generationProgress={generationProgress}
             />
