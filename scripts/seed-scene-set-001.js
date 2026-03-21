@@ -82,12 +82,29 @@ async function seed() {
 
   try {
     const sceneDescription = [
-      'A warm, sunlit bedroom. Cream linen bedding with gold-thread accent pillows.',
-      'Soft oak nightstand with a small succulent, a glass of water, and a phone face-down.',
-      'A vanity table with round mirror, skincare bottles, and a small jewelry tray.',
-      'Sheer curtains filter morning light into a soft golden wash.',
-      'A woven rug on light hardwood floor. The room feels personal, calm, beautiful but lived-in.',
-    ].join(' ');
+      'A soft, feminine, personalized space where identity, routine, and aesthetic intention meet.',
+      'This room is not just a bedroom — it is a content space, a self-expression environment, a quiet ritual zone.',
+      '',
+      'Layout: Medium-sized room. One large window as primary light source.',
+      'Bed positioned to catch morning light. Vanity or mirror area near the window.',
+      'Subtle layering of zones: sleep, beauty, creation.',
+      '',
+      'Lighting (CANONICAL): Early morning sunlight comes through blinds or sheer curtains,',
+      'creating clean, soft stripes across surfaces. Light moves across the room — time-aware feeling.',
+      'The light is perfect at 6:14 AM.',
+      '',
+      'Bed area: Low-profile bed. Neutral bedding (cream, white, soft blush).',
+      'Slightly unmade — lived-in, not staged. Soft throw blanket draped casually.',
+      '',
+      'Vanity area: Positioned to catch light. Phone (content creation tool), minimal makeup,',
+      'jewelry tray with gold accents, perfume, candle. Mirror reflects light and creates depth.',
+      '',
+      'Signature details: A phone placed intentionally. Light hitting specific surfaces.',
+      'Slight signs of real life — a hoodie, a book, a glass of water.',
+      '',
+      'What this space should feel like: This is a place where someone is becoming themselves.',
+      'Not a showroom. Intentional reality.',
+    ].join('\n');
 
     const set = await SceneSet.create({
       name: "Lala's Bedroom — Morning Light",
