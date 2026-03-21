@@ -493,6 +493,16 @@
   box-shadow: 0 3px 10px rgba(180, 140, 0, 0.25);
 }
 
+.scene-sets-clickable-icon {
+  animation: subtlePulse 2s ease-in-out infinite;
+  color: #B8962E;
+}
+
+@keyframes subtlePulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 .scene-sets-video-indicator {
   position: absolute;
   bottom: 2px;

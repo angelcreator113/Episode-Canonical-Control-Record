@@ -72,6 +72,8 @@ function AngleStrip({ angles, onGenerate, generating }) {
                 <Loader size={16} className="spin" />
               ) : isFailed ? (
                 <AlertCircle size={16} />
+              ) : isPending && !generating ? (
+                <Sparkles size={16} className="scene-sets-clickable-icon" />
               ) : (
                 <Sparkles size={16} />
               )}
@@ -99,12 +101,15 @@ function AngleStrip({ angles, onGenerate, generating }) {
 
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-function SceneSetCard({ set, onGenerateBase, onGenerateAngle, generatingId }) {
-  const [expanded, setExpanded] = useState(false);
+function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, generatingId }) {
   const isGenerating = generatingId === set.id;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || null;
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
+  const pendingAngles = set.angles?.filter(a => a.generation_status === 'pending') || [];
+  const hasBase = !!set.base_runway_seed;
+  // Auto-expand when base is ready but angles aren't generated yet
+  const [expanded, setExpanded] = useState(hasBase && readyAngles === 0 && totalAngles > 0);
 
   return (
     <div className="scene-sets-card">
@@ -115,7 +120,7 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, generatingId }) {
         ) : (
           <div className="scene-sets-card-placeholder">
             <Camera size={32} strokeWidth={1.2} />
-            <span>Not yet generated</span>
+            <span>{hasBase ? 'Generate angles to see visuals' : 'Not yet generated'}</span>
           </div>
         )}
 
@@ -148,7 +153,7 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, generatingId }) {
           </div>
 
           <div className="scene-sets-card-actions">
-            {set.generation_status === 'pending' && !set.base_runway_seed && (
+            {!hasBase && (
               <button
                 onClick={() => onGenerateBase(set)}
                 disabled={isGenerating}
@@ -158,6 +163,20 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, generatingId }) {
                   <><Loader size={12} className="spin" /> Generating...</>
                 ) : (
                   <><Sparkles size={12} /> Generate Base</>
+                )}
+              </button>
+            )}
+
+            {hasBase && pendingAngles.length > 0 && (
+              <button
+                onClick={() => onGenerateAll(set)}
+                disabled={isGenerating}
+                className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}
+              >
+                {isGenerating ? (
+                  <><Loader size={12} className="spin" /> Generating...</>
+                ) : (
+                  <><Sparkles size={12} /> Generate All Angles</>
                 )}
               </button>
             )}
@@ -257,6 +276,23 @@ export default function SceneSetsTab() {
       setTimeout(fetchSets, 5000);
     } catch {
       showToast('Angle generation failed', 'error');
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const handleGenerateAll = async (set) => {
+    const pending = set.angles?.filter(a => a.generation_status === 'pending') || [];
+    if (pending.length === 0) return;
+    setGeneratingId(set.id);
+    try {
+      for (const angle of pending) {
+        await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
+      }
+      showToast(`Generating ${pending.length} angles — this takes a few minutes`);
+      setTimeout(fetchSets, 5000);
+    } catch {
+      showToast('Some angle generations failed', 'error');
     } finally {
       setGeneratingId(null);
     }
@@ -421,6 +457,7 @@ export default function SceneSetsTab() {
               set={set}
               onGenerateBase={handleGenerateBase}
               onGenerateAngle={handleGenerateAngle}
+              onGenerateAll={handleGenerateAll}
               generatingId={generatingId}
             />
           ))}
