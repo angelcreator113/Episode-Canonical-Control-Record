@@ -89,11 +89,12 @@ function runwayHeaders() {
  * Returns { jobId }
  */
 async function startTextToImage(prompt, seed = undefined) {
+  const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
   const payload = {
     model: 'gen4_image',
     promptText: prompt,
     ratio: '1280:720',
-    ...(seed !== undefined ? { seed: parseInt(seed, 10) } : {}),
+    ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
   };
 
   try {
@@ -117,13 +118,14 @@ async function startTextToImage(prompt, seed = undefined) {
  * Returns { jobId }
  */
 async function startImageToVideo(prompt, imageUrl, seed = undefined) {
+  const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
   const payload = {
     model: 'gen3a_turbo',
     promptText: prompt,
     promptImage: imageUrl,
     ratio: '1280:768',
     duration: 5,
-    ...(seed !== undefined && !isNaN(Number(seed)) ? { seed: parseInt(seed, 10) } : {}),
+    ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
   };
 
   try {

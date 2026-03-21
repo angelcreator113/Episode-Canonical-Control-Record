@@ -92,6 +92,114 @@
   color: #FFF;
 }
 
+/* ── Header Actions (create button + filters row) ─────────────────────── */
+
+.scene-sets-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-btn-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid #B8962E;
+  background: #FFF9ED;
+  color: #8B6F00;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.scene-sets-btn-create:hover {
+  background: #F5EDDA;
+  border-color: #8B6F00;
+}
+
+/* ── Create Form ───────────────────────────────────────────────────────── */
+
+.scene-sets-create-form {
+  background: #FAFBFE;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scene-sets-create-row {
+  display: flex;
+  gap: 14px;
+}
+
+.scene-sets-create-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.scene-sets-create-field label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B6B6B;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scene-sets-optional {
+  text-transform: none;
+  font-weight: 400;
+  color: #999;
+}
+
+.scene-sets-create-field input,
+.scene-sets-create-field select,
+.scene-sets-create-field textarea {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  color: #2C2C2C;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #FFF;
+  transition: border-color 0.15s;
+  resize: vertical;
+}
+
+.scene-sets-create-field input:focus,
+.scene-sets-create-field select:focus,
+.scene-sets-create-field textarea:focus {
+  outline: none;
+  border-color: #B8962E;
+  box-shadow: 0 0 0 2px rgba(184, 150, 46, 0.12);
+}
+
+.scene-sets-create-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+  .scene-sets-create-row {
+    flex-direction: column;
+  }
+  .scene-sets-header-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* ── Status Pill ───────────────────────────────────────────────────────── */
 
 .scene-sets-status-pill {
@@ -302,6 +410,32 @@
   background: #EDE7F6;
 }
 
+.scene-sets-btn-delete {
+  background: none;
+  color: #999;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.scene-sets-btn-delete:hover {
+  color: #C62828;
+  border-color: #FFCDD2;
+  background: #FFF5F5;
+}
+
+.scene-sets-btn-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ── Seed / Script ─────────────────────────────────────────────────────── */
 
 .scene-sets-seed-info {
@@ -383,6 +517,120 @@
 .scene-sets-angle-item.clickable .scene-sets-angle-thumb:hover {
   transform: scale(1.06);
   box-shadow: 0 3px 10px rgba(180, 140, 0, 0.25);
+}
+
+.scene-sets-clickable-icon {
+  animation: subtlePulse 2s ease-in-out infinite;
+  color: #B8962E;
+}
+
+@keyframes subtlePulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ── Generation Progress ───────────────────────────────────────────────── */
+
+.scene-sets-progress-panel {
+  background: #FAFAF5;
+  border: 1px solid #E8E4DC;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 12px;
+}
+
+.scene-sets-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.scene-sets-progress-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.scene-sets-progress-timing {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #6B6B6B;
+}
+
+.scene-sets-progress-sep {
+  color: #CCC;
+}
+
+.scene-sets-progress-bar-track {
+  height: 4px;
+  background: #E8E4DC;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.scene-sets-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #B8962E, #D4AF37);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.scene-sets-progress-angles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scene-sets-progress-angle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 3px 0;
+}
+
+.scene-sets-progress-angle.queued {
+  color: #AAA;
+}
+
+.scene-sets-progress-angle.current {
+  color: #B8962E;
+  font-weight: 600;
+}
+
+.scene-sets-progress-angle.done {
+  color: #1A7A40;
+}
+
+.scene-sets-progress-angle.failed {
+  color: #C62828;
+}
+
+.scene-sets-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #DDD;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.scene-sets-progress-step {
+  color: #9E9E9E;
+  font-weight: 400;
+  font-size: 10px;
+  margin-left: 2px;
 }
 
 .scene-sets-video-indicator {

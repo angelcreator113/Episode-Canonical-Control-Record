@@ -397,20 +397,9 @@
 }
 
 /* ── MOBILE ──────────────────────────────────────────────────────────── */
+/* Backdrop and drawer styles only active on mobile */
 .ps-sidebar-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 999;
-}
-
-.ps-sidebar-open {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  z-index: 1000;
-  width: var(--ps-sidebar-w);
+  display: none;
 }
 
 .ps-sidebar-close {
@@ -425,8 +414,26 @@
 }
 
 @media (max-width: 1279px) {
+  .ps-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 999;
+  }
+
+  .ps-sidebar-open {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    width: var(--ps-sidebar-w);
+  }
+
   .ps-sidebar-close { display: flex; }
   .ps-collapse-btn { display: none; }
+
   /* Hide sidebar from layout when not open as mobile drawer */
   .ps-sidebar:not(.ps-sidebar-open) {
     display: none;
