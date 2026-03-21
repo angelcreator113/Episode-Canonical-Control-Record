@@ -1367,6 +1367,15 @@ try {
   console.error('✗ Failed to load Luxury Filter routes:', e.message);
 }
 
+// Scene Sets — generative scene pipeline (RunwayML)
+try {
+  const sceneSetRoutes = require('./routes/sceneSetRoutes');
+  app.use('/api/v1/scene-sets', sceneSetRoutes);
+  console.log('✓ Scene Sets loaded at /api/v1/scene-sets');
+} catch (e) {
+  console.error('✗ Failed to load Scene Sets routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
