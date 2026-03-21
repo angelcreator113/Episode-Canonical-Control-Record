@@ -135,6 +135,8 @@ let AIUsageLog; // AI API cost/token tracking
 let CharacterArc; // Arc tracking: wound clock, stakes, visibility, David silence
 let StoryTexture; // Texture layer: inner thought, conflict, body narrator, private moment, post, bleed
 let StoryTaskArc; // Story Engine: persisted 50-story task arc per character
+let SceneSet; // Scene Sets: canonical LalaVerse locations for generative scene pipeline
+let SceneAngle; // Scene Angles: camera angles within a scene set
 
 try {
   // Core models
@@ -374,6 +376,8 @@ try {
   AssetRole = require('./AssetRole')(sequelize, DataTypes);
   UniverseCharacter = require('./UniverseCharacter')(sequelize, DataTypes);
   WorldCharacter = require('./WorldCharacter')(sequelize, DataTypes);
+  SceneSet = require('./SceneSet')(sequelize);
+  SceneAngle = require('./SceneAngle')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -516,6 +520,8 @@ const requiredModels = {
   CharacterArc,
   StoryTexture,
   StoryTaskArc,
+  SceneSet,
+  SceneAngle,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -730,6 +736,12 @@ if (EditMap && EditMap.associate) {
 }
 if (CharacterArc && CharacterArc.associate) {
   CharacterArc.associate(requiredModels);
+}
+if (SceneSet && SceneSet.associate) {
+  SceneSet.associate(requiredModels);
+}
+if (SceneAngle && SceneAngle.associate) {
+  SceneAngle.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1878,3 +1890,5 @@ module.exports.AIUsageLog = AIUsageLog;
 module.exports.CharacterArc = CharacterArc;
 module.exports.StoryTexture = StoryTexture;
 module.exports.StoryTaskArc = StoryTaskArc;
+module.exports.SceneSet = SceneSet;
+module.exports.SceneAngle = SceneAngle;

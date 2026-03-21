@@ -363,7 +363,7 @@ app.use('/api/v1/auth', authRoutes);
 let episodeRoutes, thumbnailRoutes, metadataRoutes, processingRoutes;
 let filesRoutes, searchRoutes, jobsRoutes;
 let assetRoutes, compositionRoutes, templateRoutes;
-let sceneRoutes, scenesFixedRoutes, wardrobeRoutes;
+let sceneRoutes, wardrobeRoutes;
 
 // Characters routes
 let characterRoutes;
@@ -401,8 +401,6 @@ sceneRoutes = trackRouteLoad('scenes', () => {
   return require('./routes/scenes');
 });
 
-// FIXED Scene routes (temporary workaround)
-scenesFixedRoutes = trackRouteLoad('scenes-fixed', () => require('./routes/scenes-fixed'));
 
 let sceneTemplateRoutes;
 sceneTemplateRoutes = trackRouteLoad('sceneTemplates', () => require('./routes/sceneTemplates'));
@@ -653,7 +651,6 @@ app.use('/api/v1/templates', templateRoutes);
 // });
 
 // Scene routes
-app.use('/api/v1/scenes-fixed', scenesFixedRoutes); // TEMPORARY WORKAROUND
 app.use('/api/v1/scenes', sceneRoutes);
 app.use('/api/v1/scene-templates', sceneTemplateRoutes);
 
@@ -922,15 +919,6 @@ try {
   console.log('✓ Memories routes loaded at /api/v1/memories');
 } catch (e) {
   console.error('✗ Failed to load Memories routes:', e.message);
-}
-
-// Intimate Scene Generation (memories patch — beats + morning-after)
-try {
-  const intimatePatch = require('./routes/memoriesRoutes-intimate-patch');
-  app.use('/api/v1/memories', intimatePatch);
-  console.log('✓ Intimate scene patch loaded at /api/v1/memories/generate-intimate-scene');
-} catch (e) {
-  console.error('✗ Failed to load intimate scene patch:', e.message);
 }
 
 // Script Bridge routes (generate episode scripts from book lines)
@@ -1350,6 +1338,42 @@ try {
   console.log('✓ Texture Layer routes loaded at /api/v1/texture-layer');
 } catch (e) {
   console.error('✗ Failed to load Texture Layer routes:', e.message);
+}
+
+// Season Rhythm Validator — 8-episode arc rhythm enforcement
+try {
+  const seasonRhythmRoutes = require('./routes/seasonRhythmRoutes');
+  app.use('/api/v1/season-rhythm', seasonRhythmRoutes);
+  console.log('✓ Season Rhythm Validator loaded at /api/v1/season-rhythm');
+} catch (e) {
+  console.error('✗ Failed to load Season Rhythm routes:', e.message);
+}
+
+// World Temperature — tension aggregation across universe scope
+try {
+  const worldTemperatureRoutes = require('./routes/worldTemperatureRoutes');
+  app.use('/api/v1/world-temperature', worldTemperatureRoutes);
+  console.log('✓ World Temperature loaded at /api/v1/world-temperature');
+} catch (e) {
+  console.error('✗ Failed to load World Temperature routes:', e.message);
+}
+
+// Luxury Filter — rule-based + semantic luxury compliance validation
+try {
+  const luxuryFilterRoutes = require('./routes/luxuryFilterRoutes');
+  app.use('/api/v1/luxury-filter', luxuryFilterRoutes);
+  console.log('✓ Luxury Filter loaded at /api/v1/luxury-filter');
+} catch (e) {
+  console.error('✗ Failed to load Luxury Filter routes:', e.message);
+}
+
+// Scene Sets — generative scene pipeline (RunwayML)
+try {
+  const sceneSetRoutes = require('./routes/sceneSetRoutes');
+  app.use('/api/v1/scene-sets', sceneSetRoutes);
+  console.log('✓ Scene Sets loaded at /api/v1/scene-sets');
+} catch (e) {
+  console.error('✗ Failed to load Scene Sets routes:', e.message);
 }
 
 // API info endpoint

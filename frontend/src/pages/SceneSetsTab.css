@@ -1,0 +1,546 @@
+/* ─── Scene Sets Tab ─────────────────────────────────────────────────────── */
+
+.scene-sets-container {
+  position: relative;
+}
+
+/* ── Toast ─────────────────────────────────────────────────────────────── */
+
+.scene-sets-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  max-width: 360px;
+  animation: slideIn 0.25s ease;
+}
+
+.scene-sets-toast.success {
+  background: #E8F5E9;
+  color: #1A7A40;
+  border: 1px solid #A5D6A7;
+}
+
+.scene-sets-toast.error {
+  background: #FFEBEE;
+  color: #C62828;
+  border: 1px solid #FFCDD2;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+
+.scene-sets-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.scene-sets-title {
+  margin: 0;
+  font-family: 'Lora', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #2C2C2C;
+}
+
+.scene-sets-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6B6B6B;
+}
+
+/* ── Filter Pills ──────────────────────────────────────────────────────── */
+
+.scene-sets-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-filter-pill {
+  background: #F5F0FF;
+  color: #5C3D8F;
+  border: none;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.scene-sets-filter-pill:hover {
+  background: #EDE7F6;
+}
+
+.scene-sets-filter-pill.active {
+  background: #2D1B69;
+  color: #FFF;
+}
+
+/* ── Status Pill ───────────────────────────────────────────────────────── */
+
+.scene-sets-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.scene-sets-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.scene-sets-status-dot.pulse {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+/* ── Type Badge ────────────────────────────────────────────────────────── */
+
+.scene-sets-type-badge {
+  padding: 2px 9px;
+  border-radius: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Card ──────────────────────────────────────────────────────────────── */
+
+.scene-sets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.scene-sets-card {
+  background: #FFF;
+  border: 1px solid #E8E4DC;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.scene-sets-card:hover {
+  box-shadow: 0 4px 16px rgba(44, 27, 105, 0.10);
+}
+
+/* ── Card Preview ──────────────────────────────────────────────────────── */
+
+.scene-sets-card-preview {
+  height: 160px;
+  background: linear-gradient(135deg, #F0EBF8 0%, #EDE7F6 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.scene-sets-card-preview.has-image {
+  background: #000;
+}
+
+.scene-sets-card-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene-sets-card-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #9E9E9E;
+}
+
+.scene-sets-card-placeholder span {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.scene-sets-card-overlay-top-left {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.scene-sets-card-overlay-top-right {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.scene-sets-franchise-badge {
+  background: rgba(212, 175, 55, 0.9);
+  color: #FFF;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.scene-sets-card-video-ready {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #FFF;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Card Body ─────────────────────────────────────────────────────────── */
+
+.scene-sets-card-body {
+  padding: 14px 16px;
+}
+
+.scene-sets-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.scene-sets-card-title {
+  margin: 0;
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2C2C2C;
+}
+
+.scene-sets-card-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #6B6B6B;
+}
+
+.scene-sets-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+
+.scene-sets-btn-generate {
+  background: linear-gradient(135deg, #2D1B69, #5C3D8F);
+  color: #FFF;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: opacity 0.15s;
+}
+
+.scene-sets-btn-generate:hover {
+  opacity: 0.9;
+}
+
+.scene-sets-btn-generate.disabled {
+  background: #EEE;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.scene-sets-btn-angles {
+  background: #F5F0FF;
+  color: #5C3D8F;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.scene-sets-btn-angles:hover {
+  background: #EDE7F6;
+}
+
+/* ── Seed / Script ─────────────────────────────────────────────────────── */
+
+.scene-sets-seed-info {
+  margin: 8px 0 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #B8962E;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scene-sets-script-context {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #555;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Angle Strip ───────────────────────────────────────────────────────── */
+
+.scene-sets-angle-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.scene-sets-angle-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.scene-sets-angle-item.clickable {
+  cursor: pointer;
+}
+
+.scene-sets-angle-thumb {
+  width: 52px;
+  height: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border: 1.5px solid #E0D5F0;
+  background: #F0EBF8;
+  color: #9E9E9E;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.scene-sets-angle-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene-sets-angle-thumb.complete {
+  border-color: #B8962E;
+  background: #000;
+}
+
+.scene-sets-angle-thumb.generating {
+  border-color: #B8960C;
+}
+
+.scene-sets-angle-thumb.failed {
+  border-color: #FFCDD2;
+  color: #C62828;
+}
+
+.scene-sets-angle-item.clickable .scene-sets-angle-thumb:hover {
+  transform: scale(1.06);
+  box-shadow: 0 3px 10px rgba(180, 140, 0, 0.25);
+}
+
+.scene-sets-video-indicator {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 3px;
+  padding: 1px 3px;
+  color: #FFF;
+  display: flex;
+  align-items: center;
+}
+
+.scene-sets-angle-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #888;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.scene-sets-beat-numbers {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  color: #B8962E;
+}
+
+/* ── States ────────────────────────────────────────────────────────────── */
+
+.scene-sets-loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6B6B6B;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.scene-sets-error {
+  background: #FFEBEE;
+  border: 1px solid #FFCDD2;
+  border-radius: 10px;
+  padding: 16px;
+  color: #C62828;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scene-sets-empty {
+  border: 2px dashed #E0D5F0;
+  border-radius: 12px;
+  padding: 60px 40px;
+  text-align: center;
+  color: #9E9E9E;
+}
+
+.scene-sets-empty-title {
+  margin: 12px 0 0;
+  font-family: 'Lora', serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: #5C3D8F;
+}
+
+.scene-sets-empty-body {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #6B6B6B;
+}
+
+/* ── Spin animation ────────────────────────────────────────────────────── */
+
+.spin {
+  animation: spinAnim 1s linear infinite;
+}
+
+@keyframes spinAnim {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Tab Bar ───────────────────────────────────────────────────────────── */
+
+.scene-library-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #E8E4DC;
+  margin-bottom: 24px;
+}
+
+.scene-library-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  padding: 10px 22px;
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6B6B6B;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scene-library-tab:hover {
+  color: #2C2C2C;
+}
+
+.scene-library-tab.active {
+  border-bottom-color: #2D1B69;
+  font-weight: 700;
+  color: #2D1B69;
+}
+
+/* ── Mobile ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 767px) {
+  .scene-sets-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .scene-sets-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scene-sets-card-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .scene-sets-card-actions {
+    width: 100%;
+  }
+
+  .scene-sets-btn-generate,
+  .scene-sets-btn-angles {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .scene-sets-filters {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scene-library-tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
