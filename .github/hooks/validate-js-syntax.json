@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "windows": "powershell -NoProfile -File .github/hooks/validate-js-syntax.ps1",
+        "command": "node -c \"$(echo $HOOK_INPUT | jq -r '.toolInput.filePath // empty')\" 2>/dev/null || true",
+        "timeout": 10
+      }
+    ]
+  }
+}

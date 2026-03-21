@@ -1417,6 +1417,7 @@ router.post('/rewrite-options', optionalAuth, async (req, res) => {
       book_id,
       line_id,
       content,
+      character_id,
       chapter_brief = {},
     } = req.body;
 
@@ -1426,6 +1427,17 @@ router.post('/rewrite-options', optionalAuth, async (req, res) => {
 
     // Get universe context for voice consistency
     const universeContext = await buildUniverseContext(book_id, db);
+
+    // Load character voice from registry for accurate voice rewrite
+    const charVoice = character_id ? await getCharacterVoiceContext(character_id) : null;
+    const charName = charVoice?.name || 'JustAWoman';
+    const voiceDescription = charVoice?.voiceBlock
+      ? `Use the character voice data below to define what "${charName}'s voice" actually means:\n${charVoice.voiceBlock}`
+      : `More ${charName}. She's direct, self-aware, specific, occasionally funny. She doesn't perform. She doesn't dress things up. What would she actually say?`;
+
+    // Load full narrative context for richer rewrites
+    const wmCtx = await loadWriteModeContext(character_id);
+    const narrativeContext = buildWriteModeContextBlock(wmCtx);
 
     const briefContext = [
       chapter_brief.title                 && `Chapter: ${chapter_brief.title}`,
@@ -1440,7 +1452,7 @@ You are a literary editor helping a first-time novelist improve a single line. T
 
 CHAPTER CONTEXT:
 ${briefContext || 'No brief set.'}
-
+${narrativeContext}
 ORIGINAL LINE:
 "${content}"
 
@@ -1450,7 +1462,7 @@ Write exactly THREE rewrites of this line. Each rewrite serves a different purpo
 
 2. EMOTIONAL — More feeling. More vulnerability. More honest. Don't soften it — deepen it. What's the rawer version of this thought?
 
-3. VOICE — More JustAWoman. She's direct, self-aware, specific, occasionally funny. She doesn't perform. She doesn't dress things up. What would she actually say?
+3. VOICE — ${voiceDescription}
 
 RULES:
 - Stay in the same POV as the original (first person if original is first person)
@@ -1458,6 +1470,7 @@ RULES:
 - Each rewrite must feel distinct from the others
 - These are literary — not commercial, not self-help, not generic
 - Preserve any dialect or speech patterns that feel intentional
+${charVoice?.charRules || ''}
 
 Respond ONLY with valid JSON. No preamble. No markdown.
 
@@ -2856,7 +2869,12 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
     }
 
     const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
-    const charVoice = await getCharacterVoiceContext(character_id);
+
+    // Load voice + narrative context in parallel to reduce latency
+    const [charVoice, wmCtx] = await Promise.all([
+      getCharacterVoiceContext(character_id),
+      character_id ? loadWriteModeContext(character_id) : Promise.resolve(null),
+    ]);
 
     const recentProse = existing_prose
       ? existing_prose.split('\n\n').slice(-5).join('\n\n')
@@ -2869,6 +2887,7 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
     const charName = charVoice?.name || 'JustAWoman';
     const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
     const charVoiceBlock = charVoice?.voiceBlock || '';
+    const narrativeContext = wmCtx ? buildWriteModeContextBlock(wmCtx) : '';
 
     const lengthInstruction = gen_length === 'sentence'
       ? 'Write exactly 1–2 sentences. One vivid moment. One breath.'
@@ -2888,7 +2907,7 @@ CURRENT ACT: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 PROSE TENSE/MODE: ${act.tense}
 
-${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${recentProse ? `WHAT WAS JUST WRITTEN (continue seamlessly from here — match the rhythm and flow):\n${recentProse}` : ''}
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${narrativeContext}${recentProse ? `WHAT WAS JUST WRITTEN (continue seamlessly from here — match the rhythm and flow):\n${recentProse}` : ''}
 
 ${sessionContext}
 
@@ -2909,7 +2928,7 @@ IMMERSION RULES:
 Respond with ONLY the prose. No preamble. No explanation. No quotes around it.`;
 
     const maxTok = gen_length === 'sentence' ? 200 : 900;
-    const MODELS = ['claude-sonnet-4-6'];
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-5-20250514'];
 
     // ── STREAMING PATH ──
     if (stream) {
@@ -2918,6 +2937,8 @@ Respond with ONLY the prose. No preamble. No explanation. No quotes around it.`;
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
+      // Immediate heartbeat so frontend knows connection is alive
+      res.write(`data: ${JSON.stringify({ type: 'processing' })}\n\n`);
 
       let streamed = false;
       for (const model of MODELS) {
@@ -3051,6 +3072,10 @@ router.post('/story-edit', optionalAuth, async (req, res) => {
     const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
     const charVoiceBlock = charVoice?.voiceBlock || '';
 
+    // Load full narrative context (memories, threads, arcs, relationships, etc.)
+    const wmCtx = await loadWriteModeContext(character_id);
+    const narrativeContext = buildWriteModeContextBlock(wmCtx);
+
     const prompt = `You are editing a memoir written in ${charName}'s voice.
 
 CURRENT PROSE:
@@ -3063,7 +3088,7 @@ CHAPTER: ${chapter_title || 'Untitled'}
 CURRENT VOICE: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 
-${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${charRules}
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${narrativeContext}${charRules}
 
 EDITING RULES:
 - Take the author's note seriously — they are telling you the truth of what's wrong.
@@ -3170,6 +3195,10 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
     const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
     const charVoiceBlock = charVoice?.voiceBlock || '';
 
+    // Load full narrative context (memories, threads, arcs, relationships, etc.)
+    const wmCtx = await loadWriteModeContext(character_id);
+    const narrativeContext = buildWriteModeContextBlock(wmCtx);
+
     // Send the last ~6 paragraphs for context — more context = better predictions
     const recentProse = current_prose.split('\n\n').slice(-6).join('\n\n');
 
@@ -3197,7 +3226,10 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
       planContext.push(`AUTHOR'S NOTES: ${chapter_notes}`);
     }
     if (sections && sections.length > 0) {
-      const sectionSummary = sections.filter(s => s.title || s.description).map(s => `  - ${s.title || 'Section'}: ${s.description || s.prose?.slice(0, 80) || ''}`).join('\n');
+      const sectionSummary = sections
+        .filter(s => s.type === 'h2' || s.type === 'h3' || s.title || s.description)
+        .map(s => `  - ${s.title || s.content || 'Section'}: ${s.description || s.prose?.slice(0, 80) || ''}`)
+        .join('\n');
       if (sectionSummary) planContext.push(`SCENE STRUCTURE:\n${sectionSummary}`);
     }
     const planBlock = planContext.length > 0 ? planContext.join('\n') + '\n\n' : '';
@@ -3212,7 +3244,7 @@ ${planBlock}CURRENT ACT: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 PROSE TENSE/MODE: ${act.tense}
 
-${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}WHAT THE AUTHOR HAS WRITTEN (continue from the end):
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${narrativeContext}WHAT THE AUTHOR HAS WRITTEN (continue from the end):
 ${recentProse}
 
 ${charRules}
@@ -3926,12 +3958,29 @@ router.post('/ai-writer-action', optionalAuth, async (req, res) => {
   try {
     const {
       character,       // { name, type, role, belief_pressured, emotional_function, writer_notes }
+      character_id,    // registry PK — used for deep voice lookup
       recent_prose,    // last ~600 chars of current writing
       chapter_context, // { scene_goal, theme, emotional_arc_start, emotional_arc_end, pov }
+      previous_chapter_digest, // last ~500 chars of previous chapter (continuity)
       action,          // 'continue' | 'dialogue' | 'interior' | 'reaction' | 'lala'
       length,          // 'paragraph' | 'sentence'
+      tone,            // optional — 'intimate' | 'urgent' | 'detached' | 'raw'
       retry_hint,      // random seed string to force variation on retries
+      stream,          // boolean — if true, use SSE streaming
     } = req.body;
+
+    // Load voice + narrative context in parallel
+    const [charVoice, wmCtx] = await Promise.all([
+      character_id ? getCharacterVoiceContext(character_id) : null,
+      character_id ? loadWriteModeContext(character_id) : null,
+    ]);
+    const narrativeContext = buildWriteModeContextBlock(wmCtx);
+
+    // Build relationship voice hint from shared context (for who she's with)
+    let relationshipVoiceHint = '';
+    if (wmCtx?.relationships && character?.name) {
+      relationshipVoiceHint = `\nRelationship dynamics are included in the narrative context above — modulate voice based on who is present in the scene.`;
+    }
 
     const ACTION_PROMPTS = {
       continue: `Write what happens next in this character's voice.
@@ -3970,13 +4019,18 @@ router.post('/ai-writer-action', optionalAuth, async (req, res) => {
         Be specific to the character and the scene.`,
     };
 
+    const charName = charVoice?.name || character?.name || 'JustAWoman';
+    const charVoiceBlock = charVoice?.voiceBlock || '';
+    const charRules = charVoice?.charRules || '';
+
     const system = `You are writing for a literary memoir called "Before Lala."
 Protagonist: JustAWoman — content creator, building Lala, invisible while trying.
 Write with precision. Every word earns its place.
 Match the prose style of the recent writing exactly.
-Do not explain or comment. Only return the prose itself.`;
+Do not explain or comment. Only return the prose itself.
+${charVoiceBlock ? '\n' + charVoiceBlock : ''}${charRules ? '\n' + charRules : ''}${narrativeContext}`;
 
-    const user = `CHARACTER: ${character?.name || 'Unknown'} (${character?.type || 'unknown'})
+    const user = `CHARACTER: ${charName} (${character?.type || 'unknown'})
 ROLE: ${character?.role || ''}
 ${character?.core_wound ? `CORE WOUND: ${character.core_wound}` : ''}
 ${character?.core_desire ? `CORE DESIRE: ${character.core_desire}` : ''}
@@ -3985,26 +4039,171 @@ ${character?.description ? `WHO THEY ARE: ${character.description}` : ''}
 BELIEF PRESSURED: ${character?.belief_pressured || 'unknown'}
 EMOTIONAL FUNCTION: ${character?.emotional_function || ''}
 WRITER NOTES: ${character?.writer_notes ? character.writer_notes.slice(0, 300) : ''}
-
+${relationshipVoiceHint}
 CHAPTER CONTEXT:
 Scene goal: ${chapter_context?.scene_goal || 'not set'}
 Theme: ${chapter_context?.theme || 'not set'}
 Emotional arc: ${chapter_context?.emotional_arc_start || '?'} → ${chapter_context?.emotional_arc_end || '?'}
-
+${previous_chapter_digest ? `\nPREVIOUS CHAPTER (for continuity — do not repeat, but maintain thread):\n${previous_chapter_digest}\n` : ''}
 RECENT PROSE:
 ${recent_prose || '(start of chapter)'}
 
-ACTION: ${ACTION_PROMPTS[action] || ACTION_PROMPTS.dialogue}${retry_hint ? `\n\nIMPORTANT: Write a COMPLETELY DIFFERENT version than before. Vary the tone, word choice, and angle. Variation seed: ${retry_hint}` : ''}`;
+ACTION: ${ACTION_PROMPTS[action] || ACTION_PROMPTS.dialogue}${tone ? `\n\nTONE: Write in a ${tone} register — let that coloring shape word choice and pacing.` : ''}${retry_hint ? `\n\nIMPORTANT: Write a COMPLETELY DIFFERENT version than before. Vary the tone, word choice, and angle. Variation seed: ${retry_hint}` : ''}`;
 
     // Use higher temperature for creative writing; bump further on retries
     const temp = retry_hint ? 1.0 : 0.85;
     const maxTokens = length === 'full' ? 800 : length === 'sentence' ? 150 : 350;
-    const result = await safeAIWithTemp(system, user, maxTokens, temp);
 
-    res.json({ ok: true, content: result, action });
+    if (stream && anthropic) {
+      // ── SSE STREAMING PATH ──
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+
+      try {
+        const streamResp = anthropic.messages.stream({
+          model: 'claude-sonnet-4-6',
+          max_tokens: maxTokens,
+          temperature: temp,
+          system,
+          messages: [{ role: 'user', content: user }],
+        });
+        streamResp.on('text', (text) => {
+          res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+        });
+        await streamResp.finalMessage();
+        res.write(`data: ${JSON.stringify({ type: 'done', action })}\n\n`);
+        res.end();
+      } catch (err) {
+        console.error('ai-writer-action stream error:', err.message);
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI generation failed' })}\n\n`);
+        res.end();
+      }
+    } else {
+      // ── NON-STREAMING PATH (backward compat) ──
+      const result = await safeAIWithTemp(system, user, maxTokens, temp);
+      res.json({ ok: true, content: result, action });
+    }
 
   } catch (err) {
     console.error('POST /ai-writer-action error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════
+// POST /prose-critique
+// AI feedback on how the current prose reads — voice, rhythm, tension
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/prose-critique', optionalAuth, async (req, res) => {
+  try {
+    const { character_id, prose } = req.body;
+    if (!prose?.trim()) {
+      return res.status(400).json({ error: 'prose is required' });
+    }
+
+    const charVoice = character_id ? await getCharacterVoiceContext(character_id) : null;
+    const charName = charVoice?.name || 'JustAWoman';
+
+    const system = `You are a literary editor for "Before Lala," a memoir-style novel.
+Give honest, specific feedback on the prose — voice consistency, rhythm, tension, sensory detail, and emotional truth.
+Be concise: 3-5 bullet points. Use the author's language of "beats," "weight," and "texture."
+${charVoice?.voiceBlock ? '\n' + charVoice.voiceBlock : ''}`;
+
+    const user = `CHARACTER: ${charName}
+PROSE TO CRITIQUE:
+${prose.slice(0, 3000)}
+
+Give your editorial read. What works? What drifts? Where could it go deeper?`;
+
+    const result = await safeAIWithTemp(system, user, 600, 0.7);
+    res.json({ ok: true, critique: result });
+
+  } catch (err) {
+    console.error('POST /prose-critique error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════
+// POST /chapter-synopsis
+// AI-generated 2-3 sentence synopsis of the current chapter prose
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/chapter-synopsis', optionalAuth, async (req, res) => {
+  try {
+    const { character_id, prose, chapter_title } = req.body;
+    if (!prose?.trim()) {
+      return res.status(400).json({ error: 'prose is required' });
+    }
+
+    const charVoice = character_id ? await getCharacterVoiceContext(character_id) : null;
+    const charName = charVoice?.name || 'JustAWoman';
+
+    const system = `You are a literary assistant for "Before Lala," a memoir-style novel.
+Write a concise 2-3 sentence synopsis of the chapter prose provided.
+Capture the emotional arc, key events, and character dynamics.
+Write in third person, present tense. Be precise and evocative.`;
+
+    const user = `CHARACTER: ${charName}
+CHAPTER: ${chapter_title || 'Untitled'}
+PROSE:
+${prose.slice(0, 4000)}
+
+Write a 2-3 sentence synopsis.`;
+
+    const result = await safeAIWithTemp(system, user, 300, 0.6);
+    res.json({ ok: true, synopsis: result });
+
+  } catch (err) {
+    console.error('POST /chapter-synopsis error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════
+// POST /scene-transition
+// AI-generated prose transition between two adjacent scenes
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/scene-transition', optionalAuth, async (req, res) => {
+  try {
+    const { character_id, scene_a_end, scene_b_start, chapter_title, theme } = req.body;
+    if (!scene_a_end?.trim() || !scene_b_start?.trim()) {
+      return res.status(400).json({ error: 'scene_a_end and scene_b_start are required' });
+    }
+
+    const charVoice = character_id ? await getCharacterVoiceContext(character_id) : null;
+    const charName = charVoice?.name || 'JustAWoman';
+
+    const system = `You are a literary writer for "Before Lala," a memoir-style novel.
+Write a 2-4 paragraph transition that bridges two adjacent scenes.
+Use sensory detail, interiority, and rhythm. The transition should feel like a breath between moments — not a summary, but a lived passage of time.
+${charVoice?.voiceBlock ? '\n' + charVoice.voiceBlock : ''}`;
+
+    const user = `CHARACTER: ${charName}
+CHAPTER: ${chapter_title || 'Untitled'}
+${theme ? `THEME: ${theme}` : ''}
+
+END OF SCENE A:
+${scene_a_end.slice(-800)}
+
+BEGINNING OF SCENE B:
+${scene_b_start.slice(0, 800)}
+
+Write a transition that connects these two moments. 2-4 paragraphs. Match the voice and emotional register.`;
+
+    const result = await safeAIWithTemp(system, user, 800, 0.85);
+    res.json({ ok: true, transition: result });
+
+  } catch (err) {
+    console.error('POST /scene-transition error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -4024,6 +4223,7 @@ router.post('/scene-planner', optionalAuth, async (req, res) => {
       chapter_id,
       chapter_title,
       chapter_type = 'chapter',
+      character_id,
       existing_scenes = [],
       draft_prose = '',
       book_title = '',
@@ -4039,6 +4239,16 @@ router.post('/scene-planner', optionalAuth, async (req, res) => {
 
     // ── Universe context ───────────────────────────────────────────────────
     const universeContext = await buildUniverseContext(book_id, db);
+
+    // ── Character voice context for scene planning ─────────────────────────
+    const charVoice = character_id ? await getCharacterVoiceContext(character_id) : null;
+    const charVoiceSection = charVoice?.voiceBlock
+      ? `\n${charVoice.voiceBlock}\nPlan scenes that suit THIS character's voice and interior landscape.\n`
+      : '';
+
+    // ── Full narrative context for richer scene planning ──────────────────
+    const wmCtx = await loadWriteModeContext(character_id);
+    const narrativeContext = buildWriteModeContextBlock(wmCtx);
 
     // ── Build chapter outline ──────────────────────────────────────────────
     const chapterOutline = all_chapters.map((ch, i) => {
@@ -4066,7 +4276,7 @@ You are a literary scene architect for a first-person debut novel.
 A scene in this context means a continuous stretch of narrative that takes place in one location and time, following one thread of action or reflection. Each scene has a title (evocative, not generic), a purpose, and an emotional arc.
 
 BOOK: "${book_title}"
-${book_description ? `DESCRIPTION: ${book_description}\n` : ''}${theme ? `CHAPTER THEME: ${theme}\n` : ''}${scene_goal ? `CHAPTER GOAL: ${scene_goal}\n` : ''}
+${book_description ? `DESCRIPTION: ${book_description}\n` : ''}${theme ? `CHAPTER THEME: ${theme}\n` : ''}${scene_goal ? `CHAPTER GOAL: ${scene_goal}\n` : ''}${charVoiceSection}${narrativeContext}
 CHAPTER TYPE: ${chapter_type}
 CHAPTER BEING PLANNED: "${chapter_title || 'Untitled'}"
 
@@ -8647,6 +8857,137 @@ async function loadRecentWorldEvents(characterKey) {
     return null;
   }
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WriteMode Shared Context Loader
+// Loads the same rich narrative context that Story Engine uses, optimized for
+// WriteMode endpoints (story-continue, ai-writer-action, story-edit, etc.)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function loadWriteModeContext(characterId) {
+  if (!characterId) return null;
+  try {
+    const { RegistryCharacter } = require('../models');
+    const regChar = await RegistryCharacter.findByPk(characterId, {
+      attributes: ['character_key', 'display_name'],
+    });
+    if (!regChar?.character_key) return null;
+    const ck = regChar.character_key;
+
+    const [
+      storyMemories,
+      relationships,
+      activeThreads,
+      locations,
+      canonEvents,
+      proseStyle,
+      voiceCards,
+      dramaticIrony,
+      followInfluence,
+      voiceFingerprints,
+      arcContext,
+      therapyProfile,
+      growthLogs,
+      franchiseKnowledge,
+      recentWorldEvents,
+    ] = await Promise.all([
+      loadStoryMemories(ck),
+      loadCharacterRelationships(ck),
+      loadActiveThreads(ck),
+      loadLocations(ck),
+      loadCanonEvents(ck),
+      loadProseStyleAnchor(ck),
+      loadDialogueVoiceCards(ck),
+      loadDramaticIrony(ck),
+      loadFollowInfluence(ck),
+      loadVoiceFingerprints(ck),
+      loadArcContext(ck),
+      loadTherapyProfile(ck),
+      loadGrowthLogs(ck),
+      loadFranchiseKnowledge(ck),
+      loadRecentWorldEvents(ck),
+    ]);
+
+    return {
+      characterKey: ck,
+      proseStyle,
+      storyMemories,
+      relationships,
+      activeThreads,
+      locations,
+      canonEvents,
+      voiceCards,
+      dramaticIrony,
+      followInfluence,
+      voiceFingerprints,
+      arcContext,
+      therapyProfile,
+      growthLogs,
+      franchiseKnowledge,
+      recentWorldEvents,
+    };
+  } catch (err) {
+    console.error('[loadWriteModeContext] error:', err?.message);
+    return null;
+  }
+}
+
+function buildWriteModeContextBlock(ctx) {
+  if (!ctx) return '';
+  const sections = [];
+
+  // Arc position — where is the character in their journey
+  if (ctx.arcContext) sections.push(ctx.arcContext);
+
+  // Therapy profile — psychological underpinnings that drive behavior
+  if (ctx.therapyProfile) sections.push(ctx.therapyProfile);
+
+  // Growth logs — how the character has changed
+  if (ctx.growthLogs) sections.push(ctx.growthLogs);
+
+  // Relationship web — established dynamics
+  if (ctx.relationships) sections.push(ctx.relationships);
+
+  // Story memories — accumulated emotional threads
+  if (ctx.storyMemories) sections.push(ctx.storyMemories);
+
+  // Active threads — ongoing plots to advance
+  if (ctx.activeThreads) sections.push(ctx.activeThreads);
+
+  // Recent world events — external pressures
+  if (ctx.recentWorldEvents) sections.push(ctx.recentWorldEvents);
+
+  // Locations — established sensory details
+  if (ctx.locations) sections.push(ctx.locations);
+
+  // Canon events — immutable history
+  if (ctx.canonEvents) sections.push(ctx.canonEvents);
+
+  // Franchise knowledge — world rules/constraints
+  if (ctx.franchiseKnowledge) sections.push(ctx.franchiseKnowledge);
+
+  // Prose style anchor
+  if (ctx.proseStyle) {
+    sections.push(`PROSE STYLE ANCHOR (match this voice — this is what the author's writing actually sounds like):\n"""${ctx.proseStyle.slice(0, 600)}"""\nAbsorb the rhythm, interiority, and register. Don't copy — channel.`);
+  }
+
+  // Dialogue voice cards — how OTHER characters sound
+  if (ctx.voiceCards) sections.push(ctx.voiceCards);
+
+  // Voice fingerprints — actual dialogue samples
+  if (ctx.voiceFingerprints) sections.push(ctx.voiceFingerprints);
+
+  // Dramatic irony — what reader knows vs characters
+  if (ctx.dramaticIrony) sections.push(ctx.dramaticIrony);
+
+  // Social media / follow influence
+  if (ctx.followInfluence) sections.push(ctx.followInfluence);
+
+  if (sections.length === 0) return '';
+  return '\n\n' + sections.join('\n\n') + '\n';
+}
+
 
 // ─── In-memory cache for story engine task arcs ───────────────────────────────
 const seTaskArcCache = new Map();

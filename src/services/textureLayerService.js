@@ -30,6 +30,22 @@ async function callWithFallback(params) {
   }
 }
 
+// ── Build voice context from character data for texture layer prompts ─────
+function buildTextureVoiceBlock(characterData) {
+  const vs = characterData.voice_signature || {};
+  const parts = [];
+  if (vs.speech_pattern) parts.push(`Speech pattern: ${vs.speech_pattern}`);
+  if (vs.vocabulary_tone) parts.push(`Vocabulary/tone: ${vs.vocabulary_tone}`);
+  if (vs.internal_monologue_style) parts.push(`Interior monologue style: ${vs.internal_monologue_style}`);
+  if (vs.emotional_reactivity) parts.push(`Emotional reactivity: ${vs.emotional_reactivity}`);
+  if (vs.catchphrases?.length) parts.push(`Catchphrases: "${vs.catchphrases.join('", "')}"`);
+  if (characterData.mask_persona) parts.push(`Public persona (mask): ${characterData.mask_persona}`);
+  if (characterData.truth_persona) parts.push(`Private truth: ${characterData.truth_persona}`);
+  if (characterData.personality) parts.push(`Personality: ${characterData.personality}`);
+  if (!parts.length) return '';
+  return `\nVOICE (write texture in this character's specific voice — not generic literary prose):\n${parts.join('\n')}\n`;
+}
+
 // ── Body relationship ENUM → narrative lookup ────────────────────────
 const BODY_RELATIONSHIP_NARRATIVES = {
   currency:   'Her body is currency. She knows exactly what it is worth and in what rooms.',
@@ -119,12 +135,15 @@ async function generateInnerThought(story, characterData, arcContext) {
     revision: `Generate a REVISION — two beats back to back. Beat 1: The story she tells herself about what just happened. The version she would tell David if he asked. Beat 2: The quiet revision. What she actually knows. Separated by a single line break. No label. Beat 1: 60-80 words. Beat 2: 60-80 words. The revision is always more true. It is never cruel. It is just accurate.`,
   };
 
+  const voiceBlock = buildTextureVoiceBlock(characterData);
+
   const prompt = `You are generating interior texture for a literary novel.
 
 CHARACTER: ${characterData.display_name || characterData.name}
 Wound: ${characterData.core_wound || 'invisibility while trying'}
 Core desire: ${characterData.core_desire || 'to be legendary'}
 Core fear: ${characterData.core_fear || 'that the right room will never find her'}
+${voiceBlock}
 
 ARC POSITION:
 ${arcContext.wound_clock_narrative}
@@ -171,11 +190,12 @@ async function generateConflictScene(story, characterData, arcContext, character
     integration:   ['absorbed', 'deferred'],
   };
   const eligibleResolutions = phaseResolutions[story.phase] || resolutionTypes;
+  const voiceBlock = buildTextureVoiceBlock(characterData);
 
   const prompt = `You are generating a conflict scene for a literary novel.
 
 CHARACTER: ${characterData.display_name || characterData.name}
-Wound: ${characterData.core_wound || 'invisibility while trying'}
+${voiceBlock}Wound: ${characterData.core_wound || 'invisibility while trying'}
 The other person in the conflict: ${conflictChar?.name || 'unnamed character'} (${conflictChar?.role_type || 'unknown role'})
 
 ARC POSITION:
@@ -214,9 +234,12 @@ Return JSON only. No preamble.`;
 // GENERATOR 3 — Body Narrator
 // ══════════════════════════════════════════════════════════════════════
 async function generateBodyNarrator(story, characterData, arcContext) {
+  const voiceBlock = buildTextureVoiceBlock(characterData);
+
   const prompt = `You are generating a body narrator insert for a literary novel.
 
 CHARACTER: ${characterData.display_name || characterData.name}
+${voiceBlock}
 Body relationship: ${BODY_RELATIONSHIP_NARRATIVES[characterData.de_body_relationship] || 'She owns her body. She considers it art.'}
 Body currency: ${characterData.de_body_currency ? `Body currency score: ${characterData.de_body_currency}/100` : 'Her body is the thing men agree with when they open their wallets.'}
 
@@ -254,9 +277,12 @@ Write only the body narrator text. No labels. No preamble. Maximum 80 words.`;
 // GENERATOR 4 — Private Moment
 // ══════════════════════════════════════════════════════════════════════
 async function generatePrivateMoment(story, characterData, arcContext) {
+  const voiceBlock = buildTextureVoiceBlock(characterData);
+
   const prompt = `You are generating a private moment for a literary novel.
 
 CHARACTER: ${characterData.display_name || characterData.name}
+${voiceBlock}
 Her world: mother, wife, content creator. Dinner table and the screen.
 Core wound: ${characterData.core_wound || 'invisibility while trying'}
 
@@ -297,10 +323,12 @@ async function generateOnlineSelfPost(story, characterData, arcContext) {
   const platforms = ['instagram', 'tiktok', 'instagram', 'instagram']; // weighted toward IG
   const platform = characterData.platform_primary ||
     platforms[Math.floor(Math.random() * platforms.length)];
+  const voiceBlock = buildTextureVoiceBlock(characterData);
 
   const prompt = `You are generating a social media post for a literary novel character.
 
 CHARACTER: ${characterData.display_name || characterData.name}
+${voiceBlock}
 She posts about her ideas and her life. Fashion, beauty, lifestyle.
 She is building toward legendary. Her audience are her besties.
 She is conceited in the best way — self-esteem is foundation not performance.

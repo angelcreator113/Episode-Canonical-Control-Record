@@ -77,9 +77,10 @@ export default function StoryReviewPanel({
     setSaving(true);
     setSaveStatus('saving');
     try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/stories`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           character_key: characterKey,
           story_number: story.story_number,

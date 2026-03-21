@@ -7699,6 +7699,202 @@ html, body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   WRITING IMPROVEMENTS — Session tracker, Find/Replace, Paragraph hints, etc.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ─── Session word badge ── */
+.se-session-badge {
+  color: #4caf50;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+/* ─── Session progress bar ── */
+.se-session-progress-bar {
+  width: 100%;
+  max-width: 180px;
+  height: 3px;
+  background: rgba(184, 150, 46, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.se-session-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* ─── Autosave indicator ── */
+.se-autosave-indicator {
+  color: var(--se-text-muted, #999);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* ─── Find & Replace panel ── */
+.se-find-replace-panel {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--se-bg-card, #faf8f3);
+  border-bottom: 1px solid var(--se-border, #e2ddd3);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.se-find-replace-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.se-find-input {
+  flex: 1;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  padding: 5px 10px;
+  border: 1px solid var(--se-border, #d4cfc5);
+  border-radius: 4px;
+  background: var(--se-bg-page, #fff);
+  color: var(--se-text-primary, #2c2a25);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.se-find-input:focus {
+  border-color: var(--se-gold, #B8962E);
+}
+
+.se-find-count {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--se-text-muted, #999);
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: right;
+}
+
+.se-find-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border: 1px solid var(--se-border, #d4cfc5);
+  border-radius: 4px;
+  background: var(--se-bg-card, #faf8f3);
+  color: var(--se-text-primary, #2c2a25);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.se-find-btn:hover:not(:disabled) {
+  background: var(--se-gold, #B8962E);
+  color: #fff;
+  border-color: var(--se-gold, #B8962E);
+}
+
+.se-find-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.se-find-close {
+  font-size: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--se-text-muted, #999);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.se-find-close:hover {
+  color: var(--se-text-primary, #2c2a25);
+}
+
+/* ─── Paragraph length warnings ── */
+.se-para-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 12px;
+  background: rgba(184, 150, 46, 0.04);
+  border-bottom: 1px solid var(--se-border, #e2ddd3);
+}
+
+.se-para-warning-pill {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: #8b6914;
+  background: rgba(184, 150, 46, 0.1);
+  border: 1px solid rgba(184, 150, 46, 0.2);
+  border-radius: 12px;
+  padding: 2px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.se-para-warning-pill:hover {
+  background: rgba(184, 150, 46, 0.2);
+  color: #6b5010;
+}
+
+/* ─── Floating toolbar divider & secondary pills ── */
+.se-float-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--se-border, #d4cfc5);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.se-float-pill-secondary {
+  opacity: 0.8;
+  font-size: 12px;
+}
+
+.se-float-pill-secondary:hover:not(:disabled) {
+  opacity: 1;
+}
+
+/* ─── Responsive: find/replace + paragraph warnings ── */
+@media (max-width: 768px) {
+  .se-find-replace-panel {
+    padding: 6px 8px;
+  }
+  .se-find-input {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  .se-para-warnings {
+    padding: 3px 8px;
+  }
+  .se-session-progress-bar {
+    max-width: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .se-find-count {
+    display: none;
+  }
+  .se-float-divider {
+    display: none;
+  }
+  .se-float-pill-secondary {
+    display: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    Print styles
    ──────────────────────────────────────────────────────────────────────────── */
 @media print {
@@ -7717,6 +7913,9 @@ html, body {
   .se-floating-tools,
   .se-editor-gutter,
   .se-sheet-handle,
+  .se-find-replace-panel,
+  .se-para-warnings,
+  .se-session-progress-bar,
   .se-mobile-tools-toggle,
   .se-writing-tools,
   .se-therapy-suggestions,

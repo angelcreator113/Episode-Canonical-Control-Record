@@ -49,6 +49,54 @@ const ACTIONS = [
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'nudge',
   },
+  {
+    id:       'dialogue',
+    icon:     '💬',
+    label:    'Write dialogue',
+    shortLabel: 'Dialogue',
+    shortcut: '',
+    group:    'voice',
+    endpoint: '/api/v1/memories/ai-writer-action',
+    action:   'dialogue',
+  },
+  {
+    id:       'interior',
+    icon:     '💭',
+    label:    'Interior thoughts',
+    shortLabel: 'Interior',
+    shortcut: 'Ctrl+5',
+    group:    'voice',
+    endpoint: '/api/v1/memories/ai-writer-action',
+    action:   'interior',
+  },
+  {
+    id:       'reaction',
+    icon:     '⚡',
+    label:    'Character reaction',
+    shortLabel: 'Reaction',
+    shortcut: 'Ctrl+6',
+    group:    'voice',
+    endpoint: '/api/v1/memories/ai-writer-action',
+    action:   'reaction',
+  },
+  {
+    id:       'lala',
+    icon:     '✧',
+    label:    'Lala proto-voice',
+    shortLabel: 'Lala',
+    shortcut: 'Ctrl+7',
+    group:    'special',
+    endpoint: '/api/v1/memories/ai-writer-action',
+    action:   'lala',
+  },
+];
+
+const TONE_OPTIONS = [
+  { id: 'default', label: 'Natural' },
+  { id: 'intimate', label: 'Intimate' },
+  { id: 'urgent', label: 'Urgent' },
+  { id: 'detached', label: 'Detached' },
+  { id: 'raw', label: 'Raw' },
 ];
 const TYPE_COLORS = {
   pressure: '#B85C38',
@@ -69,6 +117,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
   onSelectCharacter,
   getSelectedText,
   cursorContext,
+  previousChapterDigest,
 }, ref) {
   const [activeAction, setActiveAction] = useState(null);
   const [result,       setResult]       = useState(null);
@@ -78,18 +127,68 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
   const [copied,       setCopied]       = useState(false);
   const [lengthMode,   setLengthMode]   = useState('paragraph');
   const [rewriteOptions, setRewriteOptions] = useState(null);
+  const [toneMode, setToneMode] = useState('default');
   const retryRef = useRef(false);
+
+  // ── Voice drift detection ──
+  function detectDrift(generated) {
+    if (!generated || !currentProse || currentProse.length < 200) return null;
+    const baseline = currentProse.slice(-2000);
+    const avg = (t) => {
+      const sentences = t.split(/[.!?]+/).filter(s => s.trim());
+      if (!sentences.length) return 0;
+      return sentences.reduce((sum, s) => sum + s.split(/\s+/).length, 0) / sentences.length;
+    };
+    const baseAvg = avg(baseline);
+    const genAvg = avg(generated);
+    if (baseAvg === 0) return null;
+    const ratio = genAvg / baseAvg;
+    // Check for excessive formality markers
+    const formalWords = /\b(however|moreover|furthermore|consequently|nevertheless|thus|hence|whereas|notwithstanding)\b/gi;
+    const baseFormal = (baseline.match(formalWords) || []).length / (baseline.split(/\s+/).length || 1);
+    const genFormal = (generated.match(formalWords) || []).length / (generated.split(/\s+/).length || 1);
+    const formalDrift = genFormal > baseFormal * 3 && genFormal > 0.01;
+    if (ratio > 1.8 || ratio < 0.4 || formalDrift) {
+      const reasons = [];
+      if (ratio > 1.8) reasons.push('sentences are much longer than your prose');
+      if (ratio < 0.4) reasons.push('sentences are much shorter than your prose');
+      if (formalDrift) reasons.push('tone is more formal than your writing');
+      return reasons.join('; ');
+    }
+    return null;
+  }
 
   // Expose triggerAction for keyboard shortcuts from parent
   useImperativeHandle(ref, () => ({
     triggerAction: (actionId) => {
       if (loading) return;
+      if (actionId === 'surprise') { runSurprise(); return; }
       const action = ACTIONS.find(a => a.id === actionId);
       if (action) runAction(action);
       else if (actionId === 'rewrite') runRewrite();
+      else if (actionId === 'critique') runCritique();
     },
     get isLoading() { return loading; },
   }), [loading]);
+
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    if (!selectedCharacter) return;
+    function handleKey(e) {
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+      if (!e.ctrlKey && !e.metaKey) return;
+      const map = { '1': 'continue', '2': 'deepen', '3': 'nudge', '4': 'rewrite',
+                    '5': 'interior', '6': 'reaction', '7': 'lala' };
+      const actionId = map[e.key];
+      if (!actionId || loading) return;
+      e.preventDefault();
+      if (actionId === 'rewrite') { runRewrite(); return; }
+      const action = ACTIONS.find(a => a.id === actionId);
+      if (action) runAction(action);
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedCharacter, loading]);
 
   const accent   = TYPE_COLORS[selectedCharacter?.type] || '#B8962E';
   const charName = selectedCharacter?.selected_name || selectedCharacter?.name;
@@ -118,7 +217,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
 
     // Build context payload
     const recentProse = currentProse
-      ? currentProse.slice(-600)
+      ? currentProse.slice(-1200)
       : '';
 
     const payload = {
@@ -139,8 +238,11 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
       },
       recent_prose:  recentProse,
       chapter_context: chapterContext,
+      previous_chapter_digest: previousChapterDigest || '',
       action:        action.action || action.id,
       length:        lengthMode,
+      tone:          toneMode !== 'default' ? toneMode : undefined,
+      stream:        true,
       // On retry, send a random hint so the API produces a different result
       ...(isRetry && { retry_hint: `v${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }),
     };
@@ -152,19 +254,51 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
         body:    JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      // ── SSE streaming path ──
+      if (res.headers.get('content-type')?.includes('text/event-stream')) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        let buffer = '';
 
-      // Handle standard response — check all possible field names from different endpoints
-      const text = data.content || data.prose || data.nudge || data.continuation ||
-                   data.text   || data.result || data.suggestion || '';
-
-      if (text) {
-        setResult(text);
-        setEditedResult(text);
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.type === 'text') {
+                fullText += evt.text;
+                setResult(fullText);
+                setEditedResult(fullText);
+              } else if (evt.type === 'error') {
+                if (!retryRef.current) setResult(null);
+                setError(evt.error || 'Generation failed.');
+              }
+            } catch {}
+          }
+        }
+        if (!fullText && !retryRef.current) {
+          setResult(null);
+          setError('No content returned — try a different action or add more prose first.');
+        }
       } else {
-        // If we got an empty response on retry, keep the old result
-        if (!retryRef.current) setResult(null);
-        setError('No content returned — try a different action or add more prose first.');
+        // ── Fallback: JSON response ──
+        const data = await res.json();
+        const text = data.content || data.prose || data.nudge || data.continuation ||
+                     data.text   || data.result || data.suggestion || '';
+
+        if (text) {
+          setResult(text);
+          setEditedResult(text);
+        } else {
+          if (!retryRef.current) setResult(null);
+          setError('No content returned — try a different action or add more prose first.');
+        }
       }
 
     } catch (e) {
@@ -197,6 +331,7 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           book_id:       bookId,
+          character_id:  selectedCharacter?.id,
           content:       selected,
           chapter_brief: chapterContext,
         }),
@@ -244,6 +379,50 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     });
+  }
+
+  function runSurprise() {
+    if (loading) return;
+    const pool = ACTIONS.filter(a => a.group !== 'special');
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    runAction(pick);
+  }
+
+  async function runCritique() {
+    if (!currentProse?.trim()) {
+      setError('Add some prose first — then ask for a critique.');
+      return;
+    }
+    setActiveAction('critique');
+    setResult(null);
+    setEditedResult(null);
+    setRewriteOptions(null);
+    setError(null);
+    setLoading(true);
+    setCopied(false);
+
+    try {
+      const res = await fetch('/api/v1/memories/prose-critique', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          book_id:      bookId,
+          chapter_id:   chapterId,
+          character_id: selectedCharacter?.id,
+          prose:        currentProse,
+        }),
+      });
+      const data = await res.json();
+      if (data.critique) {
+        setResult(data.critique);
+        setEditedResult(data.critique);
+      } else {
+        setError('No critique returned — try again.');
+      }
+    } catch {
+      setError('Critique failed. Check your connection.');
+    }
+    setLoading(false);
   }
 
   // ── NO CHARACTER SELECTED ──────────────────────────────────────────
@@ -406,6 +585,127 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
             </button>
           </div>
 
+          {/* Voice group */}
+          <div style={{ ...s.groupHeader, marginTop: 12 }}>
+            <span style={s.groupIcon}>💬</span>
+            <span style={s.groupLabel}>Character Voice</span>
+          </div>
+          <div style={s.toolRow} role="group" aria-label="Character voice tools">
+            {ACTIONS.filter(a => a.group === 'voice').map(action => (
+              <button
+                key={action.id}
+                style={{
+                  ...s.toolPill,
+                  background:  activeAction === action.id && loading
+                               ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                  borderColor: activeAction === action.id
+                               ? accent : 'rgba(28,24,20,0.10)',
+                  opacity:     loading && activeAction !== action.id ? 0.5 : 1,
+                }}
+                onClick={() => runAction(action)}
+                disabled={loading}
+                aria-label={action.label}
+                aria-busy={loading && activeAction === action.id}
+                title={`${action.label} (${action.shortcut})`}
+              >
+                <span style={s.toolIcon} aria-hidden="true">{action.icon}</span>
+                <span style={s.toolLabel}>
+                  {action.label}
+                  {loading && activeAction === action.id && (
+                    <span style={s.spinner} role="status" aria-live="polite"> Voicing…</span>
+                  )}
+                </span>
+              </button>
+            ))}
+            {ACTIONS.filter(a => a.group === 'special').map(action => (
+              <button
+                key={action.id}
+                style={{
+                  ...s.toolPill,
+                  background:  activeAction === action.id && loading
+                               ? '#C8A2C818' : 'rgba(28,24,20,0.04)',
+                  borderColor: activeAction === action.id
+                               ? '#C8A2C8' : 'rgba(28,24,20,0.10)',
+                  opacity:     loading && activeAction !== action.id ? 0.5 : 1,
+                }}
+                onClick={() => runAction(action)}
+                disabled={loading}
+                aria-label={action.label}
+                aria-busy={loading && activeAction === action.id}
+                title={`${action.label} (${action.shortcut})`}
+              >
+                <span style={s.toolIcon} aria-hidden="true">{action.icon}</span>
+                <span style={s.toolLabel}>
+                  {action.label}
+                  {loading && activeAction === action.id && (
+                    <span style={s.spinner} role="status" aria-live="polite"> Channeling Lala…</span>
+                  )}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Surprise Me */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <button
+              style={{
+                ...s.toolPill,
+                background: 'rgba(28,24,20,0.04)',
+                borderColor: 'rgba(28,24,20,0.10)',
+                opacity: loading ? 0.5 : 1,
+                flex: 1,
+                justifyContent: 'center',
+              }}
+              onClick={runSurprise}
+              disabled={loading}
+              title="Pick a random AI action"
+            >
+              <span style={s.toolIcon}>🎲</span>
+              <span style={s.toolLabel}>Surprise me</span>
+            </button>
+            <button
+              style={{
+                ...s.toolPill,
+                background: activeAction === 'critique' && loading ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                borderColor: activeAction === 'critique' ? accent : 'rgba(28,24,20,0.10)',
+                opacity: loading && activeAction !== 'critique' ? 0.5 : 1,
+                flex: 1,
+                justifyContent: 'center',
+              }}
+              onClick={runCritique}
+              disabled={loading}
+              title="Get AI feedback on your prose"
+            >
+              <span style={s.toolIcon}>📖</span>
+              <span style={s.toolLabel}>
+                How does this read?
+                {loading && activeAction === 'critique' && (
+                  <span style={s.spinner}> Reading…</span>
+                )}
+              </span>
+            </button>
+          </div>
+
+          {/* Tone selector */}
+          <div style={{ ...s.lengthRow, marginTop: 8 }} role="group" aria-label="Tone preset">
+            {TONE_OPTIONS.map(t => (
+              <button
+                key={t.id}
+                style={{
+                  ...s.lengthPill,
+                  background: toneMode === t.id ? `${accent}14` : 'transparent',
+                  color: toneMode === t.id ? accent : INK_MID,
+                  borderColor: toneMode === t.id ? accent : 'rgba(28,24,20,0.10)',
+                }}
+                onClick={() => setToneMode(t.id)}
+                aria-pressed={toneMode === t.id}
+                title={`Tone: ${t.label}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
           {/* Length toggle */}
           <div style={s.lengthRow} role="group" aria-label="Output length">
             <button
@@ -483,6 +783,26 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
             placeholder="Edit before inserting…"
             aria-label="Edit generated content before inserting into manuscript"
           />
+          {/* Voice drift warning */}
+          {(() => {
+            const drift = detectDrift(result);
+            return drift ? (
+              <div style={s.driftWarning} role="status">
+                <span style={s.driftIcon}>⚠</span>
+                <span>Voice drift: {drift}</span>
+                <button
+                  style={s.driftRetryBtn}
+                  disabled={loading}
+                  onClick={() => {
+                    const action = ACTIONS.find(a => a.id === activeAction);
+                    if (action) runAction(action, true);
+                  }}
+                >
+                  {loading ? '◌ …' : '↻ Regenerate in voice'}
+                </button>
+              </div>
+            ) : null;
+          })()}
           {loading && (
             <div style={s.retryLoading} role="status" aria-live="polite">Generating new version…</div>
           )}
@@ -863,6 +1183,39 @@ const s = {
     color:      '#B85C38',
     fontStyle:  'italic',
     fontFamily: "'Lora', Georgia, serif",
+  },
+
+  // Voice drift warning
+  driftWarning: {
+    display:      'flex',
+    alignItems:   'flex-start',
+    gap:          6,
+    padding:      '8px 10px',
+    fontSize:     9,
+    color:        '#B85C38',
+    background:   'rgba(184,92,56,0.06)',
+    borderRadius: 3,
+    fontFamily:   "'DM Mono', monospace",
+    letterSpacing:'0.04em',
+    lineHeight:   1.5,
+    marginTop:    4,
+  },
+  driftIcon: {
+    fontSize:   11,
+    flexShrink: 0,
+  },
+  driftRetryBtn: {
+    marginLeft:   'auto',
+    background:   'rgba(184,92,56,0.10)',
+    border:       '1px solid rgba(184,92,56,0.25)',
+    borderRadius: 3,
+    color:        '#B85C38',
+    fontSize:     9,
+    fontFamily:   "'DM Mono', monospace",
+    padding:      '2px 8px',
+    cursor:       'pointer',
+    whiteSpace:   'nowrap',
+    flexShrink:   0,
   },
 
   // Rewrite options
