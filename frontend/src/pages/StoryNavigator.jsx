@@ -133,40 +133,50 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
 // ─── Arc progress bar ─────────────────────────────────────────────────────────
 function ArcProgress({ approvedStories, savedStories = [], stories = {} }) {
   const phases = ['establishment', 'pressure', 'crisis', 'integration'];
-  const phaseRanges = { establishment: [1,10], pressure: [11,25], crisis: [26,40], integration: [41,50] };
+  const phaseTargets = { establishment: 10, pressure: 15, crisis: 15, integration: 10 };
+
+  // Group stories by their phase field
+  const allStories = Object.values(stories);
+  const byPhase = {};
+  for (const s of allStories) {
+    const p = s.phase || 'establishment';
+    if (!byPhase[p]) byPhase[p] = [];
+    byPhase[p].push(s);
+  }
 
   return (
     <div className="se-arc-progress">
       {phases.map((phase) => {
-        const [start, end] = phaseRanges[phase];
-        const total = end - start + 1;
-        const approved = approvedStories.filter((n) => n >= start && n <= end).length;
-        const pct = Math.round((approved / total) * 100);
+        const target = phaseTargets[phase];
+        const phaseStories = byPhase[phase] || [];
+        const count = phaseStories.length;
+        const approvedCount = phaseStories.filter(s => approvedStories.includes(s.story_number)).length;
+        const pct = Math.round((count / target) * 100);
         return (
           <div key={phase} className="se-arc-phase">
             <div className="se-arc-phase-label" style={{ color: PHASE_COLORS[phase] }} title={PHASE_LABELS[phase]}>
               {ARC_SHORT_LABELS[phase]}
             </div>
             <div className="se-arc-phase-bar">
-              <div className="se-arc-phase-fill" style={{ width: `${pct}%`, background: PHASE_COLORS[phase] }} />
+              <div className="se-arc-phase-fill" style={{ width: `${Math.min(pct, 100)}%`, background: PHASE_COLORS[phase] }} />
             </div>
             <div className="se-arc-dots">
-              {Array.from({ length: total }, (_, i) => {
-                const num = start + i;
-                const isApproved = approvedStories.includes(num);
-                const isSaved = savedStories.includes(num) && !isApproved;
-                const isGenerated = stories[num] && !isApproved && !isSaved;
+              {Array.from({ length: target }, (_, i) => {
+                const s = phaseStories[i];
+                const isApproved = s && approvedStories.includes(s.story_number);
+                const isSaved = s && savedStories.includes(s.story_number) && !isApproved;
+                const isGenerated = s && !isApproved && !isSaved;
                 return (
                   <span
-                    key={num}
+                    key={i}
                     className={`se-arc-dot ${isApproved ? 'approved' : isSaved ? 'saved' : isGenerated ? 'generated' : ''}`}
-                    title={`Story ${num}${isApproved ? ' ✓' : isSaved ? ' (saved)' : isGenerated ? ' (draft)' : ''}`}
+                    title={s ? `Ch ${s.story_number}: ${s.title || ''}${isApproved ? ' ✓' : isSaved ? ' (saved)' : ' (draft)'}` : ''}
                     style={isApproved ? { background: PHASE_COLORS[phase] } : undefined}
                   />
                 );
               })}
             </div>
-            <div className="se-arc-phase-count">{approved}/{total}</div>
+            <div className="se-arc-phase-count">{count}/{target}</div>
           </div>
         );
       })}
