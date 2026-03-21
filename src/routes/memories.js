@@ -9466,6 +9466,7 @@ Each chapter brief:
       "opening_line": "The first sentence of this situation when written as prose."
     }
   ],
+  "story_type": "internal | collision | wrong_win | quiet_victory",
   "chapter_arc": "What this chapter leaves her with. One sentence.",
   "david_presence": "present | background | absent | phone",
   "marcus_phase": "none | phase_1 | phase_2 | phase_3",
@@ -10181,6 +10182,7 @@ Use this exact structure:
   "wound_clock": ${woundClock},
   "stakes_level": ${stakesLevel},
   "situations": [ 3-5 situation objects with situation_number, situation_type, tone, title, characters_present, what_happens, what_she_knows, what_she_doesnt_say, texture_layers, opening_line ],
+  "story_type": "internal | collision | wrong_win | quiet_victory",
   "chapter_arc": "What this chapter leaves her with. One sentence.",
   "david_presence": "present | background | absent | phone",
   "marcus_phase": "none | phase_1 | phase_2 | phase_3",
@@ -10251,13 +10253,27 @@ Use this exact structure:
   }
 });
 
+// ─── Story type inference ─────────────────────────────────────────────────────
+// Derives story_type from situation types when the arc brief doesn't include it
+function inferStoryType(taskBrief) {
+  const situations = taskBrief.situations || [];
+  const types = situations.map(s => (s.situation_type || '').toUpperCase());
+  const hasConflict = types.some(t => ['SOCIAL_FRICTION', 'COLLISION', 'CONFRONTATION'].includes(t));
+  const hasMultipleChars = situations.some(s => (s.characters_present || []).length >= 3);
+  if (hasConflict && hasMultipleChars) return 'collision';
+  const hasWin = types.some(t => ['VICTORY', 'ACHIEVEMENT', 'WIN', 'WRONG_WIN'].includes(t));
+  if (hasWin) return 'wrong_win';
+  return null; // fall through to 'internal' default
+}
+
 // ─── Narrative variety engine ──────────────────────────────────────────────────
 // Each story gets a unique combination of structure, POV, length, and technique
 // based on its position in the arc, phase, and story type.
 
 function buildCraftRules(storyNumber, taskBrief, dna) {
   const phase = taskBrief.phase || 'establishment';
-  const storyType = taskBrief.story_type || 'internal';
+  // Derive story_type: use explicit value, or infer from situations
+  const storyType = taskBrief.story_type || inferStoryType(taskBrief) || 'internal';
   const n = storyNumber || 1;
 
   // ── Word count varies by phase and story position ──

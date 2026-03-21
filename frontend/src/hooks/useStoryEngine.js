@@ -567,7 +567,7 @@ export default function useStoryEngine() {
         body: JSON.stringify({
           story: { story_number: story.story_number, title: story.title, text: story.text, phase: story.phase, story_type: story.story_type },
           character_key: selectedChar,
-          characters_present: task?.characters_present || [],
+          characters_present: [...new Set(task?.situations?.flatMap(s => s.characters_present || []) || [])],
           registry_id: char?.registry_id || null,
         }),
       }).then(r => r.ok ? r.json() : null).then(textureData => {
