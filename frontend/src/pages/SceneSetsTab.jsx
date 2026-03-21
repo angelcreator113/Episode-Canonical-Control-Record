@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2 } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -99,10 +99,83 @@ function AngleStrip({ angles, onGenerate, generating }) {
   );
 }
 
+// ─── GENERATION PROGRESS ──────────────────────────────────────────────────────
+
+function GenerationProgress({ progress }) {
+  if (!progress) return null;
+  const { angles, currentIndex, startTime, completedCount, failedCount } = progress;
+  const total = angles.length;
+  const elapsed = useElapsedTime(startTime, completedCount + failedCount >= total);
+  // ~45s per angle (still image ~20s + video ~25s)
+  const perAngle = 45;
+  const estimatedTotal = total * perAngle;
+  const remaining = Math.max(0, estimatedTotal - elapsed);
+  const pct = total > 0 ? Math.round(((completedCount + failedCount) / total) * 100) : 0;
+
+  return (
+    <div className="scene-sets-progress-panel">
+      <div className="scene-sets-progress-header">
+        <div className="scene-sets-progress-title">
+          <Loader size={14} className="spin" />
+          <span>Generating {total} angle{total !== 1 ? 's' : ''}...</span>
+        </div>
+        <div className="scene-sets-progress-timing">
+          <Clock size={12} />
+          <span>{formatTime(elapsed)} elapsed</span>
+          <span className="scene-sets-progress-sep">·</span>
+          <span>~{formatTime(remaining)} remaining</span>
+        </div>
+      </div>
+
+      <div className="scene-sets-progress-bar-track">
+        <div className="scene-sets-progress-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+
+      <div className="scene-sets-progress-angles">
+        {angles.map((a, i) => {
+          const isDone = a.status === 'done';
+          const isFailed = a.status === 'failed';
+          const isCurrent = i === currentIndex && !isDone && !isFailed;
+          const isQueued = !isDone && !isFailed && !isCurrent;
+          return (
+            <div key={a.id} className={`scene-sets-progress-angle ${
+              isDone ? 'done' : isFailed ? 'failed' : isCurrent ? 'current' : 'queued'
+            }`}>
+              {isDone ? <CheckCircle2 size={12} /> : isFailed ? <AlertCircle size={12} /> : isCurrent ? <Loader size={12} className="spin" /> : <span className="scene-sets-progress-dot" />}
+              <span>{a.label}</span>
+              {isCurrent && <span className="scene-sets-progress-step">generating still + video</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function useElapsedTime(startTime, isDone) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startTime || isDone) return;
+    const tick = () => setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startTime, isDone]);
+  return elapsed;
+}
+
+function formatTime(secs) {
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}m ${s < 10 ? '0' : ''}${s}s`;
+}
+
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, generatingId }) {
+function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, generatingId, generationProgress }) {
   const isGenerating = generatingId === set.id;
+  const progress = generatingId === set.id ? generationProgress : null;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || null;
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
@@ -200,6 +273,8 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, gen
           <p className="scene-sets-script-context">{set.script_context}</p>
         )}
 
+        {progress && <GenerationProgress progress={progress} />}
+
         {expanded && (
           <AngleStrip
             angles={set.angles}
@@ -219,6 +294,7 @@ export default function SceneSetsTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [generatingId, setGeneratingId] = useState(null);
+  const [generationProgress, setGenerationProgress] = useState(null);
   const [toast, setToast] = useState(null);
   const [filterType, setFilterType] = useState('ALL');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -259,7 +335,7 @@ export default function SceneSetsTab() {
     setGeneratingId(set.id);
     try {
       await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, { method: 'POST' });
-      showToast(`Generating base for "${set.name}" — this takes ~45 seconds`);
+      showToast(`Generating base for "${set.name}" — typically takes ~45 seconds`);
       setTimeout(fetchSets, 5000);
     } catch {
       showToast('Generation failed', 'error');
@@ -272,7 +348,7 @@ export default function SceneSetsTab() {
     setGeneratingId(set.id);
     try {
       await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
-      showToast(`Generating "${angle.angle_name}" — this takes ~45 seconds`);
+      showToast(`Generating "${angle.angle_name}" — still image ~20s, then video ~25s`);
       setTimeout(fetchSets, 5000);
     } catch {
       showToast('Angle generation failed', 'error');
@@ -285,15 +361,39 @@ export default function SceneSetsTab() {
     const pending = set.angles?.filter(a => a.generation_status === 'pending') || [];
     if (pending.length === 0) return;
     setGeneratingId(set.id);
+
+    const progressAngles = pending.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
+    setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+
+    let completed = 0;
+    let failed = 0;
     try {
-      for (const angle of pending) {
-        await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
+      for (let i = 0; i < pending.length; i++) {
+        progressAngles[i].status = 'generating';
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
+
+        try {
+          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${pending[i].id}/generate`, { method: 'POST' });
+          if (!res.ok) throw new Error('Failed');
+          progressAngles[i].status = 'done';
+          completed++;
+        } catch {
+          progressAngles[i].status = 'failed';
+          failed++;
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
       }
-      showToast(`Generating ${pending.length} angles — this takes a few minutes`);
-      setTimeout(fetchSets, 5000);
+
+      if (failed === 0) {
+        showToast(`All ${pending.length} angles queued for generation`);
+      } else {
+        showToast(`${completed} queued, ${failed} failed`, failed > 0 ? 'error' : 'success');
+      }
+      fetchSets();
     } catch {
-      showToast('Some angle generations failed', 'error');
+      showToast('Generation failed', 'error');
     } finally {
+      setTimeout(() => setGenerationProgress(null), 3000);
       setGeneratingId(null);
     }
   };
@@ -459,6 +559,7 @@ export default function SceneSetsTab() {
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
               generatingId={generatingId}
+              generationProgress={generationProgress}
             />
           ))}
         </div>

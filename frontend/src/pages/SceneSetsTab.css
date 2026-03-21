@@ -503,6 +503,110 @@
   50% { opacity: 1; }
 }
 
+/* ── Generation Progress ───────────────────────────────────────────────── */
+
+.scene-sets-progress-panel {
+  background: #FAFAF5;
+  border: 1px solid #E8E4DC;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 12px;
+}
+
+.scene-sets-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.scene-sets-progress-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.scene-sets-progress-timing {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #6B6B6B;
+}
+
+.scene-sets-progress-sep {
+  color: #CCC;
+}
+
+.scene-sets-progress-bar-track {
+  height: 4px;
+  background: #E8E4DC;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.scene-sets-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #B8962E, #D4AF37);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.scene-sets-progress-angles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scene-sets-progress-angle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 3px 0;
+}
+
+.scene-sets-progress-angle.queued {
+  color: #AAA;
+}
+
+.scene-sets-progress-angle.current {
+  color: #B8962E;
+  font-weight: 600;
+}
+
+.scene-sets-progress-angle.done {
+  color: #1A7A40;
+}
+
+.scene-sets-progress-angle.failed {
+  color: #C62828;
+}
+
+.scene-sets-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #DDD;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.scene-sets-progress-step {
+  color: #9E9E9E;
+  font-weight: 400;
+  font-size: 10px;
+  margin-left: 2px;
+}
+
 .scene-sets-video-indicator {
   position: absolute;
   bottom: 2px;
