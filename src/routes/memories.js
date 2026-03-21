@@ -10644,6 +10644,19 @@ ${taskBrief.primary_location ? `Primary setting: ${taskBrief.primary_location}` 
 ${taskBrief.time_of_day ? `Time of day: ${taskBrief.time_of_day}` : ''}
 ${taskBrief.season_weather ? `Season/weather: ${taskBrief.season_weather}` : ''}
 ${taskBrief.new_character ? `New character to introduce: ${taskBrief.new_character_name} — ${taskBrief.new_character_role}` : ''}
+${taskBrief.situations?.length ? `
+CHAPTER ARCHITECTURE (follow this situation flow — each situation is a scene beat):
+${taskBrief.situations.map(s => 
+  `  ${s.situation_number}. [${s.situation_type}] "${s.title}" (${s.tone})
+     Characters: ${(s.characters_present || []).join(', ')}
+     What happens: ${s.what_happens}
+     What she knows: ${s.what_she_knows || 'n/a'}
+     What she doesn't say: ${s.what_she_doesnt_say || 'n/a'}
+     Opening line: "${s.opening_line || ''}"
+     Texture layers: ${(s.texture_layers || []).join(', ')}`
+).join('\n')}
+
+IMPORTANT: Structure the chapter around these situations in order. Each situation is a scene beat — use the provided opening lines as launch points (adapt but don't discard). The tone shifts between situations create the chapter's rhythm.` : ''}
 
 ${previousContext}
 

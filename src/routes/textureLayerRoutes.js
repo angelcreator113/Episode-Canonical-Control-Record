@@ -35,6 +35,7 @@ router.post('/generate', async (req, res) => {
         'id', 'display_name', 'name', 'core_wound', 'core_desire',
         'core_fear', 'de_body_relationship', 'de_body_currency',
         'platform_primary', 'follower_tier',
+        'voice_signature', 'mask_persona', 'truth_persona', 'personality',
       ],
     });
 
@@ -42,11 +43,24 @@ router.post('/generate', async (req, res) => {
       return res.status(404).json({ error: 'Character not found in registry' });
     }
 
+    // Enrich characters_present — frontend sends string keys, generators need objects with role_type
+    let enrichedCharsPresent = [];
+    if (characters_present?.length) {
+      const charKeys = characters_present.map(c => typeof c === 'string' ? c : c.character_key).filter(Boolean);
+      if (charKeys.length) {
+        const chars = await db.RegistryCharacter.findAll({
+          where: { character_key: charKeys },
+          attributes: ['character_key', 'role_type', 'display_name', 'name'],
+        });
+        enrichedCharsPresent = chars.map(c => c.dataValues);
+      }
+    }
+
     // Generate all texture layers — pass db for arc context
     const texture = await generateTextureLayer(db, story, {
       characterKey: character_key,
       characterData: characterData.dataValues,
-      charactersPresent: characters_present || [],
+      charactersPresent: enrichedCharsPresent,
       registryId: registry_id,
     });
 

@@ -97,6 +97,7 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'story_texture',
     underscored: true,
+    paranoid: true,
   });
 
   return StoryTexture;
