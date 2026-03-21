@@ -91,13 +91,13 @@ const NAV = [
       },
       { icon: '🧠', label: 'Show Brain',      route: '/show-brain' },
       { icon: '🎞️', label: 'Scene Library',   route: '/scene-library' },
+      { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
       { icon: '🖼️', label: 'Template Studio', route: '/template-studio' },
     ],
   },
   {
     zone: 'PRODUCE',
     items: [
-      { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
       { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
       { icon: '📂', label: 'Assets',          route: '/assets' },
       { icon: '👗', label: 'Wardrobe',        route: '/wardrobe' },

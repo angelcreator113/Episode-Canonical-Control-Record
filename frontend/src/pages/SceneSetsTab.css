@@ -92,6 +92,114 @@
   color: #FFF;
 }
 
+/* ── Header Actions (create button + filters row) ─────────────────────── */
+
+.scene-sets-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-btn-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid #B8962E;
+  background: #FFF9ED;
+  color: #8B6F00;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.scene-sets-btn-create:hover {
+  background: #F5EDDA;
+  border-color: #8B6F00;
+}
+
+/* ── Create Form ───────────────────────────────────────────────────────── */
+
+.scene-sets-create-form {
+  background: #FAFBFE;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scene-sets-create-row {
+  display: flex;
+  gap: 14px;
+}
+
+.scene-sets-create-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.scene-sets-create-field label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B6B6B;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scene-sets-optional {
+  text-transform: none;
+  font-weight: 400;
+  color: #999;
+}
+
+.scene-sets-create-field input,
+.scene-sets-create-field select,
+.scene-sets-create-field textarea {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  color: #2C2C2C;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #FFF;
+  transition: border-color 0.15s;
+  resize: vertical;
+}
+
+.scene-sets-create-field input:focus,
+.scene-sets-create-field select:focus,
+.scene-sets-create-field textarea:focus {
+  outline: none;
+  border-color: #B8962E;
+  box-shadow: 0 0 0 2px rgba(184, 150, 46, 0.12);
+}
+
+.scene-sets-create-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+  .scene-sets-create-row {
+    flex-direction: column;
+  }
+  .scene-sets-header-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* ── Status Pill ───────────────────────────────────────────────────────── */
 
 .scene-sets-status-pill {

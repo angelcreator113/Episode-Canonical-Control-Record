@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -202,6 +202,9 @@ export default function SceneSetsTab() {
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [filterType, setFilterType] = useState('ALL');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '' });
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -259,6 +262,31 @@ export default function SceneSetsTab() {
     }
   };
 
+  const handleCreate = async () => {
+    if (!newSet.name.trim()) { showToast('Name is required', 'error'); return; }
+    setCreating(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scene-sets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newSet.name.trim(),
+          scene_type: newSet.scene_type,
+          canonical_description: newSet.canonical_description.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to create');
+      showToast(`Created "${newSet.name.trim()}"`);
+      setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '' });
+      setShowCreateForm(false);
+      fetchSets();
+    } catch {
+      showToast('Failed to create scene set', 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const filtered = filterType === 'ALL'
     ? sets
     : sets.filter(s => s.scene_type === filterType);
@@ -287,18 +315,75 @@ export default function SceneSetsTab() {
           </p>
         </div>
 
-        <div className="scene-sets-filters">
-          {types.map(t => (
-            <button
-              key={t}
-              onClick={() => setFilterType(t)}
-              className={`scene-sets-filter-pill${filterType === t ? ' active' : ''}`}
-            >
-              {typeLabels[t]}
-            </button>
-          ))}
+        <div className="scene-sets-header-actions">
+          <button
+            className="scene-sets-btn-create"
+            onClick={() => setShowCreateForm(f => !f)}
+          >
+            {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Set</>}
+          </button>
+          <div className="scene-sets-filters">
+            {types.map(t => (
+              <button
+                key={t}
+                onClick={() => setFilterType(t)}
+                className={`scene-sets-filter-pill${filterType === t ? ' active' : ''}`}
+              >
+                {typeLabels[t]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Create Form */}
+      {showCreateForm && (
+        <div className="scene-sets-create-form">
+          <div className="scene-sets-create-row">
+            <div className="scene-sets-create-field">
+              <label>Location Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Lala's Kitchen — Golden Hour"
+                value={newSet.name}
+                onChange={e => setNewSet(s => ({ ...s, name: e.target.value }))}
+                autoFocus
+              />
+            </div>
+            <div className="scene-sets-create-field">
+              <label>Scene Type</label>
+              <select
+                value={newSet.scene_type}
+                onChange={e => setNewSet(s => ({ ...s, scene_type: e.target.value }))}
+              >
+                <option value="HOME_BASE">Home Base</option>
+                <option value="CLOSET">Closet</option>
+                <option value="EVENT_LOCATION">Event Location</option>
+                <option value="TRANSITION">Transition</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+          </div>
+          <div className="scene-sets-create-field">
+            <label>Description <span className="scene-sets-optional">(optional)</span></label>
+            <textarea
+              placeholder="Describe the space — layout, lighting, mood, signature details..."
+              value={newSet.canonical_description}
+              onChange={e => setNewSet(s => ({ ...s, canonical_description: e.target.value }))}
+              rows={3}
+            />
+          </div>
+          <div className="scene-sets-create-actions">
+            <button
+              className="scene-sets-btn-generate"
+              onClick={handleCreate}
+              disabled={creating || !newSet.name.trim()}
+            >
+              {creating ? <><Loader size={12} className="spin" /> Creating...</> : <><Plus size={12} /> Create Scene Set</>}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (

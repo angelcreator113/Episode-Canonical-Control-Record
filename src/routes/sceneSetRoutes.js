@@ -165,7 +165,7 @@ router.post('/:id/angles', optionalAuth, async (req, res) => {
       angle_name,
       angle_label,
       angle_description: angle_description || null,
-      beat_numbers: beat_numbers || [],
+      beat_affinity: beat_affinity || [],
       camera_direction: camera_direction || null,
       generation_status: 'pending',
     });

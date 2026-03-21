@@ -187,6 +187,20 @@ function AppContent() {
   const toggleSidebar = () => setSidebarOpen(o => !o);
   const closeSidebar = () => setSidebarOpen(false);
 
+  // Sync sidebar state when crossing the 1279px breakpoint
+  React.useEffect(() => {
+    let wasDesktop = window.innerWidth > 1279;
+    const onResize = () => {
+      const isDesktop = window.innerWidth > 1279;
+      if (isDesktop !== wasDesktop) {
+        setSidebarOpen(isDesktop);
+        wasDesktop = isDesktop;
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Debug logging - disabled to reduce console noise
   // React.useEffect(() => {
   //   console.log('[AppContent] Auth state changed:', { isAuthenticated, loading, pathname: location.pathname });
