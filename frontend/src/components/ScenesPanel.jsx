@@ -20,7 +20,7 @@ const authHeaders = () => {
   };
 };
 
-export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, book }) {
+export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, book, characterId }) {
   const [expanded, setExpanded] = useState({});
   const [addingSceneTo, setAddingSceneTo] = useState(null);
   const [newSceneTitle, setNewSceneTitle] = useState('');
@@ -121,6 +121,7 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
           chapter_id: ch.id,
           chapter_title: ch.title,
           chapter_type: ch.chapter_type || 'chapter',
+          character_id: characterId || null,
           existing_scenes: existingScenes,
           draft_prose: ch.draft_prose || '',
           book_title: book?.title || '',
@@ -144,7 +145,7 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
     } finally {
       setAiLoading(prev => ({ ...prev, [ch.id]: false }));
     }
-  }, [bookId, chapters, book, onChaptersChange]);
+  }, [bookId, chapters, book, onChaptersChange, characterId]);
 
   /* ── AI: Book-wide scene suggestions ── */
   const planBookScenes = useCallback(async () => {
@@ -321,6 +322,17 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
                           title="Delete scene"
                         >
                           {'×'}
+                        </button>
+                        <button
+                          className="scenes-panel-scene-gen"
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent('scene-generate-prose', {
+                              detail: { chapterId: ch.id, sceneTitle: scene.content, sceneId: scene.id }
+                            }));
+                          }}
+                          title="Generate prose for this scene using AI"
+                        >
+                          {'✦ Write'}
                         </button>
                       </div>
                     ))
@@ -665,6 +677,15 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
         }
         .scenes-panel-scene:hover .scenes-panel-scene-del { opacity: 1; }
         .scenes-panel-scene-del:hover { color: #B85C38; }
+        .scenes-panel-scene-gen {
+          background: none; border: 1px solid rgba(184,150,46,0.25);
+          border-radius: 3px; font-family: 'DM Mono', monospace;
+          font-size: 9px; letter-spacing: 0.04em; color: #B8962E;
+          cursor: pointer; padding: 2px 8px; opacity: 0;
+          transition: opacity 0.1s ease, background 0.12s ease;
+        }
+        .scenes-panel-scene:hover .scenes-panel-scene-gen { opacity: 1; }
+        .scenes-panel-scene-gen:hover { background: rgba(184,150,46,0.08); }
 
         /* Add scene */
         .scenes-panel-add-btn {

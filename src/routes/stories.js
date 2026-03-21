@@ -47,7 +47,7 @@ try {
 /**
  * POST / — Save or update a story (upsert by character_key + story_number)
  */
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     const db = require('../models');
     const {
@@ -96,7 +96,7 @@ router.post('/', authenticateToken, async (req, res) => {
 /**
  * POST /auto-save — Auto-save from StoryReviewPanel (lighter payload)
  */
-router.post('/auto-save', authenticateToken, async (req, res) => {
+router.post('/auto-save', optionalAuth, async (req, res) => {
   try {
     const db = require('../models');
     const { character_key, story_number, text, editor_notes } = req.body;
@@ -164,7 +164,7 @@ router.get('/:id', async (req, res) => {
 /**
  * PATCH /:id — Update story
  */
-router.patch('/:id', authenticateToken, async (req, res) => {
+router.patch('/:id', optionalAuth, async (req, res) => {
   try {
     const db = require('../models');
     const story = await db.StorytellerStory.findByPk(req.params.id);
@@ -208,7 +208,7 @@ router.delete('/:id', optionalAuth, async (req, res) => {
 /**
  * POST /:id/approve — Approve a story
  */
-router.post('/:id/approve', authenticateToken, async (req, res) => {
+router.post('/:id/approve', optionalAuth, async (req, res) => {
   try {
     const db = require('../models');
     const story = await db.StorytellerStory.findByPk(req.params.id);

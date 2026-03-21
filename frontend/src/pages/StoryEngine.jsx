@@ -76,6 +76,22 @@ function TherapySuggestions({ characterKey, apiBase }) {
 }
 
 // ─── Bottom Writing Tools (compact toolbar below story content) ───────────────
+// ─── Strip markdown artifacts from story text for clean editing ───────────────
+function cleanMarkdownForEditor(text) {
+  if (!text) return '';
+  return text
+    .split('\n')
+    .map(line => {
+      const trimmed = line.trim();
+      // Convert markdown headings to plain text (preserve as bold-looking title)
+      if (/^#{1,3}\s+/.test(trimmed)) return trimmed.replace(/^#{1,3}\s+/, '');
+      // Convert markdown hr to empty line (already visual separator)
+      if (/^---+$/.test(trimmed)) return '';
+      return line;
+    })
+    .join('\n');
+}
+
 const BOTTOM_TOOLS = [
   { id: 'continue', icon: '✨', label: 'Continue the moment', group: 'flow', action: 'continue', spinner: 'Expanding…' },
   { id: 'deepen',   icon: '🧠', label: 'Deepen the scene',   group: 'flow', action: 'deepen',   spinner: 'Layering depth…' },
@@ -301,6 +317,35 @@ function StoryPanel({
   const ttsAudioRef = useRef(null);
   const ttsUsingElevenLabs = useRef(false);
 
+  const handleTtsPause = useCallback(() => {
+    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      setTtsPaused(true);
+      setTtsPlaying(false);
+    } else {
+      const synth = window.speechSynthesis;
+      if (synth?.speaking) {
+        synth.pause();
+        setTtsPaused(true);
+        setTtsPlaying(false);
+      }
+    }
+  }, []);
+
+  const handleTtsStop = useCallback(() => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+      if (ttsAudioRef.current.src) URL.revokeObjectURL(ttsAudioRef.current.src);
+      ttsAudioRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
+    ttsUsingElevenLabs.current = false;
+    setTtsPlaying(false);
+    setTtsPaused(false);
+    setTtsLoading(false);
+  }, []);
+
   const handleTtsPlay = useCallback(async () => {
     const text = editing ? editText : (story?.text || '');
     if (!text.trim()) return;
@@ -374,35 +419,6 @@ function StoryPanel({
     setTtsPaused(false);
   }, [editing, editText, story?.text, ttsPaused, ttsRate]);
 
-  const handleTtsPause = useCallback(() => {
-    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
-      ttsAudioRef.current.pause();
-      setTtsPaused(true);
-      setTtsPlaying(false);
-    } else {
-      const synth = window.speechSynthesis;
-      if (synth?.speaking) {
-        synth.pause();
-        setTtsPaused(true);
-        setTtsPlaying(false);
-      }
-    }
-  }, []);
-
-  const handleTtsStop = useCallback(() => {
-    if (ttsAudioRef.current) {
-      ttsAudioRef.current.pause();
-      ttsAudioRef.current.currentTime = 0;
-      if (ttsAudioRef.current.src) URL.revokeObjectURL(ttsAudioRef.current.src);
-      ttsAudioRef.current = null;
-    }
-    window.speechSynthesis?.cancel();
-    ttsUsingElevenLabs.current = false;
-    setTtsPlaying(false);
-    setTtsPaused(false);
-    setTtsLoading(false);
-  }, []);
-
   // Cleanup TTS on unmount or story change
   useEffect(() => {
     return () => {
@@ -432,6 +448,72 @@ function StoryPanel({
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [selectionPopup, setSelectionPopup] = useState(null);
   const [activeParaIndex, setActiveParaIndex] = useState(null);
+
+  // ── Find & Replace state ──
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [replaceText, setReplaceText] = useState('');
+  const [findMatchCount, setFindMatchCount] = useState(0);
+
+  // ── Word count (needed by session tracker + UI) ──
+  const wordCount = editing
+    ? editText.split(/\s+/).filter(Boolean).length
+    : (story?.word_count || 0);
+
+  // ── Session word tracker ──
+  const sessionStartWordsRef = useRef(null);
+  const [sessionWordGoal] = useState(500);
+  useEffect(() => {
+    if (editing && sessionStartWordsRef.current === null) {
+      sessionStartWordsRef.current = editText.split(/\s+/).filter(Boolean).length;
+    }
+    if (!editing) sessionStartWordsRef.current = null;
+  }, [editing]);
+  const sessionWordsWritten = editing && sessionStartWordsRef.current !== null
+    ? Math.max(0, wordCount - sessionStartWordsRef.current)
+    : 0;
+
+  // ── Autosave timestamp ──
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [lastSavedAgo, setLastSavedAgo] = useState('');
+  useEffect(() => {
+    if (!lastSavedAt) return;
+    const tick = () => {
+      const secs = Math.floor((Date.now() - lastSavedAt) / 1000);
+      if (secs < 5) setLastSavedAgo('just now');
+      else if (secs < 60) setLastSavedAgo(`${secs}s ago`);
+      else setLastSavedAgo(`${Math.floor(secs / 60)}m ago`);
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
+  }, [lastSavedAt]);
+
+  // ── Smart paragraph length warnings ──
+  const longParagraphs = useMemo(() => {
+    if (!editing) return [];
+    const paras = editText.split('\n\n');
+    const warnings = [];
+    let charOffset = 0;
+    for (let i = 0; i < paras.length; i++) {
+      const wc = paras[i].trim().split(/\s+/).filter(Boolean).length;
+      if (wc > 150) {
+        warnings.push({ index: i, wordCount: wc, offset: charOffset });
+      }
+      charOffset += paras[i].length + 2;
+    }
+    return warnings;
+  }, [editing, editText]);
+
+  // ── Find match count ──
+  useEffect(() => {
+    if (!findText || !findReplaceOpen) { setFindMatchCount(0); return; }
+    try {
+      const escaped = findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const matches = editText.match(new RegExp(escaped, 'gi'));
+      setFindMatchCount(matches ? matches.length : 0);
+    } catch { setFindMatchCount(0); }
+  }, [findText, editText, findReplaceOpen]);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
   const aiWriterRef = useRef(null);
@@ -515,7 +597,7 @@ function StoryPanel({
     // Reset text when story changes and we're NOT actively editing,
     // or when it's a completely different story.
     if (!editing || isNewStory) {
-      setEditText(story?.text || '');
+      setEditText(cleanMarkdownForEditor(story?.text || ''));
       setLastSavedText(story?.text || '');
       setCurrentPage(0);
     }
@@ -671,10 +753,6 @@ function StoryPanel({
     </div>
   );
 
-  const wordCount = editing
-    ? editText.split(/\s+/).filter(Boolean).length
-    : (story.word_count || 0);
-
   // ── Arc Stage computation ──
   const arcStage = useMemo(() => {
     const num = story?.story_number || 1;
@@ -748,6 +826,7 @@ function StoryPanel({
       await onEdit(story, textToSave);
       setLastSavedText(textToSave);
       setSaveStatus('saved');
+      setLastSavedAt(Date.now());
       // Flash "✓ Saved" briefly, then revert to idle so button shows "Save"
       if (savedFlashRef.current) clearTimeout(savedFlashRef.current);
       savedFlashRef.current = setTimeout(() => setSaveStatus('idle'), 1500);
@@ -775,6 +854,10 @@ function StoryPanel({
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         handleSave();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+        e.preventDefault();
+        setFindReplaceOpen(v => !v);
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -810,18 +893,45 @@ function StoryPanel({
                 if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
                 }
-                setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
+                setEditing(false); setEditText(cleanMarkdownForEditor(story.text)); setSaveStatus('saved'); setLastSavedText(story?.text || '');
               }}
             >
               ← Exit Edit
             </button>
             <span className="se-mode-badge se-mode-badge--edit">✏️ Editing</span>
             <span className="se-edit-header-title">{story.title}</span>
+          </div>
+          <div className="se-edit-header-line2">
             <span className="se-edit-header-meta">
               Ch {story.story_number}{totalChapters ? `/${totalChapters}` : ''}
               <span className="se-edit-header-dot">·</span>
               {wordCount.toLocaleString()} words
+              <span className="se-edit-header-dot">·</span>
+              {editTotalPages} {editTotalPages === 1 ? 'page' : 'pages'}
+              {sessionWordsWritten > 0 && (
+                <>
+                  <span className="se-edit-header-dot">·</span>
+                  <span className="se-session-badge">+{sessionWordsWritten} this session</span>
+                </>
+              )}
+              {lastSavedAgo && (
+                <>
+                  <span className="se-edit-header-dot">·</span>
+                  <span className="se-autosave-indicator">Saved {lastSavedAgo}</span>
+                </>
+              )}
             </span>
+            {sessionWordsWritten > 0 && (
+              <div className="se-session-progress-bar">
+                <div
+                  className="se-session-progress-fill"
+                  style={{
+                    width: `${Math.min(100, (sessionWordsWritten / sessionWordGoal) * 100)}%`,
+                    background: sessionWordsWritten >= sessionWordGoal ? '#4caf50' : (charColor || '#B8962E'),
+                  }}
+                />
+              </div>
+            )}
           </div>
           <div className="se-edit-header-right">
             <div className="se-tts-controls">
@@ -912,7 +1022,7 @@ function StoryPanel({
                 if (hasUnsavedChanges) {
                   if (!window.confirm('You have unsaved changes. Discard them?')) return;
                 }
-                setEditing(false); setEditText(story.text); setSaveStatus('saved'); setLastSavedText(story?.text || '');
+                setEditing(false); setEditText(cleanMarkdownForEditor(story.text)); setSaveStatus('saved'); setLastSavedText(story?.text || '');
                 if (focusMode) onToggleFocusMode?.();
               }}
             >
@@ -1078,6 +1188,103 @@ function StoryPanel({
         {editing ? (
           <div className="se-edit-layout">
             <div className="se-edit-canvas">
+              <div className="se-editor-gutter">
+                <div className="se-gutter-line" />
+              </div>
+
+              {/* ── Find & Replace Panel ── */}
+              {findReplaceOpen && (
+                <div className="se-find-replace-panel">
+                  <div className="se-find-replace-row">
+                    <input
+                      className="se-find-input"
+                      type="text"
+                      placeholder="Find…"
+                      value={findText}
+                      onChange={(e) => setFindText(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') { setFindReplaceOpen(false); setFindText(''); setReplaceText(''); }
+                        if (e.key === 'Enter' && findText) {
+                          const ta = textareaRef.current;
+                          if (!ta) return;
+                          const escaped = findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                          const idx = editText.toLowerCase().indexOf(findText.toLowerCase(), (ta.selectionEnd || 0));
+                          const pos = idx >= 0 ? idx : editText.toLowerCase().indexOf(findText.toLowerCase());
+                          if (pos >= 0) { ta.focus(); ta.setSelectionRange(pos, pos + findText.length); }
+                        }
+                      }}
+                    />
+                    <span className="se-find-count">{findMatchCount} match{findMatchCount !== 1 ? 'es' : ''}</span>
+                  </div>
+                  <div className="se-find-replace-row">
+                    <input
+                      className="se-find-input"
+                      type="text"
+                      placeholder="Replace with…"
+                      value={replaceText}
+                      onChange={(e) => setReplaceText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Escape') { setFindReplaceOpen(false); setFindText(''); setReplaceText(''); } }}
+                    />
+                    <button
+                      className="se-find-btn"
+                      disabled={!findText}
+                      onClick={() => {
+                        if (!findText) return;
+                        const ta = textareaRef.current;
+                        if (!ta) return;
+                        const selStart = ta.selectionStart;
+                        const selEnd = ta.selectionEnd;
+                        const selected = editText.slice(selStart, selEnd);
+                        if (selected.toLowerCase() === findText.toLowerCase()) {
+                          const newText = editText.slice(0, selStart) + replaceText + editText.slice(selEnd);
+                          setEditText(newText);
+                          setTimeout(() => { ta.focus(); ta.setSelectionRange(selStart + replaceText.length, selStart + replaceText.length); }, 0);
+                        } else {
+                          const escaped = findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                          const idx = editText.toLowerCase().indexOf(findText.toLowerCase(), selEnd || 0);
+                          const pos = idx >= 0 ? idx : editText.toLowerCase().indexOf(findText.toLowerCase());
+                          if (pos >= 0) { ta.focus(); ta.setSelectionRange(pos, pos + findText.length); }
+                        }
+                      }}
+                    >
+                      Replace
+                    </button>
+                    <button
+                      className="se-find-btn"
+                      disabled={!findText || findMatchCount === 0}
+                      onClick={() => {
+                        if (!findText) return;
+                        const escaped = findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const newText = editText.replace(new RegExp(escaped, 'gi'), replaceText);
+                        setEditText(newText);
+                      }}
+                    >
+                      All
+                    </button>
+                    <button className="se-find-close" onClick={() => { setFindReplaceOpen(false); setFindText(''); setReplaceText(''); }}>✕</button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Paragraph length warnings ── */}
+              {longParagraphs.length > 0 && (
+                <div className="se-para-warnings">
+                  {longParagraphs.map((p) => (
+                    <button
+                      key={p.index}
+                      className="se-para-warning-pill"
+                      onClick={() => {
+                        const ta = textareaRef.current;
+                        if (ta) { ta.focus(); ta.setSelectionRange(p.offset, p.offset); }
+                      }}
+                      title={`Paragraph ${p.index + 1} is ${p.wordCount} words — consider splitting`}
+                    >
+                      ¶{p.index + 1}: {p.wordCount}w — consider splitting
+                    </button>
+                  ))}
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 className="se-story-editor"
@@ -1086,6 +1293,64 @@ function StoryPanel({
                 spellCheck
                 aria-label="Story manuscript editor"
               />
+              {/* Floating AI Quick Tools — always visible */}
+              <div className="se-floating-tools" role="group" aria-label="Quick AI tools">
+                <button
+                  className="se-float-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('continue')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Continue the moment (Ctrl+1)"
+                >
+                  <span aria-hidden="true">✨</span> Continue
+                </button>
+                <button
+                  className="se-float-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('deepen')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Deepen the scene (Ctrl+2)"
+                >
+                  <span aria-hidden="true">🧠</span> Deepen
+                </button>
+                <button
+                  className="se-float-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('nudge')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Refine tone (Ctrl+3)"
+                >
+                  <span aria-hidden="true">🎯</span> Refine
+                </button>
+                <button
+                  className="se-float-pill"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('rewrite')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Rework paragraph (Ctrl+4) — select text first"
+                >
+                  <span aria-hidden="true">🔄</span> Rework
+                </button>
+                <span className="se-float-divider" />
+                <button
+                  className="se-float-pill se-float-pill-secondary"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('dialogue')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Write dialogue for the selected character"
+                >
+                  <span aria-hidden="true">💬</span> Dialogue
+                </button>
+                <button
+                  className="se-float-pill se-float-pill-secondary"
+                  style={{ '--pill-accent': charColor || '#B8962E' }}
+                  onClick={() => aiWriterRef.current?.triggerAction('interior')}
+                  disabled={aiWriterRef.current?.isLoading}
+                  title="Write interior thoughts and feelings"
+                >
+                  <span aria-hidden="true">💭</span> Interior
+                </button>
+              </div>
               {editTotalPages > 1 && (
                 <div className="se-page-nav">
                   <button
@@ -1133,57 +1398,14 @@ function StoryPanel({
                   </button>
                 </div>
               )}
-              {/* Compact AI tools bar — visible on mobile below editor */}
-              <div className="se-edit-quick-tools" role="group" aria-label="Quick AI tools">
-                <button
-                  className="se-edit-quick-pill"
-                  style={{ '--pill-accent': charColor || '#B8962E' }}
-                  onClick={() => aiWriterRef.current?.triggerAction('continue')}
-                  disabled={aiWriterRef.current?.isLoading}
-                  title="Continue the moment (Ctrl+1)"
-                >
-                  <span aria-hidden="true">✨</span> Continue
-                </button>
-                <button
-                  className="se-edit-quick-pill"
-                  style={{ '--pill-accent': charColor || '#B8962E' }}
-                  onClick={() => aiWriterRef.current?.triggerAction('deepen')}
-                  disabled={aiWriterRef.current?.isLoading}
-                  title="Deepen the scene (Ctrl+2)"
-                >
-                  <span aria-hidden="true">🧠</span> Deepen
-                </button>
-                <button
-                  className="se-edit-quick-pill"
-                  style={{ '--pill-accent': charColor || '#B8962E' }}
-                  onClick={() => aiWriterRef.current?.triggerAction('nudge')}
-                  disabled={aiWriterRef.current?.isLoading}
-                  title="Refine tone (Ctrl+3)"
-                >
-                  <span aria-hidden="true">🎯</span> Refine
-                </button>
-                <button
-                  className="se-edit-quick-pill"
-                  style={{ '--pill-accent': charColor || '#B8962E' }}
-                  onClick={() => aiWriterRef.current?.triggerAction('rewrite')}
-                  disabled={aiWriterRef.current?.isLoading}
-                  title="Rework paragraph (Ctrl+4) — select text first"
-                >
-                  <span aria-hidden="true">🔄</span> Rework
-                </button>
-              </div>
             </div>
 
             {!focusMode && <div className={`se-writing-tools ${mobileToolsOpen ? 'se-writing-tools--mobile-open' : ''}`} id="writing-tools-panel" role="region" aria-label="Writing tools">
-              <button
-                className="se-mobile-tools-toggle"
-                onClick={() => setMobileToolsOpen(v => !v)}
-                aria-expanded={mobileToolsOpen}
-                aria-controls="writing-tools-panel"
-                title={mobileToolsOpen ? 'Collapse writing tools panel' : 'Expand writing tools panel'}
-              >
-                {mobileToolsOpen ? '▾ Hide Tools' : '▸ Writing Tools'}
-              </button>
+              {/* Mobile bottom sheet handle */}
+              <div className="se-sheet-handle" onClick={() => setMobileToolsOpen(v => !v)} aria-expanded={mobileToolsOpen} role="button" tabIndex={0}>
+                <div className="se-sheet-handle-bar" />
+                <span className="se-sheet-handle-label">{mobileToolsOpen ? 'Hide Writing Tools' : 'Writing Tools'}</span>
+              </div>
               {/* Scene Pulse */}
               {scenePulse && (
                 <div className="se-tools-section se-scene-pulse-section">
@@ -1298,8 +1520,8 @@ function StoryPanel({
                     const ta = textareaRef.current;
                     if (!ta || !editText) return '';
                     const pos = ta.selectionStart || 0;
-                    const start = Math.max(0, pos - 40);
-                    const end = Math.min(editText.length, pos + 40);
+                    const start = Math.max(0, pos - 500);
+                    const end = Math.min(editText.length, pos + 300);
                     return editText.slice(start, end).replace(/\n/g, ' ').trim();
                   })()}
                   chapterId={String(story?.story_number || task?.story_number || '')}

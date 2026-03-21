@@ -126,6 +126,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   const [wordCount,  setWordCount]  = useState(0);
   const [saved,      setSaved]      = useState(true);
   const [saving,     setSaving]     = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [lastSavedAgo, setLastSavedAgo] = useState('');
 
   // Voice state
   const [listening,  setListening]  = useState(false);
@@ -144,6 +146,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   const [proseBeforeAi, setProseBeforeAi] = useState(null); // for undo
   const [genLength,    setGenLength]    = useState('paragraph'); // 'sentence'|'paragraph'
   const [streamingText, setStreamingText] = useState(''); // live text while streaming
+  const [previewText,  setPreviewText]  = useState(null); // AI text pending acceptance
 
   // Character state
   const [characters,        setCharacters]        = useState([]);
@@ -154,6 +157,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   const [showExit,   setShowExit]   = useState(false);
   const [hint,       setHint]       = useState(null);
   const [sessionLog, setSessionLog] = useState([]);
+  const [hintLog,    setHintLog]    = useState([]);
+  const [showHintLog, setShowHintLog] = useState(false);
 
   // Focus mode
   const [focusMode,  setFocusMode]  = useState(false);
@@ -172,6 +177,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   // Paragraph-level actions
   const [selectedParagraph, setSelectedParagraph] = useState(null); // index
   const [paraAction,        setParaAction]        = useState(null); // 'rewrite'|'expand'|'delete'
+  const [paraInstruction,   setParaInstruction]   = useState('');   // free-form instruction for paragraph edit
 
   // History / version snapshots
   const [history,        setHistory]        = useState([]); // [{prose, label, timestamp}]
@@ -180,11 +186,113 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   // Help modal
   const [showHelp,       setShowHelp]       = useState(false);
 
+  // Confirmation dialog
+  const [confirmAction, setConfirmAction] = useState(null); // { message, onConfirm }
+
   // Quick character switch
   const [showCharQuick,  setShowCharQuick]  = useState(false);
 
   // ── NEW: Center tab state ──
   const [centerTab,    setCenterTab]    = useState(initialCenterTab || 'write');
+
+  // ── Chapter-level instruction mode ──
+  const [chapterInstruction, setChapterInstruction] = useState('');
+  const [chapterInstructionOpen, setChapterInstructionOpen] = useState(false);
+  const [chapterInstructionLoading, setChapterInstructionLoading] = useState(false);
+
+  // ── Write All Scenes state ──
+  const [writingAllScenes, setWritingAllScenes] = useState(false);
+  const [currentSceneIdx,  setCurrentSceneIdx]  = useState(-1);
+  const [totalScenes,      setTotalScenes]      = useState(0);
+
+  // ── Read Aloud (TTS) ──
+  const [ttsPlaying,       setTtsPlaying]       = useState(false);
+
+  // ── AI Generation History ──
+  const [aiHistory,        setAiHistory]        = useState([]);
+  const [showAiHistory,    setShowAiHistory]    = useState(false);
+
+  // ── Find & Replace ──
+  const [showFindReplace,  setShowFindReplace]  = useState(false);
+  const [findText,         setFindText]         = useState('');
+  const [replaceText,      setReplaceText]      = useState('');
+  const [findMatches,      setFindMatches]      = useState(0);
+
+  // ── Chapter Synopsis ──
+  const [synopsis,         setSynopsis]         = useState('');
+  const [synopsisLoading,  setSynopsisLoading]  = useState(false);
+
+  // ── Split Reference View ──
+  const [showReference,    setShowReference]    = useState(false);
+  const [referenceChapter, setReferenceChapter] = useState(null);
+  const [referenceProse,   setReferenceProse]   = useState('');
+
+  // ── Daily Writing Stats ──
+  const [writingStats,     setWritingStats]     = useState(() => {
+    try { return JSON.parse(localStorage.getItem('wm-writing-stats') || '[]'); } catch { return []; }
+  });
+  const [showStats,        setShowStats]        = useState(false);
+
+  // ── Prose Formatting Preview ──
+  const [prosePreviewMode, setProsePreviewMode] = useState(false);
+
+  // ── Tension / pacing analysis ──
+  const tensionAnalysis = useMemo(() => {
+    if (!prose.trim()) return [];
+    const paras = prose.split(/\n\n+/).filter(p => p.trim());
+    const TENSION_WORDS = {
+      high: /\b(scream|crash|slam|blood|broke|shatter|run|chase|fire|kill|fight|punch|rage|explode|desperate|panic|terror)\b/gi,
+      medium: /\b(tension|argue|whisper|tremble|shak|nervous|afraid|anxious|pressure|tight|clench|swallow|breath|stare|frown|grip)\b/gi,
+      internal: /\b(wonder|thought|felt|remember|realize|knew|believed|hoped|wished|imagine|dream|fear|doubt|guilt|shame)\b/gi,
+      calm: /\b(smile|laugh|warm|gentle|quiet|soft|peace|comfort|rest|sleep|morning|sun|light|kitchen|coffee|home)\b/gi,
+    };
+    return paras.map((p, i) => {
+      const words = p.split(/\s+/).length;
+      const high = (p.match(TENSION_WORDS.high) || []).length;
+      const med = (p.match(TENSION_WORDS.medium) || []).length;
+      const internal = (p.match(TENSION_WORDS.internal) || []).length;
+      const calm = (p.match(TENSION_WORDS.calm) || []).length;
+      const score = Math.min(10, Math.round(((high * 3 + med * 2 + internal * 1) / Math.max(1, words)) * 100));
+      const tone = high > med && high > calm ? 'action' : internal > calm ? 'interior' : calm > med ? 'calm' : 'tension';
+      return { index: i, score, tone, words };
+    });
+  }, [prose]);
+
+  // ── Scene beat detection (maps prose paragraphs to 5-beat structure) ──
+  const SCENE_BEATS = [
+    { id: 'domestic', label: 'Domestic', icon: '🏠', desc: 'Ground in real life' },
+    { id: 'driver', label: 'Driver', icon: '🔑', desc: 'What pulls into action' },
+    { id: 'collision', label: 'Collision', icon: '💥', desc: 'Two worlds touch' },
+    { id: 'escalation', label: 'Escalation', icon: '📈', desc: 'Past the point of return' },
+    { id: 'close', label: 'Intimate Close', icon: '🌙', desc: 'Alone with what happened' },
+  ];
+  const beatProgress = useMemo(() => {
+    const paras = prose.split(/\n\n+/).filter(p => p.trim());
+    const total = paras.length;
+    if (total === 0) return SCENE_BEATS.map((b, i) => ({ ...b, active: false, current: false }));
+    // Map: first 20% = domestic, 20-40% = driver, 40-60% = collision, 60-80% = escalation, 80-100% = close
+    const pct = (i) => i / Math.max(1, total - 1);
+    const currentPara = total - 1;
+    const currentPct = pct(currentPara);
+    return SCENE_BEATS.map((b, i) => {
+      const start = i * 0.2;
+      const end = (i + 1) * 0.2;
+      return { ...b, active: currentPct >= start, current: currentPct >= start && currentPct < end };
+    });
+  }, [prose]);
+
+  // ── Emotional arc position (heuristic from prose content) ──
+  const emotionalArcPosition = useMemo(() => {
+    if (!prose.trim()) return 0;
+    const paras = prose.split(/\n\n+/).filter(p => p.trim());
+    const total = paras.length;
+    // Simple heuristic: position is how far through the chapter we are
+    // weighted by emotional intensity in recent paragraphs
+    const pct = Math.min(100, Math.round((total / Math.max(1, total)) * 100));
+    const recentParas = paras.slice(-3).join(' ');
+    const intense = (recentParas.match(/\b(broke|shatter|scream|cry|rage|realize|truth|finally|never)\b/gi) || []).length;
+    return Math.min(100, Math.round((total / Math.max(total, 20)) * 100) + intense * 5);
+  }, [prose]);
 
   // ── Listen for CJ ribbon tab switches ──
   useEffect(() => {
@@ -210,6 +318,23 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     window.addEventListener('cj-toggle-context', handler);
     return () => window.removeEventListener('cj-toggle-context', handler);
   }, []);
+
+  // ── Listen for scene-generate-prose events from ScenesPanel ──
+  useEffect(() => {
+    const handler = (e) => {
+      const { chapterId: scChId, sceneTitle } = e.detail || {};
+      if (scChId && scChId === chapterId && sceneTitle) {
+        setCenterTab('write');
+        setChapterInstruction(`Write a prose scene for: "${sceneTitle}". Include sensory detail, emotional interiority, and authentic dialogue.`);
+        setChapterInstructionOpen(true);
+      } else if (scChId && scChId !== chapterId) {
+        setHint(`Switch to that chapter first to generate prose for "${sceneTitle}".`);
+        setTimeout(() => setHint(null), 5000);
+      }
+    };
+    window.addEventListener('scene-generate-prose', handler);
+    return () => window.removeEventListener('scene-generate-prose', handler);
+  }, [chapterId]);
 
   // ── NEW: Review tab state (from StorytellerPage) ──
   const [reviewLines,      setReviewLines]      = useState([]);
@@ -289,19 +414,20 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           }
         }
 
-        // Build previous chapter summary
+        // Build previous chapter summary + continuity digest for AI
         const currentIdx = chapters.findIndex(c => c.id === chapterId);
         if (currentIdx > 0) {
           const prev = chapters[currentIdx - 1];
           const prevProse = prev.draft_prose?.trim();
           if (prevProse) {
-            // First ~200 chars of last paragraph
             const paragraphs = prevProse.split(/\n\n+/).filter(Boolean);
             const lastPara = paragraphs[paragraphs.length - 1];
             setPrevChapterSummary({
               title: prev.title,
               excerpt: lastPara.length > 200 ? lastPara.slice(0, 200) + '…' : lastPara,
               wordCount: prevProse.split(/\s+/).filter(Boolean).length,
+              // Continuity digest: last 500 chars for AI context
+              continuityDigest: prevProse.slice(-500),
             });
           } else {
             setPrevChapterSummary({
@@ -353,6 +479,27 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     }, 1000);
     return () => clearInterval(timer);
   }, [sessionStart]);
+
+  // ── LAST SAVED AGO UPDATER ──
+  useEffect(() => {
+    if (!lastSavedAt) { setLastSavedAgo(''); return; }
+    const tick = () => {
+      const sec = Math.floor((Date.now() - lastSavedAt) / 1000);
+      if (sec < 10)      setLastSavedAgo('saved just now');
+      else if (sec < 60) setLastSavedAgo(`saved ${sec}s ago`);
+      else               setLastSavedAgo(`saved ${Math.floor(sec / 60)}m ago`);
+    };
+    tick();
+    const id = setInterval(tick, 10000);
+    return () => clearInterval(id);
+  }, [lastSavedAt]);
+
+  // ── HINT LOGGER — persist hints into a session log ──
+  useEffect(() => {
+    if (hint) {
+      setHintLog(prev => [...prev.slice(-49), { text: hint, time: Date.now() }]);
+    }
+  }, [hint]);
 
   // Track starting word count for goal progress 
   useEffect(() => {
@@ -413,14 +560,20 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     if (!targetPara) return;
 
     if (action === 'delete') {
-      takeSnapshot('Before delete paragraph');
-      const newParagraphs = paragraphs.filter((_, i) => i !== selectedParagraph);
-      const newProse = newParagraphs.join('\n\n');
-      setProse(newProse);
-      setWordCount(newProse.split(/\s+/).filter(Boolean).length);
-      setSaved(false);
-      setSelectedParagraph(null);
-      setParaAction(null);
+      setConfirmAction({
+        message: 'Delete this paragraph? This can be undone via Snapshots.',
+        onConfirm: () => {
+          takeSnapshot('Before delete paragraph');
+          const newParagraphs = paragraphs.filter((_, i) => i !== selectedParagraph);
+          const newProse = newParagraphs.join('\n\n');
+          setProse(newProse);
+          setWordCount(newProse.split(/\s+/).filter(Boolean).length);
+          setSaved(false);
+          setSelectedParagraph(null);
+          setParaAction(null);
+          setConfirmAction(null);
+        },
+      });
       return;
     }
 
@@ -428,14 +581,20 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setGenerating(true);
     setParaAction(action);
     try {
+      let editNote;
+      if (action === 'custom' && paraInstruction.trim()) {
+        editNote = paraInstruction.trim();
+      } else if (action === 'rewrite') {
+        editNote = 'Rewrite this paragraph with better prose, keeping the same meaning and tone.';
+      } else {
+        editNote = 'Expand this paragraph with more sensory detail, interiority, and emotional depth. Keep the same voice.';
+      }
       const res = await fetch(`${API}/memories/story-edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           current_prose: targetPara,
-          edit_note: action === 'rewrite'
-            ? 'Rewrite this paragraph with better prose, keeping the same meaning and tone.'
-            : 'Expand this paragraph with more sensory detail, interiority, and emotional depth. Keep the same voice.',
+          edit_note: editNote,
           pnos_act: chapter?.pnos_act || 'act_1',
           chapter_title: chapter?.title,
           character_id: selectedCharacter?.id || null,
@@ -456,7 +615,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setGenerating(false);
     setSelectedParagraph(null);
     setParaAction(null);
-  }, [prose, selectedParagraph, generating, chapter, selectedCharacter, takeSnapshot]);
+    setParaInstruction('');
+  }, [prose, selectedParagraph, generating, chapter, selectedCharacter, takeSnapshot, paraInstruction]);
 
   // ── AUTOSAVE ─────────────────────────────────────────────────────────
 
@@ -497,9 +657,251 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
         });
       }
       setSaved(true);
+      setLastSavedAt(Date.now());
     } catch {}
     setSaving(false);
   }, [chapterId]);
+
+  // ── CHAPTER-LEVEL INSTRUCTION ─────────────────────────────────────────
+  const handleChapterInstruction = useCallback(async () => {
+    if (!chapterInstruction.trim() || !prose.trim()) return;
+    setChapterInstructionLoading(true);
+    try {
+      const res = await fetch(`${API}/memories/story-edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          book_id: bookId,
+          chapter_id: chapterId,
+          current_prose: prose,
+          edit_note: chapterInstruction.trim(),
+        }),
+      });
+      const data = await res.json();
+      const revised = data.revised_prose || data.prose || data.content;
+      if (revised) {
+        setProse(revised);
+        setChapterInstruction('');
+        setChapterInstructionOpen(false);
+      }
+    } catch {}
+    setChapterInstructionLoading(false);
+  }, [chapterInstruction, prose, bookId, chapterId]);
+
+  // ── READ ALOUD (TTS) ─────────────────────────────────────────────────
+
+  const handleReadAloud = useCallback(() => {
+    if (ttsPlaying) {
+      speechSynthesis.cancel();
+      setTtsPlaying(false);
+      return;
+    }
+    const ta = proseTextareaRef.current;
+    const sel = ta ? ta.value.substring(ta.selectionStart, ta.selectionEnd) : '';
+    const textToRead = sel.trim() || prose;
+    if (!textToRead.trim()) return;
+
+    const utt = new SpeechSynthesisUtterance(textToRead.slice(0, 5000));
+    utt.rate = 0.9;
+    utt.pitch = 1;
+    utt.onend = () => setTtsPlaying(false);
+    utt.onerror = () => setTtsPlaying(false);
+    setTtsPlaying(true);
+    speechSynthesis.speak(utt);
+  }, [prose, ttsPlaying]);
+
+  // ── AI GENERATION HISTORY TRACKER ─────────────────────────────────────
+
+  const pushAiHistory = useCallback((action, result) => {
+    setAiHistory(prev => [...prev.slice(-29), {
+      action,
+      text: (result || '').slice(0, 500),
+      timestamp: Date.now(),
+      wordCount: (result || '').split(/\s+/).filter(Boolean).length,
+    }]);
+  }, []);
+
+  // ── FIND & REPLACE ────────────────────────────────────────────────────
+
+  const doFind = useCallback((needle) => {
+    if (!needle || !prose) { setFindMatches(0); return; }
+    try {
+      const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const matches = prose.match(new RegExp(escaped, 'gi'));
+      setFindMatches(matches ? matches.length : 0);
+    } catch { setFindMatches(0); }
+  }, [prose]);
+
+  const doReplace = useCallback((all) => {
+    if (!findText || !prose) return;
+    takeSnapshot('Before find/replace');
+    const escaped = findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (all) {
+      setProse(prev => prev.replace(new RegExp(escaped, 'gi'), replaceText));
+    } else {
+      setProse(prev => prev.replace(new RegExp(escaped, 'i'), replaceText));
+    }
+    setSaved(false);
+  }, [findText, replaceText, prose, takeSnapshot]);
+
+  // ── CHAPTER SYNOPSIS ──────────────────────────────────────────────────
+
+  const generateSynopsis = useCallback(async () => {
+    if (!prose.trim()) return;
+    setSynopsisLoading(true);
+    try {
+      const res = await fetch(`${API}/memories/chapter-synopsis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prose: prose.slice(0, 4000),
+          chapter_title: chapter?.title || 'Untitled',
+          character_id: selectedCharacter?.id || null,
+        }),
+      });
+      const data = await res.json();
+      setSynopsis(data.synopsis || '');
+    } catch { setSynopsis('Error generating synopsis.'); }
+    setSynopsisLoading(false);
+  }, [prose, chapter, selectedCharacter]);
+
+  // ── SCENE TRANSITION HELPER ───────────────────────────────────────────
+
+  const generateTransition = useCallback(async (sceneAEnd, sceneBStart, insertPos) => {
+    if (!sceneAEnd && !sceneBStart) return;
+    setGenerating(true);
+    takeSnapshot('Before transition');
+    try {
+      const res = await fetch(`${API}/memories/scene-transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scene_a_end: sceneAEnd,
+          scene_b_start: sceneBStart,
+          chapter_title: chapter?.title || '',
+          character_id: selectedCharacter?.id || null,
+          theme: chapter?.theme || '',
+        }),
+      });
+      const data = await res.json();
+      const transition = data.transition || data.prose || '';
+      if (transition && insertPos != null) {
+        const before = prose.slice(0, insertPos);
+        const after = prose.slice(insertPos);
+        setProse(before + '\n\n' + transition.trim() + '\n\n' + after);
+        setSaved(false);
+        setHint('Transition inserted');
+        setTimeout(() => setHint(null), 3000);
+      }
+    } catch { setHint('Transition generation failed'); setTimeout(() => setHint(null), 3000); }
+    setGenerating(false);
+  }, [prose, chapter, selectedCharacter, takeSnapshot]);
+
+  // ── SPLIT REFERENCE VIEW ──────────────────────────────────────────────
+
+  const loadReferenceChapter = useCallback(async (refChId) => {
+    if (!refChId) return;
+    try {
+      const res = await fetch(`${API}/storyteller/chapters/${refChId}`);
+      const data = await res.json();
+      const ch = data?.chapter || data;
+      setReferenceChapter(ch);
+      setReferenceProse(ch?.draft_prose || ch?.prose || '');
+      setShowReference(true);
+    } catch { setHint('Could not load reference chapter'); setTimeout(() => setHint(null), 3000); }
+  }, []);
+
+  // ── DAILY WRITING STATS ───────────────────────────────────────────────
+
+  const saveSessionStats = useCallback(() => {
+    const wordsWritten = Math.max(0, wordCount - startingWordCountRef.current);
+    if (wordsWritten < 5) return;
+    const today = new Date().toISOString().slice(0, 10);
+    setWritingStats(prev => {
+      const existing = prev.find(s => s.date === today);
+      const updated = existing
+        ? prev.map(s => s.date === today ? { ...s, words: s.words + wordsWritten, sessions: s.sessions + 1 } : s)
+        : [...prev.slice(-29), { date: today, words: wordsWritten, sessions: 1, elapsed: sessionElapsed }];
+      localStorage.setItem('wm-writing-stats', JSON.stringify(updated));
+      return updated;
+    });
+  }, [wordCount, sessionElapsed]);
+
+  // Save stats on unmount
+  useEffect(() => () => saveSessionStats(), []);
+
+  // ── WRITE ALL SCENES ──────────────────────────────────────────────
+  const handleWriteAllScenes = useCallback(async () => {
+    const secs = chapter?.sections || [];
+    const sceneHeaders = secs.filter(s => s.type === 'h2' || s.type === 'h3');
+    if (sceneHeaders.length === 0) {
+      setHint('No scene sections found — apply a blueprint first.');
+      setTimeout(() => setHint(null), 4000);
+      return;
+    }
+
+    takeSnapshot('Before write all scenes');
+    setWritingAllScenes(true);
+    setTotalScenes(sceneHeaders.length);
+    setGenerating(true);
+
+    let accumulated = prose || '';
+
+    for (let i = 0; i < sceneHeaders.length; i++) {
+      setCurrentSceneIdx(i);
+      const scene = sceneHeaders[i];
+      const sceneName = scene.content || scene.title || `Scene ${i + 1}`;
+      const isFirst = i === 0 && !accumulated.trim();
+
+      // Build scene-specific brief: overall chapter goal + this scene's role
+      const sceneBrief = `${chapter?.scene_goal || chapter?.title || ''}\nCURRENT SCENE: "${sceneName}" (scene ${i + 1} of ${sceneHeaders.length})\n${chapter?.chapter_notes || ''}`;
+
+      try {
+        const res = await fetch(`${API}/memories/story-continue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            current_prose: accumulated.trim() || `[Opening — ${sceneName}]`,
+            chapter_title: chapter?.title || 'Untitled Chapter',
+            chapter_brief: sceneBrief,
+            pnos_act: chapter?.pnos_act || 'act_1',
+            book_character: book?.character || 'JustAWoman',
+            character_id: selectedCharacter?.id || null,
+            gen_length: genLength,
+            stream: false,
+            emotional_state_start: i === 0 ? (chapter?.emotional_state_start || '') : '',
+            emotional_state_end: i === sceneHeaders.length - 1 ? (chapter?.emotional_state_end || '') : '',
+            theme: chapter?.theme || book?.theme || '',
+            pov: chapter?.pov || '',
+            sections: chapter?.sections || [],
+            chapter_notes: chapter?.chapter_notes || '',
+            tone: chapter?.tone || book?.tone || '',
+          }),
+        });
+
+        const data = await res.json();
+        const newProse = data.prose || data.continuation || data.content || data.text || '';
+        if (newProse) {
+          // Add scene header + generated prose
+          const header = `\n\n---\n\n### ${sceneName}\n\n`;
+          accumulated = (accumulated ? accumulated + header : `### ${sceneName}\n\n`) + newProse.trim();
+          setProse(accumulated);
+          setWordCount(accumulated.split(/\s+/).filter(Boolean).length);
+          setSaved(false);
+        }
+      } catch (err) {
+        console.error(`Scene ${i + 1} generation error:`, err);
+        setHint(`Scene "${sceneName}" failed — continuing with remaining scenes.`);
+        setTimeout(() => setHint(null), 3000);
+      }
+    }
+
+    setWritingAllScenes(false);
+    setCurrentSceneIdx(-1);
+    setGenerating(false);
+    setHint(`All ${sceneHeaders.length} scenes generated! Review and refine.`);
+    setTimeout(() => setHint(null), 5000);
+  }, [chapter, prose, bookId, book, selectedCharacter, genLength, takeSnapshot]);
 
   // ── VOICE RECOGNITION — MAIN ─────────────────────────────────────────
 
@@ -582,7 +984,9 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           if (!line.startsWith('data: ')) continue;
           try {
             const evt = JSON.parse(line.slice(6));
-            if (evt.type === 'text') {
+            if (evt.type === 'processing') {
+              setStreamingText('…');
+            } else if (evt.type === 'text') {
               fullText += evt.text;
               setStreamingText(fullText);
               // Auto-scroll while streaming
@@ -777,12 +1181,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       }
 
       if (fullText) {
-        const newProse = prose.trim()
-          ? prose.trimEnd() + '\n\n' + fullText
-          : fullText;
-        setProse(newProse);
-        setWordCount(newProse.split(/\s+/).filter(Boolean).length);
-        setSaved(false);
+        setPreviewText(fullText);
       } else {
         setHint('No text generated — try again or write a few words first.');
         setTimeout(() => setHint(null), 5000);
@@ -841,6 +1240,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       }
       const data = await res.json();
       if (data.prose) {
+        pushAiHistory('deepen', data.prose);
         setProse(data.prose);
         setWordCount(data.prose.split(/\s+/).filter(Boolean).length);
         setSaved(false);
@@ -912,6 +1312,23 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       setProseBeforeAi(null);
     }
   }, [proseBeforeAi]);
+
+  // ── PREVIEW ACCEPT / REJECT ─────────────────────────────────────────
+  const acceptPreview = useCallback(() => {
+    if (!previewText) return;
+    const newProse = prose.trim()
+      ? prose.trimEnd() + '\n\n' + previewText
+      : previewText;
+    setProse(newProse);
+    setWordCount(newProse.split(/\s+/).filter(Boolean).length);
+    setSaved(false);
+    pushAiHistory('continue', previewText);
+    setPreviewText(null);
+  }, [previewText, prose, pushAiHistory]);
+
+  const rejectPreview = useCallback(() => {
+    setPreviewText(null);
+  }, []);
 
   // ── REVIEW LINES LOADER ─────────────────────────────────────────────
 
@@ -1148,8 +1565,14 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
         e.preventDefault();
         if (prose) saveDraft(prose);
       }
+      // Ctrl/Cmd+F → Find & Replace
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        setShowFindReplace(v => !v);
+      }
       // Escape → exit edit mode, close panels
       if (e.key === 'Escape') {
+        if (showFindReplace) { setShowFindReplace(false); return; }
         if (editMode) { setEditMode(false); return; }
         if (showHistory) { setShowHistory(false); return; }
         if (showGoalInput) { setShowGoalInput(false); return; }
@@ -1181,7 +1604,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [editMode, prose, generating, focusMode, showHistory, showGoalInput, selectedParagraph, handleContinue, handleDeepen, saveDraft, toggleFocusMode]);
+  }, [editMode, prose, generating, focusMode, showHistory, showGoalInput, showFindReplace, selectedParagraph, handleContinue, handleDeepen, saveDraft, toggleFocusMode]);
 
   // ── TOC / CONTEXT — PERSIST TOGGLES ─────────────────────────────────
 
@@ -1497,18 +1920,43 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           </div>
 
           {wordCount > 0 && (
-            <div className="wm-word-count" onClick={() => setShowGoalInput(g => !g)} title="Click to set word goal">
-              {wordCount}w
-              {wordGoal > 0 && (
-                <span className="wm-goal-fraction">
-                  {' / '}{wordGoal}
-                </span>
-              )}
+            <div className="wm-word-count-wrap" onClick={() => setShowGoalInput(g => !g)} title="Click to set word goal">
+              {wordGoal > 0 && (() => {
+                const progress = Math.min(1, (wordCount - startingWordCountRef.current) / wordGoal);
+                const r = 12, c = 2 * Math.PI * r;
+                const color = progress >= 1 ? '#4A9B6F' : progress >= 0.5 ? '#B8962E' : '#B85C38';
+                return (
+                  <svg className="wm-goal-ring" width="28" height="28" viewBox="0 0 28 28">
+                    <circle cx="14" cy="14" r={r} fill="none" stroke="rgba(28,24,20,0.08)" strokeWidth="2.5" />
+                    <circle cx="14" cy="14" r={r} fill="none" stroke={color} strokeWidth="2.5"
+                      strokeDasharray={c} strokeDashoffset={c * (1 - progress)}
+                      strokeLinecap="round" transform="rotate(-90 14 14)"
+                      style={{ transition: 'stroke-dashoffset 0.6s ease, stroke 0.3s ease' }} />
+                  </svg>
+                );
+              })()}
+              <span className="wm-word-count">{wordCount}w</span>
             </div>
           )}
           <div className="wm-save-status">
-            {saving ? '·· saving' : saved ? '' : '· unsaved'}
+            {saving ? '·· saving' : saved ? lastSavedAgo : '· unsaved'}
           </div>
+
+          <button
+            className={`wm-tts-btn${ttsPlaying ? ' active' : ''}`}
+            onClick={handleReadAloud}
+            title={ttsPlaying ? 'Stop reading' : 'Read aloud (select text or reads all)'}
+          >
+            {ttsPlaying ? '◼' : '🔊'}
+          </button>
+
+          <button
+            className="wm-stats-btn"
+            onClick={() => setShowStats(s => !s)}
+            title="Writing stats"
+          >
+            {'📊'}
+          </button>
 
           <button
             className={`wm-history-btn${showHistory ? ' active' : ''}`}
@@ -1546,19 +1994,24 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       )}
 
       {/* ── WORD GOAL BAR ── */}
-      {wordGoal > 0 && (
-        <div className="wm-goal-bar-wrap">
-          <div className="wm-goal-bar">
-            <div
-              className="wm-goal-fill"
-              style={{ width: `${Math.min(100, ((wordCount - startingWordCountRef.current) / wordGoal) * 100)}%` }}
-            />
+      {wordGoal > 0 && (() => {
+        const wordsWritten = Math.max(0, wordCount - startingWordCountRef.current);
+        const pct = Math.min(100, (wordsWritten / wordGoal) * 100);
+        const goalMet = wordsWritten >= wordGoal;
+        return (
+          <div className={`wm-goal-bar-wrap${goalMet ? ' wm-goal-met' : ''}`}>
+            <div className="wm-goal-bar">
+              <div
+                className="wm-goal-fill"
+                style={{ width: `${pct}%`, background: goalMet ? '#4A9B6F' : pct > 50 ? '#B8962E' : '#B85C38' }}
+              />
+            </div>
+            <span className="wm-goal-label">
+              {goalMet ? '✓ ' : ''}{wordsWritten} / {wordGoal} words this session
+            </span>
           </div>
-          <span className="wm-goal-label">
-            {Math.max(0, wordCount - startingWordCountRef.current)} / {wordGoal} words this session
-          </span>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── WORD GOAL INPUT ── */}
       {showGoalInput && (
@@ -1837,6 +2290,15 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       {centerTab === 'write' && (
       <>
 
+      {/* ── REVIEW SYNC BANNER ── */}
+      {pendingLines.length > 0 && (
+        <div className="wm-sync-banner" onClick={() => setCenterTab('review')}>
+          <span className="wm-sync-dot" />
+          <span>{pendingLines.length} pending line{pendingLines.length > 1 ? 's' : ''} in Review</span>
+          <span className="wm-sync-action">Go to Review {'→'}</span>
+        </div>
+      )}
+
       {/* ── MAIN CONTENT AREA ── */}
       <div className="wm-content-row">
         {/* ── PROSE SECTION ── */}
@@ -1935,17 +2397,67 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                   </div>
                 </div>
               )}
+              {prosePreviewMode && prose.trim() ? (
+                <div className="wm-prose-preview" onClick={() => setProsePreviewMode(false)}>
+                  {prose.split(/\n\n+/).filter(s => s.trim()).map((para, i) => (
+                    <p key={i} className="wm-prose-preview-para">{
+                      para.replace(/---/g, '\u2014')
+                          .replace(/--/g, '\u2013')
+                          .replace(/"([^"]*?)"/g, '\u201C$1\u201D')
+                          .replace(/'([^']*?)'/g, '\u2018$1\u2019')
+                          .replace(/\*([^*]+)\*/g, '$1')
+                    }</p>
+                  ))}
+                  <div className="wm-prose-preview-hint">Click anywhere to return to editing</div>
+                </div>
+              ) : (
               <textarea
                 className="wm-prose-area"
                 ref={proseTextareaRef}
                 value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}
                 onChange={handleProseChange}
+                onDoubleClick={(e) => {
+                  if (editMode || generating) return;
+                  const pos = e.target.selectionStart;
+                  const textBefore = prose.slice(0, pos);
+                  const paraIndex = textBefore.split(/\n\n+/).length - 1;
+                  setSelectedParagraph(paraIndex);
+                }}
                 placeholder={editMode ? '' : "Begin writing…"}
                 spellCheck={false}
                 readOnly={generating}
               />
+              )}
+              {/* ── Pacing Arc Sparkline ── */}
+              {tensionAnalysis.length > 2 && (
+                <div className="wm-sparkline-gutter" aria-hidden="true" title="Pacing arc — emotional intensity by paragraph">
+                  <svg className="wm-sparkline-svg" viewBox={`0 0 ${tensionAnalysis.length * 6} 40`} preserveAspectRatio="none">
+                    <polyline
+                      fill="none"
+                      stroke="#B8962E"
+                      strokeWidth="1.5"
+                      strokeLinejoin="round"
+                      points={tensionAnalysis.map((p, i) => `${i * 6 + 3},${40 - p.score * 4}`).join(' ')}
+                    />
+                    {tensionAnalysis.map((p, i) => (
+                      <circle
+                        key={i}
+                        cx={i * 6 + 3}
+                        cy={40 - p.score * 4}
+                        r={1.5}
+                        fill={p.tone === 'action' ? '#C0392B' : p.tone === 'interior' ? '#8E44AD' : p.tone === 'calm' ? '#27AE60' : '#B8962E'}
+                      >
+                        <title>¶{i + 1}: {p.tone} ({p.score}/10, {p.words}w)</title>
+                      </circle>
+                    ))}
+                  </svg>
+                  <div className="wm-sparkline-labels">
+                    <span>Low</span><span>High</span>
+                  </div>
+                </div>
+              )}
               </>
-            )}}
+            )}
 
           </div>
 
@@ -2012,6 +2524,24 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                       <button className="wm-para-cancel" onClick={(e) => { e.stopPropagation(); setSelectedParagraph(null); setParaAction(null); }}>
                         {'✕'}
                       </button>
+                      <div className="wm-para-custom" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          className="wm-para-custom-input"
+                          placeholder="Custom instruction…"
+                          value={paraInstruction}
+                          onChange={(e) => setParaInstruction(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && paraInstruction.trim()) handleParagraphAction('custom'); }}
+                          disabled={generating}
+                        />
+                        <button
+                          className="wm-para-custom-go"
+                          onClick={() => handleParagraphAction('custom')}
+                          disabled={generating || !paraInstruction.trim()}
+                        >
+                          {generating && paraAction === 'custom' ? '…' : '→'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2039,6 +2569,25 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
             <div className="wm-hint">
               <div className="wm-hint-dot" />
               <div className="wm-hint-text">{hint}</div>
+              {hintLog.length > 1 && (
+                <button className="wm-hint-log-toggle" onClick={() => setShowHintLog(h => !h)} title="View hint history">
+                  {hintLog.length}
+                </button>
+              )}
+            </div>
+          )}
+          {showHintLog && hintLog.length > 0 && (
+            <div className="wm-hint-log">
+              <div className="wm-hint-log-header">
+                <span className="wm-hint-log-title">Session Hints</span>
+                <button className="wm-hint-log-close" onClick={() => setShowHintLog(false)}>{'×'}</button>
+              </div>
+              {[...hintLog].reverse().map((h, i) => (
+                <div key={i} className="wm-hint-log-item">
+                  <span className="wm-hint-log-time">{new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="wm-hint-log-text">{h.text}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -2127,6 +2676,24 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
               title="Paragraph-level actions"
             >
               <span className="wm-ai-icon">{'¶'}</span> Paragraphs
+            </button>
+          )}
+          {prose.trim() && (
+            <button
+              className={`wm-ai-btn${prosePreviewMode ? ' active' : ''}`}
+              onClick={() => setProsePreviewMode(p => !p)}
+              title="Toggle manuscript preview"
+            >
+              <span className="wm-ai-icon">{'📖'}</span> Preview
+            </button>
+          )}
+          {aiHistory.length > 0 && (
+            <button
+              className="wm-ai-btn"
+              onClick={() => setShowAiHistory(true)}
+              title={`${aiHistory.length} AI generations`}
+            >
+              <span className="wm-ai-icon">{'📋'}</span> History
             </button>
           )}
           {!prose.trim() && (
@@ -2348,7 +2915,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       {/* ══ SCENES TAB ══ */}
       {centerTab === 'scenes' && (
         <div className="wm-panel-tab">
-          <ScenesPanel bookId={bookId} chapters={allChapters} onChaptersChange={reloadChapters} book={book} />
+          <ScenesPanel bookId={bookId} chapters={allChapters} onChaptersChange={reloadChapters} book={book} characterId={selectedCharacter?.id} />
         </div>
       )}
 
@@ -2392,6 +2959,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                 >
                   {"✦"} Write
                 </button>
+                {charLoading && <span className="wm-ctx-loading">◌</span>}
               </div>
             </div>
 
@@ -2404,6 +2972,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                 characters={characters}
                 onSelectCharacter={setSelectedCharacter}
                 currentProse={prose}
+                previousChapterDigest={prevChapterSummary?.continuityDigest || ''}
                 chapterContext={{
                   scene_goal:          chapter?.scene_goal,
                   theme:               chapter?.theme,
@@ -2412,13 +2981,208 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                   pov:                 chapter?.pov,
                 }}
                 onInsert={(text) => {
-                  setProse(prev => prev ? prev + '\n\n' + text : text);
+                  const ta = proseTextareaRef.current;
+                  const pos = ta?.selectionStart;
+                  if (ta && pos != null && pos > 0 && pos < (prose || '').length) {
+                    // Insert at cursor position
+                    const before = prose.slice(0, pos);
+                    const after = prose.slice(pos);
+                    const sep = before.endsWith('\n') ? '\n' : '\n\n';
+                    const sepAfter = after.startsWith('\n') ? '' : '\n\n';
+                    setProse(before + sep + text + sepAfter + after);
+                  } else {
+                    // Append at end (default)
+                    setProse(prev => prev ? prev + '\n\n' + text : text);
+                  }
                 }}
               />
             )}
 
             {/* ── CHAPTER PLAN TAB ── */}
             {contextTab === 'plan' && (<>
+
+            {/* Chapter Templates */}
+            <div className="wm-ctx-field">
+              <label className="wm-ctx-label">Chapter Blueprints</label>
+              <div className="wm-tpl-grid">
+                {[
+                  {
+                    name: 'Conversation',
+                    icon: '💬',
+                    scene_goal: 'Two characters navigate an unresolved tension across multiple settings and emotional shifts',
+                    emotional_state_start: 'Composed',
+                    emotional_state_end: 'Shaken',
+                    theme: 'Connection & conflict',
+                    chapter_notes: 'Scene 1: Surface-level encounter (public space, pretending). Scene 2: Private escalation (alone, masks slip). Scene 3: The thing that gets said (the line that changes the air). Optional Scene 4: Aftermath — one character alone processing.',
+                    sections: [
+                      { type: 'h2', content: 'The Surface' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'Behind Closed Doors' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'The Line That Changes Everything' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'Alone With It' },
+                      { type: 'p', content: '' },
+                    ],
+                  },
+                  {
+                    name: 'Pressure Cooker',
+                    icon: '⚡',
+                    scene_goal: 'External forces compress time and space, pushing the character into decisions they aren\'t ready for',
+                    emotional_state_start: 'Alert',
+                    emotional_state_end: 'Exhausted',
+                    theme: 'Survival & determination',
+                    chapter_notes: 'Scene 1: The normal before (routine, maybe even bored). Scene 2: Disruption — the thing that changes the day. Scene 3: Escalation — no time to think, forced to act. Scene 4: Cost — what it took, what was lost.',
+                    sections: [
+                      { type: 'h2', content: 'Before' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'The Disruption' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'No Time Left' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'What It Cost' },
+                      { type: 'p', content: '' },
+                    ],
+                  },
+                  {
+                    name: 'Revelation',
+                    icon: '🪞',
+                    scene_goal: 'Character is confronted by something they\'ve been avoiding — a memory, a truth, a person — and can\'t look away anymore',
+                    emotional_state_start: 'Guarded',
+                    emotional_state_end: 'Exposed',
+                    theme: 'Self-understanding & denial',
+                    chapter_notes: 'Scene 1: Avoidance in motion (doing something else, but the thing is hovering). Scene 2: The trigger — an object, a conversation, a place that forces the memory. Scene 3: The flood — interior monologue, flashback, or raw confrontation with the truth. Scene 4: New ground — not healed, but different.',
+                    sections: [
+                      { type: 'h2', content: 'Keeping Busy' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'The Trigger' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'The Flood' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'New Ground' },
+                      { type: 'p', content: '' },
+                    ],
+                  },
+                  {
+                    name: 'Power Shift',
+                    icon: '🔥',
+                    scene_goal: 'The dynamic between two or more characters permanently changes — someone gains or loses standing, trust, or control',
+                    emotional_state_start: 'Wary',
+                    emotional_state_end: 'Transformed',
+                    theme: 'Power, trust & betrayal',
+                    chapter_notes: 'Scene 1: Established dynamic (who has power, who is performing). Scene 2: Cracks — a small moment reveals the real alignment. Scene 3: Confrontation or maneuver — someone acts on what they know. Scene 4: New order — the relationship can never go back to what it was.',
+                    sections: [
+                      { type: 'h2', content: 'The Old Dynamic' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'Cracks' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'The Move' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'New Order' },
+                      { type: 'p', content: '' },
+                    ],
+                  },
+                  {
+                    name: 'Parallel Lives',
+                    icon: '🔀',
+                    scene_goal: 'Cut between two timelines, two characters, or two versions of the same character to reveal contrast or connection',
+                    emotional_state_start: 'Fragmented',
+                    emotional_state_end: 'Convergent',
+                    theme: 'Duality & recognition',
+                    chapter_notes: 'Scene 1: Thread A — one character or timeline. Scene 2: Thread B — the other. Scene 3: Weave — the two start to bleed into each other. Scene 4: Collision or echo — where they meet, rhyme, or diverge forever.',
+                    sections: [
+                      { type: 'h2', content: 'Thread A' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'Thread B' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'The Weave' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'Where They Meet' },
+                      { type: 'p', content: '' },
+                    ],
+                  },
+                  {
+                    name: 'Slow Burn',
+                    icon: '🕯️',
+                    scene_goal: 'Nothing dramatic happens — but everything shifts underneath through accumulating details, silences, and small gestures',
+                    emotional_state_start: 'Still',
+                    emotional_state_end: 'Aching',
+                    theme: 'Intimacy & the weight of ordinary life',
+                    chapter_notes: 'Scene 1: Domestic texture (morning routine, shared space, familiar sounds). Scene 2: A small disruption — not a crisis, just a crack in the rhythm. Scene 3: The unspoken — what passes between characters in silence, in gesture. Scene 4: The last image — a detail that carries the chapter\'s emotional weight.',
+                    sections: [
+                      { type: 'h2', content: 'The Routine' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'A Small Crack' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'What Goes Unsaid' },
+                      { type: 'p', content: '' },
+                      { type: 'h2', content: 'The Last Image' },
+                      { type: 'p', content: '' },
+                    ],
+                  },
+                ].map(tpl => (
+                  <button
+                    key={tpl.name}
+                    className="wm-tpl-btn"
+                    title={tpl.chapter_notes}
+                    onClick={() => {
+                      setConfirmAction({
+                        message: `Apply "${tpl.name}" blueprint? This will set the chapter plan, scene sections, and notes.`,
+                        onConfirm: () => {
+                          // Set all plan fields
+                          saveContextField('scene_goal', tpl.scene_goal);
+                          saveContextField('emotional_state_start', tpl.emotional_state_start);
+                          saveContextField('emotional_state_end', tpl.emotional_state_end);
+                          saveContextField('theme', tpl.theme);
+                          saveContextField('chapter_notes', tpl.chapter_notes);
+                          // Set sections
+                          const secs = tpl.sections.map(s => ({ ...s, id: tocUuid() }));
+                          saveContextField('sections', secs);
+                          setTocSections(secs);
+                          setConfirmAction(null);
+                          setHint(`Applied "${tpl.name}" blueprint — ${tpl.sections.filter(s => s.type === 'h2').length} scenes ready`);
+                        },
+                      });
+                    }}
+                  >
+                    <span className="wm-tpl-icon">{tpl.icon}</span>
+                    <span className="wm-tpl-name">{tpl.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Write All Scenes — auto-generate prose for each section */}
+            {chapter?.sections?.some(s => s.type === 'h2' || s.type === 'h3') && (
+              <div className="wm-write-all-scenes">
+                <button
+                  className="wm-write-all-btn"
+                  onClick={handleWriteAllScenes}
+                  disabled={writingAllScenes || generating}
+                >
+                  {writingAllScenes ? (
+                    <>
+                      <span className="wm-write-all-spinner" />
+                      Writing scene {currentSceneIdx + 1} of {totalScenes}…
+                    </>
+                  ) : (
+                    <>
+                      <span>✦</span> Write all {chapter.sections.filter(s => s.type === 'h2' || s.type === 'h3').length} scenes
+                    </>
+                  )}
+                </button>
+                {!writingAllScenes && (
+                  <div className="wm-write-all-hint">
+                    Generates prose for each scene section sequentially
+                  </div>
+                )}
+                {writingAllScenes && (
+                  <div className="wm-write-all-progress">
+                    <div className="wm-write-all-progress-fill" style={{ width: `${((currentSceneIdx + 1) / totalScenes) * 100}%` }} />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Scene Goal */}
             <div className="wm-ctx-field">
@@ -2442,6 +3206,19 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                   {chapter?.scene_goal || <span className="wm-ctx-empty">What happens in this chapter?</span>}
                 </div>
               )}
+            </div>
+
+            {/* ── Scene Beat Planner ── */}
+            <div className="wm-beat-planner">
+              <label className="wm-ctx-label">Scene Beats</label>
+              <div className="wm-beat-strip">
+                {beatProgress.map(b => (
+                  <div key={b.id} className={`wm-beat${b.active ? ' wm-beat--active' : ''}${b.current ? ' wm-beat--current' : ''}`} title={b.desc}>
+                    <span className="wm-beat-icon">{b.icon}</span>
+                    <span className="wm-beat-label">{b.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Theme */}
@@ -2508,6 +3285,20 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                   </span>
                 )}
               </div>
+              {/* ── Emotional Arc Compass ── */}
+              {(chapter?.emotional_state_start || chapter?.emotional_state_end) && (
+                <div className="wm-arc-compass">
+                  <div className="wm-arc-compass-track">
+                    <div className="wm-arc-compass-fill" style={{ width: `${emotionalArcPosition}%` }} />
+                    <div className="wm-arc-compass-needle" style={{ left: `${emotionalArcPosition}%` }} />
+                  </div>
+                  <div className="wm-arc-compass-labels">
+                    <span className="wm-arc-compass-start">{chapter?.emotional_state_start || 'Start'}</span>
+                    <span className="wm-arc-compass-pct">{emotionalArcPosition}%</span>
+                    <span className="wm-arc-compass-end">{chapter?.emotional_state_end || 'End'}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* POV */}
@@ -2568,6 +3359,94 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
               </div>
             )}
 
+            {/* ── Chapter Synopsis ── */}
+            <div className="wm-ctx-field">
+              <label className="wm-ctx-label">Synopsis</label>
+              <button
+                className="wm-synopsis-btn"
+                onClick={generateSynopsis}
+                disabled={synopsisLoading || !prose.trim()}
+              >
+                {synopsisLoading ? '◌ Generating…' : synopsis ? '↻ Regenerate Synopsis' : '✦ Generate Synopsis'}
+              </button>
+              {synopsis && <div className="wm-synopsis-text">{synopsis}</div>}
+            </div>
+
+            {/* ── Scene Transition Helper ── */}
+            {prose.split(/\n\n+/).length > 3 && (
+              <div className="wm-ctx-field">
+                <label className="wm-ctx-label">Scene Transitions</label>
+                <button
+                  className="wm-transition-btn"
+                  onClick={() => {
+                    const paras = prose.split(/\n\n+/);
+                    const ta = proseTextareaRef.current;
+                    const cursorPos = ta?.selectionStart || 0;
+                    // Find which paragraph break is closest to cursor
+                    let charCount = 0;
+                    let splitIdx = 0;
+                    for (let i = 0; i < paras.length; i++) {
+                      charCount += paras[i].length + 2;
+                      if (charCount >= cursorPos) { splitIdx = charCount; break; }
+                    }
+                    const sceneAEnd = paras.slice(Math.max(0, Math.floor(paras.length / 2) - 1), Math.floor(paras.length / 2)).join('\n\n');
+                    const sceneBStart = paras.slice(Math.floor(paras.length / 2), Math.floor(paras.length / 2) + 1).join('\n\n');
+                    generateTransition(sceneAEnd, sceneBStart, prose.indexOf(sceneBStart));
+                  }}
+                  disabled={generating}
+                >
+                  {'🔗'} Write transition at midpoint
+                </button>
+                <div className="wm-transition-hint">Generates connective prose between scenes. Place cursor at the break point.</div>
+              </div>
+            )}
+
+            {/* ── Reference Chapter ── */}
+            <div className="wm-ctx-field">
+              <label className="wm-ctx-label">Reference Chapter</label>
+              <select
+                className="wm-reference-select"
+                value=""
+                onChange={e => { if (e.target.value) loadReferenceChapter(e.target.value); }}
+              >
+                <option value="">View another chapter…</option>
+                {allChapters.filter(c => c.id !== chapterId).map(c => (
+                  <option key={c.id} value={c.id}>{c.title || `Chapter ${c.chapter_number}`}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Chapter-Level Instruction */}
+            <div className="wm-chapter-instruction">
+              <button
+                className={`wm-chapter-instruction-toggle${chapterInstructionOpen ? ' wm-chapter-instruction-toggle--open' : ''}`}
+                onClick={() => setChapterInstructionOpen(o => !o)}
+              >
+                <span>🎬</span> Direct this scene
+              </button>
+              {chapterInstructionOpen && (
+                <div className="wm-chapter-instruction-body">
+                  <textarea
+                    className="wm-ctx-input wm-chapter-instruction-input"
+                    value={chapterInstruction}
+                    onChange={e => setChapterInstruction(e.target.value)}
+                    placeholder="e.g. Make the dialogue more tense, add sensory details about the rain…"
+                    rows={3}
+                  />
+                  <button
+                    className="wm-chapter-instruction-run"
+                    onClick={handleChapterInstruction}
+                    disabled={chapterInstructionLoading || !chapterInstruction.trim() || !prose.trim()}
+                  >
+                    {chapterInstructionLoading ? '◌ Revising…' : 'Apply to chapter'}
+                  </button>
+                  <div className="wm-chapter-instruction-hint">
+                    Rewrites the full chapter prose with your direction
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Quick link to structure in TOC */}
             <button
               className="wm-ctx-structure-link"
@@ -2592,6 +3471,34 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
 
       </div>{/* end wm-hub-layout */}
 
+      {/* ── AI PROSE PREVIEW MODAL ── */}
+      {previewText && (
+        <div className="wm-modal-overlay" onClick={rejectPreview}>
+          <div className="wm-modal wm-preview-modal" onClick={e => e.stopPropagation()}>
+            <div className="wm-modal-title">Preview Generated Text</div>
+            <div className="wm-preview-prose">{previewText}</div>
+            <div className="wm-modal-btns">
+              <button className="wm-modal-cancel" onClick={rejectPreview}>Discard</button>
+              <button className="wm-modal-leave wm-preview-accept" onClick={acceptPreview}>Insert into prose</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIRMATION DIALOG ── */}
+      {confirmAction && (
+        <div className="wm-modal-overlay" onClick={() => setConfirmAction(null)}>
+          <div className="wm-modal" onClick={e => e.stopPropagation()}>
+            <div className="wm-modal-title">Confirm</div>
+            <div className="wm-modal-sub">{confirmAction.message}</div>
+            <div className="wm-modal-btns">
+              <button className="wm-modal-cancel" onClick={() => setConfirmAction(null)}>Cancel</button>
+              <button className="wm-modal-leave" onClick={confirmAction.onConfirm}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── EXIT MODAL ── */}
       {showExit && (
         <div className="wm-modal-overlay" onClick={() => setShowExit(false)}>
@@ -2609,6 +3516,144 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
                 {prose ? 'Save & Leave' : 'Leave'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── FIND & REPLACE ── */}
+      {showFindReplace && (
+        <div className="wm-find-replace">
+          <div className="wm-find-replace-row">
+            <input
+              className="wm-find-input"
+              placeholder="Find…"
+              value={findText}
+              onChange={e => { setFindText(e.target.value); doFind(e.target.value); }}
+              autoFocus
+            />
+            <span className="wm-find-count">{findMatches > 0 ? `${findMatches} found` : ''}</span>
+          </div>
+          <div className="wm-find-replace-row">
+            <input
+              className="wm-find-input"
+              placeholder="Replace with…"
+              value={replaceText}
+              onChange={e => setReplaceText(e.target.value)}
+            />
+            <button className="wm-find-btn" onClick={() => doReplace(false)} disabled={!findText || findMatches === 0}>Replace</button>
+            <button className="wm-find-btn" onClick={() => doReplace(true)} disabled={!findText || findMatches === 0}>All</button>
+            <button className="wm-find-close" onClick={() => setShowFindReplace(false)}>{'×'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── AI GENERATION HISTORY ── */}
+      {showAiHistory && (
+        <div className="wm-modal-overlay" onClick={() => setShowAiHistory(false)}>
+          <div className="wm-modal wm-ai-history-modal" onClick={e => e.stopPropagation()}>
+            <div className="wm-modal-title">AI Generation History</div>
+            <button className="wm-help-close" onClick={() => setShowAiHistory(false)}>{'×'}</button>
+            {aiHistory.length === 0 ? (
+              <div className="wm-ai-history-empty">No AI generations yet. Use Continue, Deepen, or AI Writer.</div>
+            ) : (
+              <div className="wm-ai-history-list">
+                {[...aiHistory].reverse().map((entry, i) => (
+                  <div key={i} className="wm-ai-history-item">
+                    <div className="wm-ai-history-meta">
+                      <span className="wm-ai-history-action">{entry.action}</span>
+                      <span className="wm-ai-history-time">
+                        {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className="wm-ai-history-words">{entry.wordCount}w</span>
+                    </div>
+                    <div className="wm-ai-history-text">{entry.text}</div>
+                    <button
+                      className="wm-ai-history-insert"
+                      onClick={() => {
+                        takeSnapshot('Before insert from history');
+                        setProse(prev => prev ? prev.trimEnd() + '\n\n' + entry.text : entry.text);
+                        setSaved(false);
+                        setShowAiHistory(false);
+                        setHint('Inserted from history');
+                        setTimeout(() => setHint(null), 3000);
+                      }}
+                    >
+                      Insert
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── DAILY WRITING STATS ── */}
+      {showStats && (
+        <div className="wm-modal-overlay" onClick={() => setShowStats(false)}>
+          <div className="wm-modal wm-stats-modal" onClick={e => e.stopPropagation()}>
+            <div className="wm-modal-title">Writing Stats</div>
+            <button className="wm-help-close" onClick={() => setShowStats(false)}>{'×'}</button>
+
+            <div className="wm-stats-current">
+              <div className="wm-stats-row">
+                <span className="wm-stats-label">This session</span>
+                <span className="wm-stats-value">{Math.max(0, wordCount - startingWordCountRef.current)}w</span>
+              </div>
+              <div className="wm-stats-row">
+                <span className="wm-stats-label">Session time</span>
+                <span className="wm-stats-value">
+                  {Math.floor(sessionElapsed / 60)}m {sessionElapsed % 60}s
+                </span>
+              </div>
+              <div className="wm-stats-row">
+                <span className="wm-stats-label">Chapter total</span>
+                <span className="wm-stats-value">{wordCount}w</span>
+              </div>
+            </div>
+
+            {writingStats.length > 0 && (
+              <div className="wm-stats-history">
+                <div className="wm-stats-history-title">Recent Sessions</div>
+                <div className="wm-stats-chart">
+                  {writingStats.slice(-14).map((s, i) => {
+                    const maxW = Math.max(...writingStats.slice(-14).map(d => d.words), 1);
+                    return (
+                      <div key={i} className="wm-stats-bar-wrap" title={`${s.date}: ${s.words}w`}>
+                        <div className="wm-stats-bar" style={{ height: `${(s.words / maxW) * 100}%` }} />
+                        <span className="wm-stats-bar-label">{s.date.slice(5)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="wm-stats-streak">
+                  {(() => {
+                    let streak = 0;
+                    const today = new Date().toISOString().slice(0, 10);
+                    for (let i = writingStats.length - 1; i >= 0; i--) {
+                      const d = new Date(today);
+                      d.setDate(d.getDate() - (writingStats.length - 1 - i));
+                      if (writingStats[i].date === d.toISOString().slice(0, 10)) streak++;
+                      else break;
+                    }
+                    return streak > 1 ? `🔥 ${streak}-day writing streak` : '';
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── SPLIT REFERENCE VIEW ── */}
+      {showReference && referenceChapter && (
+        <div className="wm-reference-panel">
+          <div className="wm-reference-header">
+            <span className="wm-reference-title">{referenceChapter.title || 'Reference'}</span>
+            <button className="wm-reference-close" onClick={() => setShowReference(false)}>{'×'}</button>
+          </div>
+          <div className="wm-reference-prose">
+            {referenceProse || 'No prose in this chapter.'}
           </div>
         </div>
       )}
