@@ -1482,11 +1482,40 @@ Respond ONLY with valid JSON. No preamble. No markdown.
   ]
 }`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 600,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const MODELS = ['claude-sonnet-4-6'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`rewrite-options: trying ${model} (attempt ${attempt + 1})`);
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 600,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`rewrite-options: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`rewrite-options: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.status(503).json({ error: 'AI is busy — please try again in a moment' });
+    }
 
     const rawText = response.content
       .filter(b => b.type === 'text')
@@ -4062,23 +4091,41 @@ ACTION: ${ACTION_PROMPTS[action] || ACTION_PROMPTS.dialogue}${tone ? `\n\nTONE: 
       res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
 
-      try {
-        const streamResp = anthropic.messages.stream({
-          model: 'claude-sonnet-4-6',
-          max_tokens: maxTokens,
-          temperature: temp,
-          system,
-          messages: [{ role: 'user', content: user }],
-        });
-        streamResp.on('text', (text) => {
-          res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
-        });
-        await streamResp.finalMessage();
-        res.write(`data: ${JSON.stringify({ type: 'done', action })}\n\n`);
-        res.end();
-      } catch (err) {
-        console.error('ai-writer-action stream error:', err.message);
-        res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI generation failed' })}\n\n`);
+      const MODELS = ['claude-sonnet-4-6'];
+      let streamed = false;
+      for (const model of MODELS) {
+        try {
+          console.log(`ai-writer-action stream: trying ${model}`);
+          const streamResp = anthropic.messages.stream({
+            model,
+            max_tokens: maxTokens,
+            temperature: temp,
+            system,
+            messages: [{ role: 'user', content: user }],
+          });
+          streamResp.on('text', (text) => {
+            res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+          });
+          await streamResp.finalMessage();
+          res.write(`data: ${JSON.stringify({ type: 'done', action })}\n\n`);
+          res.end();
+          streamed = true;
+          break;
+        } catch (err) {
+          const status = err?.status || err?.error?.status;
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`ai-writer-action stream: ${model} status ${status}, trying next`);
+            continue;
+          }
+          console.error('ai-writer-action stream error:', err.message);
+          res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI generation failed' })}\n\n`);
+          res.end();
+          streamed = true;
+          break;
+        }
+      }
+      if (!streamed) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI is busy — please try again in a moment' })}\n\n`);
         res.end();
       }
     } else {
@@ -9466,6 +9513,7 @@ Each chapter brief:
       "opening_line": "The first sentence of this situation when written as prose."
     }
   ],
+  "story_type": "internal | collision | wrong_win | quiet_victory",
   "chapter_arc": "What this chapter leaves her with. One sentence.",
   "david_presence": "present | background | absent | phone",
   "marcus_phase": "none | phase_1 | phase_2 | phase_3",
@@ -10181,6 +10229,7 @@ Use this exact structure:
   "wound_clock": ${woundClock},
   "stakes_level": ${stakesLevel},
   "situations": [ 3-5 situation objects with situation_number, situation_type, tone, title, characters_present, what_happens, what_she_knows, what_she_doesnt_say, texture_layers, opening_line ],
+  "story_type": "internal | collision | wrong_win | quiet_victory",
   "chapter_arc": "What this chapter leaves her with. One sentence.",
   "david_presence": "present | background | absent | phone",
   "marcus_phase": "none | phase_1 | phase_2 | phase_3",
@@ -10251,13 +10300,27 @@ Use this exact structure:
   }
 });
 
+// ─── Story type inference ─────────────────────────────────────────────────────
+// Derives story_type from situation types when the arc brief doesn't include it
+function inferStoryType(taskBrief) {
+  const situations = taskBrief.situations || [];
+  const types = situations.map(s => (s.situation_type || '').toUpperCase());
+  const hasConflict = types.some(t => ['SOCIAL_FRICTION', 'COLLISION', 'CONFRONTATION'].includes(t));
+  const hasMultipleChars = situations.some(s => (s.characters_present || []).length >= 3);
+  if (hasConflict && hasMultipleChars) return 'collision';
+  const hasWin = types.some(t => ['VICTORY', 'ACHIEVEMENT', 'WIN', 'WRONG_WIN'].includes(t));
+  if (hasWin) return 'wrong_win';
+  return null; // fall through to 'internal' default
+}
+
 // ─── Narrative variety engine ──────────────────────────────────────────────────
 // Each story gets a unique combination of structure, POV, length, and technique
 // based on its position in the arc, phase, and story type.
 
 function buildCraftRules(storyNumber, taskBrief, dna) {
   const phase = taskBrief.phase || 'establishment';
-  const storyType = taskBrief.story_type || 'internal';
+  // Derive story_type: use explicit value, or infer from situations
+  const storyType = taskBrief.story_type || inferStoryType(taskBrief) || 'internal';
   const n = storyNumber || 1;
 
   // ── Word count varies by phase and story position ──
@@ -10644,6 +10707,19 @@ ${taskBrief.primary_location ? `Primary setting: ${taskBrief.primary_location}` 
 ${taskBrief.time_of_day ? `Time of day: ${taskBrief.time_of_day}` : ''}
 ${taskBrief.season_weather ? `Season/weather: ${taskBrief.season_weather}` : ''}
 ${taskBrief.new_character ? `New character to introduce: ${taskBrief.new_character_name} — ${taskBrief.new_character_role}` : ''}
+${taskBrief.situations?.length ? `
+CHAPTER ARCHITECTURE (follow this situation flow — each situation is a scene beat):
+${taskBrief.situations.map(s => 
+  `  ${s.situation_number}. [${s.situation_type}] "${s.title}" (${s.tone})
+     Characters: ${(s.characters_present || []).join(', ')}
+     What happens: ${s.what_happens}
+     What she knows: ${s.what_she_knows || 'n/a'}
+     What she doesn't say: ${s.what_she_doesnt_say || 'n/a'}
+     Opening line: "${s.opening_line || ''}"
+     Texture layers: ${(s.texture_layers || []).join(', ')}`
+).join('\n')}
+
+IMPORTANT: Structure the chapter around these situations in order. Each situation is a scene beat — use the provided opening lines as launch points (adapt but don't discard). The tone shifts between situations create the chapter's rhythm.` : ''}
 
 ${previousContext}
 
