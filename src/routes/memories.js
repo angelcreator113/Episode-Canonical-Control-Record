@@ -7511,9 +7511,9 @@ function mapRoleType(role) {
 
 // ─── Character DNA — drives obstacle and task generation ──────────────────────
 const CHARACTER_DNA = {
-  justawoman: {
+  'just-a-woman': {
     display_name: 'JustAWoman',
-    role_type: 'special',
+    role_type: 'protagonist',
     job: 'Content creator — fashion, beauty, makeup. Building Lala on YouTube.',
     desire_line: 'To be seen for something uniquely, undeniably hers.',
     fear_line: 'That she started too late and consistency without breakthrough is just stubbornness.',
@@ -7522,15 +7522,15 @@ const CHARACTER_DNA = {
     job_antagonist: 'The algorithm — rewards what she is not doing yet, ignores what she does every day.',
     personal_antagonist: 'Her own timeline — the feeling that everyone who started when she did is further along.',
     recurring_object: 'The kitchen table. Every major moment happens here.',
-    world: 'book1',
+    world: 'book-1',
     domains: {
       career: 'Content creation, building Lala, filming in stolen hours',
       romantic: 'David — supportive but his practicality lands like doubt',
-      family: 'Marcus (7), Miles (5), Noah (3) — three boys under 8 while building',
-      friends: 'Dana — peer on the same journey, louder about it',
+      family: 'Elias (9), Zion (5) — two boys while building',
+      friends: 'Imani — peer on the same journey, reality mirror',
     },
   },
-  david: {
+  'the-husband': {
     display_name: 'David',
     role_type: 'pressure',
     job: 'Solutions Architect. Enterprise software. In rooms making decisions that affect systems he won\'t see break for six months.',
@@ -7541,31 +7541,69 @@ const CHARACTER_DNA = {
     job_antagonist: 'The VP of Engineering who overrides his recommendations for budget, takes credit when things work, vanishes when they don\'t.',
     personal_antagonist: 'The version of himself that wonders what he could have built if he\'d taken the risk.',
     recurring_object: 'His car. The commute is the only time he is alone with his own thoughts.',
-    world: 'book1',
+    world: 'book-1',
     domains: {
       career: 'Solutions architecture, enterprise politics, technical decisions nobody wants to understand',
       romantic: 'JustAWoman — he loves her completely and doesn\'t know how to say he\'s scared',
-      family: 'Three boys who need him present in a way his job makes hard',
+      family: 'Two boys who need him present in a way his job makes hard',
       friends: 'Colleagues he respects but doesn\'t let in',
     },
   },
-  dana: {
-    display_name: 'Dana',
-    role_type: 'support',
-    job: 'Lifestyle content creator. Also shares opinions online — publicly, without softening.',
-    desire_line: 'To be taken seriously for her perspective, not just her aesthetic.',
-    fear_line: 'That her opinions are costing her the audience she needs to be taken seriously.',
-    wound: 'Being likable versus being honest — she has never found a way to be both at once.',
-    strengths: ['Directness', 'Courage', 'Relatability', 'Loyalty', 'Self-awareness'],
-    job_antagonist: 'The brand deal that goes to someone with half her engagement because they have a cleaner aesthetic and no opinions.',
-    personal_antagonist: 'Her own mouth. She shares what she thinks and then has to live in the fallout.',
-    recurring_object: 'Her phone. Always in her hand. The opinions live there.',
-    world: 'book1',
+  'the-witness': {
+    display_name: 'The Witness',
+    role_type: 'mirror',
+    job: 'Memory keeper. Not a character who acts — a character who remembers.',
+    desire_line: 'To hold the truth without needing anyone to hear it.',
+    fear_line: 'That watching everything and saying nothing makes her complicit.',
+    wound: 'Watching everything and being asked about none of it.',
+    strengths: ['Observation', 'Patience', 'Clarity', 'Memory', 'Honesty'],
+    job_antagonist: 'The weight of what she knows versus what she is asked.',
+    personal_antagonist: 'The urge to speak when silence is what keeps her safe.',
+    recurring_object: 'A window. She is always watching from one.',
+    world: 'book-1',
     domains: {
-      career: 'Lifestyle content, opinion pieces, brand deal negotiations she keeps losing',
-      romantic: 'Complicated — to be developed across stories',
-      family: 'To be developed',
-      friends: 'JustAWoman — her closest, but their paths are starting to diverge in ways neither acknowledges',
+      career: 'Witnessing — her function, not her job',
+      romantic: 'Peripheral — she sees but does not participate',
+      family: 'May be a neighbor, a narrator, or a future self',
+      friends: 'She is not close to anyone — closeness would compromise her sight',
+    },
+  },
+  'the-comparison-creator': {
+    display_name: 'Nia Vale',
+    role_type: 'pressure',
+    job: 'Content creator — same lane, no restraint. Goes fully explicit on a live — intentionally, not accidentally.',
+    desire_line: 'To be undeniable without losing control.',
+    fear_line: 'That she can only be seen at maximum intensity.',
+    wound: 'She is not chosen unless she escalates beyond comfort.',
+    strengths: ['Boldness', 'Fearlessness', 'Visibility', 'Instinct', 'Provocation'],
+    job_antagonist: 'The platform itself — rewards her at extremes, ignores her at baseline.',
+    personal_antagonist: 'The version of herself that wonders if she has any range left.',
+    recurring_object: 'The live stream counter. How many are watching right now.',
+    world: 'book-1',
+    domains: {
+      career: 'Explicit content, algorithmically adjacent to JustAWoman',
+      romantic: 'Transactional — performance extends into every relationship',
+      family: 'Unknown — she doesn\'t share that',
+      friends: 'Competitors she monitors, not confides in',
+    },
+  },
+  'the-almost-mentor': {
+    display_name: 'The Almost-Mentor',
+    role_type: 'shadow',
+    job: 'Offers guidance that always comes with a price. She sees JustAWoman\'s potential and wants to own a piece of it.',
+    desire_line: 'To shape someone else\'s success and call it generosity.',
+    fear_line: 'That she is only relevant when she is needed — and she can feel the need fading.',
+    wound: 'She built something real once and watched someone else take credit. Now she only invests where she can control the outcome.',
+    strengths: ['Authority', 'Precision', 'Financial literacy', 'Systems thinking', 'Credibility'],
+    job_antagonist: 'Former protégés who outgrew her and no longer answer her calls.',
+    personal_antagonist: 'The question of whether she left her career because she was ready or because she was afraid.',
+    recurring_object: 'Her phone — the DMs are always strategic.',
+    world: 'book-1',
+    domains: {
+      career: 'Online coaching, course creation, the business of teaching business',
+      romantic: 'Irrelevant to her function in the story',
+      family: 'Irrelevant to her function in the story',
+      friends: 'Professional network she keeps at a distance from her personal life',
     },
   },
   lala: {
@@ -7587,54 +7625,16 @@ const CHARACTER_DNA = {
       friends: 'Other LalaVerse creators — alliances that are strategic before they are genuine',
     },
   },
-  chloe: {
-    display_name: 'Chloe',
-    role_type: 'mirror',
-    job: 'Lifestyle content creator. Married, no children. Consistent. High quality. Goes live with her audience.',
-    desire_line: 'To keep evolving without losing the audience she built.',
-    fear_line: 'That she is someone else\'s measuring stick and she never asked for that weight.',
-    wound: 'Being genuinely successful in a way that makes other people feel like failures. She didn\'t ask for it.',
-    strengths: ['Consistency', 'Quality', 'Audience intimacy', 'Clarity of vision', 'Professionalism'],
-    job_antagonist: 'The audience that followed her for one thing and pushes back every time she tries to grow.',
-    personal_antagonist: 'The awareness that her life — which she built carefully and loves — reads as aspirational to strangers who resent her for it.',
-    recurring_object: 'Her living room set. Carefully designed. The audience thinks it\'s effortless.',
-    world: 'book1',
-    domains: {
-      career: 'Lifestyle content, brand partnerships, audience management',
-      romantic: 'Married — a stable partnership that becomes its own kind of story',
-      family: 'No children — a choice that gets commented on more than anything else she posts',
-      friends: 'Carefully maintained. She is selective in a way people mistake for coldness.',
-    },
-  },
-  jade: {
-    display_name: 'Jade',
-    role_type: 'shadow',
-    job: 'Online business coach. Former high-level position at a major bank. Teaches women to build businesses online.',
-    desire_line: 'To build something that outlasts the credibility she borrowed from the bank.',
-    fear_line: 'That she left a career that made sense for one that makes money but doesn\'t yet feel earned.',
-    wound: 'Institutional credibility versus built credibility — she knows which one she actually believes in.',
-    strengths: ['Authority', 'Precision', 'Financial literacy', 'Systems thinking', 'Credibility'],
-    job_antagonist: 'A former client who is now building a competing course using frameworks Jade taught her — and positioning herself as the original.',
-    personal_antagonist: 'The bank identity she left behind. The question of whether she left because she was ready or because she was afraid.',
-    recurring_object: 'Her course platform dashboard. The numbers. She checks them more than she admits.',
-    world: 'book1',
-    domains: {
-      career: 'Online coaching, course creation, the business of teaching business',
-      romantic: 'To be developed',
-      family: 'To be developed',
-      friends: 'Professional network that she keeps at a distance from her personal life',
-    },
-  },
 };
 
-// ─── Map Story Engine keys → DB character_keys ────────────────────────────────
+// ─── Map DB character_keys for cross-referencing ──────────────────────────────
 const SE_DB_KEY_MAP = {
-  justawoman: ['just-a-woman'],
-  david:      ['the-husband'],
-  dana:       ['the-witness'],
-  chloe:      ['comparison-creator'],
-  jade:       ['the-almost-mentor', 'the-digital-products-customer'],
-  lala:       ['lala'],
+  'just-a-woman': ['just-a-woman'],
+  'the-husband':  ['the-husband'],
+  'the-witness':  ['the-witness'],
+  'the-comparison-creator': ['the-comparison-creator'],
+  'the-almost-mentor': ['the-almost-mentor'],
+  lala:           ['lala'],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -7646,32 +7646,33 @@ BOOK 1 — 24-CHARACTER ECOSYSTEM
 
 THE REAL WORLD (Daily Life):
 - JustAWoman — protagonist. Content creator building toward legendary. Confident but untethered.
-- David Morgan — the husband. Safety without hunger. Solutions architect. Supportive but his practicality lands like doubt.
+- David / The Husband — stability vs. risk. Solutions architect. Supportive but his practicality lands like doubt.
 - Elias — quiet witness, age 9. Sees more than he says. Support character.
 - Zion — loud anchor, age 5. Pulls her back into the present. Support character.
-- Dana / The Witness — real friend, sees clearly. Lifestyle content creator who shares opinions publicly without softening.
+- The Witness — memory keeper. Not a character who acts — a character who remembers. Mirror character.
 - Carolyn — mother. Voice of enough. Pressure character.
 - Elena Harper — perfection as performance. Mirror character.
 - Bri Cole — chaos and survival. Support character.
 - Tasha Greene — detachment after trying. Mirror character.
 - Ms. Caldwell — Cedar Grove teacher. Pressure character.
-- Alexandra 'Alex' Morrison — local achievement standard, real-world pressure. Pressure character.
+- Imani — reality mirror, the life she could choose. Support character.
+- Alexandra 'Alex' Morrison — rising star in corporate development, pressure character.
 
 THE DIGITAL / SOCIAL LAYER:
 - Marcus — the paying man. Reduction as freedom. Shadow character. He pays for access, treats her body as product, reinforces the algorithm's logic with money.
-- Jasmine Rodriguez — her past self, unpolished ambition. Mirror character.
-- Thomas Hart — intellectual engagement, non-sexual mirror. Mirror character.
-- Victoria Sterling — proof of concept, slightly ahead. Support character.
-- James 'Jamie' Castellano — empty attention, no investment. Shadow character.
-- Ryan Blackwell — male entitlement, boundary pusher. Shadow character.
+- Jasmine Rodriguez — investigative journalist, wary respect. Mirror character.
+- Thomas Hart — strategic consultant, intellectual engagement. Mirror character.
+- Victoria Sterling — senior partner at law firm, proof of concept. Support character.
+- James 'Jamie' Castellano — bartender/musician, empty attention. Shadow character.
+- Ryan Blackwell — hedge fund CEO, male entitlement, boundary pusher. Shadow character.
 - Nia Vale / The Comparison Creator — the messy one. Goes fully explicit on a live — intentionally, not accidentally. Escalation mirror. (See ESCALATION SYSTEM below.)
 - The Customer — proof she already has impact. Support character, finalized.
 - The Algorithm — NOT a character with a voice. Environmental pressure system. (See ALGORITHM SYSTEM below.)
 
 THE BRIDGE ZONE (Danger / Disruption):
-- Liam Sullivan — real-world viable alternative, not fantasy. Special character.
-- Jade / The Almost-Mentor — clarity she's not ready for, appears then disappears. Shadow character.
-- Imani — reality mirror, the life she could choose. Support character.
+- Liam Sullivan — creative director, real-world viable alternative, not fantasy. Special character.
+- David Morgan — investment banking MD, intellectual equal who recognizes her exhaustion. Special character.
+- The Almost-Mentor — offers guidance that always comes with a price. Shadow character.
 
 ───────────────────────────────────────────
 THE ALGORITHM (Environmental Pressure System)
@@ -9194,6 +9195,54 @@ SHE IS NOT CONFUSED. She knows exactly what this is. She chooses it.
 Use him in: phone interactions, DM moments,
 any scene where her digital world and real world create friction.
 
+NIA VALE / THE COMPARISON CREATOR — the escalation mirror
+Same content lane as JustAWoman. More extreme. Less restrained. Less concerned with perception.
+Exists in her feed, occasionally in lives, algorithmically adjacent.
+Core wound: She is not chosen unless she escalates beyond comfort.
+Core desire: To be undeniable without losing control.
+What she has that JustAWoman doesn't: no hesitation, no internal negotiation, no need to remain respectable.
+What she lacks: control, containment, long-term structure.
+THE KEY SCENE: She goes fully explicit on a live. Not accidental. Not sloppy. Intentional.
+JustAWoman watches the entire thing. Does not exit. Does not comment. Does not engage. But does not look away.
+JustAWoman does NOT think: "I would never do that." She thinks: "I could."
+After watching: she becomes quieter, more focused, slightly more aware of her own restraint. She does NOT spiral. She adjusts.
+Use her in: FEED_MOMENT situations, WATCHING tone. The key live scene should land between stories 28-35.
+
+───────────────────────────────────────────
+THE ALGORITHM (Environmental Pressure System)
+───────────────────────────────────────────
+The Algorithm is NOT a literal speaking character. It has NO voice and NO dialogue.
+It is a systemic force that behaves like a character without having a voice.
+
+How it appears in the story:
+1. VISIBILITY SHIFTS — a post performs better than usual, a post dies unexpectedly, certain content gets pushed
+2. PATTERN REINFORCEMENT — the more she leans into something, the more she sees it. Her feed becomes more sexual, more aspirational, more extreme.
+3. PRESSURE WITHOUT LANGUAGE — it never says anything. But it creates moments like: "this worked — do more of this" / "this didn't work — disappear"
+
+Functional role:
+- Amplifies her body more than her mind
+- Rewards visibility over depth
+- Pushes her toward escalation without instruction
+
+It does NOT care about her life, her marriage, or consequences. It only cares about engagement.
+Key line: "It never tells her what to do. It just shows her what works."
+
+The Algorithm appears through visibility shifts and feed changes, NEVER through dialogue.
+Reference it as: an environmental pressure system that rewards certain versions of her and ignores others.
+The Algorithm begins shaping her feed quietly in the establishment phase. Its loop tightens through pressure and crisis.
+
+───────────────────────────────────────────
+THE CLOSED ESCALATION LOOP
+───────────────────────────────────────────
+The Algorithm → pressure (rewards escalation)
+Nia Vale → example (shows what escalation looks like)
+Marcus / The Paying Man → reinforcement (pays for the escalated version)
+
+Together they form a closed escalation loop around her.
+The Algorithm rewards Nia heavily. JustAWoman sees Nia's visibility, engagement, reach — and understands: "This is what works."
+Marcus reinforces by paying for access, treating her body as product, confirming the algorithm's logic with money.
+This loop must be woven across the 50 stories — not as a single plot, but as atmospheric pressure that builds.
+
 ═══════════════════════════════════════════════════════════════
 THE NINE TONES
 ═══════════════════════════════════════════════════════════════
@@ -9344,6 +9393,8 @@ ESTABLISHMENT (Chapters 1-10)
 She is building. Consistently. The right room hasn't found her.
 Wound clock: 75-85. Stakes: 1-2.
 Marcus: Phase 1 only — controlled, subtle, unremarkable entry.
+The Algorithm: Begins shaping her feed quietly. Subtle visibility shifts. She doesn't notice yet.
+Nia Vale: Not yet present. May appear in a scroll-past moment.
 Tone balance: Heavy domestic + ambitious. Light digital. No reckoning yet.
 What establishes: her routine, her world, her wound, her wanting.
 
@@ -9354,6 +9405,9 @@ Wound clock: 86-100. Stakes: 3-5.
 Marcus: Transition from Phase 1 to Phase 2.
 David: His emotional labor becomes subtly visible.
 Elias: Begins to notice more than he should.
+The Algorithm: Loop tightens. Pattern reinforcement active. Her feed becomes more sexual, more aspirational.
+Nia Vale: First real awareness — sees her content, her numbers, her reach. Watching begins.
+Escalation loop: Algorithm → Nia → Marcus reinforcement cycle starts forming.
 Tone balance: More digital + friction. Watching intensifies.
 What pressures: the gap between her real life and her online life has edges now.
 
@@ -9364,6 +9418,9 @@ Wound clock: 101-115. Stakes: 6-8.
 Marcus: Fully Phase 3 — constant, repetitive, body-focused.
 David: The accumulated weight is present in every scene.
 Elias: Knows more than a child should. Hasn't said it.
+The Algorithm: Fully active. Pressure without language at maximum. "This worked — do more of this."
+Nia Vale: THE KEY SCENE lands here (stories 28-35). The live. JustAWoman watches every minute. Does not look away.
+Escalation loop: Fully closed. Algorithm rewards Nia → JustAWoman sees what works → Marcus pays for the escalated version.
 Tone balance: Heavy friction + reckoning. Digital feels uncanny.
 What ruptures: the version of herself she has been managing can no longer be fully contained.
 
@@ -9373,6 +9430,8 @@ She is living as the uncontained version and coming back with proof.
 Wound clock: 116-125. Stakes: 9-10.
 Marcus: Present but she is changing the terms.
 David: Something is different. He doesn't know what yet.
+The Algorithm: Still present but she is no longer responding to it the same way. The loop is loosening.
+Nia Vale: Aftermath. JustAWoman has adjusted. The mirror still exists but she has moved past it.
 Lala tone: Begins bleeding through in Chapter 47.
 What integrates: the dinner table version and the screen version are the same woman.
 She is finding out if that is survivable.
@@ -9412,13 +9471,54 @@ Each chapter brief:
   "marcus_phase": "none | phase_1 | phase_2 | phase_3",
   "phone_appears": true,
   "elias_notices": false,
+  "escalation_loop_active": false,
+  "algorithm_pressure": "none | subtle | active | tightening",
   "new_character": false,
   "new_character_name": null,
   "new_character_role": null
 }`;
 
 // ─── Arc User Prompt Builder ─────────────────────────────────────────────────
-function buildArcUserPrompt(characterKey, characterData, arcContext) {
+function buildArcUserPrompt(characterKey, characterData, arcContext, registryChars) {
+  // Build character roster from DB registry if available, otherwise use defaults
+  let registryBlock;
+  if (registryChars && registryChars.length > 0) {
+    const lines = registryChars
+      .filter(c => c.character_key !== characterKey) // exclude the protagonist
+      .map(c => {
+        const parts = [c.character_key];
+        if (c.subtitle) parts.push(c.subtitle);
+        else if (c.description) parts.push(c.description.slice(0, 80));
+        parts.push(c.role_type);
+        return `- ${parts.join(' · ')}`;
+      });
+    registryBlock = lines.join('\n');
+  } else {
+    registryBlock = `- elias (son, 9, observer)
+- zion (son, 5, anchor)
+- the-husband (husband, stability vs. risk)
+- imani (best friend, reality mirror)
+- carolyn (mother, voice of enough)
+- elena_harper (mom circle, perfection)
+- bri_cole (mom circle, chaos)
+- tasha_greene (mom circle, detachment)
+- ms_caldwell (Cedar Grove teacher)
+- marcus (the paying man, phase 1 start)
+- the-comparison-creator (Nia Vale, content creator same lane)
+- the-almost-mentor (offers guidance with a price)
+- the-witness (memory keeper)
+- the-customer (one-scene unexpected validation)
+- the-algorithm (invisible force, not a person)
+- alexandra_alex_morrison (rising star, corporate dev)
+- jasmine_rodriguez (investigative journalist)
+- thomas_hart (strategic consultant, ex-military intel)
+- victoria_sterling (senior partner, law firm)
+- james_jamie_castellano (bartender/musician)
+- ryan_blackwell (hedge fund CEO)
+- david_morgan (investment banking MD)
+- liam_sullivan (creative director)`;
+  }
+
   return `Generate 50 chapter briefs for ${characterData.display_name || 'JustAWoman'}.
 
 CHARACTER CONTEXT:
@@ -9432,16 +9532,7 @@ Stakes level: ${arcContext?.stakes_level || 1}
 Visibility score: ${arcContext?.visibility_score || 20}
 
 WORLD REGISTRY (characters available for this arc):
-- elias (son, 9, observer)
-- zion (son, 5, anchor)
-- david (husband, present)
-- imani (best friend, reality mirror)
-- carolyn (mother, voice of enough)
-- elena_harper (mom circle, perfection)
-- bri_cole (mom circle, chaos)
-- tasha_greene (mom circle, detachment)
-- ms_caldwell (Cedar Grove teacher)
-- marcus (the paying man, phase 1 start)
+${registryBlock}
 
 REQUIREMENTS:
 - Chapter 1 must feel like entering her life mid-routine, not at a beginning
@@ -9454,6 +9545,14 @@ REQUIREMENTS:
 - Marcus transitions to Phase 2 between Chapters 14-16
 - David's emotional labor becomes visible by Chapter 22
 - Marcus reaches Phase 3 by Chapter 28
+- Alex Morrison or Victoria Sterling appear by Chapter 15 (corporate pressure thread)
+- Jasmine Rodriguez first appears between Chapters 12-18 (journalist mirror thread)
+- Jamie Castellano enters between Chapters 10-16 (shadow pull)
+- Ryan Blackwell escalates between Chapters 20-30 (predator chess match)
+- David Morgan or Liam Sullivan appear by Chapter 25 (special thread)
+- The Algorithm shapes feed quietly from Chapter 1, loop tightens by Chapter 15
+- Nia Vale first appears in feed between Chapters 15-20, key live scene lands between Chapters 28-35
+- The escalation loop (Algorithm → Nia → Marcus) should be fully active by Chapter 28
 - Crisis chapters (26-40) should never be loud — controlled tension only
 - Chapter 47 must include the Lala bleed
 - Integration chapters should feel earned, not resolved
@@ -9561,14 +9660,20 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
   }
 
   try {
-    // Fetch character data for the arc prompt
-    const characterData = await db.RegistryCharacter.findOne({
-      where: { character_key: characterKey },
-      attributes: ['id', 'display_name', 'core_wound', 'core_desire', 'core_fear'],
-    });
-
-    // Build arc context (wound clock, stakes, visibility)
-    const arcContext = await buildArcGenerationContext(characterKey);
+    // Fetch character data, arc context, and full registry in parallel
+    const { Op } = require('sequelize');
+    const [characterData, arcContext, registryChars] = await Promise.all([
+      db.RegistryCharacter.findOne({
+        where: { character_key: characterKey },
+        attributes: ['id', 'display_name', 'core_wound', 'core_desire', 'core_fear'],
+      }),
+      buildArcGenerationContext(characterKey),
+      db.RegistryCharacter.findAll({
+        where: { status: { [Op.in]: ['accepted', 'finalized'] }, world: 'book-1' },
+        attributes: ['character_key', 'display_name', 'role_type', 'subtitle', 'description'],
+        order: [['role_type', 'ASC'], ['display_name', 'ASC']],
+      }).then(rows => rows.map(r => r.get({ plain: true }))).catch(() => null),
+    ]);
 
     // Build prompts — chapter-based arc generation
     const systemPrompt = ARC_SYSTEM_PROMPT;
@@ -9576,6 +9681,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
       characterKey,
       characterData?.dataValues || { display_name: dna.display_name, core_wound: dna.wound, core_desire: dna.desire_line, core_fear: dna.fear_line },
       arcContext,
+      registryChars,
     );
 
     let response;
@@ -9768,18 +9874,24 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
 
   try {
     // Step 2: Load character data and arc context
-    send('loading_context', { message: 'Loading character data & arc context…' });
+    send('loading_context', { message: 'Loading character data, arc context & registry…' });
 
-    const [characterData, arcContext] = await Promise.all([
+    const { Op } = require('sequelize');
+    const [characterData, arcContext, registryChars] = await Promise.all([
       db.RegistryCharacter.findOne({
         where: { character_key: characterKey },
         attributes: ['id', 'display_name', 'core_wound', 'core_desire', 'core_fear'],
       }),
       buildArcGenerationContext(characterKey),
+      db.RegistryCharacter.findAll({
+        where: { status: { [Op.in]: ['accepted', 'finalized'] }, world: 'book-1' },
+        attributes: ['character_key', 'display_name', 'role_type', 'subtitle', 'description'],
+        order: [['role_type', 'ASC'], ['display_name', 'ASC']],
+      }).then(rows => rows.map(r => r.get({ plain: true }))).catch(() => null),
     ]);
 
     send('loading_context', {
-      message: `Context loaded — character${characterData ? ' ✓' : ' –'}, arc context ✓`,
+      message: `Context loaded — character${characterData ? ' ✓' : ' –'}, registry (${registryChars?.length || 0} chars) ✓`,
       done: true,
     });
 
@@ -9791,6 +9903,7 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
       characterKey,
       characterData?.dataValues || { display_name: dna.display_name, core_wound: dna.wound, core_desire: dna.desire_line, core_fear: dna.fear_line },
       arcContext,
+      registryChars,
     );
 
     let rawText = '';
