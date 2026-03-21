@@ -90,19 +90,25 @@ function runwayHeaders() {
  */
 async function startTextToImage(prompt, seed = undefined) {
   const payload = {
-    model: 'gen3a_turbo',
+    model: 'gen4_image',
     promptText: prompt,
     ratio: '1280:720',
     ...(seed !== undefined ? { seed: parseInt(seed, 10) } : {}),
   };
 
-  const response = await axios.post(
-    `${RUNWAY_API_BASE}/text_to_image`,
-    payload,
-    { headers: runwayHeaders(), timeout: 30000 }
-  );
-
-  return { jobId: response.data.id };
+  try {
+    const response = await axios.post(
+      `${RUNWAY_API_BASE}/text_to_image`,
+      payload,
+      { headers: runwayHeaders(), timeout: 30000 }
+    );
+    return { jobId: response.data.id };
+  } catch (err) {
+    if (err.response) {
+      console.error('[SceneGen] text_to_image API error:', JSON.stringify(err.response.data, null, 2));
+    }
+    throw err;
+  }
 }
 
 /**
@@ -115,7 +121,7 @@ async function startImageToVideo(prompt, imageUrl, seed = undefined) {
     model: 'gen3a_turbo',
     promptText: prompt,
     promptImage: imageUrl,
-    ratio: '1280:720',
+    ratio: '16:9',
     duration: 5,
     ...(seed !== undefined ? { seed: parseInt(seed, 10) } : {}),
   };
