@@ -317,6 +317,35 @@ function StoryPanel({
   const ttsAudioRef = useRef(null);
   const ttsUsingElevenLabs = useRef(false);
 
+  const handleTtsPause = useCallback(() => {
+    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      setTtsPaused(true);
+      setTtsPlaying(false);
+    } else {
+      const synth = window.speechSynthesis;
+      if (synth?.speaking) {
+        synth.pause();
+        setTtsPaused(true);
+        setTtsPlaying(false);
+      }
+    }
+  }, []);
+
+  const handleTtsStop = useCallback(() => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+      if (ttsAudioRef.current.src) URL.revokeObjectURL(ttsAudioRef.current.src);
+      ttsAudioRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
+    ttsUsingElevenLabs.current = false;
+    setTtsPlaying(false);
+    setTtsPaused(false);
+    setTtsLoading(false);
+  }, []);
+
   const handleTtsPlay = useCallback(async () => {
     const text = editing ? editText : (story?.text || '');
     if (!text.trim()) return;
@@ -389,35 +418,6 @@ function StoryPanel({
     setTtsPlaying(true);
     setTtsPaused(false);
   }, [editing, editText, story?.text, ttsPaused, ttsRate]);
-
-  const handleTtsPause = useCallback(() => {
-    if (ttsUsingElevenLabs.current && ttsAudioRef.current) {
-      ttsAudioRef.current.pause();
-      setTtsPaused(true);
-      setTtsPlaying(false);
-    } else {
-      const synth = window.speechSynthesis;
-      if (synth?.speaking) {
-        synth.pause();
-        setTtsPaused(true);
-        setTtsPlaying(false);
-      }
-    }
-  }, []);
-
-  const handleTtsStop = useCallback(() => {
-    if (ttsAudioRef.current) {
-      ttsAudioRef.current.pause();
-      ttsAudioRef.current.currentTime = 0;
-      if (ttsAudioRef.current.src) URL.revokeObjectURL(ttsAudioRef.current.src);
-      ttsAudioRef.current = null;
-    }
-    window.speechSynthesis?.cancel();
-    ttsUsingElevenLabs.current = false;
-    setTtsPlaying(false);
-    setTtsPaused(false);
-    setTtsLoading(false);
-  }, []);
 
   // Cleanup TTS on unmount or story change
   useEffect(() => {
