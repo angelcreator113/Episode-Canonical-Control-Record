@@ -26,7 +26,7 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_API_KEY     = process.env.RUNWAY_ML_API_KEY;
 const RUNWAY_API_VERSION = '2024-11-06';
-const S3_BUCKET          = process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
+const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
@@ -121,18 +121,24 @@ async function startImageToVideo(prompt, imageUrl, seed = undefined) {
     model: 'gen3a_turbo',
     promptText: prompt,
     promptImage: imageUrl,
-    ratio: '16:9',
+    ratio: '1280:768',
     duration: 5,
-    ...(seed !== undefined ? { seed: parseInt(seed, 10) } : {}),
+    ...(seed !== undefined && !isNaN(Number(seed)) ? { seed: parseInt(seed, 10) } : {}),
   };
 
-  const response = await axios.post(
-    `${RUNWAY_API_BASE}/image_to_video`,
-    payload,
-    { headers: runwayHeaders(), timeout: 30000 }
-  );
-
-  return { jobId: response.data.id };
+  try {
+    const response = await axios.post(
+      `${RUNWAY_API_BASE}/image_to_video`,
+      payload,
+      { headers: runwayHeaders(), timeout: 30000 }
+    );
+    return { jobId: response.data.id };
+  } catch (err) {
+    if (err.response) {
+      console.error('[SceneGen] image_to_video API error:', JSON.stringify(err.response.data, null, 2));
+    }
+    throw err;
+  }
 }
 
 /**
@@ -237,19 +243,22 @@ async function generateBaseScene(sceneSet, models) {
 
     console.log(`[SceneGen] Still complete. Seed locked: ${lockedSeed}`);
 
-    // ── Step 2: Still → Video ─────────────────────────────────────────────
-    console.log(`[SceneGen] Starting base video for: ${sceneSet.name}`);
-
-    const { jobId: videoJobId } = await startImageToVideo(prompt, stillResult.outputUrl, stillResult.seed);
-    const videoResult = await pollTask(videoJobId);
-
+    // ── Step 2: Still → Video (non-blocking) ─────────────────────────────
     let videoUrl = null;
-    if (videoResult.status === 'SUCCEEDED') {
-      videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, 'base', 'video');
-      console.log(`[SceneGen] Video complete.`);
-    } else {
-      // Video failure is non-blocking — still is the priority
-      console.warn(`[SceneGen] Base video failed (non-blocking): ${videoResult.error}`);
+    let videoResult = { creditsUsed: 0 };
+    try {
+      console.log(`[SceneGen] Starting base video for: ${sceneSet.name}`);
+      const { jobId: videoJobId } = await startImageToVideo(prompt, stillResult.outputUrl);
+      videoResult = await pollTask(videoJobId);
+
+      if (videoResult.status === 'SUCCEEDED') {
+        videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, 'base', 'video');
+        console.log(`[SceneGen] Video complete.`);
+      } else {
+        console.warn(`[SceneGen] Base video failed (non-blocking): ${videoResult.error}`);
+      }
+    } catch (videoErr) {
+      console.warn(`[SceneGen] Base video error (non-blocking): ${videoErr.message}`);
     }
 
     // Lock the seed — permanent
