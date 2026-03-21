@@ -1482,11 +1482,40 @@ Respond ONLY with valid JSON. No preamble. No markdown.
   ]
 }`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 600,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const MODELS = ['claude-sonnet-4-6'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`rewrite-options: trying ${model} (attempt ${attempt + 1})`);
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 600,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`rewrite-options: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`rewrite-options: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.status(503).json({ error: 'AI is busy — please try again in a moment' });
+    }
 
     const rawText = response.content
       .filter(b => b.type === 'text')
@@ -4062,23 +4091,41 @@ ACTION: ${ACTION_PROMPTS[action] || ACTION_PROMPTS.dialogue}${tone ? `\n\nTONE: 
       res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
 
-      try {
-        const streamResp = anthropic.messages.stream({
-          model: 'claude-sonnet-4-6',
-          max_tokens: maxTokens,
-          temperature: temp,
-          system,
-          messages: [{ role: 'user', content: user }],
-        });
-        streamResp.on('text', (text) => {
-          res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
-        });
-        await streamResp.finalMessage();
-        res.write(`data: ${JSON.stringify({ type: 'done', action })}\n\n`);
-        res.end();
-      } catch (err) {
-        console.error('ai-writer-action stream error:', err.message);
-        res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI generation failed' })}\n\n`);
+      const MODELS = ['claude-sonnet-4-6'];
+      let streamed = false;
+      for (const model of MODELS) {
+        try {
+          console.log(`ai-writer-action stream: trying ${model}`);
+          const streamResp = anthropic.messages.stream({
+            model,
+            max_tokens: maxTokens,
+            temperature: temp,
+            system,
+            messages: [{ role: 'user', content: user }],
+          });
+          streamResp.on('text', (text) => {
+            res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+          });
+          await streamResp.finalMessage();
+          res.write(`data: ${JSON.stringify({ type: 'done', action })}\n\n`);
+          res.end();
+          streamed = true;
+          break;
+        } catch (err) {
+          const status = err?.status || err?.error?.status;
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`ai-writer-action stream: ${model} status ${status}, trying next`);
+            continue;
+          }
+          console.error('ai-writer-action stream error:', err.message);
+          res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI generation failed' })}\n\n`);
+          res.end();
+          streamed = true;
+          break;
+        }
+      }
+      if (!streamed) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI is busy — please try again in a moment' })}\n\n`);
         res.end();
       }
     } else {
