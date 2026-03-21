@@ -455,6 +455,11 @@ function StoryPanel({
   const [replaceText, setReplaceText] = useState('');
   const [findMatchCount, setFindMatchCount] = useState(0);
 
+  // ── Word count (needed by session tracker + UI) ──
+  const wordCount = editing
+    ? editText.split(/\s+/).filter(Boolean).length
+    : (story?.word_count || 0);
+
   // ── Session word tracker ──
   const sessionStartWordsRef = useRef(null);
   const [sessionWordGoal] = useState(500);
@@ -747,10 +752,6 @@ function StoryPanel({
       </div>
     </div>
   );
-
-  const wordCount = editing
-    ? editText.split(/\s+/).filter(Boolean).length
-    : (story.word_count || 0);
 
   // ── Arc Stage computation ──
   const arcStage = useMemo(() => {
