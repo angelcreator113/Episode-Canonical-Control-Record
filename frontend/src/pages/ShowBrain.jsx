@@ -315,6 +315,16 @@ const MUSIC_RULES = [
   'Admiration beats trigger music swells.',
 ];
 
+const SCENE_GENERATION = [
+  'Environment-only output required on all scene generation calls — no exceptions.',
+  'Prompt must open with: "Empty room. No people. No person. No human. No figure. No silhouette. No body. No face. No hands. No reflection of a person."',
+  'This constraint is system-level, not prompt-level — it is enforced in sceneGenerationService.js before any prompt reaches RunwayML.',
+  'Intentional negative space required: open floor areas, clear bed edge, space near vanity, room in doorway framing.',
+  'Multi-angle consistency required: same room, same layout, same lighting direction across all angles in a set.',
+  'Style target: soft realism, warm tones, feminine and expressive, lived-in but intentional.',
+  'Banned: hyper-staged catalog look, clutter chaos, dark cinematic mood (unless explicitly defined for a specific set), any staging that implies a specific person was just present.',
+];
+
 const SEASON_ARCS = [
   {
     name: 'ARC 1: The Rise', episodes: '1–8', color: '#6bba9a',
@@ -386,6 +396,17 @@ const CANON_PRODUCTION = [
   'Bounce animations are permanently banned from the visual language.',
   'Script is always the source of truth for beat structure — not the UI.',
   "Book lines (from JustAWoman's manuscript) are the source. Script is the output. Writer Brain is the pipeline.",
+];
+
+const CANON_SCENE = [
+  'Scenes are containers. Characters are layers. They are never baked together. Not sometimes. Not optionally. Never.',
+  'A scene is invalid if it contains a person, partial body, hand, shadow, reflection of a person, or implied presence (body impression, personal object mid-use).',
+  'Every scene must preserve intentional negative space — clear open areas where characters can be placed, animated, or layered later.',
+  'A Scene Set is only valid if all angles feel like the same physical room. Same layout, same lighting, same spatial relationships. If two angles feel like different rooms, reject the set.',
+  "Lighting is system behavior, not aesthetic choice. Lala's bedroom: morning, window-based, soft stripes. This cannot change between angles.",
+  'Scenes must be reusable across different characters, moods, and story beats. If a scene feels locked to one specific moment, it is wrong.',
+  'Scene generation and character generation are separate pipeline stages. They are never triggered together.',
+  'The Scene Layer, Character Layer, Action Layer, and Camera Layer are distinct. The system must never collapse them into a single baked output.',
 ];
 
 /* ─── TAB RENDERERS ─── */
@@ -803,6 +824,16 @@ function renderVisual() {
         <ul>{MUSIC_RULES.map((r, i) => <li key={i}>{r}</li>)}</ul>
       </div>
 
+      <h3 className="sb-sub-heading">Scene Generation</h3>
+      <div className="sb-callout">
+        <span className="sb-callout-icon">🎬</span>
+        <div>
+          <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
+            {SCENE_GENERATION.map((r, i) => <li key={i} style={{ fontSize: '.88rem', lineHeight: '1.65', color: '#6a4a5a' }}>{r}</li>)}
+          </ul>
+        </div>
+      </div>
+
       <div className="sb-callout" style={{ marginTop: '1.25rem' }}>
         <span className="sb-callout-icon">⚠️</span>
         <div>
@@ -951,6 +982,18 @@ function renderCanon() {
         <h3>Production Rules</h3>
         <ul className="sb-canon-list">
           {CANON_PRODUCTION.map((r, i) => (
+            <li key={i} className="sb-canon-item">
+              <span className="sb-canon-lock">🔒</span>
+              {r}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="sb-canon-section sb-canon-scene">
+        <h3>Scene Rules</h3>
+        <ul className="sb-canon-list">
+          {CANON_SCENE.map((r, i) => (
             <li key={i} className="sb-canon-item">
               <span className="sb-canon-lock">🔒</span>
               {r}
