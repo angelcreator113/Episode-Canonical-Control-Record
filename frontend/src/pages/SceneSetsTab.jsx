@@ -213,7 +213,7 @@ export default function SceneSetsTab() {
 
   const fetchSets = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scene-sets`);
+      const res = await fetch(`${API_BASE}/scene-sets`);
       const json = await res.json();
       setSets(json.data || []);
     } catch {
@@ -239,7 +239,7 @@ export default function SceneSetsTab() {
   const handleGenerateBase = async (set) => {
     setGeneratingId(set.id);
     try {
-      await fetch(`${API_BASE}/api/v1/scene-sets/${set.id}/generate-base`, { method: 'POST' });
+      await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, { method: 'POST' });
       showToast(`Generating base for "${set.name}" — this takes ~45 seconds`);
       setTimeout(fetchSets, 5000);
     } catch {
@@ -252,7 +252,7 @@ export default function SceneSetsTab() {
   const handleGenerateAngle = async (set, angle) => {
     setGeneratingId(set.id);
     try {
-      await fetch(`${API_BASE}/api/v1/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
+      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
       showToast(`Generating "${angle.angle_name}" — this takes ~45 seconds`);
       setTimeout(fetchSets, 5000);
     } catch {
@@ -266,7 +266,7 @@ export default function SceneSetsTab() {
     if (!newSet.name.trim()) { showToast('Name is required', 'error'); return; }
     setCreating(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scene-sets`, {
+      const res = await fetch(`${API_BASE}/scene-sets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
