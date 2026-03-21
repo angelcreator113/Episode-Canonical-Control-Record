@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Film, Camera } from 'lucide-react';
 import sceneLibraryService from '../services/sceneLibraryService';
 import showService from '../services/showService';
 import { normalizeSceneThumbnail } from '../utils/urlUtils';
+import SceneSetsTab from './SceneSetsTab';
 import './SceneLibrary.css';
 
 const SceneLibrary = () => {
@@ -31,6 +33,9 @@ const SceneLibrary = () => {
 
   // Shows for filter
   const [shows, setShows] = useState([]);
+
+  // Tab
+  const [activeTab, setActiveTab] = useState('clips');
 
   // Pagination
   const [pagination, setPagination] = useState({
@@ -243,6 +248,28 @@ const SceneLibrary = () => {
           </button>
         </div>
       </div>
+
+      {/* Tab Bar */}
+      <div className="scene-library-tab-bar">
+        <button
+          className={`scene-library-tab${activeTab === 'clips' ? ' active' : ''}`}
+          onClick={() => setActiveTab('clips')}
+        >
+          <Film size={15} /> Scene Clips
+        </button>
+        <button
+          className={`scene-library-tab${activeTab === 'sets' ? ' active' : ''}`}
+          onClick={() => setActiveTab('sets')}
+        >
+          <Camera size={15} /> Scene Sets
+        </button>
+      </div>
+
+      {/* Scene Sets Tab */}
+      {activeTab === 'sets' && <SceneSetsTab />}
+
+      {/* Clips Tab */}
+      {activeTab === 'clips' && <>
 
       {/* Upload Section */}
       <div className="upload-section">
@@ -484,6 +511,7 @@ const SceneLibrary = () => {
           </>
         )}
       </div>
+      </>}
     </div>
   );
 };
