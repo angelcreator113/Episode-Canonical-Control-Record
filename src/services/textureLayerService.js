@@ -12,7 +12,7 @@ function extractText(response) {
   if (!response?.content?.length || !response.content[0]?.text) {
     throw new Error('AI returned empty or malformed response');
   }
-  return extractText(response);
+  return response.content[0].text;
 }
 
 // Call Claude with model fallback on retryable errors
@@ -55,6 +55,26 @@ const BODY_RELATIONSHIP_NARRATIVES = {
   home:       'Her body is where she lives. She is comfortable in it in a way most women are not.',
   evidence:   'Her body is proof of something. What it proves depends on who is looking.',
 };
+
+// ── Mom tone eligibility ──────────────────────────────────────────────
+const MOM_TONE_ROLES = ['child', 'son', 'daughter'];
+const MOM_TONE_KEYS = ['elias', 'zion'];
+
+function isMomToneEligible(charactersPresent = []) {
+  return charactersPresent.some(c =>
+    MOM_TONE_ROLES.includes(c.role_type) ||
+    MOM_TONE_KEYS.includes(c.character_key)
+  );
+}
+
+// ── Aftermath / memory proposal eligibility ─────────────────────────
+const INTIMATE_ROLES = ['love_interest', 'spouse', 'partner', 'ex', 'temptation'];
+
+function isAftermathEligible(charactersPresent = []) {
+  return charactersPresent.some(c =>
+    INTIMATE_ROLES.includes(c.role_type)
+  );
+}
 
 // ── Conflict eligibility ──────────────────────────────────────────────
 const CONFLICT_ELIGIBLE_STORY_TYPES = ['collision', 'wrong_win'];
@@ -412,6 +432,148 @@ Write only the bleed text. No labels. No preamble.`;
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// GENERATOR 7 — Mom Tone Insert
+// ══════════════════════════════════════════════════════════════════════
+async function generateMomToneInsert(story, characterData, arcContext, charactersPresent) {
+  const childChars = charactersPresent.filter(c =>
+    MOM_TONE_ROLES.includes(c.role_type) || MOM_TONE_KEYS.includes(c.character_key)
+  );
+  const childNames = childChars.map(c => c.name || c.character_key).join(', ') || 'her child';
+
+  const voiceBlock = buildTextureVoiceBlock(characterData);
+
+  const prompt = `You are generating a mom tone insert for a literary novel.
+
+CHARACTER: ${characterData.display_name || characterData.name}
+${voiceBlock}
+She is a mother. This is the part of her life that is uncomplicated in a complicated life.
+Children present: ${childNames}
+
+ARC POSITION:
+${arcContext.wound_clock_narrative}
+${arcContext.stakes_narrative}
+
+STORY CONTEXT:
+Title: ${story.title}
+Phase: ${story.phase}
+Story number: ${story.story_number}
+Text excerpt: ${(story.text || '').slice(0, 500)}
+
+Generate a MOM TONE INSERT — Return as JSON only:
+
+{
+  "mom_tone_trigger": "What the child did or said that stopped her. Specific. A sentence fragment or a small action. Not symbolic — real. 1 sentence.",
+  "mom_tone_text": "The moment of tenderness or exhaustion or both. She is not performing. She is not content-creating. She is just a mother. Sometimes this is beautiful. Sometimes this is heavy. Always it is specific. 60-100 words. Third person. Present tense even if the story is past tense.",
+  "mom_tone_child": "${childChars[0]?.character_key || 'elias'}"
+}
+
+Return JSON only. No preamble.`;
+
+  const response = await callWithFallback({
+    max_tokens: 300,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const raw = extractText(response)
+    .replace(/```json|```/g, '').trim();
+
+  return JSON.parse(raw);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// GENERATOR 8 — Aftermath Line
+// ══════════════════════════════════════════════════════════════════════
+async function generateAftermathLine(story, characterData, arcContext, charactersPresent) {
+  const intimateChar = charactersPresent.find(c =>
+    INTIMATE_ROLES.includes(c.role_type)
+  );
+
+  const voiceBlock = buildTextureVoiceBlock(characterData);
+
+  const prompt = `You are generating an aftermath line for a literary novel.
+
+CHARACTER: ${characterData.display_name || characterData.name}
+${voiceBlock}
+Core wound: ${characterData.core_wound || 'invisibility while trying'}
+The other person: ${intimateChar?.name || 'him'} (${intimateChar?.role_type || 'intimate'})
+
+ARC POSITION:
+${arcContext.wound_clock_narrative}
+${arcContext.stakes_narrative}
+
+STORY CONTEXT:
+Title: ${story.title}
+Phase: ${story.phase}
+Text excerpt: ${(story.text || '').slice(0, 500)}
+
+Generate an AFTERMATH LINE — what remains after the intimate moment. Not what happened. What it left behind.
+
+Rules:
+- 1-3 sentences maximum. 40-80 words.
+- Third person. Past tense.
+- Not explicit. Not metaphorical. Physical and specific.
+- What does her body remember? What does the room smell like? What did she decide without deciding?
+- The aftermath is never about the other person. It is about what she knows now that she did not know before the scene started.
+- No resolution. No judgment. Just the residue.
+
+Write only the aftermath line. No labels. No preamble.`;
+
+  const response = await callWithFallback({
+    max_tokens: 200,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  return { aftermath_line_text: extractText(response) };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// GENERATOR 9 — Memory Proposal
+// ══════════════════════════════════════════════════════════════════════
+async function generateMemoryProposal(story, characterData, arcContext, charactersPresent) {
+  const intimateChar = charactersPresent.find(c =>
+    INTIMATE_ROLES.includes(c.role_type)
+  );
+
+  const voiceBlock = buildTextureVoiceBlock(characterData);
+
+  const prompt = `You are generating a memory proposal for a literary novel.
+
+CHARACTER: ${characterData.display_name || characterData.name}
+${voiceBlock}
+Core wound: ${characterData.core_wound || 'invisibility while trying'}
+The other person: ${intimateChar?.name || 'him'} (${intimateChar?.role_type || 'intimate'})
+
+ARC POSITION:
+${arcContext.wound_clock_narrative}
+${arcContext.stakes_narrative}
+Story number: ${story.story_number} of 50. Phase: ${story.phase}.
+
+STORY CONTEXT:
+Title: ${story.title}
+Text excerpt: ${(story.text || '').slice(0, 400)}
+
+Generate a MEMORY PROPOSAL — something from this scene that might become a memory she returns to, or something she actively decides to forget. Return as JSON only:
+
+{
+  "memory_proposal_type": "keeps | buries | revises",
+  "memory_proposal_detail": "The specific sensory detail she will carry or bury. Not the whole scene — one fragment. The sound of his voice when he said the specific thing. The weight of the door when she closed it. The way the light hit the counter. 1-2 sentences.",
+  "memory_proposal_text": "The full memory proposal. What she does with this moment. If she keeps it: where she stores it and what it means to her. If she buries it: what she replaces it with. If she revises it: the version she will tell herself later. 60-100 words. Interior voice. Honest. No performance."
+}
+
+Return JSON only. No preamble.`;
+
+  const response = await callWithFallback({
+    max_tokens: 300,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const raw = extractText(response)
+    .replace(/```json|```/g, '').trim();
+
+  return JSON.parse(raw);
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // AMBER — First Reader
 // ══════════════════════════════════════════════════════════════════════
 async function amberReads(story, texture, arcContext, characterData) {
@@ -434,6 +596,9 @@ Phone appearances: ${arcContext.phone_appearances}
 GENERATED TEXTURE:
 Inner thought (${texture.inner_thought_type}): ${texture.inner_thought_text || 'not generated'}
 Body narrator: ${texture.body_narrator_text || 'not generated'}
+Mom tone: ${texture.mom_tone_text || 'no children present'}
+Aftermath line: ${texture.aftermath_line_text || 'not intimate'}
+Memory proposal (${texture.memory_proposal_type || 'n/a'}): ${texture.memory_proposal_text || 'not intimate'}
 Private moment: ${texture.private_moment_text || 'not this position'}
 Post: ${texture.post_text || 'not this position'}
 Conflict: ${texture.conflict_eligible ? texture.conflict_surface_text : 'not eligible'}
@@ -510,6 +675,25 @@ async function generateTextureLayer(db, storyData, options = {}) {
     Object.assign(texture, conflictResult);
   }
 
+  // ── Mom tone insert (children present) ─────────────────────────
+  if (isMomToneEligible(charactersPresent)) {
+    texture.mom_tone_eligible = true;
+    const momResult = await generateMomToneInsert(
+      storyData, characterData, arcContext, charactersPresent
+    );
+    Object.assign(texture, momResult);
+  }
+
+  // ── Aftermath line + Memory proposal (intimate roles present) ──
+  if (isAftermathEligible(charactersPresent)) {
+    texture.aftermath_eligible = true;
+    const [aftermathResult, memoryResult] = await Promise.all([
+      generateAftermathLine(storyData, characterData, arcContext, charactersPresent),
+      generateMemoryProposal(storyData, characterData, arcContext, charactersPresent),
+    ]);
+    Object.assign(texture, aftermathResult, memoryResult);
+  }
+
   // ── Private moment (position check) ────────────────────────────
   if (isPrivateMomentPosition(storyData.story_number)) {
     texture.private_moment_eligible = true;
@@ -549,6 +733,8 @@ module.exports = {
   generateTextureLayer,
   detectPhone,
   isConflictEligible,
+  isMomToneEligible,
+  isAftermathEligible,
   isPrivateMomentPosition,
   isPostPosition,
 };

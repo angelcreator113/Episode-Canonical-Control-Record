@@ -62,6 +62,27 @@ module.exports = (sequelize) => {
     bleed_text:      { type: DataTypes.TEXT, allowNull: true },
     bleed_confirmed: { type: DataTypes.BOOLEAN, defaultValue: false },
 
+    // Mom tone insert
+    mom_tone_eligible:  { type: DataTypes.BOOLEAN, defaultValue: false },
+    mom_tone_trigger:   { type: DataTypes.TEXT, allowNull: true },
+    mom_tone_text:      { type: DataTypes.TEXT, allowNull: true },
+    mom_tone_child:     { type: DataTypes.STRING, allowNull: true },
+    mom_tone_confirmed: { type: DataTypes.BOOLEAN, defaultValue: false },
+
+    // Aftermath line
+    aftermath_eligible:  { type: DataTypes.BOOLEAN, defaultValue: false },
+    aftermath_line_text: { type: DataTypes.TEXT, allowNull: true },
+    aftermath_confirmed: { type: DataTypes.BOOLEAN, defaultValue: false },
+
+    // Memory proposal
+    memory_proposal_type: {
+      type: DataTypes.ENUM('keeps', 'buries', 'revises'),
+      allowNull: true,
+    },
+    memory_proposal_detail:    { type: DataTypes.TEXT, allowNull: true },
+    memory_proposal_text:      { type: DataTypes.TEXT, allowNull: true },
+    memory_proposal_confirmed: { type: DataTypes.BOOLEAN, defaultValue: false },
+
     // Phone
     phone_appeared: { type: DataTypes.BOOLEAN, defaultValue: false },
     phone_context:  { type: DataTypes.TEXT, allowNull: true },

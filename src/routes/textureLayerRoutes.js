@@ -76,6 +76,7 @@ router.post('/generate', async (req, res) => {
 const VALID_CONFIRM_FIELDS = [
   'inner_thought_confirmed', 'conflict_confirmed', 'body_narrator_confirmed',
   'private_moment_confirmed', 'post_confirmed', 'bleed_confirmed',
+  'mom_tone_confirmed', 'aftermath_confirmed', 'memory_proposal_confirmed',
 ];
 
 router.post('/confirm/:storyNumber', async (req, res) => {
@@ -102,6 +103,9 @@ router.post('/confirm/:storyNumber', async (req, res) => {
       updates.private_moment_confirmed = texture.private_moment_eligible;
       updates.post_confirmed           = !!texture.post_text;
       updates.bleed_confirmed          = !!texture.bleed_text;
+      updates.mom_tone_confirmed       = !!texture.mom_tone_text;
+      updates.aftermath_confirmed      = !!texture.aftermath_line_text;
+      updates.memory_proposal_confirmed = !!texture.memory_proposal_text;
       updates.fully_confirmed          = true;
       updates.confirmed_at             = new Date();
     } else {
@@ -118,7 +122,10 @@ router.post('/confirm/:storyNumber', async (req, res) => {
         (!updated.conflict_eligible  || updated.conflict_confirmed) &&
         (!updated.private_moment_eligible || updated.private_moment_confirmed) &&
         (!updated.post_text          || updated.post_confirmed) &&
-        (!updated.bleed_text         || updated.bleed_confirmed)
+        (!updated.bleed_text         || updated.bleed_confirmed) &&
+        (!updated.mom_tone_text      || updated.mom_tone_confirmed) &&
+        (!updated.aftermath_line_text || updated.aftermath_confirmed) &&
+        (!updated.memory_proposal_text || updated.memory_proposal_confirmed)
       );
       if (allConfirmed) {
         updates.fully_confirmed = true;
@@ -146,6 +153,9 @@ router.post('/regenerate/:storyNumber/:layer', async (req, res) => {
     private_moment:  ['private_moment_setting', 'private_moment_held_thing', 'private_moment_sensory_anchor', 'private_moment_text', 'private_moment_confirmed'],
     post:            ['post_text', 'post_platform', 'post_audience_bestie', 'post_audience_paying_man', 'post_audience_competitive_woman', 'post_confirmed'],
     bleed:           ['bleed_text', 'bleed_confirmed'],
+    mom_tone:        ['mom_tone_trigger', 'mom_tone_text', 'mom_tone_child', 'mom_tone_confirmed'],
+    aftermath:       ['aftermath_line_text', 'aftermath_confirmed'],
+    memory_proposal: ['memory_proposal_type', 'memory_proposal_detail', 'memory_proposal_text', 'memory_proposal_confirmed'],
   };
 
   if (!layerFieldMap[layer]) {
@@ -196,7 +206,8 @@ router.get('/:characterKey', async (req, res) => {
         'conflict_eligible', 'private_moment_eligible',
         'phone_appeared', 'bleed_text',
         'fully_confirmed', 'amber_notes',
-        'post_text',
+        'post_text', 'mom_tone_text', 'aftermath_line_text',
+        'memory_proposal_type', 'aftermath_eligible', 'mom_tone_eligible',
       ],
       order: [['story_number', 'ASC']],
     });
