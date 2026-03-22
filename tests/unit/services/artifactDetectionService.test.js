@@ -55,6 +55,7 @@ describe('ArtifactDetectionService', () => {
       'FLOOR_DISTORTION',
       'HAND_BODY',
       'TEXT_BLEED',
+      'DUPLICATED_OBJECTS',
     ];
 
     it('should contain all expected category keys', () => {
