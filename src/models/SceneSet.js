@@ -61,6 +61,9 @@ module.exports = (sequelize) => {
     base_runway_prompt: { type: DataTypes.TEXT, allowNull: true },
     base_runway_seed: { type: DataTypes.STRING, allowNull: true },
     base_runway_model: { type: DataTypes.STRING, allowNull: true, defaultValue: 'gen3a_turbo' },
+    style_reference_url: { type: DataTypes.TEXT, allowNull: true },
+    negative_prompt: { type: DataTypes.TEXT, allowNull: true },
+    variation_count: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 1 },
     generation_status: {
       type: DataTypes.ENUM('pending', 'generating', 'complete', 'failed'),
       allowNull: false,
