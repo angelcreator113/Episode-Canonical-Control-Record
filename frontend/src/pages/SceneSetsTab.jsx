@@ -173,7 +173,7 @@ function formatTime(secs) {
 
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, generatingId, generationProgress }) {
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || null;
@@ -264,6 +264,15 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
                 <RotateCcw size={12} /> Reset Angles
               </button>
             )}
+
+            <button
+              onClick={() => onDeleteSet(set)}
+              disabled={isGenerating}
+              className="scene-sets-btn-delete-set"
+              title="Delete this scene set"
+            >
+              <Trash2 size={12} /> Delete
+            </button>
 
             <button
               onClick={() => setExpanded(e => !e)}
@@ -434,6 +443,18 @@ export default function SceneSetsTab() {
     }
   };
 
+  const handleDeleteSet = async (set) => {
+    if (!window.confirm(`Delete scene set "${set.name}"? This will soft-delete the set and all its angles.`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      showToast(`Deleted "${set.name}"`);
+      fetchSets();
+    } catch {
+      showToast('Failed to delete scene set', 'error');
+    }
+  };
+
   const handleDeleteAllAngles = async (set) => {
     const count = set.angles?.length || 0;
     if (count === 0) return;
@@ -584,6 +605,7 @@ export default function SceneSetsTab() {
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
               onDeleteAllAngles={handleDeleteAllAngles}
+              onDeleteSet={handleDeleteSet}
               generatingId={generatingId}
               generationProgress={generationProgress}
             />
