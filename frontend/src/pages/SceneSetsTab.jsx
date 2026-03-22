@@ -1161,7 +1161,11 @@ export default function SceneSetsTab() {
   const handleGenerateAngle = async (set, angle) => {
     setGeneratingId(set.id);
     try {
-      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Generation failed (${res.status})`);
+      }
       showToast(`Generating "${angle.angle_name}" — still image ~20s, then video ~25s`);
       setTimeout(fetchSets, 5000);
     } catch {
