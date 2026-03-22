@@ -54,6 +54,20 @@ const ANGLE_MODIFIERS = {
   OTHER:        'Unique compositional angle appropriate to this specific location.',
 };
 
+// Video-specific movement descriptions for image_to_video (describe camera MOTION, not static composition)
+const VIDEO_MOVEMENT_MODIFIERS = {
+  WIDE:         'Camera slowly pulls back and pans to reveal the full room. Steady, smooth cinematic pullback.',
+  CLOSET:       'Camera slowly dollies forward toward the wardrobe area. Gentle forward drift revealing fabric textures.',
+  VANITY:       'Camera slowly pushes toward the vanity mirror, approaching surface details and reflections. Smooth forward glide.',
+  WINDOW:       'Camera slowly pans toward the window as natural light brightens. Gentle lateral movement.',
+  DOORWAY:      'Camera slowly retreats through the doorway, revealing the room from the threshold. Steady pullback.',
+  ESTABLISHING: 'Camera slowly tilts up and pulls back to reveal the grand scope of the space. Majestic rising reveal.',
+  ACTION:       'Camera moves dynamically through the space with slight handheld energy. Purposeful cinematic tracking.',
+  CLOSE:        'Camera slowly pushes in for an intimate close-up of a surface or detail. Smooth gentle forward drift.',
+  OVERHEAD:     'Camera slowly rises upward, revealing the room layout from above. Steady ascending crane movement.',
+  OTHER:        'Camera moves gently through the space with natural flowing motion. Smooth cinematic drift.',
+};
+
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
 function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
@@ -67,13 +81,32 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     `LOCATION: ${sceneSet.name}.`,
     descriptionSlice,
     `CAMERA: ${cameraText}`,
-    'Cinematic quality. No text overlays. No watermarks.',
+    'Photorealistic cinematic quality. No text overlays. No watermarks. No distorted faces or hands.',
   ];
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
   // Enforce 1000 char limit
   return full.length > 1000 ? full.slice(0, 997) + '...' : full;
+}
+
+/**
+ * Build a short, movement-focused prompt for image_to_video angle generation.
+ * The scene description is already in the base image — the video prompt
+ * should only describe camera MOVEMENT so the AI animates the camera.
+ */
+function buildVideoPrompt(sceneSet, angleLabel, customCameraDirection) {
+  const movementText = customCameraDirection
+    ? `Camera movement: ${customCameraDirection}`
+    : VIDEO_MOVEMENT_MODIFIERS[angleLabel] || VIDEO_MOVEMENT_MODIFIERS.WIDE;
+
+  const parts = [
+    movementText,
+    `Scene: ${sceneSet.name}.`,
+    'Maintain warm soft natural lighting. Photorealistic quality. No morphing. No text overlays.',
+  ];
+
+  return parts.join(' ').trim();
 }
 
 // ─── RUNWAY API HELPERS ───────────────────────────────────────────────────────
@@ -299,10 +332,10 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
     const response = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 120000 });
     fs.writeFileSync(tmpVideo, Buffer.from(response.data));
 
-    // Extract first frame with ffmpeg
+    // Extract LAST frame from video (frame 1 = input image; end frame = moved camera)
     await new Promise((resolve, reject) => {
       execFile('ffmpeg', [
-        '-y', '-i', tmpVideo,
+        '-y', '-sseof', '-0.5', '-i', tmpVideo,
         '-vframes', '1', '-q:v', '2',
         tmpFrame,
       ], { timeout: 30000 }, (err) => {
@@ -336,19 +369,23 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
   }
 
-  const prompt = buildPrompt(sceneSet, sceneAngle.angle_label, sceneAngle.camera_direction);
+  // Use movement-focused prompt for video (scene is already in the base image)
+  const videoPrompt = buildVideoPrompt(sceneSet, sceneAngle.angle_label, sceneAngle.camera_direction);
+  // Keep the full prompt for logging/debugging
+  const fullPrompt = buildPrompt(sceneSet, sceneAngle.angle_label, sceneAngle.camera_direction);
 
   await SceneAngle.update(
-    { generation_status: 'generating', runway_prompt: prompt },
+    { generation_status: 'generating', runway_prompt: fullPrompt },
     { where: { id: sceneAngle.id } }
   );
 
   try {
     console.log(`[SceneGen] Starting image-anchored video for angle: ${sceneAngle.angle_name}`);
+    console.log(`[SceneGen] Video prompt: ${videoPrompt}`);
 
     // Image-anchored: use base still as promptImage → image_to_video directly
     const { jobId: videoJobId } = await startImageToVideo(
-      prompt,
+      videoPrompt,
       sceneSet.base_still_url,
     );
     const videoResult = await pollTask(videoJobId);
@@ -401,9 +438,11 @@ function sleep(ms) {
 
 module.exports = {
   buildPrompt,
+  buildVideoPrompt,
   generateBaseScene,
   generateAngle,
   pollTask,
   LALAVERSE_VISUAL_ANCHOR,
   ANGLE_MODIFIERS,
+  VIDEO_MOVEMENT_MODIFIERS,
 };
