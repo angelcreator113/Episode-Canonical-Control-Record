@@ -511,7 +511,7 @@ router.get('/refinement-queue/jobs/:jobId', optionalAuth, async (req, res) => {
 
 router.get('/by-type/:sceneType', optionalAuth, async (req, res) => {
   try {
-    const validTypes = ['HOME_BASE', 'RECURRING', 'ONE_SHOT', 'TRANSITIONAL', 'FLASHBACK'];
+    const validTypes = ['HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER'];
     const sceneType = req.params.sceneType.toUpperCase();
 
     if (!validTypes.includes(sceneType)) {
