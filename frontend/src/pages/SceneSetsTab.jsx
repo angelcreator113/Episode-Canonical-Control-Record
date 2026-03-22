@@ -290,7 +290,7 @@ function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGe
   const fileInputRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
-  const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || null;
+  const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
   const pendingAngles = set.angles?.filter(a => a.generation_status === 'pending') || [];
