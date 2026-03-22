@@ -342,7 +342,21 @@
 .scene-sets-card-header {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+
+.scene-sets-card-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scene-sets-card-header-utils {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .scene-sets-card-title {
@@ -363,6 +377,11 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.scene-sets-card-actions:empty {
+  display: none;
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
@@ -468,7 +487,7 @@
   color: #C62828;
   border: 1px solid #FFCDD2;
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 5px 7px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -831,8 +850,7 @@
   }
 
   .scene-sets-btn-generate,
-  .scene-sets-btn-upload,
-  .scene-sets-btn-angles {
+  .scene-sets-btn-upload {
     flex: 1;
     text-align: center;
     justify-content: center;

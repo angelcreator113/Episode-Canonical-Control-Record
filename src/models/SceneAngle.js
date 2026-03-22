@@ -23,6 +23,8 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM('WIDE', 'CLOSET', 'VANITY', 'WINDOW', 'DOORWAY', 'ESTABLISHING', 'ACTION', 'CLOSE', 'OVERHEAD', 'OTHER'),
       allowNull: false,
     },
+    angle_description: { type: DataTypes.TEXT, allowNull: true },
+    camera_direction: { type: DataTypes.TEXT, allowNull: true },
     beat_affinity: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
     mood: { type: DataTypes.STRING, allowNull: true },
     runway_prompt: { type: DataTypes.TEXT, allowNull: true },

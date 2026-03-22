@@ -354,11 +354,29 @@ function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGe
       {/* Card body */}
       <div className="scene-sets-card-body">
         <div className="scene-sets-card-header">
-          <div>
-            <h3 className="scene-sets-card-title">{set.name}</h3>
-            <p className="scene-sets-card-subtitle">
-              {readyAngles}/{totalAngles} angles ready
-            </p>
+          <div className="scene-sets-card-header-row">
+            <div>
+              <h3 className="scene-sets-card-title">{set.name}</h3>
+              <p className="scene-sets-card-subtitle">
+                {readyAngles}/{totalAngles} angles ready
+              </p>
+            </div>
+            <div className="scene-sets-card-header-utils">
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="scene-sets-btn-angles"
+              >
+                {expanded ? 'Hide' : 'Angles'}
+              </button>
+              <button
+                onClick={() => onDeleteSet(set)}
+                disabled={isGenerating}
+                className="scene-sets-btn-delete-set"
+                title="Delete this scene set"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
           </div>
 
           <div className="scene-sets-card-actions">
@@ -435,22 +453,6 @@ function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGe
                 <RotateCcw size={12} /> Reset Angles
               </button>
             )}
-
-            <button
-              onClick={() => onDeleteSet(set)}
-              disabled={isGenerating}
-              className="scene-sets-btn-delete-set"
-              title="Delete this scene set"
-            >
-              <Trash2 size={12} /> Delete
-            </button>
-
-            <button
-              onClick={() => setExpanded(e => !e)}
-              className="scene-sets-btn-angles"
-            >
-              {expanded ? 'Hide' : 'Angles'}
-            </button>
           </div>
         </div>
 

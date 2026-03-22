@@ -22,6 +22,10 @@
 
 const axios = require('axios');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { execFile } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_API_KEY     = process.env.RUNWAY_ML_API_KEY;
@@ -52,8 +56,8 @@ const ANGLE_MODIFIERS = {
 
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
-function buildPrompt(sceneSet, angleLabel = 'WIDE') {
-  const angleModifier = ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
+function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
+  const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
   // RunwayML promptText max is 1000 chars — keep it focused
   const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 500);
@@ -62,7 +66,7 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE') {
     LALAVERSE_VISUAL_ANCHOR,
     `LOCATION: ${sceneSet.name}.`,
     descriptionSlice,
-    `CAMERA: ${angleModifier}`,
+    `CAMERA: ${cameraText}`,
     'Cinematic quality. No text overlays. No watermarks.',
   ];
 
@@ -286,6 +290,45 @@ async function generateBaseScene(sceneSet, models) {
  * Uses the parent set's base_still_url as promptImage for image_to_video,
  * ensuring visual consistency across all angles (same room).
  */
+async function extractFirstFrame(videoUrl, setId, angleId) {
+  const tmpVideo = path.join(os.tmpdir(), `scene-${angleId}.mp4`);
+  const tmpFrame = path.join(os.tmpdir(), `scene-${angleId}-frame.jpg`);
+
+  try {
+    // Download video to temp file
+    const response = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 120000 });
+    fs.writeFileSync(tmpVideo, Buffer.from(response.data));
+
+    // Extract first frame with ffmpeg
+    await new Promise((resolve, reject) => {
+      execFile('ffmpeg', [
+        '-y', '-i', tmpVideo,
+        '-vframes', '1', '-q:v', '2',
+        tmpFrame,
+      ], { timeout: 30000 }, (err) => {
+        if (err) reject(err); else resolve();
+      });
+    });
+
+    // Upload frame to S3
+    const frameBuffer = fs.readFileSync(tmpFrame);
+    const s3Key = `scene-sets/${setId}/angles/${angleId}/still.jpg`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: frameBuffer,
+      ContentType: 'image/jpeg',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  } finally {
+    // Cleanup temp files
+    try { fs.unlinkSync(tmpVideo); } catch (_) {}
+    try { fs.unlinkSync(tmpFrame); } catch (_) {}
+  }
+}
+
 async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
 
@@ -293,7 +336,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
   }
 
-  const prompt = buildPrompt(sceneSet, sceneAngle.angle_label);
+  const prompt = buildPrompt(sceneSet, sceneAngle.angle_label, sceneAngle.camera_direction);
 
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt },
@@ -318,10 +361,19 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     const videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
     console.log(`[SceneGen] Angle video complete: ${sceneAngle.angle_name}`);
 
+    // Extract first frame from the generated video as this angle's still
+    let stillUrl = sceneSet.base_still_url; // fallback
+    try {
+      stillUrl = await extractFirstFrame(videoUrl, sceneSet.id, sceneAngle.id);
+      console.log(`[SceneGen] First frame extracted for: ${sceneAngle.angle_name}`);
+    } catch (frameErr) {
+      console.warn(`[SceneGen] First frame extraction failed (using base still): ${frameErr.message}`);
+    }
+
     const totalCost = videoResult.creditsUsed || 0;
 
     await SceneAngle.update({
-      still_image_url: sceneSet.base_still_url,
+      still_image_url: stillUrl,
       video_clip_url: videoUrl,
       runway_seed: String(videoResult.seed ?? videoJobId),
       generation_status: 'complete',
@@ -334,7 +386,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       where: { id: sceneSet.id },
     });
 
-    return { success: true, stillUrl: sceneSet.base_still_url, videoUrl, seed: videoResult.seed };
+    return { success: true, stillUrl, videoUrl, seed: videoResult.seed };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;
