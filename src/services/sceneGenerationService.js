@@ -263,9 +263,10 @@ async function generateBaseScene(sceneSet, models) {
       console.warn(`[SceneGen] Base video error (non-blocking): ${videoErr.message}`);
     }
 
-    // Lock the seed — permanent
+    // Lock the seed + base still URL — permanent
     await SceneSet.update({
       base_runway_seed: lockedSeed,
+      base_still_url: stillUrl,
       generation_status: 'complete',
       generation_cost: parseFloat(sceneSet.generation_cost || 0) +
         (stillResult.creditsUsed || 0) + (videoResult.creditsUsed || 0),
@@ -281,14 +282,15 @@ async function generateBaseScene(sceneSet, models) {
 // ─── HIGH-LEVEL: GENERATE ANGLE ───────────────────────────────────────────────
 
 /**
- * Generate still + video for a specific Scene Angle.
- * Uses the parent set's locked base_runway_seed for visual consistency.
+ * Generate video for a specific Scene Angle using image-anchored approach.
+ * Uses the parent set's base_still_url as promptImage for image_to_video,
+ * ensuring visual consistency across all angles (same room).
  */
 async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
 
-  if (!sceneSet.base_runway_seed) {
-    throw new Error('base_runway_seed not set on parent scene set. Run generateBaseScene first.');
+  if (!sceneSet.base_still_url) {
+    throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
   }
 
   const prompt = buildPrompt(sceneSet, sceneAngle.angle_label);
@@ -299,44 +301,29 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   );
 
   try {
-    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
+    console.log(`[SceneGen] Starting image-anchored video for angle: ${sceneAngle.angle_name}`);
 
-    // ── Step 1: Text → Still (with locked seed) ────────────────────────────
-    const { jobId: stillJobId } = await startTextToImage(prompt, sceneSet.base_runway_seed);
-    const stillResult = await pollTask(stillJobId);
-
-    if (stillResult.status !== 'SUCCEEDED') {
-      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-      throw new Error(`Angle still failed: ${stillResult.error}`);
-    }
-
-    const stillUrl = await storeInS3(stillResult.outputUrl, sceneSet.id, sceneAngle.id, 'still');
-    console.log(`[SceneGen] Angle still complete: ${sceneAngle.angle_name}`);
-
-    // ── Step 2: Still → Video ─────────────────────────────────────────────
-    console.log(`[SceneGen] Starting video for angle: ${sceneAngle.angle_name}`);
-
+    // Image-anchored: use base still as promptImage → image_to_video directly
     const { jobId: videoJobId } = await startImageToVideo(
       prompt,
-      stillResult.outputUrl,
-      stillResult.seed
+      sceneSet.base_still_url,
     );
     const videoResult = await pollTask(videoJobId);
 
-    let videoUrl = null;
-    if (videoResult.status === 'SUCCEEDED') {
-      videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
-      console.log(`[SceneGen] Angle video complete: ${sceneAngle.angle_name}`);
-    } else {
-      console.warn(`[SceneGen] Angle video failed (non-blocking): ${videoResult.error}`);
+    if (videoResult.status !== 'SUCCEEDED') {
+      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+      throw new Error(`Angle video failed: ${videoResult.error}`);
     }
 
-    const totalCost = (stillResult.creditsUsed || 0) + (videoResult.creditsUsed || 0);
+    const videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
+    console.log(`[SceneGen] Angle video complete: ${sceneAngle.angle_name}`);
+
+    const totalCost = videoResult.creditsUsed || 0;
 
     await SceneAngle.update({
-      still_image_url: stillUrl,
+      still_image_url: sceneSet.base_still_url,
       video_clip_url: videoUrl,
-      runway_seed: String(stillResult.seed ?? stillJobId),
+      runway_seed: String(videoResult.seed ?? videoJobId),
       generation_status: 'complete',
       generation_cost: totalCost,
     }, { where: { id: sceneAngle.id } });
@@ -347,7 +334,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       where: { id: sceneSet.id },
     });
 
-    return { success: true, stillUrl, videoUrl, seed: stillResult.seed };
+    return { success: true, stillUrl: sceneSet.base_still_url, videoUrl, seed: videoResult.seed };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;

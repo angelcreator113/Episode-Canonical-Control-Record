@@ -89,7 +89,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
     const allowed = [
       'name', 'scene_type', 'canonical_description',
       'mood_tags', 'aesthetic_tags', 'beat_numbers',
-      'base_runway_model', 'notes',
+      'base_runway_model', 'base_still_url', 'notes',
     ];
     const updates = {};
     for (const key of allowed) {
