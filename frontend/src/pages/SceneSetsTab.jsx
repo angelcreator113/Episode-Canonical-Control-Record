@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, Upload } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, Upload, Pencil, Save } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -45,16 +45,31 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
-function ImageLightbox({ src, alt, onClose }) {
+function ImageLightbox({ src, alt, set, onClose, onRegenerate, onUpdatePrompt, isGenerating }) {
+  const [editing, setEditing] = useState(false);
+  const [editDesc, setEditDesc] = useState(set?.canonical_description || '');
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = (e) => { if (e.key === 'Escape') { if (editing) setEditing(false); else onClose(); } };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, editing]);
+
+  const handleSave = async (andRegenerate = false) => {
+    setSaving(true);
+    await onUpdatePrompt(set, editDesc);
+    setSaving(false);
+    setEditing(false);
+    if (andRegenerate) {
+      onClose();
+      onRegenerate(set);
+    }
+  };
 
   return (
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
-      <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
+      <div className="scene-sets-lightbox scene-sets-lightbox-wide" onClick={e => e.stopPropagation()}>
         <button className="scene-sets-lightbox-close" onClick={onClose}>
           <X size={20} />
         </button>
@@ -64,6 +79,63 @@ function ImageLightbox({ src, alt, onClose }) {
         <div className="scene-sets-lightbox-info">
           <h3>{alt}</h3>
           <span className="scene-sets-lightbox-label">Base Image</span>
+
+          {!editing && (
+            <div className="scene-sets-lightbox-actions">
+              <button
+                className="scene-sets-lightbox-regen"
+                onClick={() => { onClose(); onRegenerate(set); }}
+                disabled={isGenerating}
+              >
+                <RotateCcw size={13} /> Regenerate Base
+              </button>
+              <button
+                className="scene-sets-lightbox-edit-btn"
+                onClick={() => { setEditDesc(set?.canonical_description || ''); setEditing(true); }}
+              >
+                <Pencil size={13} /> Edit Prompt
+              </button>
+            </div>
+          )}
+
+          {editing && (
+            <div className="scene-sets-prompt-editor">
+              <label className="scene-sets-prompt-editor-label">Scene Description (used to build AI prompt)</label>
+              <textarea
+                className="scene-sets-prompt-editor-textarea"
+                value={editDesc}
+                onChange={e => setEditDesc(e.target.value)}
+                rows={5}
+                autoFocus
+                placeholder="Describe the space — layout, lighting, mood, signature details..."
+              />
+              {set?.base_runway_prompt && (
+                <details className="scene-sets-prompt-details">
+                  <summary>Last generated prompt (read-only)</summary>
+                  <pre className="scene-sets-prompt-preview">{set.base_runway_prompt}</pre>
+                </details>
+              )}
+              <div className="scene-sets-prompt-editor-actions">
+                <button
+                  className="scene-sets-btn-generate"
+                  onClick={() => handleSave(false)}
+                  disabled={saving}
+                >
+                  {saving ? <><Loader size={12} className="spin" /> Saving...</> : <><Save size={12} /> Save</>}
+                </button>
+                <button
+                  className="scene-sets-btn-generate"
+                  onClick={() => handleSave(true)}
+                  disabled={saving || isGenerating}
+                >
+                  <RotateCcw size={12} /> Save & Regenerate
+                </button>
+                <button className="scene-sets-btn-delete" onClick={() => setEditing(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -323,7 +395,7 @@ const DEFAULT_ANGLE_PRESETS = [
   { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
 ];
 
-function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
@@ -514,7 +586,11 @@ function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGe
           <ImageLightbox
             src={primaryStill}
             alt={set.name}
+            set={set}
             onClose={() => setShowBaseLightbox(false)}
+            onRegenerate={onRegenerateBase}
+            onUpdatePrompt={onUpdatePrompt}
+            isGenerating={isGenerating}
           />
         )}
 
@@ -677,6 +753,42 @@ export default function SceneSetsTab() {
       showToast('Generation failed', 'error');
     } finally {
       setGeneratingId(null);
+    }
+  };
+
+  const handleRegenerateBase = async (set) => {
+    setGeneratingId(set.id);
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Regeneration failed');
+      }
+      showToast(`Regenerating base for "${set.name}" — typically takes ~45 seconds`);
+      setTimeout(fetchSets, 5000);
+    } catch (err) {
+      showToast(err.message || 'Regeneration failed', 'error');
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const handleUpdatePrompt = async (set, newDescription) => {
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canonical_description: newDescription }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      showToast('Prompt updated');
+      fetchSets();
+    } catch {
+      showToast('Failed to update prompt', 'error');
     }
   };
 
@@ -974,6 +1086,7 @@ export default function SceneSetsTab() {
               key={set.id}
               set={set}
               onGenerateBase={handleGenerateBase}
+              onRegenerateBase={handleRegenerateBase}
               onUploadBase={handleUploadBase}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
@@ -981,6 +1094,7 @@ export default function SceneSetsTab() {
               onDeleteSet={handleDeleteSet}
               onAddAngle={handleAddAngle}
               onSeedAngles={handleSeedAngles}
+              onUpdatePrompt={handleUpdatePrompt}
               generatingId={generatingId}
               generationProgress={generationProgress}
             />

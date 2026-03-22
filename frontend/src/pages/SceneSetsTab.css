@@ -1144,6 +1144,122 @@
   border-color: #B8962E;
 }
 
+.scene-sets-lightbox-regen:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Image Lightbox wide variant ───────────────────────────────────────── */
+
+.scene-sets-lightbox-wide {
+  max-width: 780px;
+}
+
+.scene-sets-lightbox-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-lightbox-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scene-sets-lightbox-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── Prompt Editor (inside lightbox) ───────────────────────────────────── */
+
+.scene-sets-prompt-editor {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.scene-sets-prompt-editor-label {
+  display: block;
+  font-size: 11px;
+  color: #aaa;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scene-sets-prompt-editor-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #eee;
+  font-family: 'Lora', serif;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.scene-sets-prompt-editor-textarea:focus {
+  border-color: #B8962E;
+}
+
+.scene-sets-prompt-editor-textarea::placeholder {
+  color: #666;
+}
+
+.scene-sets-prompt-details {
+  margin-top: 8px;
+}
+
+.scene-sets-prompt-details summary {
+  font-size: 11px;
+  color: #888;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scene-sets-prompt-details summary:hover {
+  color: #aaa;
+}
+
+.scene-sets-prompt-preview {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #999;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: 'DM Mono', monospace;
+}
+
+.scene-sets-prompt-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
 /* ── Angle Regenerate Overlay ──────────────────────────────────────────── */
 
 .scene-sets-angle-regen {
