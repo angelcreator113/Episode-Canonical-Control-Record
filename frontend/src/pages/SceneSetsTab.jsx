@@ -300,6 +300,7 @@ const ARTIFACT_CATEGORIES = {
   FLOOR_DISTORTION: { label: 'Floor Distortion', description: 'Floor patterns warp near furniture' },
   HAND_BODY: { label: 'Hand/Body Error', description: 'Malformed hands or anatomy' },
   TEXT_BLEED: { label: 'Text Bleed', description: 'Phantom text or symbols in the image' },
+  DUPLICATED_OBJECTS: { label: 'Duplicated Objects', description: 'Mirrored or repeated furniture that should be unique' },
 };
 
 function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
@@ -521,7 +522,7 @@ const DEFAULT_ANGLE_PRESETS = [
   { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
 ];
 
-function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onRetryFailed, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
@@ -532,6 +533,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
   const totalAngles = set.angles?.length || 0;
   const pendingAngles = set.angles?.filter(a => a.generation_status === 'pending') || [];
   const regenerableAngles = set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || [];
+  const failedAngles = set.angles?.filter(a => a.generation_status === 'failed') || [];
   const hasBase = !!set.base_runway_seed;
   // Auto-expand when base is ready but angles aren't generated yet
   const [expanded, setExpanded] = useState(hasBase && readyAngles === 0 && totalAngles > 0);
@@ -607,7 +609,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
     <div className="scene-sets-card">
       {/* Preview image */}
       <div
-        className={`scene-sets-card-preview${primaryStill ? ' has-image clickable' : ''}`}
+        className={`scene-sets-card-preview${primaryStill ? ' has-image' : ''}`}
         onClick={() => { if (primaryStill) setShowBaseLightbox(true); }}
         style={primaryStill ? { cursor: 'pointer' } : undefined}
       >
@@ -634,6 +636,40 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
         {set.angles?.some(a => a.video_clip_url) && (
           <div className="scene-sets-card-video-ready">
             <Play size={12} /> Video ready
+          </div>
+        )}
+
+        {/* Quick action toolbar on image hover */}
+        {primaryStill && (
+          <div className="scene-sets-card-hover-toolbar" onClick={e => e.stopPropagation()}>
+            {hasBase && (
+              <button
+                className="scene-sets-hover-btn"
+                onClick={() => onRegenerateBase(set)}
+                disabled={isGenerating}
+                title="Regenerate base image"
+              >
+                <RotateCcw size={14} />
+                <span>Regenerate</span>
+              </button>
+            )}
+            <button
+              className="scene-sets-hover-btn"
+              onClick={() => { setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}
+              title="Edit prompt"
+            >
+              <Pencil size={14} />
+              <span>Edit Prompt</span>
+            </button>
+            <button
+              className="scene-sets-hover-btn"
+              onClick={() => handlePreviewPrompt()}
+              disabled={loadingPreview}
+              title="Preview generated prompt"
+            >
+              <Eye size={14} />
+              <span>Preview</span>
+            </button>
           </div>
         )}
       </div>
@@ -721,6 +757,17 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
               </>
             )}
 
+            {hasBase && (
+              <button
+                onClick={() => onRegenerateBase(set)}
+                disabled={isGenerating}
+                className={`scene-sets-btn-regen-base${isGenerating ? ' disabled' : ''}`}
+                title="Regenerate the base image with the same prompt"
+              >
+                <RotateCcw size={12} /> Regen Base
+              </button>
+            )}
+
             {hasBase && pendingAngles.length > 0 && (
               <button
                 onClick={() => onGenerateAll(set, false)}
@@ -745,6 +792,20 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                   <><Loader size={12} className="spin" /> Regenerating...</>
                 ) : (
                   <><RotateCcw size={12} /> Regenerate All</>
+                )}
+              </button>
+            )}
+
+            {hasBase && failedAngles.length > 0 && (
+              <button
+                onClick={() => onRetryFailed(set)}
+                disabled={isGenerating}
+                className={`scene-sets-btn-retry-failed${isGenerating ? ' disabled' : ''}`}
+              >
+                {isGenerating ? (
+                  <><Loader size={12} className="spin" /> Retrying...</>
+                ) : (
+                  <><AlertCircle size={12} /> Retry Failed ({failedAngles.length})</>
                 )}
               </button>
             )}
@@ -789,17 +850,6 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
         )}
 
         {progress && <GenerationProgress progress={progress} />}
-
-        {expanded && (
-          <AngleStrip
-            angles={set.angles}
-            onGenerate={(angle) => onGenerateAngle(set, angle)}
-            onReview={(angle) => onReviewAngle(set, angle)}
-            onRegenerate={(angle) => onGenerateAngle(set, angle)}
-            onReorder={onReorderAngle ? (angle, dir) => onReorderAngle(set, angle, dir) : null}
-            generating={isGenerating}
-          />
-        )}
 
         {showPromptEditor && (
           <div className="scene-sets-prompt-editor">
@@ -875,6 +925,12 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                 <label>Video Movement Prompt</label>
                 <pre className="scene-sets-prompt-preview">{previewData.videoPrompt}</pre>
               </div>
+              {previewData.negativePrompt && (
+                <div className="scene-sets-prompt-preview-section">
+                  <label>Negative Prompt (suppressed elements)</label>
+                  <pre className="scene-sets-prompt-preview">{previewData.negativePrompt}</pre>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -884,6 +940,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
             <AngleStrip
               angles={set.angles}
               onGenerate={(angle) => onGenerateAngle(set, angle)}
+              onReview={(angle) => onReviewAngle(set, angle)}
               onRegenerate={(angle) => onGenerateAngle(set, angle)}
               onReorder={(angle, direction) => onReorderAngle(set, angle, direction)}
               generating={isGenerating}
@@ -1104,7 +1161,11 @@ export default function SceneSetsTab() {
   const handleGenerateAngle = async (set, angle) => {
     setGeneratingId(set.id);
     try {
-      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Generation failed (${res.status})`);
+      }
       showToast(`Generating "${angle.angle_name}" — still image ~20s, then video ~25s`);
       setTimeout(fetchSets, 5000);
     } catch {
@@ -1128,6 +1189,9 @@ export default function SceneSetsTab() {
     let failed = 0;
     try {
       for (let i = 0; i < targets.length; i++) {
+        // Stagger requests: wait 3s between each to reduce server overload
+        if (i > 0) await new Promise(r => setTimeout(r, 3000));
+
         progressAngles[i].status = 'generating';
         setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
 
@@ -1151,6 +1215,50 @@ export default function SceneSetsTab() {
       fetchSets();
     } catch {
       showToast('Generation failed', 'error');
+    } finally {
+      setTimeout(() => setGenerationProgress(null), 3000);
+      setGeneratingId(null);
+    }
+  };
+
+  const handleRetryFailed = async (set) => {
+    const targets = set.angles?.filter(a => a.generation_status === 'failed') || [];
+    if (targets.length === 0) return;
+    setGeneratingId(set.id);
+
+    const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
+    setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+
+    let completed = 0;
+    let failed = 0;
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        // Stagger retries: wait 5s between each to give server breathing room
+        if (i > 0) await new Promise(r => setTimeout(r, 5000));
+
+        progressAngles[i].status = 'generating';
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
+
+        try {
+          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
+          if (!res.ok) throw new Error('Failed');
+          progressAngles[i].status = 'done';
+          completed++;
+        } catch {
+          progressAngles[i].status = 'failed';
+          failed++;
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+      }
+
+      if (failed === 0) {
+        showToast(`All ${targets.length} failed angles retried successfully!`);
+      } else {
+        showToast(`${completed} recovered, ${failed} still failing`, failed > 0 ? 'error' : 'success');
+      }
+      fetchSets();
+    } catch {
+      showToast('Retry failed', 'error');
     } finally {
       setTimeout(() => setGenerationProgress(null), 3000);
       setGeneratingId(null);
@@ -1463,6 +1571,7 @@ export default function SceneSetsTab() {
               onUploadBase={handleUploadBase}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
+              onRetryFailed={handleRetryFailed}
               onDeleteAllAngles={handleDeleteAllAngles}
               onReviewAngle={handleReviewAngle}
               onDeleteSet={handleDeleteSet}

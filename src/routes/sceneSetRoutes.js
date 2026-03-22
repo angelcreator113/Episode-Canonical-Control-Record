@@ -270,7 +270,14 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    const statusCode = err.response?.status || 500;
+    const detail = err.response?.data?.error || err.message;
+    res.status(500).json({
+      success: false,
+      error: detail,
+      upstream_status: statusCode !== 500 ? statusCode : undefined,
+      angle_id: req.params.angleId,
+    });
   }
 });
 
@@ -594,12 +601,14 @@ router.get('/:id/preview-prompt', optionalAuth, async (req, res) => {
     const angleLabel = (req.query.angle || 'WIDE').toUpperCase();
     const prompt = sceneGenService.buildPrompt(set, angleLabel);
     const videoPrompt = sceneGenService.buildVideoPrompt(set, angleLabel);
+    const negativePrompt = sceneGenService.buildNegativePrompt(set);
 
     res.json({
       success: true,
       data: {
         prompt,
         videoPrompt,
+        negativePrompt,
         promptLength: prompt.length,
         angleLabel,
       },
