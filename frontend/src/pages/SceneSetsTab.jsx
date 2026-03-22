@@ -45,7 +45,7 @@ function TypeBadge({ type }) {
 
 // ─── LIGHTBOX MODAL ───────────────────────────────────────────────────────────
 
-function AngleLightbox({ angle, onClose, onPrev, onNext }) {
+function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
   if (!angle) return null;
 
   useEffect(() => {
@@ -97,6 +97,11 @@ function AngleLightbox({ angle, onClose, onPrev, onNext }) {
           {angle.beat_affinity && angle.beat_affinity.length > 0 && (
             <span className="scene-sets-lightbox-beats">Beats: {angle.beat_affinity.join(', ')}</span>
           )}
+          {onRegenerate && (
+            <button className="scene-sets-lightbox-regen" onClick={() => { onRegenerate(angle); onClose(); }}>
+              <RotateCcw size={13} /> Regenerate
+            </button>
+          )}
         </div>
 
         {angle.video_clip_url && (
@@ -122,7 +127,7 @@ function AngleLightbox({ angle, onClose, onPrev, onNext }) {
 
 // ─── ANGLE STRIP ──────────────────────────────────────────────────────────────
 
-function AngleStrip({ angles, onGenerate, generating }) {
+function AngleStrip({ angles, onGenerate, onRegenerate, generating }) {
   if (!angles || angles.length === 0) return null;
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
@@ -171,6 +176,16 @@ function AngleStrip({ angles, onGenerate, generating }) {
                   <Play size={8} />
                 </div>
               )}
+
+              {(isComplete || isFailed) && !generating && (
+                <button
+                  className="scene-sets-angle-regen"
+                  onClick={(e) => { e.stopPropagation(); onRegenerate(angle); }}
+                  title={`Regenerate ${angle.angle_name}`}
+                >
+                  <RotateCcw size={10} />
+                </button>
+              )}
             </div>
 
             <span className="scene-sets-angle-label">{angle.angle_label}</span>
@@ -190,6 +205,7 @@ function AngleStrip({ angles, onGenerate, generating }) {
           onClose={() => setLightboxIndex(null)}
           onPrev={lightboxIndex > 0 ? () => setLightboxIndex(i => i - 1) : null}
           onNext={lightboxIndex < completedAngles.length - 1 ? () => setLightboxIndex(i => i + 1) : null}
+          onRegenerate={!generating ? onRegenerate : null}
         />
       )}
     </div>
@@ -277,6 +293,7 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
   const pendingAngles = set.angles?.filter(a => a.generation_status === 'pending') || [];
+  const regenerableAngles = set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || [];
   const hasBase = !!set.base_runway_seed;
   // Auto-expand when base is ready but angles aren't generated yet
   const [expanded, setExpanded] = useState(hasBase && readyAngles === 0 && totalAngles > 0);
@@ -360,7 +377,7 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
 
             {hasBase && pendingAngles.length > 0 && (
               <button
-                onClick={() => onGenerateAll(set)}
+                onClick={() => onGenerateAll(set, false)}
                 disabled={isGenerating}
                 className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}
               >
@@ -368,6 +385,20 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
                   <><Loader size={12} className="spin" /> Generating...</>
                 ) : (
                   <><Sparkles size={12} /> Generate All Angles</>
+                )}
+              </button>
+            )}
+
+            {hasBase && pendingAngles.length === 0 && regenerableAngles.length > 0 && (
+              <button
+                onClick={() => onGenerateAll(set, true)}
+                disabled={isGenerating}
+                className={`scene-sets-btn-regenerate${isGenerating ? ' disabled' : ''}`}
+              >
+                {isGenerating ? (
+                  <><Loader size={12} className="spin" /> Regenerating...</>
+                ) : (
+                  <><RotateCcw size={12} /> Regenerate All</>
                 )}
               </button>
             )}
@@ -418,6 +449,7 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
             <AngleStrip
               angles={set.angles}
               onGenerate={(angle) => onGenerateAngle(set, angle)}
+              onRegenerate={(angle) => onGenerateAngle(set, angle)}
               generating={isGenerating}
             />
 
@@ -574,23 +606,25 @@ export default function SceneSetsTab() {
     }
   };
 
-  const handleGenerateAll = async (set) => {
-    const pending = set.angles?.filter(a => a.generation_status === 'pending') || [];
-    if (pending.length === 0) return;
+  const handleGenerateAll = async (set, regenerate = false) => {
+    const targets = regenerate
+      ? set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || []
+      : set.angles?.filter(a => a.generation_status === 'pending') || [];
+    if (targets.length === 0) return;
     setGeneratingId(set.id);
 
-    const progressAngles = pending.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
+    const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
     setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     let completed = 0;
     let failed = 0;
     try {
-      for (let i = 0; i < pending.length; i++) {
+      for (let i = 0; i < targets.length; i++) {
         progressAngles[i].status = 'generating';
         setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
 
         try {
-          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${pending[i].id}/generate`, { method: 'POST' });
+          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
           if (!res.ok) throw new Error('Failed');
           progressAngles[i].status = 'done';
           completed++;
@@ -602,7 +636,7 @@ export default function SceneSetsTab() {
       }
 
       if (failed === 0) {
-        showToast(`All ${pending.length} angles queued for generation`);
+        showToast(`All ${targets.length} angles ${regenerate ? 'regenerating' : 'queued for generation'}`);
       } else {
         showToast(`${completed} queued, ${failed} failed`, failed > 0 ? 'error' : 'success');
       }

@@ -1057,3 +1057,83 @@
   .scene-sets-lightbox-img,
   .scene-sets-lightbox-video { max-width: 95vw; }
 }
+
+/* ── Regenerate Button (lightbox) ──────────────────────────────────────── */
+
+.scene-sets-lightbox-regen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 7px 16px;
+  background: rgba(184, 150, 46, 0.15);
+  color: #B8962E;
+  border: 1px solid rgba(184, 150, 46, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scene-sets-lightbox-regen:hover {
+  background: rgba(184, 150, 46, 0.25);
+  border-color: #B8962E;
+}
+
+/* ── Angle Regenerate Overlay ──────────────────────────────────────────── */
+
+.scene-sets-angle-regen {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  padding: 0;
+  z-index: 2;
+}
+
+.scene-sets-angle-thumb:hover .scene-sets-angle-regen {
+  opacity: 1;
+}
+
+.scene-sets-angle-regen:hover {
+  background: rgba(184, 150, 46, 0.85);
+}
+
+/* ── Regenerate All Button ─────────────────────────────────────────────── */
+
+.scene-sets-btn-regenerate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(184, 150, 46, 0.4);
+  background: rgba(184, 150, 46, 0.08);
+  color: #B8962E;
+  transition: all 0.18s ease;
+}
+
+.scene-sets-btn-regenerate:hover {
+  background: rgba(184, 150, 46, 0.18);
+  border-color: #B8962E;
+}
+
+.scene-sets-btn-regenerate.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
