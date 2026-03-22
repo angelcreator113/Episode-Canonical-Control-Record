@@ -36,20 +36,16 @@ module.exports = {
         defaultValue: 'queued',
       },
 
-      // FK to scene_sets
+      // Reference to scene_sets (table created by model sync, not migration)
       scene_set_id: {
         type: Sequelize.UUID,
         allowNull: false,
-        references: { model: 'scene_sets', key: 'id' },
-        onDelete: 'CASCADE',
       },
 
-      // FK to scene_angles (null for generate_base and cascade)
+      // Reference to scene_angles (null for generate_base and cascade)
       scene_angle_id: {
         type: Sequelize.UUID,
         allowNull: true,
-        references: { model: 'scene_angles', key: 'id' },
-        onDelete: 'CASCADE',
       },
 
       // Input payload (prompt overrides, force flag, categories, etc.)
