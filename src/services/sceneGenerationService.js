@@ -235,7 +235,8 @@ async function storeInS3(sourceUrl, setId, angleId, assetType) {
             : contentType.includes('video') ? 'mp4'
             : 'bin';
 
-  const s3Key = `scene-sets/${setId}/angles/${angleId || 'base'}/${assetType}.${ext}`;
+  const ts = Date.now();
+  const s3Key = `scene-sets/${setId}/angles/${angleId || 'base'}/${assetType}-${ts}.${ext}`;
 
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET,

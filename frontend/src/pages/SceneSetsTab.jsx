@@ -768,8 +768,8 @@ export default function SceneSetsTab() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Regeneration failed');
       }
-      showToast(`Regenerating base for "${set.name}" — typically takes ~45 seconds`);
-      setTimeout(fetchSets, 5000);
+      showToast('Base image regenerated!');
+      fetchSets();
     } catch (err) {
       showToast(err.message || 'Regeneration failed', 'error');
     } finally {
