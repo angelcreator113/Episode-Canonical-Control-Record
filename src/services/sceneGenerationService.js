@@ -33,16 +33,16 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── LALAVERSE VISUAL ANCHOR (condensed ~590 chars) ─────────────────────────
 
-const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow (lavender, peach, rose). Natural hero lighting. Materials: soft fabrics (linen, silk), light wood (oak, ash), glass, mirrors, shimmer. Tone: calm, intentional, beautiful, lived-in. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
+const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow (lavender, peach, rose). Natural hero lighting. Materials: soft fabrics (linen, silk), light wood (oak, ash), glass, subtle shimmer. Tone: calm, intentional, beautiful, lived-in. Layout: asymmetric natural room arrangement, each piece of furniture appears only once, no mirrored or duplicated objects, varied spacing between items. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
 
 // ─── NEGATIVE PROMPT (universal) ─────────────────────────────────────────────
 
-const NEGATIVE_PROMPT = `neon lighting, cyberpunk, cluttered decor, ultra-minimal sterile, dark moody lighting, distorted furniture legs, melted objects, blobby shapes, warped reflections, text, watermarks, signatures, extra fingers, malformed hands, blurry, low resolution, oversaturated, chromatic aberration`;
+const NEGATIVE_PROMPT = `neon lighting, cyberpunk, cluttered decor, ultra-minimal sterile, dark moody lighting, distorted furniture legs, melted objects, blobby shapes, warped reflections, text, watermarks, signatures, extra fingers, malformed hands, blurry, low resolution, oversaturated, chromatic aberration, symmetrical mirrored layout, duplicated furniture, repeated objects, copy-paste elements, twin matching pieces, identical mirrored sides`;
 
 // ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
 
 const ANGLE_MODIFIERS = {
-  WIDE:         'Wide establishing shot, full room visible, camera at medium height, balanced composition.',
+  WIDE:         'Wide establishing shot, full room visible, camera at medium height, natural asymmetric composition with organic furniture placement.',
   CLOSET:       'Camera facing wardrobe wall, full-height racks or shelving visible, soft glow on fabric textures.',
   VANITY:       'Camera at vanity mirror, close-to-medium shot, soft focus on reflection and surface details.',
   WINDOW:       'Camera facing window, natural light streaming in, subject silhouette or three-quarter view.',
@@ -111,7 +111,7 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     `LOCATION: ${sceneSet.name}.`,
     descriptionSlice,
     `CAMERA: ${cameraText}`,
-    'Photorealistic cinematic quality. No text overlays. No watermarks. No distorted faces or hands.',
+    'Photorealistic cinematic quality. Each furniture piece unique, no duplicated or mirrored objects. No text overlays. No watermarks. No distorted faces or hands.',
   ];
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
