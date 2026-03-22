@@ -522,7 +522,7 @@ const DEFAULT_ANGLE_PRESETS = [
   { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
 ];
 
-function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onRetryFailed, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
@@ -533,6 +533,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
   const totalAngles = set.angles?.length || 0;
   const pendingAngles = set.angles?.filter(a => a.generation_status === 'pending') || [];
   const regenerableAngles = set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || [];
+  const failedAngles = set.angles?.filter(a => a.generation_status === 'failed') || [];
   const hasBase = !!set.base_runway_seed;
   // Auto-expand when base is ready but angles aren't generated yet
   const [expanded, setExpanded] = useState(hasBase && readyAngles === 0 && totalAngles > 0);
@@ -791,6 +792,20 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                   <><Loader size={12} className="spin" /> Regenerating...</>
                 ) : (
                   <><RotateCcw size={12} /> Regenerate All</>
+                )}
+              </button>
+            )}
+
+            {hasBase && failedAngles.length > 0 && (
+              <button
+                onClick={() => onRetryFailed(set)}
+                disabled={isGenerating}
+                className={`scene-sets-btn-retry-failed${isGenerating ? ' disabled' : ''}`}
+              >
+                {isGenerating ? (
+                  <><Loader size={12} className="spin" /> Retrying...</>
+                ) : (
+                  <><AlertCircle size={12} /> Retry Failed ({failedAngles.length})</>
                 )}
               </button>
             )}
@@ -1170,6 +1185,9 @@ export default function SceneSetsTab() {
     let failed = 0;
     try {
       for (let i = 0; i < targets.length; i++) {
+        // Stagger requests: wait 3s between each to reduce server overload
+        if (i > 0) await new Promise(r => setTimeout(r, 3000));
+
         progressAngles[i].status = 'generating';
         setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
 
@@ -1193,6 +1211,50 @@ export default function SceneSetsTab() {
       fetchSets();
     } catch {
       showToast('Generation failed', 'error');
+    } finally {
+      setTimeout(() => setGenerationProgress(null), 3000);
+      setGeneratingId(null);
+    }
+  };
+
+  const handleRetryFailed = async (set) => {
+    const targets = set.angles?.filter(a => a.generation_status === 'failed') || [];
+    if (targets.length === 0) return;
+    setGeneratingId(set.id);
+
+    const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
+    setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+
+    let completed = 0;
+    let failed = 0;
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        // Stagger retries: wait 5s between each to give server breathing room
+        if (i > 0) await new Promise(r => setTimeout(r, 5000));
+
+        progressAngles[i].status = 'generating';
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
+
+        try {
+          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
+          if (!res.ok) throw new Error('Failed');
+          progressAngles[i].status = 'done';
+          completed++;
+        } catch {
+          progressAngles[i].status = 'failed';
+          failed++;
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+      }
+
+      if (failed === 0) {
+        showToast(`All ${targets.length} failed angles retried successfully!`);
+      } else {
+        showToast(`${completed} recovered, ${failed} still failing`, failed > 0 ? 'error' : 'success');
+      }
+      fetchSets();
+    } catch {
+      showToast('Retry failed', 'error');
     } finally {
       setTimeout(() => setGenerationProgress(null), 3000);
       setGeneratingId(null);
@@ -1505,6 +1567,7 @@ export default function SceneSetsTab() {
               onUploadBase={handleUploadBase}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
+              onRetryFailed={handleRetryFailed}
               onDeleteAllAngles={handleDeleteAllAngles}
               onReviewAngle={handleReviewAngle}
               onDeleteSet={handleDeleteSet}
