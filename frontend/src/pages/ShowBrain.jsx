@@ -267,7 +267,7 @@ export default function ShowBrain() {
   const fetchEntries = useCallback(async () => {
     try {
       const res = await axios.get(
-        `${API_BASE}/api/v1/franchise-brain/entries?category=franchise_law&status=active`
+        `${API_BASE}/franchise-brain/entries?category=franchise_law&status=active`
       );
       // API may return { data: [] } or { entries: [] } — handle both
       const data = res.data?.data || res.data?.entries || res.data || [];
@@ -283,7 +283,7 @@ export default function ShowBrain() {
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
   const handleSaveEntry = async (id, updates) => {
-    await axios.patch(`${API_BASE}/api/v1/franchise-brain/entries/${id}`, updates);
+    await axios.patch(`${API_BASE}/franchise-brain/entries/${id}`, updates);
     await fetchEntries();
   };
 
