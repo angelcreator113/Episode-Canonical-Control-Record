@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Eye } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -45,7 +45,7 @@ function TypeBadge({ type }) {
 
 // ─── ANGLE STRIP ──────────────────────────────────────────────────────────────
 
-function AngleStrip({ angles, onGenerate, generating }) {
+function AngleStrip({ angles, onGenerate, onReview, generating }) {
   if (!angles || angles.length === 0) return null;
 
   return (
@@ -83,18 +83,200 @@ function AngleStrip({ angles, onGenerate, generating }) {
                   <Play size={8} />
                 </div>
               )}
+
+              {isComplete && (
+                <QualityBadge
+                  score={angle.quality_score}
+                  flagCount={(angle.artifact_flags || []).length}
+                />
+              )}
             </div>
 
             <span className="scene-sets-angle-label">{angle.angle_label}</span>
 
-            {angle.beat_affinity && angle.beat_affinity.length > 0 && (
-              <span className="scene-sets-beat-numbers">
-                B{angle.beat_affinity.join(',')}
-              </span>
-            )}
+            <div className="scene-sets-angle-meta">
+              {angle.beat_affinity && angle.beat_affinity.length > 0 && (
+                <span className="scene-sets-beat-numbers">
+                  B{angle.beat_affinity.join(',')}
+                </span>
+              )}
+
+              {isComplete && (
+                <button
+                  className="scene-sets-angle-review-btn"
+                  onClick={(e) => { e.stopPropagation(); onReview(angle); }}
+                  title="Review quality & flag artifacts"
+                >
+                  <Eye size={10} />
+                </button>
+              )}
+            </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── QUALITY BADGE ────────────────────────────────────────────────────────
+
+function QualityBadge({ score, flagCount }) {
+  if (score == null) return null;
+  const color = score >= 85 ? '#1A7A40' : score >= 60 ? '#B8960C' : '#C62828';
+  const bg = score >= 85 ? '#E8F5E9' : score >= 60 ? '#FFF8E1' : '#FFEBEE';
+  const Icon = score >= 85 ? ShieldCheck : ShieldAlert;
+  return (
+    <span className="scene-sets-quality-badge" style={{ background: bg, color }} title={`Quality: ${score}/100, ${flagCount} issue${flagCount !== 1 ? 's' : ''}`}>
+      <Icon size={10} />
+      {score}
+    </span>
+  );
+}
+
+// ─── ARTIFACT REVIEW MODAL ───────────────────────────────────────────────────
+
+const ARTIFACT_CATEGORIES = {
+  FURNITURE_DISTORTION: { label: 'Furniture Distortion', description: 'Warped legs, impossible geometry on chairs/tables' },
+  OBJECT_BLOBBING: { label: 'Blobby Objects', description: 'Small surface objects lack defined shapes' },
+  REFLECTION_ERROR: { label: 'Reflection Error', description: 'Mirrors show incoherent reflections' },
+  FABRIC_ANOMALY: { label: 'Fabric Anomaly', description: 'Unnatural stiff folds or melting edges' },
+  HARDWARE_INCONSISTENCY: { label: 'Hardware Inconsistency', description: 'Drawer handles vary in size/shape' },
+  FLOOR_DISTORTION: { label: 'Floor Distortion', description: 'Floor patterns warp near furniture' },
+  HAND_BODY: { label: 'Hand/Body Error', description: 'Malformed hands or anatomy' },
+  TEXT_BLEED: { label: 'Text Bleed', description: 'Phantom text or symbols in the image' },
+};
+
+function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
+  const [selected, setSelected] = useState([]);
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const toggle = (cat) => {
+    setSelected(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+  };
+
+  const handleSubmitReview = async () => {
+    if (selected.length === 0) return;
+    setSubmitting(true);
+    try {
+      await fetch(`${API_BASE}/scene-sets/${setId}/angles/${angle.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: selected, notes: notes.trim() || null }),
+      });
+      onSubmit('review');
+    } catch {
+      onSubmit('error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (selected.length === 0) return;
+    setSubmitting(true);
+    try {
+      // Submit review first, then regenerate
+      await fetch(`${API_BASE}/scene-sets/${setId}/angles/${angle.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: selected, notes: notes.trim() || null }),
+      });
+      await fetch(`${API_BASE}/scene-sets/${setId}/angles/${angle.id}/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: selected }),
+      });
+      onSubmit('regenerate');
+    } catch {
+      onSubmit('error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="scene-sets-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="scene-sets-artifact-modal">
+        <div className="scene-sets-artifact-modal-header">
+          <h3>Quality Review: {angle.angle_name}</h3>
+          <button onClick={onClose} className="scene-sets-modal-close"><X size={16} /></button>
+        </div>
+
+        {angle.still_image_url && (
+          <div className="scene-sets-artifact-preview">
+            <img
+              src={angle.still_image_url}
+              alt={angle.angle_name}
+              onClick={() => setPreviewOpen(!previewOpen)}
+              className={previewOpen ? 'expanded' : ''}
+            />
+            {angle.quality_score != null && (
+              <div className="scene-sets-artifact-score">
+                Quality: {angle.quality_score}/100 · Attempt #{angle.generation_attempt || 1}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Existing auto-detected flags */}
+        {angle.artifact_flags && angle.artifact_flags.length > 0 && (
+          <div className="scene-sets-artifact-auto-flags">
+            <p className="scene-sets-artifact-section-label">Auto-detected issues:</p>
+            {angle.artifact_flags.filter(f => f.auto).map((flag, i) => (
+              <span key={i} className={`scene-sets-artifact-flag ${flag.severity}`}>
+                {flag.label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="scene-sets-artifact-categories">
+          <p className="scene-sets-artifact-section-label">Flag visible artifacts:</p>
+          <div className="scene-sets-artifact-grid">
+            {Object.entries(ARTIFACT_CATEGORIES).map(([key, cat]) => (
+              <button
+                key={key}
+                className={`scene-sets-artifact-cat${selected.includes(key) ? ' selected' : ''}`}
+                onClick={() => toggle(key)}
+              >
+                <span className="scene-sets-artifact-cat-label">{cat.label}</span>
+                <span className="scene-sets-artifact-cat-desc">{cat.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="scene-sets-artifact-notes">
+          <label>Notes (optional)</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Describe specific issues you see..."
+            rows={2}
+          />
+        </div>
+
+        <div className="scene-sets-artifact-actions">
+          <button
+            onClick={handleSubmitReview}
+            disabled={submitting || selected.length === 0}
+            className="scene-sets-btn-review"
+          >
+            {submitting ? <Loader size={12} className="spin" /> : <Eye size={12} />}
+            Save Review
+          </button>
+          <button
+            onClick={handleRegenerate}
+            disabled={submitting || selected.length === 0}
+            className="scene-sets-btn-generate"
+          >
+            {submitting ? <Loader size={12} className="spin" /> : <RefreshCw size={12} />}
+            Refine & Regenerate
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -173,7 +355,7 @@ function formatTime(secs) {
 
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onReviewAngle, generatingId, generationProgress }) {
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || null;
@@ -290,6 +472,7 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
           <AngleStrip
             angles={set.angles}
             onGenerate={(angle) => onGenerateAngle(set, angle)}
+            onReview={(angle) => onReviewAngle(set, angle)}
             generating={isGenerating}
           />
         )}
@@ -311,6 +494,7 @@ export default function SceneSetsTab() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '' });
+  const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -446,6 +630,23 @@ export default function SceneSetsTab() {
     } catch {
       showToast('Failed to delete angles', 'error');
     }
+  };
+
+  const handleReviewAngle = (set, angle) => {
+    setReviewModal({ setId: set.id, angle });
+  };
+
+  const handleReviewSubmit = (result) => {
+    setReviewModal(null);
+    if (result === 'review') {
+      showToast('Quality review saved');
+    } else if (result === 'regenerate') {
+      showToast('Regenerating with refined prompt — typically takes ~45 seconds');
+      setTimeout(fetchSets, 5000);
+    } else {
+      showToast('Review failed', 'error');
+    }
+    fetchSets();
   };
 
   const filtered = filterType === 'ALL'
@@ -584,11 +785,22 @@ export default function SceneSetsTab() {
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
               onDeleteAllAngles={handleDeleteAllAngles}
+              onReviewAngle={handleReviewAngle}
               generatingId={generatingId}
               generationProgress={generationProgress}
             />
           ))}
         </div>
+      )}
+
+      {/* Artifact Review Modal */}
+      {reviewModal && (
+        <ArtifactReviewModal
+          angle={reviewModal.angle}
+          setId={reviewModal.setId}
+          onClose={() => setReviewModal(null)}
+          onSubmit={handleReviewSubmit}
+        />
       )}
     </div>
   );

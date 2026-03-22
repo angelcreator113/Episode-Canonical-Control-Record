@@ -22,6 +22,7 @@
 
 const axios = require('axios');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const artifactDetection = require('./artifactDetectionService');
 
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_API_KEY     = process.env.RUNWAY_ML_API_KEY;
@@ -33,7 +34,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── LALAVERSE VISUAL ANCHOR (canonical) ─────────────────────────────────────
 
-const LALAVERSE_VISUAL_ANCHOR = `Visual style: Final Fantasy softness meets Pinterest-core femininity with magical realism. Color language: warm neutrals (cream, blush, soft beige), gold accents never chrome, occasional pastel glow (lavender, peach, rose). Natural light is always hero lighting. Material language: soft fabrics (linen, silk, cotton), light wood tones (oak, ash), glass, mirrors, subtle shimmer. Nothing industrial, nothing harsh. Emotional tone: calm, intentional, beautiful but lived-in. Personal over perfect. FORBIDDEN: neon lighting, cyberpunk, overly cluttered decor, ultra-minimal sterile design, dark moody lighting.`;
+const LALAVERSE_VISUAL_ANCHOR = `Visual style: Final Fantasy softness meets Pinterest-core femininity with magical realism. Color language: warm neutrals (cream, blush, soft beige), gold accents never chrome, occasional pastel glow (lavender, peach, rose). Natural light is always hero lighting. Material language: soft fabrics (linen, silk, cotton), light wood tones (oak, ash), glass, mirrors, subtle shimmer. Nothing industrial, nothing harsh. Emotional tone: calm, intentional, beautiful but lived-in. Personal over perfect. QUALITY: sharp defined edges on all furniture and objects, consistent hardware on drawers and handles, physically correct chair and table legs, coherent mirror reflections, clean fabric folds with natural draping, precise herringbone or tile floor patterns near furniture, minimal small objects on surfaces. FORBIDDEN: neon lighting, cyberpunk, overly cluttered decor, ultra-minimal sterile design, dark moody lighting, distorted furniture legs, melted or blobby objects, warped reflections, text or watermarks.`;
 
 // ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
 
@@ -333,12 +334,25 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
     const totalCost = (stillResult.creditsUsed || 0) + (videoResult.creditsUsed || 0);
 
+    // ── Quality Analysis (non-blocking) ───────────────────────────────────
+    let qualityData = { qualityScore: null, flags: [] };
+    try {
+      console.log(`[SceneGen] Running artifact analysis for: ${sceneAngle.angle_name}`);
+      qualityData = await artifactDetection.analyzeImageQuality(stillUrl);
+      console.log(`[SceneGen] Quality score: ${qualityData.qualityScore}/100, flags: ${qualityData.flags.length}`);
+    } catch (qaErr) {
+      console.warn(`[SceneGen] Quality analysis failed (non-blocking): ${qaErr.message}`);
+    }
+
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: videoUrl,
       runway_seed: String(stillResult.seed ?? stillJobId),
       generation_status: 'complete',
       generation_cost: totalCost,
+      quality_score: qualityData.qualityScore,
+      artifact_flags: qualityData.flags || [],
+      generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
     }, { where: { id: sceneAngle.id } });
 
     // Update cumulative set cost
@@ -348,6 +362,91 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     });
 
     return { success: true, stillUrl, videoUrl, seed: stillResult.seed };
+  } catch (err) {
+    await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+    throw err;
+  }
+}
+
+// ─── HIGH-LEVEL: REGENERATE ANGLE WITH REFINED PROMPT ─────────────────────────
+
+/**
+ * Regenerate a scene angle using a refined prompt that addresses flagged artifacts.
+ * Uses the artifact flags to build targeted quality directives.
+ */
+async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, models) {
+  const { SceneAngle, SceneSet } = models;
+
+  if (!sceneSet.base_runway_seed) {
+    throw new Error('base_runway_seed not set on parent scene set.');
+  }
+
+  const basePrompt = buildPrompt(sceneSet, sceneAngle.angle_label);
+  const refinedPrompt = artifactDetection.buildRefinedPrompt(basePrompt, artifactCategories);
+
+  await SceneAngle.update(
+    { generation_status: 'generating', runway_prompt: refinedPrompt, refined_prompt: refinedPrompt },
+    { where: { id: sceneAngle.id } }
+  );
+
+  try {
+    console.log(`[SceneGen] Regenerating angle with refined prompt: ${sceneAngle.angle_name}`);
+    console.log(`[SceneGen] Addressing artifacts: ${artifactCategories.join(', ')}`);
+
+    // Use a slightly different seed variation to get a different output
+    const seedVariation = String(Number(sceneSet.base_runway_seed) + (sceneAngle.generation_attempt || 1));
+
+    const { jobId: stillJobId } = await startTextToImage(refinedPrompt, seedVariation);
+    const stillResult = await pollTask(stillJobId);
+
+    if (stillResult.status !== 'SUCCEEDED') {
+      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+      throw new Error(`Refined angle still failed: ${stillResult.error}`);
+    }
+
+    const stillUrl = await storeInS3(stillResult.outputUrl, sceneSet.id, sceneAngle.id, 'still');
+
+    // Video generation
+    const { jobId: videoJobId } = await startImageToVideo(refinedPrompt, stillResult.outputUrl, stillResult.seed);
+    const videoResult = await pollTask(videoJobId);
+    let videoUrl = null;
+    if (videoResult.status === 'SUCCEEDED') {
+      videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
+    }
+
+    // Run quality analysis on refined output
+    let qualityData = { qualityScore: null, flags: [] };
+    try {
+      qualityData = await artifactDetection.analyzeImageQuality(stillUrl);
+    } catch (qaErr) {
+      console.warn(`[SceneGen] Quality analysis on refined image failed: ${qaErr.message}`);
+    }
+
+    const totalCost = (stillResult.creditsUsed || 0) + (videoResult.creditsUsed || 0);
+
+    await SceneAngle.update({
+      still_image_url: stillUrl,
+      video_clip_url: videoUrl,
+      runway_seed: String(stillResult.seed ?? stillJobId),
+      generation_status: 'complete',
+      generation_cost: totalCost,
+      quality_score: qualityData.qualityScore,
+      artifact_flags: qualityData.flags || [],
+      generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
+      refined_prompt: refinedPrompt,
+    }, { where: { id: sceneAngle.id } });
+
+    await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
+
+    return {
+      success: true,
+      stillUrl,
+      videoUrl,
+      seed: stillResult.seed,
+      qualityScore: qualityData.qualityScore,
+      artifactFlags: qualityData.flags,
+      attempt: (sceneAngle.generation_attempt || 0) + 1,
+    };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;
@@ -364,6 +463,7 @@ module.exports = {
   buildPrompt,
   generateBaseScene,
   generateAngle,
+  regenerateAngleRefined,
   pollTask,
   LALAVERSE_VISUAL_ANCHOR,
   ANGLE_MODIFIERS,
