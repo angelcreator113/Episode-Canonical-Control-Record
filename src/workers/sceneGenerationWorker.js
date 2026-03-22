@@ -16,7 +16,7 @@
  */
 
 const { Op } = require('sequelize');
-const { GenerationJob, SceneSet, SceneAngle } = require('../models');
+const { GenerationJob, SceneSet, SceneAngle, sequelize } = require('../models');
 const sceneGenService = require('../services/sceneGenerationService');
 
 const POLL_INTERVAL_MS = parseInt(process.env.GEN_WORKER_POLL_MS, 10) || 3000;
@@ -29,12 +29,12 @@ let activeJobs = 0;
 
 async function claimNextJob() {
   // Use a transaction to prevent two workers from grabbing the same job
-  const job = await GenerationJob.sequelize.transaction(async (t) => {
+  const job = await sequelize.transaction(async (t) => {
     const candidate = await GenerationJob.findOne({
       where: {
         status: 'queued',
         [Op.or]: [
-          { attempts: { [Op.lt]: GenerationJob.sequelize.col('max_attempts') } },
+          { attempts: { [Op.lt]: sequelize.col('max_attempts') } },
         ],
       },
       order: [

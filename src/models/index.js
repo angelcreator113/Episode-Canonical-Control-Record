@@ -1898,3 +1898,4 @@ module.exports.StoryTexture = StoryTexture;
 module.exports.StoryTaskArc = StoryTaskArc;
 module.exports.SceneSet = SceneSet;
 module.exports.SceneAngle = SceneAngle;
+module.exports.GenerationJob = GenerationJob;
