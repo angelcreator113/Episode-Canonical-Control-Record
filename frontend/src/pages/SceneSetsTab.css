@@ -721,6 +721,14 @@
 .scene-sets-angle-thumb.failed {
   border-color: #FFCDD2;
   color: #C62828;
+  cursor: pointer;
+}
+
+.scene-sets-angle-thumb.failed .scene-sets-angle-regen {
+  opacity: 1;
+  background: #C62828;
+  width: 22px;
+  height: 22px;
 }
 
 .scene-sets-angle-item.clickable .scene-sets-angle-thumb:hover {
@@ -1748,6 +1756,33 @@
 }
 
 .scene-sets-btn-regenerate.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ── Retry Failed Button ──────────────────────────────────────────────── */
+
+.scene-sets-btn-retry-failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(198, 40, 40, 0.4);
+  background: rgba(198, 40, 40, 0.08);
+  color: #C62828;
+  transition: all 0.18s ease;
+}
+
+.scene-sets-btn-retry-failed:hover {
+  background: rgba(198, 40, 40, 0.18);
+  border-color: #C62828;
+}
+
+.scene-sets-btn-retry-failed.disabled {
   opacity: 0.5;
   pointer-events: none;
 }
