@@ -43,10 +43,94 @@ function TypeBadge({ type }) {
   );
 }
 
+// ─── LIGHTBOX MODAL ───────────────────────────────────────────────────────────
+
+function AngleLightbox({ angle, onClose, onPrev, onNext }) {
+  if (!angle) return null;
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && onPrev) onPrev();
+      if (e.key === 'ArrowRight' && onNext) onNext();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose, onPrev, onNext]);
+
+  const [showVideo, setShowVideo] = useState(false);
+
+  return (
+    <div className="scene-sets-lightbox-overlay" onClick={onClose}>
+      <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
+        <button className="scene-sets-lightbox-close" onClick={onClose}>
+          <X size={20} />
+        </button>
+
+        {onPrev && (
+          <button className="scene-sets-lightbox-nav prev" onClick={onPrev}>&#8249;</button>
+        )}
+        {onNext && (
+          <button className="scene-sets-lightbox-nav next" onClick={onNext}>&#8250;</button>
+        )}
+
+        <div className="scene-sets-lightbox-media">
+          {showVideo && angle.video_clip_url ? (
+            <video
+              src={angle.video_clip_url}
+              controls
+              autoPlay
+              className="scene-sets-lightbox-video"
+            />
+          ) : angle.still_image_url ? (
+            <img src={angle.still_image_url} alt={angle.angle_name} className="scene-sets-lightbox-img" />
+          ) : null}
+        </div>
+
+        <div className="scene-sets-lightbox-info">
+          <h3>{angle.angle_name}</h3>
+          <span className="scene-sets-lightbox-label">{angle.angle_label}</span>
+          {angle.angle_description && <p>{angle.angle_description}</p>}
+          {angle.camera_direction && (
+            <p className="scene-sets-lightbox-camera"><Camera size={12} /> {angle.camera_direction}</p>
+          )}
+          {angle.beat_affinity && angle.beat_affinity.length > 0 && (
+            <span className="scene-sets-lightbox-beats">Beats: {angle.beat_affinity.join(', ')}</span>
+          )}
+        </div>
+
+        {angle.video_clip_url && (
+          <div className="scene-sets-lightbox-toggle">
+            <button
+              className={`scene-sets-lightbox-toggle-btn${!showVideo ? ' active' : ''}`}
+              onClick={() => setShowVideo(false)}
+            >
+              <Camera size={14} /> Still
+            </button>
+            <button
+              className={`scene-sets-lightbox-toggle-btn${showVideo ? ' active' : ''}`}
+              onClick={() => setShowVideo(true)}
+            >
+              <Play size={14} /> Video
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── ANGLE STRIP ──────────────────────────────────────────────────────────────
 
 function AngleStrip({ angles, onGenerate, generating }) {
   if (!angles || angles.length === 0) return null;
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+
+  const completedAngles = angles.filter(a => a.still_image_url);
+  const openLightbox = (angle) => {
+    const idx = completedAngles.findIndex(a => a.id === angle.id);
+    if (idx !== -1) setLightboxIndex(idx);
+  };
 
   return (
     <div className="scene-sets-angle-strip">
@@ -55,13 +139,17 @@ function AngleStrip({ angles, onGenerate, generating }) {
         const isComplete = angle.generation_status === 'complete';
         const isGenerating = angle.generation_status === 'generating';
         const isFailed = angle.generation_status === 'failed';
+        const hasMedia = !!angle.still_image_url;
 
         return (
           <div
             key={angle.id}
-            className={`scene-sets-angle-item${isPending && !generating ? ' clickable' : ''}`}
-            onClick={() => isPending && !generating && onGenerate(angle)}
-            title={isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
+            className={`scene-sets-angle-item${isPending && !generating ? ' clickable' : ''}${hasMedia ? ' has-media' : ''}`}
+            onClick={() => {
+              if (hasMedia) openLightbox(angle);
+              else if (isPending && !generating) onGenerate(angle);
+            }}
+            title={hasMedia ? `View: ${angle.angle_name}` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
           >
             <div className={`scene-sets-angle-thumb ${
               isComplete ? 'complete' : isGenerating ? 'generating' : isFailed ? 'failed' : 'pending'
@@ -95,6 +183,15 @@ function AngleStrip({ angles, onGenerate, generating }) {
           </div>
         );
       })}
+
+      {lightboxIndex !== null && completedAngles[lightboxIndex] && (
+        <AngleLightbox
+          angle={completedAngles[lightboxIndex]}
+          onClose={() => setLightboxIndex(null)}
+          onPrev={lightboxIndex > 0 ? () => setLightboxIndex(i => i - 1) : null}
+          onNext={lightboxIndex < completedAngles.length - 1 ? () => setLightboxIndex(i => i + 1) : null}
+        />
+      )}
     </div>
   );
 }
