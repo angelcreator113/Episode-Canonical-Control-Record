@@ -73,6 +73,12 @@ const ARTIFACT_CATEGORIES = {
     severity: 'high',
     promptFix: 'no text, no writing, no symbols, no watermarks anywhere in the image',
   },
+  DUPLICATED_OBJECTS: {
+    label: 'Duplicated Objects',
+    description: 'Mirrored or copy-pasted furniture, repeated identical items that should be unique',
+    severity: 'high',
+    promptFix: 'each piece of furniture appears exactly once, asymmetric natural room layout, no mirrored or duplicated objects',
+  },
 };
 
 const SEVERITY_WEIGHTS = {

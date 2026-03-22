@@ -300,6 +300,7 @@ const ARTIFACT_CATEGORIES = {
   FLOOR_DISTORTION: { label: 'Floor Distortion', description: 'Floor patterns warp near furniture' },
   HAND_BODY: { label: 'Hand/Body Error', description: 'Malformed hands or anatomy' },
   TEXT_BLEED: { label: 'Text Bleed', description: 'Phantom text or symbols in the image' },
+  DUPLICATED_OBJECTS: { label: 'Duplicated Objects', description: 'Mirrored or repeated furniture that should be unique' },
 };
 
 function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
