@@ -757,17 +757,6 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
               </>
             )}
 
-            {hasBase && (
-              <button
-                onClick={() => onRegenerateBase(set)}
-                disabled={isGenerating}
-                className={`scene-sets-btn-regen-base${isGenerating ? ' disabled' : ''}`}
-                title="Regenerate the base image with the same prompt"
-              >
-                <RotateCcw size={12} /> Regen Base
-              </button>
-            )}
-
             {hasBase && pendingAngles.length > 0 && (
               <button
                 onClick={() => onGenerateAll(set, false)}
@@ -817,7 +806,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                 className="scene-sets-btn-delete"
                 title="Delete all angles and regenerate clean"
               >
-                <RotateCcw size={12} /> Reset Angles
+                <Trash2 size={12} /> Reset Angles
               </button>
             )}
           </div>
@@ -1091,8 +1080,8 @@ export default function SceneSetsTab() {
     setGeneratingId(set.id);
     try {
       await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, { method: 'POST' });
-      showToast(`Generating base for "${set.name}" — typically takes ~45 seconds`);
-      setTimeout(fetchSets, 5000);
+      showToast(`Base generated for "${set.name}"`);
+      await fetchSets();
     } catch {
       showToast('Generation failed', 'error');
     } finally {
@@ -1113,7 +1102,7 @@ export default function SceneSetsTab() {
         throw new Error(err.error || 'Regeneration failed');
       }
       showToast('Base image regenerated!');
-      fetchSets();
+      await fetchSets();
     } catch (err) {
       showToast(err.message || 'Regeneration failed', 'error');
     } finally {
