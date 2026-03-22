@@ -240,6 +240,26 @@ async function startTextToImage(prompt, options = {}) {
     );
     return { jobId: response.data.id, seed: effectiveSeed };
   } catch (err) {
+    const status = err.response?.status;
+    // Retry once on transient errors (rate limit, server errors, timeouts)
+    if (status === 429 || status >= 500 || err.code === 'ECONNABORTED') {
+      const retryDelay = status === 429 ? 10000 : 5000;
+      console.warn(`[SceneGen] text_to_image transient error (${status || err.code}), retrying in ${retryDelay / 1000}s...`);
+      await sleep(retryDelay);
+      try {
+        const retryRes = await axios.post(
+          `${RUNWAY_API_BASE}/text_to_image`,
+          payload,
+          { headers: runwayHeaders(), timeout: 30000 }
+        );
+        return { jobId: retryRes.data.id, seed: effectiveSeed };
+      } catch (retryErr) {
+        if (retryErr.response) {
+          console.error('[SceneGen] text_to_image retry failed:', JSON.stringify(retryErr.response.data, null, 2));
+        }
+        throw retryErr;
+      }
+    }
     if (err.response) {
       console.error('[SceneGen] text_to_image API error:', JSON.stringify(err.response.data, null, 2));
     }
@@ -275,6 +295,26 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
     );
     return { jobId: response.data.id };
   } catch (err) {
+    const status = err.response?.status;
+    // Retry once on transient errors (rate limit, server errors, timeouts)
+    if (status === 429 || status >= 500 || err.code === 'ECONNABORTED') {
+      const retryDelay = status === 429 ? 10000 : 5000;
+      console.warn(`[SceneGen] image_to_video transient error (${status || err.code}), retrying in ${retryDelay / 1000}s...`);
+      await sleep(retryDelay);
+      try {
+        const retryRes = await axios.post(
+          `${RUNWAY_API_BASE}/image_to_video`,
+          payload,
+          { headers: runwayHeaders(), timeout: 30000 }
+        );
+        return { jobId: retryRes.data.id };
+      } catch (retryErr) {
+        if (retryErr.response) {
+          console.error('[SceneGen] image_to_video retry failed:', JSON.stringify(retryErr.response.data, null, 2));
+        }
+        throw retryErr;
+      }
+    }
     if (err.response) {
       console.error('[SceneGen] image_to_video API error:', JSON.stringify(err.response.data, null, 2));
     }

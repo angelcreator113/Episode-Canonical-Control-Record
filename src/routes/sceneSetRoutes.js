@@ -270,7 +270,14 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    const statusCode = err.response?.status || 500;
+    const detail = err.response?.data?.error || err.message;
+    res.status(500).json({
+      success: false,
+      error: detail,
+      upstream_status: statusCode !== 500 ? statusCode : undefined,
+      angle_id: req.params.angleId,
+    });
   }
 });
 
