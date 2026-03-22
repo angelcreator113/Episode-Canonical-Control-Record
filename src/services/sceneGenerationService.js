@@ -219,12 +219,14 @@ function runwayHeaders() {
 async function startTextToImage(prompt, options = {}) {
   const { seed, numOutputs = 1, styleReference, negativePrompt } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
+  // Always send an explicit seed so we can lock it — RunwayML doesn't reliably return seeds in task responses
+  const effectiveSeed = parsedSeed ?? Math.floor(Math.random() * 2147483647);
 
   const payload = {
     model: 'gen4_image',
     promptText: prompt,
     ratio: '1280:720',
-    ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
+    seed: effectiveSeed,
     ...(numOutputs > 1 ? { numOutputs } : {}),
     ...(styleReference ? { styleReference } : {}),
     ...(negativePrompt ? { negativePrompt } : {}),
@@ -236,7 +238,7 @@ async function startTextToImage(prompt, options = {}) {
       payload,
       { headers: runwayHeaders(), timeout: 30000 }
     );
-    return { jobId: response.data.id };
+    return { jobId: response.data.id, seed: effectiveSeed };
   } catch (err) {
     if (err.response) {
       console.error('[SceneGen] text_to_image API error:', JSON.stringify(err.response.data, null, 2));
@@ -304,7 +306,7 @@ async function pollTask(jobId, maxWaitMs = 180000) {
         status: 'SUCCEEDED',
         outputUrl: outputs[0],
         outputs,
-        seed: task.seed ?? null,
+        seed: task.seed ?? task.options?.seed ?? null,
         creditsUsed: task.creditsUsed ?? 0,
       };
     }
@@ -334,7 +336,7 @@ async function generateBestVariation(prompt, numVariations, options = {}) {
 
   console.log(`[SceneGen] Generating ${numVariations} variations for best-pick...`);
 
-  const { jobId } = await startTextToImage(prompt, {
+  const { jobId, seed: requestSeed } = await startTextToImage(prompt, {
     seed,
     numOutputs: Math.min(numVariations, 4),
     styleReference,
@@ -371,7 +373,7 @@ async function generateBestVariation(prompt, numVariations, options = {}) {
   return {
     best,
     variations,
-    seed: result.seed,
+    seed: result.seed ?? requestSeed,
     creditsUsed: result.creditsUsed,
   };
 }
@@ -480,14 +482,14 @@ async function generateBaseScene(sceneSet, models) {
       stillSeed = varResult.seed;
       stillCredits = varResult.creditsUsed || 0;
     } else {
-      const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference, negativePrompt });
+      const { jobId: stillJobId, seed: requestSeed } = await startTextToImage(prompt, { styleReference, negativePrompt });
       const stillResult = await pollTask(stillJobId);
       if (stillResult.status !== 'SUCCEEDED') {
         await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
         throw new Error(`Base still failed: ${stillResult.error}`);
       }
       stillOutputUrl = stillResult.outputUrl;
-      stillSeed = stillResult.seed;
+      stillSeed = stillResult.seed ?? requestSeed;
       stillCredits = stillResult.creditsUsed || 0;
     }
 
