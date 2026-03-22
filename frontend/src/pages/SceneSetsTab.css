@@ -250,20 +250,21 @@
 .scene-sets-card {
   background: #FFF;
   border: 1px solid #E8E4DC;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
-  transition: box-shadow 0.2s ease;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .scene-sets-card:hover {
-  box-shadow: 0 4px 16px rgba(44, 27, 105, 0.10);
+  box-shadow: 0 6px 24px rgba(44, 27, 105, 0.12);
+  transform: translateY(-1px);
 }
 
 /* ── Card Preview ──────────────────────────────────────────────────────── */
 
 .scene-sets-card-preview {
-  height: 160px;
+  height: 220px;
   background: linear-gradient(135deg, #F0EBF8 0%, #EDE7F6 100%);
   position: relative;
   overflow: hidden;
@@ -428,7 +429,7 @@
 /* ── Card Body ─────────────────────────────────────────────────────────── */
 
 .scene-sets-card-body {
-  padding: 14px 16px;
+  padding: 16px 18px 14px;
 }
 
 .scene-sets-card-header {
@@ -516,22 +517,26 @@
 .scene-sets-card-title {
   margin: 0;
   font-family: 'Lora', serif;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: #2C2C2C;
+  line-height: 1.3;
 }
 
 .scene-sets-card-subtitle {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   font-size: 12px;
-  color: #6B6B6B;
+  color: #9E9E9E;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
 }
 
 .scene-sets-card-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+  margin-top: 2px;
 }
 
 .scene-sets-card-actions:empty {
@@ -595,19 +600,22 @@
 }
 
 .scene-sets-btn-angles {
-  background: #F5F0FF;
+  background: none;
   color: #5C3D8F;
-  border: none;
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
+  border: 1px solid #E0D5F0;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
 }
 
 .scene-sets-btn-angles:hover {
-  background: #EDE7F6;
+  background: #F5F0FF;
+  border-color: #5C3D8F;
 }
 
 .scene-sets-btn-delete {
@@ -665,13 +673,14 @@
 /* ── Seed / Script ─────────────────────────────────────────────────────── */
 
 .scene-sets-seed-info {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  color: #B8962E;
+  font-size: 10px;
+  color: #C4A94D;
   display: flex;
   align-items: center;
   gap: 4px;
+  opacity: 0.7;
 }
 
 .scene-sets-script-context {
@@ -689,9 +698,13 @@
 
 .scene-sets-angle-strip {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-top: 12px;
+  margin-top: 14px;
+  padding: 12px;
+  background: #FAFAF5;
+  border-radius: 10px;
+  border: 1px solid #EFEBE3;
 }
 
 .scene-sets-angle-item {
@@ -706,18 +719,18 @@
 }
 
 .scene-sets-angle-thumb {
-  width: 52px;
-  height: 36px;
-  border-radius: 6px;
+  width: 68px;
+  height: 46px;
+  border-radius: 7px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  border: 1.5px solid #E0D5F0;
+  border: 2px solid #E0D5F0;
   background: #F0EBF8;
   color: #9E9E9E;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .scene-sets-angle-thumb img {
@@ -727,8 +740,12 @@
 }
 
 .scene-sets-angle-thumb.complete {
-  border-color: #B8962E;
+  border-color: rgba(184, 150, 46, 0.5);
   background: #000;
+}
+
+.scene-sets-angle-thumb.complete:hover {
+  border-color: #B8962E;
 }
 
 .scene-sets-angle-thumb.generating {
@@ -893,7 +910,8 @@
   font-size: 9px;
   color: #888;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .scene-sets-beat-numbers {
@@ -1022,14 +1040,19 @@
 
 .scene-sets-angle-review-btn {
   background: none;
-  border: 1px solid #E0D5F0;
+  border: 1px solid transparent;
   border-radius: 4px;
   padding: 1px 4px;
   cursor: pointer;
-  color: #9E9E9E;
+  color: #C4C4C4;
   display: inline-flex;
   align-items: center;
   transition: all 0.15s;
+  opacity: 0;
+}
+
+.scene-sets-angle-item:hover .scene-sets-angle-review-btn {
+  opacity: 1;
 }
 
 .scene-sets-angle-review-btn:hover {
@@ -1756,13 +1779,13 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid rgba(184, 150, 46, 0.4);
-  background: rgba(184, 150, 46, 0.08);
+  border: 1px solid rgba(184, 150, 46, 0.3);
+  background: rgba(184, 150, 46, 0.06);
   color: #B8962E;
   transition: all 0.18s ease;
 }
@@ -1811,9 +1834,10 @@
   align-items: center;
   gap: 5px;
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  color: #B8962E;
+  font-size: 10px;
+  color: #C4A94D;
   margin: 2px 0 0;
+  opacity: 0.7;
 }
 
 .scene-sets-total-cost {
@@ -1845,11 +1869,17 @@
   flex-direction: column;
   gap: 1px;
   margin-top: 2px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.scene-sets-angle-item:hover .scene-sets-angle-reorder {
+  opacity: 1;
 }
 
 .scene-sets-angle-reorder-btn {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 3px;
   color: #999;
   cursor: pointer;
