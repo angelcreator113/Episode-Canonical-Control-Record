@@ -6,7 +6,10 @@ const { Op }  = require('sequelize');
 const multer  = require('multer');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { optionalAuth } = require('../middleware/auth');
-const sceneGenService  = require('../services/sceneGenerationService');
+const sceneGenService    = require('../services/sceneGenerationService');
+const artifactService    = require('../services/artifactDetectionService');
+const postProcessService = require('../services/postProcessingService');
+const refinementQueue    = require('../queues/sceneRefinementQueue');
 const { SceneSet, SceneAngle, Universe, Show } = require('../models');
 
 const S3_BUCKET  = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
@@ -106,6 +109,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
       'name', 'scene_type', 'canonical_description',
       'mood_tags', 'aesthetic_tags', 'beat_numbers',
       'base_runway_model', 'base_still_url', 'notes',
+      'style_reference_url', 'negative_prompt', 'variation_count',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -219,6 +223,10 @@ router.post('/:id/angles', optionalAuth, async (req, res) => {
       angle_description,
       beat_affinity,
       camera_direction,
+      camera_motion,
+      video_duration,
+      style_reference_url,
+      variation_count,
     } = req.body;
 
     if (!angle_label || !angle_name) {
@@ -232,6 +240,10 @@ router.post('/:id/angles', optionalAuth, async (req, res) => {
       angle_description: angle_description || null,
       beat_affinity: beat_affinity || [],
       camera_direction: camera_direction || null,
+      camera_motion: camera_motion || null,
+      video_duration: video_duration || null,
+      style_reference_url: style_reference_url || null,
+      variation_count: variation_count || 1,
       generation_status: 'pending',
     });
 
@@ -292,11 +304,214 @@ router.delete('/:id/angles', optionalAuth, async (req, res) => {
   }
 });
 
+// ─── GET /artifact-categories  — list all artifact categories ────────────────
+
+router.get('/artifact-categories', optionalAuth, async (req, res) => {
+  res.json({ success: true, data: artifactService.ARTIFACT_CATEGORIES });
+});
+
+// ─── POST /:id/angles/:angleId/review  — submit manual quality review ───────
+
+router.post('/:id/angles/:angleId/review', optionalAuth, async (req, res) => {
+  try {
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: req.params.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
+    const { categories, notes } = req.body;
+    if (!categories || !Array.isArray(categories)) {
+      return res.status(400).json({ success: false, error: 'categories must be an array of artifact category keys' });
+    }
+
+    const review = artifactService.createManualReview(categories, notes || null);
+
+    await angle.update({
+      quality_review: review,
+      quality_score: review.qualityScore,
+      artifact_flags: review.flags,
+    });
+
+    res.json({ success: true, data: { review, refinedPromptSuffix: review.refinedPromptSuffix } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/angles/:angleId/review error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/angles/:angleId/analyze  — run auto quality analysis ─────────
+
+router.post('/:id/angles/:angleId/analyze', optionalAuth, async (req, res) => {
+  try {
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: req.params.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+    if (!angle.still_image_url) {
+      return res.status(400).json({ success: false, error: 'No still image to analyze' });
+    }
+
+    const analysis = await artifactService.analyzeImageQuality(angle.still_image_url);
+
+    await angle.update({
+      quality_score: analysis.qualityScore,
+      artifact_flags: analysis.flags,
+    });
+
+    res.json({ success: true, data: analysis });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/angles/:angleId/analyze error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/angles/:angleId/regenerate  — regenerate with refined prompt ──
+
+router.post('/:id/angles/:angleId/regenerate', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: set.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
+    // Accept artifact categories to address, or use previously flagged ones
+    const categories = req.body.categories
+      || (angle.artifact_flags || []).map(f => f.category).filter(Boolean);
+
+    if (categories.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No artifact categories specified. Submit a review first or pass categories in the request body.',
+      });
+    }
+
+    const result = await sceneGenService.regenerateAngleRefined(
+      angle, set, categories, { SceneAngle, SceneSet }
+    );
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/angles/:angleId/regenerate error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/angles/:angleId/post-process  — run post-processing pipeline ─
+
+router.post('/:id/angles/:angleId/post-process', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: set.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
+    if (!angle.still_image_url) {
+      return res.status(400).json({ success: false, error: 'No generated assets to post-process' });
+    }
+
+    const options = {
+      skipSharp: req.body.skipSharp || false,
+      skipCloudinary: req.body.skipCloudinary || false,
+      skipFFmpeg: req.body.skipFFmpeg || false,
+      sharpOptions: req.body.sharpOptions || {},
+      cloudinarySettings: req.body.cloudinarySettings || {},
+      ffmpegOptions: req.body.ffmpegOptions || {},
+    };
+
+    const result = await postProcessService.processAngleAssets(angle, set, { SceneAngle }, options);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/angles/:angleId/post-process error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/angles/:angleId/auto-refine  — queue auto-refinement ─────────
+
+router.post('/:id/angles/:angleId/auto-refine', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: set.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
+    const categories = req.body.categories
+      || (angle.artifact_flags || []).map(f => f.category).filter(Boolean);
+
+    if (categories.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No artifact categories to refine against. Run analysis or submit a review first.',
+      });
+    }
+
+    const job = await refinementQueue.addRefinementJob({
+      angleId: angle.id,
+      sceneSetId: set.id,
+      artifactCategories: categories,
+      pass: 1,
+      qualityThreshold: req.body.qualityThreshold || refinementQueue.QUALITY_THRESHOLD,
+      runPostProcessing: req.body.runPostProcessing !== false,
+    });
+
+    res.json({ success: true, data: { jobId: job.id, pass: 1, maxPasses: refinementQueue.MAX_REFINEMENT_PASSES } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/angles/:angleId/auto-refine error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── GET /refinement-queue/stats  — refinement queue statistics ──────────────
+
+router.get('/refinement-queue/stats', optionalAuth, async (req, res) => {
+  try {
+    const stats = await refinementQueue.getQueueStats();
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── GET /refinement-queue/jobs/:jobId  — get refinement job status ──────────
+
+router.get('/refinement-queue/jobs/:jobId', optionalAuth, async (req, res) => {
+  try {
+    const job = await refinementQueue.getRefinementJob(req.params.jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+
+    const state = await job.getState();
+    const progress = job.progress();
+
+    res.json({
+      success: true,
+      data: {
+        id: job.id,
+        state,
+        progress,
+        data: job.data,
+        result: job.returnvalue,
+        failedReason: job.failedReason,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── GET /by-type/:sceneType  — filter by scene_type ─────────────────────────
 
 router.get('/by-type/:sceneType', optionalAuth, async (req, res) => {
   try {
-    const validTypes = ['HOME_BASE', 'RECURRING', 'ONE_SHOT', 'TRANSITIONAL', 'FLASHBACK'];
+    const validTypes = ['HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER'];
     const sceneType = req.params.sceneType.toUpperCase();
 
     if (!validTypes.includes(sceneType)) {

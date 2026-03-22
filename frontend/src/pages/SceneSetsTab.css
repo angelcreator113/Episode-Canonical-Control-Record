@@ -895,6 +895,287 @@
   color: #2D1B69;
 }
 
+/* ── Quality Badge ─────────────────────────────────────────────────────── */
+
+.scene-sets-quality-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ── Angle Meta Row ────────────────────────────────────────────────────── */
+
+.scene-sets-angle-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scene-sets-angle-review-btn {
+  background: none;
+  border: 1px solid #E0D5F0;
+  border-radius: 4px;
+  padding: 1px 4px;
+  cursor: pointer;
+  color: #9E9E9E;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s;
+}
+
+.scene-sets-angle-review-btn:hover {
+  background: #F5F0FF;
+  color: #5C3D8F;
+  border-color: #5C3D8F;
+}
+
+/* ── Artifact Review Modal ─────────────────────────────────────────────── */
+
+.scene-sets-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.scene-sets-artifact-modal {
+  background: #FFF;
+  border-radius: 14px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+}
+
+.scene-sets-artifact-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid #F0EBF8;
+}
+
+.scene-sets-artifact-modal-header h3 {
+  margin: 0;
+  font-family: 'Lora', serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #2C2C2C;
+}
+
+.scene-sets-modal-close {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.scene-sets-modal-close:hover {
+  background: #F5F5F5;
+  color: #333;
+}
+
+.scene-sets-artifact-preview {
+  padding: 16px 20px;
+  text-align: center;
+}
+
+.scene-sets-artifact-preview img {
+  width: 100%;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: max-height 0.3s ease;
+  max-height: 180px;
+  object-fit: cover;
+}
+
+.scene-sets-artifact-preview img.expanded {
+  max-height: 500px;
+  object-fit: contain;
+}
+
+.scene-sets-artifact-score {
+  margin-top: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #6B6B6B;
+}
+
+.scene-sets-artifact-auto-flags {
+  padding: 0 20px 12px;
+}
+
+.scene-sets-artifact-section-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B6B6B;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 8px;
+}
+
+.scene-sets-artifact-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  margin: 2px 4px 2px 0;
+}
+
+.scene-sets-artifact-flag.critical {
+  background: #FFEBEE;
+  color: #C62828;
+}
+
+.scene-sets-artifact-flag.high {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+.scene-sets-artifact-flag.medium {
+  background: #FFF8E1;
+  color: #B8960C;
+}
+
+.scene-sets-artifact-flag.low {
+  background: #F5F5F5;
+  color: #757575;
+}
+
+.scene-sets-artifact-categories {
+  padding: 0 20px 12px;
+}
+
+.scene-sets-artifact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.scene-sets-artifact-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1.5px solid #E8E4DC;
+  border-radius: 8px;
+  background: #FAFAF5;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.scene-sets-artifact-cat:hover {
+  border-color: #B8962E;
+  background: #FFF9ED;
+}
+
+.scene-sets-artifact-cat.selected {
+  border-color: #C62828;
+  background: #FFEBEE;
+}
+
+.scene-sets-artifact-cat-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.scene-sets-artifact-cat-desc {
+  font-size: 10px;
+  color: #888;
+  line-height: 1.3;
+}
+
+.scene-sets-artifact-notes {
+  padding: 0 20px 12px;
+}
+
+.scene-sets-artifact-notes label {
+  display: block;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B6B6B;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.scene-sets-artifact-notes textarea {
+  width: 100%;
+  font-family: 'Lora', serif;
+  font-size: 13px;
+  color: #2C2C2C;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  padding: 8px 12px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.scene-sets-artifact-notes textarea:focus {
+  outline: none;
+  border-color: #B8962E;
+  box-shadow: 0 0 0 2px rgba(184, 150, 46, 0.12);
+}
+
+.scene-sets-artifact-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px 18px;
+  justify-content: flex-end;
+}
+
+.scene-sets-btn-review {
+  background: #F5F0FF;
+  color: #5C3D8F;
+  border: 1px solid #E0D5F0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s;
+}
+
+.scene-sets-btn-review:hover {
+  background: #EDE7F6;
+}
+
+.scene-sets-btn-review:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Mobile ────────────────────────────────────────────────────────────── */
 
 @media (max-width: 767px) {
