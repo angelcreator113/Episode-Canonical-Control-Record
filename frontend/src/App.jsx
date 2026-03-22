@@ -304,7 +304,9 @@ function AppContent() {
           <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
           <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
           <Route path="/universe/story-dashboard" element={<StoryDashboardPage />} />
-          <Route path="/universe/knowledge" element={<FranchiseBrainPage />} />
+          <Route path="/universe/knowledge" element={<Navigate to="/intelligence/franchise-brain" replace />} />
+          <Route path="/intelligence/franchise-brain" element={<FranchiseBrainPage />} />
+          <Route path="/intelligence/show-brain" element={<ShowBrain />} />
           <Route path="/universe/writing-rhythm" element={<WritingRhythmPage />} />
 
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
@@ -437,7 +439,7 @@ function AppContent() {
           <Route path="/world-locations" element={<WorldLocations />} />
 
           {/* Show Brain — Master Intelligence Document: identity, world rules, stats, economy, beats, 5 brains, canon */}
-          <Route path="/show-brain" element={<ShowBrain />} />
+          <Route path="/show-brain" element={<Navigate to="/intelligence/show-brain" replace />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
@@ -480,7 +482,7 @@ function AppContent() {
           <Route path="/social-import" element={<Navigate to="/universe/social-import" replace />} />
 
           {/* Franchise Brain — redirects to Universe page */}
-          <Route path="/franchise-brain" element={<Navigate to="/universe/knowledge" replace />} />
+          <Route path="/franchise-brain" element={<Navigate to="/intelligence/franchise-brain" replace />} />
           
           {/* PNOS Novel Assembler */}
           <Route path="/assembler" element={<NovelAssembler />} />
@@ -560,6 +562,8 @@ function AppContent() {
             '/universe/tensions': 'Tensions',
             '/universe/story-dashboard': 'Story Dashboard',
             '/universe/knowledge': 'Franchise Brain',
+            '/intelligence/franchise-brain': 'Franchise Brain',
+            '/intelligence/show-brain': 'Show Brain',
             '/universe/writing-rhythm': 'Writing Rhythm',
             '/character-registry': 'Character Registry',
             '/relationships': 'Relationship Engine',
