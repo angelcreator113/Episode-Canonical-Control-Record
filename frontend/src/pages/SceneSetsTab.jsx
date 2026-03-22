@@ -910,6 +910,12 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                 <label>Video Movement Prompt</label>
                 <pre className="scene-sets-prompt-preview">{previewData.videoPrompt}</pre>
               </div>
+              {previewData.negativePrompt && (
+                <div className="scene-sets-prompt-preview-section">
+                  <label>Negative Prompt (suppressed elements)</label>
+                  <pre className="scene-sets-prompt-preview">{previewData.negativePrompt}</pre>
+                </div>
+              )}
             </div>
           </div>
         )}

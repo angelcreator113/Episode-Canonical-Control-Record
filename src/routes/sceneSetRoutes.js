@@ -594,12 +594,14 @@ router.get('/:id/preview-prompt', optionalAuth, async (req, res) => {
     const angleLabel = (req.query.angle || 'WIDE').toUpperCase();
     const prompt = sceneGenService.buildPrompt(set, angleLabel);
     const videoPrompt = sceneGenService.buildVideoPrompt(set, angleLabel);
+    const negativePrompt = sceneGenService.buildNegativePrompt(set);
 
     res.json({
       success: true,
       data: {
         prompt,
         videoPrompt,
+        negativePrompt,
         promptLength: prompt.length,
         angleLabel,
       },
