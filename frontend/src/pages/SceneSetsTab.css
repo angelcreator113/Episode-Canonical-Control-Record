@@ -869,6 +869,22 @@
   }
 }
 
+/* ── Seed Angles ───────────────────────────────────────────────────────── */
+
+.scene-sets-seed-angles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-seed-hint {
+  font-size: 11px;
+  color: #9E9E9E;
+  font-style: italic;
+}
+
 /* ── Add Angle ─────────────────────────────────────────────────────────── */
 
 .scene-sets-btn-add-angle {

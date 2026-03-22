@@ -43,7 +43,34 @@ function TypeBadge({ type }) {
   );
 }
 
-// ─── LIGHTBOX MODAL ───────────────────────────────────────────────────────────
+// ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
+
+function ImageLightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="scene-sets-lightbox-overlay" onClick={onClose}>
+      <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
+        <button className="scene-sets-lightbox-close" onClick={onClose}>
+          <X size={20} />
+        </button>
+        <div className="scene-sets-lightbox-media">
+          <img src={src} alt={alt} className="scene-sets-lightbox-img" />
+        </div>
+        <div className="scene-sets-lightbox-info">
+          <h3>{alt}</h3>
+          <span className="scene-sets-lightbox-label">Base Image</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ANGLE LIGHTBOX MODAL ─────────────────────────────────────────────────────
 
 function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
   if (!angle) return null;
@@ -286,11 +313,22 @@ function formatTime(secs) {
 
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, generatingId, generationProgress }) {
+// ─── DEFAULT ANGLE PRESETS ────────────────────────────────────────────────────
+
+const DEFAULT_ANGLE_PRESETS = [
+  { angle_label: 'WIDE',      angle_name: 'Wide Establishing',  camera_direction: 'Wide establishing shot, full room visible, camera at medium height, balanced composition.' },
+  { angle_label: 'VANITY',    angle_name: 'Vanity Mirror',      camera_direction: 'Camera at vanity mirror, close-to-medium shot, soft focus on reflection and surface details.' },
+  { angle_label: 'WINDOW',    angle_name: 'Window Light',       camera_direction: 'Camera facing window, natural light streaming in, subject silhouette or three-quarter view.' },
+  { angle_label: 'DOORWAY',   angle_name: 'Doorway Threshold',  camera_direction: 'Camera at doorway threshold, looking into the room, sense of arrival or departure.' },
+  { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
+];
+
+function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
   const pendingAngles = set.angles?.filter(a => a.generation_status === 'pending') || [];
@@ -323,7 +361,11 @@ function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGe
   return (
     <div className="scene-sets-card">
       {/* Preview image */}
-      <div className={`scene-sets-card-preview${primaryStill ? ' has-image' : ''}`}>
+      <div
+        className={`scene-sets-card-preview${primaryStill ? ' has-image clickable' : ''}`}
+        onClick={() => { if (primaryStill) setShowBaseLightbox(true); }}
+        style={primaryStill ? { cursor: 'pointer' } : undefined}
+      >
         {primaryStill ? (
           <img src={primaryStill} alt={set.name} />
         ) : (
@@ -468,6 +510,14 @@ function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGe
 
         {progress && <GenerationProgress progress={progress} />}
 
+        {showBaseLightbox && primaryStill && (
+          <ImageLightbox
+            src={primaryStill}
+            alt={set.name}
+            onClose={() => setShowBaseLightbox(false)}
+          />
+        )}
+
         {expanded && (
           <>
             <AngleStrip
@@ -476,6 +526,19 @@ function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGe
               onRegenerate={(angle) => onGenerateAngle(set, angle)}
               generating={isGenerating}
             />
+
+            {hasBase && totalAngles === 0 && !showAddAngle && (
+              <div className="scene-sets-seed-angles">
+                <button
+                  className="scene-sets-btn-generate"
+                  onClick={() => onSeedAngles(set)}
+                  disabled={isGenerating}
+                >
+                  <Sparkles size={12} /> Seed Default Angles
+                </button>
+                <span className="scene-sets-seed-hint">Creates 5 standard camera angles (Wide, Vanity, Window, Doorway, Close)</span>
+              </div>
+            )}
 
             {hasBase && !showAddAngle && (
               <button
@@ -761,6 +824,23 @@ export default function SceneSetsTab() {
     }
   };
 
+  const handleSeedAngles = async (set) => {
+    try {
+      for (const preset of DEFAULT_ANGLE_PRESETS) {
+        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...preset, beat_affinity: [] }),
+        });
+        if (!res.ok) throw new Error(`Failed to create ${preset.angle_label}`);
+      }
+      showToast(`Seeded ${DEFAULT_ANGLE_PRESETS.length} default angles`);
+      fetchSets();
+    } catch (err) {
+      showToast(err.message || 'Failed to seed angles', 'error');
+    }
+  };
+
   const filtered = filterType === 'ALL'
     ? sets
     : sets.filter(s => s.scene_type === filterType);
@@ -900,6 +980,7 @@ export default function SceneSetsTab() {
               onDeleteAllAngles={handleDeleteAllAngles}
               onDeleteSet={handleDeleteSet}
               onAddAngle={handleAddAngle}
+              onSeedAngles={handleSeedAngles}
               generatingId={generatingId}
               generationProgress={generationProgress}
             />
