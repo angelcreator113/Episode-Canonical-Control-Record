@@ -173,7 +173,7 @@ function formatTime(secs) {
 
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, generatingId, generationProgress }) {
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || null;
@@ -183,6 +183,27 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
   const hasBase = !!set.base_runway_seed;
   // Auto-expand when base is ready but angles aren't generated yet
   const [expanded, setExpanded] = useState(hasBase && readyAngles === 0 && totalAngles > 0);
+  const [showAddAngle, setShowAddAngle] = useState(false);
+  const [addingAngle, setAddingAngle] = useState(false);
+  const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+
+  const handleSubmitAngle = async () => {
+    if (!newAngle.angle_label.trim() || !newAngle.angle_name.trim()) return;
+    setAddingAngle(true);
+    const beatArr = newAngle.beat_affinity.trim()
+      ? newAngle.beat_affinity.split(',').map(b => parseInt(b.trim(), 10)).filter(n => !isNaN(n))
+      : [];
+    await onAddAngle(set, {
+      angle_label: newAngle.angle_label.trim().toUpperCase(),
+      angle_name: newAngle.angle_name.trim(),
+      angle_description: newAngle.angle_description.trim() || null,
+      camera_direction: newAngle.camera_direction.trim() || null,
+      beat_affinity: beatArr,
+    });
+    setNewAngle({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+    setShowAddAngle(false);
+    setAddingAngle(false);
+  };
 
   return (
     <div className="scene-sets-card">
@@ -296,11 +317,90 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
         {progress && <GenerationProgress progress={progress} />}
 
         {expanded && (
-          <AngleStrip
-            angles={set.angles}
-            onGenerate={(angle) => onGenerateAngle(set, angle)}
-            generating={isGenerating}
-          />
+          <>
+            <AngleStrip
+              angles={set.angles}
+              onGenerate={(angle) => onGenerateAngle(set, angle)}
+              generating={isGenerating}
+            />
+
+            {hasBase && !showAddAngle && (
+              <button
+                className="scene-sets-btn-add-angle"
+                onClick={() => setShowAddAngle(true)}
+              >
+                <Plus size={12} /> Add Angle
+              </button>
+            )}
+
+            {showAddAngle && (
+              <div className="scene-sets-add-angle-form">
+                <div className="scene-sets-add-angle-row">
+                  <div className="scene-sets-create-field">
+                    <label>Label</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. WIDE"
+                      value={newAngle.angle_label}
+                      onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="scene-sets-create-field">
+                    <label>Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Wide Morning"
+                      value={newAngle.angle_name}
+                      onChange={e => setNewAngle(a => ({ ...a, angle_name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="scene-sets-create-field">
+                    <label>Beats <span className="scene-sets-optional">(comma-sep)</span></label>
+                    <input
+                      type="text"
+                      placeholder="1,2,3"
+                      value={newAngle.beat_affinity}
+                      onChange={e => setNewAngle(a => ({ ...a, beat_affinity: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="scene-sets-create-field">
+                  <label>Description <span className="scene-sets-optional">(optional)</span></label>
+                  <input
+                    type="text"
+                    placeholder="What this angle captures..."
+                    value={newAngle.angle_description}
+                    onChange={e => setNewAngle(a => ({ ...a, angle_description: e.target.value }))}
+                  />
+                </div>
+                <div className="scene-sets-create-field">
+                  <label>Camera Direction <span className="scene-sets-optional">(optional)</span></label>
+                  <input
+                    type="text"
+                    placeholder="Camera placement and movement..."
+                    value={newAngle.camera_direction}
+                    onChange={e => setNewAngle(a => ({ ...a, camera_direction: e.target.value }))}
+                  />
+                </div>
+                <div className="scene-sets-add-angle-actions">
+                  <button
+                    className="scene-sets-btn-generate"
+                    onClick={handleSubmitAngle}
+                    disabled={addingAngle || !newAngle.angle_label.trim() || !newAngle.angle_name.trim()}
+                  >
+                    {addingAngle ? <><Loader size={12} className="spin" /> Adding...</> : <><Plus size={12} /> Add Angle</>}
+                  </button>
+                  <button
+                    className="scene-sets-btn-delete"
+                    onClick={() => setShowAddAngle(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -469,6 +569,21 @@ export default function SceneSetsTab() {
     }
   };
 
+  const handleAddAngle = async (set, angleData) => {
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(angleData),
+      });
+      if (!res.ok) throw new Error('Failed');
+      showToast(`Added angle "${angleData.angle_label}"`);
+      fetchSets();
+    } catch {
+      showToast('Failed to add angle', 'error');
+    }
+  };
+
   const filtered = filterType === 'ALL'
     ? sets
     : sets.filter(s => s.scene_type === filterType);
@@ -606,6 +721,7 @@ export default function SceneSetsTab() {
               onGenerateAll={handleGenerateAll}
               onDeleteAllAngles={handleDeleteAllAngles}
               onDeleteSet={handleDeleteSet}
+              onAddAngle={handleAddAngle}
               generatingId={generatingId}
               generationProgress={generationProgress}
             />

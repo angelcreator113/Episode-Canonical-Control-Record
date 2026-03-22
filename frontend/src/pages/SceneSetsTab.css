@@ -341,9 +341,8 @@
 
 .scene-sets-card-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .scene-sets-card-title {
@@ -363,7 +362,7 @@
 .scene-sets-card-actions {
   display: flex;
   gap: 6px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
@@ -790,11 +789,6 @@
     grid-template-columns: 1fr;
   }
 
-  .scene-sets-card-header {
-    flex-direction: column;
-    gap: 10px;
-  }
-
   .scene-sets-card-actions {
     width: 100%;
   }
@@ -816,5 +810,60 @@
   .scene-library-tab-bar {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Add Angle ─────────────────────────────────────────────────────────── */
+
+.scene-sets-btn-add-angle {
+  background: none;
+  color: #B8962E;
+  border: 1px dashed #D4C08E;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  transition: all 0.15s;
+}
+
+.scene-sets-btn-add-angle:hover {
+  background: #FAF3E0;
+  border-color: #B8962E;
+}
+
+.scene-sets-add-angle-form {
+  margin-top: 10px;
+  padding: 12px;
+  background: #FAFAF5;
+  border: 1px solid #E8E4D8;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scene-sets-add-angle-row {
+  display: flex;
+  gap: 10px;
+}
+
+.scene-sets-add-angle-row .scene-sets-create-field {
+  flex: 1;
+}
+
+.scene-sets-add-angle-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+@media (max-width: 600px) {
+  .scene-sets-add-angle-row {
+    flex-direction: column;
   }
 }
