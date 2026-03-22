@@ -33,7 +33,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── LALAVERSE VISUAL ANCHOR (condensed ~590 chars) ─────────────────────────
 
-const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow (lavender, peach, rose). Natural hero lighting. Materials: soft fabrics (linen, silk), light wood (oak, ash), glass, subtle shimmer. Tone: calm, intentional, beautiful, lived-in. Layout: asymmetric natural room arrangement, each piece of furniture appears only once, no mirrored or duplicated objects, varied spacing between items. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
+const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow (lavender, peach, rose). Natural hero lighting. Materials: soft fabrics (linen, silk), light wood (oak, ash), glass, subtle shimmer. Tone: calm, intentional, beautiful, lived-in. Layout: asymmetric natural arrangement, each furniture piece appears once only, no mirrored or duplicated objects. Quality: sharp furniture edges, consistent hardware, correct legs, coherent reflections, clean fabric folds, precise floor patterns.`;
 
 // ─── NEGATIVE PROMPT (universal) ─────────────────────────────────────────────
 
@@ -43,11 +43,11 @@ const NEGATIVE_PROMPT = `neon lighting, cyberpunk, cluttered decor, ultra-minima
 // Gives the AI spatial awareness about what kind of room it's generating
 
 const SCENE_TYPE_CONTEXT = {
-  HOME_BASE: 'Interior residential room. Single bed, one nightstand per side, one vanity or desk, one dresser. Lived-in personal space with curated belongings.',
-  CLOSET: 'Walk-in closet or dressing area. Organized clothing racks, shelving, shoe storage. Compact luxurious space.',
-  EVENT_LOCATION: 'Event venue or social gathering space. Open layout, decorative focal points, ambient party or gathering atmosphere.',
-  TRANSITION: 'Hallway, corridor, staircase, or connecting passage. Narrow or linear perspective with depth.',
-  OTHER: 'Distinct architectural interior space with clear purpose and function.',
+  HOME_BASE: 'Interior bedroom: one bed, one vanity, one dresser, lived-in personal space.',
+  CLOSET: 'Walk-in closet: organized racks, shelving, shoe storage, compact luxury.',
+  EVENT_LOCATION: 'Event venue: open layout, decorative focal points, gathering atmosphere.',
+  TRANSITION: 'Hallway or corridor: linear perspective with depth, connecting passage.',
+  OTHER: 'Interior space with clear purpose and function.',
 };
 
 // ─── SCENE TYPE NEGATIVE PROMPTS ─────────────────────────────────────────────
@@ -64,16 +64,16 @@ const SCENE_TYPE_NEGATIVES = {
 // ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
 
 const ANGLE_MODIFIERS = {
-  WIDE:         'Wide establishing shot, full room visible, camera at eye-level from one corner. Natural asymmetric composition showing organic furniture placement, each piece appearing only once.',
-  CLOSET:       'Camera facing wardrobe wall from standing height, full-height racks or shelving visible. Soft glow on fabric textures, depth through organized layers.',
-  VANITY:       'Camera positioned beside the single vanity, close-to-medium shot. Soft focus on mirror reflection showing part of room behind. One vanity only.',
-  WINDOW:       'Camera facing the main window at medium height. Natural light streaming inward creating depth and volume. Foreground furniture framing the shot.',
-  DOORWAY:      'Camera at doorway threshold, looking into the room from the entry point. Perspective lines converging into the space, sense of arrival.',
-  ESTABLISHING: 'Wide exterior or grand interior entrance shot from a low-medium angle. Full prestige of the space visible with architectural framing.',
-  ACTION:       'Dynamic three-quarter angle with slight Dutch tilt. Sense of movement energy, asymmetric composition with strong diagonal lines.',
-  CLOSE:        'Close shot on one specific surface, object, or detail. Shallow depth of field, intimate and personal. Single subject focus.',
-  OVERHEAD:     'High angle looking down at 45-60 degrees, revealing spatial relationships between furniture pieces. Each item distinct and separate.',
-  OTHER:        'Unique compositional angle appropriate to this specific location with clear spatial depth.',
+  WIDE:         'Wide establishing shot from one corner, full room visible at eye-level, asymmetric composition, organic furniture placement.',
+  CLOSET:       'Camera facing wardrobe wall, full-height racks visible, soft glow on fabric textures, depth through layers.',
+  VANITY:       'Camera beside the single vanity, close-to-medium shot, soft focus on mirror reflection.',
+  WINDOW:       'Camera facing main window at medium height, natural light streaming in, foreground furniture framing.',
+  DOORWAY:      'Camera at doorway threshold looking in, perspective lines converging, sense of arrival.',
+  ESTABLISHING: 'Wide exterior or grand interior entrance, low-medium angle, full prestige with architectural framing.',
+  ACTION:       'Dynamic three-quarter angle, slight Dutch tilt, asymmetric composition, strong diagonal energy.',
+  CLOSE:        'Close shot on one specific detail, shallow depth of field, intimate single-subject focus.',
+  OVERHEAD:     'High angle at 45-60 degrees, revealing spatial layout, each furniture piece distinct and separate.',
+  OTHER:        'Unique compositional angle with clear spatial depth appropriate to this location.',
 };
 
 // ─── CAMERA MOTION MAPPING (per angle type) ─────────────────────────────────
@@ -154,7 +154,7 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     descriptionSlice,
     tagLine,
     `CAMERA: ${cameraText}`,
-    'Photorealistic cinematic quality. Each furniture piece unique, no duplicated or mirrored objects. No text overlays. No watermarks. No distorted faces or hands.',
+    'Photorealistic cinematic quality. No text, no watermarks.',
   ].filter(Boolean);
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
