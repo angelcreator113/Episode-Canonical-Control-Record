@@ -295,6 +295,23 @@
   font-weight: 500;
 }
 
+.scene-sets-card-generating-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  z-index: 5;
+  pointer-events: none;
+}
+
 .scene-sets-card-overlay-top-left {
   position: absolute;
   top: 10px;

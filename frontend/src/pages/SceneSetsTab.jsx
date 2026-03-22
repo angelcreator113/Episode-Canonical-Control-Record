@@ -527,7 +527,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
-  const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const primaryStill = set.base_still_url || set.angles?.find(a => a.still_image_url)?.still_image_url || null;
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
@@ -614,11 +614,18 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
         style={primaryStill ? { cursor: 'pointer' } : undefined}
       >
         {primaryStill ? (
-          <img src={primaryStill} alt={set.name} />
+          <img src={primaryStill} alt={set.name} key={primaryStill} />
         ) : (
           <div className="scene-sets-card-placeholder">
             <Camera size={32} strokeWidth={1.2} />
             <span>{hasBase ? 'Generate angles to see visuals' : 'Not yet generated'}</span>
+          </div>
+        )}
+
+        {isGenerating && (
+          <div className="scene-sets-card-generating-overlay">
+            <Loader size={24} className="spin" />
+            <span>Generating{genStartTime ? ` ${formatTime(baseElapsed)}` : '...'}</span>
           </div>
         )}
 
@@ -825,13 +832,6 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
               (set.angles || []).reduce((sum, a) => sum + parseFloat(a.generation_cost || 0), 0)
             ).toFixed(1)} credits
           </p>
-        )}
-
-        {isGenerating && !progress && (
-          <div className="scene-sets-base-timer">
-            <Loader size={12} className="spin" />
-            <span>Generating... {formatTime(baseElapsed)}</span>
-          </div>
         )}
 
         {set.script_context && (
