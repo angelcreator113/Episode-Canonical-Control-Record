@@ -514,8 +514,8 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
     return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
   } finally {
     // Cleanup temp files
-    try { fs.unlinkSync(tmpVideo); } catch (_) {}
-    try { fs.unlinkSync(tmpFrame); } catch (_) {}
+    try { fs.unlinkSync(tmpVideo); } catch (err) { console.warn('[SceneGen] cleanup tmpVideo:', err?.message); }
+    try { fs.unlinkSync(tmpFrame); } catch (err) { console.warn('[SceneGen] cleanup tmpFrame:', err?.message); }
   }
 }
 

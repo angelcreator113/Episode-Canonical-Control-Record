@@ -244,9 +244,9 @@ async function ffmpegEnhanceVideo(videoUrl, options = {}) {
   } finally {
     // Cleanup temp files
     try {
-      await fs.unlink(inputPath).catch(() => {});
-      await fs.unlink(outputPath).catch(() => {});
-      await fs.rmdir(tmpDir).catch(() => {});
+      await fs.unlink(inputPath).catch(err => console.warn('[PostProcess] cleanup inputPath:', err?.message));
+      await fs.unlink(outputPath).catch(err => console.warn('[PostProcess] cleanup outputPath:', err?.message));
+      await fs.rmdir(tmpDir).catch(err => console.warn('[PostProcess] cleanup tmpDir:', err?.message));
     } catch (_) { /* best effort */ }
   }
 }
