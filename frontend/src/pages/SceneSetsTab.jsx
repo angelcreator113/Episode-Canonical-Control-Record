@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, Upload, Pencil, Save } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, Upload, Pencil, Save, MoreVertical } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -45,98 +45,20 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
-function ImageLightbox({ src, alt, set, onClose, onRegenerate, onUpdatePrompt, isGenerating }) {
-  const [editing, setEditing] = useState(false);
-  const [editDesc, setEditDesc] = useState(set?.canonical_description || '');
-  const [saving, setSaving] = useState(false);
-
+function ImageLightbox({ src, alt, onClose }) {
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') { if (editing) setEditing(false); else onClose(); } };
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose, editing]);
-
-  const handleSave = async (andRegenerate = false) => {
-    setSaving(true);
-    await onUpdatePrompt(set, editDesc);
-    setSaving(false);
-    setEditing(false);
-    if (andRegenerate) {
-      onClose();
-      onRegenerate(set);
-    }
-  };
+  }, [onClose]);
 
   return (
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
-      <div className="scene-sets-lightbox scene-sets-lightbox-wide" onClick={e => e.stopPropagation()}>
+      <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
         <button className="scene-sets-lightbox-close" onClick={onClose}>
           <X size={20} />
         </button>
-        <div className="scene-sets-lightbox-media">
-          <img src={src} alt={alt} className="scene-sets-lightbox-img" />
-        </div>
-        <div className="scene-sets-lightbox-info">
-          <h3>{alt}</h3>
-          <span className="scene-sets-lightbox-label">Base Image</span>
-
-          {!editing && (
-            <div className="scene-sets-lightbox-actions">
-              <button
-                className="scene-sets-lightbox-regen"
-                onClick={() => { onClose(); onRegenerate(set); }}
-                disabled={isGenerating}
-              >
-                <RotateCcw size={13} /> Regenerate Base
-              </button>
-              <button
-                className="scene-sets-lightbox-edit-btn"
-                onClick={() => { setEditDesc(set?.canonical_description || ''); setEditing(true); }}
-              >
-                <Pencil size={13} /> Edit Prompt
-              </button>
-            </div>
-          )}
-
-          {editing && (
-            <div className="scene-sets-prompt-editor">
-              <label className="scene-sets-prompt-editor-label">Scene Description (used to build AI prompt)</label>
-              <textarea
-                className="scene-sets-prompt-editor-textarea"
-                value={editDesc}
-                onChange={e => setEditDesc(e.target.value)}
-                rows={5}
-                autoFocus
-                placeholder="Describe the space — layout, lighting, mood, signature details..."
-              />
-              {set?.base_runway_prompt && (
-                <details className="scene-sets-prompt-details">
-                  <summary>Last generated prompt (read-only)</summary>
-                  <pre className="scene-sets-prompt-preview">{set.base_runway_prompt}</pre>
-                </details>
-              )}
-              <div className="scene-sets-prompt-editor-actions">
-                <button
-                  className="scene-sets-btn-generate"
-                  onClick={() => handleSave(false)}
-                  disabled={saving}
-                >
-                  {saving ? <><Loader size={12} className="spin" /> Saving...</> : <><Save size={12} /> Save</>}
-                </button>
-                <button
-                  className="scene-sets-btn-generate"
-                  onClick={() => handleSave(true)}
-                  disabled={saving || isGenerating}
-                >
-                  <RotateCcw size={12} /> Save & Regenerate
-                </button>
-                <button className="scene-sets-btn-delete" onClick={() => setEditing(false)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <img src={src} alt={alt} className="scene-sets-lightbox-img" />
       </div>
     </div>
   );
@@ -397,6 +319,7 @@ const DEFAULT_ANGLE_PRESETS = [
 
 function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
+  const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
@@ -411,6 +334,30 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
   const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+  const [showMenu, setShowMenu] = useState(false);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [editDesc, setEditDesc] = useState(set.canonical_description || '');
+  const [savingPrompt, setSavingPrompt] = useState(false);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleClick = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false); };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showMenu]);
+
+  const handleSavePrompt = async (andRegenerate = false) => {
+    setSavingPrompt(true);
+    await onUpdatePrompt(set, editDesc);
+    setSavingPrompt(false);
+    if (andRegenerate) {
+      setShowPromptEditor(false);
+      onRegenerateBase(set);
+    } else {
+      setShowPromptEditor(false);
+    }
+  };
 
   const handleSubmitAngle = async () => {
     if (!newAngle.angle_label.trim() || !newAngle.angle_name.trim()) return;
@@ -482,14 +429,30 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
               >
                 {expanded ? 'Hide' : 'Angles'}
               </button>
-              <button
-                onClick={() => onDeleteSet(set)}
-                disabled={isGenerating}
-                className="scene-sets-btn-delete-set"
-                title="Delete this scene set"
-              >
-                <Trash2 size={12} />
-              </button>
+              <div className="scene-sets-kebab-wrapper" ref={menuRef}>
+                <button
+                  className="scene-sets-btn-kebab"
+                  onClick={() => setShowMenu(m => !m)}
+                  title="More options"
+                >
+                  <MoreVertical size={14} />
+                </button>
+                {showMenu && (
+                  <div className="scene-sets-kebab-menu">
+                    <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}>
+                      <Pencil size={12} /> Edit Prompt
+                    </button>
+                    {hasBase && (
+                      <button onClick={() => { setShowMenu(false); onRegenerateBase(set); }} disabled={isGenerating}>
+                        <RotateCcw size={12} /> Regenerate Base
+                      </button>
+                    )}
+                    <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
+                      <Trash2 size={12} /> Delete Set
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -582,15 +545,52 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
 
         {progress && <GenerationProgress progress={progress} />}
 
+        {showPromptEditor && (
+          <div className="scene-sets-prompt-editor">
+            <label className="scene-sets-prompt-editor-label">Scene Description (used to build AI prompt)</label>
+            <textarea
+              className="scene-sets-prompt-editor-textarea"
+              value={editDesc}
+              onChange={e => setEditDesc(e.target.value)}
+              rows={4}
+              autoFocus
+              placeholder="Describe the space \u2014 layout, lighting, mood, signature details..."
+            />
+            {set.base_runway_prompt && (
+              <details className="scene-sets-prompt-details">
+                <summary>View last generated prompt</summary>
+                <pre className="scene-sets-prompt-preview">{set.base_runway_prompt}</pre>
+              </details>
+            )}
+            <div className="scene-sets-prompt-editor-actions">
+              <button
+                className="scene-sets-btn-generate"
+                onClick={() => handleSavePrompt(false)}
+                disabled={savingPrompt}
+              >
+                {savingPrompt ? <><Loader size={12} className="spin" /> Saving...</> : <><Save size={12} /> Save</>}
+              </button>
+              {hasBase && (
+                <button
+                  className="scene-sets-btn-generate"
+                  onClick={() => handleSavePrompt(true)}
+                  disabled={savingPrompt || isGenerating}
+                >
+                  <RotateCcw size={12} /> Save & Regenerate
+                </button>
+              )}
+              <button className="scene-sets-btn-delete" onClick={() => setShowPromptEditor(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {showBaseLightbox && primaryStill && (
           <ImageLightbox
             src={primaryStill}
             alt={set.name}
-            set={set}
             onClose={() => setShowBaseLightbox(false)}
-            onRegenerate={onRegenerateBase}
-            onUpdatePrompt={onUpdatePrompt}
-            isGenerating={isGenerating}
           />
         )}
 

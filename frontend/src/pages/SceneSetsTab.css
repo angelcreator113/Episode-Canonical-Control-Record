@@ -359,6 +359,68 @@
   flex-shrink: 0;
 }
 
+/* ─── KEBAB MENU ─────────────────────────────────────────────────────────── */
+
+.scene-sets-kebab-wrapper {
+  position: relative;
+}
+
+.scene-sets-btn-kebab {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  color: #6B6B6B;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+.scene-sets-btn-kebab:hover {
+  background: rgba(0,0,0,0.05);
+  color: #2C2C2C;
+}
+
+.scene-sets-kebab-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  min-width: 160px;
+  padding: 4px 0;
+}
+.scene-sets-kebab-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  color: #2C2C2C;
+  cursor: pointer;
+  text-align: left;
+  font-family: 'DM Mono', monospace;
+}
+.scene-sets-kebab-menu button:hover {
+  background: #f5f3ee;
+}
+.scene-sets-kebab-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.scene-sets-kebab-danger {
+  color: #c0392b !important;
+}
+.scene-sets-kebab-danger:hover {
+  background: #fdf0ef !important;
+}
+
 .scene-sets-card-title {
   margin: 0;
   font-family: 'Lora', serif;
