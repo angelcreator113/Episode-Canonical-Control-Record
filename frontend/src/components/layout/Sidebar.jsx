@@ -25,8 +25,10 @@ const NAV = [
               { icon: '□', label: 'Assets',              route: '/universe/assets' },
             ],
           },
-          { heading: 'World Building',
+          { heading: 'Intelligence',
             children: [
+              { icon: '🧠', label: 'Show Brain',         route: '/intelligence/show-brain' },
+              { icon: '⬡', label: 'Franchise Brain',    route: '/intelligence/franchise-brain' },
               { icon: '📜', label: 'World State',        route: '/universe/world-state' },
               { icon: '📍', label: 'World Locations',    route: '/world-locations' },
               { icon: '📅', label: 'Cultural Calendar',  route: '/cultural-calendar' },
@@ -48,7 +50,6 @@ const NAV = [
           { heading: 'Story Tools',
             children: [
               { icon: '✦', label: 'Story Dashboard',    route: '/universe/story-dashboard' },
-              { icon: '⬡', label: 'Franchise Brain',    route: '/universe/knowledge' },
               { icon: '◇', label: 'Writing Rhythm',     route: '/universe/writing-rhythm' },
               { icon: '🔥', label: 'Book Scene Studio',  route: '/scene-studio' },
             ],
@@ -89,7 +90,6 @@ const NAV = [
         icon: '🎬', label: 'Shows', route: '/shows',
         expandable: true,
       },
-      { icon: '🧠', label: 'Show Brain',      route: '/show-brain' },
       { icon: '🎞️', label: 'Scene Library',   route: '/scene-library' },
       { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
       { icon: '🖼️', label: 'Template Studio', route: '/template-studio' },
@@ -166,7 +166,7 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Universe sub-nav when on a /universe/* sub-page or world-building route
   useEffect(() => {
-    if (location.pathname.startsWith('/universe') || ['/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations', '/amber', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
+    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/intelligence') || ['/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations', '/amber', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
       setUniverseOpen(true);
     }
   }, [location.pathname]);
