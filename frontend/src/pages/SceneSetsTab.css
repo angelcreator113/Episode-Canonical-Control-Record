@@ -393,6 +393,34 @@
   cursor: not-allowed;
 }
 
+.scene-sets-btn-upload {
+  background: rgba(184, 150, 46, 0.1);
+  color: #B8962E;
+  border: 1px solid rgba(184, 150, 46, 0.3);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.scene-sets-btn-upload:hover {
+  background: rgba(184, 150, 46, 0.2);
+  border-color: rgba(184, 150, 46, 0.5);
+}
+
+.scene-sets-btn-upload.disabled {
+  background: #EEE;
+  color: #999;
+  border-color: #DDD;
+  cursor: not-allowed;
+}
+
 .scene-sets-btn-angles {
   background: #F5F0FF;
   color: #5C3D8F;
@@ -803,6 +831,7 @@
   }
 
   .scene-sets-btn-generate,
+  .scene-sets-btn-upload,
   .scene-sets-btn-angles {
     flex: 1;
     text-align: center;

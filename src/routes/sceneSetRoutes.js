@@ -3,9 +3,24 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
+const multer  = require('multer');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { optionalAuth } = require('../middleware/auth');
 const sceneGenService  = require('../services/sceneGenerationService');
 const { SceneSet, SceneAngle, Universe, Show } = require('../models');
+
+const S3_BUCKET  = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const s3 = new S3Client({ region: AWS_REGION });
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
+  },
+});
 
 // ─── GET /  — list all scene sets ─────────────────────────────────────────────
 
@@ -114,6 +129,42 @@ router.delete('/:id', optionalAuth, async (req, res) => {
     res.json({ success: true, message: 'Scene set deleted' });
   } catch (err) {
     console.error('Scene Sets DELETE /:id error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/upload-base  — upload a custom base image ─────────────────────
+
+router.post('/:id/upload-base', optionalAuth, upload.single('image'), async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!req.file) return res.status(400).json({ success: false, error: 'No image file provided' });
+
+    const ext = req.file.mimetype === 'image/png' ? 'png'
+              : req.file.mimetype === 'image/webp' ? 'webp'
+              : 'jpg';
+    const s3Key = `scene-sets/${set.id}/angles/base/still.${ext}`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+      CacheControl: 'max-age=31536000',
+    }));
+
+    const stillUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+
+    await set.update({
+      base_still_url: stillUrl,
+      base_runway_seed: `uploaded-${Date.now()}`,
+      generation_status: 'complete',
+    });
+
+    res.json({ success: true, data: { stillUrl, seed: set.base_runway_seed } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/upload-base error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

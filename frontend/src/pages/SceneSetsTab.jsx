@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, Upload } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -286,7 +286,8 @@ function formatTime(secs) {
 
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, generatingId, generationProgress }) {
+  const fileInputRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
   const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || null;
@@ -362,17 +363,38 @@ function SceneSetCard({ set, onGenerateBase, onGenerateAngle, onGenerateAll, onD
 
           <div className="scene-sets-card-actions">
             {!hasBase && (
-              <button
-                onClick={() => onGenerateBase(set)}
-                disabled={isGenerating}
-                className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}
-              >
-                {isGenerating ? (
-                  <><Loader size={12} className="spin" /> Generating...</>
-                ) : (
-                  <><Sparkles size={12} /> Generate Base</>
-                )}
-              </button>
+              <>
+                <button
+                  onClick={() => onGenerateBase(set)}
+                  disabled={isGenerating}
+                  className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}
+                >
+                  {isGenerating ? (
+                    <><Loader size={12} className="spin" /> Generating...</>
+                  ) : (
+                    <><Sparkles size={12} /> Generate Base</>
+                  )}
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isGenerating}
+                  className={`scene-sets-btn-upload${isGenerating ? ' disabled' : ''}`}
+                  title="Upload your own base image"
+                >
+                  <Upload size={12} /> Upload Image
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) onUploadBase(set, file);
+                    e.target.value = '';
+                  }}
+                />
+              </>
             )}
 
             {hasBase && pendingAngles.length > 0 && (
@@ -588,6 +610,28 @@ export default function SceneSetsTab() {
       setTimeout(fetchSets, 5000);
     } catch {
       showToast('Generation failed', 'error');
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const handleUploadBase = async (set, file) => {
+    setGeneratingId(set.id);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/upload-base`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Upload failed');
+      }
+      showToast(`Base image uploaded for "${set.name}"`);
+      fetchSets();
+    } catch (err) {
+      showToast(err.message || 'Upload failed', 'error');
     } finally {
       setGeneratingId(null);
     }
@@ -848,6 +892,7 @@ export default function SceneSetsTab() {
               key={set.id}
               set={set}
               onGenerateBase={handleGenerateBase}
+              onUploadBase={handleUploadBase}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
               onDeleteAllAngles={handleDeleteAllAngles}
