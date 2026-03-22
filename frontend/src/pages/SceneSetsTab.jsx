@@ -206,15 +206,6 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
                 />
               )}
 
-              {(isComplete || isFailed) && !generating && (
-                <button
-                  className="scene-sets-angle-regen"
-                  onClick={(e) => { e.stopPropagation(); onRegenerate(angle); }}
-                  title={`Regenerate ${angle.angle_name}`}
-                >
-                  <RotateCcw size={10} />
-                </button>
-              )}
             </div>
 
             <span className="scene-sets-angle-label">{angle.angle_label}</span>
@@ -224,6 +215,16 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
                 <span className="scene-sets-beat-numbers">
                   B{angle.beat_affinity.join(',')}
                 </span>
+              )}
+
+              {(isComplete || isFailed) && !generating && (
+                <button
+                  className={`scene-sets-angle-regen${isFailed ? ' failed' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); onRegenerate(angle); }}
+                  title={`Regenerate ${angle.angle_name}`}
+                >
+                  <RotateCcw size={9} />
+                </button>
               )}
 
               {isComplete && (

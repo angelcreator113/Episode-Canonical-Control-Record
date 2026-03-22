@@ -758,12 +758,7 @@
   cursor: pointer;
 }
 
-.scene-sets-angle-thumb.failed .scene-sets-angle-regen {
-  opacity: 1;
-  background: #C62828;
-  width: 22px;
-  height: 22px;
-}
+
 
 .scene-sets-angle-item.clickable .scene-sets-angle-thumb:hover {
   transform: scale(1.06);
@@ -1746,31 +1741,29 @@
 /* ── Angle Regenerate Overlay ──────────────────────────────────────────── */
 
 .scene-sets-angle-regen {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
+  background: none;
   border: none;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: 3px;
+  padding: 1px 3px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  padding: 0;
-  z-index: 2;
-}
-
-.scene-sets-angle-thumb:hover .scene-sets-angle-regen {
-  opacity: 1;
+  color: #C4C4C4;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s;
 }
 
 .scene-sets-angle-regen:hover {
-  background: rgba(184, 150, 46, 0.85);
+  color: #B8962E;
+  background: rgba(184, 150, 46, 0.1);
+}
+
+.scene-sets-angle-regen.failed {
+  color: #C62828;
+}
+
+.scene-sets-angle-regen.failed:hover {
+  color: #B71C1C;
+  background: rgba(198, 40, 40, 0.1);
 }
 
 /* ── Regenerate All Button ─────────────────────────────────────────────── */
