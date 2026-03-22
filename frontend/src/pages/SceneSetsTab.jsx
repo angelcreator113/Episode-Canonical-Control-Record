@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronUp, ChevronDown } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -237,26 +237,7 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
               )}
             </div>
 
-            {onReorder && sortedAngles.length > 1 && !generating && (
-              <div className="scene-sets-angle-reorder">
-                <button
-                  className="scene-sets-angle-reorder-btn"
-                  disabled={idx === 0}
-                  onClick={(e) => { e.stopPropagation(); onReorder(angle, 'up'); }}
-                  title="Move up"
-                >
-                  <ChevronUp size={10} />
-                </button>
-                <button
-                  className="scene-sets-angle-reorder-btn"
-                  disabled={idx === sortedAngles.length - 1}
-                  onClick={(e) => { e.stopPropagation(); onReorder(angle, 'down'); }}
-                  title="Move down"
-                >
-                  <ChevronDown size={10} />
-                </button>
-              </div>
-            )}
+
           </div>
         );
       })}
