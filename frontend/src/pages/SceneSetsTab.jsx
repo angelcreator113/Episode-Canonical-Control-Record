@@ -646,39 +646,6 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
           </div>
         )}
 
-        {/* Quick action toolbar on image hover */}
-        {primaryStill && (
-          <div className="scene-sets-card-hover-toolbar" onClick={e => e.stopPropagation()}>
-            {hasBase && (
-              <button
-                className="scene-sets-hover-btn"
-                onClick={() => onRegenerateBase(set)}
-                disabled={isGenerating}
-                title="Regenerate base image"
-              >
-                <RotateCcw size={14} />
-                <span>Regenerate</span>
-              </button>
-            )}
-            <button
-              className="scene-sets-hover-btn"
-              onClick={() => { setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}
-              title="Edit prompt"
-            >
-              <Pencil size={14} />
-              <span>Edit Prompt</span>
-            </button>
-            <button
-              className="scene-sets-hover-btn"
-              onClick={() => handlePreviewPrompt()}
-              disabled={loadingPreview}
-              title="Preview generated prompt"
-            >
-              <Eye size={14} />
-              <span>Preview</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Card body */}
