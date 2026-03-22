@@ -21,7 +21,7 @@
  */
 
 const axios = require('axios');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -248,7 +248,26 @@ async function storeInS3(sourceUrl, setId, angleId, assetType) {
 
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
+// ─── S3 CLEANUP ───────────────────────────────────────────────────────────────
 
+/**
+ * Delete an old S3 object by its full URL (if present).
+ * Extracts the S3 key from the URL and issues a DeleteObjectCommand.
+ * Silently ignores errors — cleanup is best-effort.
+ */
+async function deleteOldS3Asset(url) {
+  if (!url || !S3_BUCKET) return;
+  try {
+    const bucketHost = `${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/`;
+    const idx = url.indexOf(bucketHost);
+    if (idx === -1) return;
+    const key = decodeURIComponent(url.slice(idx + bucketHost.length));
+    await s3.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    console.log(`[SceneGen] Cleaned up old S3 asset: ${key}`);
+  } catch (err) {
+    console.warn(`[SceneGen] S3 cleanup failed (non-blocking): ${err.message}`);
+  }
+}
 // ─── HIGH-LEVEL: GENERATE BASE SCENE ─────────────────────────────────────────
 
 /**
@@ -280,6 +299,11 @@ async function generateBaseScene(sceneSet, models) {
 
     const stillUrl = await storeInS3(stillResult.outputUrl, sceneSet.id, 'base', 'still');
     const lockedSeed = String(stillResult.seed ?? stillJobId);
+
+    // Clean up old base still from S3 (best-effort)
+    if (sceneSet.base_still_url) {
+      await deleteOldS3Asset(sceneSet.base_still_url);
+    }
 
     console.log(`[SceneGen] Still complete. Seed locked: ${lockedSeed}`);
 
@@ -398,6 +422,10 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
     const videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
     console.log(`[SceneGen] Angle video complete: ${sceneAngle.angle_name}`);
+
+    // Clean up old angle assets from S3 (best-effort)
+    if (sceneAngle.video_clip_url) await deleteOldS3Asset(sceneAngle.video_clip_url);
+    if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
 
     // Extract first frame from the generated video as this angle's still
     let stillUrl = sceneSet.base_still_url; // fallback

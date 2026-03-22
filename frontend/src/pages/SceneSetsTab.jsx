@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, Upload, Pencil, Save, MoreVertical } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, Upload, Pencil, Save, MoreVertical, Eye, ChevronUp, ChevronDown } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -148,11 +148,12 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
 
 // ─── ANGLE STRIP ──────────────────────────────────────────────────────────────
 
-function AngleStrip({ angles, onGenerate, onRegenerate, generating }) {
+function AngleStrip({ angles, onGenerate, onRegenerate, onReorder, generating }) {
   if (!angles || angles.length === 0) return null;
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
-  const completedAngles = angles.filter(a => a.still_image_url);
+  const sortedAngles = [...angles].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const completedAngles = sortedAngles.filter(a => a.still_image_url);
   const openLightbox = (angle) => {
     const idx = completedAngles.findIndex(a => a.id === angle.id);
     if (idx !== -1) setLightboxIndex(idx);
@@ -160,7 +161,7 @@ function AngleStrip({ angles, onGenerate, onRegenerate, generating }) {
 
   return (
     <div className="scene-sets-angle-strip">
-      {angles.map(angle => {
+      {sortedAngles.map((angle, idx) => {
         const isPending = angle.generation_status === 'pending';
         const isComplete = angle.generation_status === 'complete';
         const isGenerating = angle.generation_status === 'generating';
@@ -210,6 +211,27 @@ function AngleStrip({ angles, onGenerate, onRegenerate, generating }) {
             </div>
 
             <span className="scene-sets-angle-label">{angle.angle_label}</span>
+
+            {onReorder && sortedAngles.length > 1 && !generating && (
+              <div className="scene-sets-angle-reorder">
+                <button
+                  className="scene-sets-angle-reorder-btn"
+                  disabled={idx === 0}
+                  onClick={(e) => { e.stopPropagation(); onReorder(angle, 'up'); }}
+                  title="Move up"
+                >
+                  <ChevronUp size={10} />
+                </button>
+                <button
+                  className="scene-sets-angle-reorder-btn"
+                  disabled={idx === sortedAngles.length - 1}
+                  onClick={(e) => { e.stopPropagation(); onReorder(angle, 'down'); }}
+                  title="Move down"
+                >
+                  <ChevronDown size={10} />
+                </button>
+              </div>
+            )}
 
             {angle.beat_affinity && angle.beat_affinity.length > 0 && (
               <span className="scene-sets-beat-numbers">
@@ -317,7 +339,7 @@ const DEFAULT_ANGLE_PRESETS = [
   { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
 ];
 
-function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, generatingId, generationProgress }) {
+function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
@@ -338,6 +360,17 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [editDesc, setEditDesc] = useState(set.canonical_description || '');
   const [savingPrompt, setSavingPrompt] = useState(false);
+  const [showPromptPreview, setShowPromptPreview] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [genStartTime, setGenStartTime] = useState(null);
+  const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
+
+  // Track generation start time
+  useEffect(() => {
+    if (isGenerating && !genStartTime) setGenStartTime(Date.now());
+    if (!isGenerating && genStartTime) setGenStartTime(null);
+  }, [isGenerating]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -347,16 +380,27 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showMenu]);
 
-  const handleSavePrompt = async (andRegenerate = false) => {
+  const handleSavePrompt = async (andRegenerate = false, andCascade = false) => {
     setSavingPrompt(true);
     await onUpdatePrompt(set, editDesc);
     setSavingPrompt(false);
-    if (andRegenerate) {
+    if (andCascade) {
+      setShowPromptEditor(false);
+      onCascadeRegenerate(set, editDesc);
+    } else if (andRegenerate) {
       setShowPromptEditor(false);
       onRegenerateBase(set);
     } else {
       setShowPromptEditor(false);
     }
+  };
+
+  const handlePreviewPrompt = async () => {
+    setLoadingPreview(true);
+    const data = await onPreviewPrompt(set);
+    setPreviewData(data);
+    setLoadingPreview(false);
+    setShowPromptPreview(true);
   };
 
   const handleSubmitAngle = async () => {
@@ -441,6 +485,9 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                   <div className="scene-sets-kebab-menu">
                     <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}>
                       <Pencil size={12} /> Edit Prompt
+                    </button>
+                    <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
+                      <Eye size={12} /> Preview Prompt
                     </button>
                     {hasBase && (
                       <button onClick={() => { setShowMenu(false); onRegenerateBase(set); }} disabled={isGenerating}>
@@ -539,6 +586,22 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
           </p>
         )}
 
+        {(set.generation_cost > 0 || set.angles?.some(a => a.generation_cost > 0)) && (
+          <p className="scene-sets-cost-info">
+            <Clock size={11} /> Cost: {(
+              parseFloat(set.generation_cost || 0) +
+              (set.angles || []).reduce((sum, a) => sum + parseFloat(a.generation_cost || 0), 0)
+            ).toFixed(1)} credits
+          </p>
+        )}
+
+        {isGenerating && !progress && (
+          <div className="scene-sets-base-timer">
+            <Loader size={12} className="spin" />
+            <span>Generating... {formatTime(baseElapsed)}</span>
+          </div>
+        )}
+
         {set.script_context && (
           <p className="scene-sets-script-context">{set.script_context}</p>
         )}
@@ -579,6 +642,16 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                   <RotateCcw size={12} /> Save & Regenerate
                 </button>
               )}
+              {hasBase && totalAngles > 0 && (
+                <button
+                  className="scene-sets-btn-regenerate"
+                  onClick={() => handleSavePrompt(false, true)}
+                  disabled={savingPrompt || isGenerating}
+                  title="Save, regenerate base image, then regenerate all angles"
+                >
+                  <Sparkles size={12} /> Save & Regen Everything
+                </button>
+              )}
               <button className="scene-sets-btn-delete" onClick={() => setShowPromptEditor(false)}>
                 Cancel
               </button>
@@ -594,12 +667,32 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
           />
         )}
 
+        {showPromptPreview && previewData && (
+          <div className="scene-sets-lightbox-overlay" onClick={() => setShowPromptPreview(false)}>
+            <div className="scene-sets-prompt-preview-modal" onClick={e => e.stopPropagation()}>
+              <button className="scene-sets-lightbox-close" onClick={() => setShowPromptPreview(false)}>
+                <X size={20} />
+              </button>
+              <h3 className="scene-sets-prompt-preview-title">Prompt Preview — {previewData.angleLabel}</h3>
+              <div className="scene-sets-prompt-preview-section">
+                <label>Still Image Prompt ({previewData.promptLength} chars)</label>
+                <pre className="scene-sets-prompt-preview">{previewData.prompt}</pre>
+              </div>
+              <div className="scene-sets-prompt-preview-section">
+                <label>Video Movement Prompt</label>
+                <pre className="scene-sets-prompt-preview">{previewData.videoPrompt}</pre>
+              </div>
+            </div>
+          </div>
+        )}
+
         {expanded && (
           <>
             <AngleStrip
               angles={set.angles}
               onGenerate={(angle) => onGenerateAngle(set, angle)}
               onRegenerate={(angle) => onGenerateAngle(set, angle)}
+              onReorder={(angle, direction) => onReorderAngle(set, angle, direction)}
               generating={isGenerating}
             />
 
@@ -953,9 +1046,75 @@ export default function SceneSetsTab() {
     }
   };
 
+  const handlePreviewPrompt = async (set) => {
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/preview-prompt`);
+      const json = await res.json();
+      return json.data || null;
+    } catch {
+      showToast('Failed to load prompt preview', 'error');
+      return null;
+    }
+  };
+
+  const handleCascadeRegenerate = async (set, description) => {
+    setGeneratingId(set.id);
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/cascade-regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canonical_description: description }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Cascade regeneration failed');
+      }
+      const json = await res.json();
+      const { successfulAngles, totalAngles } = json.data;
+      showToast(`Base + ${successfulAngles}/${totalAngles} angles regenerated!`);
+      fetchSets();
+    } catch (err) {
+      showToast(err.message || 'Cascade regeneration failed', 'error');
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const handleReorderAngle = async (set, angle, direction) => {
+    const sorted = [...(set.angles || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    const idx = sorted.findIndex(a => a.id === angle.id);
+    if (idx === -1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+
+    // Swap sort_order values
+    const newOrder = sorted.map((a, i) => ({ id: a.id, sort_order: i }));
+    // Swap the two
+    const tmp = newOrder[idx].sort_order;
+    newOrder[idx].sort_order = newOrder[swapIdx].sort_order;
+    newOrder[swapIdx].sort_order = tmp;
+
+    try {
+      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/reorder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: newOrder }),
+      });
+      fetchSets();
+    } catch {
+      showToast('Failed to reorder angles', 'error');
+    }
+  };
+
   const filtered = filterType === 'ALL'
     ? sets
     : sets.filter(s => s.scene_type === filterType);
+
+  const totalCost = sets.reduce((sum, s) => {
+    const setCost = parseFloat(s.generation_cost || 0);
+    const anglesCost = (s.angles || []).reduce((a, ang) => a + parseFloat(ang.generation_cost || 0), 0);
+    return sum + setCost + anglesCost;
+  }, 0);
 
   const types = ['ALL', 'HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION'];
   const typeLabels = {
@@ -978,6 +1137,9 @@ export default function SceneSetsTab() {
           <h2 className="scene-sets-title">Scene Sets</h2>
           <p className="scene-sets-subtitle">
             {sets.length} location{sets.length !== 1 ? 's' : ''} — Canonical LalaVerse world
+            {totalCost > 0 && (
+              <span className="scene-sets-total-cost"> · {totalCost.toFixed(1)} credits used</span>
+            )}
           </p>
         </div>
 
@@ -1095,6 +1257,9 @@ export default function SceneSetsTab() {
               onAddAngle={handleAddAngle}
               onSeedAngles={handleSeedAngles}
               onUpdatePrompt={handleUpdatePrompt}
+              onPreviewPrompt={handlePreviewPrompt}
+              onCascadeRegenerate={handleCascadeRegenerate}
+              onReorderAngle={handleReorderAngle}
               generatingId={generatingId}
               generationProgress={generationProgress}
             />

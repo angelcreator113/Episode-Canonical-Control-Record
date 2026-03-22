@@ -4,7 +4,7 @@ const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
 const multer  = require('multer');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { optionalAuth } = require('../middleware/auth');
 const sceneGenService  = require('../services/sceneGenerationService');
 const { SceneSet, SceneAngle, Universe, Show } = require('../models');
@@ -28,7 +28,7 @@ router.get('/', optionalAuth, async (req, res) => {
   try {
     const sets = await SceneSet.findAll({
       include: [{ model: SceneAngle, as: 'angles' }],
-      order: [['created_at', 'DESC']],
+      order: [['created_at', 'DESC'], [{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
     });
     res.json({ success: true, count: sets.length, data: sets });
   } catch (err) {
@@ -85,6 +85,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id, {
       include: [{ model: SceneAngle, as: 'angles' }],
+      order: [[{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
     });
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
     res.json({ success: true, data: set });
@@ -144,7 +145,20 @@ router.post('/:id/upload-base', optionalAuth, upload.single('image'), async (req
     const ext = req.file.mimetype === 'image/png' ? 'png'
               : req.file.mimetype === 'image/webp' ? 'webp'
               : 'jpg';
-    const s3Key = `scene-sets/${set.id}/angles/base/still.${ext}`;
+    const ts = Date.now();
+    const s3Key = `scene-sets/${set.id}/angles/base/still-${ts}.${ext}`;
+
+    // Clean up old base image from S3
+    if (set.base_still_url) {
+      try {
+        const bucketHost = `${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/`;
+        const idx = set.base_still_url.indexOf(bucketHost);
+        if (idx !== -1) {
+          const oldKey = decodeURIComponent(set.base_still_url.slice(idx + bucketHost.length));
+          await s3.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: oldKey }));
+        }
+      } catch (_) { /* best-effort cleanup */ }
+    }
 
     await s3.send(new PutObjectCommand({
       Bucket: S3_BUCKET,
@@ -351,6 +365,109 @@ router.get('/for-beat/:beatNumber', optionalAuth, async (req, res) => {
     res.json({ success: true, beat: beatNumber, count: sets.length, data: sets });
   } catch (err) {
     console.error('Scene Sets GET /for-beat/:beatNumber error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── GET /:id/preview-prompt  — preview the AI prompt without generating ─────
+
+router.get('/:id/preview-prompt', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const angleLabel = (req.query.angle || 'WIDE').toUpperCase();
+    const prompt = sceneGenService.buildPrompt(set, angleLabel);
+    const videoPrompt = sceneGenService.buildVideoPrompt(set, angleLabel);
+
+    res.json({
+      success: true,
+      data: {
+        prompt,
+        videoPrompt,
+        promptLength: prompt.length,
+        angleLabel,
+      },
+    });
+  } catch (err) {
+    console.error('Scene Sets GET /:id/preview-prompt error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── PATCH /:id/angles/reorder  — reorder angles by sort_order ───────────────
+
+router.patch('/:id/angles/reorder', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { order } = req.body; // [{ id: 'uuid', sort_order: 0 }, ...]
+    if (!Array.isArray(order)) {
+      return res.status(400).json({ success: false, error: 'order must be an array of { id, sort_order }' });
+    }
+
+    for (const item of order) {
+      if (!item.id || typeof item.sort_order !== 'number') continue;
+      await SceneAngle.update(
+        { sort_order: item.sort_order },
+        { where: { id: item.id, scene_set_id: set.id } }
+      );
+    }
+
+    const angles = await SceneAngle.findAll({
+      where: { scene_set_id: set.id },
+      order: [['sort_order', 'ASC']],
+    });
+
+    res.json({ success: true, data: angles });
+  } catch (err) {
+    console.error('Scene Sets PATCH /:id/angles/reorder error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/cascade-regenerate  — save + regen base + all angles ──────────
+
+router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id, {
+      include: [{ model: SceneAngle, as: 'angles' }],
+    });
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    // Optionally update the description first
+    if (req.body.canonical_description !== undefined) {
+      await set.update({ canonical_description: req.body.canonical_description });
+    }
+
+    // Step 1: Regenerate base
+    const baseResult = await sceneGenService.generateBaseScene(set, { SceneSet, SceneAngle });
+
+    // Step 2: Regenerate all existing angles
+    const angleResults = [];
+    const freshSet = await SceneSet.findByPk(set.id);
+    for (const angle of (set.angles || [])) {
+      try {
+        const freshAngle = await SceneAngle.findByPk(angle.id);
+        const result = await sceneGenService.generateAngle(freshAngle, freshSet, { SceneAngle, SceneSet });
+        angleResults.push({ id: angle.id, label: angle.angle_label, success: true });
+      } catch (err) {
+        angleResults.push({ id: angle.id, label: angle.angle_label, success: false, error: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        base: baseResult,
+        angles: angleResults,
+        totalAngles: angleResults.length,
+        successfulAngles: angleResults.filter(a => a.success).length,
+      },
+    });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/cascade-regenerate error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
