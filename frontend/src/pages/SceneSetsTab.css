@@ -341,9 +341,84 @@
 
 .scene-sets-card-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 8px;
+}
+
+.scene-sets-card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scene-sets-card-header-utils {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* ─── KEBAB MENU ─────────────────────────────────────────────────────────── */
+
+.scene-sets-kebab-wrapper {
+  position: relative;
+}
+
+.scene-sets-btn-kebab {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  color: #6B6B6B;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+.scene-sets-btn-kebab:hover {
+  background: rgba(0,0,0,0.05);
+  color: #2C2C2C;
+}
+
+.scene-sets-kebab-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  min-width: 160px;
+  padding: 4px 0;
+}
+.scene-sets-kebab-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  color: #2C2C2C;
+  cursor: pointer;
+  text-align: left;
+  font-family: 'DM Mono', monospace;
+}
+.scene-sets-kebab-menu button:hover {
+  background: #f5f3ee;
+}
+.scene-sets-kebab-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.scene-sets-kebab-danger {
+  color: #c0392b !important;
+}
+.scene-sets-kebab-danger:hover {
+  background: #fdf0ef !important;
 }
 
 .scene-sets-card-title {
@@ -363,7 +438,12 @@
 .scene-sets-card-actions {
   display: flex;
   gap: 6px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.scene-sets-card-actions:empty {
+  display: none;
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
@@ -391,6 +471,34 @@
 .scene-sets-btn-generate.disabled {
   background: #EEE;
   color: #999;
+  cursor: not-allowed;
+}
+
+.scene-sets-btn-upload {
+  background: rgba(184, 150, 46, 0.1);
+  color: #B8962E;
+  border: 1px solid rgba(184, 150, 46, 0.3);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.scene-sets-btn-upload:hover {
+  background: rgba(184, 150, 46, 0.2);
+  border-color: rgba(184, 150, 46, 0.5);
+}
+
+.scene-sets-btn-upload.disabled {
+  background: #EEE;
+  color: #999;
+  border-color: #DDD;
   cursor: not-allowed;
 }
 
@@ -432,6 +540,32 @@
 }
 
 .scene-sets-btn-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.scene-sets-btn-delete-set {
+  background: none;
+  color: #C62828;
+  border: 1px solid #FFCDD2;
+  border-radius: 8px;
+  padding: 5px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.scene-sets-btn-delete-set:hover {
+  color: #B71C1C;
+  border-color: #EF9A9A;
+  background: #FFEBEE;
+}
+
+.scene-sets-btn-delete-set:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -517,6 +651,15 @@
 .scene-sets-angle-item.clickable .scene-sets-angle-thumb:hover {
   transform: scale(1.06);
   box-shadow: 0 3px 10px rgba(180, 140, 0, 0.25);
+}
+
+.scene-sets-angle-item.has-media {
+  cursor: pointer;
+}
+
+.scene-sets-angle-item.has-media .scene-sets-angle-thumb:hover {
+  transform: scale(1.06);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
 }
 
 .scene-sets-clickable-icon {
@@ -1045,17 +1188,12 @@
     grid-template-columns: 1fr;
   }
 
-  .scene-sets-card-header {
-    flex-direction: column;
-    gap: 10px;
-  }
-
   .scene-sets-card-actions {
     width: 100%;
   }
 
   .scene-sets-btn-generate,
-  .scene-sets-btn-angles {
+  .scene-sets-btn-upload {
     flex: 1;
     text-align: center;
     justify-content: center;
@@ -1072,4 +1210,554 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
+}
+
+/* ── Seed Angles ───────────────────────────────────────────────────────── */
+
+.scene-sets-seed-angles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-seed-hint {
+  font-size: 11px;
+  color: #9E9E9E;
+  font-style: italic;
+}
+
+/* ── Add Angle ─────────────────────────────────────────────────────────── */
+
+.scene-sets-btn-add-angle {
+  background: none;
+  color: #B8962E;
+  border: 1px dashed #D4C08E;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  transition: all 0.15s;
+}
+
+.scene-sets-btn-add-angle:hover {
+  background: #FAF3E0;
+  border-color: #B8962E;
+}
+
+.scene-sets-add-angle-form {
+  margin-top: 10px;
+  padding: 12px;
+  background: #FAFAF5;
+  border: 1px solid #E8E4D8;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scene-sets-add-angle-row {
+  display: flex;
+  gap: 10px;
+}
+
+.scene-sets-add-angle-row .scene-sets-create-field {
+  flex: 1;
+}
+
+.scene-sets-add-angle-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+@media (max-width: 600px) {
+  .scene-sets-add-angle-row {
+    flex-direction: column;
+  }
+}
+
+/* ── Lightbox ──────────────────────────────────────────────────────────── */
+
+.scene-sets-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: lightboxFadeIn 0.2s ease;
+}
+
+@keyframes lightboxFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.scene-sets-lightbox {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.scene-sets-lightbox-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+  z-index: 10;
+}
+
+.scene-sets-lightbox-close:hover {
+  opacity: 1;
+}
+
+.scene-sets-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 32px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  z-index: 10;
+  line-height: 1;
+}
+
+.scene-sets-lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.scene-sets-lightbox-nav.prev {
+  left: -60px;
+}
+
+.scene-sets-lightbox-nav.next {
+  right: -60px;
+}
+
+.scene-sets-lightbox-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 80vw;
+  max-height: 70vh;
+}
+
+.scene-sets-lightbox-img {
+  max-width: 80vw;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.scene-sets-lightbox-video {
+  max-width: 80vw;
+  max-height: 70vh;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.scene-sets-lightbox-info {
+  text-align: center;
+  color: #fff;
+  max-width: 600px;
+}
+
+.scene-sets-lightbox-info h3 {
+  font-family: 'Lora', serif;
+  font-size: 18px;
+  margin: 0 0 4px;
+  color: #FAF7F0;
+}
+
+.scene-sets-lightbox-info p {
+  font-size: 13px;
+  color: #ccc;
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.scene-sets-lightbox-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #B8962E;
+  letter-spacing: 1px;
+}
+
+.scene-sets-lightbox-camera {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #999;
+}
+
+.scene-sets-lightbox-beats {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #B8962E;
+}
+
+.scene-sets-lightbox-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.scene-sets-lightbox-toggle-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s;
+}
+
+.scene-sets-lightbox-toggle-btn.active {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.scene-sets-lightbox-toggle-btn:hover:not(.active) {
+  color: #ddd;
+}
+
+@media (max-width: 600px) {
+  .scene-sets-lightbox-nav.prev { left: 8px; }
+  .scene-sets-lightbox-nav.next { right: 8px; }
+  .scene-sets-lightbox-media { max-width: 95vw; }
+  .scene-sets-lightbox-img,
+  .scene-sets-lightbox-video { max-width: 95vw; }
+}
+
+/* ── Regenerate Button (lightbox) ──────────────────────────────────────── */
+
+.scene-sets-lightbox-regen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 7px 16px;
+  background: rgba(184, 150, 46, 0.15);
+  color: #B8962E;
+  border: 1px solid rgba(184, 150, 46, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scene-sets-lightbox-regen:hover {
+  background: rgba(184, 150, 46, 0.25);
+  border-color: #B8962E;
+}
+
+.scene-sets-lightbox-regen:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Image Lightbox wide variant ───────────────────────────────────────── */
+
+.scene-sets-lightbox-wide {
+  max-width: 780px;
+}
+
+.scene-sets-lightbox-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-lightbox-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scene-sets-lightbox-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── Prompt Editor (inside lightbox) ───────────────────────────────────── */
+
+.scene-sets-prompt-editor {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.scene-sets-prompt-editor-label {
+  display: block;
+  font-size: 11px;
+  color: #aaa;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scene-sets-prompt-editor-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #eee;
+  font-family: 'Lora', serif;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.scene-sets-prompt-editor-textarea:focus {
+  border-color: #B8962E;
+}
+
+.scene-sets-prompt-editor-textarea::placeholder {
+  color: #666;
+}
+
+.scene-sets-prompt-details {
+  margin-top: 8px;
+}
+
+.scene-sets-prompt-details summary {
+  font-size: 11px;
+  color: #888;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scene-sets-prompt-details summary:hover {
+  color: #aaa;
+}
+
+.scene-sets-prompt-preview {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #999;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: 'DM Mono', monospace;
+}
+
+.scene-sets-prompt-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Angle Regenerate Overlay ──────────────────────────────────────────── */
+
+.scene-sets-angle-regen {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  padding: 0;
+  z-index: 2;
+}
+
+.scene-sets-angle-thumb:hover .scene-sets-angle-regen {
+  opacity: 1;
+}
+
+.scene-sets-angle-regen:hover {
+  background: rgba(184, 150, 46, 0.85);
+}
+
+/* ── Regenerate All Button ─────────────────────────────────────────────── */
+
+.scene-sets-btn-regenerate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(184, 150, 46, 0.4);
+  background: rgba(184, 150, 46, 0.08);
+  color: #B8962E;
+  transition: all 0.18s ease;
+}
+
+.scene-sets-btn-regenerate:hover {
+  background: rgba(184, 150, 46, 0.18);
+  border-color: #B8962E;
+}
+
+.scene-sets-btn-regenerate.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ── Cost Info ─────────────────────────────────────────────────────────── */
+
+.scene-sets-cost-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #B8962E;
+  margin: 2px 0 0;
+}
+
+.scene-sets-total-cost {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #B8962E;
+}
+
+/* ── Base Generation Timer ─────────────────────────────────────────────── */
+
+.scene-sets-base-timer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(184, 150, 46, 0.08);
+  border: 1px solid rgba(184, 150, 46, 0.2);
+  border-radius: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #B8962E;
+  margin-top: 8px;
+}
+
+/* ── Angle Reorder Buttons ─────────────────────────────────────────────── */
+
+.scene-sets-angle-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+}
+
+.scene-sets-angle-reorder-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  color: #999;
+  cursor: pointer;
+  padding: 1px 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+
+.scene-sets-angle-reorder-btn:hover:not(:disabled) {
+  background: rgba(184, 150, 46, 0.15);
+  color: #B8962E;
+  border-color: rgba(184, 150, 46, 0.3);
+}
+
+.scene-sets-angle-reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Prompt Preview Modal ──────────────────────────────────────────────── */
+
+.scene-sets-prompt-preview-modal {
+  background: #1a1a1a;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 700px;
+  width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.scene-sets-prompt-preview-title {
+  font-family: 'Lora', serif;
+  font-size: 16px;
+  color: #FAF7F0;
+  margin: 0 0 16px;
+}
+
+.scene-sets-prompt-preview-section {
+  margin-bottom: 16px;
+}
+
+.scene-sets-prompt-preview-section label {
+  display: block;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
 }

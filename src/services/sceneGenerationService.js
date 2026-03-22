@@ -16,7 +16,11 @@
  */
 
 const axios = require('axios');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { execFile } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const artifactDetection = require('./artifactDetectionService');
 
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
@@ -80,10 +84,24 @@ const VIDEO_DURATION_MAP = {
   OTHER:        5,
 };
 
+// Video-specific movement descriptions for image_to_video (describe camera MOTION, not static composition)
+const VIDEO_MOVEMENT_MODIFIERS = {
+  WIDE:         'Camera slowly pulls back and pans to reveal the full room. Steady, smooth cinematic pullback.',
+  CLOSET:       'Camera slowly dollies forward toward the wardrobe area. Gentle forward drift revealing fabric textures.',
+  VANITY:       'Camera slowly pushes toward the vanity mirror, approaching surface details and reflections. Smooth forward glide.',
+  WINDOW:       'Camera slowly pans toward the window as natural light brightens. Gentle lateral movement.',
+  DOORWAY:      'Camera slowly retreats through the doorway, revealing the room from the threshold. Steady pullback.',
+  ESTABLISHING: 'Camera slowly tilts up and pulls back to reveal the grand scope of the space. Majestic rising reveal.',
+  ACTION:       'Camera moves dynamically through the space with slight handheld energy. Purposeful cinematic tracking.',
+  CLOSE:        'Camera slowly pushes in for an intimate close-up of a surface or detail. Smooth gentle forward drift.',
+  OVERHEAD:     'Camera slowly rises upward, revealing the room layout from above. Steady ascending crane movement.',
+  OTHER:        'Camera moves gently through the space with natural flowing motion. Smooth cinematic drift.',
+};
+
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
-function buildPrompt(sceneSet, angleLabel = 'WIDE') {
-  const angleModifier = ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
+function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
+  const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
   // Condensed anchor frees ~400 chars for description vs v1.1's ~200
   const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 400);
@@ -92,14 +110,33 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE') {
     LALAVERSE_VISUAL_ANCHOR,
     `LOCATION: ${sceneSet.name}.`,
     descriptionSlice,
-    `CAMERA: ${angleModifier}`,
-    'Cinematic quality. No text overlays. No watermarks.',
+    `CAMERA: ${cameraText}`,
+    'Photorealistic cinematic quality. No text overlays. No watermarks. No distorted faces or hands.',
   ];
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
   // Enforce 1000 char limit
   return full.length > 1000 ? full.slice(0, 997) + '...' : full;
+}
+
+/**
+ * Build a short, movement-focused prompt for image_to_video angle generation.
+ * The scene description is already in the base image — the video prompt
+ * should only describe camera MOVEMENT so the AI animates the camera.
+ */
+function buildVideoPrompt(sceneSet, angleLabel, customCameraDirection) {
+  const movementText = customCameraDirection
+    ? `Camera movement: ${customCameraDirection}`
+    : VIDEO_MOVEMENT_MODIFIERS[angleLabel] || VIDEO_MOVEMENT_MODIFIERS.WIDE;
+
+  const parts = [
+    movementText,
+    `Scene: ${sceneSet.name}.`,
+    'Maintain warm soft natural lighting. Photorealistic quality. No morphing. No text overlays.',
+  ];
+
+  return parts.join(' ').trim();
 }
 
 // ─── RUNWAY API HELPERS ───────────────────────────────────────────────────────
@@ -289,7 +326,8 @@ async function storeInS3(sourceUrl, setId, angleId, assetType) {
             : contentType.includes('video') ? 'mp4'
             : 'bin';
 
-  const s3Key = `scene-sets/${setId}/angles/${angleId || 'base'}/${assetType}.${ext}`;
+  const ts = Date.now();
+  const s3Key = `scene-sets/${setId}/angles/${angleId || 'base'}/${assetType}-${ts}.${ext}`;
 
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET,
@@ -301,6 +339,7 @@ async function storeInS3(sourceUrl, setId, angleId, assetType) {
 
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
+// ─── S3 CLEANUP ───────────────────────────────────────────────────────────────
 
 /**
  * Store a raw buffer in S3.
@@ -323,6 +362,24 @@ async function storeBufferInS3(buffer, setId, angleId, assetType, contentType) {
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
+/**
+ * Delete an old S3 object by its full URL (if present).
+ * Extracts the S3 key from the URL and issues a DeleteObjectCommand.
+ * Silently ignores errors — cleanup is best-effort.
+ */
+async function deleteOldS3Asset(url) {
+  if (!url || !S3_BUCKET) return;
+  try {
+    const bucketHost = `${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/`;
+    const idx = url.indexOf(bucketHost);
+    if (idx === -1) return;
+    const key = decodeURIComponent(url.slice(idx + bucketHost.length));
+    await s3.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    console.log(`[SceneGen] Cleaned up old S3 asset: ${key}`);
+  } catch (err) {
+    console.warn(`[SceneGen] S3 cleanup failed (non-blocking): ${err.message}`);
+  }
+}
 // ─── HIGH-LEVEL: GENERATE BASE SCENE ─────────────────────────────────────────
 
 async function generateBaseScene(sceneSet, models) {
@@ -371,6 +428,11 @@ async function generateBaseScene(sceneSet, models) {
     const stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
     const lockedSeed = String(stillSeed ?? 'unknown');
 
+    // Clean up old base still from S3 (best-effort)
+    if (sceneSet.base_still_url) {
+      await deleteOldS3Asset(sceneSet.base_still_url);
+    }
+
     console.log(`[SceneGen] Still complete. Seed locked: ${lockedSeed}`);
 
     // ── Step 2: Still → Video (non-blocking) ─────────────────────────────
@@ -378,7 +440,8 @@ async function generateBaseScene(sceneSet, models) {
     let videoCredits = 0;
     try {
       console.log(`[SceneGen] Starting base video for: ${sceneSet.name}`);
-      const { jobId: videoJobId } = await startImageToVideo(prompt, stillOutputUrl, {
+      const videoPrompt = buildVideoPrompt(sceneSet, 'WIDE');
+      const { jobId: videoJobId } = await startImageToVideo(videoPrompt, stillOutputUrl, {
         duration: VIDEO_DURATION_MAP.WIDE,
         cameraMotion: CAMERA_MOTION_MAP.WIDE,
       });
@@ -395,8 +458,10 @@ async function generateBaseScene(sceneSet, models) {
       console.warn(`[SceneGen] Base video error (non-blocking): ${videoErr.message}`);
     }
 
+    // Lock the seed + base still URL — permanent
     await SceneSet.update({
       base_runway_seed: lockedSeed,
+      base_still_url: stillUrl,
       generation_status: 'complete',
       generation_cost: parseFloat(sceneSet.generation_cost || 0) + stillCredits + videoCredits,
     }, { where: { id: sceneSet.id } });
@@ -410,87 +475,101 @@ async function generateBaseScene(sceneSet, models) {
 
 // ─── HIGH-LEVEL: GENERATE ANGLE ───────────────────────────────────────────────
 
+/**
+ * Generate video for a specific Scene Angle using image-anchored approach.
+ * Uses the parent set's base_still_url as promptImage for image_to_video,
+ * ensuring visual consistency across all angles (same room).
+ */
+async function extractFirstFrame(videoUrl, setId, angleId) {
+  const tmpVideo = path.join(os.tmpdir(), `scene-${angleId}.mp4`);
+  const tmpFrame = path.join(os.tmpdir(), `scene-${angleId}-frame.jpg`);
+
+  try {
+    // Download video to temp file
+    const response = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 120000 });
+    fs.writeFileSync(tmpVideo, Buffer.from(response.data));
+
+    // Extract LAST frame from video (frame 1 = input image; end frame = moved camera)
+    await new Promise((resolve, reject) => {
+      execFile('ffmpeg', [
+        '-y', '-sseof', '-0.5', '-i', tmpVideo,
+        '-vframes', '1', '-q:v', '2',
+        tmpFrame,
+      ], { timeout: 30000 }, (err) => {
+        if (err) reject(err); else resolve();
+      });
+    });
+
+    // Upload frame to S3
+    const frameBuffer = fs.readFileSync(tmpFrame);
+    const s3Key = `scene-sets/${setId}/angles/${angleId}/still.jpg`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: frameBuffer,
+      ContentType: 'image/jpeg',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  } finally {
+    // Cleanup temp files
+    try { fs.unlinkSync(tmpVideo); } catch (_) {}
+    try { fs.unlinkSync(tmpFrame); } catch (_) {}
+  }
+}
+
 async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
 
-  if (!sceneSet.base_runway_seed) {
-    throw new Error('base_runway_seed not set on parent scene set. Run generateBaseScene first.');
+  if (!sceneSet.base_still_url) {
+    throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  const prompt = buildPrompt(sceneSet, angleLabel);
+  // Use movement-focused prompt for video (scene is already in the base image)
+  const videoPrompt = buildVideoPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
+  // Keep the full prompt for logging/debugging
+  const fullPrompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
 
   await SceneAngle.update(
-    { generation_status: 'generating', runway_prompt: prompt },
+    { generation_status: 'generating', runway_prompt: fullPrompt },
     { where: { id: sceneAngle.id } }
   );
 
   try {
-    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
+    console.log(`[SceneGen] Starting image-anchored video for angle: ${sceneAngle.angle_name}`);
+    console.log(`[SceneGen] Video prompt: ${videoPrompt}`);
 
-    // Build style reference
-    const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
-      ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
-      : undefined;
-
-    // ── Step 1: Text → Still (with locked seed) ────────────────────────────
-    const numVariations = sceneAngle.variation_count || 1;
-    let stillOutputUrl, stillSeed, stillCredits;
-    let variationData = null;
-
-    if (numVariations > 1) {
-      const varResult = await generateBestVariation(prompt, numVariations, {
-        seed: sceneSet.base_runway_seed,
-        styleReference,
-      });
-      if (!varResult.best) {
-        await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-        throw new Error(`Angle still multi-variation failed: ${varResult.error}`);
-      }
-      stillOutputUrl = varResult.best.url;
-      stillSeed = varResult.seed;
-      stillCredits = varResult.creditsUsed || 0;
-      variationData = varResult.variations;
-    } else {
-      const { jobId: stillJobId } = await startTextToImage(prompt, {
-        seed: sceneSet.base_runway_seed,
-        styleReference,
-      });
-      const stillResult = await pollTask(stillJobId);
-      if (stillResult.status !== 'SUCCEEDED') {
-        await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-        throw new Error(`Angle still failed: ${stillResult.error}`);
-      }
-      stillOutputUrl = stillResult.outputUrl;
-      stillSeed = stillResult.seed;
-      stillCredits = stillResult.creditsUsed || 0;
-    }
-
-    const stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, sceneAngle.id, 'still');
-    console.log(`[SceneGen] Angle still complete: ${sceneAngle.angle_name}`);
-
-    // ── Step 2: Still → Video ─────────────────────────────────────────────
-    console.log(`[SceneGen] Starting video for angle: ${sceneAngle.angle_name}`);
-
-    const videoDuration = sceneAngle.video_duration || VIDEO_DURATION_MAP[angleLabel] || 5;
-    const cameraMotion = sceneAngle.camera_motion || CAMERA_MOTION_MAP[angleLabel] || 'static';
-
+    // Image-anchored: use base still as promptImage → image_to_video directly
     const { jobId: videoJobId } = await startImageToVideo(
-      prompt,
-      stillOutputUrl,
-      { seed: stillSeed, duration: videoDuration, cameraMotion }
+      videoPrompt,
+      sceneSet.base_still_url,
     );
     const videoResult = await pollTask(videoJobId);
 
-    let videoUrl = null;
-    if (videoResult.status === 'SUCCEEDED') {
-      videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
-      console.log(`[SceneGen] Angle video complete: ${sceneAngle.angle_name}`);
-    } else {
-      console.warn(`[SceneGen] Angle video failed (non-blocking): ${videoResult.error}`);
+    if (videoResult.status !== 'SUCCEEDED') {
+      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+      throw new Error(`Angle video failed: ${videoResult.error}`);
     }
 
-    const totalCost = (stillCredits || 0) + (videoResult.creditsUsed || 0);
+    const videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
+    console.log(`[SceneGen] Angle video complete: ${sceneAngle.angle_name}`);
+
+    // Clean up old angle assets from S3 (best-effort)
+    if (sceneAngle.video_clip_url) await deleteOldS3Asset(sceneAngle.video_clip_url);
+    if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
+
+    // Extract first frame from the generated video as this angle's still
+    let stillUrl = sceneSet.base_still_url; // fallback
+    try {
+      stillUrl = await extractFirstFrame(videoUrl, sceneSet.id, sceneAngle.id);
+      console.log(`[SceneGen] First frame extracted for: ${sceneAngle.angle_name}`);
+    } catch (frameErr) {
+      console.warn(`[SceneGen] First frame extraction failed (using base still): ${frameErr.message}`);
+    }
+
+    const totalCost = videoResult.creditsUsed || 0;
 
     // ── Quality Analysis (non-blocking) ───────────────────────────────────
     let qualityData = { qualityScore: null, flags: [] };
@@ -505,23 +584,17 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: videoUrl,
-      runway_seed: String(stillSeed ?? 'unknown'),
+      runway_seed: String(videoResult.seed ?? videoJobId),
       generation_status: 'complete',
       generation_cost: totalCost,
       quality_score: qualityData.qualityScore,
       artifact_flags: qualityData.flags || [],
       generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
-      camera_motion: cameraMotion,
-      video_duration: videoDuration,
-      ...(variationData ? { variation_data: variationData } : {}),
     }, { where: { id: sceneAngle.id } });
 
-    await SceneSet.increment('generation_cost', {
-      by: totalCost,
-      where: { id: sceneSet.id },
-    });
+    await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
 
-    return { success: true, stillUrl, videoUrl, seed: stillSeed, qualityScore: qualityData.qualityScore };
+    return { success: true, stillUrl, videoUrl, seed: videoResult.seed, qualityScore: qualityData.qualityScore };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;
@@ -597,7 +670,7 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: videoUrl,
-      runway_seed: String(stillResult.seed ?? stillJobId),
+      runway_seed: String(videoResult.seed ?? videoJobId),
       generation_status: 'complete',
       generation_cost: totalCost,
       quality_score: qualityData.qualityScore,
@@ -633,6 +706,7 @@ function sleep(ms) {
 
 module.exports = {
   buildPrompt,
+  buildVideoPrompt,
   generateBaseScene,
   generateAngle,
   regenerateAngleRefined,
@@ -645,4 +719,5 @@ module.exports = {
   ANGLE_MODIFIERS,
   CAMERA_MOTION_MAP,
   VIDEO_DURATION_MAP,
+  VIDEO_MOVEMENT_MODIFIERS,
 };
