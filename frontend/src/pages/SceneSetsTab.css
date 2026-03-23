@@ -1435,7 +1435,7 @@
   bottom: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.94);
+  background: #000;
   z-index: 100000;
   display: flex;
   align-items: center;
@@ -1607,10 +1607,9 @@
 /* ── Image — fills viewport, no scroll ──────────────────────────────── */
 
 .scene-sets-lightbox-img {
-  max-width: 94vw;
-  max-height: 92vh;
+  max-width: 96vw;
+  max-height: 82vh;
   object-fit: contain;
-  border-radius: 6px;
   transition: transform 0.25s ease;
   cursor: pointer;
 }
@@ -1624,9 +1623,9 @@
 }
 
 .scene-sets-lightbox-video {
-  max-width: 94vw;
-  max-height: 92vh;
-  border-radius: 6px;
+  max-width: 96vw;
+  max-height: 82vh;
+  object-fit: contain;
 }
 
 /* ── Info overlay — pinned to bottom of viewport ────────────────────── */
@@ -1636,8 +1635,8 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85) 30%);
-  padding: 40px 20px 20px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.88) 35%);
+  padding: 48px 24px 24px;
   z-index: 100002;
   animation: infoSlideUp 0.25s ease;
 }
@@ -1648,12 +1647,12 @@
 }
 
 .scene-sets-lightbox-info-content {
-  max-width: 600px;
+  max-width: 900px;
   margin: 0 auto;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
 }
 
 .scene-sets-lightbox-info-text {
