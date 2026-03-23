@@ -4,7 +4,7 @@
  * Scene Generation Service — v2.0
  *
  * v2.0 enhancements:
- *   - Fixed aspect ratio: 1280:720 for text_to_image, 1280:768 for image_to_video
+ *   - Fixed aspect ratio: 1280:720 for both text_to_image and image_to_video
  *   - Added negative_prompt to suppress common artifacts
  *   - Condensed LALAVERSE_VISUAL_ANCHOR to ~600 chars for better prompt budget
  *   - Style reference image support for visual consistency
@@ -33,47 +33,25 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── LALAVERSE VISUAL ANCHOR (condensed ~590 chars) ─────────────────────────
 
-const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow (lavender, peach, rose). Natural hero lighting. Materials: soft fabrics (linen, silk), light wood (oak, ash), glass, subtle shimmer. Tone: calm, intentional, beautiful, lived-in. Layout: asymmetric natural arrangement, each furniture piece appears once only, no mirrored or duplicated objects. Quality: sharp furniture edges, consistent hardware, correct legs, coherent reflections, clean fabric folds, precise floor patterns.`;
+const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow (lavender, peach, rose). Natural hero lighting. Materials: soft fabrics (linen, silk), light wood (oak, ash), glass, mirrors, shimmer. Tone: calm, intentional, beautiful, lived-in. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
 
 // ─── NEGATIVE PROMPT (universal) ─────────────────────────────────────────────
 
-const NEGATIVE_PROMPT = `neon lighting, cyberpunk, cluttered decor, ultra-minimal sterile, dark moody lighting, distorted furniture legs, melted objects, blobby shapes, warped reflections, text, watermarks, signatures, extra fingers, malformed hands, blurry, low resolution, oversaturated, chromatic aberration, symmetrical mirrored layout, duplicated furniture, repeated objects, copy-paste elements, twin matching pieces, identical mirrored sides`;
-
-// ─── SCENE TYPE SPATIAL CONTEXT ───────────────────────────────────────────────
-// Gives the AI spatial awareness about what kind of room it's generating
-
-const SCENE_TYPE_CONTEXT = {
-  HOME_BASE: 'Interior bedroom: one bed, one vanity, one dresser, lived-in personal space.',
-  CLOSET: 'Walk-in closet: organized racks, shelving, shoe storage, compact luxury.',
-  EVENT_LOCATION: 'Event venue: open layout, decorative focal points, gathering atmosphere.',
-  TRANSITION: 'Hallway or corridor: linear perspective with depth, connecting passage.',
-  OTHER: 'Interior space with clear purpose and function.',
-};
-
-// ─── SCENE TYPE NEGATIVE PROMPTS ─────────────────────────────────────────────
-// Prevents wrong elements from appearing per scene type
-
-const SCENE_TYPE_NEGATIVES = {
-  HOME_BASE: 'commercial signage, restaurant tables, office cubicles, industrial equipment, stadium seating',
-  CLOSET: 'bed, kitchen appliances, outdoor scenery, office desks, dining table',
-  EVENT_LOCATION: 'bedroom furniture, kitchen sink, bathroom fixtures, office monitors',
-  TRANSITION: 'large furniture blocking path, dead ends, outdoor landscape',
-  OTHER: '',
-};
+const NEGATIVE_PROMPT = `neon lighting, cyberpunk, cluttered decor, ultra-minimal sterile, dark moody lighting, distorted furniture legs, melted objects, blobby shapes, warped reflections, text, watermarks, signatures, extra fingers, malformed hands, blurry, low resolution, oversaturated, chromatic aberration`;
 
 // ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
 
 const ANGLE_MODIFIERS = {
-  WIDE:         'Wide establishing shot from one corner, full room visible at eye-level, asymmetric composition, organic furniture placement.',
-  CLOSET:       'Camera facing wardrobe wall, full-height racks visible, soft glow on fabric textures, depth through layers.',
-  VANITY:       'Camera beside the single vanity, close-to-medium shot, soft focus on mirror reflection.',
-  WINDOW:       'Camera facing main window at medium height, natural light streaming in, foreground furniture framing.',
-  DOORWAY:      'Camera at doorway threshold looking in, perspective lines converging, sense of arrival.',
-  ESTABLISHING: 'Wide exterior or grand interior entrance, low-medium angle, full prestige with architectural framing.',
-  ACTION:       'Dynamic three-quarter angle, slight Dutch tilt, asymmetric composition, strong diagonal energy.',
-  CLOSE:        'Close shot on one specific detail, shallow depth of field, intimate single-subject focus.',
-  OVERHEAD:     'High angle at 45-60 degrees, revealing spatial layout, each furniture piece distinct and separate.',
-  OTHER:        'Unique compositional angle with clear spatial depth appropriate to this location.',
+  WIDE:         'Wide establishing shot, full room visible, camera at medium height, balanced composition.',
+  CLOSET:       'Camera facing wardrobe wall, full-height racks or shelving visible, soft glow on fabric textures.',
+  VANITY:       'Camera at vanity mirror, close-to-medium shot, soft focus on reflection and surface details.',
+  WINDOW:       'Camera facing window, natural light streaming in, subject silhouette or three-quarter view.',
+  DOORWAY:      'Camera at doorway threshold, looking into the room, sense of arrival or departure.',
+  ESTABLISHING: 'Wide exterior or grand interior entrance, full prestige of the space visible.',
+  ACTION:       'Dynamic angle, sense of movement or event energy, slightly asymmetric composition.',
+  CLOSE:        'Close shot on a specific surface, object, or detail. Intimate and personal.',
+  OVERHEAD:     'High angle looking down, revealing the full layout and spatial relationships.',
+  OTHER:        'Unique compositional angle appropriate to this specific location.',
 };
 
 // ─── CAMERA MOTION MAPPING (per angle type) ─────────────────────────────────
@@ -124,59 +102,22 @@ const VIDEO_MOVEMENT_MODIFIERS = {
 
 function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
   const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
-  const sceneType = sceneSet.scene_type || 'OTHER';
 
-  // Scene-type spatial context tells the AI what kind of space this is
-  const spatialContext = SCENE_TYPE_CONTEXT[sceneType] || SCENE_TYPE_CONTEXT.OTHER;
-
-  // Truncate description to leave room for other prompt components
-  const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 350);
-
-  // Pull in metadata tags if they exist (mood, aesthetic, visual language)
-  const tagParts = [];
-  if (Array.isArray(sceneSet.mood_tags) && sceneSet.mood_tags.length > 0) {
-    tagParts.push(`Mood: ${sceneSet.mood_tags.slice(0, 4).join(', ')}`);
-  }
-  if (Array.isArray(sceneSet.aesthetic_tags) && sceneSet.aesthetic_tags.length > 0) {
-    tagParts.push(`Aesthetic: ${sceneSet.aesthetic_tags.slice(0, 4).join(', ')}`);
-  }
-  if (sceneSet.visual_language && typeof sceneSet.visual_language === 'object') {
-    const vl = sceneSet.visual_language;
-    if (vl.palette) tagParts.push(`Palette: ${vl.palette}`);
-    if (vl.lighting) tagParts.push(`Lighting: ${vl.lighting}`);
-  }
-  const tagLine = tagParts.length > 0 ? tagParts.join('. ') + '.' : '';
+  // Condensed anchor frees ~400 chars for description vs v1.1's ~200
+  const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 400);
 
   const parts = [
     LALAVERSE_VISUAL_ANCHOR,
-    spatialContext,
     `LOCATION: ${sceneSet.name}.`,
     descriptionSlice,
-    tagLine,
     `CAMERA: ${cameraText}`,
-    'Photorealistic cinematic quality. No text, no watermarks.',
-  ].filter(Boolean);
+    'Photorealistic cinematic quality. No text overlays. No watermarks. No distorted faces or hands.',
+  ];
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
   // Enforce 1000 char limit
   return full.length > 1000 ? full.slice(0, 997) + '...' : full;
-}
-
-/**
- * Build the combined negative prompt for a scene set.
- * Merges universal negatives + scene-type-specific negatives + any custom negatives.
- */
-function buildNegativePrompt(sceneSet) {
-  const sceneType = sceneSet.scene_type || 'OTHER';
-  const typeNegatives = SCENE_TYPE_NEGATIVES[sceneType] || '';
-  const customNegatives = sceneSet.negative_prompt || '';
-
-  return [NEGATIVE_PROMPT, typeNegatives, customNegatives]
-    .filter(Boolean)
-    .join(', ')
-    .replace(/,\s*,/g, ',')
-    .trim();
 }
 
 /**
@@ -192,9 +133,7 @@ function buildVideoPrompt(sceneSet, angleLabel, customCameraDirection) {
   const parts = [
     movementText,
     `Scene: ${sceneSet.name}.`,
-    'Maintain warm soft natural lighting. Photorealistic quality.',
-    'All furniture and objects remain fixed in place throughout the movement. No morphing, no shape-shifting, no objects appearing or disappearing.',
-    'No text overlays. Consistent room layout from start to end.',
+    'Maintain warm soft natural lighting. Photorealistic quality. No morphing. No text overlays.',
   ];
 
   return parts.join(' ').trim();
@@ -217,19 +156,16 @@ function runwayHeaders() {
  * Supports style_reference for visual consistency.
  */
 async function startTextToImage(prompt, options = {}) {
-  const { seed, numOutputs = 1, styleReference, negativePrompt } = options;
+  const { seed, numOutputs = 1, styleReference } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
-  // Always send an explicit seed so we can lock it — RunwayML doesn't reliably return seeds in task responses
-  const effectiveSeed = parsedSeed ?? Math.floor(Math.random() * 2147483647);
 
   const payload = {
     model: 'gen4_image',
     promptText: prompt,
     ratio: '1280:720',
-    seed: effectiveSeed,
+    ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
     ...(numOutputs > 1 ? { numOutputs } : {}),
     ...(styleReference ? { styleReference } : {}),
-    ...(negativePrompt ? { negativePrompt } : {}),
   };
 
   try {
@@ -238,28 +174,8 @@ async function startTextToImage(prompt, options = {}) {
       payload,
       { headers: runwayHeaders(), timeout: 30000 }
     );
-    return { jobId: response.data.id, seed: effectiveSeed };
+    return { jobId: response.data.id };
   } catch (err) {
-    const status = err.response?.status;
-    // Retry once on transient errors (rate limit, server errors, timeouts)
-    if (status === 429 || status >= 500 || err.code === 'ECONNABORTED') {
-      const retryDelay = status === 429 ? 10000 : 5000;
-      console.warn(`[SceneGen] text_to_image transient error (${status || err.code}), retrying in ${retryDelay / 1000}s...`);
-      await sleep(retryDelay);
-      try {
-        const retryRes = await axios.post(
-          `${RUNWAY_API_BASE}/text_to_image`,
-          payload,
-          { headers: runwayHeaders(), timeout: 30000 }
-        );
-        return { jobId: retryRes.data.id, seed: effectiveSeed };
-      } catch (retryErr) {
-        if (retryErr.response) {
-          console.error('[SceneGen] text_to_image retry failed:', JSON.stringify(retryErr.response.data, null, 2));
-        }
-        throw retryErr;
-      }
-    }
     if (err.response) {
       console.error('[SceneGen] text_to_image API error:', JSON.stringify(err.response.data, null, 2));
     }
@@ -269,22 +185,21 @@ async function startTextToImage(prompt, options = {}) {
 
 /**
  * Step 2: Generate a video clip from a still image + text prompt.
- * Ratio: image_to_video accepts "768:1280"|"1280:768" only.
+ * Fixed: ratio now matches text_to_image (1280:720).
  * Added: camera motion control, scene-specific duration, negative prompt.
  */
 async function startImageToVideo(prompt, imageUrl, options = {}) {
-  const { seed, duration = 5, cameraMotion, negativePrompt } = options;
+  const { seed, duration = 5, cameraMotion } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
 
   const payload = {
     model: 'gen3a_turbo',
     promptText: prompt,
     promptImage: imageUrl,
-    ratio: '1280:768',
+    ratio: '1280:720',
     duration,
     ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
     ...(cameraMotion ? { cameraMotion } : {}),
-    ...(negativePrompt ? { negativePrompt } : {}),
   };
 
   try {
@@ -295,26 +210,6 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
     );
     return { jobId: response.data.id };
   } catch (err) {
-    const status = err.response?.status;
-    // Retry once on transient errors (rate limit, server errors, timeouts)
-    if (status === 429 || status >= 500 || err.code === 'ECONNABORTED') {
-      const retryDelay = status === 429 ? 10000 : 5000;
-      console.warn(`[SceneGen] image_to_video transient error (${status || err.code}), retrying in ${retryDelay / 1000}s...`);
-      await sleep(retryDelay);
-      try {
-        const retryRes = await axios.post(
-          `${RUNWAY_API_BASE}/image_to_video`,
-          payload,
-          { headers: runwayHeaders(), timeout: 30000 }
-        );
-        return { jobId: retryRes.data.id };
-      } catch (retryErr) {
-        if (retryErr.response) {
-          console.error('[SceneGen] image_to_video retry failed:', JSON.stringify(retryErr.response.data, null, 2));
-        }
-        throw retryErr;
-      }
-    }
     if (err.response) {
       console.error('[SceneGen] image_to_video API error:', JSON.stringify(err.response.data, null, 2));
     }
@@ -346,7 +241,7 @@ async function pollTask(jobId, maxWaitMs = 180000) {
         status: 'SUCCEEDED',
         outputUrl: outputs[0],
         outputs,
-        seed: task.seed ?? task.options?.seed ?? null,
+        seed: task.seed ?? null,
         creditsUsed: task.creditsUsed ?? 0,
       };
     }
@@ -371,16 +266,15 @@ async function pollTask(jobId, maxWaitMs = 180000) {
  * Returns the best result plus all variation data.
  */
 async function generateBestVariation(prompt, numVariations, options = {}) {
-  const { seed, styleReference, negativePrompt } = options;
+  const { seed, styleReference } = options;
   const variations = [];
 
   console.log(`[SceneGen] Generating ${numVariations} variations for best-pick...`);
 
-  const { jobId, seed: requestSeed } = await startTextToImage(prompt, {
+  const { jobId } = await startTextToImage(prompt, {
     seed,
     numOutputs: Math.min(numVariations, 4),
     styleReference,
-    negativePrompt,
   });
   const result = await pollTask(jobId);
 
@@ -413,7 +307,7 @@ async function generateBestVariation(prompt, numVariations, options = {}) {
   return {
     best,
     variations,
-    seed: result.seed ?? requestSeed,
+    seed: result.seed,
     creditsUsed: result.creditsUsed,
   };
 }
@@ -492,7 +386,6 @@ async function generateBaseScene(sceneSet, models) {
   const { SceneSet } = models;
 
   const prompt = buildPrompt(sceneSet, 'WIDE');
-  const negativePrompt = buildNegativePrompt(sceneSet);
 
   await SceneSet.update(
     { generation_status: 'generating', base_runway_prompt: prompt },
@@ -501,7 +394,6 @@ async function generateBaseScene(sceneSet, models) {
 
   try {
     console.log(`[SceneGen] Starting base still for: ${sceneSet.name}`);
-    console.log(`[SceneGen] Negative prompt: ${negativePrompt.slice(0, 120)}...`);
 
     // Build style reference if set has one
     const styleReference = sceneSet.style_reference_url
@@ -513,7 +405,7 @@ async function generateBaseScene(sceneSet, models) {
     let stillOutputUrl, stillSeed, stillCredits;
 
     if (numVariations > 1) {
-      const varResult = await generateBestVariation(prompt, numVariations, { styleReference, negativePrompt });
+      const varResult = await generateBestVariation(prompt, numVariations, { styleReference });
       if (!varResult.best) {
         await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
         throw new Error(`Base still multi-variation failed: ${varResult.error}`);
@@ -522,14 +414,14 @@ async function generateBaseScene(sceneSet, models) {
       stillSeed = varResult.seed;
       stillCredits = varResult.creditsUsed || 0;
     } else {
-      const { jobId: stillJobId, seed: requestSeed } = await startTextToImage(prompt, { styleReference, negativePrompt });
+      const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference });
       const stillResult = await pollTask(stillJobId);
       if (stillResult.status !== 'SUCCEEDED') {
         await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
         throw new Error(`Base still failed: ${stillResult.error}`);
       }
       stillOutputUrl = stillResult.outputUrl;
-      stillSeed = stillResult.seed ?? requestSeed;
+      stillSeed = stillResult.seed;
       stillCredits = stillResult.creditsUsed || 0;
     }
 
@@ -552,7 +444,6 @@ async function generateBaseScene(sceneSet, models) {
       const { jobId: videoJobId } = await startImageToVideo(videoPrompt, stillOutputUrl, {
         duration: VIDEO_DURATION_MAP.WIDE,
         cameraMotion: CAMERA_MOTION_MAP.WIDE,
-        negativePrompt,
       });
       const videoResult = await pollTask(videoJobId);
 
@@ -651,11 +542,9 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     console.log(`[SceneGen] Video prompt: ${videoPrompt}`);
 
     // Image-anchored: use base still as promptImage → image_to_video directly
-    const negPrompt = buildNegativePrompt(sceneSet);
     const { jobId: videoJobId } = await startImageToVideo(
       videoPrompt,
       sceneSet.base_still_url,
-      { negativePrompt: negPrompt },
     );
     const videoResult = await pollTask(videoJobId);
 
@@ -818,7 +707,6 @@ function sleep(ms) {
 module.exports = {
   buildPrompt,
   buildVideoPrompt,
-  buildNegativePrompt,
   generateBaseScene,
   generateAngle,
   regenerateAngleRefined,
