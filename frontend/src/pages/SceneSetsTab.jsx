@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -68,35 +68,118 @@ function ImageLightbox({ src, alt, onClose }) {
 
 // ─── ANGLE LIGHTBOX MODAL ─────────────────────────────────────────────────────
 
-function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
+function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate, currentIndex, totalCount }) {
+  const [showVideo, setShowVideo] = useState(false);
+  const [showInfo, setShowInfo] = useState(true);
+  const [zoomed, setZoomed] = useState(false);
+  const [animDir, setAnimDir] = useState(null); // 'left' | 'right' | null
+  const touchRef = useRef(null);
+  const imgRef = useRef(null);
+
   if (!angle) return null;
 
+  // Reset video/zoom state when angle changes
+  useEffect(() => { setShowVideo(false); setZoomed(false); }, [angle.id]);
+
+  // Keyboard navigation
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft' && onPrev) onPrev();
-      if (e.key === 'ArrowRight' && onNext) onNext();
+      if (e.key === 'ArrowLeft' && onPrev) navigatePrev();
+      if (e.key === 'ArrowRight' && onNext) navigateNext();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose, onPrev, onNext]);
 
-  const [showVideo, setShowVideo] = useState(false);
+  // Lock body scroll while lightbox is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  // Navigate with slide animation
+  const navigatePrev = () => {
+    if (!onPrev || zoomed) return;
+    setAnimDir('right');
+    setTimeout(() => { onPrev(); setAnimDir(null); }, 180);
+  };
+  const navigateNext = () => {
+    if (!onNext || zoomed) return;
+    setAnimDir('left');
+    setTimeout(() => { onNext(); setAnimDir(null); }, 180);
+  };
+
+  // Touch/swipe handling
+  const handleTouchStart = (e) => {
+    if (zoomed) return;
+    const t = e.touches[0];
+    touchRef.current = { startX: t.clientX, startY: t.clientY, startTime: Date.now() };
+  };
+  const handleTouchEnd = (e) => {
+    if (!touchRef.current || zoomed) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchRef.current.startX;
+    const dy = t.clientY - touchRef.current.startY;
+    const dt = Date.now() - touchRef.current.startTime;
+    touchRef.current = null;
+    // Require horizontal swipe: min 60px, mostly horizontal, under 400ms
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 400) {
+      if (dx < 0 && onNext) navigateNext();
+      else if (dx > 0 && onPrev) navigatePrev();
+    }
+  };
+
+  // Toggle zoom
+  const toggleZoom = () => setZoomed(z => !z);
+
+  // Tap image to toggle info overlay
+  const handleImageClick = (e) => {
+    if (zoomed) return;
+    setShowInfo(s => !s);
+  };
+
+  const slideClass = animDir === 'left' ? ' slide-out-left' : animDir === 'right' ? ' slide-out-right' : ' slide-in';
 
   return createPortal(
-    <div className="scene-sets-lightbox-overlay" onClick={onClose}>
+    <div
+      className="scene-sets-lightbox-overlay"
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Close button — fixed top-right */}
+      <button className="scene-sets-lightbox-close" onClick={e => { e.stopPropagation(); onClose(); }}>
+        <X size={22} />
+      </button>
+
+      {/* Counter — fixed top-center */}
+      {totalCount > 1 && (
+        <div className="scene-sets-lightbox-counter" onClick={e => e.stopPropagation()}>
+          {(currentIndex || 0) + 1} / {totalCount}
+        </div>
+      )}
+
+      {/* Zoom button — fixed top-left */}
+      <button className="scene-sets-lightbox-zoom-btn" onClick={e => { e.stopPropagation(); toggleZoom(); }}>
+        {zoomed ? <ZoomOut size={18} /> : <ZoomIn size={18} />}
+      </button>
+
+      {/* Nav arrows */}
       {onPrev && (
-        <button className="scene-sets-lightbox-nav prev" onClick={e => { e.stopPropagation(); onPrev(); }}>&#8249;</button>
+        <button className="scene-sets-lightbox-nav prev" onClick={e => { e.stopPropagation(); navigatePrev(); }}>
+          <ChevronLeft size={28} />
+        </button>
       )}
       {onNext && (
-        <button className="scene-sets-lightbox-nav next" onClick={e => { e.stopPropagation(); onNext(); }}>&#8250;</button>
-      )}
-      <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
-        <button className="scene-sets-lightbox-close" onClick={onClose}>
-          <X size={20} />
+        <button className="scene-sets-lightbox-nav next" onClick={e => { e.stopPropagation(); navigateNext(); }}>
+          <ChevronRight size={28} />
         </button>
+      )}
 
-        <div className="scene-sets-lightbox-media">
+      {/* Main content */}
+      <div className={`scene-sets-lightbox${zoomed ? ' zoomed' : ''}`} onClick={e => e.stopPropagation()}>
+        <div className={`scene-sets-lightbox-media${slideClass}`}>
           {showVideo && angle.video_clip_url ? (
             <video
               src={angle.video_clip_url}
@@ -105,41 +188,52 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
               className="scene-sets-lightbox-video"
             />
           ) : angle.still_image_url ? (
-            <img src={angle.still_image_url} alt={angle.angle_name} className="scene-sets-lightbox-img" />
+            <img
+              ref={imgRef}
+              src={angle.still_image_url}
+              alt={angle.angle_name}
+              className={`scene-sets-lightbox-img${zoomed ? ' zoomed' : ''}`}
+              onClick={handleImageClick}
+              draggable={false}
+            />
           ) : null}
         </div>
 
-        <div className="scene-sets-lightbox-info">
-          <h3>{angle.angle_name}</h3>
-          <span className="scene-sets-lightbox-label">{angle.angle_label}</span>
-          {angle.angle_description && <p>{angle.angle_description}</p>}
-          {angle.camera_direction && (
-            <p className="scene-sets-lightbox-camera"><Camera size={12} /> {angle.camera_direction}</p>
-          )}
-          {angle.beat_affinity && angle.beat_affinity.length > 0 && (
-            <span className="scene-sets-lightbox-beats">Beats: {angle.beat_affinity.join(', ')}</span>
-          )}
-          {onRegenerate && (
-            <button className="scene-sets-lightbox-regen" onClick={() => { onRegenerate(angle); onClose(); }}>
-              <RotateCcw size={13} /> Regenerate
-            </button>
-          )}
-        </div>
-
-        {angle.video_clip_url && (
-          <div className="scene-sets-lightbox-toggle">
-            <button
-              className={`scene-sets-lightbox-toggle-btn${!showVideo ? ' active' : ''}`}
-              onClick={() => setShowVideo(false)}
-            >
-              <Camera size={14} /> Still
-            </button>
-            <button
-              className={`scene-sets-lightbox-toggle-btn${showVideo ? ' active' : ''}`}
-              onClick={() => setShowVideo(true)}
-            >
-              <Play size={14} /> Video
-            </button>
+        {/* Info overlay — bottom of image */}
+        {showInfo && !zoomed && (
+          <div className="scene-sets-lightbox-info-overlay">
+            <div className="scene-sets-lightbox-info-content">
+              <div className="scene-sets-lightbox-info-text">
+                <h3>{angle.angle_name}</h3>
+                <span className="scene-sets-lightbox-label">{angle.angle_label}</span>
+                {angle.camera_direction && (
+                  <p className="scene-sets-lightbox-camera"><Camera size={12} /> {angle.camera_direction}</p>
+                )}
+              </div>
+              <div className="scene-sets-lightbox-info-actions">
+                {onRegenerate && (
+                  <button className="scene-sets-lightbox-regen" onClick={() => { onRegenerate(angle); onClose(); }}>
+                    <RotateCcw size={13} /> Regenerate
+                  </button>
+                )}
+                {angle.video_clip_url && (
+                  <div className="scene-sets-lightbox-toggle">
+                    <button
+                      className={`scene-sets-lightbox-toggle-btn${!showVideo ? ' active' : ''}`}
+                      onClick={() => setShowVideo(false)}
+                    >
+                      <Camera size={14} /> Still
+                    </button>
+                    <button
+                      className={`scene-sets-lightbox-toggle-btn${showVideo ? ' active' : ''}`}
+                      onClick={() => setShowVideo(true)}
+                    >
+                      <Play size={14} /> Video
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -251,6 +345,8 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
           onPrev={lightboxIndex > 0 ? () => setLightboxIndex(i => i - 1) : null}
           onNext={lightboxIndex < completedAngles.length - 1 ? () => setLightboxIndex(i => i + 1) : null}
           onRegenerate={!generating ? onRegenerate : null}
+          currentIndex={lightboxIndex}
+          totalCount={completedAngles.length}
         />
       )}
     </div>
