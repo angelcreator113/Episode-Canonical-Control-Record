@@ -1275,10 +1275,27 @@ export default function SceneSetsTab() {
         }),
       });
       if (!res.ok) throw new Error('Failed to create');
-      showToast(`Created "${newSet.name.trim()}"`);
+      const json = await res.json();
+      const setName = newSet.name.trim();
       setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '' });
       setShowCreateForm(false);
-      fetchSets();
+      await fetchSets();
+
+      // If a generation job was auto-queued, poll it and update when done
+      if (json.jobId) {
+        showToast(`Created "${setName}" — generating base image...`);
+        setGeneratingId(json.data.id);
+        const job = await pollJob(json.jobId);
+        if (job.status === 'completed') {
+          showToast(`Base image generated for "${setName}"`);
+        } else {
+          showToast(job.error || 'Base generation failed', 'error');
+        }
+        await fetchSets();
+        setGeneratingId(null);
+      } else {
+        showToast(`Created "${setName}"`);
+      }
     } catch {
       showToast('Failed to create scene set', 'error');
     } finally {
