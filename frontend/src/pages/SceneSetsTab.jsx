@@ -66,7 +66,7 @@ function ImageLightbox({ src, alt, onClose }) {
 
 // ─── ANGLE LIGHTBOX MODAL ─────────────────────────────────────────────────────
 
-function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
+function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate, bustUrl }) {
   if (!angle) return null;
 
   useEffect(() => {
@@ -98,13 +98,13 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
         <div className="scene-sets-lightbox-media">
           {showVideo && angle.video_clip_url ? (
             <video
-              src={angle.video_clip_url}
+              src={bustUrl ? bustUrl(angle.video_clip_url) : angle.video_clip_url}
               controls
               autoPlay
               className="scene-sets-lightbox-video"
             />
           ) : angle.still_image_url ? (
-            <img src={angle.still_image_url} alt={angle.angle_name} className="scene-sets-lightbox-img" />
+            <img src={bustUrl ? bustUrl(angle.still_image_url) : angle.still_image_url} alt={angle.angle_name} className="scene-sets-lightbox-img" />
           ) : null}
         </div>
 
@@ -148,10 +148,14 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
 
 // ─── ANGLE STRIP ──────────────────────────────────────────────────────────────
 
-function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, generating }) {
+function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, generating, imageVersion }) {
   if (!angles || angles.length === 0) return null;
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
+  const bustUrl = (url) => {
+    if (!url || !imageVersion) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}v=${imageVersion}`;
+  };
   const sortedAngles = [...angles].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const completedAngles = sortedAngles.filter(a => a.still_image_url);
   const openLightbox = (angle) => {
@@ -182,7 +186,7 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
               isComplete ? 'complete' : isGenerating ? 'generating' : isFailed ? 'failed' : 'pending'
             }`}>
               {angle.still_image_url ? (
-                <img src={angle.still_image_url} alt={angle.angle_name} />
+                <img src={bustUrl(angle.still_image_url)} alt={angle.angle_name} />
               ) : isGenerating ? (
                 <Loader size={20} className="spin" />
               ) : isFailed ? (
@@ -268,6 +272,7 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
           onPrev={lightboxIndex > 0 ? () => setLightboxIndex(i => i - 1) : null}
           onNext={lightboxIndex < completedAngles.length - 1 ? () => setLightboxIndex(i => i + 1) : null}
           onRegenerate={!generating ? onRegenerate : null}
+          bustUrl={bustUrl}
         />
       )}
     </div>
@@ -808,6 +813,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             onRegenerate={(angle) => onGenerateAngle(set, angle)}
             onReorder={onReorderAngle ? (angle, dir) => onReorderAngle(set, angle, dir) : null}
             generating={isGenerating}
+            imageVersion={imageVersion}
           />
         )}
 
@@ -897,6 +903,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               onRegenerate={(angle) => onGenerateAngle(set, angle)}
               onReorder={(angle, direction) => onReorderAngle(set, angle, direction)}
               generating={isGenerating}
+              imageVersion={imageVersion}
             />
 
             {hasBase && totalAngles === 0 && !showAddAngle && (
