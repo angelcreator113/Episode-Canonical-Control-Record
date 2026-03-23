@@ -246,8 +246,8 @@
 
 .scene-sets-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
   align-items: start;
 }
 
@@ -267,9 +267,7 @@
 /* ── Card Preview ──────────────────────────────────────────────────────── */
 
 .scene-sets-card-preview {
-  height: 220px;
-  max-height: 220px;
-  min-height: 220px;
+  aspect-ratio: 16 / 10;
   background: linear-gradient(135deg, #F0EBF8 0%, #EDE7F6 100%);
   position: relative;
   overflow: hidden;
@@ -283,6 +281,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .scene-sets-card-placeholder {
@@ -434,20 +433,20 @@
 /* ── Card Body ─────────────────────────────────────────────────────────── */
 
 .scene-sets-card-body {
-  padding: 16px 18px 14px;
+  padding: 14px 16px 16px;
 }
 
 .scene-sets-card-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .scene-sets-card-header-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 
 .scene-sets-card-header-utils {
@@ -522,15 +521,15 @@
 .scene-sets-card-title {
   margin: 0;
   font-family: 'Lora', serif;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: #2C2C2C;
   line-height: 1.3;
 }
 
 .scene-sets-card-subtitle {
-  margin: 3px 0 0;
-  font-size: 12px;
+  margin: 2px 0 0;
+  font-size: 11px;
   color: #9E9E9E;
   font-family: 'DM Mono', monospace;
   letter-spacing: 0.02em;
@@ -538,7 +537,7 @@
 
 .scene-sets-card-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
 }
@@ -705,9 +704,9 @@
 
 .scene-sets-angle-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 12px;
   padding: 12px;
   background: #FAFAF5;
   border-radius: 10px;
@@ -1305,6 +1304,15 @@
 
 /* ── Mobile ────────────────────────────────────────────────────────────── */
 
+/* Tablet: force 2-column when cards would be too narrow */
+@media (max-width: 900px) {
+  .scene-sets-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+}
+
+/* Mobile */
 @media (max-width: 767px) {
   .scene-sets-header {
     flex-direction: column;
@@ -1313,6 +1321,11 @@
 
   .scene-sets-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .scene-sets-card-preview {
+    aspect-ratio: 16 / 9;
   }
 
   .scene-sets-card-actions {
@@ -1352,6 +1365,10 @@
   .scene-library-tab-bar {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .scene-sets-angle-strip {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   }
 }
 
