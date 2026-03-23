@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import './SceneSetsTab.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 // ─── STATUS PILL ─────────────────────────────────────────────────────────────
 
@@ -960,49 +960,54 @@ export default function SceneSetsTab() {
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
     setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
-    // Fire all generation requests and collect job IDs
-    const jobMap = [];
-    for (let i = 0; i < targets.length; i++) {
-      progressAngles[i].status = 'generating';
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
-      try {
-        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
-        if (!res.ok) throw new Error('Failed');
-        const json = await res.json();
-        jobMap.push({ index: i, jobId: json.data.jobId });
-      } catch {
-        progressAngles[i].status = 'failed';
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+    try {
+      // Fire all generation requests and collect job IDs
+      const jobMap = [];
+      for (let i = 0; i < targets.length; i++) {
+        progressAngles[i].status = 'generating';
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
+        try {
+          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
+          if (!res.ok) throw new Error('Failed');
+          const json = await res.json();
+          jobMap.push({ index: i, jobId: json.data.jobId });
+        } catch {
+          progressAngles[i].status = 'failed';
+          setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+        }
       }
-    }
 
-    // Poll all jobs in parallel
-    let completed = 0;
-    let failed = progressAngles.filter(a => a.status === 'failed').length;
+      // Poll all jobs in parallel
+      let completed = 0;
+      let failed = progressAngles.filter(a => a.status === 'failed').length;
 
-    const pollPromises = jobMap.map(async ({ index, jobId }) => {
-      const job = await pollJob(jobId);
-      if (job.status === 'completed') {
-        progressAngles[index].status = 'done';
-        completed++;
+      const pollPromises = jobMap.map(async ({ index, jobId }) => {
+        const job = await pollJob(jobId);
+        if (job.status === 'completed') {
+          progressAngles[index].status = 'done';
+          completed++;
+        } else {
+          progressAngles[index].status = 'failed';
+          failed++;
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+      });
+
+      await Promise.all(pollPromises);
+
+      if (failed === 0) {
+        showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
       } else {
-        progressAngles[index].status = 'failed';
-        failed++;
+        showToast(`${completed} completed, ${failed} failed`, failed > 0 ? 'error' : 'success');
       }
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-    });
-
-    await Promise.all(pollPromises);
-
-    if (failed === 0) {
-      showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
-    } else {
-      showToast(`${completed} completed, ${failed} failed`, failed > 0 ? 'error' : 'success');
+      if (completed > 0) setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
+      fetchSets();
+    } catch (err) {
+      showToast(err?.message || 'Generation failed', 'error');
+    } finally {
+      setTimeout(() => setGenerationProgress(null), 3000);
+      setGeneratingId(null);
     }
-    if (completed > 0) setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
-    fetchSets();
-    setTimeout(() => setGenerationProgress(null), 3000);
-    setGeneratingId(null);
   };
 
   const handleRetryFailed = async (set) => {
@@ -1013,47 +1018,52 @@ export default function SceneSetsTab() {
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
     setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
-    // Fire all retry requests to get job IDs
-    const jobMap = [];
-    for (let i = 0; i < targets.length; i++) {
-      try {
-        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
-        if (!res.ok) throw new Error('Failed');
-        const json = await res.json();
-        jobMap.push({ index: i, jobId: json.data.jobId });
-        progressAngles[i].status = 'generating';
-      } catch {
-        progressAngles[i].status = 'failed';
+    try {
+      // Fire all retry requests to get job IDs
+      const jobMap = [];
+      for (let i = 0; i < targets.length; i++) {
+        try {
+          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
+          if (!res.ok) throw new Error('Failed');
+          const json = await res.json();
+          jobMap.push({ index: i, jobId: json.data.jobId });
+          progressAngles[i].status = 'generating';
+        } catch {
+          progressAngles[i].status = 'failed';
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
       }
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
-    }
 
-    // Poll all jobs in parallel
-    let completed = 0;
-    let failed = progressAngles.filter(a => a.status === 'failed').length;
+      // Poll all jobs in parallel
+      let completed = 0;
+      let failed = progressAngles.filter(a => a.status === 'failed').length;
 
-    const pollPromises = jobMap.map(async ({ index, jobId }) => {
-      const job = await pollJob(jobId);
-      if (job.status === 'completed') {
-        progressAngles[index].status = 'done';
-        completed++;
+      const pollPromises = jobMap.map(async ({ index, jobId }) => {
+        const job = await pollJob(jobId);
+        if (job.status === 'completed') {
+          progressAngles[index].status = 'done';
+          completed++;
+        } else {
+          progressAngles[index].status = 'failed';
+          failed++;
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+      });
+
+      await Promise.all(pollPromises);
+
+      if (failed === 0) {
+        showToast(`All ${targets.length} failed angles retried successfully!`);
       } else {
-        progressAngles[index].status = 'failed';
-        failed++;
+        showToast(`${completed} recovered, ${failed} still failing`, failed > 0 ? 'error' : 'success');
       }
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-    });
-
-    await Promise.all(pollPromises);
-
-    if (failed === 0) {
-      showToast(`All ${targets.length} failed angles retried successfully!`);
-    } else {
-      showToast(`${completed} recovered, ${failed} still failing`, failed > 0 ? 'error' : 'success');
+      fetchSets();
+    } catch (err) {
+      showToast(err?.message || 'Retry failed', 'error');
+    } finally {
+      setTimeout(() => setGenerationProgress(null), 3000);
+      setGeneratingId(null);
     }
-    fetchSets();
-    setTimeout(() => setGenerationProgress(null), 3000);
-    setGeneratingId(null);
   };
 
   const handleCreate = async () => {
