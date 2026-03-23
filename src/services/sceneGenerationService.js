@@ -197,11 +197,9 @@ async function startTextToImage(prompt, options = {}) {
  * Added: camera motion control, scene-specific duration, negative prompt.
  */
 async function startImageToVideo(prompt, imageUrl, options = {}) {
-  const { seed, duration = 5 } = options;
+  const { seed, duration = 5, cameraMotion } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
 
-  // Note: gen3a_turbo image_to_video does NOT accept 'ratio' (inferred from input image)
-  // or 'cameraMotion' (not a valid field — camera motion is described in promptText instead)
   const payload = {
     model: 'gen3a_turbo',
     promptText: prompt,
@@ -223,11 +221,7 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
       const status = err.response?.status;
       const retryable = !status || status === 429 || status >= 500;
       if (err.response) {
-        const tag = retryable ? '' : ' [NON-RETRYABLE]';
-        console.error(`[SceneGen]${tag} image_to_video API error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
-        if (!retryable) {
-          console.error(`[SceneGen] Payload sent:`, JSON.stringify(payload, null, 2));
-        }
+        console.error(`[SceneGen] image_to_video API error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
       }
       if (!retryable || attempt === MAX_RETRIES) throw err;
       const backoff = attempt * 2000;
@@ -647,10 +641,6 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
     throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
   }
 
-  if (!sceneSet.base_runway_seed) {
-    throw new Error('base_runway_seed not set on parent scene set.');
-  }
-
   const angleLabel = sceneAngle.angle_label || 'WIDE';
   const basePrompt = buildPrompt(sceneSet, angleLabel);
   const refinedPrompt = artifactDetection.buildRefinedPrompt(basePrompt, artifactCategories);
@@ -664,11 +654,12 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
     console.log(`[SceneGen] Regenerating angle with refined prompt: ${sceneAngle.angle_name}`);
     console.log(`[SceneGen] Addressing artifacts: ${artifactCategories.join(', ')}`);
 
-    // Support both numeric seeds and uploaded-image seeds (e.g. "uploaded-1679234567")
-    const baseSeedNum = parseInt(sceneSet.base_runway_seed, 10);
-    const seedVariation = !isNaN(baseSeedNum)
-      ? String(baseSeedNum + (sceneAngle.generation_attempt || 1))
-      : String(Date.now() + (sceneAngle.generation_attempt || 1));
+    const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
+      ? Number(sceneSet.base_runway_seed)
+      : null;
+    const seedVariation = numericSeed !== null
+      ? String(numericSeed + (sceneAngle.generation_attempt || 1))
+      : undefined;
 
     // Style reference
     const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
