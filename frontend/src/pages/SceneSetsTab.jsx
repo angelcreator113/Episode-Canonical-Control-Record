@@ -1274,10 +1274,24 @@ export default function SceneSetsTab() {
         }),
       });
       if (!res.ok) throw new Error('Failed to create');
-      showToast(`Created "${newSet.name.trim()}"`);
+      const json = await res.json();
       setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '' });
       setShowCreateForm(false);
       fetchSets();
+
+      if (json.jobId) {
+        showToast(`"${newSet.name.trim()}" created — generating base image...`);
+        setCreating(false);
+        const job = await pollJob(json.jobId);
+        if (job.status === 'completed') {
+          showToast(`Base image ready for "${newSet.name.trim()}"!`);
+        } else {
+          showToast(job.error || 'Base generation failed', 'error');
+        }
+        fetchSets();
+      } else {
+        showToast(`Created "${newSet.name.trim()}"`);
+      }
     } catch {
       showToast('Failed to create scene set', 'error');
     } finally {

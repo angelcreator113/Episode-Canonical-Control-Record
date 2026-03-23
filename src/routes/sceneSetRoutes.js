@@ -75,7 +75,19 @@ router.post('/', optionalAuth, async (req, res) => {
       generation_status: 'pending',
     });
 
-    res.status(201).json({ success: true, data: set });
+    // Auto-queue a base generation job if a description was provided
+    let jobId = null;
+    if (canonical_description && canonical_description.trim()) {
+      const job = await GenerationJob.create({
+        job_type: 'generate_base',
+        scene_set_id: set.id,
+        payload: {},
+      });
+      jobId = job.id;
+      await set.update({ generation_status: 'generating' });
+    }
+
+    res.status(201).json({ success: true, data: set, jobId });
   } catch (err) {
     console.error('Scene Sets POST / error:', err);
     res.status(500).json({ success: false, error: err.message });
