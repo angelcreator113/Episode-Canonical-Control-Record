@@ -4,7 +4,7 @@
  * Scene Generation Service — v2.0
  *
  * v2.0 enhancements:
- *   - Fixed aspect ratio: 1280:720 for both text_to_image and image_to_video
+ *   - Fixed aspect ratio: 1280:720 for text_to_image, 1280:768 for image_to_video
  *   - Added negative_prompt to suppress common artifacts
  *   - Condensed LALAVERSE_VISUAL_ANCHOR to ~600 chars for better prompt budget
  *   - Style reference image support for visual consistency
@@ -269,7 +269,7 @@ async function startTextToImage(prompt, options = {}) {
 
 /**
  * Step 2: Generate a video clip from a still image + text prompt.
- * Fixed: ratio now matches text_to_image (1280:720).
+ * Ratio: image_to_video accepts "768:1280"|"1280:768" only.
  * Added: camera motion control, scene-specific duration, negative prompt.
  */
 async function startImageToVideo(prompt, imageUrl, options = {}) {
@@ -280,7 +280,7 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
     model: 'gen3a_turbo',
     promptText: prompt,
     promptImage: imageUrl,
-    ratio: '1280:720',
+    ratio: '1280:768',
     duration,
     ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
     ...(cameraMotion ? { cameraMotion } : {}),

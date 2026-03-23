@@ -137,6 +137,7 @@ let StoryTexture; // Texture layer: inner thought, conflict, body narrator, priv
 let StoryTaskArc; // Story Engine: persisted 50-story task arc per character
 let SceneSet; // Scene Sets: canonical LalaVerse locations for generative scene pipeline
 let SceneAngle; // Scene Angles: camera angles within a scene set
+let GenerationJob; // Async job queue for scene generation
 
 try {
   // Core models
@@ -378,6 +379,7 @@ try {
   WorldCharacter = require('./WorldCharacter')(sequelize, DataTypes);
   SceneSet = require('./SceneSet')(sequelize);
   SceneAngle = require('./SceneAngle')(sequelize);
+  GenerationJob = require('./GenerationJob')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -522,6 +524,7 @@ const requiredModels = {
   StoryTaskArc,
   SceneSet,
   SceneAngle,
+  GenerationJob,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -742,6 +745,9 @@ if (SceneSet && SceneSet.associate) {
 }
 if (SceneAngle && SceneAngle.associate) {
   SceneAngle.associate(requiredModels);
+}
+if (GenerationJob && GenerationJob.associate) {
+  GenerationJob.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1892,3 +1898,4 @@ module.exports.StoryTexture = StoryTexture;
 module.exports.StoryTaskArc = StoryTaskArc;
 module.exports.SceneSet = SceneSet;
 module.exports.SceneAngle = SceneAngle;
+module.exports.GenerationJob = GenerationJob;
