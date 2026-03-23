@@ -266,7 +266,7 @@ describe('SceneGenerationService', () => {
       const result = buildVideoPrompt(makeSceneSet(), 'WIDE');
       expect(result).toContain('Photorealistic quality');
       expect(result).toContain('No morphing');
-      expect(result).toContain('remain fixed in place');
+      expect(result).toContain('No text overlays');
     });
 
     it('should default to WIDE movement for unknown angle labels', () => {
