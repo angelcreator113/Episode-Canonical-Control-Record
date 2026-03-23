@@ -1421,9 +1421,14 @@
 
 .scene-sets-lightbox-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.85);
-  z-index: 9999;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 100000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1464,35 +1469,35 @@
 }
 
 .scene-sets-lightbox-nav {
-  position: absolute;
+  position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   color: #fff;
   font-size: 32px;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s;
-  z-index: 10;
+  z-index: 100001;
   line-height: 1;
 }
 
 .scene-sets-lightbox-nav:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .scene-sets-lightbox-nav.prev {
-  left: -60px;
+  left: 24px;
 }
 
 .scene-sets-lightbox-nav.next {
-  right: -60px;
+  right: 24px;
 }
 
 .scene-sets-lightbox-media {

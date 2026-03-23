@@ -85,17 +85,16 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
 
   return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
+      {onPrev && (
+        <button className="scene-sets-lightbox-nav prev" onClick={e => { e.stopPropagation(); onPrev(); }}>&#8249;</button>
+      )}
+      {onNext && (
+        <button className="scene-sets-lightbox-nav next" onClick={e => { e.stopPropagation(); onNext(); }}>&#8250;</button>
+      )}
       <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
         <button className="scene-sets-lightbox-close" onClick={onClose}>
           <X size={20} />
         </button>
-
-        {onPrev && (
-          <button className="scene-sets-lightbox-nav prev" onClick={onPrev}>&#8249;</button>
-        )}
-        {onNext && (
-          <button className="scene-sets-lightbox-nav next" onClick={onNext}>&#8250;</button>
-        )}
 
         <div className="scene-sets-lightbox-media">
           {showVideo && angle.video_clip_url ? (
