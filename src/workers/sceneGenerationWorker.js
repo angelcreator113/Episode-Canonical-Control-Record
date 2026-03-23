@@ -188,11 +188,40 @@ async function pollLoop() {
 
 // ─── Start / Stop ────────────────────────────────────────────────────────────
 
+async function recoverStuckJobs() {
+  // Any job left in 'processing' means the previous worker died mid-flight.
+  // Reset them to 'queued' (if under max_attempts) so they get retried,
+  // or mark them 'failed' if they've exhausted retries.
+  try {
+    const stuck = await GenerationJob.findAll({
+      where: { status: 'processing' },
+    });
+    for (const job of stuck) {
+      if (job.attempts < job.max_attempts) {
+        await job.update({ status: 'queued', started_at: null });
+        console.log(`🔄 [GenWorker] Recovered stuck job ${job.id} (${job.job_type}) → queued`);
+      } else {
+        await job.update({
+          status: 'failed',
+          error: 'Worker restarted mid-job (max attempts reached)',
+          completed_at: new Date(),
+        });
+        console.log(`💀 [GenWorker] Abandoned stuck job ${job.id} — max attempts exhausted`);
+      }
+    }
+    if (stuck.length === 0) {
+      console.log('🎬 [GenWorker] No stuck jobs found');
+    }
+  } catch (err) {
+    console.error('[GenWorker] Failed to recover stuck jobs:', err.message);
+  }
+}
+
 function start() {
   if (running) return;
   running = true;
   console.log(`🎬 [GenWorker] Started — polling every ${POLL_INTERVAL_MS}ms, concurrency ${CONCURRENCY}`);
-  pollLoop();
+  recoverStuckJobs().then(() => pollLoop());
 }
 
 function stop() {

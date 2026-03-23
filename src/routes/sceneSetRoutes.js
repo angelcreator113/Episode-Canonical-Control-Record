@@ -72,10 +72,21 @@ router.post('/', optionalAuth, async (req, res) => {
       show_id: show_id || null,
       base_runway_model: base_runway_model || 'gen3a_turbo',
       notes: notes || null,
-      generation_status: 'pending',
+      generation_status: canonical_description ? 'generating' : 'pending',
     });
 
-    res.status(201).json({ success: true, data: set });
+    // Auto-enqueue base generation when a description is provided
+    let jobId = null;
+    if (canonical_description) {
+      const job = await GenerationJob.create({
+        job_type: 'generate_base',
+        scene_set_id: set.id,
+        payload: {},
+      });
+      jobId = job.id;
+    }
+
+    res.status(201).json({ success: true, data: set, jobId });
   } catch (err) {
     console.error('Scene Sets POST / error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -194,7 +205,7 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
-    if (set.base_runway_seed && !req.body.force) {
+    if (set.base_runway_seed && !req.body?.force) {
       return res.status(409).json({
         success: false,
         error: 'Base already generated. Pass { "force": true } to regenerate.',
@@ -205,7 +216,7 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
     const job = await GenerationJob.create({
       job_type: 'generate_base',
       scene_set_id: set.id,
-      payload: { force: !!req.body.force },
+      payload: { force: !!(req.body?.force) },
     });
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
