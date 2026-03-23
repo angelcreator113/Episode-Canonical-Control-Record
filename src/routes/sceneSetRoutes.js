@@ -714,6 +714,27 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
   }
 });
 
+// ─── GET /jobs/set/:setId  — get all active jobs for a scene set ─────────────
+// IMPORTANT: This must be defined BEFORE /jobs/:jobId to prevent "set" being
+// captured as a :jobId parameter.
+
+router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
+  try {
+    const jobs = await GenerationJob.findAll({
+      where: {
+        scene_set_id: req.params.setId,
+        status: ['queued', 'processing'],
+      },
+      order: [['created_at', 'ASC']],
+    });
+
+    res.json({ success: true, data: jobs });
+  } catch (err) {
+    console.error('Scene Sets GET /jobs/set/:setId error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── GET /jobs/:jobId  — poll a single job status ────────────────────────────
 
 router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
@@ -739,25 +760,6 @@ router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Scene Sets GET /jobs/:jobId error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─── GET /jobs/set/:setId  — get all active jobs for a scene set ─────────────
-
-router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
-  try {
-    const jobs = await GenerationJob.findAll({
-      where: {
-        scene_set_id: req.params.setId,
-        status: ['queued', 'processing'],
-      },
-      order: [['created_at', 'ASC']],
-    });
-
-    res.json({ success: true, data: jobs });
-  } catch (err) {
-    console.error('Scene Sets GET /jobs/set/:setId error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
