@@ -104,7 +104,7 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
               className="scene-sets-lightbox-video"
             />
           ) : angle.still_image_url ? (
-            <img src={angle.still_image_url} alt={angle.angle_name} className="scene-sets-lightbox-img" />
+            <img src={`${angle.still_image_url}${angle.still_image_url.includes('?') ? '&' : '?'}v=${new Date(angle.updated_at || 0).getTime()}`} alt={angle.angle_name} className="scene-sets-lightbox-img" />
           ) : null}
         </div>
 
@@ -182,7 +182,7 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
               isComplete ? 'complete' : isGenerating ? 'generating' : isFailed ? 'failed' : 'pending'
             }`}>
               {angle.still_image_url ? (
-                <img src={angle.still_image_url} alt={angle.angle_name} />
+                <img src={`${angle.still_image_url}${angle.still_image_url.includes('?') ? '&' : '?'}v=${new Date(angle.updated_at || 0).getTime()}`} alt={angle.angle_name} />
               ) : isGenerating ? (
                 <Loader size={20} className="spin" />
               ) : isFailed ? (
@@ -526,7 +526,9 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
-  const primaryStill = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const primaryStillRaw = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const bustSuffix = set.updated_at ? `${primaryStillRaw?.includes('?') ? '&' : '?'}v=${new Date(set.updated_at).getTime()}` : '';
+  const primaryStill = primaryStillRaw ? `${primaryStillRaw}${bustSuffix}` : null;
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
