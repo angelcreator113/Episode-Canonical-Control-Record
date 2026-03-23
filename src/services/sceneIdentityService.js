@@ -148,7 +148,7 @@ class SceneIdentityService {
       await SceneSetModel.update(
         { visual_language: { ...existing, _meta: failMeta } },
         { where: { id: sceneSet.id } }
-      ).catch(() => {}); // best-effort
+      ).catch((e) => console.warn('[sceneIdentity] failed to persist fail meta:', e?.message));
 
       throw err;
     }
