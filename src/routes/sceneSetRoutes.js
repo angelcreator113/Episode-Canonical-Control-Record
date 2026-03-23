@@ -191,6 +191,12 @@ router.post('/:id/upload-base', optionalAuth, upload.single('image'), async (req
       generation_status: 'complete',
     });
 
+    // Clear stale angle thumbnails — they were generated from the old base image
+    await SceneAngle.update(
+      { still_image_url: null, video_clip_url: null, generation_status: 'pending' },
+      { where: { scene_set_id: set.id } }
+    );
+
     res.json({ success: true, data: { stillUrl, seed: set.base_runway_seed } });
   } catch (err) {
     console.error('Scene Sets POST /:id/upload-base error:', err);
@@ -289,8 +295,8 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
       payload: {},
     });
 
-    // Mark the angle as generating so the frontend sees it immediately
-    await angle.update({ generation_status: 'generating' });
+    // Mark the angle as generating and clear stale assets so the frontend shows a spinner
+    await angle.update({ generation_status: 'generating', still_image_url: null, video_clip_url: null });
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {

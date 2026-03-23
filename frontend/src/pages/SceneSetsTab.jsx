@@ -542,7 +542,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           {/* Angle thumbs */}
           {sortedAngles.map(angle => {
             const isActive = selectedAngleId === angle.id;
-            const hasStill = !!angle.still_image_url;
+            const hasStill = !!angle.still_image_url && angle.generation_status === 'complete';
             const isAngleGenerating = angle.generation_status === 'generating';
             const isFailed = angle.generation_status === 'failed';
             const isPending = angle.generation_status === 'pending';
