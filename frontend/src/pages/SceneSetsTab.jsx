@@ -214,7 +214,7 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
                   onClick={(e) => { e.stopPropagation(); onRegenerate(angle); }}
                   title={`Regenerate ${angle.angle_name}`}
                 >
-                  <RotateCcw size={12} />
+                  <RotateCcw size={10} />
                 </button>
               )}
             </div>

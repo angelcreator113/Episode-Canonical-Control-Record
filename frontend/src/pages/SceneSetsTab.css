@@ -1060,7 +1060,6 @@
   display: inline-flex;
   align-items: center;
   transition: all 0.15s;
-  opacity: 0;
 }
 
 .scene-sets-angle-item:hover .scene-sets-angle-review-btn {
@@ -1764,12 +1763,12 @@
 
 .scene-sets-angle-regen {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
   border: none;
   padding: 0;
   cursor: pointer;
@@ -1782,22 +1781,12 @@
   z-index: 2;
 }
 
-.scene-sets-angle-thumb:hover .scene-sets-angle-regen {
+.scene-sets-angle-item:hover .scene-sets-angle-regen {
   opacity: 1;
 }
 
 .scene-sets-angle-regen:hover {
-  color: #B8962E;
-  background: rgba(184, 150, 46, 0.1);
-}
-
-.scene-sets-angle-regen.failed {
-  color: #C62828;
-}
-
-.scene-sets-angle-regen.failed:hover {
-  color: #B71C1C;
-  background: rgba(198, 40, 40, 0.1);
+  background: rgba(0, 0, 0, 0.8);
 }
 
 /* ── Regenerate All Button ─────────────────────────────────────────────── */
