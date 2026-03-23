@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye } from 'lucide-react';
 import './SceneSetsTab.css';
 
@@ -52,7 +53,7 @@ function ImageLightbox({ src, alt, onClose }) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
       <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
         <button className="scene-sets-lightbox-close" onClick={onClose}>
@@ -60,7 +61,8 @@ function ImageLightbox({ src, alt, onClose }) {
         </button>
         <img src={src} alt={alt} className="scene-sets-lightbox-img" />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -81,7 +83,7 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
 
   const [showVideo, setShowVideo] = useState(false);
 
-  return (
+  return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
       <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
         <button className="scene-sets-lightbox-close" onClick={onClose}>
@@ -142,7 +144,8 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -848,7 +851,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
           />
         )}
 
-        {showPromptPreview && previewData && (
+        {showPromptPreview && previewData && createPortal(
           <div className="scene-sets-lightbox-overlay" onClick={() => setShowPromptPreview(false)}>
             <div className="scene-sets-prompt-preview-modal" onClick={e => e.stopPropagation()}>
               <button className="scene-sets-lightbox-close" onClick={() => setShowPromptPreview(false)}>
@@ -870,7 +873,8 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                 </div>
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {expanded && (
