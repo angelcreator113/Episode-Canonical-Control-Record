@@ -70,6 +70,7 @@ const KNOWN_MIGRATIONS = [
   '20260218000001-fix-scenes-timeline-schema-gaps.js',
   '20260218000002-fix-wardrobe-defaults-table.js',
   '20260218000003-add-asset-file-hash.js',
+  '20260323000000-create-generation-jobs.js',
 ];
 
 async function bootstrap() {
