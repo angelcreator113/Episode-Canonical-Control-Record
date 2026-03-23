@@ -532,9 +532,9 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
   const totalAngles = set.angles?.length || 0;
   const pendingAngles = set.angles?.filter(a => a.generation_status === 'pending') || [];
   const regenerableAngles = set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || [];
-  const hasBase = !!set.base_runway_seed;
-  // Auto-expand when base is ready but angles aren't generated yet
-  const [expanded, setExpanded] = useState(hasBase && readyAngles === 0 && totalAngles > 0);
+  const hasBase = !!(set.base_still_url || set.base_runway_seed);
+  // Auto-expand when base is ready but no angles are generated yet
+  const [expanded, setExpanded] = useState(hasBase && readyAngles === 0);
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
   const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
@@ -653,7 +653,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
             <div>
               <h3 className="scene-sets-card-title">{set.name}</h3>
               <p className="scene-sets-card-subtitle">
-                {readyAngles}/{totalAngles} angles ready
+                {totalAngles === 0 ? 'Base ready — click Angles to continue' : `${readyAngles}/${totalAngles} angles ready`}
               </p>
             </div>
             <div className="scene-sets-card-header-utils">
@@ -770,7 +770,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
           </div>
         </div>
 
-        {set.base_runway_seed && (
+        {set.base_runway_seed && set.base_runway_seed !== 'unknown' && (
           <p className="scene-sets-seed-info">
             <Lock size={11} /> Seed: {set.base_runway_seed.slice(0, 20)}...
           </p>

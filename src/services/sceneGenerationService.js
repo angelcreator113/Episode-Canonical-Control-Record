@@ -426,7 +426,7 @@ async function generateBaseScene(sceneSet, models) {
     }
 
     const stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
-    const lockedSeed = String(stillSeed ?? 'unknown');
+    const lockedSeed = stillSeed != null ? String(stillSeed) : null;
 
     // Clean up old base still from S3 (best-effort)
     if (sceneSet.base_still_url) {
@@ -606,8 +606,12 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, models) {
   const { SceneAngle, SceneSet } = models;
 
-  if (!sceneSet.base_runway_seed) {
-    throw new Error('base_runway_seed not set on parent scene set.');
+  if (!sceneSet.base_still_url) {
+    throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
+  }
+
+  if (!sceneSet.base_runway_seed || isNaN(Number(sceneSet.base_runway_seed))) {
+    throw new Error('base_runway_seed not set or invalid on parent scene set.');
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
