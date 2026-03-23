@@ -341,6 +341,46 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
   }
 });
 
+// ─── POST /:id/angles/:angleId/generate-video  — on-demand video for an angle ─
+
+router.post('/:id/angles/:angleId/generate-video', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: set.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
+    if (!angle.still_image_url && !set.base_still_url) {
+      return res.status(400).json({
+        success: false,
+        error: 'No source image available. Generate the angle still first.',
+      });
+    }
+
+    await ensureGenerationJobsTable();
+    const job = await GenerationJob.create({
+      job_type: 'generate_angle_video',
+      scene_set_id: set.id,
+      scene_angle_id: angle.id,
+      payload: {},
+    });
+
+    try {
+      await angle.update({ generation_status: 'generating_video' });
+    } catch (e) {
+      console.warn('generate-angle-video: could not update angle status:', e.message);
+    }
+
+    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/angles/:angleId/generate-video error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── DELETE /:id/angles/:angleId  — soft-delete a single angle ──────────────
 
 router.delete('/:id/angles/:angleId', optionalAuth, async (req, res) => {
