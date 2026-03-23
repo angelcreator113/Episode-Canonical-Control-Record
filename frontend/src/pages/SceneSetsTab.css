@@ -1035,19 +1035,13 @@
 /* ── Angle Meta Row ────────────────────────────────────────────────────── */
 
 .scene-sets-angle-meta {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 4px;
-  opacity: 0;
-  height: 0;
-  overflow: hidden;
-  transition: opacity 0.15s ease, height 0.15s ease;
 }
 
 .scene-sets-angle-item:hover .scene-sets-angle-meta {
-  opacity: 1;
-  height: auto;
-  overflow: visible;
+  display: flex;
 }
 
 .scene-sets-angle-review-btn {
@@ -1060,10 +1054,6 @@
   display: inline-flex;
   align-items: center;
   transition: all 0.15s;
-}
-
-.scene-sets-angle-item:hover .scene-sets-angle-review-btn {
-  opacity: 1;
 }
 
 .scene-sets-angle-review-btn:hover {
@@ -1773,16 +1763,14 @@
   padding: 0;
   cursor: pointer;
   color: #fff;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s ease;
   z-index: 2;
 }
 
 .scene-sets-angle-item:hover .scene-sets-angle-regen {
-  opacity: 1;
+  display: flex;
 }
 
 .scene-sets-angle-regen:hover {
