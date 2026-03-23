@@ -420,6 +420,48 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
         <div className="scene-sets-card-overlay-top-right">
           <StatusPill status={set.generation_status} />
+          <div className="scene-sets-kebab-wrapper" ref={menuRef}>
+            <button
+              className="scene-sets-btn-kebab-hero"
+              onClick={(e) => { e.stopPropagation(); setShowMenu(m => !m); }}
+              title="More options"
+            >
+              <MoreVertical size={14} />
+            </button>
+            {showMenu && createPortal(
+              <div className="scene-sets-kebab-backdrop" onClick={() => setShowMenu(false)}>
+                <div
+                  className="scene-sets-kebab-menu"
+                  style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 190 }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}>
+                    <Pencil size={12} /> Edit Prompt
+                  </button>
+                  <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
+                    <Eye size={12} /> Preview Prompt
+                  </button>
+                  {hasBase && (
+                    <button onClick={() => { setShowMenu(false); onRegenerateBase(set); }} disabled={isGenerating}>
+                      <RotateCcw size={12} /> Regenerate Base
+                    </button>
+                  )}
+                  {hasBase && totalAngles === 0 && (
+                    <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
+                      <Sparkles size={12} /> Seed Default Angles
+                    </button>
+                  )}
+                  <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
+                    <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
+                  </button>
+                  <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
+                    <Trash2 size={12} /> Delete Set
+                  </button>
+                </div>
+              </div>,
+              document.body
+            )}
+          </div>
         </div>
 
         {selectedAngle?.video_clip_url && (
@@ -485,6 +527,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               </button>
             );
           })}
+          {/* Add Angle button at end of filmstrip */}
+          {hasBase && (
+            <button
+              className="scene-sets-filmstrip-thumb scene-sets-filmstrip-add"
+              onClick={() => setShowAddAngle(true)}
+              title="Add new angle"
+            >
+              <Plus size={14} />
+              <span className="scene-sets-filmstrip-label">ADD</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -492,58 +545,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       <div className="scene-sets-card-body">
         <div className="scene-sets-card-header">
           <div className="scene-sets-card-header-row">
-            <div>
-              <h3 className="scene-sets-card-title">{set.name}</h3>
-              <p className="scene-sets-card-subtitle">
-                {totalAngles === 0
-                  ? (hasBase ? 'Base ready — seed angles to continue' : 'Not yet generated')
-                  : `${readyAngles}/${totalAngles} angles`}
-              </p>
-            </div>
-            <div className="scene-sets-card-header-utils">
-              <div className="scene-sets-kebab-wrapper" ref={menuRef}>
-                <button
-                  className="scene-sets-btn-kebab"
-                  onClick={() => setShowMenu(m => !m)}
-                  title="More options"
-                >
-                  <MoreVertical size={14} />
-                </button>
-                {showMenu && createPortal(
-                  <div className="scene-sets-kebab-backdrop" onClick={() => setShowMenu(false)}>
-                    <div
-                      className="scene-sets-kebab-menu"
-                      style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 180 }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}>
-                        <Pencil size={12} /> Edit Prompt
-                      </button>
-                      <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
-                        <Eye size={12} /> Preview Prompt
-                      </button>
-                      {hasBase && (
-                        <button onClick={() => { setShowMenu(false); onRegenerateBase(set); }} disabled={isGenerating}>
-                          <RotateCcw size={12} /> Regenerate Base
-                        </button>
-                      )}
-                      {hasBase && totalAngles === 0 && (
-                        <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
-                          <Sparkles size={12} /> Seed Default Angles
-                        </button>
-                      )}
-                      <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
-                        <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
-                      </button>
-                      <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
-                        <Trash2 size={12} /> Delete Set
-                      </button>
-                    </div>
-                  </div>,
-                  document.body
-                )}
-              </div>
-            </div>
+            <h3 className="scene-sets-card-title">{set.name}</h3>
+            {totalAngles > 0 && (
+              <span className="scene-sets-angle-badge">{readyAngles}/{totalAngles}</span>
+            )}
           </div>
 
           <div className="scene-sets-card-actions">

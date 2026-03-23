@@ -388,6 +388,20 @@
   color: #B8962E;
 }
 
+.scene-sets-filmstrip-add {
+  opacity: 0.5;
+  border: 2px dashed rgba(255,255,255,0.25) !important;
+}
+
+.scene-sets-filmstrip-add:hover {
+  opacity: 0.85;
+  border-color: rgba(184, 150, 46, 0.6) !important;
+}
+
+.scene-sets-filmstrip-add svg {
+  color: #B8962E !important;
+}
+
 .scene-sets-filmstrip-video {
   position: absolute;
   top: 3px;
@@ -458,6 +472,28 @@
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scene-sets-btn-kebab-hero {
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #FFF;
+  transition: background 0.15s;
+  backdrop-filter: blur(4px);
+}
+
+.scene-sets-btn-kebab-hero:hover {
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .scene-sets-franchise-badge {
@@ -573,16 +609,20 @@
 
 .scene-sets-card-header-row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
 }
 
-.scene-sets-card-header-utils {
-  display: flex;
-  gap: 4px;
-  align-items: center;
+.scene-sets-angle-badge {
   flex-shrink: 0;
+  background: #F0EBF8;
+  color: #5C3D8F;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.03em;
 }
 
 /* ─── KEBAB MENU ─────────────────────────────────────────────────────────── */
