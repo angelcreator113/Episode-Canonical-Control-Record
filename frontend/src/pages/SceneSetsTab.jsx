@@ -548,6 +548,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [expanded, setExpanded] = useState(hasBase && readyAngles === 0);
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
   const [showMenu, setShowMenu] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
@@ -904,10 +905,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               <div className="scene-sets-seed-angles">
                 <button
                   className="scene-sets-btn-generate"
-                  onClick={() => onSeedAngles(set)}
-                  disabled={isGenerating}
+                  onClick={async () => { setSeeding(true); await onSeedAngles(set); setSeeding(false); }}
+                  disabled={isGenerating || seeding}
                 >
-                  <Sparkles size={12} /> Seed Default Angles
+                  {seeding ? <><Loader size={12} className="spin" /> Seeding...</> : <><Sparkles size={12} /> Seed Default Angles</>}
                 </button>
                 <span className="scene-sets-seed-hint">Creates 5 standard camera angles (Wide, Vanity, Window, Doorway, Close)</span>
               </div>
