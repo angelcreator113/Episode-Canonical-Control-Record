@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -46,12 +46,22 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
-function ImageLightbox({ src, alt, onClose }) {
+function ImageLightbox({ images, initialIndex, onClose }) {
+  const [idx, setIdx] = useState(initialIndex || 0);
+  const current = images[idx] || images[0];
+
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') setIdx(i => (i > 0 ? i - 1 : images.length - 1));
+      if (e.key === 'ArrowRight') setIdx(i => (i < images.length - 1 ? i + 1 : 0));
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, images.length]);
+
+  const goPrev = (e) => { e.stopPropagation(); setIdx(i => (i > 0 ? i - 1 : images.length - 1)); };
+  const goNext = (e) => { e.stopPropagation(); setIdx(i => (i < images.length - 1 ? i + 1 : 0)); };
 
   return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
@@ -59,7 +69,44 @@ function ImageLightbox({ src, alt, onClose }) {
         <button className="scene-sets-lightbox-close" onClick={onClose}>
           <X size={20} />
         </button>
-        <img src={src} alt={alt} className="scene-sets-lightbox-img" />
+
+        {images.length > 1 && (
+          <button className="scene-sets-lightbox-nav prev" onClick={goPrev}>
+            <ChevronLeft size={24} />
+          </button>
+        )}
+
+        {current.videoUrl ? (
+          <video src={current.videoUrl} className="scene-sets-lightbox-video" controls autoPlay loop muted />
+        ) : (
+          <img src={current.src} alt={current.label} className="scene-sets-lightbox-img" />
+        )}
+
+        {images.length > 1 && (
+          <button className="scene-sets-lightbox-nav next" onClick={goNext}>
+            <ChevronRight size={24} />
+          </button>
+        )}
+
+        {/* Bottom info + filmstrip */}
+        <div className="scene-sets-lightbox-info">
+          <span className="scene-sets-lightbox-label">{current.label}</span>
+          <span className="scene-sets-lightbox-counter">{idx + 1} / {images.length}</span>
+        </div>
+
+        {images.length > 1 && (
+          <div className="scene-sets-lightbox-thumbstrip">
+            {images.map((img, i) => (
+              <button
+                key={i}
+                className={`scene-sets-lightbox-thumb${i === idx ? ' active' : ''}`}
+                onClick={() => setIdx(i)}
+              >
+                <img src={img.thumbSrc || img.src} alt={img.label} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>,
     document.body
@@ -659,9 +706,31 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       </div>
 
       {/* ── Lightboxes (portaled) ─────────────────────────── */}
-      {showBaseLightbox && heroImage && (
-        <ImageLightbox src={heroImage} alt={selectedAngle?.angle_name || set.name} onClose={() => setShowBaseLightbox(false)} />
-      )}
+      {showBaseLightbox && (() => {
+        // Build gallery: base image first, then all angles with stills
+        const galleryImages = [];
+        if (set.base_still_url) {
+          galleryImages.push({ src: bustUrl(set.base_still_url), label: 'BASE', thumbSrc: bustUrl(set.base_still_url) });
+        }
+        sortedAngles.forEach(a => {
+          if (a.still_image_url) {
+            galleryImages.push({
+              src: bustUrl(a.still_image_url),
+              label: a.angle_label || a.angle_name,
+              thumbSrc: bustUrl(a.still_image_url),
+              videoUrl: a.video_clip_url ? bustUrl(a.video_clip_url) : null,
+            });
+          }
+        });
+        if (galleryImages.length === 0) return null;
+        // Find initial index: match selected angle or hero
+        let startIdx = 0;
+        if (selectedAngle?.still_image_url) {
+          const found = galleryImages.findIndex(g => g.src === bustUrl(selectedAngle.still_image_url));
+          if (found >= 0) startIdx = found;
+        }
+        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} />;
+      })()}
 
       {showPromptPreview && previewData && createPortal(
         <div className="scene-sets-lightbox-overlay" onClick={() => setShowPromptPreview(false)}>
