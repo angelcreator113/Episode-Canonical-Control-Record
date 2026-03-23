@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronUp, ChevronDown } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -66,233 +66,7 @@ function ImageLightbox({ src, alt, onClose }) {
   );
 }
 
-// ─── ANGLE LIGHTBOX MODAL ─────────────────────────────────────────────────────
-
-function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate, bustUrl }) {
-  const [showVideo, setShowVideo] = useState(false);
-
-  useEffect(() => {
-    if (!angle) return;
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft' && onPrev) onPrev();
-      if (e.key === 'ArrowRight' && onNext) onNext();
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [angle, onClose, onPrev, onNext]);
-
-  if (!angle) return null;
-
-  return createPortal(
-    <div className="scene-sets-lightbox-overlay" onClick={onClose}>
-      <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
-        <button className="scene-sets-lightbox-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-
-        {onPrev && (
-          <button className="scene-sets-lightbox-nav prev" onClick={onPrev}>&#8249;</button>
-        )}
-        {onNext && (
-          <button className="scene-sets-lightbox-nav next" onClick={onNext}>&#8250;</button>
-        )}
-
-        <div className="scene-sets-lightbox-media">
-          {showVideo && angle.video_clip_url ? (
-            <video
-              src={bustUrl ? bustUrl(angle.video_clip_url) : angle.video_clip_url}
-              controls
-              autoPlay
-              className="scene-sets-lightbox-video"
-            />
-          ) : angle.still_image_url ? (
-            <img src={bustUrl ? bustUrl(angle.still_image_url) : angle.still_image_url} alt={angle.angle_name} className="scene-sets-lightbox-img" />
-          ) : null}
-        </div>
-
-        <div className="scene-sets-lightbox-info">
-          <h3>{angle.angle_name}</h3>
-          <span className="scene-sets-lightbox-label">{angle.angle_label}</span>
-          {angle.angle_description && <p>{angle.angle_description}</p>}
-          {angle.camera_direction && (
-            <p className="scene-sets-lightbox-camera"><Camera size={12} /> {angle.camera_direction}</p>
-          )}
-          {angle.beat_affinity && angle.beat_affinity.length > 0 && (
-            <span className="scene-sets-lightbox-beats">Beats: {angle.beat_affinity.join(', ')}</span>
-          )}
-          {onRegenerate && (
-            <button className="scene-sets-lightbox-regen" onClick={() => { onRegenerate(angle); onClose(); }}>
-              <RotateCcw size={13} /> Regenerate
-            </button>
-          )}
-        </div>
-
-        {angle.video_clip_url && (
-          <div className="scene-sets-lightbox-toggle">
-            <button
-              className={`scene-sets-lightbox-toggle-btn${!showVideo ? ' active' : ''}`}
-              onClick={() => setShowVideo(false)}
-            >
-              <Camera size={14} /> Still
-            </button>
-            <button
-              className={`scene-sets-lightbox-toggle-btn${showVideo ? ' active' : ''}`}
-              onClick={() => setShowVideo(true)}
-            >
-              <Play size={14} /> Video
-            </button>
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-// ─── ANGLE STRIP ──────────────────────────────────────────────────────────────
-
-function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, generating, bustUrl }) {
-  if (!angles || angles.length === 0) return null;
-  const [lightboxIndex, setLightboxIndex] = useState(null);
-  const sortedAngles = [...angles].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const completedAngles = sortedAngles.filter(a => a.still_image_url);
-  const openLightbox = (angle) => {
-    const idx = completedAngles.findIndex(a => a.id === angle.id);
-    if (idx !== -1) setLightboxIndex(idx);
-  };
-
-  return (
-    <div className="scene-sets-angle-strip">
-      {sortedAngles.map((angle, idx) => {
-        const isPending = angle.generation_status === 'pending';
-        const isComplete = angle.generation_status === 'complete';
-        const isGenerating = angle.generation_status === 'generating';
-        const isFailed = angle.generation_status === 'failed';
-        const hasMedia = !!angle.still_image_url;
-
-        return (
-          <div
-            key={angle.id}
-            className={`scene-sets-angle-item${isPending && !generating ? ' clickable' : ''}${hasMedia ? ' has-media' : ''}`}
-            onClick={() => {
-              if (hasMedia) openLightbox(angle);
-              else if (isPending && !generating) onGenerate(angle);
-            }}
-            title={hasMedia ? `View: ${angle.angle_name}` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
-          >
-            <div className={`scene-sets-angle-thumb ${
-              isComplete ? 'complete' : isGenerating ? 'generating' : isFailed ? 'failed' : 'pending'
-            }`}>
-              {angle.still_image_url ? (
-                <img src={bustUrl(angle.still_image_url)} alt={angle.angle_name} />
-              ) : isGenerating ? (
-                <Loader size={20} className="spin" />
-              ) : isFailed ? (
-                <AlertCircle size={20} />
-              ) : isPending && !generating ? (
-                <Sparkles size={20} className="scene-sets-clickable-icon" />
-              ) : (
-                <Sparkles size={20} />
-              )}
-
-              {angle.video_clip_url && (
-                <div className="scene-sets-video-indicator">
-                  <Play size={10} />
-                </div>
-              )}
-
-              {isComplete && (
-                <QualityBadge
-                  score={angle.quality_score}
-                  flagCount={(angle.artifact_flags || []).length}
-                />
-              )}
-
-              {(isComplete || isFailed) && !generating && (
-                <button
-                  className="scene-sets-angle-regen"
-                  onClick={(e) => { e.stopPropagation(); onRegenerate(angle); }}
-                  title={`Regenerate ${angle.angle_name}`}
-                >
-                  <RotateCcw size={10} />
-                </button>
-              )}
-            </div>
-
-            <span className="scene-sets-angle-label">{angle.angle_label}</span>
-
-            <div className="scene-sets-angle-meta">
-              {angle.beat_affinity && angle.beat_affinity.length > 0 && (
-                <span className="scene-sets-beat-numbers">
-                  B{angle.beat_affinity.join(',')}
-                </span>
-              )}
-
-              {isComplete && (
-                <button
-                  className="scene-sets-angle-review-btn"
-                  onClick={(e) => { e.stopPropagation(); onReview(angle); }}
-                  title="Review quality & flag artifacts"
-                >
-                  <Eye size={10} />
-                </button>
-              )}
-            </div>
-
-            {onReorder && sortedAngles.length > 1 && !generating && (
-              <div className="scene-sets-angle-reorder">
-                <button
-                  className="scene-sets-angle-reorder-btn"
-                  disabled={idx === 0}
-                  onClick={(e) => { e.stopPropagation(); onReorder(angle, 'up'); }}
-                  title="Move up"
-                >
-                  <ChevronUp size={10} />
-                </button>
-                <button
-                  className="scene-sets-angle-reorder-btn"
-                  disabled={idx === sortedAngles.length - 1}
-                  onClick={(e) => { e.stopPropagation(); onReorder(angle, 'down'); }}
-                  title="Move down"
-                >
-                  <ChevronDown size={10} />
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      {lightboxIndex !== null && completedAngles[lightboxIndex] && (
-        <AngleLightbox
-          angle={completedAngles[lightboxIndex]}
-          onClose={() => setLightboxIndex(null)}
-          onPrev={lightboxIndex > 0 ? () => setLightboxIndex(i => i - 1) : null}
-          onNext={lightboxIndex < completedAngles.length - 1 ? () => setLightboxIndex(i => i + 1) : null}
-          onRegenerate={!generating ? onRegenerate : null}
-          bustUrl={bustUrl}
-        />
-      )}
-    </div>
-  );
-}
-
-// ─── QUALITY BADGE ────────────────────────────────────────────────────────
-
-function QualityBadge({ score, flagCount }) {
-  if (score == null) return null;
-  const color = score >= 85 ? '#1A7A40' : score >= 60 ? '#B8960C' : '#C62828';
-  const bg = score >= 85 ? '#E8F5E9' : score >= 60 ? '#FFF8E1' : '#FFEBEE';
-  const Icon = score >= 85 ? ShieldCheck : ShieldAlert;
-  return (
-    <span className="scene-sets-quality-badge" style={{ background: bg, color }} title={`Quality: ${score}/100, ${flagCount} issue${flagCount !== 1 ? 's' : ''}`}>
-      <Icon size={10} />
-      {score}
-    </span>
-  );
-}
-
+// ─── ARTIFACT REVIEW MODAL + CATEGORIES ──────────────────────────────────────
 // ─── ARTIFACT REVIEW MODAL ───────────────────────────────────────────────────
 
 const ARTIFACT_CATEGORIES = {
@@ -525,7 +299,7 @@ const DEFAULT_ANGLE_PRESETS = [
   { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
 ];
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
@@ -1539,14 +1313,12 @@ export default function SceneSetsTab() {
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
               onDeleteAllAngles={handleDeleteAllAngles}
-              onReviewAngle={handleReviewAngle}
               onDeleteSet={handleDeleteSet}
               onAddAngle={handleAddAngle}
               onSeedAngles={handleSeedAngles}
               onUpdatePrompt={handleUpdatePrompt}
               onPreviewPrompt={handlePreviewPrompt}
               onCascadeRegenerate={handleCascadeRegenerate}
-              onReorderAngle={handleReorderAngle}
               generatingId={generatingId}
               generationProgress={generationProgress}
             />
