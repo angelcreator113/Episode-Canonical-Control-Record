@@ -255,9 +255,9 @@
   background: #FFF;
   border: 1px solid #E8E4DC;
   border-radius: 14px;
-  overflow: hidden;
   transition: box-shadow 0.25s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  position: relative;
 }
 
 .scene-sets-card:hover {
@@ -271,6 +271,7 @@
   background: linear-gradient(135deg, #F0EBF8 0%, #EDE7F6 100%);
   position: relative;
   overflow: hidden;
+  border-radius: 14px 14px 0 0;
 }
 
 .scene-sets-card-preview.has-image {
@@ -610,12 +611,12 @@
   position: absolute;
   top: 100%;
   right: 0;
-  z-index: 20;
+  z-index: 50;
   background: #fff;
   border: 1px solid #ddd;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  min-width: 160px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  min-width: 180px;
   padding: 4px 0;
 }
 .scene-sets-kebab-menu button {
