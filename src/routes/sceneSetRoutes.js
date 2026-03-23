@@ -25,6 +25,19 @@ const upload = multer({
   },
 });
 
+// Ensure generation_jobs table exists (safe to call multiple times)
+let generationJobsSynced = false;
+async function ensureGenerationJobsTable() {
+  if (generationJobsSynced) return;
+  try {
+    await GenerationJob.sync();
+    generationJobsSynced = true;
+  } catch (err) {
+    console.error('[SceneSets] Failed to sync GenerationJob table:', err.message);
+    throw new Error('Generation jobs table not available');
+  }
+}
+
 // ─── GET /  — list all scene sets ─────────────────────────────────────────────
 
 router.get('/', optionalAuth, async (req, res) => {
@@ -78,6 +91,7 @@ router.post('/', optionalAuth, async (req, res) => {
     // Auto-enqueue base generation when a description is provided
     let jobId = null;
     if (canonical_description) {
+      await ensureGenerationJobsTable();
       const job = await GenerationJob.create({
         job_type: 'generate_base',
         scene_set_id: set.id,
@@ -221,6 +235,7 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
 
     await set.update({ generation_status: 'generating' });
 
+    await ensureGenerationJobsTable();
     const job = await GenerationJob.create({
       job_type: 'generate_base',
       scene_set_id: set.id,
@@ -290,6 +305,7 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
+    await ensureGenerationJobsTable();
     const job = await GenerationJob.create({
       job_type: 'generate_angle',
       scene_set_id: set.id,
@@ -691,6 +707,7 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
 
     await set.update({ generation_status: 'generating' });
 
+    await ensureGenerationJobsTable();
     const job = await GenerationJob.create({
       job_type: 'cascade_regenerate',
       scene_set_id: set.id,
@@ -710,6 +727,7 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
 
 router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
   try {
+    await ensureGenerationJobsTable();
     const jobs = await GenerationJob.findAll({
       where: {
         scene_set_id: req.params.setId,
@@ -729,6 +747,7 @@ router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
 
 router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
   try {
+    await ensureGenerationJobsTable();
     const job = await GenerationJob.findByPk(req.params.jobId);
     if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
 

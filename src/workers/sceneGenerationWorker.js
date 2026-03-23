@@ -217,10 +217,17 @@ async function recoverStuckJobs() {
   }
 }
 
-function start() {
+async function start() {
   if (running) return;
   running = true;
   console.log(`🎬 [GenWorker] Started — polling every ${POLL_INTERVAL_MS}ms, concurrency ${CONCURRENCY}`);
+  // Ensure the generation_jobs table exists before polling
+  try {
+    await GenerationJob.sync();
+    console.log('🎬 [GenWorker] generation_jobs table ready');
+  } catch (err) {
+    console.error('🎬 [GenWorker] Failed to sync generation_jobs table:', err.message);
+  }
   recoverStuckJobs().then(() => pollLoop());
 }
 
