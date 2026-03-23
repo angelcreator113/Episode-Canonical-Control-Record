@@ -168,18 +168,26 @@ async function startTextToImage(prompt, options = {}) {
     ...(styleReference ? { styleReference } : {}),
   };
 
-  try {
-    const response = await axios.post(
-      `${RUNWAY_API_BASE}/text_to_image`,
-      payload,
-      { headers: runwayHeaders(), timeout: 30000 }
-    );
-    return { jobId: response.data.id };
-  } catch (err) {
-    if (err.response) {
-      console.error('[SceneGen] text_to_image API error:', JSON.stringify(err.response.data, null, 2));
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await axios.post(
+        `${RUNWAY_API_BASE}/text_to_image`,
+        payload,
+        { headers: runwayHeaders(), timeout: 30000 }
+      );
+      return { jobId: response.data.id };
+    } catch (err) {
+      const status = err.response?.status;
+      const retryable = !status || status === 429 || status >= 500;
+      if (err.response) {
+        console.error(`[SceneGen] text_to_image API error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
+      }
+      if (!retryable || attempt === MAX_RETRIES) throw err;
+      const backoff = attempt * 2000;
+      console.log(`[SceneGen] Retrying text_to_image in ${backoff}ms...`);
+      await sleep(backoff);
     }
-    throw err;
   }
 }
 
@@ -202,18 +210,26 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
     ...(cameraMotion ? { cameraMotion } : {}),
   };
 
-  try {
-    const response = await axios.post(
-      `${RUNWAY_API_BASE}/image_to_video`,
-      payload,
-      { headers: runwayHeaders(), timeout: 30000 }
-    );
-    return { jobId: response.data.id };
-  } catch (err) {
-    if (err.response) {
-      console.error('[SceneGen] image_to_video API error:', JSON.stringify(err.response.data, null, 2));
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await axios.post(
+        `${RUNWAY_API_BASE}/image_to_video`,
+        payload,
+        { headers: runwayHeaders(), timeout: 30000 }
+      );
+      return { jobId: response.data.id };
+    } catch (err) {
+      const status = err.response?.status;
+      const retryable = !status || status === 429 || status >= 500;
+      if (err.response) {
+        console.error(`[SceneGen] image_to_video API error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
+      }
+      if (!retryable || attempt === MAX_RETRIES) throw err;
+      const backoff = attempt * 2000;
+      console.log(`[SceneGen] Retrying image_to_video in ${backoff}ms...`);
+      await sleep(backoff);
     }
-    throw err;
   }
 }
 
@@ -224,16 +240,28 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
 async function pollTask(jobId, maxWaitMs = 180000) {
   const pollInterval = 4000;
   const maxAttempts = Math.floor(maxWaitMs / pollInterval);
+  let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_ERRORS = 3;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await sleep(pollInterval);
 
-    const response = await axios.get(
-      `${RUNWAY_API_BASE}/tasks/${jobId}`,
-      { headers: runwayHeaders(), timeout: 15000 }
-    );
-
-    const task = response.data;
+    let task;
+    try {
+      const response = await axios.get(
+        `${RUNWAY_API_BASE}/tasks/${jobId}`,
+        { headers: runwayHeaders(), timeout: 15000 }
+      );
+      task = response.data;
+      consecutiveErrors = 0; // Reset on success
+    } catch (pollErr) {
+      consecutiveErrors++;
+      console.warn(`  [RunwayML] Poll error for ${jobId} (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${pollErr.message}`);
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        return { status: 'FAILED', error: `Polling failed after ${MAX_CONSECUTIVE_ERRORS} consecutive errors: ${pollErr.message}` };
+      }
+      continue; // Retry on next interval
+    }
 
     if (task.status === 'SUCCEEDED') {
       const outputs = Array.isArray(task.output) ? task.output : [task.output];
@@ -543,9 +571,13 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     console.log(`[SceneGen] Video prompt: ${videoPrompt}`);
 
     // Image-anchored: use base still as promptImage → image_to_video directly
+    const videoDuration = sceneAngle.video_duration || VIDEO_DURATION_MAP[angleLabel] || 5;
+    const cameraMotion = sceneAngle.camera_motion || CAMERA_MOTION_MAP[angleLabel] || 'static';
+
     const { jobId: videoJobId } = await startImageToVideo(
       videoPrompt,
       sceneSet.base_still_url,
+      { duration: videoDuration, cameraMotion },
     );
     const videoResult = await pollTask(videoJobId);
 
