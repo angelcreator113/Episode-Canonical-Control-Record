@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronUp, ChevronDown } from 'lucide-react';
 import './SceneSetsTab.css';
 
@@ -104,7 +104,7 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate }) {
               className="scene-sets-lightbox-video"
             />
           ) : angle.still_image_url ? (
-            <img src={`${angle.still_image_url}${angle.still_image_url.includes('?') ? '&' : '?'}v=${new Date(angle.updated_at || 0).getTime()}`} alt={angle.angle_name} className="scene-sets-lightbox-img" />
+            <img src={angle.still_image_url} alt={angle.angle_name} className="scene-sets-lightbox-img" />
           ) : null}
         </div>
 
@@ -182,7 +182,7 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
               isComplete ? 'complete' : isGenerating ? 'generating' : isFailed ? 'failed' : 'pending'
             }`}>
               {angle.still_image_url ? (
-                <img src={`${angle.still_image_url}${angle.still_image_url.includes('?') ? '&' : '?'}v=${new Date(angle.updated_at || 0).getTime()}`} alt={angle.angle_name} />
+                <img src={angle.still_image_url} alt={angle.angle_name} />
               ) : isGenerating ? (
                 <Loader size={20} className="spin" />
               ) : isFailed ? (
@@ -521,14 +521,14 @@ const DEFAULT_ANGLE_PRESETS = [
   { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
 ];
 
-function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress, imageVersion }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
   const primaryStillRaw = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
-  const bustSuffix = set.updated_at ? `${primaryStillRaw?.includes('?') ? '&' : '?'}v=${new Date(set.updated_at).getTime()}` : '';
-  const primaryStill = primaryStillRaw ? `${primaryStillRaw}${bustSuffix}` : null;
+  const bustParam = imageVersion ? `${primaryStillRaw?.includes('?') ? '&' : '?'}v=${imageVersion}` : '';
+  const primaryStill = primaryStillRaw ? `${primaryStillRaw}${bustParam}` : null;
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
@@ -993,12 +993,27 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
       </div>
     </div>
   );
-}
+}, (prev, next) => {
+  // Only re-render when meaningful data changes, not on every poll
+  return prev.set.id === next.set.id
+    && prev.set.updated_at === next.set.updated_at
+    && prev.set.generation_status === next.set.generation_status
+    && prev.generatingId === next.generatingId
+    && prev.imageVersion === next.imageVersion
+    && prev.generationProgress === next.generationProgress
+    && (prev.set.angles?.length || 0) === (next.set.angles?.length || 0)
+    && (prev.set.angles || []).every((a, i) => {
+      const b = next.set.angles?.[i];
+      return b && a.id === b.id && a.generation_status === b.generation_status
+        && a.still_image_url === b.still_image_url && a.updated_at === b.updated_at;
+    });
+});
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function SceneSetsTab() {
   const [sets, setSets] = useState([]);
+  const [imageVersions, setImageVersions] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [generatingId, setGeneratingId] = useState(null);
@@ -1072,6 +1087,7 @@ export default function SceneSetsTab() {
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {
         showToast(`Base generated for "${set.name}"`);
+        setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       } else {
         showToast(job.error || 'Base generation failed', 'error');
       }
@@ -1100,6 +1116,7 @@ export default function SceneSetsTab() {
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {
         showToast('Base image regenerated!');
+        setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       } else {
         showToast(job.error || 'Regeneration failed', 'error');
       }
@@ -1140,6 +1157,7 @@ export default function SceneSetsTab() {
         throw new Error(err.error || 'Upload failed');
       }
       showToast(`Base image uploaded for "${set.name}"`);
+      setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       fetchSets();
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
@@ -1161,6 +1179,7 @@ export default function SceneSetsTab() {
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {
         showToast(`"${angle.angle_name}" generated!`);
+        setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       } else {
         showToast(job.error || 'Angle generation failed', 'error');
       }
@@ -1206,6 +1225,7 @@ export default function SceneSetsTab() {
       } else {
         showToast(`${completed} queued, ${failed} failed`, failed > 0 ? 'error' : 'success');
       }
+      if (completed > 0) setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       fetchSets();
     } catch {
       showToast('Generation failed', 'error');
@@ -1409,6 +1429,7 @@ export default function SceneSetsTab() {
       const json = await res.json();
       const { successfulAngles, totalAngles } = json.data;
       showToast(`Base + ${successfulAngles}/${totalAngles} angles regenerated!`);
+      setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       fetchSets();
     } catch (err) {
       showToast(err.message || 'Cascade regeneration failed', 'error');
@@ -1601,6 +1622,7 @@ export default function SceneSetsTab() {
               onReorderAngle={handleReorderAngle}
               generatingId={generatingId}
               generationProgress={generationProgress}
+              imageVersion={imageVersions[set.id] || 0}
             />
           ))}
         </div>
