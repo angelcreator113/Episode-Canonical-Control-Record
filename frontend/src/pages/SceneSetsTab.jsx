@@ -612,7 +612,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
         style={primaryStill ? { cursor: 'pointer' } : undefined}
       >
         {primaryStill ? (
-          <img src={primaryStill} alt={set.name} key={primaryStill} />
+          <img src={primaryStill} alt={set.name} />
         ) : (
           <div className="scene-sets-card-placeholder">
             <Camera size={32} strokeWidth={1.2} />
