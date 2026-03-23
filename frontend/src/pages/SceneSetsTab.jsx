@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, ShieldCheck, ShieldAlert, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronUp, ChevronDown } from 'lucide-react';
 import './SceneSetsTab.css';
 
@@ -52,7 +53,7 @@ function ImageLightbox({ src, alt, onClose }) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
       <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
         <button className="scene-sets-lightbox-close" onClick={onClose}>
@@ -60,7 +61,8 @@ function ImageLightbox({ src, alt, onClose }) {
         </button>
         <img src={src} alt={alt} className="scene-sets-lightbox-img" />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -81,7 +83,7 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate, bustUrl }
 
   const [showVideo, setShowVideo] = useState(false);
 
-  return (
+  return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
       <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
         <button className="scene-sets-lightbox-close" onClick={onClose}>
@@ -142,7 +144,8 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate, bustUrl }
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1001,19 +1004,26 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     </div>
   );
 }, (prev, next) => {
-  // Only re-render when meaningful data changes, not on every poll
-  return prev.set.id === next.set.id
-    && prev.set.updated_at === next.set.updated_at
-    && prev.set.generation_status === next.set.generation_status
-    && prev.generatingId === next.generatingId
-    && prev.imageVersion === next.imageVersion
-    && prev.generationProgress === next.generationProgress
-    && (prev.set.angles?.length || 0) === (next.set.angles?.length || 0)
-    && (prev.set.angles || []).every((a, i) => {
-      const b = next.set.angles?.[i];
-      return b && a.id === b.id && a.generation_status === b.generation_status
-        && a.still_image_url === b.still_image_url && a.updated_at === b.updated_at;
-    });
+  // Only re-render when meaningful rendering data changes, not on every poll
+  if (prev.generatingId !== next.generatingId) return false;
+  if (prev.imageVersion !== next.imageVersion) return false;
+  if (prev.generationProgress !== next.generationProgress) return false;
+  const ps = prev.set, ns = next.set;
+  if (ps.id !== ns.id) return false;
+  if (ps.name !== ns.name) return false;
+  if (ps.generation_status !== ns.generation_status) return false;
+  if (ps.base_still_url !== ns.base_still_url) return false;
+  if (ps.scene_type !== ns.scene_type) return false;
+  if (ps.canonical_description !== ns.canonical_description) return false;
+  const pa = ps.angles || [], na = ns.angles || [];
+  if (pa.length !== na.length) return false;
+  for (let i = 0; i < pa.length; i++) {
+    if (pa[i].id !== na[i].id) return false;
+    if (pa[i].generation_status !== na[i].generation_status) return false;
+    if (pa[i].still_image_url !== na[i].still_image_url) return false;
+    if (pa[i].video_clip_url !== na[i].video_clip_url) return false;
+  }
+  return true;
 });
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
