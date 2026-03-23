@@ -184,18 +184,18 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
               {angle.still_image_url ? (
                 <img src={angle.still_image_url} alt={angle.angle_name} />
               ) : isGenerating ? (
-                <Loader size={16} className="spin" />
+                <Loader size={20} className="spin" />
               ) : isFailed ? (
-                <AlertCircle size={16} />
+                <AlertCircle size={20} />
               ) : isPending && !generating ? (
-                <Sparkles size={16} className="scene-sets-clickable-icon" />
+                <Sparkles size={20} className="scene-sets-clickable-icon" />
               ) : (
-                <Sparkles size={16} />
+                <Sparkles size={20} />
               )}
 
               {angle.video_clip_url && (
                 <div className="scene-sets-video-indicator">
-                  <Play size={8} />
+                  <Play size={10} />
                 </div>
               )}
 
@@ -212,7 +212,7 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
                   onClick={(e) => { e.stopPropagation(); onRegenerate(angle); }}
                   title={`Regenerate ${angle.angle_name}`}
                 >
-                  <RotateCcw size={10} />
+                  <RotateCcw size={12} />
                 </button>
               )}
             </div>

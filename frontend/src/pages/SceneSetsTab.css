@@ -671,9 +671,9 @@
 /* ── Angle Strip ───────────────────────────────────────────────────────── */
 
 .scene-sets-angle-strip {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 10px;
   margin-top: 12px;
 }
 
@@ -681,7 +681,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 0;
+  position: relative;
 }
 
 .scene-sets-angle-item.clickable {
@@ -689,9 +690,9 @@
 }
 
 .scene-sets-angle-thumb {
-  width: 52px;
-  height: 36px;
-  border-radius: 6px;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -861,11 +862,11 @@
 
 .scene-sets-video-indicator {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
+  bottom: 4px;
+  right: 4px;
   background: rgba(0, 0, 0, 0.65);
-  border-radius: 3px;
-  padding: 1px 3px;
+  border-radius: 4px;
+  padding: 2px 5px;
   color: #FFF;
   display: flex;
   align-items: center;
@@ -874,9 +875,15 @@
 .scene-sets-angle-label {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
-  color: #888;
+  color: #666;
   font-weight: 600;
   letter-spacing: 0.04em;
+  margin-top: 4px;
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scene-sets-beat-numbers {
@@ -982,15 +989,15 @@
 
 .scene-sets-quality-badge {
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 4px;
+  left: 4px;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 1px 5px;
+  gap: 3px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -1001,6 +1008,16 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  transition: opacity 0.15s ease, height 0.15s ease;
+}
+
+.scene-sets-angle-item:hover .scene-sets-angle-meta {
+  opacity: 1;
+  height: auto;
+  overflow: visible;
 }
 
 .scene-sets-angle-review-btn {
@@ -1707,10 +1724,10 @@
 
 .scene-sets-angle-regen {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.6);
   border: none;
@@ -1827,16 +1844,25 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin-top: 2px;
+  position: absolute;
+  right: 2px;
+  bottom: 22px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 3;
+}
+
+.scene-sets-angle-item:hover .scene-sets-angle-reorder {
+  opacity: 1;
 }
 
 .scene-sets-angle-reorder-btn {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 3px;
-  color: #999;
+  color: #fff;
   cursor: pointer;
-  padding: 1px 3px;
+  padding: 2px 3px;
   display: flex;
   align-items: center;
   justify-content: center;
