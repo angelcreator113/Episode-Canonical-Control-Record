@@ -74,7 +74,7 @@ router.post('/', optionalAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'name and scene_type are required' });
     }
 
-    const set = await SceneSet.create({
+    const createFields = {
       name,
       scene_type,
       canonical_description: canonical_description || null,
@@ -86,7 +86,19 @@ router.post('/', optionalAuth, async (req, res) => {
       base_runway_model: base_runway_model || 'gen3a_turbo',
       notes: notes || null,
       generation_status: canonical_description ? 'generating' : 'pending',
-    });
+    };
+    let set;
+    try {
+      set = await SceneSet.create(createFields);
+    } catch (createErr) {
+      // Retry without generation_status if the column doesn't exist yet
+      if (createErr.message && createErr.message.includes('generation_status')) {
+        delete createFields.generation_status;
+        set = await SceneSet.create(createFields);
+      } else {
+        throw createErr;
+      }
+    }
 
     // Auto-enqueue base generation when a description is provided
     let jobId = null;
@@ -233,7 +245,9 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
       });
     }
 
-    await set.update({ generation_status: 'generating' });
+    try { await set.update({ generation_status: 'generating' }); } catch (e) {
+      console.warn('generate-base: could not update generation_status:', e.message);
+    }
 
     await ensureGenerationJobsTable();
     const job = await GenerationJob.create({
@@ -314,7 +328,11 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
     });
 
     // Mark the angle as generating and clear stale assets so the frontend shows a spinner
-    await angle.update({ generation_status: 'generating', still_image_url: null, video_clip_url: null });
+    try {
+      await angle.update({ generation_status: 'generating', still_image_url: null, video_clip_url: null });
+    } catch (e) {
+      console.warn('generate-angle: could not update angle status:', e.message);
+    }
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
@@ -705,7 +723,10 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
       await set.update({ canonical_description: req.body.canonical_description });
     }
 
-    await set.update({ generation_status: 'generating' });
+    // Mark as generating (non-fatal if column not yet migrated)
+    try { await set.update({ generation_status: 'generating' }); } catch (e) {
+      console.warn('cascade-regenerate: could not update generation_status:', e.message);
+    }
 
     await ensureGenerationJobsTable();
     const job = await GenerationJob.create({
