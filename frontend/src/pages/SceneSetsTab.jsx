@@ -1143,64 +1143,6 @@ export default function SceneSetsTab() {
     }
   };
 
-  const handleRegenerateBase = async (set) => {
-    setGeneratingId(set.id);
-    try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force: true }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Regeneration failed');
-      }
-      showToast('Base image regenerated!');
-      fetchSets();
-    } catch (err) {
-      showToast(err.message || 'Regeneration failed', 'error');
-    } finally {
-      setGeneratingId(null);
-    }
-  };
-
-  const handleUpdatePrompt = async (set, newDescription) => {
-    try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_description: newDescription }),
-      });
-      if (!res.ok) throw new Error('Failed to save');
-      showToast('Prompt updated');
-      fetchSets();
-    } catch {
-      showToast('Failed to update prompt', 'error');
-    }
-  };
-
-  const handleUploadBase = async (set, file) => {
-    setGeneratingId(set.id);
-    try {
-      const formData = new FormData();
-      formData.append('image', file);
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/upload-base`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Upload failed');
-      }
-      showToast(`Base image uploaded for "${set.name}"`);
-      fetchSets();
-    } catch (err) {
-      showToast(err.message || 'Upload failed', 'error');
-    } finally {
-      setGeneratingId(null);
-    }
-  };
-
   const handleGenerateAngle = async (set, angle) => {
     setGeneratingId(set.id);
     try {
@@ -1266,33 +1208,6 @@ export default function SceneSetsTab() {
       setTimeout(() => setGenerationProgress(null), 3000);
       setGeneratingId(null);
     }
-
-    // Poll all jobs in parallel
-    let completed = 0;
-    let failed = progressAngles.filter(a => a.status === 'failed').length;
-
-    const pollPromises = jobMap.map(async ({ index, jobId }) => {
-      const job = await pollJob(jobId);
-      if (job.status === 'completed') {
-        progressAngles[index].status = 'done';
-        completed++;
-      } else {
-        progressAngles[index].status = 'failed';
-        failed++;
-      }
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-    });
-
-    await Promise.all(pollPromises);
-
-    if (failed === 0) {
-      showToast(`All ${targets.length} angles generated!`);
-    } else {
-      showToast(`${completed} generated, ${failed} failed`, failed > 0 ? 'error' : 'success');
-    }
-    fetchSets();
-    setTimeout(() => setGenerationProgress(null), 3000);
-    setGeneratingId(null);
   };
 
   const handleRetryFailed = async (set) => {
