@@ -536,16 +536,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     if (!url || !cacheBust) return url;
     return `${url}${url.includes('?') ? '&' : '?'}v=${cacheBust}`;
   };
-  const primaryStillRaw = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
-  const primaryStill = primaryStillRaw ? bustUrl(primaryStillRaw) : null;
-  const [showBaseLightbox, setShowBaseLightbox] = useState(false);
-  const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
-  const totalAngles = set.angles?.length || 0;
-  const pendingAngles = set.angles?.filter(a => a.generation_status === 'pending') || [];
-  const regenerableAngles = set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || [];
+  const sortedAngles = [...(set.angles || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const readyAngles = sortedAngles.filter(a => a.generation_status === 'complete').length;
+  const totalAngles = sortedAngles.length;
+  const pendingAngles = sortedAngles.filter(a => a.generation_status === 'pending');
+  const regenerableAngles = sortedAngles.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed');
   const hasBase = !!(set.base_still_url || set.base_runway_seed);
-  // Auto-expand when base is ready but no angles are generated yet
-  const [expanded, setExpanded] = useState(hasBase && readyAngles === 0);
+
+  // Selected angle for hero display — null means show base/first available
+  const [selectedAngleId, setSelectedAngleId] = useState(null);
+  const selectedAngle = selectedAngleId ? sortedAngles.find(a => a.id === selectedAngleId) : null;
+  const heroImageRaw = selectedAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const heroImage = heroImageRaw ? bustUrl(heroImageRaw) : null;
+  const [showBaseLightbox, setShowBaseLightbox] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -617,14 +621,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
   return (
     <div className="scene-sets-card">
-      {/* Preview image */}
+      {/* ── Hero Preview ─────────────────────────────────────── */}
       <div
-        className={`scene-sets-card-preview${primaryStill ? ' has-image clickable' : ''}`}
-        onClick={() => { if (primaryStill) setShowBaseLightbox(true); }}
-        style={primaryStill ? { cursor: 'pointer' } : undefined}
+        className={`scene-sets-card-preview${heroImage ? ' has-image' : ''}`}
+        onClick={() => { if (heroImage) setShowBaseLightbox(true); }}
+        style={heroImage ? { cursor: 'pointer' } : undefined}
       >
-        {primaryStill ? (
-          <img src={primaryStill} alt={set.name} />
+        {heroImage ? (
+          <img src={heroImage} alt={set.name} />
         ) : (
           <div className="scene-sets-card-placeholder">
             <Camera size={32} strokeWidth={1.2} />
@@ -650,31 +654,85 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           <StatusPill status={set.generation_status} />
         </div>
 
-        {set.angles?.some(a => a.video_clip_url) && (
+        {selectedAngle?.video_clip_url && (
           <div className="scene-sets-card-video-ready">
             <Play size={12} /> Video ready
           </div>
         )}
 
+        {/* Hero label showing which angle is displayed */}
+        {selectedAngle && (
+          <div className="scene-sets-card-hero-label">
+            {selectedAngle.angle_label}
+          </div>
+        )}
       </div>
 
-      {/* Card body */}
+      {/* ── Filmstrip (always visible when angles exist) ───── */}
+      {sortedAngles.length > 0 && (
+        <div className="scene-sets-filmstrip">
+          {/* Base image thumb */}
+          {set.base_still_url && (
+            <button
+              className={`scene-sets-filmstrip-thumb${!selectedAngleId ? ' active' : ''}`}
+              onClick={() => setSelectedAngleId(null)}
+              title="Base image"
+            >
+              <img src={bustUrl(set.base_still_url)} alt="Base" />
+              <span className="scene-sets-filmstrip-label">BASE</span>
+            </button>
+          )}
+          {/* Angle thumbs */}
+          {sortedAngles.map(angle => {
+            const isActive = selectedAngleId === angle.id;
+            const hasStill = !!angle.still_image_url;
+            const isAngleGenerating = angle.generation_status === 'generating';
+            const isFailed = angle.generation_status === 'failed';
+            const isPending = angle.generation_status === 'pending';
+            return (
+              <button
+                key={angle.id}
+                className={`scene-sets-filmstrip-thumb${isActive ? ' active' : ''}${isFailed ? ' failed' : ''}${isPending ? ' pending' : ''}`}
+                onClick={() => {
+                  if (hasStill) {
+                    if (isActive) setShowBaseLightbox(true);
+                    else setSelectedAngleId(angle.id);
+                  } else if (isPending && !isGenerating) {
+                    onGenerateAngle(set, angle);
+                  }
+                }}
+                title={hasStill ? angle.angle_name : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
+              >
+                {hasStill ? (
+                  <img src={bustUrl(angle.still_image_url)} alt={angle.angle_label} />
+                ) : isAngleGenerating ? (
+                  <Loader size={14} className="spin" />
+                ) : isFailed ? (
+                  <AlertCircle size={14} />
+                ) : (
+                  <Sparkles size={14} className={isPending && !isGenerating ? 'scene-sets-clickable-icon' : ''} />
+                )}
+                <span className="scene-sets-filmstrip-label">{angle.angle_label}</span>
+                {angle.video_clip_url && <span className="scene-sets-filmstrip-video"><Play size={8} /></span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Card Body ────────────────────────────────────────── */}
       <div className="scene-sets-card-body">
         <div className="scene-sets-card-header">
           <div className="scene-sets-card-header-row">
             <div>
               <h3 className="scene-sets-card-title">{set.name}</h3>
               <p className="scene-sets-card-subtitle">
-                {totalAngles === 0 ? 'Base ready — click Angles to continue' : `${readyAngles}/${totalAngles} angles ready`}
+                {totalAngles === 0
+                  ? (hasBase ? 'Base ready — seed angles to continue' : 'Not yet generated')
+                  : `${readyAngles}/${totalAngles} angles`}
               </p>
             </div>
             <div className="scene-sets-card-header-utils">
-              <button
-                onClick={() => setExpanded(e => !e)}
-                className="scene-sets-btn-angles"
-              >
-                {expanded ? 'Hide' : 'Angles'}
-              </button>
               <div className="scene-sets-kebab-wrapper" ref={menuRef}>
                 <button
                   className="scene-sets-btn-kebab"
@@ -696,6 +754,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         <RotateCcw size={12} /> Regenerate Base
                       </button>
                     )}
+                    {hasBase && totalAngles === 0 && (
+                      <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
+                        <Sparkles size={12} /> Seed Default Angles
+                      </button>
+                    )}
+                    <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
+                      <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
+                    </button>
                     <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
                       <Trash2 size={12} /> Delete Set
                     </button>
@@ -708,94 +774,41 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           <div className="scene-sets-card-actions">
             {!hasBase && (
               <>
-                <button
-                  onClick={() => onGenerateBase(set)}
-                  disabled={isGenerating}
-                  className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}
-                >
-                  {isGenerating ? (
-                    <><Loader size={12} className="spin" /> Generating...</>
-                  ) : (
-                    <><Sparkles size={12} /> Generate Base</>
-                  )}
+                <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}>
+                  {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate Base</>}
                 </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isGenerating}
-                  className={`scene-sets-btn-upload${isGenerating ? ' disabled' : ''}`}
-                  title="Upload your own base image"
-                >
-                  <Upload size={12} /> Upload Image
+                <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className={`scene-sets-btn-upload${isGenerating ? ' disabled' : ''}`} title="Upload your own base image">
+                  <Upload size={12} /> Upload
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) onUploadBase(set, file);
-                    e.target.value = '';
-                  }}
-                />
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={(e) => { const file = e.target.files?.[0]; if (file) onUploadBase(set, file); e.target.value = ''; }} />
               </>
             )}
 
+            {hasBase && totalAngles === 0 && (
+              <button className="scene-sets-btn-generate" onClick={async () => { setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
+                {seeding ? <><Loader size={12} className="spin" /> Seeding...</> : <><Sparkles size={12} /> Seed Angles</>}
+              </button>
+            )}
+
             {hasBase && pendingAngles.length > 0 && (
-              <button
-                onClick={() => onGenerateAll(set, false)}
-                disabled={isGenerating}
-                className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}
-              >
-                {isGenerating ? (
-                  <><Loader size={12} className="spin" /> Generating...</>
-                ) : (
-                  <><Sparkles size={12} /> Generate All Angles</>
-                )}
+              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}>
+                {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All</>}
               </button>
             )}
 
             {hasBase && pendingAngles.length === 0 && regenerableAngles.length > 0 && (
-              <button
-                onClick={() => onGenerateAll(set, true)}
-                disabled={isGenerating}
-                className={`scene-sets-btn-regenerate${isGenerating ? ' disabled' : ''}`}
-              >
-                {isGenerating ? (
-                  <><Loader size={12} className="spin" /> Regenerating...</>
-                ) : (
-                  <><RotateCcw size={12} /> Regenerate All</>
-                )}
+              <button onClick={() => onGenerateAll(set, true)} disabled={isGenerating} className={`scene-sets-btn-regenerate${isGenerating ? ' disabled' : ''}`}>
+                {isGenerating ? <><Loader size={12} className="spin" /> Regenerating...</> : <><RotateCcw size={12} /> Regenerate All</>}
               </button>
             )}
 
             {totalAngles > 0 && (
-              <button
-                onClick={() => onDeleteAllAngles(set)}
-                disabled={isGenerating}
-                className="scene-sets-btn-delete"
-                title="Delete all angles and regenerate clean"
-              >
-                <Trash2 size={12} /> Reset Angles
+              <button onClick={() => onDeleteAllAngles(set)} disabled={isGenerating} className="scene-sets-btn-delete" title="Reset all angles">
+                <Trash2 size={12} /> Reset
               </button>
             )}
           </div>
         </div>
-
-        {set.base_runway_seed && set.base_runway_seed !== 'unknown' && (
-          <p className="scene-sets-seed-info">
-            <Lock size={11} /> Seed: {set.base_runway_seed.slice(0, 20)}...
-          </p>
-        )}
-
-        {(set.generation_cost > 0 || set.angles?.some(a => a.generation_cost > 0)) && (
-          <p className="scene-sets-cost-info">
-            <Clock size={11} /> Cost: {(
-              parseFloat(set.generation_cost || 0) +
-              (set.angles || []).reduce((sum, a) => sum + parseFloat(a.generation_cost || 0), 0)
-            ).toFixed(1)} credits
-          </p>
-        )}
 
         {isGenerating && !progress && (
           <div className="scene-sets-base-timer">
@@ -804,23 +817,32 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           </div>
         )}
 
-        {set.script_context && (
-          <p className="scene-sets-script-context">{set.script_context}</p>
-        )}
-
         {progress && <GenerationProgress progress={progress} />}
+
+        {/* Details panel (toggled from kebab menu) */}
+        {showDetails && (
+          <div className="scene-sets-details-panel">
+            {set.base_runway_seed && set.base_runway_seed !== 'unknown' && (
+              <p className="scene-sets-seed-info"><Lock size={11} /> Seed: {set.base_runway_seed.slice(0, 20)}...</p>
+            )}
+            {(set.generation_cost > 0 || sortedAngles.some(a => a.generation_cost > 0)) && (
+              <p className="scene-sets-cost-info">
+                <Clock size={11} /> Cost: {(parseFloat(set.generation_cost || 0) + sortedAngles.reduce((sum, a) => sum + parseFloat(a.generation_cost || 0), 0)).toFixed(1)} credits
+              </p>
+            )}
+            {set.script_context && <p className="scene-sets-script-context">{set.script_context}</p>}
+            {hasBase && (
+              <button className="scene-sets-btn-add-angle" onClick={() => setShowAddAngle(true)}>
+                <Plus size={12} /> Add Angle
+              </button>
+            )}
+          </div>
+        )}
 
         {showPromptEditor && (
           <div className="scene-sets-prompt-editor">
             <label className="scene-sets-prompt-editor-label">Scene Description (used to build AI prompt)</label>
-            <textarea
-              className="scene-sets-prompt-editor-textarea"
-              value={editDesc}
-              onChange={e => setEditDesc(e.target.value)}
-              rows={4}
-              autoFocus
-              placeholder="Describe the space \u2014 layout, lighting, mood, signature details..."
-            />
+            <textarea className="scene-sets-prompt-editor-textarea" value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={4} autoFocus placeholder="Describe the space \u2014 layout, lighting, mood, signature details..." />
             {set.base_runway_prompt && (
               <details className="scene-sets-prompt-details">
                 <summary>View last generated prompt</summary>
@@ -828,171 +850,50 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               </details>
             )}
             <div className="scene-sets-prompt-editor-actions">
-              <button
-                className="scene-sets-btn-generate"
-                onClick={() => handleSavePrompt(false)}
-                disabled={savingPrompt}
-              >
+              <button className="scene-sets-btn-generate" onClick={() => handleSavePrompt(false)} disabled={savingPrompt}>
                 {savingPrompt ? <><Loader size={12} className="spin" /> Saving...</> : <><Save size={12} /> Save</>}
               </button>
-              {hasBase && (
-                <button
-                  className="scene-sets-btn-generate"
-                  onClick={() => handleSavePrompt(true)}
-                  disabled={savingPrompt || isGenerating}
-                >
-                  <RotateCcw size={12} /> Save & Regenerate
-                </button>
-              )}
-              {hasBase && totalAngles > 0 && (
-                <button
-                  className="scene-sets-btn-regenerate"
-                  onClick={() => handleSavePrompt(false, true)}
-                  disabled={savingPrompt || isGenerating}
-                  title="Save, regenerate base image, then regenerate all angles"
-                >
-                  <Sparkles size={12} /> Save & Regen Everything
-                </button>
-              )}
-              <button className="scene-sets-btn-delete" onClick={() => setShowPromptEditor(false)}>
-                Cancel
-              </button>
+              {hasBase && <button className="scene-sets-btn-generate" onClick={() => handleSavePrompt(true)} disabled={savingPrompt || isGenerating}><RotateCcw size={12} /> Save & Regen</button>}
+              {hasBase && totalAngles > 0 && <button className="scene-sets-btn-regenerate" onClick={() => handleSavePrompt(false, true)} disabled={savingPrompt || isGenerating}><Sparkles size={12} /> Regen Everything</button>}
+              <button className="scene-sets-btn-delete" onClick={() => setShowPromptEditor(false)}>Cancel</button>
             </div>
           </div>
         )}
 
-        {showBaseLightbox && primaryStill && (
-          <ImageLightbox
-            src={primaryStill}
-            alt={set.name}
-            onClose={() => setShowBaseLightbox(false)}
-          />
-        )}
-
-        {showPromptPreview && previewData && createPortal(
-          <div className="scene-sets-lightbox-overlay" onClick={() => setShowPromptPreview(false)}>
-            <div className="scene-sets-prompt-preview-modal" onClick={e => e.stopPropagation()}>
-              <button className="scene-sets-lightbox-close" onClick={() => setShowPromptPreview(false)}>
-                <X size={20} />
-              </button>
-              <h3 className="scene-sets-prompt-preview-title">Prompt Preview — {previewData.angleLabel}</h3>
-              <div className="scene-sets-prompt-preview-section">
-                <label>Still Image Prompt ({previewData.promptLength} chars)</label>
-                <pre className="scene-sets-prompt-preview">{previewData.prompt}</pre>
-              </div>
-              <div className="scene-sets-prompt-preview-section">
-                <label>Video Movement Prompt</label>
-                <pre className="scene-sets-prompt-preview">{previewData.videoPrompt}</pre>
-              </div>
+        {showAddAngle && (
+          <div className="scene-sets-add-angle-form">
+            <div className="scene-sets-add-angle-row">
+              <div className="scene-sets-create-field"><label>Label</label><input type="text" placeholder="e.g. WIDE" value={newAngle.angle_label} onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))} autoFocus /></div>
+              <div className="scene-sets-create-field"><label>Name</label><input type="text" placeholder="e.g. Wide Morning" value={newAngle.angle_name} onChange={e => setNewAngle(a => ({ ...a, angle_name: e.target.value }))} /></div>
+              <div className="scene-sets-create-field"><label>Beats <span className="scene-sets-optional">(comma-sep)</span></label><input type="text" placeholder="1,2,3" value={newAngle.beat_affinity} onChange={e => setNewAngle(a => ({ ...a, beat_affinity: e.target.value }))} /></div>
             </div>
-          </div>,
-          document.body
-        )}
-
-        {expanded && (
-          <>
-            <AngleStrip
-              angles={set.angles}
-              onGenerate={(angle) => onGenerateAngle(set, angle)}
-              onReview={(angle) => onReviewAngle(set, angle)}
-              onRegenerate={(angle) => onGenerateAngle(set, angle)}
-              onReorder={(angle, direction) => onReorderAngle(set, angle, direction)}
-              generating={isGenerating}
-              bustUrl={bustUrl}
-            />
-
-            {hasBase && totalAngles === 0 && !showAddAngle && (
-              <div className="scene-sets-seed-angles">
-                <button
-                  className="scene-sets-btn-generate"
-                  onClick={async () => { setSeeding(true); await onSeedAngles(set); setSeeding(false); }}
-                  disabled={isGenerating || seeding}
-                >
-                  {seeding ? <><Loader size={12} className="spin" /> Seeding...</> : <><Sparkles size={12} /> Seed Default Angles</>}
-                </button>
-                <span className="scene-sets-seed-hint">Creates 5 standard camera angles (Wide, Vanity, Window, Doorway, Close)</span>
-              </div>
-            )}
-
-            {hasBase && !showAddAngle && (
-              <button
-                className="scene-sets-btn-add-angle"
-                onClick={() => setShowAddAngle(true)}
-              >
-                <Plus size={12} /> Add Angle
+            <div className="scene-sets-create-field"><label>Camera Direction <span className="scene-sets-optional">(optional)</span></label><input type="text" placeholder="Camera placement and movement..." value={newAngle.camera_direction} onChange={e => setNewAngle(a => ({ ...a, camera_direction: e.target.value }))} /></div>
+            <div className="scene-sets-add-angle-actions">
+              <button className="scene-sets-btn-generate" onClick={handleSubmitAngle} disabled={addingAngle || !newAngle.angle_label.trim() || !newAngle.angle_name.trim()}>
+                {addingAngle ? <><Loader size={12} className="spin" /> Adding...</> : <><Plus size={12} /> Add</>}
               </button>
-            )}
-
-            {showAddAngle && (
-              <div className="scene-sets-add-angle-form">
-                <div className="scene-sets-add-angle-row">
-                  <div className="scene-sets-create-field">
-                    <label>Label</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. WIDE"
-                      value={newAngle.angle_label}
-                      onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))}
-                      autoFocus
-                    />
-                  </div>
-                  <div className="scene-sets-create-field">
-                    <label>Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Wide Morning"
-                      value={newAngle.angle_name}
-                      onChange={e => setNewAngle(a => ({ ...a, angle_name: e.target.value }))}
-                    />
-                  </div>
-                  <div className="scene-sets-create-field">
-                    <label>Beats <span className="scene-sets-optional">(comma-sep)</span></label>
-                    <input
-                      type="text"
-                      placeholder="1,2,3"
-                      value={newAngle.beat_affinity}
-                      onChange={e => setNewAngle(a => ({ ...a, beat_affinity: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="scene-sets-create-field">
-                  <label>Description <span className="scene-sets-optional">(optional)</span></label>
-                  <input
-                    type="text"
-                    placeholder="What this angle captures..."
-                    value={newAngle.angle_description}
-                    onChange={e => setNewAngle(a => ({ ...a, angle_description: e.target.value }))}
-                  />
-                </div>
-                <div className="scene-sets-create-field">
-                  <label>Camera Direction <span className="scene-sets-optional">(optional)</span></label>
-                  <input
-                    type="text"
-                    placeholder="Camera placement and movement..."
-                    value={newAngle.camera_direction}
-                    onChange={e => setNewAngle(a => ({ ...a, camera_direction: e.target.value }))}
-                  />
-                </div>
-                <div className="scene-sets-add-angle-actions">
-                  <button
-                    className="scene-sets-btn-generate"
-                    onClick={handleSubmitAngle}
-                    disabled={addingAngle || !newAngle.angle_label.trim() || !newAngle.angle_name.trim()}
-                  >
-                    {addingAngle ? <><Loader size={12} className="spin" /> Adding...</> : <><Plus size={12} /> Add Angle</>}
-                  </button>
-                  <button
-                    className="scene-sets-btn-delete"
-                    onClick={() => setShowAddAngle(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
+              <button className="scene-sets-btn-delete" onClick={() => setShowAddAngle(false)}>Cancel</button>
+            </div>
+          </div>
         )}
       </div>
+
+      {/* ── Lightboxes (portaled) ─────────────────────────── */}
+      {showBaseLightbox && heroImage && (
+        <ImageLightbox src={heroImage} alt={selectedAngle?.angle_name || set.name} onClose={() => setShowBaseLightbox(false)} />
+      )}
+
+      {showPromptPreview && previewData && createPortal(
+        <div className="scene-sets-lightbox-overlay" onClick={() => setShowPromptPreview(false)}>
+          <div className="scene-sets-prompt-preview-modal" onClick={e => e.stopPropagation()}>
+            <button className="scene-sets-lightbox-close" onClick={() => setShowPromptPreview(false)}><X size={20} /></button>
+            <h3 className="scene-sets-prompt-preview-title">Prompt Preview — {previewData.angleLabel}</h3>
+            <div className="scene-sets-prompt-preview-section"><label>Still Image Prompt ({previewData.promptLength} chars)</label><pre className="scene-sets-prompt-preview">{previewData.prompt}</pre></div>
+            <div className="scene-sets-prompt-preview-section"><label>Video Movement Prompt</label><pre className="scene-sets-prompt-preview">{previewData.videoPrompt}</pre></div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }, (prev, next) => {

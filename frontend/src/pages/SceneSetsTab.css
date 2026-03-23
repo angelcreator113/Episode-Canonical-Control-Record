@@ -284,6 +284,134 @@
   display: block;
 }
 
+/* ── Hero Label ────────────────────────────────────────────────────────── */
+
+.scene-sets-card-hero-label {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #FFF;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+/* ── Filmstrip ─────────────────────────────────────────────────────────── */
+
+.scene-sets-filmstrip {
+  display: flex;
+  gap: 0;
+  background: #1a1a1a;
+  padding: 6px 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+
+.scene-sets-filmstrip::-webkit-scrollbar {
+  height: 4px;
+}
+
+.scene-sets-filmstrip::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+}
+
+.scene-sets-filmstrip-thumb {
+  flex: 0 0 auto;
+  width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  transition: border-color 0.15s, opacity 0.15s;
+  position: relative;
+}
+
+.scene-sets-filmstrip-thumb img {
+  width: 48px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+  display: block;
+}
+
+.scene-sets-filmstrip-thumb:not(.active):hover {
+  border-color: rgba(184, 150, 46, 0.5);
+}
+
+.scene-sets-filmstrip-thumb.active {
+  border-color: #B8962E;
+}
+
+.scene-sets-filmstrip-thumb.pending {
+  opacity: 0.5;
+}
+
+.scene-sets-filmstrip-thumb.pending:hover {
+  opacity: 0.8;
+}
+
+.scene-sets-filmstrip-thumb.failed {
+  border-color: rgba(198, 40, 40, 0.4);
+}
+
+.scene-sets-filmstrip-thumb .spin,
+.scene-sets-filmstrip-thumb svg:not(.spin) {
+  color: #999;
+}
+
+.scene-sets-filmstrip-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  font-weight: 600;
+  color: #999;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 48px;
+}
+
+.scene-sets-filmstrip-thumb.active .scene-sets-filmstrip-label {
+  color: #B8962E;
+}
+
+.scene-sets-filmstrip-video {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  background: rgba(0,0,0,0.7);
+  border-radius: 2px;
+  padding: 1px 2px;
+  color: #FFF;
+  display: flex;
+  align-items: center;
+}
+
+/* ── Details Panel ────────────────────────────────────────────────────── */
+
+.scene-sets-details-panel {
+  margin-top: 8px;
+  padding: 10px;
+  background: #FAFAF5;
+  border: 1px solid #EFEBE3;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .scene-sets-card-placeholder {
   width: 100%;
   height: 100%;
