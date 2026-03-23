@@ -219,6 +219,8 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
       });
     }
 
+    await set.update({ generation_status: 'generating' });
+
     const job = await GenerationJob.create({
       job_type: 'generate_base',
       scene_set_id: set.id,
@@ -686,6 +688,8 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
     if (req.body.canonical_description !== undefined) {
       await set.update({ canonical_description: req.body.canonical_description });
     }
+
+    await set.update({ generation_status: 'generating' });
 
     const job = await GenerationJob.create({
       job_type: 'cascade_regenerate',
