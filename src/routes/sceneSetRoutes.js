@@ -72,19 +72,18 @@ router.post('/', optionalAuth, async (req, res) => {
       show_id: show_id || null,
       base_runway_model: base_runway_model || 'gen3a_turbo',
       notes: notes || null,
-      generation_status: 'pending',
+      generation_status: canonical_description ? 'generating' : 'pending',
     });
 
-    // Auto-queue a base generation job if a description was provided
+    // Auto-enqueue base generation when a description is provided
     let jobId = null;
-    if (canonical_description && canonical_description.trim()) {
+    if (canonical_description) {
       const job = await GenerationJob.create({
         job_type: 'generate_base',
         scene_set_id: set.id,
         payload: {},
       });
       jobId = job.id;
-      await set.update({ generation_status: 'generating' });
     }
 
     res.status(201).json({ success: true, data: set, jobId });
@@ -414,16 +413,11 @@ router.post('/:id/angles/:angleId/regenerate', optionalAuth, async (req, res) =>
       });
     }
 
-    const job = await GenerationJob.create({
-      job_type: 'regenerate_angle',
-      scene_set_id: set.id,
-      scene_angle_id: angle.id,
-      payload: { categories },
-    });
+    const result = await sceneGenService.regenerateAngleRefined(
+      angle, set, categories, { SceneAngle, SceneSet }
+    );
 
-    await angle.update({ generation_status: 'generating' });
-
-    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
+    res.json({ success: true, data: result });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/regenerate error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -689,14 +683,31 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
       await set.update({ canonical_description: req.body.canonical_description });
     }
 
-    const job = await GenerationJob.create({
-      job_type: 'cascade_regenerate',
-      scene_set_id: set.id,
-      payload: { canonical_description: req.body.canonical_description },
-      priority: 10, // Higher priority for cascade jobs
-    });
+    // Step 1: Regenerate base
+    const baseResult = await sceneGenService.generateBaseScene(set, { SceneSet, SceneAngle });
 
-    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
+    // Step 2: Regenerate all existing angles
+    const angleResults = [];
+    const freshSet = await SceneSet.findByPk(set.id);
+    for (const angle of (set.angles || [])) {
+      try {
+        const freshAngle = await SceneAngle.findByPk(angle.id);
+        const result = await sceneGenService.generateAngle(freshAngle, freshSet, { SceneAngle, SceneSet });
+        angleResults.push({ id: angle.id, label: angle.angle_label, success: true });
+      } catch (err) {
+        angleResults.push({ id: angle.id, label: angle.angle_label, success: false, error: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        base: baseResult,
+        angles: angleResults,
+        totalAngles: angleResults.length,
+        successfulAngles: angleResults.filter(a => a.success).length,
+      },
+    });
   } catch (err) {
     console.error('Scene Sets POST /:id/cascade-regenerate error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -750,5 +761,6 @@ router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
 
 module.exports = router;

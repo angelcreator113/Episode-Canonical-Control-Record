@@ -10,6 +10,13 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Check if table already exists (idempotent — safe to re-run after rename)
+    const tableDesc = await queryInterface.describeTable('generation_jobs').catch(() => null);
+    if (tableDesc) {
+      console.log('generation_jobs table already exists — skipping creation');
+      return;
+    }
+
     await queryInterface.createTable('generation_jobs', {
       id: {
         type: Sequelize.UUID,

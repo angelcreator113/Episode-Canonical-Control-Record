@@ -533,10 +533,9 @@
 
 .scene-sets-card-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   align-items: center;
-  margin-top: 2px;
 }
 
 .scene-sets-card-actions:empty {
@@ -575,6 +574,34 @@
   background: rgba(184, 150, 46, 0.1);
   color: #B8962E;
   border: 1px solid rgba(184, 150, 46, 0.3);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.scene-sets-btn-upload:hover {
+  background: rgba(184, 150, 46, 0.2);
+  border-color: rgba(184, 150, 46, 0.5);
+}
+
+.scene-sets-btn-upload.disabled {
+  background: #EEE;
+  color: #999;
+  border-color: #DDD;
+  cursor: not-allowed;
+}
+
+.scene-sets-btn-angles {
+  background: #F5F0FF;
+  color: #5C3D8F;
+  border: none;
   border-radius: 8px;
   padding: 6px 14px;
   font-size: 12px;
@@ -653,6 +680,30 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.scene-sets-btn-delete-set:hover {
+  color: #B71C1C;
+  border-color: #EF9A9A;
+  background: #FFEBEE;
+}
+
+.scene-sets-btn-delete-set:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Seed / Script ─────────────────────────────────────────────────────── */
+
+.scene-sets-seed-info {
+  margin: 8px 0 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #B8962E;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1019,15 +1070,15 @@
 
 .scene-sets-quality-badge {
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: 2px;
+  left: 2px;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
+  gap: 2px;
+  padding: 1px 5px;
   border-radius: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -1038,32 +1089,18 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  opacity: 0;
-  height: 0;
-  overflow: hidden;
-  transition: opacity 0.15s ease, height 0.15s ease;
-}
-
-.scene-sets-angle-item:hover .scene-sets-angle-meta {
-  opacity: 1;
-  height: auto;
-  overflow: visible;
 }
 
 .scene-sets-angle-review-btn {
   background: none;
-  border: 1px solid transparent;
+  border: 1px solid #E0D5F0;
   border-radius: 4px;
   padding: 1px 4px;
   cursor: pointer;
-  color: #C4C4C4;
+  color: #9E9E9E;
   display: inline-flex;
   align-items: center;
   transition: all 0.15s;
-}
-
-.scene-sets-angle-item:hover .scene-sets-angle-review-btn {
-  opacity: 1;
 }
 
 .scene-sets-angle-review-btn:hover {
@@ -1437,14 +1474,9 @@
 
 .scene-sets-lightbox-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.88);
-  z-index: 100000;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1485,35 +1517,35 @@
 }
 
 .scene-sets-lightbox-nav {
-  position: fixed;
+  position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
   font-size: 32px;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s;
-  z-index: 100001;
+  z-index: 10;
   line-height: 1;
 }
 
 .scene-sets-lightbox-nav:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .scene-sets-lightbox-nav.prev {
-  left: 24px;
+  left: -60px;
 }
 
 .scene-sets-lightbox-nav.next {
-  right: 24px;
+  right: -60px;
 }
 
 .scene-sets-lightbox-media {
@@ -1763,30 +1795,30 @@
 
 .scene-sets-angle-regen {
   position: absolute;
-  top: 3px;
-  right: 3px;
+  top: 2px;
+  right: 2px;
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.6);
   border: none;
-  padding: 0;
-  cursor: pointer;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s ease;
+  padding: 0;
   z-index: 2;
 }
 
-.scene-sets-angle-item:hover .scene-sets-angle-regen {
+.scene-sets-angle-thumb:hover .scene-sets-angle-regen {
   opacity: 1;
 }
 
 .scene-sets-angle-regen:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(184, 150, 46, 0.85);
 }
 
 /* ── Regenerate All Button ─────────────────────────────────────────────── */
@@ -1795,13 +1827,13 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid rgba(184, 150, 46, 0.3);
-  background: rgba(184, 150, 46, 0.06);
+  border: 1px solid rgba(184, 150, 46, 0.4);
+  background: rgba(184, 150, 46, 0.08);
   color: #B8962E;
   transition: all 0.18s ease;
 }
@@ -1816,33 +1848,6 @@
   pointer-events: none;
 }
 
-/* ── Retry Failed Button ──────────────────────────────────────────────── */
-
-.scene-sets-btn-retry-failed {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid rgba(198, 40, 40, 0.4);
-  background: rgba(198, 40, 40, 0.08);
-  color: #C62828;
-  transition: all 0.18s ease;
-}
-
-.scene-sets-btn-retry-failed:hover {
-  background: rgba(198, 40, 40, 0.18);
-  border-color: #C62828;
-}
-
-.scene-sets-btn-retry-failed.disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
 /* ── Cost Info ─────────────────────────────────────────────────────────── */
 
 .scene-sets-cost-info {
@@ -1850,10 +1855,9 @@
   align-items: center;
   gap: 5px;
   font-family: 'DM Mono', monospace;
-  font-size: 10px;
-  color: #C4A94D;
+  font-size: 11px;
+  color: #B8962E;
   margin: 2px 0 0;
-  opacity: 0.7;
 }
 
 .scene-sets-total-cost {
@@ -1884,25 +1888,16 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  position: absolute;
-  right: 2px;
-  bottom: 22px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  z-index: 3;
-}
-
-.scene-sets-angle-item:hover .scene-sets-angle-reorder {
-  opacity: 1;
+  margin-top: 2px;
 }
 
 .scene-sets-angle-reorder-btn {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 3px;
-  color: #fff;
+  color: #999;
   cursor: pointer;
-  padding: 2px 3px;
+  padding: 1px 3px;
   display: flex;
   align-items: center;
   justify-content: center;
