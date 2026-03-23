@@ -679,9 +679,7 @@ router.patch('/:id/angles/reorder', optionalAuth, async (req, res) => {
 
 router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
   try {
-    const set = await SceneSet.findByPk(req.params.id, {
-      include: [{ model: SceneAngle, as: 'angles' }],
-    });
+    const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
     // Optionally update the description first
@@ -689,31 +687,13 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
       await set.update({ canonical_description: req.body.canonical_description });
     }
 
-    // Step 1: Regenerate base
-    const baseResult = await sceneGenService.generateBaseScene(set, { SceneSet, SceneAngle });
-
-    // Step 2: Regenerate all existing angles
-    const angleResults = [];
-    const freshSet = await SceneSet.findByPk(set.id);
-    for (const angle of (set.angles || [])) {
-      try {
-        const freshAngle = await SceneAngle.findByPk(angle.id);
-        const result = await sceneGenService.generateAngle(freshAngle, freshSet, { SceneAngle, SceneSet });
-        angleResults.push({ id: angle.id, label: angle.angle_label, success: true });
-      } catch (err) {
-        angleResults.push({ id: angle.id, label: angle.angle_label, success: false, error: err.message });
-      }
-    }
-
-    res.json({
-      success: true,
-      data: {
-        base: baseResult,
-        angles: angleResults,
-        totalAngles: angleResults.length,
-        successfulAngles: angleResults.filter(a => a.success).length,
-      },
+    const job = await GenerationJob.create({
+      job_type: 'cascade_regenerate',
+      scene_set_id: set.id,
+      payload: { force: true },
     });
+
+    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/cascade-regenerate error:', err);
     res.status(500).json({ success: false, error: err.message });

@@ -1199,8 +1199,14 @@ export default function SceneSetsTab() {
         throw new Error(err.error || 'Cascade regeneration failed');
       }
       const json = await res.json();
-      const { successfulAngles, totalAngles } = json.data;
-      showToast(`Base + ${successfulAngles}/${totalAngles} angles regenerated!`);
+      showToast('Cascade regeneration queued...');
+      const job = await pollJob(json.data.jobId);
+      if (job.status === 'completed') {
+        const { successfulAngles, totalAngles } = job.result || {};
+        showToast(`Base + ${successfulAngles || 0}/${totalAngles || 0} angles regenerated!`);
+      } else {
+        showToast(job.error || 'Cascade regeneration failed', 'error');
+      }
       setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       fetchSets();
     } catch (err) {
