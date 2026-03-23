@@ -500,9 +500,10 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
       });
     });
 
-    // Upload frame to S3
+    // Upload frame to S3 with timestamp key for cache-busting
     const frameBuffer = fs.readFileSync(tmpFrame);
-    const s3Key = `scene-sets/${setId}/angles/${angleId}/still.jpg`;
+    const ts = Date.now();
+    const s3Key = `scene-sets/${setId}/angles/${angleId}/still-${ts}.jpg`;
     await s3.send(new PutObjectCommand({
       Bucket: S3_BUCKET,
       Key: s3Key,

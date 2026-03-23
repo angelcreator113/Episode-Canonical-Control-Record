@@ -152,14 +152,9 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate, bustUrl }
 
 // ─── ANGLE STRIP ──────────────────────────────────────────────────────────────
 
-function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, generating, imageVersion }) {
+function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, generating, bustUrl }) {
   if (!angles || angles.length === 0) return null;
   const [lightboxIndex, setLightboxIndex] = useState(null);
-
-  const bustUrl = (url) => {
-    if (!url || !imageVersion) return url;
-    return `${url}${url.includes('?') ? '&' : '?'}v=${imageVersion}`;
-  };
   const sortedAngles = [...angles].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const completedAngles = sortedAngles.filter(a => a.still_image_url);
   const openLightbox = (angle) => {
@@ -530,14 +525,19 @@ const DEFAULT_ANGLE_PRESETS = [
   { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
 ];
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress, imageVersion }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onReorderAngle, onReviewAngle, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
+  // Cache-bust using set.updated_at — survives page refresh unlike local counters
+  const cacheBust = set.updated_at ? new Date(set.updated_at).getTime() : '';
+  const bustUrl = (url) => {
+    if (!url || !cacheBust) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}v=${cacheBust}`;
+  };
   const primaryStillRaw = set.angles?.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
-  const bustParam = imageVersion ? `${primaryStillRaw?.includes('?') ? '&' : '?'}v=${imageVersion}` : '';
-  const primaryStill = primaryStillRaw ? `${primaryStillRaw}${bustParam}` : null;
+  const primaryStill = primaryStillRaw ? bustUrl(primaryStillRaw) : null;
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const readyAngles = set.angles?.filter(a => a.generation_status === 'complete').length || 0;
   const totalAngles = set.angles?.length || 0;
@@ -898,7 +898,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               onRegenerate={(angle) => onGenerateAngle(set, angle)}
               onReorder={(angle, direction) => onReorderAngle(set, angle, direction)}
               generating={isGenerating}
-              imageVersion={imageVersion}
+              bustUrl={bustUrl}
             />
 
             {hasBase && totalAngles === 0 && !showAddAngle && (
@@ -998,7 +998,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 }, (prev, next) => {
   // Only re-render when meaningful rendering data changes, not on every poll
   if (prev.generatingId !== next.generatingId) return false;
-  if (prev.imageVersion !== next.imageVersion) return false;
+  if (prev.set.updated_at !== next.set.updated_at) return false;
   if (prev.generationProgress !== next.generationProgress) return false;
   const ps = prev.set, ns = next.set;
   if (ps.id !== ns.id) return false;
@@ -1022,7 +1022,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
 export default function SceneSetsTab() {
   const [sets, setSets] = useState([]);
-  const [imageVersions, setImageVersions] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [generatingId, setGeneratingId] = useState(null);
@@ -1102,7 +1101,7 @@ export default function SceneSetsTab() {
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {
         showToast(`Base generated for "${set.name}"`);
-        setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
+
       } else {
         showToast(job.error || 'Base generation failed', 'error');
       }
@@ -1131,7 +1130,7 @@ export default function SceneSetsTab() {
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {
         showToast('Base image regenerated!');
-        setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
+
       } else {
         showToast(job.error || 'Regeneration failed', 'error');
       }
@@ -1194,7 +1193,7 @@ export default function SceneSetsTab() {
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {
         showToast(`"${angle.angle_name}" generated!`);
-        setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
+
       } else {
         showToast(job.error || 'Angle generation failed', 'error');
       }
@@ -1649,7 +1648,6 @@ export default function SceneSetsTab() {
               onReorderAngle={handleReorderAngle}
               generatingId={generatingId}
               generationProgress={generationProgress}
-              imageVersion={imageVersions[set.id] || 0}
             />
           ))}
         </div>
