@@ -11,10 +11,8 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     // Check if table already exists (idempotent — safe to re-run after rename)
-    const [tables] = await queryInterface.sequelize.query(
-      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'generation_jobs'`
-    );
-    if (tables.length > 0) {
+    const tableDesc = await queryInterface.describeTable('generation_jobs').catch(() => null);
+    if (tableDesc) {
       console.log('generation_jobs table already exists — skipping creation');
       return;
     }
