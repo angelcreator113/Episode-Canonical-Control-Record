@@ -344,13 +344,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     if (!isGenerating && genStartTime) setGenStartTime(null);
   }, [isGenerating]);
 
-  // Close menu on outside click
-  useEffect(() => {
-    if (!showMenu) return;
-    const handleClick = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false); };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showMenu]);
+  // menuRef used for positioning the portaled kebab dropdown
 
   const handleSavePrompt = async (andRegenerate = false, andCascade = false) => {
     setSavingPrompt(true);
@@ -515,31 +509,38 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 >
                   <MoreVertical size={14} />
                 </button>
-                {showMenu && (
-                  <div className="scene-sets-kebab-menu">
-                    <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}>
-                      <Pencil size={12} /> Edit Prompt
-                    </button>
-                    <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
-                      <Eye size={12} /> Preview Prompt
-                    </button>
-                    {hasBase && (
-                      <button onClick={() => { setShowMenu(false); onRegenerateBase(set); }} disabled={isGenerating}>
-                        <RotateCcw size={12} /> Regenerate Base
+                {showMenu && createPortal(
+                  <div className="scene-sets-kebab-backdrop" onClick={() => setShowMenu(false)}>
+                    <div
+                      className="scene-sets-kebab-menu"
+                      style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 180 }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}>
+                        <Pencil size={12} /> Edit Prompt
                       </button>
-                    )}
-                    {hasBase && totalAngles === 0 && (
-                      <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
-                        <Sparkles size={12} /> Seed Default Angles
+                      <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
+                        <Eye size={12} /> Preview Prompt
                       </button>
-                    )}
-                    <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
-                      <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
-                    </button>
-                    <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
-                      <Trash2 size={12} /> Delete Set
-                    </button>
-                  </div>
+                      {hasBase && (
+                        <button onClick={() => { setShowMenu(false); onRegenerateBase(set); }} disabled={isGenerating}>
+                          <RotateCcw size={12} /> Regenerate Base
+                        </button>
+                      )}
+                      {hasBase && totalAngles === 0 && (
+                        <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
+                          <Sparkles size={12} /> Seed Default Angles
+                        </button>
+                      )}
+                      <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
+                        <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
+                      </button>
+                      <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
+                        <Trash2 size={12} /> Delete Set
+                      </button>
+                    </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             </div>
