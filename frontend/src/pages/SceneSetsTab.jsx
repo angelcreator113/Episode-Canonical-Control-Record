@@ -489,8 +489,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     <Eye size={12} /> Preview Prompt
                   </button>
                   {hasBase && (
-                    <button onClick={() => { setShowMenu(false); onRegenerateBase(set); }} disabled={isGenerating}>
-                      <RotateCcw size={12} /> Regenerate Base
+                    <button onClick={() => { setShowMenu(false); onCascadeRegenerate(set); }} disabled={isGenerating}>
+                      <RotateCcw size={12} /> Regenerate All
                     </button>
                   )}
                   {hasBase && totalAngles === 0 && (
@@ -623,11 +623,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               </button>
             )}
 
-            {hasBase && pendingAngles.length === 0 && regenerableAngles.length > 0 && (
-              <button onClick={() => onGenerateAll(set, true)} disabled={isGenerating} className={`scene-sets-btn-regenerate${isGenerating ? ' disabled' : ''}`}>
-                {isGenerating ? <><Loader size={12} className="spin" /> Regenerating...</> : <><RotateCcw size={12} /> Regenerate All</>}
-              </button>
-            )}
 
             {totalAngles > 0 && (
               <button onClick={() => onDeleteAllAngles(set)} disabled={isGenerating} className="scene-sets-btn-delete" title="Reset all angles">
@@ -1197,7 +1192,7 @@ export default function SceneSetsTab() {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/cascade-regenerate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_description: description }),
+        body: JSON.stringify(description ? { canonical_description: description } : {}),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
