@@ -1040,8 +1040,10 @@
   gap: 4px;
 }
 
-.scene-sets-angle-item:hover .scene-sets-angle-meta {
-  display: flex;
+@media (hover: hover) {
+  .scene-sets-angle-item:hover .scene-sets-angle-meta {
+    display: flex;
+  }
 }
 
 .scene-sets-angle-review-btn {
@@ -1769,8 +1771,10 @@
   z-index: 2;
 }
 
-.scene-sets-angle-item:hover .scene-sets-angle-regen {
-  display: flex;
+@media (hover: hover) {
+  .scene-sets-angle-item:hover .scene-sets-angle-regen {
+    display: flex;
+  }
 }
 
 .scene-sets-angle-regen:hover {
