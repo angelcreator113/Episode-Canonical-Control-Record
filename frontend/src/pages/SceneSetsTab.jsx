@@ -69,9 +69,10 @@ function ImageLightbox({ src, alt, onClose }) {
 // ─── ANGLE LIGHTBOX MODAL ─────────────────────────────────────────────────────
 
 function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate, bustUrl }) {
-  if (!angle) return null;
+  const [showVideo, setShowVideo] = useState(false);
 
   useEffect(() => {
+    if (!angle) return;
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowLeft' && onPrev) onPrev();
@@ -79,9 +80,9 @@ function AngleLightbox({ angle, onClose, onPrev, onNext, onRegenerate, bustUrl }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose, onPrev, onNext]);
+  }, [angle, onClose, onPrev, onNext]);
 
-  const [showVideo, setShowVideo] = useState(false);
+  if (!angle) return null;
 
   return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
@@ -808,18 +809,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
         {progress && <GenerationProgress progress={progress} />}
 
-        {expanded && (
-          <AngleStrip
-            angles={set.angles}
-            onGenerate={(angle) => onGenerateAngle(set, angle)}
-            onReview={(angle) => onReviewAngle(set, angle)}
-            onRegenerate={(angle) => onGenerateAngle(set, angle)}
-            onReorder={onReorderAngle ? (angle, dir) => onReorderAngle(set, angle, dir) : null}
-            generating={isGenerating}
-            imageVersion={imageVersion}
-          />
-        )}
-
         {showPromptEditor && (
           <div className="scene-sets-prompt-editor">
             <label className="scene-sets-prompt-editor-label">Scene Description (used to build AI prompt)</label>
@@ -879,7 +868,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           />
         )}
 
-        {showPromptPreview && previewData && (
+        {showPromptPreview && previewData && createPortal(
           <div className="scene-sets-lightbox-overlay" onClick={() => setShowPromptPreview(false)}>
             <div className="scene-sets-prompt-preview-modal" onClick={e => e.stopPropagation()}>
               <button className="scene-sets-lightbox-close" onClick={() => setShowPromptPreview(false)}>
@@ -895,7 +884,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <pre className="scene-sets-prompt-preview">{previewData.videoPrompt}</pre>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {expanded && (
@@ -903,6 +893,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             <AngleStrip
               angles={set.angles}
               onGenerate={(angle) => onGenerateAngle(set, angle)}
+              onReview={(angle) => onReviewAngle(set, angle)}
               onRegenerate={(angle) => onGenerateAngle(set, angle)}
               onReorder={(angle, direction) => onReorderAngle(set, angle, direction)}
               generating={isGenerating}
@@ -1047,13 +1038,19 @@ export default function SceneSetsTab() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const initialLoadDone = useRef(false);
   const fetchSets = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/scene-sets`);
       const json = await res.json();
       setSets(json.data || []);
+      setError(null);
+      initialLoadDone.current = true;
     } catch {
-      setError('Failed to load scene sets');
+      // Only show error on initial load, not on poll failures
+      if (!initialLoadDone.current) {
+        setError('Failed to load scene sets');
+      }
     } finally {
       setLoading(false);
     }
@@ -1218,38 +1215,49 @@ export default function SceneSetsTab() {
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
     setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
-    let completed = 0;
-    let failed = 0;
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        progressAngles[i].status = 'generating';
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
-
-        try {
-          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
-          if (!res.ok) throw new Error('Failed');
-          progressAngles[i].status = 'done';
-          completed++;
-        } catch {
-          progressAngles[i].status = 'failed';
-          failed++;
-        }
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+    // Fire all generation requests and collect job IDs
+    const jobMap = [];
+    for (let i = 0; i < targets.length; i++) {
+      progressAngles[i].status = 'generating';
+      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
+      try {
+        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed');
+        const json = await res.json();
+        jobMap.push({ index: i, jobId: json.data.jobId });
+      } catch {
+        progressAngles[i].status = 'failed';
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
       }
-
-      if (failed === 0) {
-        showToast(`All ${targets.length} angles ${regenerate ? 'regenerating' : 'queued for generation'}`);
-      } else {
-        showToast(`${completed} queued, ${failed} failed`, failed > 0 ? 'error' : 'success');
-      }
-      if (completed > 0) setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
-      fetchSets();
-    } catch {
-      showToast('Generation failed', 'error');
-    } finally {
-      setTimeout(() => setGenerationProgress(null), 3000);
-      setGeneratingId(null);
     }
+
+    // Poll all jobs in parallel
+    let completed = 0;
+    let failed = progressAngles.filter(a => a.status === 'failed').length;
+
+    const pollPromises = jobMap.map(async ({ index, jobId }) => {
+      const job = await pollJob(jobId);
+      if (job.status === 'completed') {
+        progressAngles[index].status = 'done';
+        completed++;
+      } else {
+        progressAngles[index].status = 'failed';
+        failed++;
+      }
+      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+    });
+
+    await Promise.all(pollPromises);
+
+    if (failed === 0) {
+      showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
+    } else {
+      showToast(`${completed} completed, ${failed} failed`, failed > 0 ? 'error' : 'success');
+    }
+    if (completed > 0) setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
+    fetchSets();
+    setTimeout(() => setGenerationProgress(null), 3000);
+    setGeneratingId(null);
   };
 
   const handleRetryFailed = async (set) => {
@@ -1326,7 +1334,7 @@ export default function SceneSetsTab() {
       // If a generation job was auto-queued, poll it and update when done
       if (json.jobId) {
         showToast(`Created "${setName}" — generating base image...`);
-        setGeneratingId(json.data.id);
+        if (json.data?.id) setGeneratingId(json.data.id);
         const job = await pollJob(json.jobId);
         if (job.status === 'completed') {
           showToast(`Base image generated for "${setName}"`);
@@ -1405,18 +1413,20 @@ export default function SceneSetsTab() {
 
   const handleSeedAngles = async (set) => {
     try {
-      for (const preset of DEFAULT_ANGLE_PRESETS) {
-        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles`, {
+      const results = await Promise.all(DEFAULT_ANGLE_PRESETS.map(preset =>
+        fetch(`${API_BASE}/scene-sets/${set.id}/angles`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...preset, beat_affinity: [] }),
-        });
-        if (!res.ok) throw new Error(`Failed to create ${preset.angle_label}`);
-      }
+        })
+      ));
+      const failed = results.filter(r => !r.ok);
+      if (failed.length > 0) throw new Error(`${failed.length} angle(s) failed to create`);
       showToast(`Seeded ${DEFAULT_ANGLE_PRESETS.length} default angles`);
       fetchSets();
     } catch (err) {
       showToast(err.message || 'Failed to seed angles', 'error');
+      fetchSets();
     }
   };
 
@@ -1627,7 +1637,6 @@ export default function SceneSetsTab() {
               onUploadBase={handleUploadBase}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
-              onRetryFailed={handleRetryFailed}
               onDeleteAllAngles={handleDeleteAllAngles}
               onReviewAngle={handleReviewAngle}
               onDeleteSet={handleDeleteSet}
