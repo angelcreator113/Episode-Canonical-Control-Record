@@ -1057,7 +1057,10 @@ export default function SceneSetsTab() {
   const handleGenerateBase = async (set) => {
     setGeneratingId(set.id);
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Generation failed');
