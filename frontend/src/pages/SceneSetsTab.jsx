@@ -184,18 +184,18 @@ function AngleStrip({ angles, onGenerate, onReview, onRegenerate, onReorder, gen
               {angle.still_image_url ? (
                 <img src={angle.still_image_url} alt={angle.angle_name} />
               ) : isGenerating ? (
-                <Loader size={16} className="spin" />
+                <Loader size={20} className="spin" />
               ) : isFailed ? (
-                <AlertCircle size={16} />
+                <AlertCircle size={20} />
               ) : isPending && !generating ? (
-                <Sparkles size={16} className="scene-sets-clickable-icon" />
+                <Sparkles size={20} className="scene-sets-clickable-icon" />
               ) : (
-                <Sparkles size={16} />
+                <Sparkles size={20} />
               )}
 
               {angle.video_clip_url && (
                 <div className="scene-sets-video-indicator">
-                  <Play size={8} />
+                  <Play size={10} />
                 </div>
               )}
 
@@ -612,11 +612,18 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
         style={primaryStill ? { cursor: 'pointer' } : undefined}
       >
         {primaryStill ? (
-          <img src={primaryStill} alt={set.name} />
+          <img src={primaryStill} alt={set.name} key={primaryStill} />
         ) : (
           <div className="scene-sets-card-placeholder">
             <Camera size={32} strokeWidth={1.2} />
             <span>{hasBase ? 'Generate angles to see visuals' : 'Not yet generated'}</span>
+          </div>
+        )}
+
+        {isGenerating && (
+          <div className="scene-sets-card-generating-overlay">
+            <Loader size={24} className="spin" />
+            <span>Generating{genStartTime ? ` ${formatTime(baseElapsed)}` : '...'}</span>
           </div>
         )}
 
@@ -636,6 +643,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
             <Play size={12} /> Video ready
           </div>
         )}
+
       </div>
 
       {/* Card body */}
@@ -756,7 +764,7 @@ function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onG
                 className="scene-sets-btn-delete"
                 title="Delete all angles and regenerate clean"
               >
-                <RotateCcw size={12} /> Reset Angles
+                <Trash2 size={12} /> Reset Angles
               </button>
             )}
           </div>
@@ -1030,14 +1038,106 @@ export default function SceneSetsTab() {
     return () => clearTimeout(timer);
   }, [sets, fetchSets]);
 
+  // Poll a job until it completes or fails; returns the final job data
+  const pollJob = useCallback(async (jobId) => {
+    const maxPolls = 120; // 120 * 3s = 6 min max
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const res = await fetch(`${API_BASE}/scene-sets/jobs/${jobId}`);
+        if (!res.ok) continue;
+        const json = await res.json();
+        const job = json.data;
+        if (job.status === 'completed' || job.status === 'failed') return job;
+      } catch { /* retry on network error */ }
+    }
+    return { status: 'failed', error: 'Polling timed out' };
+  }, []);
+
   const handleGenerateBase = async (set) => {
     setGeneratingId(set.id);
     try {
-      await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, { method: 'POST' });
-      showToast(`Generating base for "${set.name}" — typically takes ~45 seconds`);
-      setTimeout(fetchSets, 5000);
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Generation failed');
+      }
+      const json = await res.json();
+      showToast('Base generation queued...');
+      const job = await pollJob(json.data.jobId);
+      if (job.status === 'completed') {
+        showToast(`Base generated for "${set.name}"`);
+      } else {
+        showToast(job.error || 'Base generation failed', 'error');
+      }
+      await fetchSets();
+    } catch (err) {
+      showToast(err.message || 'Generation failed', 'error');
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const handleRegenerateBase = async (set) => {
+    setGeneratingId(set.id);
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Regeneration failed');
+      }
+      const json = await res.json();
+      showToast('Base regeneration queued...');
+      const job = await pollJob(json.data.jobId);
+      if (job.status === 'completed') {
+        showToast('Base image regenerated!');
+      } else {
+        showToast(job.error || 'Regeneration failed', 'error');
+      }
+      await fetchSets();
+    } catch (err) {
+      showToast(err.message || 'Regeneration failed', 'error');
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
+  const handleUpdatePrompt = async (set, newDescription) => {
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canonical_description: newDescription }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      showToast('Prompt updated');
+      fetchSets();
     } catch {
-      showToast('Generation failed', 'error');
+      showToast('Failed to update prompt', 'error');
+    }
+  };
+
+  const handleUploadBase = async (set, file) => {
+    setGeneratingId(set.id);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/upload-base`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Upload failed');
+      }
+      showToast(`Base image uploaded for "${set.name}"`);
+      fetchSets();
+    } catch (err) {
+      showToast(err.message || 'Upload failed', 'error');
     } finally {
       setGeneratingId(null);
     }
@@ -1104,9 +1204,20 @@ export default function SceneSetsTab() {
   const handleGenerateAngle = async (set, angle) => {
     setGeneratingId(set.id);
     try {
-      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
-      showToast(`Generating "${angle.angle_name}" — still image ~20s, then video ~25s`);
-      setTimeout(fetchSets, 5000);
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Generation failed (${res.status})`);
+      }
+      const json = await res.json();
+      showToast(`Generating "${angle.angle_name}" — queued`);
+      const job = await pollJob(json.data.jobId);
+      if (job.status === 'completed') {
+        showToast(`"${angle.angle_name}" generated!`);
+      } else {
+        showToast(job.error || 'Angle generation failed', 'error');
+      }
+      await fetchSets();
     } catch {
       showToast('Angle generation failed', 'error');
     } finally {
@@ -1155,6 +1266,84 @@ export default function SceneSetsTab() {
       setTimeout(() => setGenerationProgress(null), 3000);
       setGeneratingId(null);
     }
+
+    // Poll all jobs in parallel
+    let completed = 0;
+    let failed = progressAngles.filter(a => a.status === 'failed').length;
+
+    const pollPromises = jobMap.map(async ({ index, jobId }) => {
+      const job = await pollJob(jobId);
+      if (job.status === 'completed') {
+        progressAngles[index].status = 'done';
+        completed++;
+      } else {
+        progressAngles[index].status = 'failed';
+        failed++;
+      }
+      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+    });
+
+    await Promise.all(pollPromises);
+
+    if (failed === 0) {
+      showToast(`All ${targets.length} angles generated!`);
+    } else {
+      showToast(`${completed} generated, ${failed} failed`, failed > 0 ? 'error' : 'success');
+    }
+    fetchSets();
+    setTimeout(() => setGenerationProgress(null), 3000);
+    setGeneratingId(null);
+  };
+
+  const handleRetryFailed = async (set) => {
+    const targets = set.angles?.filter(a => a.generation_status === 'failed') || [];
+    if (targets.length === 0) return;
+    setGeneratingId(set.id);
+
+    const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
+    setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+
+    // Fire all retry requests to get job IDs
+    const jobMap = [];
+    for (let i = 0; i < targets.length; i++) {
+      try {
+        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed');
+        const json = await res.json();
+        jobMap.push({ index: i, jobId: json.data.jobId });
+        progressAngles[i].status = 'generating';
+      } catch {
+        progressAngles[i].status = 'failed';
+      }
+      setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+    }
+
+    // Poll all jobs in parallel
+    let completed = 0;
+    let failed = progressAngles.filter(a => a.status === 'failed').length;
+
+    const pollPromises = jobMap.map(async ({ index, jobId }) => {
+      const job = await pollJob(jobId);
+      if (job.status === 'completed') {
+        progressAngles[index].status = 'done';
+        completed++;
+      } else {
+        progressAngles[index].status = 'failed';
+        failed++;
+      }
+      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+    });
+
+    await Promise.all(pollPromises);
+
+    if (failed === 0) {
+      showToast(`All ${targets.length} failed angles retried successfully!`);
+    } else {
+      showToast(`${completed} recovered, ${failed} still failing`, failed > 0 ? 'error' : 'success');
+    }
+    fetchSets();
+    setTimeout(() => setGenerationProgress(null), 3000);
+    setGeneratingId(null);
   };
 
   const handleCreate = async () => {
@@ -1463,6 +1652,7 @@ export default function SceneSetsTab() {
               onUploadBase={handleUploadBase}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
+              onRetryFailed={handleRetryFailed}
               onDeleteAllAngles={handleDeleteAllAngles}
               onReviewAngle={handleReviewAngle}
               onDeleteSet={handleDeleteSet}

@@ -20,9 +20,16 @@ require('./videoRenderer');
 
 console.log('✅ Worker process started — monitoring queue: video-export');
 
+// Load the scene generation worker (DB-polling processor)
+const sceneGenWorker = require('./sceneGenerationWorker');
+sceneGenWorker.start();
+
+console.log('✅ Scene generation worker started — monitoring queue: generation_jobs');
+
 // Graceful shutdown
 const shutdown = (signal) => {
   console.log(`\n📢 ${signal} received — shutting down worker...`);
+  sceneGenWorker.stop();
   // Bull will finish the current job before exiting
   process.exit(0);
 };

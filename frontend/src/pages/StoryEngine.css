@@ -63,9 +63,7 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  background:
-    radial-gradient(900px 500px at 18% 0%, rgba(176,146,46,0.05), transparent 52%),
-    linear-gradient(to bottom, var(--se-bg) 0%, var(--se-bg-2) 100%);
+  background: var(--se-bg);
   color: var(--se-text);
   font-family: 'DM Sans', sans-serif;
   overflow: hidden;
@@ -81,13 +79,10 @@ html, body {
   padding: 6px 16px;
   border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
-  background: var(--se-surface-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--se-surface);
   z-index: 20;
   position: sticky;
   top: 0;
-  box-shadow: 0 1px 0 rgba(0,0,0,0.03);
   min-height: 48px;
 }
 
@@ -329,7 +324,7 @@ html, body {
   width: 280px;
   flex-shrink: 0;
   border-right: 1px solid var(--se-border-light);
-  background: var(--se-surface);
+  background: var(--se-cream);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -338,6 +333,7 @@ html, body {
 
 .se-nav-top {
   flex-shrink: 0;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--se-border-light);
 }
 
@@ -346,7 +342,6 @@ html, body {
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px 14px;
-  border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
 }
 
@@ -424,7 +419,6 @@ html, body {
 
 .se-nav-filter {
   padding: 8px 14px;
-  border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
 }
 
@@ -488,8 +482,7 @@ html, body {
 .se-nav-count {
   font-size: 11px;
   color: var(--se-text-dim);
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--se-border-light);
+  padding: 8px 14px 4px;
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -544,6 +537,8 @@ html, body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  box-shadow: 0 0 24px rgba(0,0,0,0.04);
+  z-index: 1;
 }
 
 .se-canvas-generating {
@@ -665,6 +660,7 @@ html, body {
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 0;
 }
 
 .se-inspector::-webkit-scrollbar {
@@ -678,7 +674,6 @@ html, body {
 
 .se-insp-section {
   padding: 16px 18px;
-  border-bottom: 1px solid rgba(0,0,0,0.04);
 }
 
 .se-insp-section:last-child {
@@ -1611,9 +1606,8 @@ html, body {
 .se-char-selector {
   position: relative;
   padding: 10px 20px;
-  border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
-  background: var(--se-surface);
+  background: transparent;
 }
 
 .se-char-trigger {
@@ -1847,9 +1841,8 @@ html, body {
   display: flex;
   gap: 0;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
-  background: var(--se-surface);
+  background: transparent;
 }
 
 .se-arc-phase {
@@ -1957,8 +1950,7 @@ html, body {
 
 .se-stats-dashboard {
   padding: 14px 20px;
-  border-bottom: 1px solid var(--se-border-light);
-  background: var(--se-surface);
+  background: transparent;
   animation: se-slide-down 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   flex-shrink: 0;
 }
@@ -2185,8 +2177,7 @@ html, body {
 /* section intro */
 .se-task-section-intro {
   padding: 14px 14px 10px;
-  border-bottom: 1px solid var(--se-border-light);
-  background: var(--se-surface);
+  background: transparent;
 }
 
 .se-task-section-title {
@@ -2206,8 +2197,7 @@ html, body {
 /* Filter bar */
 .se-filter-bar {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--se-border-light);
-  background: var(--se-surface);
+  background: transparent;
   flex-shrink: 0;
 }
 
@@ -2307,10 +2297,9 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 9px 14px;
-  border-bottom: 1px solid var(--se-border-light);
   font-size: 11px;
   color: var(--se-text-dim);
-  background: var(--se-surface);
+  background: transparent;
   position: sticky;
   top: 0;
   z-index: 2;
@@ -2421,19 +2410,20 @@ html, body {
   align-items: flex-start;
   gap: 8px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--se-border-light);
   cursor: pointer;
   transition: all 0.16s ease;
   position: relative;
+  border-radius: 8px;
+  margin: 2px 6px;
 }
 
 .se-task-card:hover {
-  background: rgba(255,255,255,0.72);
+  background: var(--se-surface);
 }
 
 .se-task-card.active {
   background: var(--se-surface);
-  box-shadow: inset 3px 0 0 var(--char-color, var(--se-gold));
+  box-shadow: inset 3px 0 0 var(--char-color, var(--se-gold)), var(--se-shadow-sm);
 }
 
 .se-task-card.approved {
@@ -2969,7 +2959,7 @@ html, body {
   border-bottom: 1px solid var(--se-border-light);
   flex-shrink: 0;
   gap: 16px;
-  background: var(--se-surface);
+  background: transparent;
 }
 
 .se-story-header-left {

@@ -250,20 +250,21 @@
 .scene-sets-card {
   background: #FFF;
   border: 1px solid #E8E4DC;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
-  transition: box-shadow 0.2s ease;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .scene-sets-card:hover {
-  box-shadow: 0 4px 16px rgba(44, 27, 105, 0.10);
+  box-shadow: 0 6px 24px rgba(44, 27, 105, 0.12);
+  transform: translateY(-1px);
 }
 
 /* ── Card Preview ──────────────────────────────────────────────────────── */
 
 .scene-sets-card-preview {
-  height: 160px;
+  height: 220px;
   background: linear-gradient(135deg, #F0EBF8 0%, #EDE7F6 100%);
   position: relative;
   overflow: hidden;
@@ -293,6 +294,23 @@
 .scene-sets-card-placeholder span {
   font-size: 11px;
   font-weight: 500;
+}
+
+.scene-sets-card-generating-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  z-index: 5;
+  pointer-events: none;
 }
 
 .scene-sets-card-overlay-top-left {
@@ -333,10 +351,85 @@
   gap: 4px;
 }
 
+/* ── Card Hover Toolbar ───────────────────────────────────────────────── */
+
+.scene-sets-card-hover-toolbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.scene-sets-card-preview:hover .scene-sets-card-hover-toolbar {
+  opacity: 1;
+}
+
+.scene-sets-hover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFF;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.scene-sets-hover-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.scene-sets-hover-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Regen Base Button (card body) ────────────────────────────────────── */
+
+.scene-sets-btn-regen-base {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(184, 150, 46, 0.4);
+  background: rgba(184, 150, 46, 0.08);
+  color: #B8962E;
+  transition: all 0.18s ease;
+}
+
+.scene-sets-btn-regen-base:hover {
+  background: rgba(184, 150, 46, 0.18);
+  border-color: #B8962E;
+}
+
+.scene-sets-btn-regen-base.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* ── Card Body ─────────────────────────────────────────────────────────── */
 
 .scene-sets-card-body {
-  padding: 14px 16px;
+  padding: 16px 18px 14px;
 }
 
 .scene-sets-card-header {
@@ -424,15 +517,18 @@
 .scene-sets-card-title {
   margin: 0;
   font-family: 'Lora', serif;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: #2C2C2C;
+  line-height: 1.3;
 }
 
 .scene-sets-card-subtitle {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   font-size: 12px;
-  color: #6B6B6B;
+  color: #9E9E9E;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
 }
 
 .scene-sets-card-actions {
@@ -507,15 +603,46 @@
   color: #5C3D8F;
   border: none;
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.scene-sets-btn-upload:hover {
+  background: rgba(184, 150, 46, 0.2);
+  border-color: rgba(184, 150, 46, 0.5);
+}
+
+.scene-sets-btn-upload.disabled {
+  background: #EEE;
+  color: #999;
+  border-color: #DDD;
+  cursor: not-allowed;
+}
+
+.scene-sets-btn-angles {
+  background: none;
+  color: #5C3D8F;
+  border: 1px solid #E0D5F0;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
 }
 
 .scene-sets-btn-angles:hover {
-  background: #EDE7F6;
+  background: #F5F0FF;
+  border-color: #5C3D8F;
 }
 
 .scene-sets-btn-delete {
@@ -580,6 +707,31 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  transition: all 0.15s;
+}
+
+.scene-sets-btn-delete-set:hover {
+  color: #B71C1C;
+  border-color: #EF9A9A;
+  background: #FFEBEE;
+}
+
+.scene-sets-btn-delete-set:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Seed / Script ─────────────────────────────────────────────────────── */
+
+.scene-sets-seed-info {
+  margin: 10px 0 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #C4A94D;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.7;
 }
 
 .scene-sets-script-context {
@@ -596,17 +748,22 @@
 /* ── Angle Strip ───────────────────────────────────────────────────────── */
 
 .scene-sets-angle-strip {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  background: #FAFAF5;
+  border-radius: 10px;
+  border: 1px solid #EFEBE3;
 }
 
 .scene-sets-angle-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 0;
+  position: relative;
 }
 
 .scene-sets-angle-item.clickable {
@@ -614,18 +771,18 @@
 }
 
 .scene-sets-angle-thumb {
-  width: 52px;
-  height: 36px;
-  border-radius: 6px;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  border: 1.5px solid #E0D5F0;
+  border: 2px solid #E0D5F0;
   background: #F0EBF8;
   color: #9E9E9E;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .scene-sets-angle-thumb img {
@@ -635,8 +792,12 @@
 }
 
 .scene-sets-angle-thumb.complete {
-  border-color: #B8962E;
+  border-color: rgba(184, 150, 46, 0.5);
   background: #000;
+}
+
+.scene-sets-angle-thumb.complete:hover {
+  border-color: #B8962E;
 }
 
 .scene-sets-angle-thumb.generating {
@@ -646,7 +807,10 @@
 .scene-sets-angle-thumb.failed {
   border-color: #FFCDD2;
   color: #C62828;
+  cursor: pointer;
 }
+
+
 
 .scene-sets-angle-item.clickable .scene-sets-angle-thumb:hover {
   transform: scale(1.06);
@@ -778,11 +942,11 @@
 
 .scene-sets-video-indicator {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
+  bottom: 4px;
+  right: 4px;
   background: rgba(0, 0, 0, 0.65);
-  border-radius: 3px;
-  padding: 1px 3px;
+  border-radius: 4px;
+  padding: 2px 5px;
   color: #FFF;
   display: flex;
   align-items: center;
@@ -791,9 +955,16 @@
 .scene-sets-angle-label {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
-  color: #888;
+  color: #666;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-top: 4px;
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scene-sets-beat-numbers {
@@ -1197,6 +1368,22 @@
     flex: 1;
     text-align: center;
     justify-content: center;
+  }
+
+  .scene-sets-card-hover-toolbar {
+    opacity: 1;
+    position: relative;
+    background: #F5F0FF;
+    padding: 8px;
+    gap: 4px;
+  }
+
+  .scene-sets-hover-btn {
+    background: rgba(92, 61, 143, 0.1);
+    color: #5C3D8F;
+    border-color: rgba(92, 61, 143, 0.2);
+    font-size: 10px;
+    padding: 5px 8px;
   }
 
   .scene-sets-filters {

@@ -10,7 +10,7 @@ const sceneGenService    = require('../services/sceneGenerationService');
 const artifactService    = require('../services/artifactDetectionService');
 const postProcessService = require('../services/postProcessingService');
 const refinementQueue    = require('../queues/sceneRefinementQueue');
-const { SceneSet, SceneAngle, Universe, Show } = require('../models');
+const { SceneSet, SceneAngle, Universe, Show, GenerationJob } = require('../models');
 
 const S3_BUCKET  = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -202,8 +202,13 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
       });
     }
 
-    const result = await sceneGenService.generateBaseScene(set, { SceneSet, SceneAngle });
-    res.json({ success: true, data: result });
+    const job = await GenerationJob.create({
+      job_type: 'generate_base',
+      scene_set_id: set.id,
+      payload: { force: !!req.body.force },
+    });
+
+    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -266,8 +271,17 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
-    const result = await sceneGenService.generateAngle(angle, set, { SceneAngle, SceneSet });
-    res.json({ success: true, data: result });
+    const job = await GenerationJob.create({
+      job_type: 'generate_angle',
+      scene_set_id: set.id,
+      scene_angle_id: angle.id,
+      payload: {},
+    });
+
+    // Mark the angle as generating so the frontend sees it immediately
+    await angle.update({ generation_status: 'generating' });
+
+    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -511,7 +525,7 @@ router.get('/refinement-queue/jobs/:jobId', optionalAuth, async (req, res) => {
 
 router.get('/by-type/:sceneType', optionalAuth, async (req, res) => {
   try {
-    const validTypes = ['HOME_BASE', 'RECURRING', 'ONE_SHOT', 'TRANSITIONAL', 'FLASHBACK'];
+    const validTypes = ['HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER'];
     const sceneType = req.params.sceneType.toUpperCase();
 
     if (!validTypes.includes(sceneType)) {
@@ -594,12 +608,14 @@ router.get('/:id/preview-prompt', optionalAuth, async (req, res) => {
     const angleLabel = (req.query.angle || 'WIDE').toUpperCase();
     const prompt = sceneGenService.buildPrompt(set, angleLabel);
     const videoPrompt = sceneGenService.buildVideoPrompt(set, angleLabel);
+    const negativePrompt = sceneGenService.buildNegativePrompt(set);
 
     res.json({
       success: true,
       data: {
         prompt,
         videoPrompt,
+        negativePrompt,
         promptLength: prompt.length,
         angleLabel,
       },
@@ -686,5 +702,54 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// ─── GET /jobs/:jobId  — poll a single job status ────────────────────────────
+
+router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
+  try {
+    const job = await GenerationJob.findByPk(req.params.jobId);
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+
+    res.json({
+      success: true,
+      data: {
+        id: job.id,
+        job_type: job.job_type,
+        status: job.status,
+        scene_set_id: job.scene_set_id,
+        scene_angle_id: job.scene_angle_id,
+        result: job.result,
+        error: job.error,
+        attempts: job.attempts,
+        started_at: job.started_at,
+        completed_at: job.completed_at,
+        created_at: job.created_at,
+      },
+    });
+  } catch (err) {
+    console.error('Scene Sets GET /jobs/:jobId error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── GET /jobs/set/:setId  — get all active jobs for a scene set ─────────────
+
+router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
+  try {
+    const jobs = await GenerationJob.findAll({
+      where: {
+        scene_set_id: req.params.setId,
+        status: ['queued', 'processing'],
+      },
+      order: [['created_at', 'ASC']],
+    });
+
+    res.json({ success: true, data: jobs });
+  } catch (err) {
+    console.error('Scene Sets GET /jobs/set/:setId error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 module.exports = router;
