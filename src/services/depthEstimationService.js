@@ -29,8 +29,8 @@ const s3 = new S3Client({ region: AWS_REGION });
 // ─── REPLICATE CONFIG ───────────────────────────────────────────────────────
 
 // DepthAnythingV2 via chenxwh (actively maintained, 384K+ runs)
-// Community models require /v1/predictions endpoint with version hash
-const DEPTH_MODEL_VERSION = 'c86af37112102f128f3db5ff190659d56b4305e2';
+// Uses /v1/models/{owner}/{name}/predictions endpoint (no version hash needed)
+const DEPTH_MODEL = 'chenxwh/depth-anything-v2';
 const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
 const MAX_POLL_ATTEMPTS = 60;
 const POLL_INTERVAL_MS = 3000;
@@ -81,13 +81,12 @@ async function runDepthEstimation(imageUrl) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  console.log(`[DepthEstimation] Creating prediction with version ${DEPTH_MODEL_VERSION.slice(0, 12)}...`);
+  console.log(`[DepthEstimation] Creating prediction with ${DEPTH_MODEL}...`);
 
-  // Create prediction using /v1/predictions endpoint (required for community models)
+  // Create prediction using model-based endpoint (no version hash required)
   const createResponse = await axios.post(
-    `${REPLICATE_API_BASE}/predictions`,
+    `${REPLICATE_API_BASE}/models/${DEPTH_MODEL}/predictions`,
     {
-      version: DEPTH_MODEL_VERSION,
       input: {
         image: imageUrl,
         encoder: 'vitl',
@@ -110,19 +109,16 @@ async function runDepthEstimation(imageUrl) {
   }
 
   // Otherwise, poll for completion
-  const predictionId = createResponse.data.id;
-  console.log(`[DepthEstimation] Polling prediction ${predictionId}...`);
+  const pollUrl = createResponse.data.urls?.get || `${REPLICATE_API_BASE}/predictions/${createResponse.data.id}`;
+  console.log(`[DepthEstimation] Polling prediction ${createResponse.data.id}...`);
 
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
     await sleep(POLL_INTERVAL_MS);
 
-    const pollResponse = await axios.get(
-      `${REPLICATE_API_BASE}/predictions/${predictionId}`,
-      {
-        headers: { 'Authorization': `Bearer ${REPLICATE_API_TOKEN}` },
-        timeout: 15000,
-      }
-    );
+    const pollResponse = await axios.get(pollUrl, {
+      headers: { 'Authorization': `Bearer ${REPLICATE_API_TOKEN}` },
+      timeout: 15000,
+    });
 
     const { status, output, error } = pollResponse.data;
 
