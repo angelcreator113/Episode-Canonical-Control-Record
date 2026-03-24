@@ -368,12 +368,7 @@ router.post('/:id/angles/:angleId/generate-video', optionalAuth, async (req, res
       payload: {},
     });
 
-    try {
-      await angle.update({ generation_status: 'generating_video' });
-    } catch (e) {
-      console.warn('generate-angle-video: could not update angle status:', e.message);
-    }
-
+    // Note: angle stays 'complete' (still visible) while video generates in background
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate-video error:', err);

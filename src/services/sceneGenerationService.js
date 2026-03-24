@@ -616,11 +616,6 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
   const videoDuration = sceneAngle.video_duration || VIDEO_DURATION_MAP[angleLabel] || 5;
   const cameraMotion = sceneAngle.camera_motion || CAMERA_MOTION_MAP[angleLabel] || 'static';
 
-  await SceneAngle.update(
-    { generation_status: 'generating_video' },
-    { where: { id: sceneAngle.id } }
-  );
-
   try {
     console.log(`[SceneGen] Starting on-demand video for angle: ${sceneAngle.angle_name}`);
 
@@ -631,8 +626,6 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
     const result = await pollTask(jobId);
 
     if (result.status !== 'SUCCEEDED') {
-      // Revert to complete — the still is still valid
-      await SceneAngle.update({ generation_status: 'complete' }, { where: { id: sceneAngle.id } });
       throw new Error(`Angle video failed: ${result.error}`);
     }
 
@@ -653,8 +646,7 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
 
     return { success: true, videoUrl };
   } catch (err) {
-    // Keep the angle as complete so the still image stays accessible
-    await SceneAngle.update({ generation_status: 'complete' }, { where: { id: sceneAngle.id } });
+    // Angle stays 'complete' — the still image remains accessible
     throw err;
   }
 }
