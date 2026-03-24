@@ -115,6 +115,8 @@ function SceneComposerFull() {
       characters: scene.characters,
       ui_elements: scene.ui_elements,
       dialogue_clips: scene.dialogue_clips,
+      scene_set_id: scene.scene_set_id || null,
+      scene_angle_id: scene.scene_angle_id || null,
     })),
   }), [episode, platform, scenes, currentPlatform]);
 
@@ -309,6 +311,8 @@ function SceneComposerFull() {
           characters: s.characters || [],
           ui_elements: s.uiElements || s.ui_elements || [],
           dialogue_clips: s.dialogueClips || s.dialogue_clips || [],
+          scene_set_id: s.sceneSetId || s.scene_set_id || null,
+          scene_angle_id: s.sceneAngleId || s.scene_angle_id || null,
         }));
         setScenes(mapped);
         console.log('✅ Scenes set:', mapped.map(s => `#${s.scene_number} "${s.title}"`).join(', '));
@@ -1355,6 +1359,19 @@ function SceneComposerFull() {
                   <div className="scene-title">{scene.title}</div>
                   <div className="scene-meta">{scene.duration_seconds}s</div>
                 </div>
+                {scene.id && (
+                  <button
+                    className="scene-studio-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/studio/scene/${scene.id}?show_id=${episode?.show_id || episode?.showId || ''}&episode_id=${episodeId}`);
+                    }}
+                    title="Open in Scene Studio"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#6366f1', padding: '2px 4px' }}
+                  >
+                    🎨
+                  </button>
+                )}
                 {scenes.length > 1 && (
                   <button
                     className="scene-delete-btn"

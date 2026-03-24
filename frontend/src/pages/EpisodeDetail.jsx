@@ -11,6 +11,7 @@ import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
 import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
+import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
 import './EpisodeDetail.css';
 
 
@@ -532,7 +533,7 @@ const EpisodeDetail = () => {
         <div className="ed-header-actions">
           <Link
             to={`/episodes/${episode.id}/evaluate`}
-            style={{padding:'8px 16px', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', borderRadius:8, color:'#fff', fontSize:13, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'6px'}}
+            style={{padding:'5px 10px', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', borderRadius:6, color:'#fff', fontSize:12, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'4px'}}
           >
             🎯 Evaluate
           </Link>
@@ -621,6 +622,14 @@ const EpisodeDetail = () => {
             <span className="ed-tab-label">Assets</span>
           </button>
           <button
+            className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('scenes')}
+            title="Scenes"
+          >
+            <span className="ed-tab-icon">🎬</span>
+            <span className="ed-tab-label">Scenes</span>
+          </button>
+          <button
             className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('wardrobe')}
             title="Wardrobe"
@@ -693,6 +702,14 @@ const EpisodeDetail = () => {
               </div>
             </div>
           )
+        )}
+
+        {/* Scenes Tab */}
+        {activeTab === 'scenes' && (
+          <EpisodeScenesTab
+            episode={episode}
+            onToast={(msg, type) => toast && toast[type] ? toast[type](msg) : console.log(msg)}
+          />
         )}
 
         {/* Wardrobe Tab */}

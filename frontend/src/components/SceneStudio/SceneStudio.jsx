@@ -1,8 +1,7 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
-import ObjectsPanel from './panels/ObjectsPanel';
-import AssetDrawer from './panels/AssetDrawer';
+import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
 import useSceneStudioState from './useSceneStudioState';
 import sceneService from '../../services/sceneService';
@@ -21,8 +20,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const canvasContainerRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
   const [isSaving, setIsSaving] = useState(false);
-  const [assetDrawerOpen, setAssetDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
   const saveTimerRef = useRef(null);
 
@@ -197,7 +196,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   const backgroundUrl = (() => {
     if (state.contextType === 'scene') {
-      return state.sceneData?.background_url || null;
+      const s = state.sceneData;
+      return s?.background_url
+        || s?.sceneAngle?.enhanced_still_url
+        || s?.sceneAngle?.still_image_url
+        || s?.sceneSet?.base_still_url
+        || null;
     }
     if (state.contextType === 'sceneSet') {
       const angle = state.angles?.find((a) => a.id === state.activeAngleId);
@@ -282,7 +286,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       <div className="scene-studio-body">
         {/* Left Panel */}
         <div className="scene-studio-left-panel">
-          <ObjectsPanel
+          <CreationPanel
+            showId={showId}
+            episodeId={episodeId}
+            sceneId={sceneId || sceneSetId}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+            onAddAsset={state.addObject}
+            onAddObject={state.addObject}
             objects={state.objects}
             selectedIds={state.selectedIds}
             onSelect={state.selectObject}
@@ -291,14 +302,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onReorder={state.reorderObject}
             onDelete={state.removeObject}
             onDuplicate={state.duplicateObject}
-          />
-
-          <AssetDrawer
-            showId={showId}
-            episodeId={episodeId}
-            onAddAsset={state.addObject}
-            isOpen={assetDrawerOpen}
-            onToggle={() => setAssetDrawerOpen(!assetDrawerOpen)}
+            onRequestTextEdit={(id) => setEditingTextId(id)}
           />
         </div>
 
@@ -316,6 +320,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             panY={state.canvasSettings.panY}
             snapGuides={state.snapGuides}
             gridVisible={state.canvasSettings.gridVisible}
+            editingTextId={editingTextId}
+            onClearEditingText={() => setEditingTextId(null)}
             onSelect={state.selectObject}
             onDeselect={() => {
               state.deselectAll();

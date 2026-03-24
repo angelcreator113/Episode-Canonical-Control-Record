@@ -78,6 +78,8 @@ function TimelineEditor() {
       background_url: scene.background_url,
       characters: scene.characters,
       ui_elements: scene.ui_elements,
+      scene_set_id: scene.scene_set_id || null,
+      scene_angle_id: scene.scene_angle_id || null,
     })),
     timeline: { beats, markers, audioClips, characterClips, keyframes },
   }), [episode, platform, scenes, beats, markers, audioClips, characterClips, keyframes, currentPlatform]);
@@ -329,6 +331,8 @@ function TimelineEditor() {
           background_url: s.background_url || s.backgroundUrl || null,
           characters: s.characters || [],
           ui_elements: s.uiElements || s.ui_elements || [],
+          scene_set_id: s.sceneSetId || s.scene_set_id || null,
+          scene_angle_id: s.sceneAngleId || s.scene_angle_id || null,
         })));
       } else {
         setScenes([

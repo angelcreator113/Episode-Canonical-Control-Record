@@ -8,6 +8,7 @@
 
 const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
 const { v4: uuidv4 } = require('uuid');
+const objectGenerationService = require('../services/objectGenerationService');
 
 // ── Canvas Load ──
 
@@ -15,11 +16,36 @@ exports.getCanvas = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Detect whether Scene Studio migration has been applied
+    const sceneAssetCols = await sequelize.getQueryInterface().describeTable('scene_assets');
+    const studioMigrated = !!sceneAssetCols.rotation;
+
+    // Base scene attributes — add canvas_settings only if migration applied
+    const sceneAttributes = [
+      'id', 'title', 'episode_id', 'scene_number', 'description',
+      'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
+      'scene_set_id', 'scene_angle_id',
+    ];
+    if (studioMigrated) {
+      const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
+      if (sceneCols.canvas_settings) sceneAttributes.push('canvas_settings');
+    }
+
     const scene = await Scene.findByPk(id, {
-      attributes: [
-        'id', 'title', 'episode_id', 'scene_number', 'description',
-        'duration_seconds', 'background_url', 'canvas_settings',
-        'layout', 'scene_type', 'production_status',
+      attributes: sceneAttributes,
+      include: [
+        {
+          model: SceneAngle,
+          as: 'sceneAngle',
+          attributes: ['id', 'still_image_url', 'video_clip_url', 'thumbnail_url', 'enhanced_still_url'],
+          required: false,
+        },
+        {
+          model: SceneSet,
+          as: 'sceneSet',
+          attributes: ['id', 'name', 'base_still_url', 'cover_angle_id'],
+          required: false,
+        },
       ],
     });
 
@@ -27,8 +53,27 @@ exports.getCanvas = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Scene not found' });
     }
 
+    // Base SceneAsset attributes that exist before the Studio migration
+    const baseObjectAttrs = [
+      'id', 'scene_id', 'scene_set_id', 'scene_angle_id', 'asset_id',
+      'usage_type', 'start_timecode', 'end_timecode', 'layer_order',
+      'opacity', 'position', 'metadata', 'asset_role', 'character_name',
+      'position_x', 'position_y', 'scale', 'z_index',
+      'created_at', 'updated_at', 'deleted_at',
+    ];
+    // Add Studio columns only if migration has been applied
+    if (studioMigrated) {
+      baseObjectAttrs.push(
+        'rotation', 'width', 'height', 'is_visible', 'is_locked',
+        'object_type', 'object_label', 'flip_x', 'flip_y',
+        'crop_data', 'style_data', 'group_id',
+        'variant_group_id', 'variant_label', 'is_active_variant'
+      );
+    }
+
     const objects = await SceneAsset.findAll({
       where: { scene_id: id },
+      attributes: baseObjectAttrs,
       include: [{
         model: Asset,
         as: 'asset',
@@ -41,15 +86,23 @@ exports.getCanvas = async (req, res) => {
       order: [['layer_order', 'ASC']],
     });
 
-    const variantGroups = await SceneObjectVariant.findAll({
-      where: { scene_id: id },
-      include: [{
-        model: SceneAsset,
-        as: 'activeVariant',
-        attributes: ['id', 'object_label', 'variant_label'],
-      }],
-      order: [['created_at', 'ASC']],
-    });
+    // scene_object_variants table only exists after Studio migration
+    let variantGroups = [];
+    if (studioMigrated) {
+      try {
+        variantGroups = await SceneObjectVariant.findAll({
+          where: { scene_id: id },
+          include: [{
+            model: SceneAsset,
+            as: 'activeVariant',
+            attributes: ['id', 'object_label', 'variant_label'],
+          }],
+          order: [['created_at', 'ASC']],
+        });
+      } catch (variantErr) {
+        if (!variantErr.message.includes('does not exist')) throw variantErr;
+      }
+    }
 
     res.json({
       success: true,
@@ -791,5 +844,45 @@ exports.addSceneSetObject = async (req, res) => {
   } catch (error) {
     console.error('Scene Studio addSceneSetObject error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ── AI Object Generation ──
+
+exports.generateObject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prompt, style_hints } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'prompt is required' });
+    }
+
+    // Get show_id from the scene for asset association
+    let showId = null;
+    try {
+      const scene = await Scene.findByPk(id, { attributes: ['id', 'episode_id'] });
+      if (scene?.episode_id) {
+        const { Episode } = require('../models');
+        const ep = await Episode.findByPk(scene.episode_id, { attributes: ['show_id'] });
+        showId = ep?.show_id || null;
+      }
+    } catch { /* non-critical */ }
+
+    const options = await objectGenerationService.generateObject(prompt.trim(), {
+      sceneId: id,
+      styleHints: style_hints || null,
+      count: 2,
+      userId: req.user?.id || null,
+      showId,
+      Asset,
+    });
+
+    res.json({ success: true, data: { options } });
+  } catch (error) {
+    console.error('Scene Studio generateObject error:', error);
+    // Rate limit errors return 429
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
   }
 };

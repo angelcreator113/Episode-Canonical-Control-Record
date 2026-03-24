@@ -8,7 +8,7 @@ import useImage from 'use-image';
  */
 export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd }) {
   const src = obj.assetUrl || '';
-  const [image] = useImage(src, 'anonymous');
+  const [image] = useImage(src);
 
   if (!obj.isVisible && !isSelected) return null;
 

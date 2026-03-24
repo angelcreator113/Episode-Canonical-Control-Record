@@ -10,7 +10,7 @@ const outfitSetsController = require('../controllers/outfitSetsController');
 const episodeAssetsController = require('../controllers/episodeAssetsController');
 const timelinePlacementsController = require('../controllers/timelinePlacementsController');
 const videoCompositionController = require('../controllers/videoCompositionController');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/requestValidation');
@@ -242,6 +242,8 @@ router.post(
               characters: scene.characters || [],
               ui_elements: scene.ui_elements || [],
               dialogue_clips: scene.dialogue_clips || [],
+              scene_set_id: scene.scene_set_id || null,
+              scene_angle_id: scene.scene_angle_id || null,
             })),
             { transaction: t }
           );
@@ -362,7 +364,7 @@ router.post(
 // DELETE EPISODE
 router.delete(
   '/:id',
-  authenticateToken,
+  optionalAuth,
   asyncHandler(episodeController.deleteEpisode)
 );
 
@@ -981,5 +983,175 @@ router.post('/:id/generate-beats', asyncHandler(async (req, res) => {
   });
 }));
 
+
+// ==========================================
+// EPISODE ↔ SCENE SET ENDPOINTS
+// ==========================================
+
+// GET /api/v1/episodes/:episodeId/scene-sets - Get scene sets linked to this episode
+router.get(
+  '/:episodeId/scene-sets',
+  validateUUIDParam('episodeId'),
+  asyncHandler(async (req, res) => {
+    const { models } = require('../models');
+    const { Episode, SceneSet, SceneAngle, SceneSetEpisode } = models;
+
+    const episode = await Episode.findByPk(req.params.episodeId);
+    if (!episode) {
+      return res.status(404).json({ success: false, error: 'Episode not found' });
+    }
+
+    const links = await SceneSetEpisode.findAll({
+      where: { episode_id: req.params.episodeId },
+      order: [['created_at', 'ASC']],
+      include: [
+        {
+          model: SceneSet,
+          as: 'sceneSet',
+          include: [
+            {
+              model: SceneAngle,
+              as: 'angles',
+              attributes: ['id', 'angle_name', 'angle_label', 'still_image_url', 'video_clip_url', 'thumbnail_url', 'generation_status', 'sort_order', 'mood', 'beat_affinity'],
+            },
+          ],
+        },
+      ],
+    });
+
+    const sceneSets = links
+      .filter((l) => l.sceneSet)
+      .map((l) => ({
+        ...l.sceneSet.toJSON(),
+        sortOrder: l.sort_order,
+        linkId: l.id,
+      }));
+
+    res.json({ success: true, data: sceneSets });
+  })
+);
+
+// POST /api/v1/episodes/:episodeId/scene-sets - Link scene set(s) to episode
+router.post(
+  '/:episodeId/scene-sets',
+  validateUUIDParam('episodeId'),
+  asyncHandler(async (req, res) => {
+    const { models } = require('../models');
+    const { Episode, SceneSetEpisode } = models;
+
+    const episode = await Episode.findByPk(req.params.episodeId);
+    if (!episode) {
+      return res.status(404).json({ success: false, error: 'Episode not found' });
+    }
+
+    const { sceneSetIds } = req.body;
+    if (!sceneSetIds || !Array.isArray(sceneSetIds) || sceneSetIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'sceneSetIds array required' });
+    }
+
+    const created = [];
+    for (const setId of sceneSetIds) {
+      const [link, wasCreated] = await SceneSetEpisode.findOrCreate({
+        where: { episode_id: req.params.episodeId, scene_set_id: setId },
+      });
+      created.push({ id: link.id, sceneSetId: setId, created: wasCreated });
+    }
+
+    res.json({ success: true, data: created });
+  })
+);
+
+// DELETE /api/v1/episodes/:episodeId/scene-sets/:setId - Unlink scene set from episode
+router.delete(
+  '/:episodeId/scene-sets/:setId',
+  validateUUIDParam('episodeId'),
+  asyncHandler(async (req, res) => {
+    const { models } = require('../models');
+    const { SceneSetEpisode } = models;
+
+    const deleted = await SceneSetEpisode.destroy({
+      where: {
+        episode_id: req.params.episodeId,
+        scene_set_id: req.params.setId,
+      },
+    });
+
+    res.json({ success: true, deleted: deleted > 0 });
+  })
+);
+
+// PATCH /api/v1/episodes/:episodeId/scene-sets/reorder - Reorder scene sets
+router.patch(
+  '/:episodeId/scene-sets/reorder',
+  validateUUIDParam('episodeId'),
+  asyncHandler(async (req, res) => {
+    const { models } = require('../models');
+    const { SceneSetEpisode } = models;
+
+    const { sceneSetIds } = req.body;
+    if (!sceneSetIds || !Array.isArray(sceneSetIds)) {
+      return res.status(400).json({ success: false, error: 'sceneSetIds array required' });
+    }
+
+    for (let i = 0; i < sceneSetIds.length; i++) {
+      await SceneSetEpisode.update(
+        { sort_order: i },
+        { where: { episode_id: req.params.episodeId, scene_set_id: sceneSetIds[i] } }
+      );
+    }
+
+    res.json({ success: true });
+  })
+);
+
+// POST /api/v1/episodes/:episodeId/scenes/from-angle - Create scene from a scene set angle
+router.post(
+  '/:episodeId/scenes/from-angle',
+  validateUUIDParam('episodeId'),
+  asyncHandler(async (req, res) => {
+    const { models } = require('../models');
+    const { Episode, Scene, SceneSet, SceneAngle } = models;
+
+    const episode = await Episode.findByPk(req.params.episodeId);
+    if (!episode) {
+      return res.status(404).json({ success: false, error: 'Episode not found' });
+    }
+
+    const { sceneSetId, sceneAngleId, title, sceneType } = req.body;
+    if (!sceneSetId || !sceneAngleId) {
+      return res.status(400).json({ success: false, error: 'sceneSetId and sceneAngleId required' });
+    }
+
+    const sceneSet = await SceneSet.findByPk(sceneSetId);
+    if (!sceneSet) {
+      return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+
+    const angle = await SceneAngle.findByPk(sceneAngleId);
+    if (!angle) {
+      return res.status(404).json({ success: false, error: 'Scene angle not found' });
+    }
+
+    const nextNumber = await Scene.getNextSceneNumber(req.params.episodeId);
+
+    const scene = await Scene.create({
+      episode_id: req.params.episodeId,
+      scene_set_id: sceneSetId,
+      scene_angle_id: sceneAngleId,
+      scene_number: nextNumber,
+      title: title || `${sceneSet.name} — ${angle.angle_name}`,
+      background_url: angle.still_image_url || null,
+      scene_type: sceneType || 'main',
+      production_status: 'draft',
+      duration_seconds: 5.0,
+      characters: [],
+      ui_elements: [],
+      dialogue_clips: [],
+      location: sceneSet.name,
+    });
+
+    res.status(201).json({ success: true, data: scene });
+  })
+);
 
 module.exports = router;

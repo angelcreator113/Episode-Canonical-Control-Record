@@ -361,7 +361,7 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, generatingId, generationProgress, allShows, allEpisodes, onLoadEpisodes }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, generatingId, generationProgress, allShows, allEpisodes, onLoadEpisodes, onToast }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
@@ -468,11 +468,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
-      if (!res.ok) throw new Error('Failed to get suggestions');
       const json = await res.json();
+      if (!res.ok || !json.success) {
+        const errMsg = json.error || 'Failed to get suggestions';
+        if (onToast) onToast(errMsg, 'error');
+        setSuggestions([]);
+        setLoadingSuggestions(false);
+        return;
+      }
       setSuggestions(json.data || []);
       setSelectedSuggestions((json.data || []).map((_, i) => i));
-    } catch {
+    } catch (err) {
+      if (onToast) onToast('Failed to get AI suggestions', 'error');
       setSuggestions([]);
     }
     setLoadingSuggestions(false);
@@ -610,8 +617,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         )}
       </div>
 
-      {/* ── Filmstrip (always visible when angles exist) ───── */}
-      {sortedAngles.length > 0 && (
+      {/* ── Filmstrip (visible when angles exist OR has base image for ADD/AI) ───── */}
+      {(sortedAngles.length > 0 || hasBase) && (
         <div className="scene-sets-filmstrip">
           {/* Base image thumb */}
           {set.base_still_url && (
@@ -677,7 +684,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               <span className="scene-sets-filmstrip-label">ADD</span>
             </button>
           )}
-          {hasBase && set.canonical_description && (
+          {hasBase && (
             <button
               className="scene-sets-filmstrip-thumb scene-sets-filmstrip-add"
               onClick={handleSuggestAngles}
@@ -1773,6 +1780,7 @@ export default function SceneSetsTab() {
               allShows={allShows}
               allEpisodes={allEpisodes}
               onLoadEpisodes={loadEpisodesForShow}
+              onToast={showToast}
             />
           ))}
         </div>

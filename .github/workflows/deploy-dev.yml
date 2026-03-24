@@ -280,17 +280,19 @@ jobs:
 
             # Run database migrations against RDS
             echo '🗃️ Running migrations...'
-            npx sequelize-cli db:migrate --env development 2>&1 | tail -10
+            if ! npx sequelize-cli db:migrate --env development 2>&1 | tail -20; then
+              echo '⚠️ Migration failed — will still restart PM2 so site stays up'
+              MIGRATION_FAILED=true
+            fi
 
             # Restart the Node.js backend + worker via PM2
             echo '🔄 Restarting PM2...'
-            pm2 delete episode-api 2>/dev/null || true
-            pm2 delete episode-worker 2>/dev/null || true
+            pm2 delete all 2>/dev/null || true
             sleep 2
             # Kill anything still holding port 3002
             fuser -k 3002/tcp 2>/dev/null || true
             sleep 1
-            pm2 start ecosystem.config.js --env development 2>&1 | tail -5
+            pm2 start ecosystem.config.js --only episode-api,episode-worker --env development 2>&1 | tail -5
             pm2 save
 
             # Health check — retry up to 30 seconds
@@ -330,6 +332,11 @@ jobs:
             # Cleanup
             rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz
             echo \"Disk final: \$(df -h / | tail -1 | awk '{print \$4}')\"
+
+            if [ \"\${MIGRATION_FAILED:-}\" = \"true\" ]; then
+              echo '❌ Deployment completed but migrations failed — check migration errors above'
+              exit 1
+            fi
             echo '✅ Full deployment complete'
           "
 

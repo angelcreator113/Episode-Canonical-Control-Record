@@ -4,7 +4,7 @@ const sceneController = require('../controllers/sceneController');
 const sceneStudioController = require('../controllers/sceneStudioController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
 
 console.log('🔵 SCENES ROUTES FILE LOADING... [TIMESTAMP:', new Date().toISOString(), ']');
 console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:id LAST');
@@ -222,6 +222,14 @@ router.put(
   asyncHandler(sceneStudioController.saveCanvas)
 );
 
+// POST /api/v1/scenes/:id/generate-object - AI object generation (DALL-E 3)
+router.post(
+  '/:id/generate-object',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.generateObject)
+);
+
 // POST /api/v1/scenes/:id/objects - Add object to canvas
 router.post(
   '/:id/objects',
@@ -295,7 +303,7 @@ router.put(
 router.delete(
   '/:id',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.deleteScene)
 );
 

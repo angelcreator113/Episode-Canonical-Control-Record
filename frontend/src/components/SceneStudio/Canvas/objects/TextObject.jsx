@@ -5,14 +5,15 @@ import { Text } from 'react-konva';
  * TextObject — Renders editable text on the Konva canvas.
  * Double-click to edit via a temporary HTML input overlay.
  */
-export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, onUpdateObject }) {
+export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, onUpdateObject, autoEdit, onClearAutoEdit }) {
   const textRef = useRef(null);
+  const hasAutoEdited = useRef(false);
 
   if (!obj.isVisible && !isSelected) return null;
 
   const style = obj.styleData || {};
 
-  const handleDblClick = () => {
+  const triggerEdit = () => {
     if (obj.isLocked || !onUpdateObject) return;
 
     const textNode = textRef.current;
@@ -43,6 +44,7 @@ export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, 
     textarea.style.resize = 'none';
     textarea.style.outline = 'none';
     textarea.focus();
+    textarea.select();
 
     const finish = () => {
       onUpdateObject(obj.id, {
@@ -59,6 +61,22 @@ export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, 
       }
     });
   };
+
+  // Auto-edit: trigger inline edit when autoEdit prop is set
+  useEffect(() => {
+    if (autoEdit && textRef.current && !hasAutoEdited.current) {
+      hasAutoEdited.current = true;
+      // Small delay for Konva to render and position the node
+      const timer = setTimeout(() => {
+        triggerEdit();
+        if (onClearAutoEdit) onClearAutoEdit();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+    if (!autoEdit) {
+      hasAutoEdited.current = false;
+    }
+  }, [autoEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Text
@@ -84,8 +102,8 @@ export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, 
       listening={!obj.isLocked}
       onClick={onSelect}
       onTap={onSelect}
-      onDblClick={handleDblClick}
-      onDblTap={handleDblClick}
+      onDblClick={triggerEdit}
+      onDblTap={triggerEdit}
       onDragEnd={(e) => {
         if (onDragEnd) {
           onDragEnd(obj.id, { x: e.target.x(), y: e.target.y() });

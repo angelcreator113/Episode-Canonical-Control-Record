@@ -23,7 +23,8 @@ const OBJECT_RENDERERS = {
 };
 
 function BackgroundImage({ src, width, height }) {
-  const [image] = useImage(src, 'anonymous');
+  // Load without crossOrigin to avoid CORS failures on S3 images
+  const [image] = useImage(src);
   if (!image) return null;
 
   // Cover fit
@@ -104,6 +105,8 @@ export default function StudioCanvas({
   onPan,
   gridVisible,
   containerRef,
+  editingTextId,
+  onClearEditingText,
 }) {
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
@@ -267,6 +270,8 @@ export default function StudioCanvas({
               onDragEnd={onDragEnd}
               onTransformEnd={onTransformEnd}
               onUpdateObject={onUpdateObject}
+              autoEdit={obj.type === 'text' && editingTextId === obj.id}
+              onClearAutoEdit={onClearEditingText}
             />
           );
         })}
