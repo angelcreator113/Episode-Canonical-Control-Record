@@ -9,31 +9,43 @@
  */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // 1. Add scene_set_id to scene_assets
-    await queryInterface.addColumn('scene_assets', 'scene_set_id', {
-      type: Sequelize.UUID,
-      allowNull: true,
-      references: { model: 'scene_sets', key: 'id' },
-      onDelete: 'CASCADE',
-      comment: 'Scene set this object belongs to (alternative to scene_id)',
-    });
+    // Guard: skip if required tables don't exist
+    const assetsTable = await queryInterface.describeTable('scene_assets').catch(() => null);
+    const setsTable = await queryInterface.describeTable('scene_sets').catch(() => null);
+    if (!assetsTable || !setsTable) {
+      console.log('scene_assets or scene_sets table missing — skipping migration');
+      return;
+    }
 
-    await queryInterface.addIndex('scene_assets', ['scene_set_id'], {
-      name: 'idx_scene_assets_scene_set_id',
-    });
+    // 1. Add scene_set_id to scene_assets
+    if (!assetsTable.scene_set_id) {
+      await queryInterface.addColumn('scene_assets', 'scene_set_id', {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: { model: 'scene_sets', key: 'id' },
+        onDelete: 'CASCADE',
+        comment: 'Scene set this object belongs to (alternative to scene_id)',
+      });
+
+      await queryInterface.addIndex('scene_assets', ['scene_set_id'], {
+        name: 'idx_scene_assets_scene_set_id',
+      });
+    }
 
     // 2. Add scene_angle_id to scene_assets (which angle is the background context)
-    await queryInterface.addColumn('scene_assets', 'scene_angle_id', {
-      type: Sequelize.UUID,
-      allowNull: true,
-      references: { model: 'scene_angles', key: 'id' },
-      onDelete: 'SET NULL',
-      comment: 'Which angle this object is placed on (for angle-specific objects)',
-    });
+    if (!assetsTable.scene_angle_id) {
+      await queryInterface.addColumn('scene_assets', 'scene_angle_id', {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: { model: 'scene_angles', key: 'id' },
+        onDelete: 'SET NULL',
+        comment: 'Which angle this object is placed on (for angle-specific objects)',
+      });
 
-    await queryInterface.addIndex('scene_assets', ['scene_angle_id'], {
-      name: 'idx_scene_assets_scene_angle_id',
-    });
+      await queryInterface.addIndex('scene_assets', ['scene_angle_id'], {
+        name: 'idx_scene_assets_scene_angle_id',
+      });
+    }
 
     // 3. Make scene_id nullable (objects can belong to scene_set instead)
     await queryInterface.changeColumn('scene_assets', 'scene_id', {
@@ -44,16 +56,18 @@ module.exports = {
     });
 
     // 4. Add canvas_settings to scene_sets
-    await queryInterface.addColumn('scene_sets', 'canvas_settings', {
-      type: Sequelize.JSONB,
-      allowNull: true,
-      defaultValue: null,
-      comment: 'Scene Studio canvas settings for this scene set',
-    });
+    if (!setsTable.canvas_settings) {
+      await queryInterface.addColumn('scene_sets', 'canvas_settings', {
+        type: Sequelize.JSONB,
+        allowNull: true,
+        defaultValue: null,
+        comment: 'Scene Studio canvas settings for this scene set',
+      });
+    }
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn('scene_sets', 'canvas_settings');
+    await queryInterface.removeColumn('scene_sets', 'canvas_settings').catch(() => {});
 
     // Restore scene_id as NOT NULL (delete orphans first)
     await queryInterface.sequelize.query(
@@ -67,9 +81,9 @@ module.exports = {
     });
 
     await queryInterface.removeIndex('scene_assets', 'idx_scene_assets_scene_angle_id').catch(() => {});
-    await queryInterface.removeColumn('scene_assets', 'scene_angle_id');
+    await queryInterface.removeColumn('scene_assets', 'scene_angle_id').catch(() => {});
 
     await queryInterface.removeIndex('scene_assets', 'idx_scene_assets_scene_set_id').catch(() => {});
-    await queryInterface.removeColumn('scene_assets', 'scene_set_id');
+    await queryInterface.removeColumn('scene_assets', 'scene_set_id').catch(() => {});
   },
 };
