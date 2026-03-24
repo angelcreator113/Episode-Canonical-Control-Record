@@ -156,7 +156,7 @@ function runwayHeaders() {
  * Supports style_reference for visual consistency.
  */
 async function startTextToImage(prompt, options = {}) {
-  const { seed, numOutputs = 1, styleReference } = options;
+  const { seed, numOutputs = 1, styleReference, referenceImages } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
 
   const payload = {
@@ -166,6 +166,7 @@ async function startTextToImage(prompt, options = {}) {
     ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
     ...(numOutputs > 1 ? { numOutputs } : {}),
     ...(styleReference ? { styleReference } : {}),
+    ...(referenceImages && referenceImages.length > 0 ? { referenceImages } : {}),
   };
 
   const MAX_RETRIES = 3;
@@ -552,7 +553,12 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
       : undefined;
 
-    const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference });
+    // Anchor all angles to the base still so they show the same room from different cameras.
+    const referenceImages = sceneSet.base_still_url
+      ? [{ uri: sceneSet.base_still_url, tag: 'image_reference' }]
+      : undefined;
+
+    const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });
     const result = await pollTask(jobId);
 
     if (result.status !== 'SUCCEEDED') {
