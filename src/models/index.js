@@ -135,6 +135,7 @@ let AIUsageLog; // AI API cost/token tracking
 let CharacterArc; // Arc tracking: wound clock, stakes, visibility, David silence
 let StoryTexture; // Texture layer: inner thought, conflict, body narrator, private moment, post, bleed
 let StoryTaskArc; // Story Engine: persisted 50-story task arc per character
+let SceneObjectVariant; // Scene Studio: variant groups for scene objects
 let SceneSet; // Scene Sets: canonical LalaVerse locations for generative scene pipeline
 let SceneAngle; // Scene Angles: camera angles within a scene set
 let SceneSetEpisode; // Join table: many-to-many between scene sets and episodes
@@ -378,6 +379,7 @@ try {
   AssetRole = require('./AssetRole')(sequelize, DataTypes);
   UniverseCharacter = require('./UniverseCharacter')(sequelize, DataTypes);
   WorldCharacter = require('./WorldCharacter')(sequelize, DataTypes);
+  SceneObjectVariant = require('./SceneObjectVariant')(sequelize);
   SceneSet = require('./SceneSet')(sequelize);
   SceneAngle = require('./SceneAngle')(sequelize);
   SceneSetEpisode = require('./SceneSetEpisode')(sequelize);
@@ -524,6 +526,7 @@ const requiredModels = {
   CharacterArc,
   StoryTexture,
   StoryTaskArc,
+  SceneObjectVariant,
   SceneSet,
   SceneAngle,
   SceneSetEpisode,
@@ -911,6 +914,30 @@ SceneAsset.belongsTo(Asset, {
   foreignKey: 'asset_id',
   as: 'asset',
 });
+
+// ==================== SCENE OBJECT VARIANTS (Scene Studio) ====================
+
+if (SceneObjectVariant) {
+  Scene.hasMany(SceneObjectVariant, {
+    foreignKey: 'scene_id',
+    as: 'variantGroups',
+  });
+
+  SceneObjectVariant.belongsTo(Scene, {
+    foreignKey: 'scene_id',
+    as: 'scene',
+  });
+
+  SceneObjectVariant.belongsTo(SceneAsset, {
+    foreignKey: 'active_variant_id',
+    as: 'activeVariant',
+  });
+
+  SceneAsset.hasMany(SceneObjectVariant, {
+    foreignKey: 'active_variant_id',
+    as: 'activeInGroups',
+  });
+}
 
 // ==================== EPISODE WARDROBE DEFAULTS ====================
 
@@ -1911,6 +1938,7 @@ module.exports.AIUsageLog = AIUsageLog;
 module.exports.CharacterArc = CharacterArc;
 module.exports.StoryTexture = StoryTexture;
 module.exports.StoryTaskArc = StoryTaskArc;
+module.exports.SceneObjectVariant = SceneObjectVariant;
 module.exports.SceneSet = SceneSet;
 module.exports.SceneAngle = SceneAngle;
 module.exports.SceneSetEpisode = SceneSetEpisode;

@@ -278,6 +278,12 @@ module.exports = (sequelize) => {
         defaultValue: [],
         comment: 'Array of dialogue/voiceover clips for the scene',
       },
+      canvas_settings: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: null,
+        comment: 'Scene Studio canvas settings: { zoom, panX, panY, gridVisible, snapEnabled, backgroundColor, statePresets }',
+      },
       created_by: {
         type: DataTypes.STRING(255),
         allowNull: true,

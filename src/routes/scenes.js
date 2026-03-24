@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const sceneController = require('../controllers/sceneController');
+const sceneStudioController = require('../controllers/sceneStudioController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
 const { authenticateToken } = require('../middleware/auth');
@@ -200,6 +201,86 @@ router.patch(
   validateUUIDParam('assetId'),
   authenticateToken,
   asyncHandler(sceneController.updateSceneAsset)
+);
+
+/**
+ * Scene Studio Routes (Canvas-based editor)
+ */
+
+// GET /api/v1/scenes/:id/canvas - Load canvas state (objects + settings)
+router.get(
+  '/:id/canvas',
+  validateUUIDParam('id'),
+  asyncHandler(sceneStudioController.getCanvas)
+);
+
+// PUT /api/v1/scenes/:id/canvas - Bulk save canvas (objects + settings)
+router.put(
+  '/:id/canvas',
+  validateUUIDParam('id'),
+  authenticateToken,
+  asyncHandler(sceneStudioController.saveCanvas)
+);
+
+// POST /api/v1/scenes/:id/objects - Add object to canvas
+router.post(
+  '/:id/objects',
+  validateUUIDParam('id'),
+  authenticateToken,
+  asyncHandler(sceneStudioController.addObject)
+);
+
+// PATCH /api/v1/scenes/:id/objects/:objectId - Update single object
+router.patch(
+  '/:id/objects/:objectId',
+  validateUUIDParam('id'),
+  validateUUIDParam('objectId'),
+  authenticateToken,
+  asyncHandler(sceneStudioController.updateObject)
+);
+
+// DELETE /api/v1/scenes/:id/objects/:objectId - Remove object
+router.delete(
+  '/:id/objects/:objectId',
+  validateUUIDParam('id'),
+  validateUUIDParam('objectId'),
+  authenticateToken,
+  asyncHandler(sceneStudioController.deleteObject)
+);
+
+// POST /api/v1/scenes/:id/objects/:objectId/duplicate - Duplicate object
+router.post(
+  '/:id/objects/:objectId/duplicate',
+  validateUUIDParam('id'),
+  validateUUIDParam('objectId'),
+  authenticateToken,
+  asyncHandler(sceneStudioController.duplicateObject)
+);
+
+// POST /api/v1/scenes/:id/objects/:objectId/variants - Create variant
+router.post(
+  '/:id/objects/:objectId/variants',
+  validateUUIDParam('id'),
+  validateUUIDParam('objectId'),
+  authenticateToken,
+  asyncHandler(sceneStudioController.createVariant)
+);
+
+// PATCH /api/v1/scenes/:id/variant-groups/:groupId/activate - Switch active variant
+router.patch(
+  '/:id/variant-groups/:groupId/activate',
+  validateUUIDParam('id'),
+  validateUUIDParam('groupId'),
+  authenticateToken,
+  asyncHandler(sceneStudioController.activateVariant)
+);
+
+// GET /api/v1/scenes/:id/variant-groups/:groupId - Get variant group details
+router.get(
+  '/:id/variant-groups/:groupId',
+  validateUUIDParam('id'),
+  validateUUIDParam('groupId'),
+  asyncHandler(sceneStudioController.getVariantGroup)
 );
 
 // PUT /api/v1/scenes/:id - Update scene
