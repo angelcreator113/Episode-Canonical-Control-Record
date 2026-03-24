@@ -336,17 +336,8 @@ function formatTime(secs) {
 
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
-// ─── DEFAULT ANGLE PRESETS ────────────────────────────────────────────────────
 
-const DEFAULT_ANGLE_PRESETS = [
-  { angle_label: 'WIDE',      angle_name: 'Wide Establishing',  camera_direction: 'Wide establishing shot, full room visible, camera at medium height, balanced composition.' },
-  { angle_label: 'VANITY',    angle_name: 'Vanity Mirror',      camera_direction: 'Camera at vanity mirror, close-to-medium shot, soft focus on reflection and surface details.' },
-  { angle_label: 'WINDOW',    angle_name: 'Window Light',       camera_direction: 'Camera facing window, natural light streaming in, subject silhouette or three-quarter view.' },
-  { angle_label: 'DOORWAY',   angle_name: 'Doorway Threshold',  camera_direction: 'Camera at doorway threshold, looking into the room, sense of arrival or departure.' },
-  { angle_label: 'CLOSE',     angle_name: 'Close Detail',       camera_direction: 'Close shot on a specific surface, object, or detail. Intimate and personal.' },
-];
-
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onSeedAngles, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, generatingId, generationProgress }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, generatingId, generationProgress }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
@@ -373,7 +364,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [showDetails, setShowDetails] = useState(false);
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
-  const [seeding, setSeeding] = useState(false);
   const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
   const [showMenu, setShowMenu] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
@@ -560,11 +550,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <RotateCcw size={12} /> Regenerate All
                     </button>
                   )}
-                  {hasBase && totalAngles === 0 && (
-                    <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
-                      <Sparkles size={12} /> Seed Default Angles
-                    </button>
-                  )}
                   <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
                     <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
                   </button>
@@ -687,12 +672,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 </button>
                 <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={(e) => { const file = e.target.files?.[0]; if (file) onUploadBase(set, file); e.target.value = ''; }} />
               </>
-            )}
-
-            {hasBase && totalAngles === 0 && (
-              <button className="scene-sets-btn-generate" onClick={async () => { setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
-                {seeding ? <><Loader size={12} className="spin" /> Seeding...</> : <><Sparkles size={12} /> Seed Angles</>}
-              </button>
             )}
 
             {hasBase && pendingAngles.length > 0 && (
@@ -1287,24 +1266,6 @@ export default function SceneSetsTab() {
     }
   };
 
-  const handleSeedAngles = async (set) => {
-    try {
-      const results = await Promise.all(DEFAULT_ANGLE_PRESETS.map(preset =>
-        fetch(`${API_BASE}/scene-sets/${set.id}/angles`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...preset, beat_affinity: [] }),
-        })
-      ));
-      const failed = results.filter(r => !r.ok);
-      if (failed.length > 0) throw new Error(`${failed.length} angle(s) failed to create`);
-      showToast(`Seeded ${DEFAULT_ANGLE_PRESETS.length} default angles`);
-      fetchSets();
-    } catch (err) {
-      showToast(err.message || 'Failed to seed angles', 'error');
-      fetchSets();
-    }
-  };
 
   const handlePreviewPrompt = async (set) => {
     try {
@@ -1521,7 +1482,6 @@ export default function SceneSetsTab() {
               onDeleteAllAngles={handleDeleteAllAngles}
               onDeleteSet={handleDeleteSet}
               onAddAngle={handleAddAngle}
-              onSeedAngles={handleSeedAngles}
               onUpdatePrompt={handleUpdatePrompt}
               onPreviewPrompt={handlePreviewPrompt}
               onCascadeRegenerate={handleCascadeRegenerate}
