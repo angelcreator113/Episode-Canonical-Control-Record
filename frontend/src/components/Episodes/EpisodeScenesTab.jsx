@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, ChevronDown, ChevronRight, Camera, Plus, Trash2, GripVertical, ExternalLink, Clapperboard, Film } from 'lucide-react';
+import { MapPin, ChevronDown, ChevronRight, Camera, Plus, Trash2, GripVertical, ExternalLink, Clapperboard, Film, Sparkles, Loader } from 'lucide-react';
 import './EpisodeScenesTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -34,6 +34,9 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
 
   // Creating scene from angle
   const [creatingSceneFor, setCreatingSceneFor] = useState(null);
+
+  // Generating angles
+  const [generatingAnglesFor, setGeneratingAnglesFor] = useState(null);
 
   const toast = useCallback((msg, type = 'info') => {
     if (onToast) onToast(msg, type);
@@ -165,6 +168,49 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     }
   };
 
+  // ---- Generate Angles (AI suggest + auto-save) ----
+  const generateAngles = async (setId) => {
+    setGeneratingAnglesFor(setId);
+    try {
+      // Step 1: AI suggests angles
+      const suggestRes = await fetch(`${API_BASE}/scene-sets/${setId}/suggest-angles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const suggestData = await suggestRes.json();
+      if (!suggestData.success || !suggestData.data?.length) {
+        toast(suggestData.error || 'No angles suggested — add a description to the scene set first', 'error');
+        return;
+      }
+
+      // Step 2: Save all suggested angles
+      let savedCount = 0;
+      for (const angle of suggestData.data) {
+        const saveRes = await fetch(`${API_BASE}/scene-sets/${setId}/angles`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            angle_name: angle.angle_name,
+            angle_label: angle.angle_label,
+            camera_direction: angle.camera_direction,
+            mood: angle.mood,
+            beat_affinity: angle.beat_affinity,
+          }),
+        });
+        const saveData = await saveRes.json();
+        if (saveData.success) savedCount++;
+      }
+
+      toast(`Generated ${savedCount} angles`, 'success');
+      fetchSceneSets();
+    } catch (err) {
+      console.error('Failed to generate angles:', err);
+      toast('Failed to generate angles', 'error');
+    } finally {
+      setGeneratingAnglesFor(null);
+    }
+  };
+
   const linkedSetIds = sceneSets.map((s) => s.id);
 
   return (
@@ -228,6 +274,17 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
                     </div>
                     <div className="est-set-actions">
                       <button
+                        className="est-btn-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          generateAngles(set.id);
+                        }}
+                        disabled={generatingAnglesFor === set.id}
+                        title="AI Generate Angles"
+                      >
+                        {generatingAnglesFor === set.id ? <Loader size={14} className="est-spin" /> : <Sparkles size={14} />}
+                      </button>
+                      <button
                         className="est-btn-icon est-btn-danger"
                         onClick={(e) => { e.stopPropagation(); unlinkSet(set.id); }}
                         title="Unlink from episode"
@@ -241,7 +298,20 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
                   {isExpanded && (
                     <div className="est-angles-grid">
                       {angles.length === 0 ? (
-                        <p className="est-angles-empty">No angles generated yet. Open Scene Sets to add angles.</p>
+                        <div className="est-angles-empty-container">
+                          <p className="est-angles-empty">No angles generated yet.</p>
+                          <button
+                            className="est-btn est-btn-primary est-btn-sm"
+                            onClick={(e) => { e.stopPropagation(); generateAngles(set.id); }}
+                            disabled={generatingAnglesFor === set.id}
+                          >
+                            {generatingAnglesFor === set.id ? (
+                              <><Loader size={13} className="est-spin" /> Generating...</>
+                            ) : (
+                              <><Sparkles size={13} /> AI Generate Angles</>
+                            )}
+                          </button>
+                        </div>
                       ) : (
                         angles.map((angle) => {
                           const isCreating = creatingSceneFor === angle.id;
