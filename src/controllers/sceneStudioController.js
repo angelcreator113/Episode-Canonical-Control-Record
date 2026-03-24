@@ -15,17 +15,19 @@ exports.getCanvas = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if canvas_settings column exists on scenes table (migration may be pending)
-    let sceneAttributes = [
+    // Detect whether Scene Studio migration has been applied
+    const sceneAssetCols = await sequelize.getQueryInterface().describeTable('scene_assets');
+    const studioMigrated = !!sceneAssetCols.rotation;
+
+    // Base scene attributes — add canvas_settings only if migration applied
+    const sceneAttributes = [
       'id', 'title', 'episode_id', 'scene_number', 'description',
       'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
     ];
-    try {
+    if (studioMigrated) {
       const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
-      if (sceneCols.canvas_settings) {
-        sceneAttributes.push('canvas_settings');
-      }
-    } catch (_) { /* table describe failed, use base attributes */ }
+      if (sceneCols.canvas_settings) sceneAttributes.push('canvas_settings');
+    }
 
     const scene = await Scene.findByPk(id, { attributes: sceneAttributes });
 
@@ -33,8 +35,27 @@ exports.getCanvas = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Scene not found' });
     }
 
+    // Base SceneAsset attributes that exist before the Studio migration
+    const baseObjectAttrs = [
+      'id', 'scene_id', 'scene_set_id', 'scene_angle_id', 'asset_id',
+      'usage_type', 'start_timecode', 'end_timecode', 'layer_order',
+      'opacity', 'position', 'metadata', 'asset_role', 'character_name',
+      'position_x', 'position_y', 'scale', 'z_index',
+      'created_at', 'updated_at', 'deleted_at',
+    ];
+    // Add Studio columns only if migration has been applied
+    if (studioMigrated) {
+      baseObjectAttrs.push(
+        'rotation', 'width', 'height', 'is_visible', 'is_locked',
+        'object_type', 'object_label', 'flip_x', 'flip_y',
+        'crop_data', 'style_data', 'group_id',
+        'variant_group_id', 'variant_label', 'is_active_variant'
+      );
+    }
+
     const objects = await SceneAsset.findAll({
       where: { scene_id: id },
+      attributes: baseObjectAttrs,
       include: [{
         model: Asset,
         as: 'asset',
@@ -47,21 +68,22 @@ exports.getCanvas = async (req, res) => {
       order: [['layer_order', 'ASC']],
     });
 
-    // scene_object_variants table may not exist if migration is pending
+    // scene_object_variants table only exists after Studio migration
     let variantGroups = [];
-    try {
-      variantGroups = await SceneObjectVariant.findAll({
-        where: { scene_id: id },
-        include: [{
-          model: SceneAsset,
-          as: 'activeVariant',
-          attributes: ['id', 'object_label', 'variant_label'],
-        }],
-        order: [['created_at', 'ASC']],
-      });
-    } catch (variantErr) {
-      if (!variantErr.message.includes('does not exist')) throw variantErr;
-      // Table not yet created — return empty variant groups
+    if (studioMigrated) {
+      try {
+        variantGroups = await SceneObjectVariant.findAll({
+          where: { scene_id: id },
+          include: [{
+            model: SceneAsset,
+            as: 'activeVariant',
+            attributes: ['id', 'object_label', 'variant_label'],
+          }],
+          order: [['created_at', 'ASC']],
+        });
+      } catch (variantErr) {
+        if (!variantErr.message.includes('does not exist')) throw variantErr;
+      }
     }
 
     res.json({
