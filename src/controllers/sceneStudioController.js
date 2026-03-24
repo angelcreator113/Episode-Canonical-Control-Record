@@ -933,7 +933,7 @@ exports.generateDepth = async (req, res) => {
     const { image_url } = req.body;
 
     const scene = await Scene.findByPk(id, {
-      attributes: ['id', 'background_url', 'extra_fields'],
+      attributes: ['id', 'background_url', 'canvas_settings'],
       include: [{
         model: SceneAngle,
         as: 'sceneAngle',
@@ -961,11 +961,11 @@ exports.generateDepth = async (req, res) => {
       userId: req.user?.id || null,
     });
 
-    // Store depth map URL in scene's extra_fields
-    const extraFields = scene.extra_fields || {};
-    extraFields.depth_map_url = result.depth_map_url;
-    extraFields.depth_model_used = result.model_used;
-    await scene.update({ extra_fields: extraFields });
+    // Store depth map URL in scene's canvas_settings JSONB
+    const settings = scene.canvas_settings || {};
+    settings.depth_map_url = result.depth_map_url;
+    settings.depth_model_used = result.model_used;
+    await scene.update({ canvas_settings: settings });
 
     res.json({ success: true, data: result });
   } catch (error) {
