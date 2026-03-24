@@ -56,6 +56,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [isCreationPanelOpen, setCreationPanelOpen] = useState(true);
   const [focusTarget, setFocusTarget] = useState(null);
 
+  // Depth estimation state
+  const [isGeneratingDepth, setIsGeneratingDepth] = useState(false);
+
   // UX guidance state
   const [hasInteracted, setHasInteracted] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
@@ -338,6 +341,32 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     return null;
   })();
 
+  // ── Depth Map Generation ──
+
+  const handleGenerateDepth = useCallback(async () => {
+    if (isGeneratingDepth) return;
+    setIsGeneratingDepth(true);
+    try {
+      let result;
+      if (state.contextType === 'scene' && state.contextId) {
+        result = await sceneService.generateDepth(state.contextId, backgroundUrl);
+      } else if (state.contextType === 'sceneSet' && state.contextId && state.activeAngleId) {
+        result = await sceneService.generateAngleDepth(state.contextId, state.activeAngleId);
+      }
+      if (result?.success && result.data?.depth_map_url) {
+        state.setDepthMapUrl(result.data.depth_map_url);
+      }
+    } catch (err) {
+      console.error('Depth generation error:', err);
+    } finally {
+      setIsGeneratingDepth(false);
+    }
+  }, [isGeneratingDepth, state.contextType, state.contextId, state.activeAngleId, backgroundUrl, state]);
+
+  const handleUpdateDepthEffects = useCallback((updates) => {
+    state.setDepthEffects((prev) => ({ ...prev, ...updates }));
+  }, [state]);
+
   const rawTitle = state.contextType === 'scene'
     ? state.sceneData?.title || ''
     : state.sceneSetData?.name || '';
@@ -499,6 +528,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onZoom={state.setZoom}
             onPan={state.setPan}
             containerRef={canvasContainerRef}
+            depthMapUrl={state.depthMapUrl}
+            depthEffects={state.depthEffects}
           />
 
           {/* Empty canvas guidance overlay — hide when background is already set */}
@@ -577,6 +608,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             contextType={state.contextType}
             backgroundSelected={backgroundSelected}
             backgroundUrl={backgroundUrl}
+            depthMapUrl={state.depthMapUrl}
+            depthEffects={state.depthEffects}
+            isGeneratingDepth={isGeneratingDepth}
+            onGenerateDepth={handleGenerateDepth}
+            onUpdateDepthEffects={handleUpdateDepthEffects}
           />
         </div>
       </div>

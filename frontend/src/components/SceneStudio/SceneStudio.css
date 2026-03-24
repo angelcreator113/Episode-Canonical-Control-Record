@@ -1734,6 +1734,91 @@
   }
 }
 
+/* ── Depth Estimation Controls ── */
+
+.scene-studio-depth-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(184, 150, 46, 0.12), rgba(184, 150, 46, 0.06));
+  border: 1px solid rgba(184, 150, 46, 0.25);
+  border-radius: 6px;
+  color: #B8962E;
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scene-studio-depth-btn:hover {
+  background: linear-gradient(135deg, rgba(184, 150, 46, 0.2), rgba(184, 150, 46, 0.1));
+  border-color: rgba(184, 150, 46, 0.4);
+}
+
+.scene-studio-depth-generating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #888;
+}
+
+.scene-studio-spinner {
+  animation: scene-studio-spin 1s linear infinite;
+}
+
+@keyframes scene-studio-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.scene-studio-depth-preview {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.scene-studio-depth-preview img {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+  max-height: 120px;
+  filter: grayscale(0);
+}
+
+.scene-studio-depth-regen {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.scene-studio-depth-preview:hover .scene-studio-depth-regen {
+  opacity: 1;
+}
+
+.scene-studio-depth-regen:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
 @media (max-width: 768px) {
   .scene-studio-left-panel,
   .scene-studio-right-panel {

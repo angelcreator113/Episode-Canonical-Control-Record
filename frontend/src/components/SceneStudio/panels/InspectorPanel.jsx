@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import {
   Settings, Move, RotateCw, Maximize2, Eye, EyeOff, Lock, Unlock,
   FlipHorizontal, FlipVertical, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown,
-  Trash2, Copy, Layers, GitBranch, ImageIcon,
+  Trash2, Copy, Layers, GitBranch, ImageIcon, Box, Loader2, RefreshCw,
 } from 'lucide-react';
 
 /**
@@ -68,6 +68,11 @@ export default function InspectorPanel({
   contextType,
   backgroundSelected,
   backgroundUrl,
+  depthMapUrl,
+  depthEffects,
+  isGeneratingDepth,
+  onGenerateDepth,
+  onUpdateDepthEffects,
 }) {
   const selectedObjects = useMemo(
     () => objects.filter((o) => selectedIds.has(o.id)),
@@ -92,6 +97,76 @@ export default function InspectorPanel({
           <p className="scene-studio-bg-hint">
             This is the scene background image. Use the Generate tab to create objects to layer on top, or the Library tab to add existing assets.
           </p>
+        </div>
+
+        <div className="scene-studio-section">
+          <h4><Box size={12} style={{ marginRight: 4 }} /> 3D & Depth</h4>
+          {!depthMapUrl && !isGeneratingDepth && (
+            <button
+              className="scene-studio-depth-btn"
+              onClick={onGenerateDepth}
+            >
+              <Box size={14} />
+              Generate Depth Map
+            </button>
+          )}
+          {isGeneratingDepth && (
+            <div className="scene-studio-depth-generating">
+              <Loader2 size={14} className="scene-studio-spinner" />
+              <span>Generating depth map...</span>
+            </div>
+          )}
+          {depthMapUrl && !isGeneratingDepth && (
+            <>
+              <div className="scene-studio-depth-preview">
+                <img src={depthMapUrl} alt="Depth map" />
+                <button
+                  className="scene-studio-depth-regen"
+                  onClick={onGenerateDepth}
+                  title="Regenerate depth map"
+                >
+                  <RefreshCw size={12} />
+                </button>
+              </div>
+              <div className="scene-studio-input-row">
+                <label>Parallax</label>
+                <button
+                  className={`scene-studio-toggle ${depthEffects?.parallaxEnabled ? 'active' : ''}`}
+                  onClick={() => onUpdateDepthEffects({ parallaxEnabled: !depthEffects?.parallaxEnabled })}
+                >
+                  {depthEffects?.parallaxEnabled ? 'On' : 'Off'}
+                </button>
+              </div>
+              <div className="scene-studio-input-row">
+                <label>Focus Depth</label>
+                <div className="scene-studio-slider-group">
+                  <input
+                    type="range"
+                    value={depthEffects?.focusDepth ?? 50}
+                    onChange={(e) => onUpdateDepthEffects({ focusDepth: parseInt(e.target.value) })}
+                    min={0}
+                    max={100}
+                    step={1}
+                  />
+                  <span className="scene-studio-slider-value">{depthEffects?.focusDepth ?? 50}</span>
+                </div>
+              </div>
+              <div className="scene-studio-input-row">
+                <label>DoF Blur</label>
+                <div className="scene-studio-slider-group">
+                  <input
+                    type="range"
+                    value={depthEffects?.blurIntensity ?? 0}
+                    onChange={(e) => onUpdateDepthEffects({ blurIntensity: parseInt(e.target.value) })}
+                    min={0}
+                    max={20}
+                    step={1}
+                  />
+                  <span className="scene-studio-slider-value">{depthEffects?.blurIntensity ?? 0}px</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="scene-studio-section">

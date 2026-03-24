@@ -5,6 +5,7 @@ import ImageObject from './objects/ImageObject';
 import VideoObject from './objects/VideoObject';
 import TextObject from './objects/TextObject';
 import ShapeObject from './objects/ShapeObject';
+import ParallaxLayer from './ParallaxLayer';
 
 /**
  * StudioCanvas — Main Konva canvas for Scene Studio.
@@ -131,6 +132,8 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
   onClearEditingText,
   backgroundSelected,
   onBackgroundSelect,
+  depthMapUrl,
+  depthEffects,
 }, forwardedRef) {
   const stageRef = useRef(null);
 
@@ -138,6 +141,23 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
   React.useImperativeHandle(forwardedRef, () => stageRef.current, []);
   const transformerRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
+  const [mousePosition, setMousePosition] = useState({ x: 0.5, y: 0.5 });
+
+  const parallaxEnabled = depthEffects?.parallaxEnabled && depthMapUrl;
+
+  // Mouse tracking for parallax
+  const handleMouseMove = useCallback((e) => {
+    if (!parallaxEnabled) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const pointer = stage.getPointerPosition();
+    if (pointer) {
+      setMousePosition({
+        x: pointer.x / stageSize.width,
+        y: pointer.y / stageSize.height,
+      });
+    }
+  }, [parallaxEnabled, stageSize.width, stageSize.height]);
 
   // Fit stage to container
   useEffect(() => {
@@ -235,6 +255,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
       onClick={handleStageClick}
       onTap={handleStageClick}
       onWheel={handleWheel}
+      onMouseMove={handleMouseMove}
       draggable={activeTool === 'hand'}
       onDragEnd={(e) => {
         if (activeTool === 'hand' && onPan) {
@@ -255,13 +276,35 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           fill="#1a1a2e"
           listening={true}
         />
-        {backgroundUrl && (
+        {backgroundUrl && parallaxEnabled ? (
+          <ParallaxLayer
+            bgSrc={backgroundUrl}
+            depthMapSrc={depthMapUrl}
+            width={canvasWidth}
+            height={canvasHeight}
+            isSelected={backgroundSelected}
+            onClick={onBackgroundSelect}
+            mousePosition={mousePosition}
+          />
+        ) : backgroundUrl ? (
           <BackgroundImage
             src={backgroundUrl}
             width={canvasWidth}
             height={canvasHeight}
             isSelected={backgroundSelected}
             onClick={onBackgroundSelect}
+          />
+        ) : null}
+        {backgroundSelected && parallaxEnabled && (
+          <Rect
+            x={0}
+            y={0}
+            width={canvasWidth}
+            height={canvasHeight}
+            stroke="#667eea"
+            strokeWidth={3}
+            dash={[8, 4]}
+            listening={false}
           />
         )}
 

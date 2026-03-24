@@ -230,6 +230,14 @@ router.post(
   asyncHandler(sceneStudioController.generateObject)
 );
 
+// POST /api/v1/scenes/:id/generate-depth - Depth map estimation (DepthAnythingV2)
+router.post(
+  '/:id/generate-depth',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.generateDepth)
+);
+
 // POST /api/v1/scenes/:id/objects - Add object to canvas
 router.post(
   '/:id/objects',

@@ -123,6 +123,14 @@ export default function useSceneStudioState() {
   const [activeAngleId, setActiveAngleId] = useState(null);
   const [variantGroups, setVariantGroups] = useState([]);
 
+  // Depth map
+  const [depthMapUrl, setDepthMapUrl] = useState(null);
+  const [depthEffects, setDepthEffects] = useState({
+    parallaxEnabled: false,
+    focusDepth: 50,
+    blurIntensity: 0,
+  });
+
   // Dirty flag
   const [isDirty, setIsDirty] = useState(false);
 
@@ -176,11 +184,16 @@ export default function useSceneStudioState() {
       setSceneData(data.scene);
       setAngles([]);
       setActiveAngleId(null);
+      // Load depth map from scene extra_fields
+      setDepthMapUrl(data.scene?.extra_fields?.depth_map_url || null);
     } else {
       setContextId(data.sceneSet?.id);
       setSceneSetData(data.sceneSet);
       setAngles(data.angles || []);
       setActiveAngleId(data.activeAngleId || null);
+      // Load depth map from active angle
+      const activeAngle = (data.angles || []).find(a => a.id === data.activeAngleId);
+      setDepthMapUrl(activeAngle?.depth_map_url || null);
     }
 
     const normalized = (data.objects || []).map(normalizeObject);
@@ -437,6 +450,8 @@ export default function useSceneStudioState() {
     redoCount,
     snapGuides,
     clipboard,
+    depthMapUrl,
+    depthEffects,
 
     // Actions
     loadFromApi,
@@ -468,6 +483,8 @@ export default function useSceneStudioState() {
     setObjects,
     setSceneData,
     setSceneSetData,
+    setDepthMapUrl,
+    setDepthEffects,
   };
 }
 
