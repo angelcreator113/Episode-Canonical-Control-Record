@@ -176,6 +176,12 @@ exports.createScene = async (req, res) => {
       end_timecode,
       endTimecode,
       characters,
+      scene_set_id,
+      sceneSetId,
+      scene_angle_id,
+      sceneAngleId,
+      background_url,
+      backgroundUrl,
     } = req.body;
 
     const resolvedEpisodeId = episodeId || episode_id;
@@ -226,6 +232,9 @@ exports.createScene = async (req, res) => {
       start_timecode: resolvedStartTimecode,
       end_timecode: resolvedEndTimecode,
       characters: characters || [],
+      scene_set_id: sceneSetId || scene_set_id || null,
+      scene_angle_id: sceneAngleId || scene_angle_id || null,
+      background_url: backgroundUrl || background_url || null,
       created_by: userId,
       updated_by: userId,
     });

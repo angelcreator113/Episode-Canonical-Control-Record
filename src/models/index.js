@@ -866,6 +866,24 @@ Scene.belongsTo(Episode, {
   as: 'episode',
 });
 
+// Scene → SceneSet (N:1) — source location
+if (SceneSet) {
+  Scene.belongsTo(SceneSet, {
+    foreignKey: 'scene_set_id',
+    as: 'sceneSet',
+    onDelete: 'SET NULL',
+  });
+}
+
+// Scene → SceneAngle (N:1) — source camera angle
+if (SceneAngle) {
+  Scene.belongsTo(SceneAngle, {
+    foreignKey: 'scene_angle_id',
+    as: 'sceneAngle',
+    onDelete: 'SET NULL',
+  });
+}
+
 // Scene → Thumbnail (N:1)
 Scene.belongsTo(Thumbnail, {
   foreignKey: 'thumbnail_id',

@@ -115,6 +115,8 @@ function SceneComposerFull() {
       characters: scene.characters,
       ui_elements: scene.ui_elements,
       dialogue_clips: scene.dialogue_clips,
+      scene_set_id: scene.scene_set_id || null,
+      scene_angle_id: scene.scene_angle_id || null,
     })),
   }), [episode, platform, scenes, currentPlatform]);
 
@@ -309,6 +311,8 @@ function SceneComposerFull() {
           characters: s.characters || [],
           ui_elements: s.uiElements || s.ui_elements || [],
           dialogue_clips: s.dialogueClips || s.dialogue_clips || [],
+          scene_set_id: s.sceneSetId || s.scene_set_id || null,
+          scene_angle_id: s.sceneAngleId || s.scene_angle_id || null,
         }));
         setScenes(mapped);
         console.log('✅ Scenes set:', mapped.map(s => `#${s.scene_number} "${s.title}"`).join(', '));

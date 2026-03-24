@@ -11,6 +11,7 @@ import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
 import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
+import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
 import './EpisodeDetail.css';
 
 
@@ -705,160 +706,10 @@ const EpisodeDetail = () => {
 
         {/* Scenes Tab */}
         {activeTab === 'scenes' && (
-          <div className="ed-card">
-            <div className="ed-cardhead" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 className="ed-cardtitle">🎬 Episode Scenes</h2>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  className="btn-action"
-                  onClick={() => navigate(`/episodes/${episode.id}/scene-composer`)}
-                  style={{ padding: '8px 16px', fontSize: '0.85rem', background: '#f5f3ff', color: '#6366f1', border: '1px solid #c7d2fe', borderRadius: '6px', cursor: 'pointer' }}
-                >
-                  🎨 Scene Composer
-                </button>
-                <button
-                  className="btn-action btn-primary-action"
-                  onClick={() => setShowScenePicker(true)}
-                  style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                >
-                  + Add Scene
-                </button>
-              </div>
-            </div>
-            <div className="ed-cardbody">
-              {loadingScenes ? (
-                <div style={{ textAlign: 'center', padding: '3rem' }}>
-                  <p style={{ color: '#64748b' }}>Loading scenes...</p>
-                </div>
-              ) : episodeScenes.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '3rem' }}>
-                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎬</div>
-                  <p style={{ color: '#64748b', marginBottom: '1rem' }}>
-                    No scenes added to this episode yet.
-                  </p>
-                  <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                    Add scenes from your show's scene library to build out this episode.
-                  </p>
-                  <button
-                    className="btn-action btn-primary-action"
-                    onClick={() => setShowScenePicker(true)}
-                  >
-                    + Add Your First Scene
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {episodeScenes.map((scene, index) => {
-                    const lib = scene.sceneLibrary || scene.scene_library || {};
-                    const trimData = editingTrim[scene.id] || {};
-                    const isSaving = savingScenes[scene.id];
-                    return (
-                      <div
-                        key={scene.id}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '12px',
-                          padding: '12px', borderRadius: '8px',
-                          border: selectedSceneId === scene.id ? '2px solid #6366f1' : '1px solid #e2e8f0',
-                          background: selectedSceneId === scene.id ? '#f5f3ff' : '#fff',
-                          cursor: 'pointer',
-                        }}
-                        onClick={() => handleSelectSceneForPreview(scene.id)}
-                      >
-                        {/* Order number */}
-                        <div style={{ fontWeight: 700, color: '#94a3b8', fontSize: '0.85rem', minWidth: '24px', textAlign: 'center' }}>
-                          {index + 1}
-                        </div>
-
-                        {/* Thumbnail */}
-                        <div style={{ width: '80px', height: '50px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, background: '#f1f5f9' }}>
-                          {lib.thumbnail_url ? (
-                            <img src={lib.thumbnail_url} alt={lib.title || 'Scene'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1.2rem' }}>🎬</div>
-                          )}
-                        </div>
-
-                        {/* Info */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {scene.title_override || lib.title || `Scene ${index + 1}`}
-                          </div>
-                          {lib.duration_seconds != null && (
-                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
-                              {Math.floor(lib.duration_seconds / 60)}:{String(Math.floor(lib.duration_seconds % 60)).padStart(2, '0')}
-                            </div>
-                          )}
-                          {scene.episode_notes && (
-                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {scene.episode_notes}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Trim controls */}
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.8rem' }} onClick={(e) => e.stopPropagation()}>
-                          <label style={{ color: '#64748b' }}>In:</label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            value={trimData.trimStart ?? scene.trim_start ?? 0}
-                            onChange={(e) => handleTrimChange(scene.id, 'trimStart', e.target.value)}
-                            style={{ width: '60px', padding: '4px', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '0.8rem' }}
-                          />
-                          <label style={{ color: '#64748b' }}>Out:</label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            value={trimData.trimEnd ?? scene.trim_end ?? lib.duration_seconds ?? 0}
-                            onChange={(e) => handleTrimChange(scene.id, 'trimEnd', e.target.value)}
-                            style={{ width: '60px', padding: '4px', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '0.8rem' }}
-                          />
-                          {editingTrim[scene.id] && (
-                            <button
-                              onClick={() => handleSaveTrim(scene.id)}
-                              disabled={isSaving}
-                              style={{ padding: '4px 8px', borderRadius: '4px', border: 'none', background: '#6366f1', color: '#fff', fontSize: '0.75rem', cursor: 'pointer' }}
-                            >
-                              {isSaving ? '...' : 'Save'}
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Reorder + Remove */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }} onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => handleReorderScene(index, 'up')}
-                            disabled={index === 0}
-                            style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', background: '#fff', cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.3 : 1, fontSize: '0.7rem' }}
-                            title="Move up"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            onClick={() => handleReorderScene(index, 'down')}
-                            disabled={index === episodeScenes.length - 1}
-                            style={{ padding: '2px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', background: '#fff', cursor: index === episodeScenes.length - 1 ? 'default' : 'pointer', opacity: index === episodeScenes.length - 1 ? 0.3 : 1, fontSize: '0.7rem' }}
-                            title="Move down"
-                          >
-                            ▼
-                          </button>
-                        </div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleRemoveScene(scene.id); }}
-                          style={{ padding: '4px 8px', border: 'none', borderRadius: '4px', background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem' }}
-                          title="Remove scene"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
+          <EpisodeScenesTab
+            episode={episode}
+            onToast={(msg, type) => toast && toast[type] ? toast[type](msg) : console.log(msg)}
+          />
         )}
 
         {/* Wardrobe Tab */}
