@@ -932,20 +932,26 @@ exports.generateDepth = async (req, res) => {
     const { id } = req.params;
     const { image_url } = req.body;
 
-    // Detect available columns — canvas_settings may not exist if migration hasn't run
+    // Detect available columns — canvas_settings / scene_angle_id may not exist pre-migration
     const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
     const sceneAttrs = ['id', 'background_url'];
     const hasCanvasSettings = !!sceneCols.canvas_settings;
+    const hasAngleFK = !!sceneCols.scene_angle_id;
     if (hasCanvasSettings) sceneAttrs.push('canvas_settings');
 
-    const scene = await Scene.findByPk(id, {
-      attributes: sceneAttrs,
-      include: [{
+    const includeOpts = [];
+    if (hasAngleFK) {
+      includeOpts.push({
         model: SceneAngle,
         as: 'sceneAngle',
         attributes: ['id', 'still_image_url', 'enhanced_still_url'],
         required: false,
-      }],
+      });
+    }
+
+    const scene = await Scene.findByPk(id, {
+      attributes: sceneAttrs,
+      include: includeOpts,
     });
 
     if (!scene) {
