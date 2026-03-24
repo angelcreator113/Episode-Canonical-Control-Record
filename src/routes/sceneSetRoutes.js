@@ -1067,4 +1067,29 @@ router.delete('/:id/episodes/:episodeId', optionalAuth, async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════
+// SCENE STUDIO routes for scene sets
+// ══════════════════════════════════════════════════════════════════════
+
+const sceneStudioController = require('../controllers/sceneStudioController');
+const { asyncHandler } = require('../middleware/errorHandler');
+
+// GET /api/v1/scene-sets/:id/canvas - Load canvas state for scene set
+router.get('/:id/canvas', asyncHandler(sceneStudioController.getSceneSetCanvas));
+
+// PUT /api/v1/scene-sets/:id/canvas - Bulk save canvas for scene set
+router.put('/:id/canvas', optionalAuth, asyncHandler(sceneStudioController.saveSceneSetCanvas));
+
+// POST /api/v1/scene-sets/:id/objects - Add object to scene set canvas
+router.post('/:id/objects', optionalAuth, asyncHandler(sceneStudioController.addSceneSetObject));
+
+// PATCH /api/v1/scene-sets/:id/objects/:objectId - Update object on scene set
+router.patch('/:id/objects/:objectId', optionalAuth, asyncHandler(sceneStudioController.updateObject));
+
+// DELETE /api/v1/scene-sets/:id/objects/:objectId - Remove object from scene set
+router.delete('/:id/objects/:objectId', optionalAuth, asyncHandler(sceneStudioController.deleteObject));
+
+// POST /api/v1/scene-sets/:id/objects/:objectId/duplicate - Duplicate object
+router.post('/:id/objects/:objectId/duplicate', optionalAuth, asyncHandler(sceneStudioController.duplicateObject));
+
 module.exports = router;

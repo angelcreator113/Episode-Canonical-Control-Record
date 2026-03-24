@@ -95,6 +95,12 @@ module.exports = (sequelize) => {
     intimacy_value: { type: DataTypes.INTEGER, allowNull: true },
     spectacle_value: { type: DataTypes.INTEGER, allowNull: true },
     cover_angle_id: { type: DataTypes.UUID, allowNull: true },
+    canvas_settings: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Scene Studio canvas settings for this scene set',
+    },
   }, {
     sequelize,
     modelName: 'SceneSet',

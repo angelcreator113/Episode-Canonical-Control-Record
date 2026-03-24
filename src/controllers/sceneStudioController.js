@@ -6,7 +6,7 @@
  * for the Canva-like Scene Studio editor.
  */
 
-const { Scene, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
+const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
 const { v4: uuidv4 } = require('uuid');
 
 // ── Canvas Load ──
@@ -229,6 +229,17 @@ exports.addObject = async (req, res) => {
   }
 };
 
+// ── Helper: find object belonging to either a scene or scene set ──
+
+async function findOwnedObject(objectId, parentId) {
+  // Try scene_id first, then scene_set_id
+  let obj = await SceneAsset.findOne({ where: { id: objectId, scene_id: parentId } });
+  if (!obj) {
+    obj = await SceneAsset.findOne({ where: { id: objectId, scene_set_id: parentId } });
+  }
+  return obj;
+}
+
 // ── Update Object ──
 
 exports.updateObject = async (req, res) => {
@@ -236,7 +247,7 @@ exports.updateObject = async (req, res) => {
     const { id, objectId } = req.params;
     const updates = req.body;
 
-    const obj = await SceneAsset.findOne({ where: { id: objectId, scene_id: id } });
+    const obj = await findOwnedObject(objectId, id);
     if (!obj) {
       return res.status(404).json({ success: false, error: 'Object not found' });
     }
@@ -277,7 +288,7 @@ exports.deleteObject = async (req, res) => {
   try {
     const { id, objectId } = req.params;
 
-    const obj = await SceneAsset.findOne({ where: { id: objectId, scene_id: id } });
+    const obj = await findOwnedObject(objectId, id);
     if (!obj) {
       return res.status(404).json({ success: false, error: 'Object not found' });
     }
@@ -297,7 +308,7 @@ exports.duplicateObject = async (req, res) => {
   try {
     const { id, objectId } = req.params;
 
-    const obj = await SceneAsset.findOne({ where: { id: objectId, scene_id: id } });
+    const obj = await findOwnedObject(objectId, id);
     if (!obj) {
       return res.status(404).json({ success: false, error: 'Object not found' });
     }
@@ -549,6 +560,236 @@ exports.getVariantGroup = async (req, res) => {
     });
   } catch (error) {
     console.error('Scene Studio getVariantGroup error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════════
+// SCENE SET Studio endpoints
+// ══════════════════════════════════════════════════════════════════════
+
+// ── Scene Set Canvas Load ──
+
+exports.getSceneSetCanvas = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { angle_id } = req.query;
+
+    const sceneSet = await SceneSet.findByPk(id, {
+      include: [{
+        model: SceneAngle,
+        as: 'angles',
+        order: [['sort_order', 'ASC']],
+      }],
+    });
+
+    if (!sceneSet) {
+      return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+
+    // Build query — objects can belong to the set globally OR to a specific angle
+    const where = { scene_set_id: id };
+
+    const objects = await SceneAsset.findAll({
+      where,
+      include: [{
+        model: Asset,
+        as: 'asset',
+        attributes: [
+          'id', 's3_url_raw', 's3_url_processed', 'content_type',
+          'width', 'height', 'category', 'asset_type',
+          'character_name', 'outfit_name', 'location_name',
+        ],
+      }],
+      order: [['layer_order', 'ASC']],
+    });
+
+    const variantGroups = await SceneObjectVariant.findAll({
+      where: { scene_id: null },
+      include: [{
+        model: SceneAsset,
+        as: 'activeVariant',
+        where: { scene_set_id: id },
+        required: false,
+        attributes: ['id', 'object_label', 'variant_label'],
+      }],
+    });
+
+    // Filter variant groups to only those related to this scene set
+    const setVariantGroupIds = new Set(
+      objects.filter((o) => o.variant_group_id).map((o) => o.variant_group_id)
+    );
+
+    res.json({
+      success: true,
+      data: {
+        sceneSet: sceneSet.toJSON(),
+        angles: sceneSet.angles?.map((a) => a.toJSON()) || [],
+        activeAngleId: angle_id || sceneSet.cover_angle_id || sceneSet.angles?.[0]?.id || null,
+        objects: objects.map((o) => o.toJSON()),
+        variantGroups: variantGroups
+          .filter((vg) => {
+            const av = vg.activeVariant;
+            return av && setVariantGroupIds.has(av.variant_group_id);
+          })
+          .map((vg) => vg.toJSON()),
+      },
+    });
+  } catch (error) {
+    console.error('Scene Studio getSceneSetCanvas error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ── Scene Set Canvas Save (bulk) ──
+
+exports.saveSceneSetCanvas = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { id } = req.params;
+    const { objects, canvas_settings } = req.body;
+
+    const sceneSet = await SceneSet.findByPk(id, { transaction });
+    if (!sceneSet) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+
+    if (canvas_settings !== undefined) {
+      await sceneSet.update({ canvas_settings }, { transaction });
+    }
+
+    if (Array.isArray(objects)) {
+      const existing = await SceneAsset.findAll({
+        where: { scene_set_id: id },
+        attributes: ['id'],
+        transaction,
+      });
+      const existingIds = new Set(existing.map((e) => e.id));
+      const incomingIds = new Set(objects.filter((o) => o.id).map((o) => o.id));
+
+      // Delete removed objects
+      const toDelete = [...existingIds].filter((eid) => !incomingIds.has(eid));
+      if (toDelete.length > 0) {
+        await SceneAsset.destroy({
+          where: { id: toDelete, scene_set_id: id },
+          transaction,
+        });
+      }
+
+      // Upsert each object
+      for (const obj of objects) {
+        const data = {
+          scene_id: null,
+          scene_set_id: id,
+          scene_angle_id: obj.scene_angle_id || null,
+          asset_id: obj.asset_id || null,
+          usage_type: obj.usage_type || 'overlay',
+          position_x: obj.x != null ? Math.round(obj.x) : null,
+          position_y: obj.y != null ? Math.round(obj.y) : null,
+          width: obj.width != null ? Math.round(obj.width) : null,
+          height: obj.height != null ? Math.round(obj.height) : null,
+          rotation: obj.rotation || 0,
+          scale: obj.scale || 1.0,
+          opacity: obj.opacity != null ? obj.opacity : 1.0,
+          layer_order: obj.layer_order != null ? obj.layer_order : 0,
+          z_index: obj.z_index != null ? obj.z_index : 0,
+          is_visible: obj.is_visible !== false,
+          is_locked: obj.is_locked === true,
+          object_type: obj.object_type || 'image',
+          object_label: obj.object_label || null,
+          flip_x: obj.flip_x === true,
+          flip_y: obj.flip_y === true,
+          crop_data: obj.crop_data || null,
+          style_data: obj.style_data || null,
+          group_id: obj.group_id || null,
+          variant_group_id: obj.variant_group_id || null,
+          variant_label: obj.variant_label || null,
+          is_active_variant: obj.is_active_variant !== false,
+          asset_role: obj.asset_role || null,
+          character_name: obj.character_name || null,
+          start_timecode: obj.start_timecode || null,
+          end_timecode: obj.end_timecode || null,
+          position: obj.position || null,
+          metadata: obj.metadata || {},
+        };
+
+        if (obj.id && existingIds.has(obj.id)) {
+          await SceneAsset.update(data, {
+            where: { id: obj.id, scene_set_id: id },
+            transaction,
+          });
+        } else {
+          data.id = obj.id || uuidv4();
+          await SceneAsset.create(data, { transaction });
+        }
+      }
+    }
+
+    await transaction.commit();
+    res.json({ success: true, message: 'Scene set canvas saved' });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Scene Studio saveSceneSetCanvas error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ── Add Object to Scene Set ──
+
+exports.addSceneSetObject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      asset_id, object_type, object_label, asset_role, usage_type,
+      x, y, width, height, rotation, layer_order, style_data, scene_angle_id,
+    } = req.body;
+
+    const sceneSet = await SceneSet.findByPk(id);
+    if (!sceneSet) {
+      return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+
+    const maxLayer = await SceneAsset.max('layer_order', { where: { scene_set_id: id } });
+
+    const obj = await SceneAsset.create({
+      id: uuidv4(),
+      scene_id: null,
+      scene_set_id: id,
+      scene_angle_id: scene_angle_id || null,
+      asset_id: asset_id || null,
+      object_type: object_type || 'image',
+      object_label: object_label || null,
+      asset_role: asset_role || null,
+      usage_type: usage_type || 'overlay',
+      position_x: x != null ? Math.round(x) : 0,
+      position_y: y != null ? Math.round(y) : 0,
+      width: width || null,
+      height: height || null,
+      rotation: rotation || 0,
+      layer_order: layer_order != null ? layer_order : (maxLayer || 0) + 1,
+      opacity: 1.0,
+      scale: 1.0,
+      is_visible: true,
+      is_locked: false,
+      style_data: style_data || null,
+    });
+
+    const created = await SceneAsset.findByPk(obj.id, {
+      include: [{
+        model: Asset,
+        as: 'asset',
+        attributes: [
+          'id', 's3_url_raw', 's3_url_processed', 'content_type',
+          'width', 'height', 'category',
+        ],
+      }],
+    });
+
+    res.status(201).json({ success: true, data: created.toJSON() });
+  } catch (error) {
+    console.error('Scene Studio addSceneSetObject error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
