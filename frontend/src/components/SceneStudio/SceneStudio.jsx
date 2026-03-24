@@ -446,6 +446,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onTabChange={setActiveCreationTab}
               focusTarget={focusTarget}
               onClearFocus={() => setFocusTarget(null)}
+              hasBackground={!!backgroundUrl}
             />
           </div>
         )}
@@ -480,8 +481,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             containerRef={canvasContainerRef}
           />
 
-          {/* Empty canvas guidance overlay */}
-          {state.objects.length === 0 && !hasInteracted && (
+          {/* Empty canvas guidance overlay — hide when background is already set */}
+          {state.objects.length === 0 && !hasInteracted && !backgroundUrl && (
             <div className="scene-studio-canvas-overlay">
               <div className="scene-studio-canvas-overlay-inner">
                 <p className="scene-studio-overlay-title">Start building your scene</p>

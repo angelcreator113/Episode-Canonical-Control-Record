@@ -1562,12 +1562,18 @@
 .scene-studio-canvas-overlay-inner {
   text-align: center;
   pointer-events: auto;
+  padding: 28px 36px;
+  background: rgba(44, 44, 44, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .scene-studio-overlay-title {
   font-family: 'Lora', serif;
   font-size: 18px;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.9);
   margin: 0 0 16px;
   font-weight: 400;
 }
@@ -1584,15 +1590,14 @@
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 20px;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 12px;
   font-family: 'DM Mono', monospace;
   cursor: pointer;
   transition: all 150ms ease;
-  backdrop-filter: blur(4px);
 }
 
 .scene-studio-overlay-cta:hover {

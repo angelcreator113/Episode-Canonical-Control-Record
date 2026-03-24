@@ -15,6 +15,7 @@ export default function ObjectsPanel({
   onDelete,
   onDuplicate,
   embedded,
+  hasBackground,
 }) {
   // Sort by layer order descending (top layer first in the list)
   const sorted = [...objects].sort((a, b) => (b.layerOrder || 0) - (a.layerOrder || 0));
@@ -69,7 +70,9 @@ export default function ObjectsPanel({
       <div className="scene-studio-objects-list">
         {sorted.length === 0 && (
           <div className="scene-studio-empty-state">
-            No objects yet. Use the tabs to add content.
+            {hasBackground
+              ? 'Background set. Add objects using the tabs above.'
+              : 'No objects yet. Use the tabs to add content.'}
           </div>
         )}
 

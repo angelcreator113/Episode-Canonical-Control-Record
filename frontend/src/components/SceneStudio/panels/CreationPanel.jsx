@@ -48,6 +48,7 @@ export default function CreationPanel({
   onTabChange,
   focusTarget,
   onClearFocus,
+  hasBackground,
 }) {
   const [internalTab, setInternalTab] = useState('objects');
   const activeTab = controlledTab !== undefined ? controlledTab : internalTab;
@@ -66,6 +67,7 @@ export default function CreationPanel({
             onReorder={onReorder}
             onDelete={onDelete}
             onDuplicate={onDuplicate}
+            hasBackground={hasBackground}
             embedded
           />
         );
