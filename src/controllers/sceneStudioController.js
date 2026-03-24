@@ -887,3 +887,39 @@ exports.generateObject = async (req, res) => {
     res.status(status).json({ success: false, error: error.message });
   }
 };
+
+// ── AI Object Generation (Scene Sets) ──
+
+exports.generateSceneSetObject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prompt, style_hints, remove_background } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'prompt is required' });
+    }
+
+    // Scene sets have show_id directly
+    let showId = null;
+    try {
+      const sceneSet = await SceneSet.findByPk(id, { attributes: ['id', 'show_id'] });
+      showId = sceneSet?.show_id || null;
+    } catch { /* non-critical */ }
+
+    const options = await objectGenerationService.generateObject(prompt.trim(), {
+      sceneId: id,
+      styleHints: style_hints || null,
+      count: 2,
+      removeBackground: remove_background === true,
+      userId: req.user?.id || null,
+      showId,
+      Asset,
+    });
+
+    res.json({ success: true, data: { options } });
+  } catch (error) {
+    console.error('Scene Studio generateSceneSetObject error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};

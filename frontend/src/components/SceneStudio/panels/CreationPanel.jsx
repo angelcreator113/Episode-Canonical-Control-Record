@@ -49,6 +49,7 @@ export default function CreationPanel({
   focusTarget,
   onClearFocus,
   hasBackground,
+  contextType,
 }) {
   const [internalTab, setInternalTab] = useState('objects');
   const activeTab = controlledTab !== undefined ? controlledTab : internalTab;
@@ -99,6 +100,7 @@ export default function CreationPanel({
         return (
           <GenerateTab
             sceneId={sceneId}
+            contextType={contextType}
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
             onAddAsset={onAddAsset}

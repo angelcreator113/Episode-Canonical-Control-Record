@@ -195,16 +195,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     const id = sceneId || sceneSetId;
     if (!id) return;
 
-    // Optimistic update
-    if (state.contextType === 'scene' && state.sceneData) {
-      state.sceneData.title = trimmed;
-    } else if (state.contextType === 'sceneSet' && state.sceneSetData) {
-      state.sceneSetData.name = trimmed;
+    // Optimistic update via state setter (triggers re-render)
+    if (state.contextType === 'scene') {
+      state.setSceneData((prev) => prev ? { ...prev, title: trimmed } : prev);
+    } else if (state.contextType === 'sceneSet') {
+      state.setSceneSetData((prev) => prev ? { ...prev, name: trimmed } : prev);
     }
 
     try {
       if (state.contextType === 'scene') {
         await sceneService.updateScene(id, { title: trimmed });
+      } else {
+        await sceneService.updateSceneSet(id, { name: trimmed });
       }
     } catch (err) {
       console.error('Failed to save title:', err);
@@ -450,6 +452,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               focusTarget={focusTarget}
               onClearFocus={() => setFocusTarget(null)}
               hasBackground={!!backgroundUrl}
+              contextType={state.contextType}
             />
           </div>
         )}

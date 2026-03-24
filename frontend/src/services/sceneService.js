@@ -295,6 +295,15 @@ const sceneService = {
   // ============================================================================
 
   /**
+   * Update a scene set (name, notes, etc.)
+   * PUT /api/v1/scene-sets/:id
+   */
+  updateSceneSet: async (sceneSetId, updates) => {
+    const { data } = await api.put(`/api/v1/scene-sets/${sceneSetId}`, updates);
+    return data;
+  },
+
+  /**
    * Load canvas state for a scene set
    * GET /api/v1/scene-sets/:id/canvas
    */

@@ -466,6 +466,8 @@ export default function useSceneStudioState() {
     setSnapGuides,
     markClean,
     setObjects,
+    setSceneData,
+    setSceneSetData,
   };
 }
 

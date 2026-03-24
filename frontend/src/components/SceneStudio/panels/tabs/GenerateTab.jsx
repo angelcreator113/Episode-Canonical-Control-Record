@@ -35,7 +35,7 @@ const PROMPT_TIPS = [
 const STORAGE_KEY_PREFIX = 'studio-gen-history-';
 const MAX_HISTORY = 20;
 
-export default function GenerateTab({ sceneId, canvasWidth, canvasHeight, onAddAsset, focusTarget, onClearFocus }) {
+export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasHeight, onAddAsset, focusTarget, onClearFocus }) {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -132,7 +132,8 @@ export default function GenerateTab({ sceneId, canvasWidth, canvasHeight, onAddA
         } catch {}
       }
 
-      const { data } = await api.post(`/api/v1/scenes/${sceneId}/generate-object`, {
+      const basePath = contextType === 'sceneSet' ? 'scene-sets' : 'scenes';
+      const { data } = await api.post(`/api/v1/${basePath}/${sceneId}/generate-object`, {
         prompt: finalPrompt,
         remove_background: removeBackground,
         original_prompt: prompt.trim(),
