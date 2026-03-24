@@ -32,8 +32,8 @@ const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
 // ─── REPLICATE CONFIG ───────────────────────────────────────────────────────
 
-// Depth-Anything-V2 — state of the art monocular depth estimation
-const DEPTH_MODEL = 'cjwbw/depth-anything-v2-large';
+// Depth-Anything-V2 — state of the art monocular depth estimation (zsxkib fork is actively maintained)
+const DEPTH_MODEL = 'zsxkib/depth-anything-v2';
 
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
