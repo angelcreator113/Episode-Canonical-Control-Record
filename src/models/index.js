@@ -743,8 +743,14 @@ if (EditMap && EditMap.associate) {
 if (CharacterArc && CharacterArc.associate) {
   CharacterArc.associate(requiredModels);
 }
-if (Episode && Episode.associate) {
-  Episode.associate(requiredModels);
+// Episode ↔ SceneSet (M:N through SceneSetEpisode)
+if (Episode && SceneSetEpisode && SceneSet) {
+  Episode.belongsToMany(SceneSet, {
+    through: SceneSetEpisode,
+    foreignKey: 'episode_id',
+    otherKey: 'scene_set_id',
+    as: 'sceneSets',
+  });
 }
 if (SceneSet && SceneSet.associate) {
   SceneSet.associate(requiredModels);
