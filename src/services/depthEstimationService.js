@@ -28,8 +28,8 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── REPLICATE CONFIG ───────────────────────────────────────────────────────
 
-// DepthAnythingV2 — high-quality monocular depth estimation (via lucataco on Replicate)
-const DEPTH_MODEL = 'lucataco/depth-anything-v2';
+// MiDaS — robust monocular depth estimation (works reliably on Replicate)
+const DEPTH_MODEL = 'cjwbw/midas';
 const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
 const MAX_POLL_ATTEMPTS = 60; // 5 minutes max at 5s intervals
 const POLL_INTERVAL_MS = 5000;
@@ -79,9 +79,9 @@ async function runDepthEstimation(imageUrl) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  console.log('[DepthEstimation] Creating prediction with DepthAnythingV2...');
+  console.log('[DepthEstimation] Creating prediction with MiDaS depth model...');
 
-  // Create prediction
+  // Create prediction using model endpoint
   const createResponse = await axios.post(
     `${REPLICATE_API_BASE}/models/${DEPTH_MODEL}/predictions`,
     {
