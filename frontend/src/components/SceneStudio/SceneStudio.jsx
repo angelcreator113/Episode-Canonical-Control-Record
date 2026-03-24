@@ -44,6 +44,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const stageRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
@@ -94,7 +95,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── Save ──
 
   const save = useCallback(async () => {
-    if (isSaving) return;
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     setIsSaving(true);
     try {
       const payload = state.serializeForSave();
@@ -107,9 +109,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     } catch (err) {
       console.error('Scene Studio save error:', err);
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [state, isSaving]);
+  }, [state]);
 
   // Auto-save (3s debounce)
   useEffect(() => {

@@ -227,6 +227,7 @@ export default function useSceneStudioState() {
     };
     setObjects((prev) => [...prev, obj]);
     setSelectedIds(new Set([obj.id]));
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   const removeObject = useCallback((id) => {
@@ -237,6 +238,7 @@ export default function useSceneStudioState() {
       next.delete(id);
       return next;
     });
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   const updateObject = useCallback((id, changes) => {
@@ -278,6 +280,7 @@ export default function useSceneStudioState() {
     };
     setObjects((prev) => [...prev, copy]);
     setSelectedIds(new Set([copy.id]));
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   // ── Selection ──
@@ -319,6 +322,7 @@ export default function useSceneStudioState() {
 
       return sorted.map((o, i) => ({ ...o, layerOrder: i }));
     });
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   // ── Visibility / Lock ──
@@ -365,6 +369,7 @@ export default function useSceneStudioState() {
 
     setObjects((prev) => [...prev, ...pasted]);
     setSelectedIds(newIds);
+    setIsDirty(true);
   }, [clipboard, objects, pushHistory]);
 
   // ── Zoom / Pan ──
@@ -400,6 +405,7 @@ export default function useSceneStudioState() {
         return { ...o, isActiveVariant: o.id === variantId };
       })
     );
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   // ── Canvas settings ──
