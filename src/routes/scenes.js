@@ -295,7 +295,7 @@ router.get(
 router.put(
   '/:id',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.updateScene)
 );
 
