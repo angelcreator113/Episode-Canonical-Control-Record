@@ -74,7 +74,7 @@ function incrementUsage(userId) {
 /**
  * Create a prediction on Replicate and wait for it to complete.
  * Returns the output URL (depth map image).
- * Uses /v1/predictions endpoint with version hash (required for community models).
+ * Uses /v1/models/{owner}/{name}/predictions endpoint (auto-resolves latest version).
  */
 async function runDepthEstimation(imageUrl) {
   if (!REPLICATE_API_TOKEN) {
@@ -84,23 +84,30 @@ async function runDepthEstimation(imageUrl) {
   console.log(`[DepthEstimation] Creating prediction with ${DEPTH_MODEL}...`);
 
   // Create prediction using model-based endpoint (no version hash required)
-  const createResponse = await axios.post(
-    `${REPLICATE_API_BASE}/models/${DEPTH_MODEL}/predictions`,
-    {
-      input: {
-        image: imageUrl,
-        encoder: 'vitl',
+  let createResponse;
+  try {
+    createResponse = await axios.post(
+      `${REPLICATE_API_BASE}/models/${DEPTH_MODEL}/predictions`,
+      {
+        input: {
+          image: imageUrl,
+          encoder: 'vitl',
+        },
       },
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${REPLICATE_API_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'wait',
-      },
-      timeout: 300000, // 5 minute timeout for sync wait
-    }
-  );
+      {
+        headers: {
+          'Authorization': `Bearer ${REPLICATE_API_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'wait',
+        },
+        timeout: 300000, // 5 minute timeout for sync wait
+      }
+    );
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.response?.data || err.message;
+    console.error(`[DepthEstimation] Replicate API error (${err.response?.status}):`, detail);
+    throw new Error(`Replicate API error: ${err.response?.status || 'network'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+  }
 
   // If the API responded synchronously (Prefer: wait), check for output
   if (createResponse.data.status === 'succeeded' && createResponse.data.output) {
