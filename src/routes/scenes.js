@@ -4,7 +4,7 @@ const sceneController = require('../controllers/sceneController');
 const sceneStudioController = require('../controllers/sceneStudioController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
-const { authenticateToken, optionalAuth } = require('../middleware/auth');
+const { optionalAuth } = require('../middleware/auth');
 
 console.log('🔵 SCENES ROUTES FILE LOADING... [TIMESTAMP:', new Date().toISOString(), ']');
 console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:id LAST');
@@ -114,7 +114,7 @@ router.get('/test-direct/:id', asyncHandler(async (req, res) => {
 // POST /api/v1/scenes - Create new scene
 router.post(
   '/',
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.createScene)
 );
 
@@ -122,7 +122,7 @@ router.post(
 router.post(
   '/:id/duplicate',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.duplicateScene)
 );
 
@@ -134,7 +134,7 @@ router.post(
 router.put(
   '/:id/status',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.updateSceneStatus)
 );
 
@@ -142,7 +142,7 @@ router.put(
 router.post(
   '/:id/characters',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.addCharacter)
 );
 
@@ -150,7 +150,7 @@ router.post(
 router.delete(
   '/:id/characters/:characterName',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.removeCharacter)
 );
 
@@ -158,7 +158,7 @@ router.delete(
 router.put(
   '/:id/thumbnail',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.setSceneThumbnail)
 );
 
@@ -166,7 +166,7 @@ router.put(
 router.put(
   '/:id/assets',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.updateSceneAssets)
 );
 
@@ -181,7 +181,7 @@ router.get('/:id/assets', validateUUIDParam('id'), asyncHandler(sceneController.
 router.post(
   '/:id/assets',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.addSceneAsset)
 );
 
@@ -190,7 +190,7 @@ router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   validateUUIDParam('assetId'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.removeSceneAsset)
 );
 
@@ -199,7 +199,7 @@ router.patch(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   validateUUIDParam('assetId'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.updateSceneAsset)
 );
 
@@ -218,7 +218,7 @@ router.get(
 router.put(
   '/:id/canvas',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneStudioController.saveCanvas)
 );
 
@@ -234,7 +234,7 @@ router.post(
 router.post(
   '/:id/objects',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneStudioController.addObject)
 );
 
@@ -243,7 +243,7 @@ router.patch(
   '/:id/objects/:objectId',
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneStudioController.updateObject)
 );
 
@@ -252,7 +252,7 @@ router.delete(
   '/:id/objects/:objectId',
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneStudioController.deleteObject)
 );
 
@@ -261,7 +261,7 @@ router.post(
   '/:id/objects/:objectId/duplicate',
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneStudioController.duplicateObject)
 );
 
@@ -270,7 +270,7 @@ router.post(
   '/:id/objects/:objectId/variants',
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneStudioController.createVariant)
 );
 
@@ -279,7 +279,7 @@ router.patch(
   '/:id/variant-groups/:groupId/activate',
   validateUUIDParam('id'),
   validateUUIDParam('groupId'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneStudioController.activateVariant)
 );
 
