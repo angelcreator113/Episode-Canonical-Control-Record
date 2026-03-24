@@ -48,7 +48,7 @@ function responsiveAuditor() {
 
   // 1. How many page CSS files have media queries?
   let withMQ = 0;
-  let withoutMQ = [];
+  const withoutMQ = [];
   const breakpointUsage = {};
 
   cssFiles.forEach(f => {
@@ -141,7 +141,7 @@ function tokenCompliance() {
   // 2. Scan page CSS files for hard-coded colours
   const cssFiles = listFiles(PAGES_DIR, '.css');
   let hardCodedColours = 0;
-  let hardCodedPages = [];
+  const hardCodedPages = [];
   const hexRe = /#[0-9a-fA-F]{3,8}\b/g;
   const rgbRe = /rgba?\s*\(\s*\d/g;
 
@@ -169,7 +169,7 @@ function tokenCompliance() {
   // 3. Scan JSX inline styles for hard-coded colours
   const jsxFiles = listFiles(PAGES_DIR, '.jsx');
   let inlineHardCoded = 0;
-  let inlineWorst = [];
+  const inlineWorst = [];
 
   jsxFiles.forEach(f => {
     const src = readSafe(path.join(PAGES_DIR, f));
@@ -247,7 +247,7 @@ function consistencyChecker() {
   }
 
   // 3. Font-family declarations (should be consistent)
-  let fontDeclarations = new Set();
+  const fontDeclarations = new Set();
   cssFiles.forEach(f => {
     const src = readSafe(path.join(PAGES_DIR, f));
     const fonts = src.match(/font-family\s*:\s*([^;]+)/g) || [];
@@ -263,7 +263,7 @@ function consistencyChecker() {
   }
 
   // 4. z-index sprawl
-  let zIndexValues = new Set();
+  const zIndexValues = new Set();
   cssFiles.forEach(f => {
     const src = readSafe(path.join(PAGES_DIR, f));
     const matches = src.match(/z-index\s*:\s*(\d+)/g) || [];
@@ -284,7 +284,7 @@ function consistencyChecker() {
   }
 
   // 5. Border-radius consistency
-  let radiusValues = new Set();
+  const radiusValues = new Set();
   cssFiles.forEach(f => {
     const src = readSafe(path.join(PAGES_DIR, f));
     const matches = src.match(/border-radius\s*:\s*([^;]+)/g) || [];

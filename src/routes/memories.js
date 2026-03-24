@@ -6666,7 +6666,7 @@ router.post('/generate-living-state', optionalAuth, async (req, res) => {
 
     // Find this character's manuscript lines across all books
     const books = await StorytellerBook.findAll({ attributes: ['id', 'title'], raw: true });
-    let manuscriptSnippets = [];
+    const manuscriptSnippets = [];
     let lastChapter = null;
 
     for (const book of books) {
@@ -8271,7 +8271,7 @@ async function loadCharacterRelationships(characterKey) {
     if (!CharacterRelationship) return null;
 
     // Find all DB IDs for this character
-    let dbKeys = SE_DB_KEY_MAP[characterKey] || [characterKey];
+    const dbKeys = SE_DB_KEY_MAP[characterKey] || [characterKey];
     const charRows = await RegistryCharacter.findAll({
       where: { character_key: dbKeys },
       attributes: ['id', 'display_name'],
@@ -10587,7 +10587,7 @@ Return JSON array of story numbers, e.g. [3, 7, 14]` }],
         remainingOlder = older;
       }
 
-      let contextParts = [];
+      const contextParts = [];
       if (remainingOlder.length) {
         contextParts.push('EARLIER ARC STORIES (titles — these established the foundation):\n' +
           remainingOlder.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
@@ -11330,7 +11330,7 @@ async function runPipeline({ characterKey, storyNumber, taskBrief, previousStori
   }
 
   let finalText = genResult.text;
-  let qualityReport = genResult.quality_report;
+  const qualityReport = genResult.quality_report;
   let revised = false;
 
   // ── Step 2: Check quality gate ──────────────────────────────────────

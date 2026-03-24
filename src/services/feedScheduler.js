@@ -126,7 +126,7 @@ const ARCHETYPES = [
 ];
 const FOLLOWER_TIERS = ['micro', 'mid', 'macro', 'mega'];
 
-let schedulerConfig = {
+const schedulerConfig = {
   enabled: false,
   interval_hours: 4,
   batch_size: 5,              // profiles per fill run

@@ -256,7 +256,7 @@ router.post(
 
       // 3. Upsert timeline data
       if (timeline) {
-        let timelineRecord = await TimelineData.findOne({
+        const timelineRecord = await TimelineData.findOne({
           where: { episode_id: id },
           transaction: t
         });

@@ -196,8 +196,8 @@ router.post('/world/:showId/browse-pool', optionalAuth, async (req, res) => {
     }
 
     // Get episode event data
-    let event = {};
-    let selectedOutfit = {};
+    const event = {};
+    const selectedOutfit = {};
     if (episode_id) {
       const episode = await models.Episode.findByPk(episode_id);
       if (episode?.script_content) {

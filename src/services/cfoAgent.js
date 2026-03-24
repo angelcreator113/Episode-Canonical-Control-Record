@@ -21,7 +21,7 @@ const path = require('path');
 // ═══════════════════════════════════════════════════════════════
 // BUDGET CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
-let budgetConfig = {
+const budgetConfig = {
   daily_limit:   Number(process.env.CFO_DAILY_BUDGET)   || 5.00,   // $ per day
   monthly_limit: Number(process.env.CFO_MONTHLY_BUDGET) || 100.00, // $ per month
   warn_pct:      Number(process.env.CFO_WARN_PCT)       || 80,     // alert at this % of limit

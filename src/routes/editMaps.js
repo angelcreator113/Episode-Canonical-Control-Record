@@ -16,7 +16,7 @@ router.post('/:id/analyze', optionalAuth, async (req, res) => {
     const { id } = req.params;
     
     // Find raw footage (or create stub if doesn't exist for testing)
-    let footage = await db.RawFootage?.findByPk(id);
+    const footage = await db.RawFootage?.findByPk(id);
     
     if (!footage) {
       return res.status(404).json({ error: 'Raw footage not found' });

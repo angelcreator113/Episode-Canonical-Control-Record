@@ -287,12 +287,12 @@ router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
     const state = await getOrCreateCharacterState(models.sequelize, showId, seasonId, character_key);
 
     // Get wardrobe items for style scoring — uses real outfit synergy
-    let styleScores = { outfit_match: null, accessory_match: null, deadline_penalty: null };
+    const styleScores = { outfit_match: null, accessory_match: null, deadline_penalty: null };
     let outfitData = null;
     try {
       const { getOutfitScore } = require('./wardrobe');
       // Build event context from parsed script event + world_events if available
-      let eventContext = { ...event };
+      const eventContext = { ...event };
       try {
         const [weRows] = await models.sequelize.query(
           `SELECT event_type, dress_code, dress_code_keywords, prestige, strictness, host_brand

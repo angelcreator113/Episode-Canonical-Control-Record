@@ -855,7 +855,7 @@ module.exports = {
       // 2. assets.episode_id direct link (legacy)
 
       let deletedCount = 0;
-      let deletionMethods = [];
+      const deletionMethods = [];
 
       // Method 1: Remove from episode_assets join table
       const where = {
