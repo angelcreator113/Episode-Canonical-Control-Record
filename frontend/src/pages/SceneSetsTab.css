@@ -609,8 +609,9 @@
 
 .scene-sets-card-header-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .scene-sets-angle-badge {
