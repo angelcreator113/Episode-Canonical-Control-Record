@@ -28,11 +28,12 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── REPLICATE CONFIG ───────────────────────────────────────────────────────
 
-// DepthAnythingV2 — high-quality monocular depth estimation
+// DepthAnythingV2 via chenxwh (actively maintained, 384K+ runs)
+// Uses /v1/models/{owner}/{name}/predictions endpoint (no version hash needed)
 const DEPTH_MODEL = 'chenxwh/depth-anything-v2';
 const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
-const MAX_POLL_ATTEMPTS = 60; // 5 minutes max at 5s intervals
-const POLL_INTERVAL_MS = 5000;
+const MAX_POLL_ATTEMPTS = 60;
+const POLL_INTERVAL_MS = 3000;
 
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
@@ -73,15 +74,16 @@ function incrementUsage(userId) {
 /**
  * Create a prediction on Replicate and wait for it to complete.
  * Returns the output URL (depth map image).
+ * Uses /v1/models/{owner}/{name}/predictions endpoint (auto-resolves latest version).
  */
 async function runDepthEstimation(imageUrl) {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  console.log('[DepthEstimation] Creating prediction with DepthAnythingV2...');
+  console.log(`[DepthEstimation] Creating prediction with ${DEPTH_MODEL}...`);
 
-  // Create prediction via Replicate's models API
+  // Create prediction using model-based endpoint (no version hash required)
   let createResponse;
   try {
     createResponse = await axios.post(
@@ -89,6 +91,7 @@ async function runDepthEstimation(imageUrl) {
       {
         input: {
           image: imageUrl,
+          encoder: 'vitl',
         },
       },
       {
@@ -100,10 +103,10 @@ async function runDepthEstimation(imageUrl) {
         timeout: 300000, // 5 minute timeout for sync wait
       }
     );
-  } catch (apiError) {
-    const status = apiError.response?.status;
-    const detail = apiError.response?.data?.detail || apiError.message;
-    throw new Error(`Replicate API error: ${status} — ${detail}`);
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.response?.data || err.message;
+    console.error(`[DepthEstimation] Replicate API error (${err.response?.status}):`, detail);
+    throw new Error(`Replicate API error: ${err.response?.status || 'network'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
   // If the API responded synchronously (Prefer: wait), check for output
@@ -113,14 +116,13 @@ async function runDepthEstimation(imageUrl) {
   }
 
   // Otherwise, poll for completion
-  const predictionUrl = createResponse.data.urls?.get || `${REPLICATE_API_BASE}/predictions/${createResponse.data.id}`;
-
+  const pollUrl = createResponse.data.urls?.get || `${REPLICATE_API_BASE}/predictions/${createResponse.data.id}`;
   console.log(`[DepthEstimation] Polling prediction ${createResponse.data.id}...`);
 
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
     await sleep(POLL_INTERVAL_MS);
 
-    const pollResponse = await axios.get(predictionUrl, {
+    const pollResponse = await axios.get(pollUrl, {
       headers: { 'Authorization': `Bearer ${REPLICATE_API_TOKEN}` },
       timeout: 15000,
     });
@@ -135,9 +137,11 @@ async function runDepthEstimation(imageUrl) {
     if (status === 'failed' || status === 'canceled') {
       throw new Error(`Depth estimation ${status}: ${error || 'unknown error'}`);
     }
+
+    console.log(`[DepthEstimation] Status: ${status} (attempt ${attempt + 1}/${MAX_POLL_ATTEMPTS})`);
   }
 
-  throw new Error('Depth estimation timed out after 5 minutes');
+  throw new Error('Depth estimation timed out after 3 minutes');
 }
 
 function sleep(ms) {

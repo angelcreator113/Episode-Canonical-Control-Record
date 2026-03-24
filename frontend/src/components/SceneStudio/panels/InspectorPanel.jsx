@@ -71,6 +71,7 @@ export default function InspectorPanel({
   depthMapUrl,
   depthEffects,
   isGeneratingDepth,
+  depthError,
   onGenerateDepth,
   onUpdateDepthEffects,
 }) {
@@ -102,13 +103,18 @@ export default function InspectorPanel({
         <div className="scene-studio-section">
           <h4><Box size={12} style={{ marginRight: 4 }} /> 3D & Depth</h4>
           {!depthMapUrl && !isGeneratingDepth && (
-            <button
-              className="scene-studio-depth-btn"
-              onClick={onGenerateDepth}
-            >
-              <Box size={14} />
-              Generate Depth Map
-            </button>
+            <>
+              <button
+                className="scene-studio-depth-btn"
+                onClick={onGenerateDepth}
+              >
+                <Box size={14} />
+                Generate Depth Map
+              </button>
+              {depthError && (
+                <p className="scene-studio-depth-error">{depthError}</p>
+              )}
+            </>
           )}
           {isGeneratingDepth && (
             <div className="scene-studio-depth-generating">
