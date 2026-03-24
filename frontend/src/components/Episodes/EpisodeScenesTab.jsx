@@ -157,7 +157,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
   // ---- Delete Scene ----
   const deleteScene = async (sceneId) => {
     try {
-      await fetch(`${API_BASE}/episodes/scenes/${sceneId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/scenes/${sceneId}`, { method: 'DELETE' });
       setScenes((prev) => prev.filter((s) => s.id !== sceneId));
       toast('Scene removed', 'info');
     } catch (err) {

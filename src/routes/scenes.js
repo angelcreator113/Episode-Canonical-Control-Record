@@ -4,7 +4,7 @@ const sceneController = require('../controllers/sceneController');
 const sceneStudioController = require('../controllers/sceneStudioController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
 
 console.log('🔵 SCENES ROUTES FILE LOADING... [TIMESTAMP:', new Date().toISOString(), ']');
 console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:id LAST');
@@ -295,7 +295,7 @@ router.put(
 router.delete(
   '/:id',
   validateUUIDParam('id'),
-  authenticateToken,
+  optionalAuth,
   asyncHandler(sceneController.deleteScene)
 );
 
