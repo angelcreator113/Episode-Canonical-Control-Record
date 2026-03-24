@@ -85,7 +85,7 @@ function SnapGuides({ guides, canvasWidth, canvasHeight }) {
   });
 }
 
-export default function StudioCanvas({
+const StudioCanvas = React.forwardRef(function StudioCanvas({
   canvasWidth,
   canvasHeight,
   backgroundUrl,
@@ -107,8 +107,11 @@ export default function StudioCanvas({
   containerRef,
   editingTextId,
   onClearEditingText,
-}) {
+}, forwardedRef) {
   const stageRef = useRef(null);
+
+  // Expose stage ref to parent for export
+  React.useImperativeHandle(forwardedRef, () => stageRef.current, []);
   const transformerRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
 
@@ -308,4 +311,6 @@ export default function StudioCanvas({
       </Layer>
     </Stage>
   );
-}
+});
+
+export default StudioCanvas;

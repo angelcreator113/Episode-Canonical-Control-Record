@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Sparkles, Loader, Image } from 'lucide-react';
 import api from '../../../../services/api';
 
@@ -17,13 +17,22 @@ const STYLE_HINTS = [
   'Pastel Soft',
 ];
 
-export default function GenerateTab({ sceneId, canvasWidth, canvasHeight, onAddAsset }) {
+export default function GenerateTab({ sceneId, canvasWidth, canvasHeight, onAddAsset, focusTarget, onClearFocus }) {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [results, setResults] = useState([]);
   const [error, setError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef(null);
+  const promptRef = useRef(null);
+
+  // Focus prompt textarea when requested
+  useEffect(() => {
+    if (focusTarget === 'generate-prompt' && promptRef.current) {
+      promptRef.current.focus();
+      if (onClearFocus) onClearFocus();
+    }
+  }, [focusTarget, onClearFocus]);
 
   const startTimer = () => {
     setElapsed(0);
@@ -118,6 +127,7 @@ export default function GenerateTab({ sceneId, canvasWidth, canvasHeight, onAddA
 
       {/* Prompt input */}
       <textarea
+        ref={promptRef}
         className="scene-studio-gen-prompt"
         rows={3}
         placeholder='Describe an object, e.g. "ornate gold mirror" or "pink crystal chandelier"...'

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Upload, Image, X, Loader } from 'lucide-react';
 import assetService from '../../../../services/assetService';
 import { computeInsertionRect } from './insertionUtils';
@@ -11,12 +11,20 @@ import { computeInsertionRect } from './insertionUtils';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'];
 
-export default function UploadTab({ showId, episodeId, canvasWidth, canvasHeight, onAddAsset }) {
+export default function UploadTab({ showId, episodeId, canvasWidth, canvasHeight, onAddAsset, focusTarget, onClearFocus }) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [recentUploads, setRecentUploads] = useState([]);
   const fileInputRef = useRef(null);
+
+  // Focus file picker when requested
+  useEffect(() => {
+    if (focusTarget === 'upload-zone' && fileInputRef.current) {
+      fileInputRef.current.click();
+      if (onClearFocus) onClearFocus();
+    }
+  }, [focusTarget, onClearFocus]);
 
   const processFile = useCallback(async (file) => {
     if (!ACCEPTED_TYPES.includes(file.type)) {

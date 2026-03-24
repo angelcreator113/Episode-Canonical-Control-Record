@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react';
+import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
 import CreationPanel from './panels/CreationPanel';
@@ -15,15 +16,49 @@ import './SceneStudio.css';
  * and auto-saves.
  */
 
+function slugify(str) {
+  return (str || 'scene')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function formatTitle(raw) {
+  if (!raw) return '';
+  return raw
+    .replace(/\s--\s/g, ' — ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const QUICK_ADD_OPTIONS = [
+  { key: 'generate', label: 'Generate', icon: Sparkles },
+  { key: 'upload', label: 'Upload', icon: Upload },
+  { key: 'library', label: 'Library', icon: Image },
+  { key: 'text', label: 'Text', icon: Type },
+  { key: 'shapes', label: 'Shapes', icon: Pentagon },
+];
+
 export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, onBack }) {
   const state = useSceneStudioState();
   const canvasContainerRef = useRef(null);
+  const stageRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
   const saveTimerRef = useRef(null);
+
+  // Lifted creation panel state
+  const [activeCreationTab, setActiveCreationTab] = useState('objects');
+  const [isCreationPanelOpen, setCreationPanelOpen] = useState(true);
+  const [focusTarget, setFocusTarget] = useState(null);
+
+  // UX guidance state
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const [showFirstHint, setShowFirstHint] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const prevObjectCountRef = useRef(0);
 
   const canvasWidth = PLATFORM_PRESETS[platform]?.width || 1920;
   const canvasHeight = PLATFORM_PRESETS[platform]?.height || 1080;
@@ -89,6 +124,89 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, [state.isDirty, state.objects, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Track first object add (for overlay + hint) ──
+
+  useEffect(() => {
+    const prevCount = prevObjectCountRef.current;
+    const curCount = state.objects.length;
+    prevObjectCountRef.current = curCount;
+
+    if (prevCount === 0 && curCount > 0 && !hasInteracted) {
+      setHasInteracted(true);
+      setShowFirstHint(true);
+      const timer = setTimeout(() => setShowFirstHint(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [state.objects.length, hasInteracted]);
+
+  // Dismiss first hint on any click/keydown
+  useEffect(() => {
+    if (!showFirstHint) return;
+    const dismiss = () => setShowFirstHint(false);
+    window.addEventListener('click', dismiss);
+    window.addEventListener('keydown', dismiss);
+    return () => {
+      window.removeEventListener('click', dismiss);
+      window.removeEventListener('keydown', dismiss);
+    };
+  }, [showFirstHint]);
+
+  // ── Quick Add helpers ──
+
+  const handleQuickAdd = useCallback((tabKey) => {
+    setCreationPanelOpen(true);
+    setActiveCreationTab(tabKey);
+    const focusMap = { library: 'library-search', upload: 'upload-zone', generate: 'generate-prompt' };
+    if (focusMap[tabKey]) setFocusTarget(focusMap[tabKey]);
+    setQuickAddOpen(false);
+  }, []);
+
+  const handleOverlayCta = useCallback((tabKey) => {
+    handleQuickAdd(tabKey);
+  }, [handleQuickAdd]);
+
+  // Close Quick Add popup on outside click / Escape
+  useEffect(() => {
+    if (!quickAddOpen) return;
+    const close = (e) => {
+      if (e.key === 'Escape' || e.type === 'mousedown') setQuickAddOpen(false);
+    };
+    // Delay to avoid immediate close from the same click
+    const timer = setTimeout(() => {
+      window.addEventListener('mousedown', close);
+      window.addEventListener('keydown', close);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [quickAddOpen]);
+
+  // ── Title editing ──
+
+  const handleTitleChange = useCallback(async (newTitle) => {
+    if (!newTitle || !newTitle.trim()) return;
+    const trimmed = newTitle.trim();
+    const id = sceneId || sceneSetId;
+    if (!id) return;
+
+    // Optimistic update
+    if (state.contextType === 'scene' && state.sceneData) {
+      state.sceneData.title = trimmed;
+    } else if (state.contextType === 'sceneSet' && state.sceneSetData) {
+      state.sceneSetData.name = trimmed;
+    }
+
+    try {
+      if (state.contextType === 'scene') {
+        await sceneService.updateScene(id, { title: trimmed });
+      }
+    } catch (err) {
+      console.error('Failed to save title:', err);
+    }
+  }, [sceneId, sceneSetId, state]);
 
   // ── Keyboard shortcuts ──
 
@@ -210,9 +328,26 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     return null;
   })();
 
-  const studioTitle = state.contextType === 'scene'
-    ? state.sceneData?.title || 'Scene Studio'
-    : state.sceneSetData?.name || 'Scene Set Studio';
+  const rawTitle = state.contextType === 'scene'
+    ? state.sceneData?.title || ''
+    : state.sceneSetData?.name || '';
+  const studioTitle = rawTitle || (state.contextType === 'scene' ? 'Scene Studio' : 'Scene Set Studio');
+
+  // ── Export ──
+
+  const handleExport = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const pixelRatio = Math.min(2, 2000 / canvasWidth);
+    const dataUrl = stage.toDataURL({ pixelRatio });
+    const link = document.createElement('a');
+    link.download = `${slugify(rawTitle || 'scene')}.png`;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [canvasWidth, rawTitle]);
 
   // ── Zoom handlers ──
 
@@ -275,7 +410,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         isDirty={state.isDirty}
         isSaving={isSaving}
         onSave={save}
-        title={studioTitle}
+        onExport={handleExport}
+        title={formatTitle(rawTitle) || studioTitle}
+        rawTitle={rawTitle}
+        onTitleChange={handleTitleChange}
         platform={platform}
         onPlatformChange={setPlatform}
         gridVisible={state.canvasSettings.gridVisible}
@@ -285,30 +423,37 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       <div className="scene-studio-body">
         {/* Left Panel */}
-        <div className="scene-studio-left-panel">
-          <CreationPanel
-            showId={showId}
-            episodeId={episodeId}
-            sceneId={sceneId || sceneSetId}
-            canvasWidth={canvasWidth}
-            canvasHeight={canvasHeight}
-            onAddAsset={state.addObject}
-            onAddObject={state.addObject}
-            objects={state.objects}
-            selectedIds={state.selectedIds}
-            onSelect={state.selectObject}
-            onToggleVisibility={state.toggleVisibility}
-            onToggleLock={state.toggleLock}
-            onReorder={state.reorderObject}
-            onDelete={state.removeObject}
-            onDuplicate={state.duplicateObject}
-            onRequestTextEdit={(id) => setEditingTextId(id)}
-          />
-        </div>
+        {isCreationPanelOpen && (
+          <div className="scene-studio-left-panel">
+            <CreationPanel
+              showId={showId}
+              episodeId={episodeId}
+              sceneId={sceneId || sceneSetId}
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+              onAddAsset={state.addObject}
+              onAddObject={state.addObject}
+              objects={state.objects}
+              selectedIds={state.selectedIds}
+              onSelect={state.selectObject}
+              onToggleVisibility={state.toggleVisibility}
+              onToggleLock={state.toggleLock}
+              onReorder={state.reorderObject}
+              onDelete={state.removeObject}
+              onDuplicate={state.duplicateObject}
+              onRequestTextEdit={(id) => setEditingTextId(id)}
+              activeTab={activeCreationTab}
+              onTabChange={setActiveCreationTab}
+              focusTarget={focusTarget}
+              onClearFocus={() => setFocusTarget(null)}
+            />
+          </div>
+        )}
 
         {/* Canvas */}
         <div className="scene-studio-canvas-container" ref={canvasContainerRef}>
           <StudioCanvas
+            ref={stageRef}
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
             backgroundUrl={backgroundUrl}
@@ -334,6 +479,60 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onPan={state.setPan}
             containerRef={canvasContainerRef}
           />
+
+          {/* Empty canvas guidance overlay */}
+          {state.objects.length === 0 && !hasInteracted && (
+            <div className="scene-studio-canvas-overlay">
+              <div className="scene-studio-canvas-overlay-inner">
+                <p className="scene-studio-overlay-title">Start building your scene</p>
+                <div className="scene-studio-overlay-ctas">
+                  <button className="scene-studio-overlay-cta" onClick={() => handleOverlayCta('library')}>
+                    <Image size={16} /> Add from Library
+                  </button>
+                  <button className="scene-studio-overlay-cta" onClick={() => handleOverlayCta('upload')}>
+                    <Upload size={16} /> Upload
+                  </button>
+                  <button className="scene-studio-overlay-cta" onClick={() => handleOverlayCta('generate')}>
+                    <Sparkles size={16} /> Generate
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* First-object hint tooltip */}
+          {showFirstHint && (
+            <div className="scene-studio-first-hint">
+              Drag to move &bull; Handles to resize &bull; Delete to remove
+            </div>
+          )}
+
+          {/* Quick Add floating button */}
+          <div className="scene-studio-quick-add-wrapper" onMouseDown={(e) => e.stopPropagation()}>
+            <button
+              className="scene-studio-quick-add-btn"
+              onClick={() => setQuickAddOpen(!quickAddOpen)}
+            >
+              <Plus size={16} /> Add
+            </button>
+            {quickAddOpen && (
+              <div className="scene-studio-quick-add-popup">
+                {QUICK_ADD_OPTIONS.map((opt) => {
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.key}
+                      className="scene-studio-quick-add-option"
+                      onClick={() => handleQuickAdd(opt.key)}
+                    >
+                      <Icon size={14} />
+                      <span>{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Panel */}

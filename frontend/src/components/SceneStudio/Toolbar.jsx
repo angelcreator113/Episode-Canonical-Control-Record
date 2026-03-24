@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   MousePointer2, Hand, Type, Square, ZoomIn, ZoomOut, Maximize,
   Undo2, Redo2, Save, Download, Grid3X3,
@@ -6,7 +6,7 @@ import {
 
 /**
  * Toolbar — Top toolbar for Scene Studio.
- * Tools, zoom controls, undo/redo, save status.
+ * Tools, zoom controls, undo/redo, save status, editable title, export.
  */
 
 const PLATFORM_PRESETS = {
@@ -16,6 +16,13 @@ const PLATFORM_PRESETS = {
   square: { width: 1080, height: 1080, label: 'Square 1:1' },
   cinema: { width: 2560, height: 1440, label: 'Cinema 16:9' },
 };
+
+const TOOLS = [
+  { key: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
+  { key: 'hand', icon: Hand, label: 'Pan', shortcut: 'H' },
+  { key: 'text', icon: Type, label: 'Text', shortcut: 'T' },
+  { key: 'shape', icon: Square, label: 'Shape', shortcut: 'S' },
+];
 
 export default function Toolbar({
   activeTool,
@@ -33,12 +40,43 @@ export default function Toolbar({
   onSave,
   onExport,
   title,
+  rawTitle,
+  onTitleChange,
   platform,
   onPlatformChange,
   gridVisible,
   onToggleGrid,
   onBack,
 }) {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const titleInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
+  const handleTitleClick = () => {
+    if (!onTitleChange) return;
+    setEditValue(rawTitle || '');
+    setIsEditingTitle(true);
+  };
+
+  const commitTitle = () => {
+    setIsEditingTitle(false);
+    if (editValue.trim() && editValue.trim() !== (rawTitle || '')) {
+      onTitleChange(editValue.trim());
+    }
+  };
+
+  const cancelTitle = () => {
+    setIsEditingTitle(false);
+    setEditValue('');
+  };
+
   return (
     <div className="scene-studio-toolbar">
       {/* Left: Back + Title */}
@@ -48,40 +86,46 @@ export default function Toolbar({
             ← Back
           </button>
         )}
-        <span className="scene-studio-toolbar-title">{title || 'Scene Studio'}</span>
+        {isEditingTitle ? (
+          <input
+            ref={titleInputRef}
+            className="scene-studio-toolbar-title-input"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitTitle();
+              if (e.key === 'Escape') cancelTitle();
+            }}
+          />
+        ) : (
+          <span
+            className={`scene-studio-toolbar-title ${onTitleChange ? 'editable' : ''}`}
+            onClick={handleTitleClick}
+            title={onTitleChange ? 'Click to edit title' : undefined}
+          >
+            {title || 'Scene Studio'}
+          </span>
+        )}
       </div>
 
       {/* Center: Tools */}
       <div className="scene-studio-toolbar-center">
         <div className="scene-studio-tool-group">
-          <button
-            className={`scene-studio-tool-btn ${activeTool === 'select' ? 'active' : ''}`}
-            onClick={() => onSetTool('select')}
-            title="Select (V)"
-          >
-            <MousePointer2 size={16} />
-          </button>
-          <button
-            className={`scene-studio-tool-btn ${activeTool === 'hand' ? 'active' : ''}`}
-            onClick={() => onSetTool('hand')}
-            title="Pan (H)"
-          >
-            <Hand size={16} />
-          </button>
-          <button
-            className={`scene-studio-tool-btn ${activeTool === 'text' ? 'active' : ''}`}
-            onClick={() => onSetTool('text')}
-            title="Text (T)"
-          >
-            <Type size={16} />
-          </button>
-          <button
-            className={`scene-studio-tool-btn ${activeTool === 'shape' ? 'active' : ''}`}
-            onClick={() => onSetTool('shape')}
-            title="Shape (S)"
-          >
-            <Square size={16} />
-          </button>
+          {TOOLS.map((tool) => {
+            const Icon = tool.icon;
+            return (
+              <button
+                key={tool.key}
+                className={`scene-studio-tool-btn-labeled ${activeTool === tool.key ? 'active' : ''}`}
+                onClick={() => onSetTool(tool.key)}
+                title={`${tool.label} (${tool.shortcut})`}
+              >
+                <Icon size={16} />
+                <span className="scene-studio-tool-label">{tool.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="scene-studio-divider" />
@@ -94,9 +138,6 @@ export default function Toolbar({
           <span className="scene-studio-zoom-label">{Math.round(zoom * 100)}%</span>
           <button className="scene-studio-tool-btn" onClick={onZoomIn} title="Zoom In">
             <ZoomIn size={16} />
-          </button>
-          <button className="scene-studio-tool-btn" onClick={onFitToScreen} title="Fit to Screen">
-            <Maximize size={16} />
           </button>
         </div>
 
@@ -134,8 +175,12 @@ export default function Toolbar({
         </div>
       </div>
 
-      {/* Right: Platform, Save, Export */}
+      {/* Right: Fit, Platform, Save, Export */}
       <div className="scene-studio-toolbar-right">
+        <button className="scene-studio-tool-btn" onClick={onFitToScreen} title="Fit to Screen">
+          <Maximize size={16} />
+        </button>
+
         {onPlatformChange && (
           <select
             className="scene-studio-platform-select"

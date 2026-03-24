@@ -53,7 +53,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.06);
   border-radius: 6px;
   padding: 2px;
 }
@@ -78,8 +78,9 @@
 }
 
 .scene-studio-tool-btn.active {
-  color: #B8962E;
-  background: rgba(184, 150, 46, 0.12);
+  color: #8B7220;
+  background: rgba(184, 150, 46, 0.18);
+  border: 1px solid rgba(184, 150, 46, 0.3);
 }
 
 .scene-studio-tool-btn:disabled {
@@ -96,8 +97,8 @@
 
 .scene-studio-divider {
   width: 1px;
-  height: 20px;
-  background: rgba(0, 0, 0, 0.1);
+  height: 24px;
+  background: rgba(0, 0, 0, 0.12);
   margin: 0 4px;
 }
 
@@ -1143,6 +1144,222 @@
   color: #B8962E;
   border-color: rgba(184, 150, 46, 0.4);
   background: rgba(184, 150, 46, 0.08);
+}
+
+/* ── Toolbar: Enhanced Tool Buttons with Labels ── */
+
+.scene-studio-tool-btn-labeled {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 40px;
+  height: 38px;
+  border: none;
+  background: transparent;
+  color: #666;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  padding: 2px 0;
+}
+
+.scene-studio-tool-btn-labeled:hover {
+  color: #2C2C2C;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.scene-studio-tool-btn-labeled.active {
+  color: #8B7220;
+  background: rgba(184, 150, 46, 0.18);
+  border: 1px solid rgba(184, 150, 46, 0.3);
+}
+
+.scene-studio-tool-label {
+  font-size: 8px;
+  font-family: 'DM Mono', monospace;
+  line-height: 1;
+  letter-spacing: 0.2px;
+}
+
+/* ── Toolbar: Editable Title ── */
+
+.scene-studio-toolbar-title.editable {
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 150ms ease;
+}
+
+.scene-studio-toolbar-title.editable:hover {
+  border-bottom-color: rgba(184, 150, 46, 0.5);
+}
+
+.scene-studio-toolbar-title-input {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2C2C2C;
+  font-family: 'DM Mono', monospace;
+  max-width: 200px;
+  padding: 2px 6px;
+  border: 1px solid rgba(184, 150, 46, 0.4);
+  border-radius: 4px;
+  outline: none;
+  background: #fff;
+}
+
+.scene-studio-toolbar-title-input:focus {
+  border-color: #B8962E;
+  box-shadow: 0 0 0 2px rgba(184, 150, 46, 0.15);
+}
+
+/* ── Empty Canvas Guidance Overlay ── */
+
+.scene-studio-canvas-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+  animation: scene-studio-fade-in 200ms ease;
+}
+
+.scene-studio-canvas-overlay-inner {
+  text-align: center;
+  pointer-events: auto;
+}
+
+.scene-studio-overlay-title {
+  font-family: 'Lora', serif;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 16px;
+  font-weight: 400;
+}
+
+.scene-studio-overlay-ctas {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.scene-studio-overlay-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  transition: all 150ms ease;
+  backdrop-filter: blur(4px);
+}
+
+.scene-studio-overlay-cta:hover {
+  background: rgba(184, 150, 46, 0.2);
+  border-color: rgba(184, 150, 46, 0.5);
+  color: #fff;
+}
+
+@keyframes scene-studio-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── First-Object Hint ── */
+
+.scene-studio-first-hint {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(44, 44, 44, 0.85);
+  color: #fff;
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+  padding: 6px 16px;
+  border-radius: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 11;
+  animation: scene-studio-fade-in 200ms ease;
+  backdrop-filter: blur(4px);
+}
+
+/* ── Quick Add Floating Button ── */
+
+.scene-studio-quick-add-wrapper {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+}
+
+.scene-studio-quick-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: #B8962E;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  transition: all 150ms ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.scene-studio-quick-add-btn:hover {
+  background: #a68429;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.scene-studio-quick-add-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #FAF7F0;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  min-width: 140px;
+  animation: scene-studio-fade-in 120ms ease;
+}
+
+.scene-studio-quick-add-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #555;
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 100ms ease;
+  text-align: left;
+}
+
+.scene-studio-quick-add-option:hover {
+  background: rgba(184, 150, 46, 0.1);
+  color: #8B7220;
 }
 
 /* ── Responsive ── */
