@@ -28,8 +28,8 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── REPLICATE CONFIG ───────────────────────────────────────────────────────
 
-// DepthAnythingV2 — high-quality monocular depth estimation
-const DEPTH_MODEL = 'depth-anything/depth-anything-v2-large';
+// DepthAnythingV2 — high-quality monocular depth estimation (via cjwbw on Replicate)
+const DEPTH_MODEL = 'cjwbw/depth-anything-v2-large';
 const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
 const MAX_POLL_ATTEMPTS = 60; // 5 minutes max at 5s intervals
 const POLL_INTERVAL_MS = 5000;
