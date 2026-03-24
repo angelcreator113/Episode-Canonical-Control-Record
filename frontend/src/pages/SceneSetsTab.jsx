@@ -502,13 +502,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   };
 
   const handleAiAssist = async () => {
-    if (!newAngle.angle_label.trim()) return;
     setAiAssistLoading(true);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/ai-camera-direction`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ angle_label: newAngle.angle_label.trim().toUpperCase(), angle_name: newAngle.angle_name.trim() }),
+        body: JSON.stringify({ angle_label: newAngle.angle_label.trim().toUpperCase() || 'GENERAL', angle_name: newAngle.angle_name.trim() }),
       });
       if (!res.ok) throw new Error('AI assist failed');
       const json = await res.json();
@@ -814,8 +813,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <button
                   className="scene-sets-ai-assist-btn"
                   onClick={handleAiAssist}
-                  disabled={aiAssistLoading || !newAngle.angle_label.trim()}
-                  title={!newAngle.angle_label.trim() ? 'Type a label first (e.g. WIDE) to enable AI' : 'AI-generate camera direction'}
+                  disabled={aiAssistLoading}
+                  title="AI-generate camera direction"
                 >
                   {aiAssistLoading ? <Loader size={10} className="spin" /> : <Sparkles size={10} />} AI
                 </button>
