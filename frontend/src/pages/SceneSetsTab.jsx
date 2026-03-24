@@ -46,9 +46,13 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
-function ImageLightbox({ images, initialIndex, onClose }) {
+function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle }) {
+  const [images, setImages] = useState(initialImages);
   const [idx, setIdx] = useState(initialIndex || 0);
   const current = images[idx] || images[0];
+
+  // Sync if parent passes new images
+  useEffect(() => { setImages(initialImages); }, [initialImages]);
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -63,6 +67,16 @@ function ImageLightbox({ images, initialIndex, onClose }) {
   const goPrev = (e) => { e.stopPropagation(); setIdx(i => (i > 0 ? i - 1 : images.length - 1)); };
   const goNext = (e) => { e.stopPropagation(); setIdx(i => (i < images.length - 1 ? i + 1 : 0)); };
 
+  const handleDelete = () => {
+    if (!current?.angleId || !onDeleteAngle) return;
+    if (!window.confirm(`Delete angle "${current.label}"? This cannot be undone.`)) return;
+    onDeleteAngle(current.angleId);
+    const newImages = images.filter((_, i) => i !== idx);
+    if (newImages.length === 0) { onClose(); return; }
+    setImages(newImages);
+    setIdx(i => Math.min(i, newImages.length - 1));
+  };
+
   return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
       <div className="scene-sets-lightbox" onClick={e => e.stopPropagation()}>
@@ -70,28 +84,37 @@ function ImageLightbox({ images, initialIndex, onClose }) {
           <X size={20} />
         </button>
 
-        {images.length > 1 && (
-          <button className="scene-sets-lightbox-nav prev" onClick={goPrev}>
-            <ChevronLeft size={24} />
-          </button>
-        )}
+        <div className="scene-sets-lightbox-stage">
+          {images.length > 1 && (
+            <button className="scene-sets-lightbox-nav prev" onClick={goPrev}>
+              <ChevronLeft size={24} />
+            </button>
+          )}
 
-        {current.videoUrl ? (
-          <video src={current.videoUrl} className="scene-sets-lightbox-video" controls autoPlay loop muted />
-        ) : (
-          <img src={current.src} alt={current.label} className="scene-sets-lightbox-img" />
-        )}
+          <div className="scene-sets-lightbox-media">
+            {current.videoUrl ? (
+              <video src={current.videoUrl} className="scene-sets-lightbox-video" controls autoPlay loop muted />
+            ) : (
+              <img src={current.src} alt={current.label} className="scene-sets-lightbox-img" />
+            )}
+          </div>
 
-        {images.length > 1 && (
-          <button className="scene-sets-lightbox-nav next" onClick={goNext}>
-            <ChevronRight size={24} />
-          </button>
-        )}
+          {images.length > 1 && (
+            <button className="scene-sets-lightbox-nav next" onClick={goNext}>
+              <ChevronRight size={24} />
+            </button>
+          )}
+        </div>
 
-        {/* Bottom info + filmstrip */}
+        {/* Bottom info + actions */}
         <div className="scene-sets-lightbox-info">
           <span className="scene-sets-lightbox-label">{current.label}</span>
           <span className="scene-sets-lightbox-counter">{idx + 1} / {images.length}</span>
+          {current.angleId && onDeleteAngle && (
+            <button className="scene-sets-lightbox-delete" onClick={handleDelete} title="Delete this angle">
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
 
         {images.length > 1 && (
@@ -337,7 +360,7 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, generatingId, generationProgress, allShows, allEpisodes, onLoadEpisodes }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, generatingId, generationProgress, allShows, allEpisodes, onLoadEpisodes }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
@@ -928,6 +951,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               label: a.angle_label || a.angle_name,
               thumbSrc: bustUrl(a.still_image_url),
               videoUrl: a.video_clip_url ? bustUrl(a.video_clip_url) : null,
+              angleId: a.id,
             });
           }
         });
@@ -938,7 +962,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           const found = galleryImages.findIndex(g => g.src === bustUrl(selectedAngle.still_image_url));
           if (found >= 0) startIdx = found;
         }
-        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} />;
+        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} onDeleteAngle={(angleId) => onDeleteSingleAngle(set, angleId)} />;
       })()}
 
       {showPromptPreview && previewData && createPortal(
@@ -1401,6 +1425,17 @@ export default function SceneSetsTab() {
     }
   };
 
+  const handleDeleteSingleAngle = async (set, angleId) => {
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angleId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      showToast('Angle deleted');
+      fetchSets();
+    } catch {
+      showToast('Failed to delete angle', 'error');
+    }
+  };
+
   const handleDeleteAllAngles = async (set) => {
     const count = set.angles?.length || 0;
     if (count === 0) return;
@@ -1707,6 +1742,7 @@ export default function SceneSetsTab() {
               onSetCoverAngle={handleSetCoverAngle}
               onLinkEpisodes={handleLinkEpisodes}
               onUnlinkEpisode={handleUnlinkEpisode}
+              onDeleteSingleAngle={handleDeleteSingleAngle}
               generatingId={generatingId}
               generationProgress={generationProgress}
               allShows={allShows}

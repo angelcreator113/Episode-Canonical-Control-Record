@@ -1791,12 +1791,22 @@
 .scene-sets-lightbox {
   position: relative;
   max-width: 90vw;
-  max-height: 90vh;
-  overflow-y: auto;
+  max-height: 95vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+}
+
+.scene-sets-lightbox-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .scene-sets-lightbox-close {
@@ -1817,13 +1827,10 @@
 }
 
 .scene-sets-lightbox-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   color: #fff;
-  font-size: 32px;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -1833,40 +1840,33 @@
   justify-content: center;
   transition: background 0.15s;
   z-index: 10;
-  line-height: 1;
+  margin: 0 8px;
 }
 
 .scene-sets-lightbox-nav:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.scene-sets-lightbox-nav.prev {
-  left: -60px;
-}
-
-.scene-sets-lightbox-nav.next {
-  right: -60px;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .scene-sets-lightbox-media {
   display: flex;
   align-items: center;
   justify-content: center;
-  max-width: 80vw;
-  max-height: 70vh;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .scene-sets-lightbox-img {
-  max-width: 80vw;
-  max-height: 70vh;
+  max-width: calc(90vw - 120px);
+  max-height: 65vh;
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .scene-sets-lightbox-video {
-  max-width: 80vw;
-  max-height: 70vh;
+  max-width: calc(90vw - 120px);
+  max-height: 65vh;
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
@@ -1884,6 +1884,26 @@
   font-family: 'DM Mono', monospace;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.scene-sets-lightbox-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(198, 40, 40, 0.2);
+  border: 1px solid rgba(198, 40, 40, 0.4);
+  color: #ef5350;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.scene-sets-lightbox-delete:hover {
+  background: rgba(198, 40, 40, 0.4);
+  color: #fff;
 }
 
 .scene-sets-lightbox-thumbstrip {
@@ -1991,11 +2011,9 @@
 }
 
 @media (max-width: 600px) {
-  .scene-sets-lightbox-nav.prev { left: 8px; }
-  .scene-sets-lightbox-nav.next { right: 8px; }
-  .scene-sets-lightbox-media { max-width: 95vw; }
+  .scene-sets-lightbox-nav { width: 36px; height: 36px; margin: 0 4px; }
   .scene-sets-lightbox-img,
-  .scene-sets-lightbox-video { max-width: 95vw; }
+  .scene-sets-lightbox-video { max-width: calc(95vw - 88px); max-height: 60vh; }
 }
 
 /* ── Regenerate Button (lightbox) ──────────────────────────────────────── */
