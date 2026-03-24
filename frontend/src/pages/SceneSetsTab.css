@@ -614,9 +614,10 @@
 
 .scene-sets-card-header-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   min-width: 0;
-  gap: 8px;
+  gap: 10px;
 }
 
 .scene-sets-angle-badge {

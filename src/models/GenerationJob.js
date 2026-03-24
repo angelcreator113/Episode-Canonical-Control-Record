@@ -22,7 +22,7 @@ module.exports = (sequelize) => {
   GenerationJob.init({
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     job_type: {
-      type: DataTypes.ENUM('generate_base', 'generate_angle', 'regenerate_angle', 'cascade_regenerate'),
+      type: DataTypes.ENUM('generate_base', 'generate_angle', 'generate_angle_video', 'regenerate_angle', 'cascade_regenerate'),
       allowNull: false,
     },
     status: {

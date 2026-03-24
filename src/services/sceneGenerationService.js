@@ -156,7 +156,7 @@ function runwayHeaders() {
  * Supports style_reference for visual consistency.
  */
 async function startTextToImage(prompt, options = {}) {
-  const { seed, numOutputs = 1, styleReference } = options;
+  const { seed, numOutputs = 1, styleReference, referenceImages } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
 
   const payload = {
@@ -166,6 +166,7 @@ async function startTextToImage(prompt, options = {}) {
     ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
     ...(numOutputs > 1 ? { numOutputs } : {}),
     ...(styleReference ? { styleReference } : {}),
+    ...(referenceImages && referenceImages.length > 0 ? { referenceImages } : {}),
   };
 
   const MAX_RETRIES = 3;
@@ -197,11 +198,9 @@ async function startTextToImage(prompt, options = {}) {
  * Added: camera motion control, scene-specific duration, negative prompt.
  */
 async function startImageToVideo(prompt, imageUrl, options = {}) {
-  const { seed, duration = 5 } = options;
+  const { seed, duration = 5, cameraMotion } = options;
   const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
 
-  // Note: gen3a_turbo image_to_video does NOT accept 'ratio' (inferred from input image)
-  // or 'cameraMotion' (not a valid field — camera motion is described in promptText instead)
   const payload = {
     model: 'gen3a_turbo',
     promptText: prompt,
@@ -223,11 +222,7 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
       const status = err.response?.status;
       const retryable = !status || status === 429 || status >= 500;
       if (err.response) {
-        const tag = retryable ? '' : ' [NON-RETRYABLE]';
-        console.error(`[SceneGen]${tag} image_to_video API error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
-        if (!retryable) {
-          console.error(`[SceneGen] Payload sent:`, JSON.stringify(payload, null, 2));
-        }
+        console.error(`[SceneGen] image_to_video API error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
       }
       if (!retryable || attempt === MAX_RETRIES) throw err;
       const backoff = attempt * 2000;
@@ -467,38 +462,16 @@ async function generateBaseScene(sceneSet, models) {
 
     console.log(`[SceneGen] Still complete. Seed locked: ${lockedSeed}`);
 
-    // ── Step 2: Still → Video (non-blocking) ─────────────────────────────
-    let videoUrl = null;
-    let videoCredits = 0;
-    try {
-      console.log(`[SceneGen] Starting base video for: ${sceneSet.name}`);
-      const videoPrompt = buildVideoPrompt(sceneSet, 'WIDE');
-      const { jobId: videoJobId } = await startImageToVideo(videoPrompt, stillOutputUrl, {
-        duration: VIDEO_DURATION_MAP.WIDE,
-        cameraMotion: CAMERA_MOTION_MAP.WIDE,
-      });
-      const videoResult = await pollTask(videoJobId);
-
-      if (videoResult.status === 'SUCCEEDED') {
-        videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, 'base', 'video');
-        videoCredits = videoResult.creditsUsed || 0;
-        console.log(`[SceneGen] Video complete.`);
-      } else {
-        console.warn(`[SceneGen] Base video failed (non-blocking): ${videoResult.error}`);
-      }
-    } catch (videoErr) {
-      console.warn(`[SceneGen] Base video error (non-blocking): ${videoErr.message}`);
-    }
-
     // Lock the seed + base still URL — permanent
+    // Base video is generated on-demand only (use POST /:id/generate-video to produce it)
     await SceneSet.update({
       base_runway_seed: lockedSeed,
       base_still_url: stillUrl,
       generation_status: 'complete',
-      generation_cost: parseFloat(sceneSet.generation_cost || 0) + stillCredits + videoCredits,
+      generation_cost: parseFloat(sceneSet.generation_cost || 0) + stillCredits,
     }, { where: { id: sceneSet.id } });
 
-    return { success: true, stillUrl, videoUrl, seed: lockedSeed };
+    return { success: true, stillUrl, videoUrl: null, seed: lockedSeed };
   } catch (err) {
     await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
     throw err;
@@ -555,63 +528,56 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
 
-  if (!sceneSet.base_still_url) {
-    throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
-  }
-
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  // Use movement-focused prompt for video (scene is already in the base image)
-  const videoPrompt = buildVideoPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
-  // Keep the full prompt for logging/debugging
-  const fullPrompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
+  // Use the full angle-specific prompt for text→image (cheap: ~1 credit via gen4_image)
+  const prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
 
   await SceneAngle.update(
-    { generation_status: 'generating', runway_prompt: fullPrompt },
+    { generation_status: 'generating', runway_prompt: prompt },
     { where: { id: sceneAngle.id } }
   );
 
   try {
-    console.log(`[SceneGen] Starting image-anchored video for angle: ${sceneAngle.angle_name}`);
-    console.log(`[SceneGen] Video prompt: ${videoPrompt}`);
+    console.log(`[SceneGen] Starting text-to-image still for angle: ${sceneAngle.angle_name}`);
 
-    // Image-anchored: use base still as promptImage → image_to_video directly
-    const videoDuration = sceneAngle.video_duration || VIDEO_DURATION_MAP[angleLabel] || 5;
-    const cameraMotion = sceneAngle.camera_motion || CAMERA_MOTION_MAP[angleLabel] || 'static';
+    // Derive a seed variation from the parent set's locked seed so sibling angles
+    // share the same stylistic base while remaining visually distinct.
+    const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
+      ? Number(sceneSet.base_runway_seed)
+      : null;
+    const seedOpt = numericSeed !== null
+      ? String(numericSeed + (sceneAngle.generation_attempt || 0) + 1)
+      : undefined;
 
-    const { jobId: videoJobId } = await startImageToVideo(
-      videoPrompt,
-      sceneSet.base_still_url,
-      { duration: videoDuration, cameraMotion },
-    );
-    const videoResult = await pollTask(videoJobId);
+    const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
+      ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
+      : undefined;
 
-    if (videoResult.status !== 'SUCCEEDED') {
+    // Anchor all angles to the base still so they show the same room from different cameras.
+    const referenceImages = sceneSet.base_still_url
+      ? [{ uri: sceneSet.base_still_url, tag: 'image_reference' }]
+      : undefined;
+
+    const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });
+    const result = await pollTask(jobId);
+
+    if (result.status !== 'SUCCEEDED') {
       await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-      throw new Error(`Angle video failed: ${videoResult.error}`);
+      throw new Error(`Angle still failed: ${result.error}`);
     }
 
-    const videoUrl = await storeInS3(videoResult.outputUrl, sceneSet.id, sceneAngle.id, 'video');
-    console.log(`[SceneGen] Angle video complete: ${sceneAngle.angle_name}`);
-
-    // Clean up old angle assets from S3 (best-effort)
-    if (sceneAngle.video_clip_url) await deleteOldS3Asset(sceneAngle.video_clip_url);
+    // Clean up old assets from S3 (best-effort)
     if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
+    if (sceneAngle.video_clip_url)  await deleteOldS3Asset(sceneAngle.video_clip_url);
 
-    // Extract first frame from the generated video as this angle's still
-    let stillUrl = sceneSet.base_still_url; // fallback
-    try {
-      stillUrl = await extractFirstFrame(videoUrl, sceneSet.id, sceneAngle.id);
-      console.log(`[SceneGen] First frame extracted for: ${sceneAngle.angle_name}`);
-    } catch (frameErr) {
-      console.warn(`[SceneGen] First frame extraction failed (using base still): ${frameErr.message}`);
-    }
+    const stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
+    const totalCost = result.creditsUsed || 0;
 
-    const totalCost = videoResult.creditsUsed || 0;
+    console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
-    // ── Quality Analysis (non-blocking) ───────────────────────────────────
+    // Quality Analysis (non-blocking)
     let qualityData = { qualityScore: null, flags: [] };
     try {
-      console.log(`[SceneGen] Running artifact analysis for: ${sceneAngle.angle_name}`);
       qualityData = await artifactDetection.analyzeImageQuality(stillUrl);
       console.log(`[SceneGen] Quality score: ${qualityData.qualityScore}/100, flags: ${qualityData.flags.length}`);
     } catch (qaErr) {
@@ -620,8 +586,8 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
     await SceneAngle.update({
       still_image_url: stillUrl,
-      video_clip_url: videoUrl,
-      runway_seed: String(videoResult.seed ?? videoJobId),
+      video_clip_url: null,
+      runway_seed: String(result.seed ?? jobId),
       generation_status: 'complete',
       generation_cost: totalCost,
       quality_score: qualityData.qualityScore,
@@ -631,9 +597,62 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
     await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
 
-    return { success: true, stillUrl, videoUrl, seed: videoResult.seed, qualityScore: qualityData.qualityScore };
+    return { success: true, stillUrl, videoUrl: null, seed: result.seed, qualityScore: qualityData.qualityScore };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+    throw err;
+  }
+}
+
+/**
+ * Generate a video clip for an angle on demand (image→video, gen3a_turbo).
+ * Uses the angle's existing still_image_url as the source image.
+ * Call only after generateAngle() has completed successfully.
+ */
+async function generateAngleVideo(sceneAngle, sceneSet, models) {
+  const { SceneAngle, SceneSet } = models;
+
+  const sourceImageUrl = sceneAngle.still_image_url || sceneSet.base_still_url;
+  if (!sourceImageUrl) {
+    throw new Error('No source image available. Generate the angle still first.');
+  }
+
+  const angleLabel = sceneAngle.angle_label || 'WIDE';
+  const videoPrompt = buildVideoPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
+  const videoDuration = sceneAngle.video_duration || VIDEO_DURATION_MAP[angleLabel] || 5;
+  const cameraMotion = sceneAngle.camera_motion || CAMERA_MOTION_MAP[angleLabel] || 'static';
+
+  try {
+    console.log(`[SceneGen] Starting on-demand video for angle: ${sceneAngle.angle_name}`);
+
+    const { jobId } = await startImageToVideo(videoPrompt, sourceImageUrl, {
+      duration: videoDuration,
+      cameraMotion,
+    });
+    const result = await pollTask(jobId);
+
+    if (result.status !== 'SUCCEEDED') {
+      throw new Error(`Angle video failed: ${result.error}`);
+    }
+
+    if (sceneAngle.video_clip_url) await deleteOldS3Asset(sceneAngle.video_clip_url);
+
+    const videoUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'video');
+    const totalCost = result.creditsUsed || 0;
+
+    console.log(`[SceneGen] Video complete for angle: ${sceneAngle.angle_name}`);
+
+    await SceneAngle.update({
+      video_clip_url: videoUrl,
+      generation_status: 'complete',
+      generation_cost: parseFloat(sceneAngle.generation_cost || 0) + totalCost,
+    }, { where: { id: sceneAngle.id } });
+
+    await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
+
+    return { success: true, videoUrl };
+  } catch (err) {
+    // Angle stays 'complete' — the still image remains accessible
     throw err;
   }
 }
@@ -645,10 +664,6 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
 
   if (!sceneSet.base_still_url) {
     throw new Error('base_still_url not set on parent scene set. Run generateBaseScene first.');
-  }
-
-  if (!sceneSet.base_runway_seed) {
-    throw new Error('base_runway_seed not set on parent scene set.');
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
@@ -664,11 +679,12 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
     console.log(`[SceneGen] Regenerating angle with refined prompt: ${sceneAngle.angle_name}`);
     console.log(`[SceneGen] Addressing artifacts: ${artifactCategories.join(', ')}`);
 
-    // Support both numeric seeds and uploaded-image seeds (e.g. "uploaded-1679234567")
-    const baseSeedNum = parseInt(sceneSet.base_runway_seed, 10);
-    const seedVariation = !isNaN(baseSeedNum)
-      ? String(baseSeedNum + (sceneAngle.generation_attempt || 1))
-      : String(Date.now() + (sceneAngle.generation_attempt || 1));
+    const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
+      ? Number(sceneSet.base_runway_seed)
+      : null;
+    const seedVariation = numericSeed !== null
+      ? String(numericSeed + (sceneAngle.generation_attempt || 1))
+      : undefined;
 
     // Style reference
     const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
@@ -754,6 +770,7 @@ module.exports = {
   buildVideoPrompt,
   generateBaseScene,
   generateAngle,
+  generateAngleVideo,
   regenerateAngleRefined,
   generateBestVariation,
   pollTask,
