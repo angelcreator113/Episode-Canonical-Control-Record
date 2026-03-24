@@ -56,6 +56,12 @@ module.exports = (sequelize) => {
     },
     enhanced_still_url: { type: DataTypes.TEXT, allowNull: true },
     enhanced_video_url: { type: DataTypes.TEXT, allowNull: true },
+    depth_map_url: { type: DataTypes.TEXT, allowNull: true },
+    depth_status: {
+      type: DataTypes.ENUM('pending', 'generating', 'complete', 'failed'),
+      allowNull: true,
+      defaultValue: null,
+    },
     control_value: { type: DataTypes.INTEGER, allowNull: true },
     vulnerability_value: { type: DataTypes.INTEGER, allowNull: true },
     sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },

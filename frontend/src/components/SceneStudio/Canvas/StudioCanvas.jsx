@@ -5,6 +5,7 @@ import ImageObject from './objects/ImageObject';
 import VideoObject from './objects/VideoObject';
 import TextObject from './objects/TextObject';
 import ShapeObject from './objects/ShapeObject';
+import ParallaxLayer from './ParallaxLayer';
 
 /**
  * StudioCanvas — Main Konva canvas for Scene Studio.
@@ -22,7 +23,7 @@ const OBJECT_RENDERERS = {
   overlay: ImageObject,
 };
 
-function BackgroundImage({ src, width, height }) {
+function BackgroundImage({ src, width, height, isSelected, onClick }) {
   // Load without crossOrigin to avoid CORS failures on S3 images
   const [image] = useImage(src);
   if (!image) return null;
@@ -45,14 +46,36 @@ function BackgroundImage({ src, width, height }) {
   }
 
   return (
-    <KonvaImage
-      image={image}
-      x={drawX}
-      y={drawY}
-      width={drawW}
-      height={drawH}
-      listening={false}
-    />
+    <>
+      <KonvaImage
+        image={image}
+        x={drawX}
+        y={drawY}
+        width={drawW}
+        height={drawH}
+        listening={true}
+        onClick={(e) => {
+          e.cancelBubble = true;
+          if (onClick) onClick();
+        }}
+        onTap={(e) => {
+          e.cancelBubble = true;
+          if (onClick) onClick();
+        }}
+      />
+      {isSelected && (
+        <Rect
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          stroke="#667eea"
+          strokeWidth={3}
+          dash={[8, 4]}
+          listening={false}
+        />
+      )}
+    </>
   );
 }
 
@@ -85,7 +108,7 @@ function SnapGuides({ guides, canvasWidth, canvasHeight }) {
   });
 }
 
-export default function StudioCanvas({
+const StudioCanvas = React.forwardRef(function StudioCanvas({
   canvasWidth,
   canvasHeight,
   backgroundUrl,
@@ -107,10 +130,34 @@ export default function StudioCanvas({
   containerRef,
   editingTextId,
   onClearEditingText,
-}) {
+  backgroundSelected,
+  onBackgroundSelect,
+  depthMapUrl,
+  depthEffects,
+}, forwardedRef) {
   const stageRef = useRef(null);
+
+  // Expose stage ref to parent for export
+  React.useImperativeHandle(forwardedRef, () => stageRef.current, []);
   const transformerRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
+  const [mousePosition, setMousePosition] = useState({ x: 0.5, y: 0.5 });
+
+  const parallaxEnabled = depthEffects?.parallaxEnabled && depthMapUrl;
+
+  // Mouse tracking for parallax
+  const handleMouseMove = useCallback((e) => {
+    if (!parallaxEnabled) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const pointer = stage.getPointerPosition();
+    if (pointer) {
+      setMousePosition({
+        x: pointer.x / stageSize.width,
+        y: pointer.y / stageSize.height,
+      });
+    }
+  }, [parallaxEnabled, stageSize.width, stageSize.height]);
 
   // Fit stage to container
   useEffect(() => {
@@ -208,6 +255,7 @@ export default function StudioCanvas({
       onClick={handleStageClick}
       onTap={handleStageClick}
       onWheel={handleWheel}
+      onMouseMove={handleMouseMove}
       draggable={activeTool === 'hand'}
       onDragEnd={(e) => {
         if (activeTool === 'hand' && onPan) {
@@ -228,11 +276,35 @@ export default function StudioCanvas({
           fill="#1a1a2e"
           listening={true}
         />
-        {backgroundUrl && (
+        {backgroundUrl && parallaxEnabled ? (
+          <ParallaxLayer
+            bgSrc={backgroundUrl}
+            depthMapSrc={depthMapUrl}
+            width={canvasWidth}
+            height={canvasHeight}
+            isSelected={backgroundSelected}
+            onClick={onBackgroundSelect}
+            mousePosition={mousePosition}
+          />
+        ) : backgroundUrl ? (
           <BackgroundImage
             src={backgroundUrl}
             width={canvasWidth}
             height={canvasHeight}
+            isSelected={backgroundSelected}
+            onClick={onBackgroundSelect}
+          />
+        ) : null}
+        {backgroundSelected && parallaxEnabled && (
+          <Rect
+            x={0}
+            y={0}
+            width={canvasWidth}
+            height={canvasHeight}
+            stroke="#667eea"
+            strokeWidth={3}
+            dash={[8, 4]}
+            listening={false}
           />
         )}
 
@@ -308,4 +380,6 @@ export default function StudioCanvas({
       </Layer>
     </Stage>
   );
-}
+});
+
+export default StudioCanvas;

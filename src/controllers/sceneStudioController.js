@@ -9,6 +9,7 @@
 const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
 const { v4: uuidv4 } = require('uuid');
 const objectGenerationService = require('../services/objectGenerationService');
+const depthEstimationService = require('../services/depthEstimationService');
 
 // ── Canvas Load ──
 
@@ -852,7 +853,7 @@ exports.addSceneSetObject = async (req, res) => {
 exports.generateObject = async (req, res) => {
   try {
     const { id } = req.params;
-    const { prompt, style_hints } = req.body;
+    const { prompt, style_hints, remove_background } = req.body;
 
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({ success: false, error: 'prompt is required' });
@@ -873,6 +874,7 @@ exports.generateObject = async (req, res) => {
       sceneId: id,
       styleHints: style_hints || null,
       count: 2,
+      removeBackground: remove_background === true,
       userId: req.user?.id || null,
       showId,
       Asset,
@@ -882,6 +884,137 @@ exports.generateObject = async (req, res) => {
   } catch (error) {
     console.error('Scene Studio generateObject error:', error);
     // Rate limit errors return 429
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+// ── AI Object Generation (Scene Sets) ──
+
+exports.generateSceneSetObject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prompt, style_hints, remove_background } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'prompt is required' });
+    }
+
+    // Scene sets have show_id directly
+    let showId = null;
+    try {
+      const sceneSet = await SceneSet.findByPk(id, { attributes: ['id', 'show_id'] });
+      showId = sceneSet?.show_id || null;
+    } catch { /* non-critical */ }
+
+    const options = await objectGenerationService.generateObject(prompt.trim(), {
+      sceneId: id,
+      styleHints: style_hints || null,
+      count: 2,
+      removeBackground: remove_background === true,
+      userId: req.user?.id || null,
+      showId,
+      Asset,
+    });
+
+    res.json({ success: true, data: { options } });
+  } catch (error) {
+    console.error('Scene Studio generateSceneSetObject error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+// ── Depth Estimation (Scenes) ──
+
+exports.generateDepth = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url } = req.body;
+
+    const scene = await Scene.findByPk(id, {
+      attributes: ['id', 'background_url', 'extra_fields'],
+      include: [{
+        model: SceneAngle,
+        as: 'sceneAngle',
+        attributes: ['id', 'still_image_url', 'enhanced_still_url'],
+        required: false,
+      }],
+    });
+
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    // Determine source image: explicit URL > angle still > scene background
+    const sourceUrl = image_url
+      || scene.sceneAngle?.enhanced_still_url
+      || scene.sceneAngle?.still_image_url
+      || scene.background_url;
+
+    if (!sourceUrl) {
+      return res.status(400).json({ success: false, error: 'No source image available for depth estimation' });
+    }
+
+    const result = await depthEstimationService.generateDepthMap(sourceUrl, {
+      entityId: id,
+      userId: req.user?.id || null,
+    });
+
+    // Store depth map URL in scene's extra_fields
+    const extraFields = scene.extra_fields || {};
+    extraFields.depth_map_url = result.depth_map_url;
+    extraFields.depth_model_used = result.model_used;
+    await scene.update({ extra_fields: extraFields });
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Scene Studio generateDepth error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+// ── Depth Estimation (Scene Set Angles) ──
+
+exports.generateAngleDepth = async (req, res) => {
+  try {
+    const { id, angleId } = req.params;
+
+    const angle = await SceneAngle.findOne({
+      where: { id: angleId, scene_set_id: id },
+    });
+
+    if (!angle) {
+      return res.status(404).json({ success: false, error: 'Scene angle not found' });
+    }
+
+    const sourceUrl = angle.enhanced_still_url || angle.still_image_url;
+    if (!sourceUrl) {
+      return res.status(400).json({ success: false, error: 'No still image available for this angle. Generate a still first.' });
+    }
+
+    // Mark as generating
+    await angle.update({ depth_status: 'generating' });
+
+    try {
+      const result = await depthEstimationService.generateDepthMap(sourceUrl, {
+        entityId: angleId,
+        userId: req.user?.id || null,
+      });
+
+      await angle.update({
+        depth_map_url: result.depth_map_url,
+        depth_status: 'complete',
+      });
+
+      res.json({ success: true, data: result });
+    } catch (depthError) {
+      await angle.update({ depth_status: 'failed' });
+      throw depthError;
+    }
+  } catch (error) {
+    console.error('Scene Studio generateAngleDepth error:', error);
     const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
     res.status(status).json({ success: false, error: error.message });
   }

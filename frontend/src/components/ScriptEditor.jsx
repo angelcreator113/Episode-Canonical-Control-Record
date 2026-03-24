@@ -395,13 +395,13 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
     } finally { setIsAnalyzing(false); }
   }, [scriptContent, episodeId, episode, hasUnsavedChanges]);
 
-  const handleSendToSceneComposer = useCallback(async () => {
+  const handleSendToSceneStudio = useCallback(async () => {
     if (!episodeId || !analysis) return;
     try {
       let c = normalizeScript(scriptContent);
       if (!/##\s*BEAT:/i.test(c)) c = inferBeats(c);
       const res = await api.post(`/api/v1/episodes/${episodeId}/apply-scene-plan`, { content: c, clearExisting: true });
-      if (res.data.success) alert(`✅ ${res.data.scenesCreated} scenes created! Open Scene Composer to build visuals.`);
+      if (res.data.success) alert(`✅ ${res.data.scenesCreated} scenes created! Open Scene Studio to build visuals.`);
     } catch (err) { setError('Failed: ' + (err.response?.data?.error || err.message)); }
   }, [episodeId, analysis, scriptContent]);
 
@@ -658,8 +658,8 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
                   <span className="se-overflow-icon">⌨️</span> Command Palette
                   <span className="se-overflow-shortcut">Ctrl+K</span>
                 </button>
-                <button className="se-overflow-item" onClick={() => { handleSendToSceneComposer(); setOverflowOpen(false); }}>
-                  <span className="se-overflow-icon">🎬</span> Send to Scene Composer
+                <button className="se-overflow-item" onClick={() => { handleSendToSceneStudio(); setOverflowOpen(false); }}>
+                  <span className="se-overflow-icon">🎬</span> Send to Scene Studio
                 </button>
               </div>
             )}
@@ -1032,7 +1032,7 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
             </div>
 
             <div className="se-analysis-actions">
-              <button className="se-analysis-scene-btn" onClick={handleSendToSceneComposer}>🎬 Send to Scene Composer</button>
+              <button className="se-analysis-scene-btn" onClick={handleSendToSceneStudio}>🎬 Send to Scene Studio</button>
               <button className="se-analysis-re-btn" onClick={handleAnalyze}>🔄 Re-analyze</button>
             </div>
           </div>

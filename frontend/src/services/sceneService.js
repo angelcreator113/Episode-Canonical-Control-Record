@@ -295,6 +295,15 @@ const sceneService = {
   // ============================================================================
 
   /**
+   * Update a scene set (name, notes, etc.)
+   * PUT /api/v1/scene-sets/:id
+   */
+  updateSceneSet: async (sceneSetId, updates) => {
+    const { data } = await api.put(`/api/v1/scene-sets/${sceneSetId}`, updates);
+    return data;
+  },
+
+  /**
    * Load canvas state for a scene set
    * GET /api/v1/scene-sets/:id/canvas
    */
@@ -337,6 +346,26 @@ const sceneService = {
    */
   deleteSceneSetObject: async (sceneSetId, objectId) => {
     const { data } = await api.delete(`/api/v1/scene-sets/${sceneSetId}/objects/${objectId}`);
+    return data;
+  },
+
+  /**
+   * Generate depth map for a scene background
+   * POST /api/v1/scenes/:id/generate-depth
+   */
+  generateDepth: async (sceneId, imageUrl) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/generate-depth`, {
+      image_url: imageUrl || undefined,
+    });
+    return data;
+  },
+
+  /**
+   * Generate depth map for a scene set angle
+   * POST /api/v1/scene-sets/:id/angles/:angleId/generate-depth
+   */
+  generateAngleDepth: async (sceneSetId, angleId) => {
+    const { data } = await api.post(`/api/v1/scene-sets/${sceneSetId}/angles/${angleId}/generate-depth`);
     return data;
   },
 };

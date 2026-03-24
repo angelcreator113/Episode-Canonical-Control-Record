@@ -43,8 +43,17 @@ export default function CreationPanel({
   onDuplicate,
   // Text edit callback
   onRequestTextEdit,
+  // Controlled tab state (lifted to SceneStudio)
+  activeTab: controlledTab,
+  onTabChange,
+  focusTarget,
+  onClearFocus,
+  hasBackground,
+  contextType,
 }) {
-  const [activeTab, setActiveTab] = useState('objects');
+  const [internalTab, setInternalTab] = useState('objects');
+  const activeTab = controlledTab !== undefined ? controlledTab : internalTab;
+  const setActiveTab = onTabChange || setInternalTab;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -59,6 +68,7 @@ export default function CreationPanel({
             onReorder={onReorder}
             onDelete={onDelete}
             onDuplicate={onDuplicate}
+            hasBackground={hasBackground}
             embedded
           />
         );
@@ -70,6 +80,8 @@ export default function CreationPanel({
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
             onAddAsset={onAddAsset}
+            focusTarget={focusTarget}
+            onClearFocus={onClearFocus}
           />
         );
       case 'upload':
@@ -80,15 +92,20 @@ export default function CreationPanel({
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
             onAddAsset={onAddAsset}
+            focusTarget={focusTarget}
+            onClearFocus={onClearFocus}
           />
         );
       case 'generate':
         return (
           <GenerateTab
             sceneId={sceneId}
+            contextType={contextType}
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
             onAddAsset={onAddAsset}
+            focusTarget={focusTarget}
+            onClearFocus={onClearFocus}
           />
         );
       case 'shapes':

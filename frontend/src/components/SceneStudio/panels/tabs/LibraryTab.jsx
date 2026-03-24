@@ -16,12 +16,21 @@ const FILTERS = [
   { key: 'background', label: 'Backgrounds', icon: MapPin },
 ];
 
-export default function LibraryTab({ showId, episodeId, canvasWidth, canvasHeight, onAddAsset }) {
+export default function LibraryTab({ showId, episodeId, canvasWidth, canvasHeight, onAddAsset, focusTarget, onClearFocus }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  // Focus search input when requested
+  useEffect(() => {
+    if (focusTarget === 'library-search' && searchInputRef.current) {
+      searchInputRef.current.focus();
+      if (onClearFocus) onClearFocus();
+    }
+  }, [focusTarget, onClearFocus]);
 
   const fetchAssets = useCallback(async (searchTerm) => {
     setLoading(true);
@@ -99,6 +108,7 @@ export default function LibraryTab({ showId, episodeId, canvasWidth, canvasHeigh
       <div className="scene-studio-search">
         <Search size={14} />
         <input
+          ref={searchInputRef}
           type="text"
           placeholder="Search assets..."
           value={search}

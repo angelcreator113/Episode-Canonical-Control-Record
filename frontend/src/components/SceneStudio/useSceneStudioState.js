@@ -123,6 +123,14 @@ export default function useSceneStudioState() {
   const [activeAngleId, setActiveAngleId] = useState(null);
   const [variantGroups, setVariantGroups] = useState([]);
 
+  // Depth map
+  const [depthMapUrl, setDepthMapUrl] = useState(null);
+  const [depthEffects, setDepthEffects] = useState({
+    parallaxEnabled: false,
+    focusDepth: 50,
+    blurIntensity: 0,
+  });
+
   // Dirty flag
   const [isDirty, setIsDirty] = useState(false);
 
@@ -176,11 +184,16 @@ export default function useSceneStudioState() {
       setSceneData(data.scene);
       setAngles([]);
       setActiveAngleId(null);
+      // Load depth map from scene extra_fields
+      setDepthMapUrl(data.scene?.extra_fields?.depth_map_url || null);
     } else {
       setContextId(data.sceneSet?.id);
       setSceneSetData(data.sceneSet);
       setAngles(data.angles || []);
       setActiveAngleId(data.activeAngleId || null);
+      // Load depth map from active angle
+      const activeAngle = (data.angles || []).find(a => a.id === data.activeAngleId);
+      setDepthMapUrl(activeAngle?.depth_map_url || null);
     }
 
     const normalized = (data.objects || []).map(normalizeObject);
@@ -227,6 +240,7 @@ export default function useSceneStudioState() {
     };
     setObjects((prev) => [...prev, obj]);
     setSelectedIds(new Set([obj.id]));
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   const removeObject = useCallback((id) => {
@@ -237,6 +251,7 @@ export default function useSceneStudioState() {
       next.delete(id);
       return next;
     });
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   const updateObject = useCallback((id, changes) => {
@@ -278,6 +293,7 @@ export default function useSceneStudioState() {
     };
     setObjects((prev) => [...prev, copy]);
     setSelectedIds(new Set([copy.id]));
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   // ── Selection ──
@@ -319,6 +335,7 @@ export default function useSceneStudioState() {
 
       return sorted.map((o, i) => ({ ...o, layerOrder: i }));
     });
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   // ── Visibility / Lock ──
@@ -365,6 +382,7 @@ export default function useSceneStudioState() {
 
     setObjects((prev) => [...prev, ...pasted]);
     setSelectedIds(newIds);
+    setIsDirty(true);
   }, [clipboard, objects, pushHistory]);
 
   // ── Zoom / Pan ──
@@ -400,6 +418,7 @@ export default function useSceneStudioState() {
         return { ...o, isActiveVariant: o.id === variantId };
       })
     );
+    setIsDirty(true);
   }, [objects, pushHistory]);
 
   // ── Canvas settings ──
@@ -431,6 +450,8 @@ export default function useSceneStudioState() {
     redoCount,
     snapGuides,
     clipboard,
+    depthMapUrl,
+    depthEffects,
 
     // Actions
     loadFromApi,
@@ -460,6 +481,10 @@ export default function useSceneStudioState() {
     setSnapGuides,
     markClean,
     setObjects,
+    setSceneData,
+    setSceneSetData,
+    setDepthMapUrl,
+    setDepthEffects,
   };
 }
 

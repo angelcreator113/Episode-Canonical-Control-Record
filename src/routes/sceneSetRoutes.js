@@ -1080,6 +1080,12 @@ router.get('/:id/canvas', asyncHandler(sceneStudioController.getSceneSetCanvas))
 // PUT /api/v1/scene-sets/:id/canvas - Bulk save canvas for scene set
 router.put('/:id/canvas', optionalAuth, asyncHandler(sceneStudioController.saveSceneSetCanvas));
 
+// POST /api/v1/scene-sets/:id/generate-object - AI object generation (DALL-E 3) for scene sets
+router.post('/:id/generate-object', optionalAuth, asyncHandler(sceneStudioController.generateSceneSetObject));
+
+// POST /api/v1/scene-sets/:id/angles/:angleId/generate-depth - Depth map estimation for angle
+router.post('/:id/angles/:angleId/generate-depth', optionalAuth, asyncHandler(sceneStudioController.generateAngleDepth));
+
 // POST /api/v1/scene-sets/:id/objects - Add object to scene set canvas
 router.post('/:id/objects', optionalAuth, asyncHandler(sceneStudioController.addSceneSetObject));
 
