@@ -29,7 +29,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 // ─── REPLICATE CONFIG ───────────────────────────────────────────────────────
 
 // DepthAnythingV2 — high-quality monocular depth estimation
-const DEPTH_MODEL = 'depth-anything/depth-anything-v2-large';
+const DEPTH_MODEL = 'chenxwh/depth-anything-v2';
 const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
 const MAX_POLL_ATTEMPTS = 60; // 5 minutes max at 5s intervals
 const POLL_INTERVAL_MS = 5000;
@@ -81,23 +81,30 @@ async function runDepthEstimation(imageUrl) {
 
   console.log('[DepthEstimation] Creating prediction with DepthAnythingV2...');
 
-  // Create prediction
-  const createResponse = await axios.post(
-    `${REPLICATE_API_BASE}/models/${DEPTH_MODEL}/predictions`,
-    {
-      input: {
-        image: imageUrl,
+  // Create prediction via Replicate's models API
+  let createResponse;
+  try {
+    createResponse = await axios.post(
+      `${REPLICATE_API_BASE}/models/${DEPTH_MODEL}/predictions`,
+      {
+        input: {
+          image: imageUrl,
+        },
       },
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${REPLICATE_API_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'wait',
-      },
-      timeout: 300000, // 5 minute timeout for sync wait
-    }
-  );
+      {
+        headers: {
+          'Authorization': `Bearer ${REPLICATE_API_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'wait',
+        },
+        timeout: 300000, // 5 minute timeout for sync wait
+      }
+    );
+  } catch (apiError) {
+    const status = apiError.response?.status;
+    const detail = apiError.response?.data?.detail || apiError.message;
+    throw new Error(`Replicate API error: ${status} — ${detail}`);
+  }
 
   // If the API responded synchronously (Prefer: wait), check for output
   if (createResponse.data.status === 'succeeded' && createResponse.data.output) {
