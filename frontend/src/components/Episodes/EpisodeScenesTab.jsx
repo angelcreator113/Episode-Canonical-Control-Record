@@ -51,6 +51,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
       const data = await res.json();
       if (data.success) {
         setSceneSets(data.data || []);
+      } else {
+        console.error('Failed to load scene sets:', data.error);
       }
     } catch (err) {
       console.error('Failed to load episode scene sets:', err);
@@ -79,6 +81,16 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
   useEffect(() => {
     fetchSceneSets();
     fetchScenes();
+  }, [fetchSceneSets, fetchScenes]);
+
+  // Refetch when browser tab/window regains focus (e.g. user linked sets in Scene Library)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchSceneSets();
+      fetchScenes();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, [fetchSceneSets, fetchScenes]);
 
   // ---- Scene Set Picker ----
