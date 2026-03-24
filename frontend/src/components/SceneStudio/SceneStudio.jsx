@@ -58,6 +58,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   // Depth estimation state
   const [isGeneratingDepth, setIsGeneratingDepth] = useState(false);
+  const [depthError, setDepthError] = useState(null);
 
   // UX guidance state
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -346,6 +347,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const handleGenerateDepth = useCallback(async () => {
     if (isGeneratingDepth) return;
     setIsGeneratingDepth(true);
+    setDepthError(null);
     try {
       let result;
       if (state.contextType === 'scene' && state.contextId) {
@@ -358,6 +360,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
     } catch (err) {
       console.error('Depth generation error:', err);
+      const msg = err.response?.data?.error || err.message || 'Depth generation failed';
+      setDepthError(msg);
     } finally {
       setIsGeneratingDepth(false);
     }
@@ -611,6 +615,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             depthMapUrl={state.depthMapUrl}
             depthEffects={state.depthEffects}
             isGeneratingDepth={isGeneratingDepth}
+            depthError={depthError}
             onGenerateDepth={handleGenerateDepth}
             onUpdateDepthEffects={handleUpdateDepthEffects}
           />
