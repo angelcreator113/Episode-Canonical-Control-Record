@@ -1003,7 +1003,7 @@ router.get(
 
     const links = await SceneSetEpisode.findAll({
       where: { episode_id: req.params.episodeId },
-      order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
+      order: [['created_at', 'ASC']],
       include: [
         {
           model: SceneSet,
@@ -1013,7 +1013,6 @@ router.get(
               model: SceneAngle,
               as: 'angles',
               attributes: ['id', 'angle_name', 'angle_label', 'still_image_url', 'video_clip_url', 'thumbnail_url', 'generation_status', 'sort_order', 'mood', 'beat_affinity'],
-              order: [['sort_order', 'ASC']],
             },
           ],
         },
@@ -1050,18 +1049,10 @@ router.post(
       return res.status(400).json({ success: false, error: 'sceneSetIds array required' });
     }
 
-    // Get max sort_order
-    const maxLink = await SceneSetEpisode.findOne({
-      where: { episode_id: req.params.episodeId },
-      order: [['sort_order', 'DESC']],
-    });
-    let nextOrder = (maxLink?.sort_order ?? -1) + 1;
-
     const created = [];
     for (const setId of sceneSetIds) {
       const [link, wasCreated] = await SceneSetEpisode.findOrCreate({
         where: { episode_id: req.params.episodeId, scene_set_id: setId },
-        defaults: { sort_order: nextOrder++ },
       });
       created.push({ id: link.id, sceneSetId: setId, created: wasCreated });
     }

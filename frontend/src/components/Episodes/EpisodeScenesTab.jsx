@@ -199,7 +199,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
               const isExpanded = expandedSetId === set.id;
               const angles = set.angles || [];
               const coverAngle = angles.find((a) => a.id === set.cover_angle_id) || angles[0];
-              const thumbUrl = coverAngle?.still_image_url || coverAngle?.thumbnail_url;
+              const thumbUrl = coverAngle?.still_image_url || coverAngle?.thumbnail_url || set.base_still_url;
               const typeColor = SCENE_TYPE_COLORS[set.scene_type] || SCENE_TYPE_COLORS.OTHER;
 
               return (
@@ -385,7 +385,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
                     const isLinked = linkedSetIds.includes(set.id);
                     const isSelected = selectedPickerIds.includes(set.id);
                     const angles = set.angles || [];
-                    const thumb = angles[0]?.still_image_url || angles[0]?.thumbnail_url;
+                    const thumb = angles[0]?.still_image_url || angles[0]?.thumbnail_url || set.base_still_url;
                     const typeColor = SCENE_TYPE_COLORS[set.scene_type] || SCENE_TYPE_COLORS.OTHER;
 
                     return (
