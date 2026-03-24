@@ -222,6 +222,14 @@ router.put(
   asyncHandler(sceneStudioController.saveCanvas)
 );
 
+// POST /api/v1/scenes/:id/generate-object - AI object generation (DALL-E 3)
+router.post(
+  '/:id/generate-object',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.generateObject)
+);
+
 // POST /api/v1/scenes/:id/objects - Add object to canvas
 router.post(
   '/:id/objects',

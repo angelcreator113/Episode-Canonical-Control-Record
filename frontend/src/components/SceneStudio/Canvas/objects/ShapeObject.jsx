@@ -1,5 +1,5 @@
 import React from 'react';
-import { Rect, Circle, Line } from 'react-konva';
+import { Rect, Circle, Line, RegularPolygon } from 'react-konva';
 
 /**
  * ShapeObject — Renders a shape (rectangle, circle, or line) on the Konva canvas.
@@ -53,6 +53,31 @@ export default function ShapeObject({ obj, isSelected, onSelect, onTransformEnd,
         radius={radius}
         offsetX={0}
         offsetY={0}
+      />
+    );
+  }
+
+  if (shapeType === 'star') {
+    const radius = Math.min(obj.width || 150, obj.height || 150) / 2;
+    return (
+      <RegularPolygon
+        {...commonProps}
+        sides={style.numPoints || 5}
+        radius={radius}
+        innerRadius={style.innerRadius ? (radius * style.innerRadius / 100) : radius * 0.4}
+      />
+    );
+  }
+
+  if (shapeType === 'triangle') {
+    const w = obj.width || 150;
+    const h = obj.height || 130;
+    return (
+      <Line
+        {...commonProps}
+        points={[w / 2, 0, w, h, 0, h]}
+        closed
+        tension={0}
       />
     );
   }

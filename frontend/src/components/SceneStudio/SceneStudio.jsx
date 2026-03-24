@@ -2,7 +2,7 @@ import React, { useEffect, useCallback, useRef, useState } from 'react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
 import ObjectsPanel from './panels/ObjectsPanel';
-import AssetDrawer from './panels/AssetDrawer';
+import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
 import useSceneStudioState from './useSceneStudioState';
 import sceneService from '../../services/sceneService';
@@ -21,7 +21,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const canvasContainerRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
   const [isSaving, setIsSaving] = useState(false);
-  const [assetDrawerOpen, setAssetDrawerOpen] = useState(false);
+  const [creationPanelOpen, setCreationPanelOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const saveTimerRef = useRef(null);
@@ -298,12 +298,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onDuplicate={state.duplicateObject}
           />
 
-          <AssetDrawer
+          <CreationPanel
             showId={showId}
             episodeId={episodeId}
+            sceneId={sceneId || sceneSetId}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
             onAddAsset={state.addObject}
-            isOpen={assetDrawerOpen}
-            onToggle={() => setAssetDrawerOpen(!assetDrawerOpen)}
+            onAddObject={state.addObject}
           />
         </div>
 

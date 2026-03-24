@@ -8,6 +8,7 @@
 
 const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
 const { v4: uuidv4 } = require('uuid');
+const objectGenerationService = require('../services/objectGenerationService');
 
 // ── Canvas Load ──
 
@@ -842,6 +843,30 @@ exports.addSceneSetObject = async (req, res) => {
     res.status(201).json({ success: true, data: created.toJSON() });
   } catch (error) {
     console.error('Scene Studio addSceneSetObject error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ── AI Object Generation ──
+
+exports.generateObject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prompt, style_hints } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'prompt is required' });
+    }
+
+    const options = await objectGenerationService.generateObject(prompt.trim(), {
+      sceneId: id,
+      styleHints: style_hints || null,
+      count: 2,
+    });
+
+    res.json({ success: true, data: { options } });
+  } catch (error) {
+    console.error('Scene Studio generateObject error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
