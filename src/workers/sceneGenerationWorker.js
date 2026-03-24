@@ -87,6 +87,15 @@ async function processJob(job) {
         break;
       }
 
+      case 'generate_angle_video': {
+        const set = await SceneSet.findByPk(job.scene_set_id);
+        if (!set) throw new Error(`Scene set ${job.scene_set_id} not found`);
+        const angle = await SceneAngle.findByPk(job.scene_angle_id);
+        if (!angle) throw new Error(`Scene angle ${job.scene_angle_id} not found`);
+        result = await sceneGenService.generateAngleVideo(angle, set, models);
+        break;
+      }
+
       case 'regenerate_angle': {
         const set = await SceneSet.findByPk(job.scene_set_id);
         if (!set) throw new Error(`Scene set ${job.scene_set_id} not found`);
@@ -217,10 +226,17 @@ async function recoverStuckJobs() {
   }
 }
 
-function start() {
+async function start() {
   if (running) return;
   running = true;
   console.log(`🎬 [GenWorker] Started — polling every ${POLL_INTERVAL_MS}ms, concurrency ${CONCURRENCY}`);
+  // Ensure the generation_jobs table exists before polling
+  try {
+    await GenerationJob.sync();
+    console.log('🎬 [GenWorker] generation_jobs table ready');
+  } catch (err) {
+    console.error('🎬 [GenWorker] Failed to sync generation_jobs table:', err.message);
+  }
   recoverStuckJobs().then(() => pollLoop());
 }
 

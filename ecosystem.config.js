@@ -47,6 +47,9 @@ const sharedEnv = {
 
   // ElevenLabs TTS (Amber voice)
   ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY || '',
+
+  // Runway ML (scene generation)
+  RUNWAY_ML_API_KEY: process.env.RUNWAY_ML_API_KEY || '',
 };
 
 module.exports = {

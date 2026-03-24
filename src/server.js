@@ -201,6 +201,19 @@ async function startServer() {
       console.log(`✓ Export Queue: ${redisAvailable ? 'ready' : '⚠️  degraded'}`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('🔗 Ready to accept requests\n');
+
+      // ── Auto-start scene generation worker in dev mode ──────────────
+      // In production, PM2 runs a separate episode-worker process.
+      // In dev, embed the scene generation worker so `npm run dev` handles everything.
+      if (process.env.NODE_ENV !== 'production') {
+        try {
+          const sceneGenWorker = require('./workers/sceneGenerationWorker');
+          sceneGenWorker.start();
+          console.log('🎬 Scene generation worker started (embedded in dev server)');
+        } catch (workerErr) {
+          console.warn('⚠️  Scene generation worker failed to start:', workerErr.message);
+        }
+      }
     });
 
     // Handle server errors

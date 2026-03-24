@@ -16,9 +16,14 @@ console.log(`   Redis: ${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.RE
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
 // Load the video renderer (registers the Bull job processor)
-require('./videoRenderer');
-
-console.log('✅ Worker process started — monitoring queue: video-export');
+// This requires Redis — if unavailable, skip gracefully so scene gen still works
+try {
+  require('./videoRenderer');
+  console.log('✅ Worker process started — monitoring queue: video-export');
+} catch (err) {
+  console.warn('⚠️  Video renderer failed to start (Redis may be unavailable):', err.message);
+  console.warn('   Video exports will be unavailable, but scene generation will still work.');
+}
 
 // Load the scene generation worker (DB-polling processor)
 const sceneGenWorker = require('./sceneGenerationWorker');

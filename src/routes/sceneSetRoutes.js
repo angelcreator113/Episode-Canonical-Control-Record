@@ -25,6 +25,19 @@ const upload = multer({
   },
 });
 
+// Ensure generation_jobs table exists (safe to call multiple times)
+let generationJobsSynced = false;
+async function ensureGenerationJobsTable() {
+  if (generationJobsSynced) return;
+  try {
+    await GenerationJob.sync();
+    generationJobsSynced = true;
+  } catch (err) {
+    console.error('[SceneSets] Failed to sync GenerationJob table:', err.message);
+    throw new Error('Generation jobs table not available');
+  }
+}
+
 // ─── GET /  — list all scene sets ─────────────────────────────────────────────
 
 router.get('/', optionalAuth, async (req, res) => {
@@ -61,7 +74,7 @@ router.post('/', optionalAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'name and scene_type are required' });
     }
 
-    const set = await SceneSet.create({
+    const createFields = {
       name,
       scene_type,
       canonical_description: canonical_description || null,
@@ -73,11 +86,24 @@ router.post('/', optionalAuth, async (req, res) => {
       base_runway_model: base_runway_model || 'gen3a_turbo',
       notes: notes || null,
       generation_status: canonical_description ? 'generating' : 'pending',
-    });
+    };
+    let set;
+    try {
+      set = await SceneSet.create(createFields);
+    } catch (createErr) {
+      // Retry without generation_status if the column doesn't exist yet
+      if (createErr.message && createErr.message.includes('generation_status')) {
+        delete createFields.generation_status;
+        set = await SceneSet.create(createFields);
+      } else {
+        throw createErr;
+      }
+    }
 
     // Auto-enqueue base generation when a description is provided
     let jobId = null;
     if (canonical_description) {
+      await ensureGenerationJobsTable();
       const job = await GenerationJob.create({
         job_type: 'generate_base',
         scene_set_id: set.id,
@@ -191,6 +217,12 @@ router.post('/:id/upload-base', optionalAuth, upload.single('image'), async (req
       generation_status: 'complete',
     });
 
+    // Clear stale angle thumbnails — they were generated from the old base image
+    await SceneAngle.update(
+      { still_image_url: null, video_clip_url: null, generation_status: 'pending' },
+      { where: { scene_set_id: set.id } }
+    );
+
     res.json({ success: true, data: { stillUrl, seed: set.base_runway_seed } });
   } catch (err) {
     console.error('Scene Sets POST /:id/upload-base error:', err);
@@ -213,6 +245,11 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
       });
     }
 
+    try { await set.update({ generation_status: 'generating' }); } catch (e) {
+      console.warn('generate-base: could not update generation_status:', e.message);
+    }
+
+    await ensureGenerationJobsTable();
     const job = await GenerationJob.create({
       job_type: 'generate_base',
       scene_set_id: set.id,
@@ -282,6 +319,7 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
+    await ensureGenerationJobsTable();
     const job = await GenerationJob.create({
       job_type: 'generate_angle',
       scene_set_id: set.id,
@@ -289,12 +327,51 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
       payload: {},
     });
 
-    // Mark the angle as generating so the frontend sees it immediately
-    await angle.update({ generation_status: 'generating' });
+    // Mark the angle as generating and clear stale assets so the frontend shows a spinner
+    try {
+      await angle.update({ generation_status: 'generating', still_image_url: null, video_clip_url: null });
+    } catch (e) {
+      console.warn('generate-angle: could not update angle status:', e.message);
+    }
 
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/angles/:angleId/generate-video  — on-demand video for an angle ─
+
+router.post('/:id/angles/:angleId/generate-video', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: set.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
+    if (!angle.still_image_url && !set.base_still_url) {
+      return res.status(400).json({
+        success: false,
+        error: 'No source image available. Generate the angle still first.',
+      });
+    }
+
+    await ensureGenerationJobsTable();
+    const job = await GenerationJob.create({
+      job_type: 'generate_angle_video',
+      scene_set_id: set.id,
+      scene_angle_id: angle.id,
+      payload: {},
+    });
+
+    // Note: angle stays 'complete' (still visible) while video generates in background
+    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/angles/:angleId/generate-video error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -619,7 +696,7 @@ router.get('/:id/preview-prompt', optionalAuth, async (req, res) => {
     const angleLabel = (req.query.angle || 'WIDE').toUpperCase();
     const prompt = sceneGenService.buildPrompt(set, angleLabel);
     const videoPrompt = sceneGenService.buildVideoPrompt(set, angleLabel);
-    const negativePrompt = sceneGenService.buildNegativePrompt(set);
+    const negativePrompt = sceneGenService.NEGATIVE_PROMPT;
 
     res.json({
       success: true,
@@ -673,9 +750,7 @@ router.patch('/:id/angles/reorder', optionalAuth, async (req, res) => {
 
 router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
   try {
-    const set = await SceneSet.findByPk(req.params.id, {
-      include: [{ model: SceneAngle, as: 'angles' }],
-    });
+    const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
     // Optionally update the description first
@@ -683,33 +758,43 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
       await set.update({ canonical_description: req.body.canonical_description });
     }
 
-    // Step 1: Regenerate base
-    const baseResult = await sceneGenService.generateBaseScene(set, { SceneSet, SceneAngle });
-
-    // Step 2: Regenerate all existing angles
-    const angleResults = [];
-    const freshSet = await SceneSet.findByPk(set.id);
-    for (const angle of (set.angles || [])) {
-      try {
-        const freshAngle = await SceneAngle.findByPk(angle.id);
-        const result = await sceneGenService.generateAngle(freshAngle, freshSet, { SceneAngle, SceneSet });
-        angleResults.push({ id: angle.id, label: angle.angle_label, success: true });
-      } catch (err) {
-        angleResults.push({ id: angle.id, label: angle.angle_label, success: false, error: err.message });
-      }
+    // Mark as generating (non-fatal if column not yet migrated)
+    try { await set.update({ generation_status: 'generating' }); } catch (e) {
+      console.warn('cascade-regenerate: could not update generation_status:', e.message);
     }
 
-    res.json({
-      success: true,
-      data: {
-        base: baseResult,
-        angles: angleResults,
-        totalAngles: angleResults.length,
-        successfulAngles: angleResults.filter(a => a.success).length,
-      },
+    await ensureGenerationJobsTable();
+    const job = await GenerationJob.create({
+      job_type: 'cascade_regenerate',
+      scene_set_id: set.id,
+      payload: { force: true },
     });
+
+    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/cascade-regenerate error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── GET /jobs/set/:setId  — get all active jobs for a scene set ─────────────
+// IMPORTANT: This must be defined BEFORE /jobs/:jobId to prevent "set" being
+// captured as a :jobId parameter.
+
+router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
+  try {
+    await ensureGenerationJobsTable();
+    const jobs = await GenerationJob.findAll({
+      where: {
+        scene_set_id: req.params.setId,
+        status: ['queued', 'processing'],
+      },
+      order: [['created_at', 'ASC']],
+    });
+
+    res.json({ success: true, data: jobs });
+  } catch (err) {
+    console.error('Scene Sets GET /jobs/set/:setId error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -718,6 +803,7 @@ router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
 
 router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
   try {
+    await ensureGenerationJobsTable();
     const job = await GenerationJob.findByPk(req.params.jobId);
     if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
 
@@ -739,25 +825,6 @@ router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Scene Sets GET /jobs/:jobId error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─── GET /jobs/set/:setId  — get all active jobs for a scene set ─────────────
-
-router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
-  try {
-    const jobs = await GenerationJob.findAll({
-      where: {
-        scene_set_id: req.params.setId,
-        status: ['queued', 'processing'],
-      },
-      order: [['created_at', 'ASC']],
-    });
-
-    res.json({ success: true, data: jobs });
-  } catch (err) {
-    console.error('Scene Sets GET /jobs/set/:setId error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

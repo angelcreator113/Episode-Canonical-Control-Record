@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import './SceneSetsTab.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 // ─── STATUS PILL ─────────────────────────────────────────────────────────────
 
@@ -46,12 +46,22 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
-function ImageLightbox({ src, alt, onClose }) {
+function ImageLightbox({ images, initialIndex, onClose }) {
+  const [idx, setIdx] = useState(initialIndex || 0);
+  const current = images[idx] || images[0];
+
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') setIdx(i => (i > 0 ? i - 1 : images.length - 1));
+      if (e.key === 'ArrowRight') setIdx(i => (i < images.length - 1 ? i + 1 : 0));
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, images.length]);
+
+  const goPrev = (e) => { e.stopPropagation(); setIdx(i => (i > 0 ? i - 1 : images.length - 1)); };
+  const goNext = (e) => { e.stopPropagation(); setIdx(i => (i < images.length - 1 ? i + 1 : 0)); };
 
   return createPortal(
     <div className="scene-sets-lightbox-overlay" onClick={onClose}>
@@ -59,7 +69,44 @@ function ImageLightbox({ src, alt, onClose }) {
         <button className="scene-sets-lightbox-close" onClick={onClose}>
           <X size={20} />
         </button>
-        <img src={src} alt={alt} className="scene-sets-lightbox-img" />
+
+        {images.length > 1 && (
+          <button className="scene-sets-lightbox-nav prev" onClick={goPrev}>
+            <ChevronLeft size={24} />
+          </button>
+        )}
+
+        {current.videoUrl ? (
+          <video src={current.videoUrl} className="scene-sets-lightbox-video" controls autoPlay loop muted />
+        ) : (
+          <img src={current.src} alt={current.label} className="scene-sets-lightbox-img" />
+        )}
+
+        {images.length > 1 && (
+          <button className="scene-sets-lightbox-nav next" onClick={goNext}>
+            <ChevronRight size={24} />
+          </button>
+        )}
+
+        {/* Bottom info + filmstrip */}
+        <div className="scene-sets-lightbox-info">
+          <span className="scene-sets-lightbox-label">{current.label}</span>
+          <span className="scene-sets-lightbox-counter">{idx + 1} / {images.length}</span>
+        </div>
+
+        {images.length > 1 && (
+          <div className="scene-sets-lightbox-thumbstrip">
+            {images.map((img, i) => (
+              <button
+                key={i}
+                className={`scene-sets-lightbox-thumb${i === idx ? ' active' : ''}`}
+                onClick={() => setIdx(i)}
+              >
+                <img src={img.thumbSrc || img.src} alt={img.label} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>,
     document.body
@@ -420,6 +467,48 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
         <div className="scene-sets-card-overlay-top-right">
           <StatusPill status={set.generation_status} />
+          <div className="scene-sets-kebab-wrapper" ref={menuRef}>
+            <button
+              className="scene-sets-btn-kebab-hero"
+              onClick={(e) => { e.stopPropagation(); setShowMenu(m => !m); }}
+              title="More options"
+            >
+              <MoreVertical size={14} />
+            </button>
+            {showMenu && createPortal(
+              <div className="scene-sets-kebab-backdrop" onClick={() => setShowMenu(false)}>
+                <div
+                  className="scene-sets-kebab-menu"
+                  style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 190 }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}>
+                    <Pencil size={12} /> Edit Prompt
+                  </button>
+                  <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
+                    <Eye size={12} /> Preview Prompt
+                  </button>
+                  {hasBase && (
+                    <button onClick={() => { setShowMenu(false); onCascadeRegenerate(set); }} disabled={isGenerating}>
+                      <RotateCcw size={12} /> Regenerate All
+                    </button>
+                  )}
+                  {hasBase && totalAngles === 0 && (
+                    <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
+                      <Sparkles size={12} /> Seed Default Angles
+                    </button>
+                  )}
+                  <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
+                    <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
+                  </button>
+                  <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
+                    <Trash2 size={12} /> Delete Set
+                  </button>
+                </div>
+              </div>,
+              document.body
+            )}
+          </div>
         </div>
 
         {selectedAngle?.video_clip_url && (
@@ -453,7 +542,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           {/* Angle thumbs */}
           {sortedAngles.map(angle => {
             const isActive = selectedAngleId === angle.id;
-            const hasStill = !!angle.still_image_url;
+            const hasStill = !!angle.still_image_url && angle.generation_status === 'complete';
             const isAngleGenerating = angle.generation_status === 'generating';
             const isFailed = angle.generation_status === 'failed';
             const isPending = angle.generation_status === 'pending';
@@ -485,6 +574,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               </button>
             );
           })}
+          {/* Add Angle button at end of filmstrip */}
+          {hasBase && (
+            <button
+              className="scene-sets-filmstrip-thumb scene-sets-filmstrip-add"
+              onClick={() => setShowAddAngle(true)}
+              title="Add new angle"
+            >
+              <Plus size={14} />
+              <span className="scene-sets-filmstrip-label">ADD</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -492,58 +592,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       <div className="scene-sets-card-body">
         <div className="scene-sets-card-header">
           <div className="scene-sets-card-header-row">
-            <div>
-              <h3 className="scene-sets-card-title">{set.name}</h3>
-              <p className="scene-sets-card-subtitle">
-                {totalAngles === 0
-                  ? (hasBase ? 'Base ready — seed angles to continue' : 'Not yet generated')
-                  : `${readyAngles}/${totalAngles} angles`}
-              </p>
-            </div>
-            <div className="scene-sets-card-header-utils">
-              <div className="scene-sets-kebab-wrapper" ref={menuRef}>
-                <button
-                  className="scene-sets-btn-kebab"
-                  onClick={() => setShowMenu(m => !m)}
-                  title="More options"
-                >
-                  <MoreVertical size={14} />
-                </button>
-                {showMenu && createPortal(
-                  <div className="scene-sets-kebab-backdrop" onClick={() => setShowMenu(false)}>
-                    <div
-                      className="scene-sets-kebab-menu"
-                      style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 180 }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); }}>
-                        <Pencil size={12} /> Edit Prompt
-                      </button>
-                      <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
-                        <Eye size={12} /> Preview Prompt
-                      </button>
-                      {hasBase && (
-                        <button onClick={() => { setShowMenu(false); onRegenerateBase(set); }} disabled={isGenerating}>
-                          <RotateCcw size={12} /> Regenerate Base
-                        </button>
-                      )}
-                      {hasBase && totalAngles === 0 && (
-                        <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
-                          <Sparkles size={12} /> Seed Default Angles
-                        </button>
-                      )}
-                      <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
-                        <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
-                      </button>
-                      <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
-                        <Trash2 size={12} /> Delete Set
-                      </button>
-                    </div>
-                  </div>,
-                  document.body
-                )}
-              </div>
-            </div>
+            <h3 className="scene-sets-card-title">{set.name}</h3>
+            {totalAngles > 0 && (
+              <span className="scene-sets-angle-badge">{readyAngles}/{totalAngles}</span>
+            )}
           </div>
 
           <div className="scene-sets-card-actions">
@@ -571,11 +623,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               </button>
             )}
 
-            {hasBase && pendingAngles.length === 0 && regenerableAngles.length > 0 && (
-              <button onClick={() => onGenerateAll(set, true)} disabled={isGenerating} className={`scene-sets-btn-regenerate${isGenerating ? ' disabled' : ''}`}>
-                {isGenerating ? <><Loader size={12} className="spin" /> Regenerating...</> : <><RotateCcw size={12} /> Regenerate All</>}
-              </button>
-            )}
 
             {totalAngles > 0 && (
               <button onClick={() => onDeleteAllAngles(set)} disabled={isGenerating} className="scene-sets-btn-delete" title="Reset all angles">
@@ -654,9 +701,31 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       </div>
 
       {/* ── Lightboxes (portaled) ─────────────────────────── */}
-      {showBaseLightbox && heroImage && (
-        <ImageLightbox src={heroImage} alt={selectedAngle?.angle_name || set.name} onClose={() => setShowBaseLightbox(false)} />
-      )}
+      {showBaseLightbox && (() => {
+        // Build gallery: base image first, then all angles with stills
+        const galleryImages = [];
+        if (set.base_still_url) {
+          galleryImages.push({ src: bustUrl(set.base_still_url), label: 'BASE', thumbSrc: bustUrl(set.base_still_url) });
+        }
+        sortedAngles.forEach(a => {
+          if (a.still_image_url) {
+            galleryImages.push({
+              src: bustUrl(a.still_image_url),
+              label: a.angle_label || a.angle_name,
+              thumbSrc: bustUrl(a.still_image_url),
+              videoUrl: a.video_clip_url ? bustUrl(a.video_clip_url) : null,
+            });
+          }
+        });
+        if (galleryImages.length === 0) return null;
+        // Find initial index: match selected angle or hero
+        let startIdx = 0;
+        if (selectedAngle?.still_image_url) {
+          const found = galleryImages.findIndex(g => g.src === bustUrl(selectedAngle.still_image_url));
+          if (found >= 0) startIdx = found;
+        }
+        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} />;
+      })()}
 
       {showPromptPreview && previewData && createPortal(
         <div className="scene-sets-lightbox-overlay" onClick={() => setShowPromptPreview(false)}>
@@ -847,7 +916,6 @@ export default function SceneSetsTab() {
         throw new Error(err.error || 'Upload failed');
       }
       showToast(`Base image uploaded for "${set.name}"`);
-      setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       fetchSets();
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
@@ -891,49 +959,53 @@ export default function SceneSetsTab() {
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
     setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
-    // Fire all generation requests and collect job IDs
-    const jobMap = [];
-    for (let i = 0; i < targets.length; i++) {
-      progressAngles[i].status = 'generating';
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
-      try {
-        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
-        if (!res.ok) throw new Error('Failed');
-        const json = await res.json();
-        jobMap.push({ index: i, jobId: json.data.jobId });
-      } catch {
-        progressAngles[i].status = 'failed';
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+    try {
+      // Fire all generation requests and collect job IDs
+      const jobMap = [];
+      for (let i = 0; i < targets.length; i++) {
+        progressAngles[i].status = 'generating';
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
+        try {
+          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
+          if (!res.ok) throw new Error('Failed');
+          const json = await res.json();
+          jobMap.push({ index: i, jobId: json.data.jobId });
+        } catch {
+          progressAngles[i].status = 'failed';
+          setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+        }
       }
-    }
 
-    // Poll all jobs in parallel
-    let completed = 0;
-    let failed = progressAngles.filter(a => a.status === 'failed').length;
+      // Poll all jobs in parallel
+      let completed = 0;
+      let failed = progressAngles.filter(a => a.status === 'failed').length;
 
-    const pollPromises = jobMap.map(async ({ index, jobId }) => {
-      const job = await pollJob(jobId);
-      if (job.status === 'completed') {
-        progressAngles[index].status = 'done';
-        completed++;
+      const pollPromises = jobMap.map(async ({ index, jobId }) => {
+        const job = await pollJob(jobId);
+        if (job.status === 'completed') {
+          progressAngles[index].status = 'done';
+          completed++;
+        } else {
+          progressAngles[index].status = 'failed';
+          failed++;
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+      });
+
+      await Promise.all(pollPromises);
+
+      if (failed === 0) {
+        showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
       } else {
-        progressAngles[index].status = 'failed';
-        failed++;
+        showToast(`${completed} completed, ${failed} failed`, failed > 0 ? 'error' : 'success');
       }
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-    });
-
-    await Promise.all(pollPromises);
-
-    if (failed === 0) {
-      showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
-    } else {
-      showToast(`${completed} completed, ${failed} failed`, failed > 0 ? 'error' : 'success');
+      fetchSets();
+    } catch (err) {
+      showToast(err?.message || 'Generation failed', 'error');
+    } finally {
+      setTimeout(() => setGenerationProgress(null), 3000);
+      setGeneratingId(null);
     }
-    if (completed > 0) setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
-    fetchSets();
-    setTimeout(() => setGenerationProgress(null), 3000);
-    setGeneratingId(null);
   };
 
   const handleRetryFailed = async (set) => {
@@ -944,47 +1016,52 @@ export default function SceneSetsTab() {
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
     setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
-    // Fire all retry requests to get job IDs
-    const jobMap = [];
-    for (let i = 0; i < targets.length; i++) {
-      try {
-        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
-        if (!res.ok) throw new Error('Failed');
-        const json = await res.json();
-        jobMap.push({ index: i, jobId: json.data.jobId });
-        progressAngles[i].status = 'generating';
-      } catch {
-        progressAngles[i].status = 'failed';
+    try {
+      // Fire all retry requests to get job IDs
+      const jobMap = [];
+      for (let i = 0; i < targets.length; i++) {
+        try {
+          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
+          if (!res.ok) throw new Error('Failed');
+          const json = await res.json();
+          jobMap.push({ index: i, jobId: json.data.jobId });
+          progressAngles[i].status = 'generating';
+        } catch {
+          progressAngles[i].status = 'failed';
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
       }
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
-    }
 
-    // Poll all jobs in parallel
-    let completed = 0;
-    let failed = progressAngles.filter(a => a.status === 'failed').length;
+      // Poll all jobs in parallel
+      let completed = 0;
+      let failed = progressAngles.filter(a => a.status === 'failed').length;
 
-    const pollPromises = jobMap.map(async ({ index, jobId }) => {
-      const job = await pollJob(jobId);
-      if (job.status === 'completed') {
-        progressAngles[index].status = 'done';
-        completed++;
+      const pollPromises = jobMap.map(async ({ index, jobId }) => {
+        const job = await pollJob(jobId);
+        if (job.status === 'completed') {
+          progressAngles[index].status = 'done';
+          completed++;
+        } else {
+          progressAngles[index].status = 'failed';
+          failed++;
+        }
+        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+      });
+
+      await Promise.all(pollPromises);
+
+      if (failed === 0) {
+        showToast(`All ${targets.length} failed angles retried successfully!`);
       } else {
-        progressAngles[index].status = 'failed';
-        failed++;
+        showToast(`${completed} recovered, ${failed} still failing`, failed > 0 ? 'error' : 'success');
       }
-      setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-    });
-
-    await Promise.all(pollPromises);
-
-    if (failed === 0) {
-      showToast(`All ${targets.length} failed angles retried successfully!`);
-    } else {
-      showToast(`${completed} recovered, ${failed} still failing`, failed > 0 ? 'error' : 'success');
+      fetchSets();
+    } catch (err) {
+      showToast(err?.message || 'Retry failed', 'error');
+    } finally {
+      setTimeout(() => setGenerationProgress(null), 3000);
+      setGeneratingId(null);
     }
-    fetchSets();
-    setTimeout(() => setGenerationProgress(null), 3000);
-    setGeneratingId(null);
   };
 
   const handleCreate = async () => {
@@ -1123,16 +1200,21 @@ export default function SceneSetsTab() {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/cascade-regenerate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_description: description }),
+        body: JSON.stringify(description ? { canonical_description: description } : {}),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Cascade regeneration failed');
       }
       const json = await res.json();
-      const { successfulAngles, totalAngles } = json.data;
-      showToast(`Base + ${successfulAngles}/${totalAngles} angles regenerated!`);
-      setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
+      showToast('Cascade regeneration queued...');
+      const job = await pollJob(json.data.jobId);
+      if (job.status === 'completed') {
+        const { successfulAngles, totalAngles } = job.result || {};
+        showToast(`Base + ${successfulAngles || 0}/${totalAngles || 0} angles regenerated!`);
+      } else {
+        showToast(job.error || 'Cascade regeneration failed', 'error');
+      }
       fetchSets();
     } catch (err) {
       showToast(err.message || 'Cascade regeneration failed', 'error');
