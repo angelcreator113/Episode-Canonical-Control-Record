@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Stage } from '../components/SceneComposer/Stage';
 import {
   startExport,
   getExportStatus,
@@ -11,6 +10,46 @@ import {
 } from '../services/exportService';
 import api from '../services/api';
 import './ExportPage.css';
+
+// Simple inline preview component (replaces old Stage from deprecated SceneComposer)
+function ScenePreview({ scene, platform }) {
+  return (
+    <div className="scene-preview-placeholder" style={{ 
+      width: '100%', 
+      height: '100%', 
+      background: `url(${scene?.thumbnail || scene?.backgroundUrl || ''}) center/cover no-repeat`,
+      backgroundColor: '#1a1a1a',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+    }}>
+      <div className="platform-badge" style={{
+        position: 'absolute',
+        top: '8px',
+        right: '8px',
+        background: 'rgba(0,0,0,0.6)',
+        color: '#fff',
+        padding: '4px 8px',
+        borderRadius: '4px',
+        fontSize: '12px',
+      }}>
+        {platform?.icon} {platform?.name}
+      </div>
+      {scene?.title && (
+        <div style={{
+          background: 'rgba(0,0,0,0.6)',
+          color: '#fff',
+          padding: '8px 16px',
+          borderRadius: '6px',
+          fontSize: '14px',
+        }}>
+          {scene.title}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ExportPage() {
   const { episodeId } = useParams();
@@ -317,12 +356,9 @@ function ExportPage() {
             >
               {scenes.length > 0 ? (
                 <>
-                  <Stage
+                  <ScenePreview
                     platform={currentPlatform}
-                    scene={scenes[0]} // Show first scene as preview
-                    currentTime={currentTime}
-                    interactionMode="view"
-                    showPlatformBadge={true}
+                    scene={scenes[0]}
                   />
                 </>
               ) : (

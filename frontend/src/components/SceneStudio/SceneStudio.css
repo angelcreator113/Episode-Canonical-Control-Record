@@ -1074,6 +1074,339 @@
   animation: scene-studio-spin 1s linear infinite;
 }
 
+/* ── Generate Tab Enhanced UI ── */
+
+.scene-studio-gen-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.scene-studio-gen-header h4 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.scene-studio-gen-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.scene-studio-gen-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.scene-studio-gen-icon-btn:hover {
+  color: #B8962E;
+  border-color: rgba(184, 150, 46, 0.4);
+  background: rgba(184, 150, 46, 0.04);
+}
+
+.scene-studio-gen-icon-btn.active {
+  color: #B8962E;
+  background: rgba(184, 150, 46, 0.1);
+  border-color: rgba(184, 150, 46, 0.4);
+}
+
+.scene-studio-gen-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 7px;
+  font-weight: 700;
+  background: #B8962E;
+  color: #fff;
+  padding: 2px 4px;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+/* Tips Panel */
+.scene-studio-gen-tips {
+  margin-bottom: 10px;
+  padding: 8px;
+  background: rgba(184, 150, 46, 0.06);
+  border-radius: 6px;
+  border: 1px solid rgba(184, 150, 46, 0.15);
+}
+
+.scene-studio-gen-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 9px;
+  color: #666;
+}
+
+.scene-studio-gen-tip svg {
+  flex-shrink: 0;
+  color: #B8962E;
+  margin-top: 1px;
+}
+
+/* History Panel */
+.scene-studio-gen-history {
+  margin-bottom: 10px;
+}
+
+.scene-studio-gen-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.scene-studio-gen-history-header span {
+  font-size: 9px;
+  color: #999;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scene-studio-gen-history-header button {
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  color: #dc3535;
+  font-size: 9px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 100ms ease;
+}
+
+.scene-studio-gen-history-header button:hover {
+  background: rgba(220, 53, 53, 0.08);
+}
+
+.scene-studio-gen-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.scene-studio-gen-history-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.scene-studio-gen-history-item:hover {
+  border-color: rgba(184, 150, 46, 0.4);
+  background: rgba(184, 150, 46, 0.02);
+}
+
+.scene-studio-gen-history-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.scene-studio-gen-history-prompt {
+  flex: 1;
+  font-size: 9px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Prompt Area */
+.scene-studio-gen-prompt-wrap {
+  position: relative;
+  margin-bottom: 6px;
+}
+
+.scene-studio-gen-enhance-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border: none;
+  background: rgba(184, 150, 46, 0.1);
+  color: #B8962E;
+  font-size: 8px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.scene-studio-gen-enhance-btn:hover:not(:disabled) {
+  background: rgba(184, 150, 46, 0.2);
+}
+
+.scene-studio-gen-enhance-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.scene-studio-gen-duplicate {
+  padding: 4px 8px;
+  margin-top: 4px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
+  font-size: 9px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Style Hints with Swatch */
+.scene-studio-gen-hint-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Options Row */
+.scene-studio-gen-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.scene-studio-gen-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: #666;
+}
+
+.scene-studio-gen-option input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  accent-color: #B8962E;
+  cursor: pointer;
+}
+
+.scene-studio-gen-option label {
+  cursor: pointer;
+}
+
+/* Results Header */
+.scene-studio-gen-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.scene-studio-gen-results-header span {
+  font-size: 10px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.scene-studio-gen-bg-badge {
+  padding: 2px 6px;
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  font-size: 8px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+/* Loading State */
+.scene-studio-gen-loading-text {
+  margin-top: 4px;
+  font-size: 9px;
+  color: #999;
+  font-style: italic;
+}
+
+/* Empty State */
+.scene-studio-gen-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 12px;
+  text-align: center;
+}
+
+.scene-studio-gen-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(184, 150, 46, 0.08);
+  border-radius: 50%;
+  color: #B8962E;
+  margin-bottom: 12px;
+}
+
+.scene-studio-gen-empty-title {
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.scene-studio-gen-empty-text {
+  margin: 0 0 12px 0;
+  font-size: 10px;
+  color: #888;
+  line-height: 1.5;
+}
+
+.scene-studio-gen-empty-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.scene-studio-gen-empty-examples button {
+  padding: 6px 10px;
+  border: 1px dashed rgba(184, 150, 46, 0.4);
+  background: transparent;
+  color: #B8962E;
+  font-size: 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.scene-studio-gen-empty-examples button:hover {
+  background: rgba(184, 150, 46, 0.06);
+  border-style: solid;
+}
+
 /* ── Nav Badge (object count on Objects tab) ── */
 
 .scene-studio-creation-nav-btn {
