@@ -743,6 +743,9 @@ if (EditMap && EditMap.associate) {
 if (CharacterArc && CharacterArc.associate) {
   CharacterArc.associate(requiredModels);
 }
+if (Episode && Episode.associate) {
+  Episode.associate(requiredModels);
+}
 if (SceneSet && SceneSet.associate) {
   SceneSet.associate(requiredModels);
 }

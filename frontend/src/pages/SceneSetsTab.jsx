@@ -1487,8 +1487,15 @@ export default function SceneSetsTab() {
         body: JSON.stringify(angleData),
       });
       if (!res.ok) throw new Error('Failed');
+      const json = await res.json();
+      const newAngle = json.data;
       showToast(`Added angle "${angleData.angle_label}"`);
-      fetchSets();
+      await fetchSets();
+
+      // Auto-generate the angle image if the scene set has a base image
+      if (newAngle?.id && set.base_image_url) {
+        handleGenerateAngle(set, newAngle);
+      }
     } catch {
       showToast('Failed to add angle', 'error');
     }
