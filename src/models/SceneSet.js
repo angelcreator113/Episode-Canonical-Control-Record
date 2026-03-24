@@ -8,6 +8,11 @@ module.exports = (sequelize) => {
         foreignKey: 'scene_set_id',
         as: 'angles',
       });
+      SceneSet.belongsTo(models.SceneAngle, {
+        foreignKey: 'cover_angle_id',
+        as: 'coverAngle',
+        constraints: false,
+      });
       if (models.Universe) {
         SceneSet.belongsTo(models.Universe, {
           foreignKey: 'universe_id',
@@ -18,6 +23,14 @@ module.exports = (sequelize) => {
         SceneSet.belongsTo(models.Show, {
           foreignKey: 'show_id',
           as: 'show',
+        });
+      }
+      if (models.SceneSetEpisode) {
+        SceneSet.belongsToMany(models.Episode, {
+          through: models.SceneSetEpisode,
+          foreignKey: 'scene_set_id',
+          otherKey: 'episode_id',
+          as: 'episodes',
         });
       }
     }
@@ -81,6 +94,7 @@ module.exports = (sequelize) => {
     },
     intimacy_value: { type: DataTypes.INTEGER, allowNull: true },
     spectacle_value: { type: DataTypes.INTEGER, allowNull: true },
+    cover_angle_id: { type: DataTypes.UUID, allowNull: true },
   }, {
     sequelize,
     modelName: 'SceneSet',

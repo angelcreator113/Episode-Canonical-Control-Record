@@ -20,7 +20,7 @@ function getAnthropicClient() {
   return anthropicClient;
 }
 const refinementQueue    = require('../queues/sceneRefinementQueue');
-const { SceneSet, SceneAngle, Universe, Show, GenerationJob } = require('../models');
+const { SceneSet, SceneAngle, Universe, Show, Episode, SceneSetEpisode, GenerationJob } = require('../models');
 
 const S3_BUCKET  = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -52,8 +52,18 @@ async function ensureGenerationJobsTable() {
 
 router.get('/', optionalAuth, async (req, res) => {
   try {
+    const includes = [{ model: SceneAngle, as: 'angles' }];
+    if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'] });
+    if (Episode && SceneSetEpisode) {
+      includes.push({
+        model: Episode,
+        as: 'episodes',
+        attributes: ['id', 'title', 'episode_number', 'season_number'],
+        through: { attributes: [] },
+      });
+    }
     const sets = await SceneSet.findAll({
-      include: [{ model: SceneAngle, as: 'angles' }],
+      include: includes,
       order: [['created_at', 'DESC'], [{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
     });
     res.json({ success: true, count: sets.length, data: sets });
@@ -78,6 +88,7 @@ router.post('/', optionalAuth, async (req, res) => {
       show_id,
       base_runway_model,
       notes,
+      episode_ids,
     } = req.body;
 
     if (!name || !scene_type) {
@@ -110,6 +121,16 @@ router.post('/', optionalAuth, async (req, res) => {
       }
     }
 
+    // Link episodes if provided
+    if (Array.isArray(episode_ids) && episode_ids.length > 0 && SceneSetEpisode) {
+      for (const epId of episode_ids) {
+        await SceneSetEpisode.findOrCreate({
+          where: { scene_set_id: set.id, episode_id: epId },
+          defaults: { scene_set_id: set.id, episode_id: epId },
+        });
+      }
+    }
+
     // Auto-enqueue base generation when a description is provided
     let jobId = null;
     if (canonical_description) {
@@ -133,8 +154,18 @@ router.post('/', optionalAuth, async (req, res) => {
 
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
+    const includes = [{ model: SceneAngle, as: 'angles' }];
+    if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'] });
+    if (Episode && SceneSetEpisode) {
+      includes.push({
+        model: Episode,
+        as: 'episodes',
+        attributes: ['id', 'title', 'episode_number', 'season_number'],
+        through: { attributes: [] },
+      });
+    }
     const set = await SceneSet.findByPk(req.params.id, {
-      include: [{ model: SceneAngle, as: 'angles' }],
+      include: includes,
       order: [[{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
     });
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -952,5 +983,88 @@ router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
   }
 });
 
+
+// ─── PATCH /:id/cover-angle  — set persistent cover image ───────────────────
+
+router.patch('/:id/cover-angle', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { angle_id } = req.body;
+
+    // Allow null to clear cover
+    if (angle_id) {
+      const angle = await SceneAngle.findOne({
+        where: { id: angle_id, scene_set_id: set.id },
+      });
+      if (!angle) return res.status(400).json({ success: false, error: 'Angle does not belong to this set' });
+    }
+
+    await set.update({ cover_angle_id: angle_id || null });
+    res.json({ success: true, data: set });
+  } catch (err) {
+    console.error('Scene Sets PATCH /:id/cover-angle error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/episodes  — link episodes to a scene set ────────────────────
+
+router.post('/:id/episodes', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { episode_ids } = req.body;
+    if (!Array.isArray(episode_ids) || episode_ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'episode_ids array is required' });
+    }
+
+    const results = [];
+    for (const episodeId of episode_ids) {
+      const [link] = await SceneSetEpisode.findOrCreate({
+        where: { scene_set_id: set.id, episode_id: episodeId },
+        defaults: { scene_set_id: set.id, episode_id: episodeId },
+      });
+      results.push(link);
+    }
+
+    // Return updated episodes list
+    const episodes = await Episode.findAll({
+      include: [{
+        model: SceneSet,
+        as: 'sceneSets',
+        where: { id: set.id },
+        attributes: [],
+        through: { attributes: [] },
+      }],
+      attributes: ['id', 'title', 'episode_number', 'season_number'],
+    });
+
+    res.json({ success: true, data: episodes });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/episodes error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── DELETE /:id/episodes/:episodeId  — unlink an episode ───────────────────
+
+router.delete('/:id/episodes/:episodeId', optionalAuth, async (req, res) => {
+  try {
+    const destroyed = await SceneSetEpisode.destroy({
+      where: {
+        scene_set_id: req.params.id,
+        episode_id: req.params.episodeId,
+      },
+    });
+    if (!destroyed) return res.status(404).json({ success: false, error: 'Link not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Scene Sets DELETE /:id/episodes/:episodeId error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 module.exports = router;

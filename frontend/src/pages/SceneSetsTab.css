@@ -2313,3 +2313,159 @@
   letter-spacing: 0.5px;
   margin-bottom: 6px;
 }
+
+/* ─── Cover Badge on Filmstrip ─────────────────────────────────────── */
+
+.scene-sets-filmstrip-thumb.cover {
+  border-color: #B8962E;
+  box-shadow: 0 0 0 2px rgba(184, 150, 46, 0.3);
+}
+
+.scene-sets-cover-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  color: #B8962E;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4));
+  z-index: 2;
+}
+
+.scene-sets-filmstrip-thumb {
+  position: relative;
+}
+
+/* ─── Show & Episode Tags ──────────────────────────────────────────── */
+
+.scene-sets-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.scene-sets-show-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #666;
+  background: #F0EDE6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+
+.scene-sets-episode-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #B8962E;
+  background: #FFF8E1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+}
+
+.scene-sets-episode-tag:hover {
+  background: #FFF0C0;
+}
+
+.scene-sets-link-episodes-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #999;
+  background: none;
+  border: 1px dashed #CCC;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.scene-sets-link-episodes-btn:hover {
+  color: #B8962E;
+  border-color: #B8962E;
+}
+
+/* ─── Episode Manager Panel ────────────────────────────────────────── */
+
+.scene-sets-episode-manager {
+  margin-top: 8px;
+  padding: 8px;
+  background: #FAFAF5;
+  border: 1px solid #E8E4DA;
+  border-radius: 6px;
+}
+
+.scene-sets-episode-manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2C2C2C;
+  margin-bottom: 6px;
+}
+
+.scene-sets-episode-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.scene-sets-episode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  background: #FFF8E1;
+  color: #2C2C2C;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid #E8E4DA;
+}
+
+.scene-sets-episode-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.scene-sets-episode-chip button:hover {
+  color: #C62828;
+}
+
+.scene-sets-episode-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.scene-sets-episode-add-row select {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 4px 6px;
+  border: 1px solid #DDD;
+  border-radius: 4px;
+  background: #FFF;
+  min-width: 140px;
+}
+
+.scene-sets-episode-add-row select[multiple] {
+  min-width: 200px;
+}

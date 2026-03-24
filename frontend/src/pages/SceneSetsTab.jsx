@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Crown, Tv, Film } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -337,7 +337,7 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, generatingId, generationProgress }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, generatingId, generationProgress, allShows, allEpisodes, onLoadEpisodes }) {
   const fileInputRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
@@ -355,10 +355,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const regenerableAngles = sortedAngles.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed');
   const hasBase = !!(set.base_still_url || set.base_runway_seed);
 
-  // Selected angle for hero display — null means show base/first available
-  const [selectedAngleId, setSelectedAngleId] = useState(null);
+  // Selected angle for hero display — initializes to cover_angle_id if set
+  const [selectedAngleId, setSelectedAngleId] = useState(set.cover_angle_id || null);
   const selectedAngle = selectedAngleId ? sortedAngles.find(a => a.id === selectedAngleId) : null;
-  const heroImageRaw = selectedAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const coverAngle = set.cover_angle_id ? sortedAngles.find(a => a.id === set.cover_angle_id) : null;
+  const heroImageRaw = selectedAngle?.still_image_url || coverAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const isCoverAngle = (angleId) => set.cover_angle_id === angleId;
   const heroImage = heroImageRaw ? bustUrl(heroImageRaw) : null;
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -378,6 +380,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [selectedSuggestions, setSelectedSuggestions] = useState([]);
   const [addingSuggestions, setAddingSuggestions] = useState(false);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
+  const [showEpisodeManager, setShowEpisodeManager] = useState(false);
+  const [selectedShowForLink, setSelectedShowForLink] = useState('');
+  const [episodesToLink, setEpisodesToLink] = useState([]);
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
   // Track generation start time
@@ -594,6 +599,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           {/* Angle thumbs */}
           {sortedAngles.map(angle => {
             const isActive = selectedAngleId === angle.id;
+            const isCover = isCoverAngle(angle.id);
             const hasStill = !!angle.still_image_url && angle.generation_status === 'complete';
             const isAngleGenerating = angle.generation_status === 'generating';
             const isFailed = angle.generation_status === 'failed';
@@ -601,7 +607,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             return (
               <button
                 key={angle.id}
-                className={`scene-sets-filmstrip-thumb${isActive ? ' active' : ''}${isFailed ? ' failed' : ''}${isPending ? ' pending' : ''}`}
+                className={`scene-sets-filmstrip-thumb${isActive ? ' active' : ''}${isFailed ? ' failed' : ''}${isPending ? ' pending' : ''}${isCover ? ' cover' : ''}`}
                 onClick={() => {
                   if (hasStill) {
                     if (isActive) setShowBaseLightbox(true);
@@ -610,7 +616,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     onGenerateAngle(set, angle);
                   }
                 }}
-                title={hasStill ? angle.angle_name : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
+                onDoubleClick={() => {
+                  if (hasStill && onSetCoverAngle) {
+                    onSetCoverAngle(set, isCover ? null : angle.id);
+                  }
+                }}
+                title={hasStill ? `${angle.angle_name}${isCover ? ' (Cover)' : ''} — double-click to ${isCover ? 'unset' : 'set as'} cover` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
               >
                 {hasStill ? (
                   <img src={bustUrl(angle.still_image_url)} alt={angle.angle_label} />
@@ -621,6 +632,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 ) : (
                   <Sparkles size={14} className={isPending && !isGenerating ? 'scene-sets-clickable-icon' : ''} />
                 )}
+                {isCover && <Crown size={10} className="scene-sets-cover-badge" />}
                 <span className="scene-sets-filmstrip-label">{angle.angle_label}</span>
                 {angle.video_clip_url && <span className="scene-sets-filmstrip-video"><Play size={8} /></span>}
               </button>
@@ -660,6 +672,33 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               <span className="scene-sets-angle-badge">{readyAngles}/{totalAngles}</span>
             )}
           </div>
+          {/* Show & Episode tags */}
+          {(set.show || (set.episodes && set.episodes.length > 0)) && (
+            <div className="scene-sets-card-tags">
+              {set.show && (
+                <span className="scene-sets-show-tag">
+                  <Tv size={10} /> {set.show.name}
+                </span>
+              )}
+              {set.episodes && set.episodes.length > 0 && (
+                <span className="scene-sets-episode-tag" onClick={() => setShowEpisodeManager(v => !v)} title="Click to manage episodes">
+                  <Film size={10} /> {set.episodes.length === 1 ? `Ep ${set.episodes[0].episode_number || set.episodes[0].title}` : `${set.episodes.length} episodes`}
+                </span>
+              )}
+              {!set.episodes?.length && (
+                <button className="scene-sets-link-episodes-btn" onClick={() => setShowEpisodeManager(true)} title="Link episodes">
+                  <Film size={10} /> + Episodes
+                </button>
+              )}
+            </div>
+          )}
+          {!set.show && !set.episodes?.length && (
+            <div className="scene-sets-card-tags">
+              <button className="scene-sets-link-episodes-btn" onClick={() => setShowEpisodeManager(true)} title="Link to show/episodes">
+                <Film size={10} /> + Link Episodes
+              </button>
+            </div>
+          )}
 
           <div className="scene-sets-card-actions">
             {!hasBase && (
@@ -749,7 +788,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             <div className="scene-sets-camera-direction-row">
               <div className="scene-sets-create-field"><label>Camera Direction <span className="scene-sets-optional">(optional)</span></label><input type="text" placeholder="Camera placement and movement..." value={newAngle.camera_direction} onChange={e => setNewAngle(a => ({ ...a, camera_direction: e.target.value }))} /></div>
               {set.canonical_description && (
-                <button className="scene-sets-ai-assist-btn" onClick={handleAiAssist} disabled={aiAssistLoading || !newAngle.angle_label.trim()} title="AI-generate camera direction">
+                <button
+                  className="scene-sets-ai-assist-btn"
+                  onClick={handleAiAssist}
+                  disabled={aiAssistLoading || !newAngle.angle_label.trim()}
+                  title={!newAngle.angle_label.trim() ? 'Type a label first (e.g. WIDE) to enable AI' : 'AI-generate camera direction'}
+                >
                   {aiAssistLoading ? <Loader size={10} className="spin" /> : <Sparkles size={10} />} AI
                 </button>
               )}
@@ -798,6 +842,74 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Episode Manager Panel ──────────────────────── */}
+        {showEpisodeManager && (
+          <div className="scene-sets-episode-manager">
+            <div className="scene-sets-episode-manager-header">
+              <span>Link Episodes</span>
+              <button className="scene-sets-btn-delete" onClick={() => setShowEpisodeManager(false)} style={{ padding: '2px 8px', fontSize: '11px' }}>
+                <X size={10} /> Close
+              </button>
+            </div>
+            {/* Current episodes */}
+            {set.episodes && set.episodes.length > 0 && (
+              <div className="scene-sets-episode-list">
+                {set.episodes.map(ep => (
+                  <span key={ep.id} className="scene-sets-episode-chip">
+                    {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} {ep.title}
+                    <button onClick={() => onUnlinkEpisode(set, ep.id)} title="Remove"><X size={10} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* Add episodes */}
+            <div className="scene-sets-episode-add-row">
+              <select
+                value={selectedShowForLink}
+                onChange={e => {
+                  setSelectedShowForLink(e.target.value);
+                  setEpisodesToLink([]);
+                  if (e.target.value && onLoadEpisodes) onLoadEpisodes(e.target.value);
+                }}
+              >
+                <option value="">Select Show...</option>
+                {(allShows || []).map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              {selectedShowForLink && (
+                <select
+                  multiple
+                  value={episodesToLink}
+                  onChange={e => setEpisodesToLink(Array.from(e.target.selectedOptions, o => o.value))}
+                  style={{ minHeight: '60px' }}
+                >
+                  {(allEpisodes || [])
+                    .filter(ep => ep.show_id === selectedShowForLink)
+                    .filter(ep => !set.episodes?.some(linked => linked.id === ep.id))
+                    .map(ep => (
+                      <option key={ep.id} value={ep.id}>
+                        {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} — {ep.title}
+                      </option>
+                    ))}
+                </select>
+              )}
+              {episodesToLink.length > 0 && (
+                <button
+                  className="scene-sets-btn-generate"
+                  onClick={() => {
+                    onLinkEpisodes(set, episodesToLink);
+                    setEpisodesToLink([]);
+                  }}
+                  style={{ padding: '4px 10px', fontSize: '11px' }}
+                >
+                  <Plus size={10} /> Link {episodesToLink.length}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -854,6 +966,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   if (ps.base_still_url !== ns.base_still_url) return false;
   if (ps.scene_type !== ns.scene_type) return false;
   if (ps.canonical_description !== ns.canonical_description) return false;
+  if (ps.cover_angle_id !== ns.cover_angle_id) return false;
+  if (ps.show_id !== ns.show_id) return false;
+  if ((ps.episodes || []).length !== (ns.episodes || []).length) return false;
+  if (prev.allShows !== next.allShows) return false;
+  if (prev.allEpisodes !== next.allEpisodes) return false;
   const pa = ps.angles || [], na = ns.angles || [];
   if (pa.length !== na.length) return false;
   for (let i = 0; i < pa.length; i++) {
@@ -877,8 +994,11 @@ export default function SceneSetsTab() {
   const [filterType, setFilterType] = useState('ALL');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '' });
+  const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
+  const [allShows, setAllShows] = useState([]);
+  const [allEpisodes, setAllEpisodes] = useState([]);
+  const [createShowId, setCreateShowId] = useState('');
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -904,6 +1024,22 @@ export default function SceneSetsTab() {
   }, []);
 
   useEffect(() => { fetchSets(); }, [fetchSets]);
+
+  // Fetch shows for selectors
+  useEffect(() => {
+    fetch(`${API_BASE}/shows`).then(r => r.json()).then(d => setAllShows(d.data || [])).catch(() => {});
+  }, []);
+
+  const loadEpisodesForShow = useCallback(async (showId) => {
+    try {
+      const res = await fetch(`${API_BASE}/episodes?show_id=${showId}&limit=100`);
+      const json = await res.json();
+      setAllEpisodes(prev => {
+        const otherShows = prev.filter(ep => ep.show_id !== showId);
+        return [...otherShows, ...(json.data || [])];
+      });
+    } catch { /* silent */ }
+  }, []);
 
   // Auto-poll while any generation is in progress
   useEffect(() => {
@@ -1170,19 +1306,23 @@ export default function SceneSetsTab() {
     if (!newSet.name.trim()) { showToast('Name is required', 'error'); return; }
     setCreating(true);
     try {
+      const createPayload = {
+        name: newSet.name.trim(),
+        scene_type: newSet.scene_type,
+        canonical_description: newSet.canonical_description.trim() || null,
+      };
+      if (newSet.show_id) createPayload.show_id = newSet.show_id;
+      if (newSet.episode_ids?.length > 0) createPayload.episode_ids = newSet.episode_ids;
       const res = await fetch(`${API_BASE}/scene-sets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newSet.name.trim(),
-          scene_type: newSet.scene_type,
-          canonical_description: newSet.canonical_description.trim() || null,
-        }),
+        body: JSON.stringify(createPayload),
       });
       if (!res.ok) throw new Error('Failed to create');
       const json = await res.json();
       const setName = newSet.name.trim();
-      setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '' });
+      setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
+      setCreateShowId('');
       setShowCreateForm(false);
       await fetchSets();
 
@@ -1217,6 +1357,47 @@ export default function SceneSetsTab() {
       fetchSets();
     } catch {
       showToast('Failed to delete scene set', 'error');
+    }
+  };
+
+  const handleSetCoverAngle = async (set, angleId) => {
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/cover-angle`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ angle_id: angleId }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      showToast(angleId ? 'Cover image set' : 'Cover image cleared');
+      fetchSets();
+    } catch {
+      showToast('Failed to set cover image', 'error');
+    }
+  };
+
+  const handleLinkEpisodes = async (set, episodeIds) => {
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/episodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episode_ids: episodeIds }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      showToast(`Linked ${episodeIds.length} episode(s)`);
+      fetchSets();
+    } catch {
+      showToast('Failed to link episodes', 'error');
+    }
+  };
+
+  const handleUnlinkEpisode = async (set, episodeId) => {
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/episodes/${episodeId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      showToast('Episode unlinked');
+      fetchSets();
+    } catch {
+      showToast('Failed to unlink episode', 'error');
     }
   };
 
@@ -1428,6 +1609,44 @@ export default function SceneSetsTab() {
               rows={3}
             />
           </div>
+          <div className="scene-sets-create-row">
+            <div className="scene-sets-create-field">
+              <label>Show <span className="scene-sets-optional">(optional)</span></label>
+              <select
+                value={newSet.show_id}
+                onChange={e => {
+                  const showId = e.target.value;
+                  setNewSet(s => ({ ...s, show_id: showId, episode_ids: [] }));
+                  setCreateShowId(showId);
+                  if (showId) loadEpisodesForShow(showId);
+                }}
+              >
+                <option value="">No show</option>
+                {allShows.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            {createShowId && (
+              <div className="scene-sets-create-field">
+                <label>Episodes <span className="scene-sets-optional">(optional, multi-select)</span></label>
+                <select
+                  multiple
+                  value={newSet.episode_ids}
+                  onChange={e => setNewSet(s => ({ ...s, episode_ids: Array.from(e.target.selectedOptions, o => o.value) }))}
+                  style={{ minHeight: '60px' }}
+                >
+                  {allEpisodes
+                    .filter(ep => ep.show_id === createShowId)
+                    .map(ep => (
+                      <option key={ep.id} value={ep.id}>
+                        {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} — {ep.title}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+          </div>
           <div className="scene-sets-create-actions">
             <button
               className="scene-sets-btn-generate"
@@ -1485,8 +1704,14 @@ export default function SceneSetsTab() {
               onUpdatePrompt={handleUpdatePrompt}
               onPreviewPrompt={handlePreviewPrompt}
               onCascadeRegenerate={handleCascadeRegenerate}
+              onSetCoverAngle={handleSetCoverAngle}
+              onLinkEpisodes={handleLinkEpisodes}
+              onUnlinkEpisode={handleUnlinkEpisode}
               generatingId={generatingId}
               generationProgress={generationProgress}
+              allShows={allShows}
+              allEpisodes={allEpisodes}
+              onLoadEpisodes={loadEpisodesForShow}
             />
           ))}
         </div>
