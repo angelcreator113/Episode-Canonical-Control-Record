@@ -1683,6 +1683,9 @@ const db = {
     CharacterSpark,
     HairLibrary,
     MakeupLibrary,
+    SceneSet,
+    SceneAngle,
+    SceneSetEpisode,
   },
 
   /**
