@@ -770,6 +770,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <Clock size={11} /> Cost: {(parseFloat(set.generation_cost || 0) + sortedAngles.reduce((sum, a) => sum + parseFloat(a.generation_cost || 0), 0)).toFixed(1)} credits
               </p>
             )}
+            {set.episodes && set.episodes.length > 0 && (
+              <div className="scene-sets-details-episodes">
+                <p className="scene-sets-details-label"><Film size={11} /> Linked Episodes</p>
+                <ul className="scene-sets-details-episode-list">
+                  {set.episodes.map(ep => (
+                    <li key={ep.id}>
+                      <span className="scene-sets-details-ep-number">{ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'}</span>
+                      <span className="scene-sets-details-ep-title">{ep.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {set.script_context && <p className="scene-sets-script-context">{set.script_context}</p>}
             {hasBase && (
               <button className="scene-sets-btn-add-angle" onClick={() => setShowAddAngle(true)}>

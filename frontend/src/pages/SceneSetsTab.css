@@ -880,6 +880,55 @@
   overflow: hidden;
 }
 
+.scene-sets-details-episodes {
+  margin: 10px 0 0;
+}
+
+.scene-sets-details-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #5C3D8F;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+
+.scene-sets-details-episode-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scene-sets-details-episode-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #F5F0FA;
+  border: 1px solid #E0D5F0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #2C2C2C;
+}
+
+.scene-sets-details-ep-number {
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+  font-size: 10px;
+  color: #5C3D8F;
+}
+
+.scene-sets-details-ep-title {
+  color: #555;
+}
+
 /* ── Angle Strip ───────────────────────────────────────────────────────── */
 
 .scene-sets-angle-strip {
