@@ -708,13 +708,22 @@ const EpisodeDetail = () => {
           <div className="ed-card">
             <div className="ed-cardhead" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 className="ed-cardtitle">🎬 Episode Scenes</h2>
-              <button
-                className="btn-action btn-primary-action"
-                onClick={() => setShowScenePicker(true)}
-                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-              >
-                + Add Scene
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn-action"
+                  onClick={() => navigate(`/episodes/${episode.id}/scene-composer`)}
+                  style={{ padding: '8px 16px', fontSize: '0.85rem', background: '#f5f3ff', color: '#6366f1', border: '1px solid #c7d2fe', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  🎨 Scene Composer
+                </button>
+                <button
+                  className="btn-action btn-primary-action"
+                  onClick={() => setShowScenePicker(true)}
+                  style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                >
+                  + Add Scene
+                </button>
+              </div>
             </div>
             <div className="ed-cardbody">
               {loadingScenes ? (

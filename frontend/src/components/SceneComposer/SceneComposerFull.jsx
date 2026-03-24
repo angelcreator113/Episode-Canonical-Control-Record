@@ -1355,6 +1355,19 @@ function SceneComposerFull() {
                   <div className="scene-title">{scene.title}</div>
                   <div className="scene-meta">{scene.duration_seconds}s</div>
                 </div>
+                {scene.id && (
+                  <button
+                    className="scene-studio-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/studio/scene/${scene.id}?show_id=${episode?.show_id || episode?.showId || ''}&episode_id=${episodeId}`);
+                    }}
+                    title="Open in Scene Studio"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#6366f1', padding: '2px 4px' }}
+                  >
+                    🎨
+                  </button>
+                )}
                 {scenes.length > 1 && (
                   <button
                     className="scene-delete-btn"
