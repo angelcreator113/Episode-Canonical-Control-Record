@@ -184,8 +184,8 @@ export default function useSceneStudioState() {
       setSceneData(data.scene);
       setAngles([]);
       setActiveAngleId(null);
-      // Load depth map from scene canvas_settings
-      setDepthMapUrl(data.scene?.canvas_settings?.depth_map_url || null);
+      // Load depth map from scene canvas_settings or extra_fields
+      setDepthMapUrl(data.scene?.canvas_settings?.depth_map_url || data.scene?.extra_fields?.depth_map_url || null);
     } else {
       setContextId(data.sceneSet?.id);
       setSceneSetData(data.sceneSet);
