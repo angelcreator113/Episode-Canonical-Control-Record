@@ -110,6 +110,89 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         comment: 'Z-index stacking order',
       },
+      // ── Scene Studio fields ──
+      rotation: {
+        type: DataTypes.DECIMAL(6, 2),
+        allowNull: false,
+        defaultValue: 0,
+        comment: 'Rotation in degrees (0-360)',
+      },
+      width: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Pixel width on canvas',
+      },
+      height: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Pixel height on canvas',
+      },
+      is_visible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        comment: 'Whether object is visible on canvas',
+      },
+      is_locked: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Whether object is locked from editing',
+      },
+      object_type: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        defaultValue: 'image',
+        comment: 'Object type: image, video, text, shape, overlay, decor',
+      },
+      object_label: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'User-facing name (e.g., "Chandelier", "Wall Art")',
+      },
+      flip_x: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Horizontal flip',
+      },
+      flip_y: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Vertical flip',
+      },
+      crop_data: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: 'Crop rectangle: { x, y, width, height }',
+      },
+      style_data: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: 'Style properties: { fill, stroke, strokeWidth, fontSize, fontFamily, textContent, shadow }',
+      },
+      group_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Group ID for grouped objects',
+      },
+      variant_group_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Links objects that are variants of each other',
+      },
+      variant_label: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Variant label: "open", "closed", "day", "night"',
+      },
+      is_active_variant: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        comment: 'Only one variant per group is active/visible',
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,
