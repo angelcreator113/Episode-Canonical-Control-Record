@@ -6,9 +6,19 @@ const { Op }  = require('sequelize');
 const multer  = require('multer');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { optionalAuth } = require('../middleware/auth');
+const Anthropic          = require('@anthropic-ai/sdk');
 const sceneGenService    = require('../services/sceneGenerationService');
 const artifactService    = require('../services/artifactDetectionService');
 const postProcessService = require('../services/postProcessingService');
+
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+let anthropicClient = null;
+function getAnthropicClient() {
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return anthropicClient;
+}
 const refinementQueue    = require('../queues/sceneRefinementQueue');
 const { SceneSet, SceneAngle, Universe, Show, GenerationJob } = require('../models');
 
@@ -259,6 +269,119 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/angles  — add an angle to a scene set ────────────────────────
+
+// ─── POST /:id/suggest-angles  — AI suggests angles for a scene set ─────────
+
+const VALID_ANGLE_LABELS = ['WIDE', 'CLOSET', 'VANITY', 'WINDOW', 'DOORWAY', 'ESTABLISHING', 'ACTION', 'CLOSE', 'OVERHEAD', 'OTHER'];
+
+router.post('/:id/suggest-angles', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id, {
+      include: [{ model: SceneAngle, as: 'angles' }],
+    });
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.canonical_description) {
+      return res.status(400).json({ success: false, error: 'Scene set needs a canonical description first' });
+    }
+
+    const existingLabels = (set.angles || []).map(a => a.angle_label);
+    const sceneType = set.scene_type || 'OTHER';
+
+    const prompt = `You are a cinematic director planning camera angles and room coverage for a scene location.
+
+Scene name: ${set.name}
+Scene type: ${sceneType}
+Description: ${set.canonical_description}
+${set.mood_tags?.length ? `Mood: ${set.mood_tags.join(', ')}` : ''}
+${set.aesthetic_tags?.length ? `Aesthetic: ${set.aesthetic_tags.join(', ')}` : ''}
+${existingLabels.length ? `Already created angles: ${existingLabels.join(', ')} — do NOT suggest duplicates of these.` : ''}
+
+Suggest 4-6 distinct camera angles or room areas for this location. For event spaces, include BOTH different camera angles of the main space AND separate areas/rooms (entrance, outdoor area, interior rooms, etc.).
+
+Valid angle_label values: ${VALID_ANGLE_LABELS.join(', ')}. Use OTHER for non-standard angles.
+
+Return ONLY a JSON array with objects containing:
+- angle_label: one of the valid labels above
+- angle_name: a short descriptive name (2-4 words, e.g. "Glass Door Entrance")
+- camera_direction: detailed camera placement and framing description (1-2 sentences)
+- description: what this angle captures and why it matters for storytelling (1 sentence)
+- beat_affinity: array of beat numbers 1-5 this angle works best for (e.g. [1,2])
+
+Return raw JSON only, no markdown or explanation.`;
+
+    const client = getAnthropicClient();
+    const message = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 1500,
+      temperature: 0.7,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = message.content[0].text.trim();
+    let suggestions;
+    try {
+      suggestions = JSON.parse(text);
+    } catch {
+      // Try to extract JSON array from response
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) suggestions = JSON.parse(match[0]);
+      else throw new Error('Could not parse AI suggestions');
+    }
+
+    // Validate and sanitize
+    suggestions = suggestions
+      .filter(s => s.angle_label && s.angle_name)
+      .map(s => ({
+        angle_label: VALID_ANGLE_LABELS.includes(s.angle_label) ? s.angle_label : 'OTHER',
+        angle_name: String(s.angle_name).slice(0, 100),
+        camera_direction: String(s.camera_direction || '').slice(0, 300),
+        description: String(s.description || '').slice(0, 200),
+        beat_affinity: Array.isArray(s.beat_affinity) ? s.beat_affinity.filter(b => Number.isInteger(b) && b >= 1 && b <= 10) : [],
+      }));
+
+    res.json({ success: true, data: suggestions });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/suggest-angles error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/ai-camera-direction  — AI generates camera direction for an angle
+
+router.post('/:id/ai-camera-direction', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { angle_label, angle_name } = req.body;
+    if (!angle_label) return res.status(400).json({ success: false, error: 'angle_label is required' });
+
+    const prompt = `You are a cinematic director. Generate a camera direction for this scene angle.
+
+Scene: ${set.name}
+Description: ${set.canonical_description || 'No description available'}
+Angle label: ${angle_label}
+${angle_name ? `Angle name: ${angle_name}` : ''}
+
+Write a concise camera placement and framing direction (1-2 sentences). Describe where the camera is, what it's facing, and the composition. Return only the direction text, nothing else.`;
+
+    const client = getAnthropicClient();
+    const message = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 200,
+      temperature: 0.5,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const direction = message.content[0].text.trim();
+    res.json({ success: true, data: { camera_direction: direction } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/ai-camera-direction error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

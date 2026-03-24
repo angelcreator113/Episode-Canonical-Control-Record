@@ -383,6 +383,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [previewData, setPreviewData] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [genStartTime, setGenStartTime] = useState(null);
+  const [suggestions, setSuggestions] = useState(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [selectedSuggestions, setSelectedSuggestions] = useState([]);
+  const [addingSuggestions, setAddingSuggestions] = useState(false);
+  const [aiAssistLoading, setAiAssistLoading] = useState(false);
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
   // Track generation start time
@@ -432,6 +437,68 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     setNewAngle({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
     setShowAddAngle(false);
     setAddingAngle(false);
+  };
+
+  const handleSuggestAngles = async () => {
+    setLoadingSuggestions(true);
+    setSuggestions(null);
+    setSelectedSuggestions([]);
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error('Failed to get suggestions');
+      const json = await res.json();
+      setSuggestions(json.data || []);
+      setSelectedSuggestions((json.data || []).map((_, i) => i));
+    } catch {
+      setSuggestions([]);
+    }
+    setLoadingSuggestions(false);
+  };
+
+  const handleAddSelectedSuggestions = async () => {
+    if (!suggestions || selectedSuggestions.length === 0) return;
+    setAddingSuggestions(true);
+    for (const idx of selectedSuggestions) {
+      const s = suggestions[idx];
+      if (!s) continue;
+      await onAddAngle(set, {
+        angle_label: s.angle_label,
+        angle_name: s.angle_name,
+        camera_direction: s.camera_direction || null,
+        beat_affinity: s.beat_affinity || [],
+      });
+    }
+    setSuggestions(null);
+    setSelectedSuggestions([]);
+    setAddingSuggestions(false);
+  };
+
+  const toggleSuggestion = (idx) => {
+    setSelectedSuggestions(prev =>
+      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+    );
+  };
+
+  const handleAiAssist = async () => {
+    if (!newAngle.angle_label.trim()) return;
+    setAiAssistLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/ai-camera-direction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ angle_label: newAngle.angle_label.trim().toUpperCase(), angle_name: newAngle.angle_name.trim() }),
+      });
+      if (!res.ok) throw new Error('AI assist failed');
+      const json = await res.json();
+      if (json.data?.camera_direction) {
+        setNewAngle(a => ({ ...a, camera_direction: json.data.camera_direction }));
+      }
+    } catch { /* silent */ }
+    setAiAssistLoading(false);
   };
 
   return (
@@ -585,6 +652,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               <span className="scene-sets-filmstrip-label">ADD</span>
             </button>
           )}
+          {hasBase && set.canonical_description && (
+            <button
+              className="scene-sets-filmstrip-thumb scene-sets-filmstrip-add"
+              onClick={handleSuggestAngles}
+              disabled={loadingSuggestions}
+              title="AI suggest angles"
+            >
+              {loadingSuggestions ? <Loader size={14} className="spin" /> : <Sparkles size={14} />}
+              <span className="scene-sets-filmstrip-label">AI</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -689,13 +767,58 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               <div className="scene-sets-create-field"><label>Name</label><input type="text" placeholder="e.g. Wide Morning" value={newAngle.angle_name} onChange={e => setNewAngle(a => ({ ...a, angle_name: e.target.value }))} /></div>
               <div className="scene-sets-create-field"><label>Beats <span className="scene-sets-optional">(comma-sep)</span></label><input type="text" placeholder="1,2,3" value={newAngle.beat_affinity} onChange={e => setNewAngle(a => ({ ...a, beat_affinity: e.target.value }))} /></div>
             </div>
-            <div className="scene-sets-create-field"><label>Camera Direction <span className="scene-sets-optional">(optional)</span></label><input type="text" placeholder="Camera placement and movement..." value={newAngle.camera_direction} onChange={e => setNewAngle(a => ({ ...a, camera_direction: e.target.value }))} /></div>
+            <div className="scene-sets-camera-direction-row">
+              <div className="scene-sets-create-field"><label>Camera Direction <span className="scene-sets-optional">(optional)</span></label><input type="text" placeholder="Camera placement and movement..." value={newAngle.camera_direction} onChange={e => setNewAngle(a => ({ ...a, camera_direction: e.target.value }))} /></div>
+              {set.canonical_description && (
+                <button className="scene-sets-ai-assist-btn" onClick={handleAiAssist} disabled={aiAssistLoading || !newAngle.angle_label.trim()} title="AI-generate camera direction">
+                  {aiAssistLoading ? <Loader size={10} className="spin" /> : <Sparkles size={10} />} AI
+                </button>
+              )}
+            </div>
             <div className="scene-sets-add-angle-actions">
               <button className="scene-sets-btn-generate" onClick={handleSubmitAngle} disabled={addingAngle || !newAngle.angle_label.trim() || !newAngle.angle_name.trim()}>
                 {addingAngle ? <><Loader size={12} className="spin" /> Adding...</> : <><Plus size={12} /> Add</>}
               </button>
               <button className="scene-sets-btn-delete" onClick={() => setShowAddAngle(false)}>Cancel</button>
             </div>
+          </div>
+        )}
+
+        {/* ── AI Angle Suggestions Panel ──────────────────────── */}
+        {suggestions && (
+          <div className="scene-sets-suggestions-panel">
+            <div className="scene-sets-suggestions-header">
+              <h4>Suggested Angles</h4>
+              <button className="scene-sets-btn-delete" onClick={() => { setSuggestions(null); setSelectedSuggestions([]); }} style={{ padding: '2px 8px', fontSize: '11px' }}>
+                <X size={10} /> Dismiss
+              </button>
+            </div>
+            {suggestions.length === 0 ? (
+              <p style={{ fontSize: '13px', color: '#999', margin: '4px 0' }}>No suggestions available.</p>
+            ) : (
+              <>
+                <div className="scene-sets-suggestions-list">
+                  {suggestions.map((s, idx) => (
+                    <div key={idx} className={`scene-sets-suggestion-item${selectedSuggestions.includes(idx) ? ' selected' : ''}`} onClick={() => toggleSuggestion(idx)}>
+                      <input type="checkbox" checked={selectedSuggestions.includes(idx)} onChange={() => toggleSuggestion(idx)} />
+                      <div className="scene-sets-suggestion-info">
+                        <div>
+                          <span className="scene-sets-suggestion-label">{s.angle_label}</span>
+                          <span className="scene-sets-suggestion-name">{s.angle_name}</span>
+                        </div>
+                        {s.description && <div className="scene-sets-suggestion-desc">{s.description}</div>}
+                        {s.camera_direction && <div className="scene-sets-suggestion-camera">{s.camera_direction}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="scene-sets-suggestions-actions">
+                  <button className="scene-sets-btn-generate" onClick={handleAddSelectedSuggestions} disabled={addingSuggestions || selectedSuggestions.length === 0}>
+                    {addingSuggestions ? <><Loader size={12} className="spin" /> Adding...</> : <><Plus size={12} /> Add {selectedSuggestions.length} Selected</>}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
