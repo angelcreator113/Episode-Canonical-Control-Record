@@ -290,6 +290,55 @@ const sceneService = {
     const { data } = await api.get(`/api/v1/scenes/${sceneId}/variant-groups/${groupId}`);
     return data;
   },
+  // ============================================================================
+  // SCENE SET STUDIO API METHODS
+  // ============================================================================
+
+  /**
+   * Load canvas state for a scene set
+   * GET /api/v1/scene-sets/:id/canvas
+   */
+  getSceneSetCanvas: async (sceneSetId, angleId = null) => {
+    const params = angleId ? { angle_id: angleId } : {};
+    const { data } = await api.get(`/api/v1/scene-sets/${sceneSetId}/canvas`, { params });
+    return data;
+  },
+
+  /**
+   * Bulk save canvas state for a scene set
+   * PUT /api/v1/scene-sets/:id/canvas
+   */
+  saveSceneSetCanvas: async (sceneSetId, payload) => {
+    const { data } = await api.put(`/api/v1/scene-sets/${sceneSetId}/canvas`, payload);
+    return data;
+  },
+
+  /**
+   * Add object to scene set canvas
+   * POST /api/v1/scene-sets/:id/objects
+   */
+  addSceneSetObject: async (sceneSetId, objectData) => {
+    const { data } = await api.post(`/api/v1/scene-sets/${sceneSetId}/objects`, objectData);
+    return data;
+  },
+
+  /**
+   * Update object on scene set canvas
+   * PATCH /api/v1/scene-sets/:id/objects/:objectId
+   */
+  updateSceneSetObject: async (sceneSetId, objectId, updates) => {
+    const { data } = await api.patch(`/api/v1/scene-sets/${sceneSetId}/objects/${objectId}`, updates);
+    return data;
+  },
+
+  /**
+   * Delete object from scene set canvas
+   * DELETE /api/v1/scene-sets/:id/objects/:objectId
+   */
+  deleteSceneSetObject: async (sceneSetId, objectId) => {
+    const { data } = await api.delete(`/api/v1/scene-sets/${sceneSetId}/objects/${objectId}`);
+    return data;
+  },
 };
 
 export default sceneService;

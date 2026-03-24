@@ -939,6 +939,32 @@ if (SceneObjectVariant) {
   });
 }
 
+// ==================== SCENE SET ↔ SCENE ASSETS (Scene Studio) ====================
+
+if (SceneSet && SceneAsset) {
+  SceneSet.hasMany(SceneAsset, {
+    foreignKey: 'scene_set_id',
+    as: 'studioObjects',
+  });
+
+  SceneAsset.belongsTo(SceneSet, {
+    foreignKey: 'scene_set_id',
+    as: 'sceneSet',
+  });
+}
+
+if (SceneAngle && SceneAsset) {
+  SceneAngle.hasMany(SceneAsset, {
+    foreignKey: 'scene_angle_id',
+    as: 'studioObjects',
+  });
+
+  SceneAsset.belongsTo(SceneAngle, {
+    foreignKey: 'scene_angle_id',
+    as: 'sceneAngle',
+  });
+}
+
 // ==================== EPISODE WARDROBE DEFAULTS ====================
 
 // Episode ↔ EpisodeWardrobeDefault (1:N)

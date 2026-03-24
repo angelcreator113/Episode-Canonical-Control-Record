@@ -17,16 +17,37 @@ module.exports = (sequelize) => {
       },
       scene_id: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: 'scenes',
           key: 'id',
         },
         onDelete: 'CASCADE',
+        comment: 'Scene this object belongs to (null if belongs to scene set)',
+      },
+      scene_set_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'scene_sets',
+          key: 'id',
+        },
+        onDelete: 'CASCADE',
+        comment: 'Scene set this object belongs to (alternative to scene_id)',
+      },
+      scene_angle_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'scene_angles',
+          key: 'id',
+        },
+        onDelete: 'SET NULL',
+        comment: 'Which angle this object is placed on (for angle-specific objects)',
       },
       asset_id: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: 'assets',
           key: 'id',
