@@ -10,7 +10,7 @@ const outfitSetsController = require('../controllers/outfitSetsController');
 const episodeAssetsController = require('../controllers/episodeAssetsController');
 const timelinePlacementsController = require('../controllers/timelinePlacementsController');
 const videoCompositionController = require('../controllers/videoCompositionController');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/requestValidation');
@@ -362,7 +362,7 @@ router.post(
 // DELETE EPISODE
 router.delete(
   '/:id',
-  authenticateToken,
+  optionalAuth,
   asyncHandler(episodeController.deleteEpisode)
 );
 
