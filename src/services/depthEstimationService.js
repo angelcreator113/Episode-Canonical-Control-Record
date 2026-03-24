@@ -17,6 +17,7 @@
  */
 
 const axios = require('axios');
+const Replicate = require('replicate');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
@@ -26,13 +27,13 @@ const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
 
+// Initialize Replicate SDK (handles model version resolution automatically)
+const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+
 // ─── REPLICATE CONFIG ───────────────────────────────────────────────────────
 
-// MiDaS — robust monocular depth estimation (works reliably on Replicate)
-const DEPTH_MODEL = 'cjwbw/midas';
-const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
-const MAX_POLL_ATTEMPTS = 60; // 5 minutes max at 5s intervals
-const POLL_INTERVAL_MS = 5000;
+// Depth-Anything-V2 — state of the art monocular depth estimation
+const DEPTH_MODEL = 'cjwbw/depth-anything-v2-large';
 
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
@@ -73,68 +74,24 @@ function incrementUsage(userId) {
 /**
  * Create a prediction on Replicate and wait for it to complete.
  * Returns the output URL (depth map image).
+ * Uses official Replicate SDK which handles version resolution automatically.
  */
 async function runDepthEstimation(imageUrl) {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  console.log('[DepthEstimation] Creating prediction with MiDaS depth model...');
+  console.log(`[DepthEstimation] Running ${DEPTH_MODEL} via Replicate SDK...`);
 
-  // Create prediction using model endpoint
-  const createResponse = await axios.post(
-    `${REPLICATE_API_BASE}/models/${DEPTH_MODEL}/predictions`,
-    {
-      input: {
-        image: imageUrl,
-      },
+  // Use Replicate SDK - handles model version lookup automatically
+  const output = await replicate.run(DEPTH_MODEL, {
+    input: {
+      image: imageUrl,
     },
-    {
-      headers: {
-        'Authorization': `Bearer ${REPLICATE_API_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'wait',
-      },
-      timeout: 300000, // 5 minute timeout for sync wait
-    }
-  );
+  });
 
-  // If the API responded synchronously (Prefer: wait), check for output
-  if (createResponse.data.status === 'succeeded' && createResponse.data.output) {
-    console.log('[DepthEstimation] Prediction completed synchronously');
-    return createResponse.data.output;
-  }
-
-  // Otherwise, poll for completion
-  const predictionUrl = createResponse.data.urls?.get || `${REPLICATE_API_BASE}/predictions/${createResponse.data.id}`;
-
-  console.log(`[DepthEstimation] Polling prediction ${createResponse.data.id}...`);
-
-  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    await sleep(POLL_INTERVAL_MS);
-
-    const pollResponse = await axios.get(predictionUrl, {
-      headers: { 'Authorization': `Bearer ${REPLICATE_API_TOKEN}` },
-      timeout: 15000,
-    });
-
-    const { status, output, error } = pollResponse.data;
-
-    if (status === 'succeeded') {
-      console.log('[DepthEstimation] Prediction completed');
-      return output;
-    }
-
-    if (status === 'failed' || status === 'canceled') {
-      throw new Error(`Depth estimation ${status}: ${error || 'unknown error'}`);
-    }
-  }
-
-  throw new Error('Depth estimation timed out after 5 minutes');
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  console.log('[DepthEstimation] Prediction completed via SDK');
+  return output;
 }
 
 // ─── S3 STORAGE ─────────────────────────────────────────────────────────────
