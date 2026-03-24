@@ -15,13 +15,19 @@ exports.getCanvas = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const scene = await Scene.findByPk(id, {
-      attributes: [
-        'id', 'title', 'episode_id', 'scene_number', 'description',
-        'duration_seconds', 'background_url', 'canvas_settings',
-        'layout', 'scene_type', 'production_status',
-      ],
-    });
+    // Check if canvas_settings column exists on scenes table (migration may be pending)
+    let sceneAttributes = [
+      'id', 'title', 'episode_id', 'scene_number', 'description',
+      'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
+    ];
+    try {
+      const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
+      if (sceneCols.canvas_settings) {
+        sceneAttributes.push('canvas_settings');
+      }
+    } catch (_) { /* table describe failed, use base attributes */ }
+
+    const scene = await Scene.findByPk(id, { attributes: sceneAttributes });
 
     if (!scene) {
       return res.status(404).json({ success: false, error: 'Scene not found' });
@@ -41,15 +47,22 @@ exports.getCanvas = async (req, res) => {
       order: [['layer_order', 'ASC']],
     });
 
-    const variantGroups = await SceneObjectVariant.findAll({
-      where: { scene_id: id },
-      include: [{
-        model: SceneAsset,
-        as: 'activeVariant',
-        attributes: ['id', 'object_label', 'variant_label'],
-      }],
-      order: [['created_at', 'ASC']],
-    });
+    // scene_object_variants table may not exist if migration is pending
+    let variantGroups = [];
+    try {
+      variantGroups = await SceneObjectVariant.findAll({
+        where: { scene_id: id },
+        include: [{
+          model: SceneAsset,
+          as: 'activeVariant',
+          attributes: ['id', 'object_label', 'variant_label'],
+        }],
+        order: [['created_at', 'ASC']],
+      });
+    } catch (variantErr) {
+      if (!variantErr.message.includes('does not exist')) throw variantErr;
+      // Table not yet created — return empty variant groups
+    }
 
     res.json({
       success: true,
