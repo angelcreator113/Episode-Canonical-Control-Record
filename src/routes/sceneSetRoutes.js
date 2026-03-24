@@ -20,7 +20,7 @@ function getAnthropicClient() {
   return anthropicClient;
 }
 const refinementQueue    = require('../queues/sceneRefinementQueue');
-const { SceneSet, SceneAngle, Show, Episode, SceneSetEpisode, GenerationJob } = require('../models');
+const { SceneSet, SceneAngle, Universe, Show, Episode, SceneSetEpisode, GenerationJob } = require('../models');
 
 const S3_BUCKET  = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
