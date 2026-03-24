@@ -23,7 +23,8 @@ const OBJECT_RENDERERS = {
 };
 
 function BackgroundImage({ src, width, height }) {
-  const [image] = useImage(src, 'anonymous');
+  // Load without crossOrigin to avoid CORS failures on S3 images
+  const [image] = useImage(src);
   if (!image) return null;
 
   // Cover fit

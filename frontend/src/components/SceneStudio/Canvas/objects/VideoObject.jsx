@@ -18,7 +18,7 @@ export default function VideoObject({ obj, isSelected, onSelect, onTransformEnd,
 
     const video = document.createElement('video');
     video.src = src;
-    video.crossOrigin = 'anonymous';
+    // Skip crossOrigin to avoid CORS failures on S3 videos
     video.muted = true;
     video.loop = true;
     video.playsInline = true;
