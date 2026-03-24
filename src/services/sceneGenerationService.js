@@ -554,8 +554,9 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       : undefined;
 
     // Anchor all angles to the base still so they show the same room from different cameras.
+    // Note: gen4_image uses 'weight' (0-1) not 'tag' for reference images
     const referenceImages = sceneSet.base_still_url
-      ? [{ uri: sceneSet.base_still_url, tag: 'image_reference' }]
+      ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
       : undefined;
 
     const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });

@@ -538,7 +538,7 @@ router.post('/advance-career', optionalAuth, async (req, res) => {
 
     const models = getModels();
 
-    let career = await models.PressCareer?.findOne({
+    const career = await models.PressCareer?.findOne({
       where: { character_slug },
       paranoid: false,
     });

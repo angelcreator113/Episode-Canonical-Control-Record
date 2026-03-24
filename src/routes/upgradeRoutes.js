@@ -332,7 +332,7 @@ router.get('/writing-rhythm/stats', optionalAuth, async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const sessionDates = new Set(sessions.map(s => s.session_date));
 
-    let checkDate = new Date();
+    const checkDate = new Date();
     while (true) {
       const dateStr = checkDate.toISOString().split('T')[0];
       if (sessionDates.has(dateStr)) {
