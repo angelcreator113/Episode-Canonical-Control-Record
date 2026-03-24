@@ -54,6 +54,7 @@ function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteA
   // Sync if parent passes new images
   useEffect(() => { setImages(initialImages); }, [initialImages]);
 
+
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
@@ -575,6 +576,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   {hasBase && (
                     <button onClick={() => { setShowMenu(false); onCascadeRegenerate(set); }} disabled={isGenerating}>
                       <RotateCcw size={12} /> Regenerate All
+                    </button>
+                  )}
+                  {hasBase && totalAngles === 0 && (
+                    <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
+                      <Sparkles size={12} /> Seed Default Angles
                     </button>
                   )}
                   <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
