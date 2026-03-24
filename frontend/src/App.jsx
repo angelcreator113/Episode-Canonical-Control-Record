@@ -345,9 +345,6 @@ function AppContent() {
           <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
           <Route path="/episodes/:episodeId/icon-cues" element={<IconCueTimeline />} />
           
-          {/* Animatic Preview */}
-          <Route path="/episodes/:episodeId/animatic-preview" element={<AnimaticPreview />} />
-          
           {/* ===== PRODUCTION ROUTES ===== */}
           
           {/* Wardrobe */}
