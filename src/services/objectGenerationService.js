@@ -6,6 +6,9 @@
  * Generates transparent PNG object cutouts for Scene Studio.
  * Uses OpenAI's DALL-E 3 API to create isolated objects that can be
  * placed as overlays on the canvas.
+ *
+ * Generated assets are saved to the Asset table for reuse across scenes.
+ * Includes basic rate limiting (1 in-flight per scene, 20/hr per user).
  */
 
 const axios = require('axios');
@@ -24,10 +27,53 @@ const OBJECT_STYLE_ANCHOR = 'Style: Final Fantasy softness, Pinterest-core femin
   'Materials: soft fabrics, light wood, glass, mirrors, shimmer. ' +
   'Quality: sharp edges, clean silhouette, studio lighting.';
 
-/**
- * Build prompt for DALL-E 3 object generation.
- * Emphasizes transparent/isolated object with clean cutout.
- */
+// ─── RATE LIMITING ──────────────────────────────────────────────────────────
+
+// In-flight tracking: sceneId → true (only one generation at a time per scene)
+const inFlight = new Map();
+
+// Hourly rate tracking: userId → { count, resetAt }
+const hourlyUsage = new Map();
+const MAX_PER_HOUR = 20;
+
+function checkRateLimit(userId, sceneId) {
+  // Check in-flight
+  if (inFlight.get(sceneId)) {
+    return { allowed: false, reason: 'A generation is already in progress for this scene. Please wait.' };
+  }
+
+  // Check hourly limit
+  const now = Date.now();
+  const userKey = userId || 'anonymous';
+  let usage = hourlyUsage.get(userKey);
+  if (!usage || now > usage.resetAt) {
+    usage = { count: 0, resetAt: now + 3600000 };
+    hourlyUsage.set(userKey, usage);
+  }
+  if (usage.count >= MAX_PER_HOUR) {
+    const minutesLeft = Math.ceil((usage.resetAt - now) / 60000);
+    return { allowed: false, reason: `Generation limit reached (${MAX_PER_HOUR}/hour). Resets in ${minutesLeft} minutes.` };
+  }
+
+  return { allowed: true };
+}
+
+function markInFlight(sceneId) {
+  inFlight.set(sceneId, true);
+}
+
+function clearInFlight(sceneId) {
+  inFlight.delete(sceneId);
+}
+
+function incrementUsage(userId) {
+  const userKey = userId || 'anonymous';
+  const usage = hourlyUsage.get(userKey);
+  if (usage) usage.count++;
+}
+
+// ─── PROMPT BUILDING ────────────────────────────────────────────────────────
+
 function buildObjectPrompt(userPrompt, styleHints) {
   const parts = [
     'Isolated single object on a pure white background.',
@@ -45,9 +91,8 @@ function buildObjectPrompt(userPrompt, styleHints) {
   return parts.join(' ').trim();
 }
 
-/**
- * Call DALL-E 3 API to generate an image.
- */
+// ─── DALL-E 3 API ───────────────────────────────────────────────────────────
+
 async function callDallE3(prompt) {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
 
@@ -73,9 +118,8 @@ async function callDallE3(prompt) {
   return response.data.data[0];
 }
 
-/**
- * Download image from URL and upload to S3.
- */
+// ─── S3 STORAGE ─────────────────────────────────────────────────────────────
+
 async function storeInS3(imageUrl, sceneId) {
   const response = await axios.get(imageUrl, {
     responseType: 'arraybuffer',
@@ -97,53 +141,123 @@ async function storeInS3(imageUrl, sceneId) {
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
+// ─── ASSET CREATION ─────────────────────────────────────────────────────────
+
 /**
- * Generate object images and store in S3.
+ * Save generated image as a reusable Asset in the database.
+ * Available globally in the user's library under "AI Generated" category.
+ */
+async function createAssetRecord(Asset, { s3Url, prompt, styleHints, showId, userId, revisedPrompt }) {
+  try {
+    const asset = await Asset.create({
+      id: uuidv4(),
+      s3_url_raw: s3Url,
+      s3_url_processed: s3Url,
+      content_type: 'image/png',
+      width: 1024,
+      height: 1024,
+      category: 'ai_generated',
+      asset_type: 'GENERATED_OBJECT',
+      show_id: showId || null,
+      original_filename: `ai-${prompt.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '-')}.png`,
+      metadata: {
+        source: 'dall-e-3',
+        prompt,
+        style_hints: styleHints || null,
+        revised_prompt: revisedPrompt || null,
+        generated_at: new Date().toISOString(),
+        generated_by: userId || null,
+        background_removed: false,
+      },
+    });
+    return asset;
+  } catch (err) {
+    console.error('[ObjectGen] Asset creation failed:', err.message);
+    return null;
+  }
+}
+
+// ─── MAIN EXPORT ────────────────────────────────────────────────────────────
+
+/**
+ * Generate object images and store in S3 + Asset table.
  *
  * @param {string} prompt - User's object description
  * @param {object} options
  * @param {string} options.sceneId - Scene ID for S3 path
  * @param {string} [options.styleHints] - Additional style modifiers
  * @param {number} [options.count=2] - Number of variations (1-4)
+ * @param {string} [options.userId] - User ID for rate limiting
+ * @param {string} [options.showId] - Show ID for asset association
+ * @param {object} [options.Asset] - Sequelize Asset model for DB persistence
  * @returns {Promise<Array<{asset_id: string, url: string, width: number, height: number}>>}
  */
 async function generateObject(prompt, options = {}) {
-  const { sceneId, styleHints, count = 2 } = options;
+  const { sceneId, styleHints, count = 2, userId, showId, Asset } = options;
+
+  // Rate limit check
+  const rateCheck = checkRateLimit(userId, sceneId);
+  if (!rateCheck.allowed) {
+    throw new Error(rateCheck.reason);
+  }
+
+  markInFlight(sceneId);
   const fullPrompt = buildObjectPrompt(prompt, styleHints);
 
   console.log(`[ObjectGen] Generating ${count} object(s): "${prompt}"`);
 
-  // DALL-E 3 only supports n=1, so call in parallel for multiple options
-  const calls = Array.from({ length: Math.min(count, 4) }, () => callDallE3(fullPrompt));
+  try {
+    // DALL-E 3 only supports n=1, so call in parallel for multiple options
+    const calls = Array.from({ length: Math.min(count, 4) }, () => callDallE3(fullPrompt));
 
-  const results = await Promise.allSettled(calls);
-  const options_out = [];
+    const results = await Promise.allSettled(calls);
+    const optionsOut = [];
 
-  for (const result of results) {
-    if (result.status === 'fulfilled' && result.value?.url) {
-      try {
-        const s3Url = await storeInS3(result.value.url, sceneId);
-        options_out.push({
-          asset_id: uuidv4(),
-          url: s3Url,
-          width: 1024,
-          height: 1024,
-          revised_prompt: result.value.revised_prompt,
-        });
-      } catch (err) {
-        console.error('[ObjectGen] S3 upload failed:', err.message);
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value?.url) {
+        try {
+          const s3Url = await storeInS3(result.value.url, sceneId);
+
+          // Save to Asset table if model available
+          let assetId = uuidv4();
+          if (Asset) {
+            const asset = await createAssetRecord(Asset, {
+              s3Url,
+              prompt,
+              styleHints,
+              showId,
+              userId,
+              revisedPrompt: result.value.revised_prompt,
+            });
+            if (asset) assetId = asset.id;
+          }
+
+          optionsOut.push({
+            asset_id: assetId,
+            url: s3Url,
+            width: 1024,
+            height: 1024,
+            revised_prompt: result.value.revised_prompt,
+            background_removed: false,
+          });
+        } catch (err) {
+          console.error('[ObjectGen] S3 upload failed:', err.message);
+        }
+      } else if (result.status === 'rejected') {
+        console.error('[ObjectGen] DALL-E 3 call failed:', result.reason?.message);
       }
-    } else if (result.status === 'rejected') {
-      console.error('[ObjectGen] DALL-E 3 call failed:', result.reason?.message);
     }
-  }
 
-  if (options_out.length === 0) {
-    throw new Error('All generation attempts failed');
-  }
+    if (optionsOut.length === 0) {
+      throw new Error('All generation attempts failed');
+    }
 
-  console.log(`[ObjectGen] Generated ${options_out.length} option(s) successfully`);
-  return options_out;
+    incrementUsage(userId);
+    console.log(`[ObjectGen] Generated ${optionsOut.length} option(s) successfully`);
+    return optionsOut;
+  } finally {
+    clearInFlight(sceneId);
+  }
 }
 
-module.exports = { generateObject };
+module.exports = { generateObject, checkRateLimit };

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, Image, X, Loader } from 'lucide-react';
 import assetService from '../../../../services/assetService';
+import { computeInsertionRect } from './insertionUtils';
 
 /**
  * UploadTab — Inline drag-drop upload zone within the CreationPanel.
@@ -10,7 +11,7 @@ import assetService from '../../../../services/assetService';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'];
 
-export default function UploadTab({ showId, episodeId, onAddAsset }) {
+export default function UploadTab({ showId, episodeId, canvasWidth, canvasHeight, onAddAsset }) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -45,15 +46,21 @@ export default function UploadTab({ showId, episodeId, onAddAsset }) {
       // Place on canvas
       if (onAddAsset) {
         const isVideo = (asset.content_type || '').startsWith('video/');
+        const objType = isVideo ? 'video' : 'image';
+        const rect = computeInsertionRect({
+          srcWidth: asset.width || 400,
+          srcHeight: asset.height || 400,
+          canvasWidth: canvasWidth || 1920,
+          canvasHeight: canvasHeight || 1080,
+          assetRole: 'prop',
+          objectType: objType,
+        });
         onAddAsset({
           id: `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          type: isVideo ? 'video' : 'image',
+          type: objType,
           assetId: asset.id,
           assetUrl: asset.s3_url_processed || asset.s3_url_raw || '',
-          x: 100,
-          y: 100,
-          width: asset.width || 300,
-          height: asset.height || 200,
+          ...rect,
           rotation: 0,
           opacity: 1,
           isVisible: true,
@@ -97,15 +104,21 @@ export default function UploadTab({ showId, episodeId, onAddAsset }) {
   const handleAddRecent = useCallback((asset) => {
     if (!onAddAsset) return;
     const isVideo = (asset.content_type || '').startsWith('video/');
+    const objType = isVideo ? 'video' : 'image';
+    const rect = computeInsertionRect({
+      srcWidth: asset.width || 400,
+      srcHeight: asset.height || 400,
+      canvasWidth: canvasWidth || 1920,
+      canvasHeight: canvasHeight || 1080,
+      assetRole: 'prop',
+      objectType: objType,
+    });
     onAddAsset({
       id: `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      type: isVideo ? 'video' : 'image',
+      type: objType,
       assetId: asset.id,
       assetUrl: asset.s3_url_processed || asset.s3_url_raw || '',
-      x: 100,
-      y: 100,
-      width: asset.width || 300,
-      height: asset.height || 200,
+      ...rect,
       rotation: 0,
       opacity: 1,
       isVisible: true,
@@ -115,7 +128,7 @@ export default function UploadTab({ showId, episodeId, onAddAsset }) {
       usageType: 'overlay',
       _asset: asset,
     });
-  }, [onAddAsset]);
+  }, [onAddAsset, canvasWidth, canvasHeight]);
 
   return (
     <div className="scene-studio-upload-tab">

@@ -1,7 +1,6 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
-import ObjectsPanel from './panels/ObjectsPanel';
 import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
 import useSceneStudioState from './useSceneStudioState';
@@ -21,8 +20,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const canvasContainerRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
   const [isSaving, setIsSaving] = useState(false);
-  const [creationPanelOpen, setCreationPanelOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
   const saveTimerRef = useRef(null);
 
@@ -287,17 +286,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       <div className="scene-studio-body">
         {/* Left Panel */}
         <div className="scene-studio-left-panel">
-          <ObjectsPanel
-            objects={state.objects}
-            selectedIds={state.selectedIds}
-            onSelect={state.selectObject}
-            onToggleVisibility={state.toggleVisibility}
-            onToggleLock={state.toggleLock}
-            onReorder={state.reorderObject}
-            onDelete={state.removeObject}
-            onDuplicate={state.duplicateObject}
-          />
-
           <CreationPanel
             showId={showId}
             episodeId={episodeId}
@@ -306,6 +294,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             canvasHeight={canvasHeight}
             onAddAsset={state.addObject}
             onAddObject={state.addObject}
+            objects={state.objects}
+            selectedIds={state.selectedIds}
+            onSelect={state.selectObject}
+            onToggleVisibility={state.toggleVisibility}
+            onToggleLock={state.toggleLock}
+            onReorder={state.reorderObject}
+            onDelete={state.removeObject}
+            onDuplicate={state.duplicateObject}
+            onRequestTextEdit={(id) => setEditingTextId(id)}
           />
         </div>
 
@@ -323,6 +320,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             panY={state.canvasSettings.panY}
             snapGuides={state.snapGuides}
             gridVisible={state.canvasSettings.gridVisible}
+            editingTextId={editingTextId}
+            onClearEditingText={() => setEditingTextId(null)}
             onSelect={state.selectObject}
             onDeselect={() => {
               state.deselectAll();

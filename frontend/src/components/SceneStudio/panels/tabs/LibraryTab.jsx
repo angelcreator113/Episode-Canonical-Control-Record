@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Image, Video, User, MapPin, Palette } from 'lucide-react';
 import api from '../../../../services/api';
+import { computeInsertionRect } from './insertionUtils';
 
 /**
  * LibraryTab — Browse/search assets from the asset library.
@@ -15,7 +16,7 @@ const FILTERS = [
   { key: 'background', label: 'Backgrounds', icon: MapPin },
 ];
 
-export default function LibraryTab({ showId, episodeId, onAddAsset }) {
+export default function LibraryTab({ showId, episodeId, canvasWidth, canvasHeight, onAddAsset }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [assets, setAssets] = useState([]);
@@ -60,16 +61,23 @@ export default function LibraryTab({ showId, episodeId, onAddAsset }) {
     if (!onAddAsset) return;
     const contentType = asset.content_type || '';
     const isVideo = contentType.startsWith('video/');
+    const objType = isVideo ? 'video' : 'image';
+
+    const rect = computeInsertionRect({
+      srcWidth: asset.width || 400,
+      srcHeight: asset.height || 400,
+      canvasWidth: canvasWidth || 1920,
+      canvasHeight: canvasHeight || 1080,
+      assetRole: asset.category || 'default',
+      objectType: objType,
+    });
 
     onAddAsset({
       id: `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      type: isVideo ? 'video' : 'image',
+      type: objType,
       assetId: asset.id,
       assetUrl: asset.s3_url_processed || asset.s3_url_raw || '',
-      x: 100,
-      y: 100,
-      width: asset.width || 300,
-      height: asset.height || 200,
+      ...rect,
       rotation: 0,
       scaleX: 1,
       scaleY: 1,
@@ -83,7 +91,7 @@ export default function LibraryTab({ showId, episodeId, onAddAsset }) {
       usageType: 'overlay',
       _asset: asset,
     });
-  }, [onAddAsset]);
+  }, [onAddAsset, canvasWidth, canvasHeight]);
 
   return (
     <div className="scene-studio-library-tab">

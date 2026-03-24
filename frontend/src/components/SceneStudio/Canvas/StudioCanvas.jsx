@@ -105,6 +105,8 @@ export default function StudioCanvas({
   onPan,
   gridVisible,
   containerRef,
+  editingTextId,
+  onClearEditingText,
 }) {
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
@@ -268,6 +270,8 @@ export default function StudioCanvas({
               onDragEnd={onDragEnd}
               onTransformEnd={onTransformEnd}
               onUpdateObject={onUpdateObject}
+              autoEdit={obj.type === 'text' && editingTextId === obj.id}
+              onClearAutoEdit={onClearEditingText}
             />
           );
         })}

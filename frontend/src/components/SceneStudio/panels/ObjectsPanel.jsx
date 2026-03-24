@@ -14,6 +14,7 @@ export default function ObjectsPanel({
   onReorder,
   onDelete,
   onDuplicate,
+  embedded,
 }) {
   // Sort by layer order descending (top layer first in the list)
   const sorted = [...objects].sort((a, b) => (b.layerOrder || 0) - (a.layerOrder || 0));
@@ -56,17 +57,19 @@ export default function ObjectsPanel({
   }, [objects, onReorder]);
 
   return (
-    <div className="scene-studio-objects-panel">
-      <div className="scene-studio-panel-header">
-        <Layers size={14} />
-        <span>Objects</span>
-        <span className="scene-studio-badge">{objects.length}</span>
-      </div>
+    <div className={`scene-studio-objects-panel ${embedded ? 'embedded' : ''}`}>
+      {!embedded && (
+        <div className="scene-studio-panel-header">
+          <Layers size={14} />
+          <span>Objects</span>
+          <span className="scene-studio-badge">{objects.length}</span>
+        </div>
+      )}
 
       <div className="scene-studio-objects-list">
         {sorted.length === 0 && (
           <div className="scene-studio-empty-state">
-            No objects yet. Add assets from the drawer below.
+            No objects yet. Use the tabs to add content.
           </div>
         )}
 

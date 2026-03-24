@@ -858,15 +858,31 @@ exports.generateObject = async (req, res) => {
       return res.status(400).json({ success: false, error: 'prompt is required' });
     }
 
+    // Get show_id from the scene for asset association
+    let showId = null;
+    try {
+      const scene = await Scene.findByPk(id, { attributes: ['id', 'episode_id'] });
+      if (scene?.episode_id) {
+        const { Episode } = require('../models');
+        const ep = await Episode.findByPk(scene.episode_id, { attributes: ['show_id'] });
+        showId = ep?.show_id || null;
+      }
+    } catch { /* non-critical */ }
+
     const options = await objectGenerationService.generateObject(prompt.trim(), {
       sceneId: id,
       styleHints: style_hints || null,
       count: 2,
+      userId: req.user?.id || null,
+      showId,
+      Asset,
     });
 
     res.json({ success: true, data: { options } });
   } catch (error) {
     console.error('Scene Studio generateObject error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    // Rate limit errors return 429
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
   }
 };

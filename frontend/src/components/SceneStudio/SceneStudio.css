@@ -1074,6 +1074,77 @@
   animation: scene-studio-spin 1s linear infinite;
 }
 
+/* ── Nav Badge (object count on Objects tab) ── */
+
+.scene-studio-creation-nav-btn {
+  position: relative;
+}
+
+.scene-studio-nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 7px;
+  font-weight: 700;
+  background: #B8962E;
+  color: #fff;
+  min-width: 12px;
+  height: 12px;
+  line-height: 12px;
+  text-align: center;
+  border-radius: 6px;
+  padding: 0 2px;
+}
+
+/* ── Embedded Objects Panel (inside CreationPanel tab) ── */
+
+.scene-studio-objects-panel.embedded {
+  border: none;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.scene-studio-objects-panel.embedded .scene-studio-objects-list {
+  padding-top: 4px;
+}
+
+/* ── Decor Category Pills ── */
+
+.scene-studio-decor-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.scene-studio-decor-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 4px 6px;
+}
+
+.scene-studio-decor-pill {
+  padding: 3px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: transparent;
+  color: #777;
+  font-size: 9px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.scene-studio-decor-pill:hover {
+  color: #2C2C2C;
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+.scene-studio-decor-pill.active {
+  color: #B8962E;
+  border-color: rgba(184, 150, 46, 0.4);
+  background: rgba(184, 150, 46, 0.08);
+}
+
 /* ── Responsive ── */
 
 @media (max-width: 1024px) {

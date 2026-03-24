@@ -43,11 +43,12 @@ const TEXT_PRESETS = [
   },
 ];
 
-export default function TextTab({ canvasWidth, canvasHeight, onAddObject }) {
+export default function TextTab({ canvasWidth, canvasHeight, onAddObject, onRequestTextEdit }) {
   const handleAdd = useCallback((preset) => {
     if (!onAddObject) return;
+    const id = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     onAddObject({
-      id: `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id,
       type: 'text',
       assetId: null,
       assetUrl: '',
@@ -62,7 +63,11 @@ export default function TextTab({ canvasWidth, canvasHeight, onAddObject }) {
       label: preset.label,
       styleData: { ...preset.styleData },
     });
-  }, [canvasWidth, canvasHeight, onAddObject]);
+    // Trigger inline edit mode on the newly added text
+    if (onRequestTextEdit) {
+      setTimeout(() => onRequestTextEdit(id), 200);
+    }
+  }, [canvasWidth, canvasHeight, onAddObject, onRequestTextEdit]);
 
   return (
     <div className="scene-studio-text-tab">

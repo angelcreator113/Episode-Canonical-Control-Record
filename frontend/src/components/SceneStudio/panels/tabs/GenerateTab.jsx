@@ -75,21 +75,31 @@ export default function GenerateTab({ sceneId, canvasWidth, canvasHeight, onAddA
 
   const handleAddResult = useCallback((option) => {
     if (!onAddAsset) return;
+    // Smart sizing: 25% of canvas width, preserve aspect ratio
+    const cw = canvasWidth || 1920;
+    const ch = canvasHeight || 1080;
+    const srcW = option.width || 1024;
+    const srcH = option.height || 1024;
+    const aspect = srcW / srcH;
+    let w = cw * 0.25;
+    let h = w / aspect;
+    if (h > ch * 0.35) { h = ch * 0.35; w = h * aspect; }
+
     onAddAsset({
       id: `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: 'image',
       assetId: option.asset_id,
       assetUrl: option.url,
-      x: (canvasWidth || 1920) / 2 - 100,
-      y: (canvasHeight || 1080) / 2 - 100,
-      width: option.width || 200,
-      height: option.height || 200,
+      x: Math.round(cw / 2 - w / 2),
+      y: Math.round(ch / 2 - h / 2),
+      width: Math.round(w),
+      height: Math.round(h),
       rotation: 0,
       opacity: 1,
       isVisible: true,
       isLocked: false,
       label: prompt.slice(0, 30) || 'AI Object',
-      assetRole: 'decor',
+      assetRole: 'ai_generated',
       usageType: 'overlay',
     });
   }, [prompt, canvasWidth, canvasHeight, onAddAsset]);
