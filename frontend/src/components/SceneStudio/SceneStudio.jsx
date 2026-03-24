@@ -49,6 +49,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
   const saveTimerRef = useRef(null);
+  const saveRef = useRef(null);
 
   // Lifted creation panel state
   const [activeCreationTab, setActiveCreationTab] = useState('objects');
@@ -59,6 +60,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [hasInteracted, setHasInteracted] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [backgroundSelected, setBackgroundSelected] = useState(false);
   const prevObjectCountRef = useRef(0);
 
   const canvasWidth = PLATFORM_PRESETS[platform]?.width || 1920;
@@ -114,19 +116,22 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state]);
 
+  // Keep a stable ref to the latest save function so auto-save never goes stale
+  useEffect(() => { saveRef.current = save; }, [save]);
+
   // Auto-save (3s debounce)
   useEffect(() => {
     if (!state.isDirty || isLoading) return;
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      save();
+      if (saveRef.current) saveRef.current();
     }, 3000);
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [state.isDirty, state.objects, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.isDirty, state.objects, isLoading]);
 
   // ── Track first object add (for overlay + hint) ──
 
@@ -474,9 +479,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             gridVisible={state.canvasSettings.gridVisible}
             editingTextId={editingTextId}
             onClearEditingText={() => setEditingTextId(null)}
-            onSelect={state.selectObject}
+            backgroundSelected={backgroundSelected}
+            onBackgroundSelect={() => {
+              state.deselectAll();
+              setBackgroundSelected(true);
+            }}
+            onSelect={(id, shiftKey) => {
+              setBackgroundSelected(false);
+              state.selectObject(id, shiftKey);
+            }}
             onDeselect={() => {
               state.deselectAll();
+              setBackgroundSelected(false);
               handleCanvasClickForTool();
             }}
             onUpdateObject={state.updateObject}
@@ -561,6 +575,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onActivateVariant={state.activateVariant}
             onSetActiveAngle={state.setActiveAngleId}
             contextType={state.contextType}
+            backgroundSelected={backgroundSelected}
+            backgroundUrl={backgroundUrl}
           />
         </div>
       </div>

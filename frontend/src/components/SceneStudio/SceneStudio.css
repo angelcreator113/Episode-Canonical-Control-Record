@@ -1611,6 +1611,29 @@
   to { opacity: 1; }
 }
 
+/* ── Background Inspector ── */
+
+.scene-studio-bg-preview {
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.scene-studio-bg-preview img {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+  max-height: 160px;
+}
+
+.scene-studio-bg-hint {
+  font-size: 11px;
+  color: #888;
+  line-height: 1.5;
+  margin: 0;
+}
+
 /* ── First-Object Hint ── */
 
 .scene-studio-first-hint {

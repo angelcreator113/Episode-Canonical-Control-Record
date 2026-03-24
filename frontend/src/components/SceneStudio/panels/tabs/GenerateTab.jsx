@@ -164,13 +164,16 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
     } catch (err) {
       console.error('Generate error:', err);
       const msg = err.response?.data?.error || 'Generation failed.';
+      const status = err.response?.status;
       // User-friendly error messages
       if (msg.includes('limit')) {
         setError('You\'ve reached the generation limit (20/hour). Try again in a few minutes.');
       } else if (msg.includes('in progress')) {
         setError('Another generation is in progress. Please wait for it to complete.');
-      } else if (msg.includes('OPENAI')) {
-        setError('AI service temporarily unavailable. Please try again shortly.');
+      } else if (msg.includes('not configured') || msg.includes('OPENAI_API_KEY')) {
+        setError('DALL-E image generation is not configured on this server. The OPENAI_API_KEY environment variable needs to be set.');
+      } else if (status === 404) {
+        setError('Generate endpoint not found. This feature may not be available for this context.');
       } else {
         setError(msg);
       }

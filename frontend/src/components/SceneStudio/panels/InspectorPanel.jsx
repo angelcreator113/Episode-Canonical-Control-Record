@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import {
   Settings, Move, RotateCw, Maximize2, Eye, EyeOff, Lock, Unlock,
   FlipHorizontal, FlipVertical, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown,
-  Trash2, Copy, Layers, GitBranch,
+  Trash2, Copy, Layers, GitBranch, ImageIcon,
 } from 'lucide-react';
 
 /**
@@ -66,6 +66,8 @@ export default function InspectorPanel({
   onActivateVariant,
   onSetActiveAngle,
   contextType,
+  backgroundSelected,
+  backgroundUrl,
 }) {
   const selectedObjects = useMemo(
     () => objects.filter((o) => selectedIds.has(o.id)),
@@ -73,6 +75,49 @@ export default function InspectorPanel({
   );
 
   const selected = selectedObjects.length === 1 ? selectedObjects[0] : null;
+
+  // Background selected — show background info
+  if (backgroundSelected && backgroundUrl && selectedObjects.length === 0) {
+    return (
+      <div className="scene-studio-inspector">
+        <div className="scene-studio-panel-header">
+          <ImageIcon size={14} />
+          <span>Background</span>
+        </div>
+
+        <div className="scene-studio-section">
+          <div className="scene-studio-bg-preview">
+            <img src={backgroundUrl} alt="Background" />
+          </div>
+          <p className="scene-studio-bg-hint">
+            This is the scene background image. Use the Generate tab to create objects to layer on top, or the Library tab to add existing assets.
+          </p>
+        </div>
+
+        <div className="scene-studio-section">
+          <h4>Canvas</h4>
+          <div className="scene-studio-input-row">
+            <label>Grid</label>
+            <button
+              className={`scene-studio-toggle ${canvasSettings.gridVisible ? 'active' : ''}`}
+              onClick={() => onUpdateCanvasSettings({ gridVisible: !canvasSettings.gridVisible })}
+            >
+              {canvasSettings.gridVisible ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div className="scene-studio-input-row">
+            <label>Snap</label>
+            <button
+              className={`scene-studio-toggle ${canvasSettings.snapEnabled ? 'active' : ''}`}
+              onClick={() => onUpdateCanvasSettings({ snapEnabled: !canvasSettings.snapEnabled })}
+            >
+              {canvasSettings.snapEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // No selection — show canvas settings
   if (selectedObjects.length === 0) {

@@ -22,7 +22,7 @@ const OBJECT_RENDERERS = {
   overlay: ImageObject,
 };
 
-function BackgroundImage({ src, width, height }) {
+function BackgroundImage({ src, width, height, isSelected, onClick }) {
   // Load without crossOrigin to avoid CORS failures on S3 images
   const [image] = useImage(src);
   if (!image) return null;
@@ -45,14 +45,36 @@ function BackgroundImage({ src, width, height }) {
   }
 
   return (
-    <KonvaImage
-      image={image}
-      x={drawX}
-      y={drawY}
-      width={drawW}
-      height={drawH}
-      listening={false}
-    />
+    <>
+      <KonvaImage
+        image={image}
+        x={drawX}
+        y={drawY}
+        width={drawW}
+        height={drawH}
+        listening={true}
+        onClick={(e) => {
+          e.cancelBubble = true;
+          if (onClick) onClick();
+        }}
+        onTap={(e) => {
+          e.cancelBubble = true;
+          if (onClick) onClick();
+        }}
+      />
+      {isSelected && (
+        <Rect
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          stroke="#667eea"
+          strokeWidth={3}
+          dash={[8, 4]}
+          listening={false}
+        />
+      )}
+    </>
   );
 }
 
@@ -107,6 +129,8 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
   containerRef,
   editingTextId,
   onClearEditingText,
+  backgroundSelected,
+  onBackgroundSelect,
 }, forwardedRef) {
   const stageRef = useRef(null);
 
@@ -236,6 +260,8 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
             src={backgroundUrl}
             width={canvasWidth}
             height={canvasHeight}
+            isSelected={backgroundSelected}
+            onClick={onBackgroundSelect}
           />
         )}
 
