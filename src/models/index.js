@@ -135,8 +135,10 @@ let AIUsageLog; // AI API cost/token tracking
 let CharacterArc; // Arc tracking: wound clock, stakes, visibility, David silence
 let StoryTexture; // Texture layer: inner thought, conflict, body narrator, private moment, post, bleed
 let StoryTaskArc; // Story Engine: persisted 50-story task arc per character
+let SceneObjectVariant; // Scene Studio: variant groups for scene objects
 let SceneSet; // Scene Sets: canonical LalaVerse locations for generative scene pipeline
 let SceneAngle; // Scene Angles: camera angles within a scene set
+let SceneSetEpisode; // Join table: many-to-many between scene sets and episodes
 let GenerationJob; // Async job queue for scene generation
 
 try {
@@ -377,8 +379,10 @@ try {
   AssetRole = require('./AssetRole')(sequelize, DataTypes);
   UniverseCharacter = require('./UniverseCharacter')(sequelize, DataTypes);
   WorldCharacter = require('./WorldCharacter')(sequelize, DataTypes);
+  SceneObjectVariant = require('./SceneObjectVariant')(sequelize);
   SceneSet = require('./SceneSet')(sequelize);
   SceneAngle = require('./SceneAngle')(sequelize);
+  SceneSetEpisode = require('./SceneSetEpisode')(sequelize);
   GenerationJob = require('./GenerationJob')(sequelize);
 
   console.log('✅ All models loaded successfully');
@@ -522,8 +526,10 @@ const requiredModels = {
   CharacterArc,
   StoryTexture,
   StoryTaskArc,
+  SceneObjectVariant,
   SceneSet,
   SceneAngle,
+  SceneSetEpisode,
   GenerationJob,
 };
 
@@ -740,8 +746,20 @@ if (EditMap && EditMap.associate) {
 if (CharacterArc && CharacterArc.associate) {
   CharacterArc.associate(requiredModels);
 }
+// Episode ↔ SceneSet (M:N through SceneSetEpisode)
+if (Episode && SceneSetEpisode && SceneSet) {
+  Episode.belongsToMany(SceneSet, {
+    through: SceneSetEpisode,
+    foreignKey: 'episode_id',
+    otherKey: 'scene_set_id',
+    as: 'sceneSets',
+  });
+}
 if (SceneSet && SceneSet.associate) {
   SceneSet.associate(requiredModels);
+}
+if (SceneSetEpisode && SceneSetEpisode.associate) {
+  SceneSetEpisode.associate(requiredModels);
 }
 if (SceneAngle && SceneAngle.associate) {
   SceneAngle.associate(requiredModels);
@@ -896,6 +914,56 @@ SceneAsset.belongsTo(Asset, {
   foreignKey: 'asset_id',
   as: 'asset',
 });
+
+// ==================== SCENE OBJECT VARIANTS (Scene Studio) ====================
+
+if (SceneObjectVariant) {
+  Scene.hasMany(SceneObjectVariant, {
+    foreignKey: 'scene_id',
+    as: 'variantGroups',
+  });
+
+  SceneObjectVariant.belongsTo(Scene, {
+    foreignKey: 'scene_id',
+    as: 'scene',
+  });
+
+  SceneObjectVariant.belongsTo(SceneAsset, {
+    foreignKey: 'active_variant_id',
+    as: 'activeVariant',
+  });
+
+  SceneAsset.hasMany(SceneObjectVariant, {
+    foreignKey: 'active_variant_id',
+    as: 'activeInGroups',
+  });
+}
+
+// ==================== SCENE SET ↔ SCENE ASSETS (Scene Studio) ====================
+
+if (SceneSet && SceneAsset) {
+  SceneSet.hasMany(SceneAsset, {
+    foreignKey: 'scene_set_id',
+    as: 'studioObjects',
+  });
+
+  SceneAsset.belongsTo(SceneSet, {
+    foreignKey: 'scene_set_id',
+    as: 'sceneSet',
+  });
+}
+
+if (SceneAngle && SceneAsset) {
+  SceneAngle.hasMany(SceneAsset, {
+    foreignKey: 'scene_angle_id',
+    as: 'studioObjects',
+  });
+
+  SceneAsset.belongsTo(SceneAngle, {
+    foreignKey: 'scene_angle_id',
+    as: 'sceneAngle',
+  });
+}
 
 // ==================== EPISODE WARDROBE DEFAULTS ====================
 
@@ -1896,6 +1964,8 @@ module.exports.AIUsageLog = AIUsageLog;
 module.exports.CharacterArc = CharacterArc;
 module.exports.StoryTexture = StoryTexture;
 module.exports.StoryTaskArc = StoryTaskArc;
+module.exports.SceneObjectVariant = SceneObjectVariant;
 module.exports.SceneSet = SceneSet;
 module.exports.SceneAngle = SceneAngle;
+module.exports.SceneSetEpisode = SceneSetEpisode;
 module.exports.GenerationJob = GenerationJob;

@@ -6,11 +6,21 @@ const { Op }  = require('sequelize');
 const multer  = require('multer');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { optionalAuth } = require('../middleware/auth');
+const Anthropic          = require('@anthropic-ai/sdk');
 const sceneGenService    = require('../services/sceneGenerationService');
 const artifactService    = require('../services/artifactDetectionService');
 const postProcessService = require('../services/postProcessingService');
+
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+let anthropicClient = null;
+function getAnthropicClient() {
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return anthropicClient;
+}
 const refinementQueue    = require('../queues/sceneRefinementQueue');
-const { SceneSet, SceneAngle, Universe, Show, GenerationJob } = require('../models');
+const { SceneSet, SceneAngle, Universe, Show, Episode, SceneSetEpisode, GenerationJob } = require('../models');
 
 const S3_BUCKET  = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -42,8 +52,18 @@ async function ensureGenerationJobsTable() {
 
 router.get('/', optionalAuth, async (req, res) => {
   try {
+    const includes = [{ model: SceneAngle, as: 'angles' }];
+    if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'] });
+    if (Episode && SceneSetEpisode) {
+      includes.push({
+        model: Episode,
+        as: 'episodes',
+        attributes: ['id', 'title', 'episode_number', 'season_number'],
+        through: { attributes: [] },
+      });
+    }
     const sets = await SceneSet.findAll({
-      include: [{ model: SceneAngle, as: 'angles' }],
+      include: includes,
       order: [['created_at', 'DESC'], [{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
     });
     res.json({ success: true, count: sets.length, data: sets });
@@ -68,6 +88,7 @@ router.post('/', optionalAuth, async (req, res) => {
       show_id,
       base_runway_model,
       notes,
+      episode_ids,
     } = req.body;
 
     if (!name || !scene_type) {
@@ -100,6 +121,16 @@ router.post('/', optionalAuth, async (req, res) => {
       }
     }
 
+    // Link episodes if provided
+    if (Array.isArray(episode_ids) && episode_ids.length > 0 && SceneSetEpisode) {
+      for (const epId of episode_ids) {
+        await SceneSetEpisode.findOrCreate({
+          where: { scene_set_id: set.id, episode_id: epId },
+          defaults: { scene_set_id: set.id, episode_id: epId },
+        });
+      }
+    }
+
     // Auto-enqueue base generation when a description is provided
     let jobId = null;
     if (canonical_description) {
@@ -123,8 +154,18 @@ router.post('/', optionalAuth, async (req, res) => {
 
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
+    const includes = [{ model: SceneAngle, as: 'angles' }];
+    if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'] });
+    if (Episode && SceneSetEpisode) {
+      includes.push({
+        model: Episode,
+        as: 'episodes',
+        attributes: ['id', 'title', 'episode_number', 'season_number'],
+        through: { attributes: [] },
+      });
+    }
     const set = await SceneSet.findByPk(req.params.id, {
-      include: [{ model: SceneAngle, as: 'angles' }],
+      include: includes,
       order: [[{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
     });
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -259,6 +300,119 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
     res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/angles  — add an angle to a scene set ────────────────────────
+
+// ─── POST /:id/suggest-angles  — AI suggests angles for a scene set ─────────
+
+const VALID_ANGLE_LABELS = ['WIDE', 'CLOSET', 'VANITY', 'WINDOW', 'DOORWAY', 'ESTABLISHING', 'ACTION', 'CLOSE', 'OVERHEAD', 'OTHER'];
+
+router.post('/:id/suggest-angles', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id, {
+      include: [{ model: SceneAngle, as: 'angles' }],
+    });
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.canonical_description) {
+      return res.status(400).json({ success: false, error: 'Scene set needs a canonical description first' });
+    }
+
+    const existingLabels = (set.angles || []).map(a => a.angle_label);
+    const sceneType = set.scene_type || 'OTHER';
+
+    const prompt = `You are a cinematic director planning camera angles and room coverage for a scene location.
+
+Scene name: ${set.name}
+Scene type: ${sceneType}
+Description: ${set.canonical_description}
+${set.mood_tags?.length ? `Mood: ${set.mood_tags.join(', ')}` : ''}
+${set.aesthetic_tags?.length ? `Aesthetic: ${set.aesthetic_tags.join(', ')}` : ''}
+${existingLabels.length ? `Already created angles: ${existingLabels.join(', ')} — do NOT suggest duplicates of these.` : ''}
+
+Suggest 4-6 distinct camera angles or room areas for this location. For event spaces, include BOTH different camera angles of the main space AND separate areas/rooms (entrance, outdoor area, interior rooms, etc.).
+
+Valid angle_label values: ${VALID_ANGLE_LABELS.join(', ')}. Use OTHER for non-standard angles.
+
+Return ONLY a JSON array with objects containing:
+- angle_label: one of the valid labels above
+- angle_name: a short descriptive name (2-4 words, e.g. "Glass Door Entrance")
+- camera_direction: detailed camera placement and framing description (1-2 sentences)
+- description: what this angle captures and why it matters for storytelling (1 sentence)
+- beat_affinity: array of beat numbers 1-5 this angle works best for (e.g. [1,2])
+
+Return raw JSON only, no markdown or explanation.`;
+
+    const client = getAnthropicClient();
+    const message = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 1500,
+      temperature: 0.7,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = message.content[0].text.trim();
+    let suggestions;
+    try {
+      suggestions = JSON.parse(text);
+    } catch {
+      // Try to extract JSON array from response
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) suggestions = JSON.parse(match[0]);
+      else throw new Error('Could not parse AI suggestions');
+    }
+
+    // Validate and sanitize
+    suggestions = suggestions
+      .filter(s => s.angle_label && s.angle_name)
+      .map(s => ({
+        angle_label: VALID_ANGLE_LABELS.includes(s.angle_label) ? s.angle_label : 'OTHER',
+        angle_name: String(s.angle_name).slice(0, 100),
+        camera_direction: String(s.camera_direction || '').slice(0, 300),
+        description: String(s.description || '').slice(0, 200),
+        beat_affinity: Array.isArray(s.beat_affinity) ? s.beat_affinity.filter(b => Number.isInteger(b) && b >= 1 && b <= 10) : [],
+      }));
+
+    res.json({ success: true, data: suggestions });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/suggest-angles error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/ai-camera-direction  — AI generates camera direction for an angle
+
+router.post('/:id/ai-camera-direction', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { angle_label, angle_name } = req.body;
+    if (!angle_label) return res.status(400).json({ success: false, error: 'angle_label is required' });
+
+    const prompt = `You are a cinematic director. Generate a camera direction for this scene angle.
+
+Scene: ${set.name}
+Description: ${set.canonical_description || 'No description available'}
+Angle label: ${angle_label}
+${angle_name ? `Angle name: ${angle_name}` : ''}
+
+Write a concise camera placement and framing direction (1-2 sentences). Describe where the camera is, what it's facing, and the composition. Return only the direction text, nothing else.`;
+
+    const client = getAnthropicClient();
+    const message = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 200,
+      temperature: 0.5,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const direction = message.content[0].text.trim();
+    res.json({ success: true, data: { camera_direction: direction } });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/ai-camera-direction error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -829,5 +983,113 @@ router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
   }
 });
 
+
+// ─── PATCH /:id/cover-angle  — set persistent cover image ───────────────────
+
+router.patch('/:id/cover-angle', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { angle_id } = req.body;
+
+    // Allow null to clear cover
+    if (angle_id) {
+      const angle = await SceneAngle.findOne({
+        where: { id: angle_id, scene_set_id: set.id },
+      });
+      if (!angle) return res.status(400).json({ success: false, error: 'Angle does not belong to this set' });
+    }
+
+    await set.update({ cover_angle_id: angle_id || null });
+    res.json({ success: true, data: set });
+  } catch (err) {
+    console.error('Scene Sets PATCH /:id/cover-angle error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/episodes  — link episodes to a scene set ────────────────────
+
+router.post('/:id/episodes', optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { episode_ids } = req.body;
+    if (!Array.isArray(episode_ids) || episode_ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'episode_ids array is required' });
+    }
+
+    const results = [];
+    for (const episodeId of episode_ids) {
+      const [link] = await SceneSetEpisode.findOrCreate({
+        where: { scene_set_id: set.id, episode_id: episodeId },
+        defaults: { scene_set_id: set.id, episode_id: episodeId },
+      });
+      results.push(link);
+    }
+
+    // Return updated episodes list
+    const episodes = await Episode.findAll({
+      include: [{
+        model: SceneSet,
+        as: 'sceneSets',
+        where: { id: set.id },
+        attributes: [],
+        through: { attributes: [] },
+      }],
+      attributes: ['id', 'title', 'episode_number', 'season_number'],
+    });
+
+    res.json({ success: true, data: episodes });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/episodes error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── DELETE /:id/episodes/:episodeId  — unlink an episode ───────────────────
+
+router.delete('/:id/episodes/:episodeId', optionalAuth, async (req, res) => {
+  try {
+    const destroyed = await SceneSetEpisode.destroy({
+      where: {
+        scene_set_id: req.params.id,
+        episode_id: req.params.episodeId,
+      },
+    });
+    if (!destroyed) return res.status(404).json({ success: false, error: 'Link not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Scene Sets DELETE /:id/episodes/:episodeId error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// SCENE STUDIO routes for scene sets
+// ══════════════════════════════════════════════════════════════════════
+
+const sceneStudioController = require('../controllers/sceneStudioController');
+const { asyncHandler } = require('../middleware/errorHandler');
+
+// GET /api/v1/scene-sets/:id/canvas - Load canvas state for scene set
+router.get('/:id/canvas', asyncHandler(sceneStudioController.getSceneSetCanvas));
+
+// PUT /api/v1/scene-sets/:id/canvas - Bulk save canvas for scene set
+router.put('/:id/canvas', optionalAuth, asyncHandler(sceneStudioController.saveSceneSetCanvas));
+
+// POST /api/v1/scene-sets/:id/objects - Add object to scene set canvas
+router.post('/:id/objects', optionalAuth, asyncHandler(sceneStudioController.addSceneSetObject));
+
+// PATCH /api/v1/scene-sets/:id/objects/:objectId - Update object on scene set
+router.patch('/:id/objects/:objectId', optionalAuth, asyncHandler(sceneStudioController.updateObject));
+
+// DELETE /api/v1/scene-sets/:id/objects/:objectId - Remove object from scene set
+router.delete('/:id/objects/:objectId', optionalAuth, asyncHandler(sceneStudioController.deleteObject));
+
+// POST /api/v1/scene-sets/:id/objects/:objectId/duplicate - Duplicate object
+router.post('/:id/objects/:objectId/duplicate', optionalAuth, asyncHandler(sceneStudioController.duplicateObject));
 
 module.exports = router;

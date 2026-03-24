@@ -229,6 +229,16 @@ module.exports = (sequelize) => {
       otherKey: 'wardrobe_id',
       as: 'wardrobeItems',
     });
+
+    // Many-to-many with SceneSet through scene_set_episodes
+    if (models.SceneSetEpisode) {
+      Episode.belongsToMany(models.SceneSet, {
+        through: models.SceneSetEpisode,
+        foreignKey: 'episode_id',
+        otherKey: 'scene_set_id',
+        as: 'sceneSets',
+      });
+    }
   };
 
   /**

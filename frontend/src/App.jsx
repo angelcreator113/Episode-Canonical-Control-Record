@@ -46,6 +46,7 @@ const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
 const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
 const WorldStudio = lazy(() => import('./pages/WorldStudio'));
 const SceneStudio = lazy(() => import('./pages/SceneStudio'));
+const SceneStudioPage = lazy(() => import('./pages/SceneStudioPage'));
 const ShowSettings = lazy(() => import('./pages/ShowSettings'));
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
@@ -269,7 +270,8 @@ function AppContent() {
   // Social Import is now embedded in Universe page as a tab
   const isSetupWizard = location.pathname === '/setup';
   const isStoryEngine = location.pathname === '/story-engine';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isSetupWizard || isStoryEngine;
+  const isSceneStudioEditor = /\/studio\/scene(-set)?\//.test(location.pathname);
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isSetupWizard || isStoryEngine || isSceneStudioEditor;
   const hideFooter = isFullScreen;
 
   return (
@@ -335,6 +337,10 @@ function AppContent() {
           {/* Studio — universe-level entry points */}
           <Route path="/studio/timeline" element={<StudioTimelinePage />} />
           <Route path="/studio/scene-composer" element={<StudioSceneComposerPage />} />
+
+          {/* Scene Studio (Canva-like visual editor) */}
+          <Route path="/studio/scene/:sceneId" element={<SceneStudioPage />} />
+          <Route path="/studio/scene-set/:sceneSetId" element={<SceneStudioPage />} />
           
           {/* Scene Library */}
           <Route path="/scene-library" element={<SceneLibrary />} />
