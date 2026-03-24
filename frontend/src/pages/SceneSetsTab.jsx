@@ -916,7 +916,6 @@ export default function SceneSetsTab() {
         throw new Error(err.error || 'Upload failed');
       }
       showToast(`Base image uploaded for "${set.name}"`);
-      setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       fetchSets();
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
@@ -1000,7 +999,6 @@ export default function SceneSetsTab() {
       } else {
         showToast(`${completed} completed, ${failed} failed`, failed > 0 ? 'error' : 'success');
       }
-      if (completed > 0) setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       fetchSets();
     } catch (err) {
       showToast(err?.message || 'Generation failed', 'error');
@@ -1217,7 +1215,6 @@ export default function SceneSetsTab() {
       } else {
         showToast(job.error || 'Cascade regeneration failed', 'error');
       }
-      setImageVersions(v => ({ ...v, [set.id]: (v[set.id] || 0) + 1 }));
       fetchSets();
     } catch (err) {
       showToast(err.message || 'Cascade regeneration failed', 'error');
