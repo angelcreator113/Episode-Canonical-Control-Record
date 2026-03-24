@@ -23,13 +23,30 @@ exports.getCanvas = async (req, res) => {
     const sceneAttributes = [
       'id', 'title', 'episode_id', 'scene_number', 'description',
       'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
+      'scene_set_id', 'scene_angle_id',
     ];
     if (studioMigrated) {
       const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
       if (sceneCols.canvas_settings) sceneAttributes.push('canvas_settings');
     }
 
-    const scene = await Scene.findByPk(id, { attributes: sceneAttributes });
+    const scene = await Scene.findByPk(id, {
+      attributes: sceneAttributes,
+      include: [
+        {
+          model: SceneAngle,
+          as: 'sceneAngle',
+          attributes: ['id', 'still_image_url', 'video_clip_url', 'thumbnail_url', 'enhanced_still_url'],
+          required: false,
+        },
+        {
+          model: SceneSet,
+          as: 'sceneSet',
+          attributes: ['id', 'name', 'base_still_url', 'cover_angle_id'],
+          required: false,
+        },
+      ],
+    });
 
     if (!scene) {
       return res.status(404).json({ success: false, error: 'Scene not found' });

@@ -197,7 +197,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   const backgroundUrl = (() => {
     if (state.contextType === 'scene') {
-      return state.sceneData?.background_url || null;
+      const s = state.sceneData;
+      return s?.background_url
+        || s?.sceneAngle?.enhanced_still_url
+        || s?.sceneAngle?.still_image_url
+        || s?.sceneSet?.base_still_url
+        || null;
     }
     if (state.contextType === 'sceneSet') {
       const angle = state.angles?.find((a) => a.id === state.activeAngleId);
