@@ -110,7 +110,6 @@ const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
-const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPage'));
 const SocialProfileGenerator = lazy(() => import('./pages/SocialProfileGenerator'));
 const NarrativeControlCenter = lazy(() => import('./pages/NarrativeControlCenter'));
 const AmberCommandCenter = lazy(() => import('./pages/AmberCommandCenter'));
@@ -132,10 +131,6 @@ const WorldLocations = lazy(() => import('./pages/WorldLocations'));
 const ShowBrain = lazy(() => import('./pages/ShowBrain'));
 const TextureReviewPage = lazy(() => import('./pages/TextureReviewPage'));
 // WorldView merged into CharacterRegistryPage
-
-// Heavy components — lazy loaded
-const SceneComposerFull = lazy(() => import('./components/SceneComposer/SceneComposerFull'));
-const AnimaticPreview = lazy(() => import('./components/Episodes/SceneComposer/AnimaticPreview'));
 
 // Layout components — eager loaded (always visible)
 import Sidebar from './components/layout/Sidebar';
@@ -261,7 +256,6 @@ function AppContent() {
   // Check if current route is Timeline Editor, Scene Composer, Export, Storyteller, or WriteMode (full-screen modes)
   // Only match episode-scoped URLs for full-screen (not /studio/* picker pages)
   const isTimelineEditor = /\/episodes\/[^/]+\/timeline/.test(location.pathname);
-  const isSceneComposer = /\/episodes\/[^/]+\/scene-composer/.test(location.pathname);
   const isExportPage = location.pathname.includes('/export');
   const isStorytellerPage = location.pathname.includes('/storyteller');
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
@@ -271,7 +265,7 @@ function AppContent() {
   const isSetupWizard = location.pathname === '/setup';
   const isStoryEngine = location.pathname === '/story-engine';
   const isSceneStudioEditor = /\/studio\/scene(-set)?\//.test(location.pathname);
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isSetupWizard || isStoryEngine || isSceneStudioEditor;
+  const isFullScreen = isTimelineEditor || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isSetupWizard || isStoryEngine || isSceneStudioEditor;
   const hideFooter = isFullScreen;
 
   return (
@@ -331,12 +325,8 @@ function AppContent() {
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
           <Route path="/shows/:showId/quick-episode" element={<QuickEpisodeCreator />} />
           <Route path="/shows/:id/settings" element={<ShowSettings />} />
-          {/* Scene Composer */}
-          <Route path="/episodes/:episodeId/scene-composer" element={<SceneComposerFull />} />
-          
           {/* Studio — universe-level entry points */}
           <Route path="/studio/timeline" element={<StudioTimelinePage />} />
-          <Route path="/studio/scene-composer" element={<StudioSceneComposerPage />} />
 
           {/* Scene Studio (Canva-like visual editor) */}
           <Route path="/studio/scene/:sceneId" element={<SceneStudioPage />} />
@@ -354,9 +344,6 @@ function AppContent() {
           {/* Timeline Editor */}
           <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
           <Route path="/episodes/:episodeId/icon-cues" element={<IconCueTimeline />} />
-          
-          {/* Animatic Preview */}
-          <Route path="/episodes/:episodeId/animatic-preview" element={<AnimaticPreview />} />
           
           {/* ===== PRODUCTION ROUTES ===== */}
           

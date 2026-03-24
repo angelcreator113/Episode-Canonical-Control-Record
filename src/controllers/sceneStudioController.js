@@ -852,7 +852,7 @@ exports.addSceneSetObject = async (req, res) => {
 exports.generateObject = async (req, res) => {
   try {
     const { id } = req.params;
-    const { prompt, style_hints } = req.body;
+    const { prompt, style_hints, remove_background } = req.body;
 
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({ success: false, error: 'prompt is required' });
@@ -873,6 +873,7 @@ exports.generateObject = async (req, res) => {
       sceneId: id,
       styleHints: style_hints || null,
       count: 2,
+      removeBackground: remove_background === true,
       userId: req.user?.id || null,
       showId,
       Asset,

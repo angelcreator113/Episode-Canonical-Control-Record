@@ -14,7 +14,6 @@ import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
 import TagInput from '../components/TagInput';
 import { STATUS_OPTIONS } from '../utils/constants';
-import SceneComposerFull from '../components/SceneComposer/SceneComposerFull';
 import './CreateEpisode.css';
 
 const MAX_THUMB_MB = 5;
@@ -573,15 +572,6 @@ const CreateEpisode = () => {
           >
             🎬 Content
           </button>
-          {isEditMode && (
-            <button
-              type="button"
-              className={`tab-button ${activeTab === 'scenes' ? 'active' : ''}`}
-              onClick={() => setActiveTab('scenes')}
-            >
-              🎞️ Scene Composer
-            </button>
-          )}
           <button
             type="button"
             className={`tab-button ${activeTab === 'team' ? 'active' : ''}`}
@@ -608,8 +598,7 @@ const CreateEpisode = () => {
 
       {/* BODY */}
       <div className="episode-body">
-        {/* Hide tip banner and form on Scene Composer tab */}
-        {activeTab !== 'scenes' && (
+        {/* Tip banner and form */}
           <>
             {error && <ErrorMessage message={error} onDismiss={() => setError(null)} />}
             {!error && (
@@ -1577,12 +1566,6 @@ const CreateEpisode = () => {
 
         </form>
           </>
-        )}
-
-        {/* ===== TAB: Scene Composer (Outside Form) ===== */}
-        {activeTab === 'scenes' && isEditMode && (
-          <SceneComposerFull />
-        )}
 
         {/* Sticky Footer */}
         <div className="sticky-footer">

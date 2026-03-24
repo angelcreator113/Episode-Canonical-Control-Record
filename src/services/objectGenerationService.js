@@ -1,7 +1,13 @@
 'use strict';
 
 /**
- * Object Generation Service — DALL-E 3
+ * Object Generation Service — DALL-E 3 + Background Removal
+ *
+ * v2.0 Enhancements:
+ *   - Background removal via remove.bg API
+ *   - Automatic prompt enhancement option
+ *   - Better error handling and rate limiting
+ *   - Asset deduplication support
  *
  * Generates transparent PNG object cutouts for Scene Studio.
  * Uses OpenAI's DALL-E 3 API to create isolated objects that can be
@@ -16,6 +22,7 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const REMOVEBG_API_KEY = process.env.REMOVEBG_API_KEY;
 const S3_BUCKET      = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION     = process.env.AWS_REGION || 'us-east-1';
 
@@ -118,6 +125,61 @@ async function callDallE3(prompt) {
   return response.data.data[0];
 }
 
+// ─── BACKGROUND REMOVAL ─────────────────────────────────────────────────────
+
+/**
+ * Remove background from an image using remove.bg API.
+ * Returns the URL of a transparent PNG stored in S3.
+ */
+async function removeBackground(imageUrl, sceneId) {
+  if (!REMOVEBG_API_KEY) {
+    console.warn('[ObjectGen] REMOVEBG_API_KEY not configured, skipping background removal');
+    return null;
+  }
+
+  try {
+    console.log('[ObjectGen] Removing background using remove.bg...');
+
+    const response = await axios.post(
+      'https://api.remove.bg/v1.0/removebg',
+      {
+        image_url: imageUrl,
+        size: 'auto',
+        format: 'png',
+        bg_color: null, // Transparent
+      },
+      {
+        headers: {
+          'X-Api-Key': REMOVEBG_API_KEY,
+        },
+        responseType: 'arraybuffer',
+        timeout: 45000,
+      }
+    );
+
+    // Store result in S3
+    const ts = Date.now();
+    const id = uuidv4().slice(0, 8);
+    const s3Key = `scene-studio/${sceneId}/generated/${ts}-${id}-nobg.png`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: Buffer.from(response.data),
+      ContentType: 'image/png',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    const resultUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    console.log('[ObjectGen] Background removal complete');
+    return resultUrl;
+  } catch (err) {
+    console.error('[ObjectGen] Background removal failed:', err.message);
+    // Non-fatal — return null to indicate no BG removal was done
+    return null;
+  }
+}
+
 // ─── S3 STORAGE ─────────────────────────────────────────────────────────────
 
 async function storeInS3(imageUrl, sceneId) {
@@ -147,12 +209,12 @@ async function storeInS3(imageUrl, sceneId) {
  * Save generated image as a reusable Asset in the database.
  * Available globally in the user's library under "AI Generated" category.
  */
-async function createAssetRecord(Asset, { s3Url, prompt, styleHints, showId, userId, revisedPrompt }) {
+async function createAssetRecord(Asset, { s3Url, s3UrlProcessed, prompt, styleHints, showId, userId, revisedPrompt, backgroundRemoved }) {
   try {
     const asset = await Asset.create({
       id: uuidv4(),
       s3_url_raw: s3Url,
-      s3_url_processed: s3Url,
+      s3_url_processed: s3UrlProcessed || s3Url,
       content_type: 'image/png',
       width: 1024,
       height: 1024,
@@ -167,7 +229,7 @@ async function createAssetRecord(Asset, { s3Url, prompt, styleHints, showId, use
         revised_prompt: revisedPrompt || null,
         generated_at: new Date().toISOString(),
         generated_by: userId || null,
-        background_removed: false,
+        background_removed: backgroundRemoved || false,
       },
     });
     return asset;
@@ -181,19 +243,21 @@ async function createAssetRecord(Asset, { s3Url, prompt, styleHints, showId, use
 
 /**
  * Generate object images and store in S3 + Asset table.
+ * Optionally removes background using remove.bg API.
  *
  * @param {string} prompt - User's object description
  * @param {object} options
  * @param {string} options.sceneId - Scene ID for S3 path
  * @param {string} [options.styleHints] - Additional style modifiers
  * @param {number} [options.count=2] - Number of variations (1-4)
+ * @param {boolean} [options.removeBackground=false] - Remove background using remove.bg
  * @param {string} [options.userId] - User ID for rate limiting
  * @param {string} [options.showId] - Show ID for asset association
  * @param {object} [options.Asset] - Sequelize Asset model for DB persistence
- * @returns {Promise<Array<{asset_id: string, url: string, width: number, height: number}>>}
+ * @returns {Promise<Array<{asset_id: string, url: string, width: number, height: number, background_removed: boolean}>>}
  */
 async function generateObject(prompt, options = {}) {
-  const { sceneId, styleHints, count = 2, userId, showId, Asset } = options;
+  const { sceneId, styleHints, count = 2, userId, showId, Asset, removeBackground: doRemoveBg = false } = options;
 
   // Rate limit check
   const rateCheck = checkRateLimit(userId, sceneId);
@@ -204,7 +268,7 @@ async function generateObject(prompt, options = {}) {
   markInFlight(sceneId);
   const fullPrompt = buildObjectPrompt(prompt, styleHints);
 
-  console.log(`[ObjectGen] Generating ${count} object(s): "${prompt}"`);
+  console.log(`[ObjectGen] Generating ${count} object(s): "${prompt}"${doRemoveBg ? ' (with BG removal)' : ''}`);
 
   try {
     // DALL-E 3 only supports n=1, so call in parallel for multiple options
@@ -216,32 +280,47 @@ async function generateObject(prompt, options = {}) {
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value?.url) {
         try {
+          // Store raw image in S3
           const s3Url = await storeInS3(result.value.url, sceneId);
+
+          // Optionally remove background
+          let s3UrlProcessed = s3Url;
+          let bgRemoved = false;
+          if (doRemoveBg) {
+            const noBgUrl = await removeBackground(s3Url, sceneId);
+            if (noBgUrl) {
+              s3UrlProcessed = noBgUrl;
+              bgRemoved = true;
+            }
+          }
 
           // Save to Asset table if model available
           let assetId = uuidv4();
           if (Asset) {
             const asset = await createAssetRecord(Asset, {
               s3Url,
+              s3UrlProcessed,
               prompt,
               styleHints,
               showId,
               userId,
               revisedPrompt: result.value.revised_prompt,
+              backgroundRemoved: bgRemoved,
             });
             if (asset) assetId = asset.id;
           }
 
           optionsOut.push({
             asset_id: assetId,
-            url: s3Url,
+            url: s3UrlProcessed, // Return the processed URL (with or without BG)
+            url_raw: s3Url,      // Also include raw URL
             width: 1024,
             height: 1024,
             revised_prompt: result.value.revised_prompt,
-            background_removed: false,
+            background_removed: bgRemoved,
           });
         } catch (err) {
-          console.error('[ObjectGen] S3 upload failed:', err.message);
+          console.error('[ObjectGen] Processing failed:', err.message);
         }
       } else if (result.status === 'rejected') {
         console.error('[ObjectGen] DALL-E 3 call failed:', result.reason?.message);
@@ -260,4 +339,4 @@ async function generateObject(prompt, options = {}) {
   }
 }
 
-module.exports = { generateObject, checkRateLimit };
+module.exports = { generateObject, checkRateLimit, removeBackground };

@@ -12623,4 +12623,68 @@ Be emotionally specific. No grand revelations. Just one real moment — somethin
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════
+// POST /ai/enhance-prompt
+// Enhance a user's object description into a more detailed, effective prompt
+// Used by Scene Studio GenerateTab for DALL-E object generation
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/ai/enhance-prompt', optionalAuth, async (req, res) => {
+  try {
+    const { prompt, context = 'scene_studio_object' } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'prompt is required' });
+    }
+
+    // Context-specific enhancement instructions
+    const contextInstructions = {
+      scene_studio_object: `You are enhancing object descriptions for AI image generation (DALL-E 3).
+The style is "Pinterest-core femininity, Final Fantasy softness, magical realism" for a luxury aesthetic.
+
+Rules:
+- Keep it under 50 words
+- Add specific materials (velvet, silk, crystal, gold, marble)
+- Add specific style details (ornate, art deco, rococo, mid-century)
+- Include color palette hints (warm neutrals, blush, champagne, rose gold)
+- Do NOT add background or room context — objects must be isolated
+- Do NOT add people or characters
+- Return ONLY the enhanced prompt, no explanation`,
+    };
+
+    const systemPrompt = contextInstructions[context] || contextInstructions.scene_studio_object;
+
+    const MODELS = ['claude-sonnet-4-6'];
+    let enhanced = null;
+
+    for (const model of MODELS) {
+      try {
+        const aiResponse = await anthropic.messages.create({
+          model,
+          max_tokens: 150,
+          system: systemPrompt,
+          messages: [
+            { role: 'user', content: `Enhance this object description: "${prompt.trim()}"` },
+          ],
+        });
+
+        enhanced = aiResponse.content?.[0]?.text?.trim();
+        if (enhanced) break;
+      } catch (err) {
+        console.warn(`[enhance-prompt] ${model} failed:`, err.message);
+      }
+    }
+
+    if (!enhanced) {
+      // Fallback: return original prompt
+      return res.json({ success: true, enhanced: prompt.trim(), fallback: true });
+    }
+
+    res.json({ success: true, enhanced });
+  } catch (err) {
+    console.error('[enhance-prompt] error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
