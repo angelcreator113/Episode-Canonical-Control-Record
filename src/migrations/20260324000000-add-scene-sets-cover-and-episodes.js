@@ -10,17 +10,26 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     // ── cover_angle_id on scene_sets ─────────────────────────────────────
     const setTable = await queryInterface.describeTable('scene_sets').catch(() => null);
+    if (!setTable) {
+      console.log('scene_sets table does not exist — skipping migration');
+      return;
+    }
+
+    const anglesTable = await queryInterface.describeTable('scene_angles').catch(() => null);
     if (setTable && !setTable.cover_angle_id) {
       await queryInterface.addColumn('scene_sets', 'cover_angle_id', {
         type: Sequelize.UUID,
         allowNull: true,
-        references: { model: 'scene_angles', key: 'id' },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        ...(anglesTable ? {
+          references: { model: 'scene_angles', key: 'id' },
+          onUpdate: 'CASCADE',
+          onDelete: 'SET NULL',
+        } : {}),
       });
     }
 
     // ── scene_set_episodes join table ────────────────────────────────────
+    const episodesTable = await queryInterface.describeTable('episodes').catch(() => null);
     const joinExists = await queryInterface.describeTable('scene_set_episodes').catch(() => null);
     if (!joinExists) {
       await queryInterface.createTable('scene_set_episodes', {
@@ -39,9 +48,11 @@ module.exports = {
         episode_id: {
           type: Sequelize.UUID,
           allowNull: false,
-          references: { model: 'episodes', key: 'id' },
-          onUpdate: 'CASCADE',
-          onDelete: 'CASCADE',
+          ...(episodesTable ? {
+            references: { model: 'episodes', key: 'id' },
+            onUpdate: 'CASCADE',
+            onDelete: 'CASCADE',
+          } : {}),
         },
         created_at: {
           type: Sequelize.DATE,

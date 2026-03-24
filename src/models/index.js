@@ -137,6 +137,7 @@ let StoryTexture; // Texture layer: inner thought, conflict, body narrator, priv
 let StoryTaskArc; // Story Engine: persisted 50-story task arc per character
 let SceneSet; // Scene Sets: canonical LalaVerse locations for generative scene pipeline
 let SceneAngle; // Scene Angles: camera angles within a scene set
+let SceneSetEpisode; // Join table: many-to-many between scene sets and episodes
 let GenerationJob; // Async job queue for scene generation
 
 try {
@@ -379,6 +380,7 @@ try {
   WorldCharacter = require('./WorldCharacter')(sequelize, DataTypes);
   SceneSet = require('./SceneSet')(sequelize);
   SceneAngle = require('./SceneAngle')(sequelize);
+  SceneSetEpisode = require('./SceneSetEpisode')(sequelize);
   GenerationJob = require('./GenerationJob')(sequelize);
 
   console.log('✅ All models loaded successfully');
@@ -524,6 +526,7 @@ const requiredModels = {
   StoryTaskArc,
   SceneSet,
   SceneAngle,
+  SceneSetEpisode,
   GenerationJob,
 };
 
@@ -742,6 +745,9 @@ if (CharacterArc && CharacterArc.associate) {
 }
 if (SceneSet && SceneSet.associate) {
   SceneSet.associate(requiredModels);
+}
+if (SceneSetEpisode && SceneSetEpisode.associate) {
+  SceneSetEpisode.associate(requiredModels);
 }
 if (SceneAngle && SceneAngle.associate) {
   SceneAngle.associate(requiredModels);
@@ -1898,4 +1904,5 @@ module.exports.StoryTexture = StoryTexture;
 module.exports.StoryTaskArc = StoryTaskArc;
 module.exports.SceneSet = SceneSet;
 module.exports.SceneAngle = SceneAngle;
+module.exports.SceneSetEpisode = SceneSetEpisode;
 module.exports.GenerationJob = GenerationJob;
