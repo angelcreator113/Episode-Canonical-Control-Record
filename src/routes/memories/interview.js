@@ -1,9 +1,25 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const { anthropic, optionalAuth, db, getCharacterVoiceContext } = require('./helpers');
+const Anthropic = require('@anthropic-ai/sdk');
+
+// Auth middleware
+let optionalAuth;
+try {
+  const authModule = require('../../middleware/auth');
+  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
+} catch (e) {
+  optionalAuth = (req, res, next) => next();
+}
+
+const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
+
+require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic();
+
+const { getCharacterVoiceContext } = require('./helpers');
 const { loadWriteModeContext, buildWriteModeContextBlock } = require('./engine');
 
 // ═══════════════════════════════════════════════════════════════════════════════

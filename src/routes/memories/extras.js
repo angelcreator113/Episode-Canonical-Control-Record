@@ -1,9 +1,24 @@
 'use strict';
+
 const router = require('express').Router();
+
+const Anthropic = require('@anthropic-ai/sdk');
 const { v4: uuidv4 } = require('uuid');
-const { anthropic, optionalAuth, db } = require('./helpers');
+
+let optionalAuth;
+try {
+  const authModule = require('../../middleware/auth');
+  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
+} catch (e) {
+  optionalAuth = (req, res, next) => next();
+}
+
+const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
+
+require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic();
 
 // ─── Prose style anchor cache ────────────────────────────────────────────────
 // Stores author's prose sample per world/universe for voice matching
