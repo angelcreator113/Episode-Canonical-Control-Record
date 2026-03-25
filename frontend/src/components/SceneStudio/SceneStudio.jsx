@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
@@ -135,7 +135,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [state.isDirty, state.objects, isLoading]);
+  }, [state.isDirty, state.objects, state.depthEffects, state.depthMapUrl, isLoading]);
 
   // ── Track first object add (for overlay + hint) ──
 
@@ -356,7 +356,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         result = await sceneService.generateAngleDepth(state.contextId, state.activeAngleId);
       }
       if (result?.success && result.data?.depth_map_url) {
-        state.setDepthMapUrl(result.data.depth_map_url);
+        state.updateDepthMapUrl(result.data.depth_map_url);
       }
     } catch (err) {
       console.error('Depth generation error:', err);
@@ -368,8 +368,22 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, [isGeneratingDepth, state.contextType, state.contextId, state.activeAngleId, backgroundUrl, state]);
 
   const handleUpdateDepthEffects = useCallback((updates) => {
-    state.setDepthEffects((prev) => ({ ...prev, ...updates }));
+    state.updateDepthEffects((prev) => ({ ...prev, ...updates }));
   }, [state]);
+
+  // Proxy depth map URL through backend to avoid S3 CORS issues.
+  // ParallaxLayer needs crossOrigin pixel access (getImageData) which
+  // requires CORS headers that the S3 bucket may not provide.
+  const proxiedDepthMapUrl = useMemo(() => {
+    if (!state.depthMapUrl) return null;
+    if (state.contextType === 'scene' && state.contextId) {
+      return `/api/v1/scenes/${state.contextId}/depth-map`;
+    }
+    if (state.contextType === 'sceneSet' && state.contextId && state.activeAngleId) {
+      return `/api/v1/scene-sets/${state.contextId}/angles/${state.activeAngleId}/depth-map`;
+    }
+    return state.depthMapUrl;
+  }, [state.depthMapUrl, state.contextType, state.contextId, state.activeAngleId]);
 
   const rawTitle = state.contextType === 'scene'
     ? state.sceneData?.title || ''
@@ -532,7 +546,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onZoom={state.setZoom}
             onPan={state.setPan}
             containerRef={canvasContainerRef}
-            depthMapUrl={state.depthMapUrl}
+            depthMapUrl={proxiedDepthMapUrl}
             depthEffects={state.depthEffects}
           />
 
@@ -612,7 +626,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             contextType={state.contextType}
             backgroundSelected={backgroundSelected}
             backgroundUrl={backgroundUrl}
-            depthMapUrl={state.depthMapUrl}
+            depthMapUrl={proxiedDepthMapUrl}
             depthEffects={state.depthEffects}
             isGeneratingDepth={isGeneratingDepth}
             depthError={depthError}

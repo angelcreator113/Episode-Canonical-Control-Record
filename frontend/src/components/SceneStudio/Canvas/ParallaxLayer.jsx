@@ -64,7 +64,7 @@ function generateLayerMasks(depthImage, bgImage, width, height) {
   const canvas = document.createElement('canvas');
   canvas.width = padW;
   canvas.height = padH;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   // Draw depth map with cover-fit into the padded area
   const df = coverFit(depthImage.width, depthImage.height, padW, padH);
@@ -272,6 +272,16 @@ export default function ParallaxLayer({
             width={padW}
             height={padH}
             listening={i === NUM_LAYERS - 1} // only topmost layer captures clicks
+            // Custom hit region: the topmost layer is mostly transparent (only
+            // one depth band), so Konva's default pixel-based hit detection
+            // misses clicks on transparent areas. Fill the entire bounding rect
+            // so any click on the background registers.
+            hitFunc={i === NUM_LAYERS - 1 ? (context, shape) => {
+              context.beginPath();
+              context.rect(0, 0, shape.width(), shape.height());
+              context.closePath();
+              context.fillStrokeShape(shape);
+            } : undefined}
             onClick={(e) => {
               if (i === NUM_LAYERS - 1) {
                 e.cancelBubble = true;
