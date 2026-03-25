@@ -45,6 +45,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [platform, setPlatform] = useState('youtube');
   const [isSaving, setIsSaving] = useState(false);
   const isSavingRef = useRef(false);
+  const [saveError, setSaveError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
@@ -81,11 +82,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           const result = await sceneService.getCanvas(sceneId);
           if (result.success) {
             state.loadFromApi(result.data, 'scene');
+            const savedPlatform = result.data.scene?.canvas_settings?.platform;
+            if (savedPlatform && PLATFORM_PRESETS[savedPlatform]) setPlatform(savedPlatform);
           }
         } else if (sceneSetId) {
           const result = await sceneService.getSceneSetCanvas(sceneSetId);
           if (result.success) {
             state.loadFromApi(result.data, 'sceneSet');
+            const savedPlatform = result.data.sceneSet?.canvas_settings?.platform;
+            if (savedPlatform && PLATFORM_PRESETS[savedPlatform]) setPlatform(savedPlatform);
           }
         }
       } catch (err) {
@@ -104,8 +109,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     if (isSavingRef.current) return;
     isSavingRef.current = true;
     setIsSaving(true);
+    setSaveError(false);
     try {
       const payload = state.serializeForSave();
+      // Include platform in canvas_settings for persistence
+      if (payload.canvas_settings) {
+        payload.canvas_settings.platform = platform;
+      }
       if (state.contextType === 'scene') {
         await sceneService.saveCanvas(state.contextId, payload);
       } else {
@@ -114,11 +124,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       state.markClean();
     } catch (err) {
       console.error('Scene Studio save error:', err);
+      setSaveError(true);
     } finally {
       isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [state]);
+  }, [state, platform]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -466,13 +477,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         onRedo={state.redo}
         isDirty={state.isDirty}
         isSaving={isSaving}
+        saveError={saveError}
         onSave={save}
         onExport={handleExport}
         title={formatTitle(rawTitle) || studioTitle}
         rawTitle={rawTitle}
         onTitleChange={handleTitleChange}
         platform={platform}
-        onPlatformChange={setPlatform}
+        onPlatformChange={(p) => { setPlatform(p); state.updateCanvasSettings({ platform: p }); }}
         gridVisible={state.canvasSettings.gridVisible}
         onToggleGrid={() => state.updateCanvasSettings({ gridVisible: !state.canvasSettings.gridVisible })}
         onBack={onBack}
