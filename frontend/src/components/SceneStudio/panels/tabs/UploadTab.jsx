@@ -41,6 +41,7 @@ export default function UploadTab({ showId, episodeId, canvasWidth, canvasHeight
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('assetType', file.type.startsWith('video/') ? 'EPISODE_VIDEO' : 'EPISODE_FRAME');
       formData.append('category', 'prop');
       if (showId) formData.append('show_id', showId);
       if (episodeId) formData.append('episode_id', episodeId);

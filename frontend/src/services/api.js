@@ -12,6 +12,12 @@ const apiClient = axios.create({
 // ✅ REQUEST INTERCEPTOR - Add token to requests
 apiClient.interceptors.request.use(
   (config) => {
+    // Attach auth token to all requests
+    const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
     // Don't set Content-Type header for FormData - let browser handle it
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
@@ -20,12 +26,6 @@ apiClient.interceptors.request.use(
         url: config.url,
         formDataEntries: Array.from(config.data.entries()).map(([k, v]) => [k, v instanceof File ? `[File:${v.name}]` : v])
       });
-      return config;
-    }
-
-    const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
     }
     if (import.meta.env.DEV) {
       console.log('API Request (dev):', config.method.toUpperCase(), config.url);
