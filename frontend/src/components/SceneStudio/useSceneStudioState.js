@@ -206,6 +206,10 @@ export default function useSceneStudioState() {
       : data.sceneSet?.canvas_settings;
     if (settings) {
       setCanvasSettings((prev) => ({ ...prev, ...settings }));
+      // Restore depth effects from saved canvas settings
+      if (settings.depth_effects) {
+        setDepthEffects((prev) => ({ ...prev, ...settings.depth_effects }));
+      }
     }
 
     // Reset history
@@ -222,9 +226,13 @@ export default function useSceneStudioState() {
   const serializeForSave = useCallback(() => {
     return {
       objects: objects.map(serializeObject),
-      canvas_settings: canvasSettings,
+      canvas_settings: {
+        ...canvasSettings,
+        depth_map_url: depthMapUrl,
+        depth_effects: depthEffects,
+      },
     };
-  }, [objects, canvasSettings]);
+  }, [objects, canvasSettings, depthMapUrl, depthEffects]);
 
   // ── Object CRUD ──
 
@@ -432,6 +440,16 @@ export default function useSceneStudioState() {
     setIsDirty(false);
   }, []);
 
+  const updateDepthMapUrl = useCallback((url) => {
+    setDepthMapUrl(url);
+    setIsDirty(true);
+  }, []);
+
+  const updateDepthEffects = useCallback((updater) => {
+    setDepthEffects(updater);
+    setIsDirty(true);
+  }, []);
+
   return {
     // State
     objects,
@@ -483,8 +501,8 @@ export default function useSceneStudioState() {
     setObjects,
     setSceneData,
     setSceneSetData,
-    setDepthMapUrl,
-    setDepthEffects,
+    updateDepthMapUrl,
+    updateDepthEffects,
   };
 }
 
