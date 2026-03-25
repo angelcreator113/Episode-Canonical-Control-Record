@@ -75,6 +75,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // Export dialog state
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportFormat, setExportFormat] = useState('png');
+
+  // Erase / inpaint state
+  const [hasMask, setHasMask] = useState(false);
+  const [brushSize, setBrushSize] = useState(30);
+  const [isInpainting, setIsInpainting] = useState(false);
+  const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [exportScale, setExportScale] = useState(2);
 
   // UX guidance state
@@ -590,6 +596,45 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, save]);
 
+  // ── Inpaint (erase) ──
+
+  const handleInpaint = useCallback(async () => {
+    if (isInpainting || !state.contextId || !backgroundUrl) return;
+    if (!hasMask) return;
+
+    setIsInpainting(true);
+    try {
+      // Get the mask from MaskLayer
+      const MaskLayer = require('./Canvas/MaskLayer').default;
+      const maskDataUrl = MaskLayer._exportMask();
+      if (!maskDataUrl) {
+        setIsInpainting(false);
+        return;
+      }
+
+      const prompt = inpaintPrompt || 'clean seamless continuation of surrounding area, matching style and lighting';
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: backgroundUrl,
+        maskDataUrl,
+        prompt,
+      });
+
+      if (result?.success && result.data?.inpainted_url) {
+        // Update background with inpainted result
+        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        // Clear the mask
+        MaskLayer._clearMask();
+        setHasMask(false);
+        setInpaintPrompt('');
+      }
+    } catch (err) {
+      console.error('Inpaint error:', err);
+      setSaveErrorMsg(err.response?.data?.error || err.message || 'Inpainting failed');
+    } finally {
+      setIsInpainting(false);
+    }
+  }, [isInpainting, state, backgroundUrl, hasMask, inpaintPrompt]);
+
   const handleExport = useCallback(() => {
     setShowExportDialog(true);
   }, []);
@@ -796,7 +841,47 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             containerRef={canvasContainerRef}
             depthMapUrl={proxiedDepthMapUrl}
             depthEffects={state.depthEffects}
+            brushSize={brushSize}
+            onMaskChange={setHasMask}
           />
+
+          {/* Erase tool controls — shown when erase tool is active */}
+          {state.activeTool === 'erase' && (
+            <div className="scene-studio-erase-controls">
+              <label>Brush: {brushSize}px</label>
+              <input
+                type="range"
+                min={5}
+                max={100}
+                value={brushSize}
+                onChange={(e) => setBrushSize(parseInt(e.target.value))}
+              />
+              <input
+                type="text"
+                className="scene-studio-erase-prompt"
+                placeholder="Fill with... (leave empty for auto)"
+                value={inpaintPrompt}
+                onChange={(e) => setInpaintPrompt(e.target.value)}
+              />
+              <button
+                className="scene-studio-btn primary"
+                disabled={!hasMask || isInpainting}
+                onClick={handleInpaint}
+              >
+                {isInpainting ? 'Removing...' : 'Remove'}
+              </button>
+              <button
+                className="scene-studio-btn ghost"
+                onClick={() => {
+                  const MaskLayer = require('./Canvas/MaskLayer').default;
+                  MaskLayer._clearMask();
+                  setHasMask(false);
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
 
           {/* Empty canvas guidance overlay — hide when background is already set */}
           {state.objects.length === 0 && !hasInteracted && !backgroundUrl && (

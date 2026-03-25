@@ -6,6 +6,7 @@ import VideoObject from './objects/VideoObject';
 import TextObject from './objects/TextObject';
 import ShapeObject from './objects/ShapeObject';
 import ParallaxLayer from './ParallaxLayer';
+import MaskLayer from './MaskLayer';
 
 /**
  * StudioCanvas — Main Konva canvas for Scene Studio.
@@ -134,6 +135,8 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
   onBackgroundSelect,
   depthMapUrl,
   depthEffects,
+  brushSize,
+  onMaskChange,
 }, forwardedRef) {
   const stageRef = useRef(null);
 
@@ -262,7 +265,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           onPan(e.target.x(), e.target.y());
         }
       }}
-      style={{ cursor: activeTool === 'hand' ? 'grab' : 'default' }}
+      style={{ cursor: activeTool === 'hand' ? 'grab' : activeTool === 'erase' ? 'crosshair' : 'default' }}
     >
       {/* Background layer */}
       <Layer>
@@ -328,6 +331,18 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
             listening={false}
           />
         ))}
+      </Layer>
+
+      {/* Mask layer for erase/inpaint tool */}
+      <Layer>
+        <MaskLayer
+          active={activeTool === 'erase'}
+          canvasWidth={canvasWidth}
+          canvasHeight={canvasHeight}
+          brushSize={brushSize || 30}
+          onMaskChange={onMaskChange}
+          stageRef={stageRef}
+        />
       </Layer>
 
       {/* Objects layer */}
