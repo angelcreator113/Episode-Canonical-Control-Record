@@ -932,14 +932,26 @@ exports.generateDepth = async (req, res) => {
     const { id } = req.params;
     const { image_url } = req.body;
 
-    const scene = await Scene.findByPk(id, {
-      attributes: ['id', 'background_url', 'extra_fields'],
-      include: [{
+    // Detect available columns — canvas_settings / scene_angle_id may not exist pre-migration
+    const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
+    const sceneAttrs = ['id', 'background_url'];
+    const hasCanvasSettings = !!sceneCols.canvas_settings;
+    const hasAngleFK = !!sceneCols.scene_angle_id;
+    if (hasCanvasSettings) sceneAttrs.push('canvas_settings');
+
+    const includeOpts = [];
+    if (hasAngleFK) {
+      includeOpts.push({
         model: SceneAngle,
         as: 'sceneAngle',
         attributes: ['id', 'still_image_url', 'enhanced_still_url'],
         required: false,
-      }],
+      });
+    }
+
+    const scene = await Scene.findByPk(id, {
+      attributes: sceneAttrs,
+      include: includeOpts,
     });
 
     if (!scene) {
@@ -961,16 +973,20 @@ exports.generateDepth = async (req, res) => {
       userId: req.user?.id || null,
     });
 
-    // Store depth map URL in scene's extra_fields
-    const extraFields = scene.extra_fields || {};
-    extraFields.depth_map_url = result.depth_map_url;
-    extraFields.depth_model_used = result.model_used;
-    await scene.update({ extra_fields: extraFields });
+    // Store depth map URL in scene's canvas_settings JSONB (if column exists)
+    if (hasCanvasSettings) {
+      const settings = scene.canvas_settings || {};
+      settings.depth_map_url = result.depth_map_url;
+      settings.depth_model_used = result.model_used;
+      await scene.update({ canvas_settings: settings });
+    }
 
     res.json({ success: true, data: result });
   } catch (error) {
     console.error('Scene Studio generateDepth error:', error);
-    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    let status = 500;
+    if (error.message.includes('limit') || error.message.includes('in progress')) status = 429;
+    if (error.message.includes('not configured')) status = 503;
     res.status(status).json({ success: false, error: error.message });
   }
 };
@@ -980,6 +996,10 @@ exports.generateDepth = async (req, res) => {
 exports.generateAngleDepth = async (req, res) => {
   try {
     const { id, angleId } = req.params;
+
+    // Check if depth columns exist on scene_angles
+    const angleCols = await sequelize.getQueryInterface().describeTable('scene_angles');
+    const hasDepthCols = !!angleCols.depth_map_url;
 
     const angle = await SceneAngle.findOne({
       where: { id: angleId, scene_set_id: id },
@@ -994,8 +1014,10 @@ exports.generateAngleDepth = async (req, res) => {
       return res.status(400).json({ success: false, error: 'No still image available for this angle. Generate a still first.' });
     }
 
-    // Mark as generating
-    await angle.update({ depth_status: 'generating' });
+    // Mark as generating (if column exists)
+    if (hasDepthCols) {
+      await angle.update({ depth_status: 'generating' });
+    }
 
     try {
       const result = await depthEstimationService.generateDepthMap(sourceUrl, {
@@ -1003,19 +1025,25 @@ exports.generateAngleDepth = async (req, res) => {
         userId: req.user?.id || null,
       });
 
-      await angle.update({
-        depth_map_url: result.depth_map_url,
-        depth_status: 'complete',
-      });
+      if (hasDepthCols) {
+        await angle.update({
+          depth_map_url: result.depth_map_url,
+          depth_status: 'complete',
+        });
+      }
 
       res.json({ success: true, data: result });
     } catch (depthError) {
-      await angle.update({ depth_status: 'failed' });
+      if (hasDepthCols) {
+        await angle.update({ depth_status: 'failed' });
+      }
       throw depthError;
     }
   } catch (error) {
     console.error('Scene Studio generateAngleDepth error:', error);
-    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    let status = 500;
+    if (error.message.includes('limit') || error.message.includes('in progress')) status = 429;
+    if (error.message.includes('not configured')) status = 503;
     res.status(status).json({ success: false, error: error.message });
   }
 };
