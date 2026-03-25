@@ -61,12 +61,15 @@ function BackgroundImage({ src, width, height, isSelected, onClick, onLayoutChan
   }, [image]);
 
   const activeImage = displayImage || image;
-  if (!activeImage) return null;
+  // Compute layout only when image is ready; null otherwise so hooks below are safe.
+  const layout = activeImage
+    ? getCoverLayout(activeImage.width, activeImage.height, width, height)
+    : null;
 
-  const layout = getCoverLayout(activeImage.width, activeImage.height, width, height);
-
+  // These effects must be declared unconditionally (Rules of Hooks).
+  // Guard logic is handled inside the effect bodies.
   useEffect(() => {
-    if (!onLayoutChange) return undefined;
+    if (!onLayoutChange || !activeImage || !layout) return undefined;
 
     onLayoutChange({
       sourceWidth: activeImage.width,
@@ -78,12 +81,14 @@ function BackgroundImage({ src, width, height, isSelected, onClick, onLayoutChan
     });
 
     return undefined;
-  }, [activeImage.height, activeImage.width, layout.height, layout.width, layout.x, layout.y, onLayoutChange]);
+  }, [activeImage, layout, onLayoutChange]);
 
   useEffect(() => {
     if (!onLayoutChange) return undefined;
     return () => onLayoutChange(null);
   }, [onLayoutChange]);
+
+  if (!activeImage || !layout) return null;
 
   return (
     <>
