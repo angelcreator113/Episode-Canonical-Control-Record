@@ -97,9 +97,17 @@ async function runLamaRemoval(imageUrl, maskUrl) {
     prediction = await replicate.predictions.get(prediction.id);
 
     if (prediction.status === 'succeeded') {
-      console.log('[Inpainting] LaMa removal completed');
-      const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-      if (!outputUrl) throw new Error('LaMa model returned no output URL');
+      console.log('[Inpainting] LaMa removal completed, output:', JSON.stringify(prediction.output));
+      const raw = prediction.output;
+      let outputUrl;
+      if (typeof raw === 'string') {
+        outputUrl = raw;
+      } else if (Array.isArray(raw)) {
+        outputUrl = typeof raw[0] === 'string' ? raw[0] : (raw[0]?.url?.() || String(raw[0]));
+      } else if (raw && typeof raw === 'object') {
+        outputUrl = raw.url?.() || raw.href || String(raw);
+      }
+      if (!outputUrl || outputUrl === 'undefined') throw new Error('LaMa model returned no output URL');
       return outputUrl;
     }
 
