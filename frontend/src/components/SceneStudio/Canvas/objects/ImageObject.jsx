@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Group, Rect, Image as KonvaImage, Text } from 'react-konva';
 import useImage from 'use-image';
 
@@ -13,7 +13,16 @@ import useImage from 'use-image';
 export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, onDragMove }) {
   const src = obj.assetUrl || '';
   const [image, imageStatus] = useImage(src);
+  const [displayImage, setDisplayImage] = useState(null);
   const imageRef = useRef(null);
+
+  useEffect(() => {
+    if (image) {
+      setDisplayImage(image);
+    }
+  }, [image]);
+
+  const activeImage = displayImage || image;
 
   if (!obj.isVisible && !isSelected) return null;
 
@@ -30,11 +39,11 @@ export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd,
 
   // Apply filters when image or style changes
   useEffect(() => {
-    if (imageRef.current && image) {
+    if (imageRef.current && activeImage) {
       imageRef.current.cache();
       imageRef.current.getLayer()?.batchDraw();
     }
-  }, [image, style.blur, style.brightness, style.shadow?.enabled]);
+  }, [activeImage, style.blur, style.brightness, style.shadow?.enabled]);
 
   // Shadow props from styleData
   const shadowProps = style.shadow?.enabled ? {
@@ -91,10 +100,10 @@ export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd,
       {/* Hit region — always clickable even if image hasn't loaded */}
       <Rect width={w} height={h} fill="transparent" />
 
-      {image ? (
+      {activeImage ? (
         <KonvaImage
           ref={imageRef}
-          image={image}
+          image={activeImage}
           width={w}
           height={h}
           listening={false}

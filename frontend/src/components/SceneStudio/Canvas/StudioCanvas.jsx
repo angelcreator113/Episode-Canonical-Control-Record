@@ -24,36 +24,75 @@ const OBJECT_RENDERERS = {
   overlay: ImageObject,
 };
 
-function BackgroundImage({ src, width, height, isSelected, onClick }) {
-  // Load without crossOrigin to avoid CORS failures on S3 images
-  const [image] = useImage(src);
-  if (!image) return null;
-
-  // Cover fit
-  const imgRatio = image.width / image.height;
-  const canvasRatio = width / height;
-  let drawW, drawH, drawX, drawY;
+function getCoverLayout(imageWidth, imageHeight, canvasWidth, canvasHeight) {
+  const imgRatio = imageWidth / imageHeight;
+  const canvasRatio = canvasWidth / canvasHeight;
 
   if (imgRatio > canvasRatio) {
-    drawH = height;
-    drawW = height * imgRatio;
-    drawX = (width - drawW) / 2;
-    drawY = 0;
-  } else {
-    drawW = width;
-    drawH = width / imgRatio;
-    drawX = 0;
-    drawY = (height - drawH) / 2;
+    const drawHeight = canvasHeight;
+    const drawWidth = canvasHeight * imgRatio;
+    return {
+      x: (canvasWidth - drawWidth) / 2,
+      y: 0,
+      width: drawWidth,
+      height: drawHeight,
+    };
   }
+
+  const drawWidth = canvasWidth;
+  const drawHeight = canvasWidth / imgRatio;
+  return {
+    x: 0,
+    y: (canvasHeight - drawHeight) / 2,
+    width: drawWidth,
+    height: drawHeight,
+  };
+}
+
+function BackgroundImage({ src, width, height, isSelected, onClick, onLayoutChange }) {
+  // Load without crossOrigin to avoid CORS failures on S3 images
+  const [image] = useImage(src);
+  const [displayImage, setDisplayImage] = useState(null);
+
+  useEffect(() => {
+    if (image) {
+      setDisplayImage(image);
+    }
+  }, [image]);
+
+  const activeImage = displayImage || image;
+  if (!activeImage) return null;
+
+  const layout = getCoverLayout(activeImage.width, activeImage.height, width, height);
+
+  useEffect(() => {
+    if (!onLayoutChange) return undefined;
+
+    onLayoutChange({
+      sourceWidth: activeImage.width,
+      sourceHeight: activeImage.height,
+      drawX: layout.x,
+      drawY: layout.y,
+      drawWidth: layout.width,
+      drawHeight: layout.height,
+    });
+
+    return undefined;
+  }, [activeImage.height, activeImage.width, layout.height, layout.width, layout.x, layout.y, onLayoutChange]);
+
+  useEffect(() => {
+    if (!onLayoutChange) return undefined;
+    return () => onLayoutChange(null);
+  }, [onLayoutChange]);
 
   return (
     <>
       <KonvaImage
-        image={image}
-        x={drawX}
-        y={drawY}
-        width={drawW}
-        height={drawH}
+        image={activeImage}
+        x={layout.x}
+        y={layout.y}
+        width={layout.width}
+        height={layout.height}
         listening={true}
         onClick={(e) => {
           e.cancelBubble = true;
@@ -133,6 +172,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
   onClearEditingText,
   backgroundSelected,
   onBackgroundSelect,
+  onBackgroundLayoutChange,
   depthMapUrl,
   depthEffects,
   brushSize,
@@ -396,6 +436,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
             onClick={onBackgroundSelect}
             mousePosition={mousePosition}
             depthEffects={depthEffects}
+            onLayoutChange={onBackgroundLayoutChange}
           />
         ) : backgroundUrl ? (
           <BackgroundImage
@@ -404,6 +445,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
             height={canvasHeight}
             isSelected={backgroundSelected}
             onClick={onBackgroundSelect}
+            onLayoutChange={onBackgroundLayoutChange}
           />
         ) : null}
         {backgroundSelected && parallaxEnabled && (

@@ -13,6 +13,7 @@
 const axios = require('axios');
 const Replicate = require('replicate');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
@@ -26,6 +27,53 @@ const s3 = new S3Client({ region: AWS_REGION });
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 90;
 
+// ─── MODEL CONFIG ───────────────────────────────────────────────────────────
+
+function extractReplicateOutputUrl(output) {
+  if (!output) return null;
+
+  if (typeof output === 'string') {
+    return output;
+  }
+
+  if (output instanceof URL) {
+    return output.toString();
+  }
+
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      const nestedUrl = extractReplicateOutputUrl(item);
+      if (nestedUrl) return nestedUrl;
+    }
+    return null;
+  }
+
+  if (typeof output.url === 'function') {
+    const resolved = output.url();
+    if (resolved instanceof URL) return resolved.toString();
+    if (typeof resolved === 'string') return resolved;
+  }
+
+  if (typeof output.url === 'string') {
+    return output.url;
+  }
+
+  for (const key of ['image', 'images', 'file', 'files', 'output']) {
+    if (output[key]) {
+      const nestedUrl = extractReplicateOutputUrl(output[key]);
+      if (nestedUrl) return nestedUrl;
+    }
+  }
+
+  if (typeof output.toString === 'function' && output.toString !== Object.prototype.toString) {
+    const resolved = output.toString();
+    if (/^https?:\/\//i.test(resolved)) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
 const inFlight = new Map();
@@ -81,6 +129,8 @@ async function runLamaRemoval(imageUrl, maskUrl) {
       input: {
         image: imageUrl,
         mask: maskUrl,
+        hd_strategy: 'Resize',
+        hd_strategy_resize_limit: 2048,
       },
     });
   } catch (err) {
@@ -97,34 +147,33 @@ async function runLamaRemoval(imageUrl, maskUrl) {
     prediction = await replicate.predictions.get(prediction.id);
 
     if (prediction.status === 'succeeded') {
-      const raw = prediction.output;
-      console.log('[Inpainting] LaMa succeeded, output type:', typeof raw, 'value:', JSON.stringify(raw)?.slice(0, 200));
+      const outputUrl = extractReplicateOutputUrl(prediction.output);
+      let resolvedUrl = outputUrl;
 
-      // Extract URL from whatever format the SDK returns
-      let outputUrl;
-      if (typeof raw === 'string') {
-        outputUrl = raw;
-      } else if (Array.isArray(raw)) {
-        outputUrl = typeof raw[0] === 'string' ? raw[0] : (raw[0]?.url?.() || raw[0]?.href || String(raw[0]));
-      } else if (raw && typeof raw === 'object') {
-        outputUrl = raw.url?.() || raw.href || String(raw);
-      }
-
-      // If SDK didn't give us a usable URL, fetch raw prediction via HTTP
-      if (!outputUrl || outputUrl === 'undefined' || outputUrl === 'null' || outputUrl === '[object Object]') {
-        console.log('[Inpainting] SDK output unusable, fetching raw prediction via HTTP...');
+      if (!resolvedUrl || resolvedUrl === 'undefined' || resolvedUrl === 'null' || resolvedUrl === '[object Object]') {
+        console.warn('[Inpainting] SDK output unusable; fetching raw prediction payload.');
         const rawResp = await axios.get(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
           headers: { Authorization: `Bearer ${REPLICATE_API_TOKEN}` },
           timeout: 10000,
         });
-        const rawOutput = rawResp.data?.output;
-        console.log('[Inpainting] Raw API output:', JSON.stringify(rawOutput)?.slice(0, 200));
-        outputUrl = typeof rawOutput === 'string' ? rawOutput : (Array.isArray(rawOutput) ? rawOutput[0] : null);
+        resolvedUrl = extractReplicateOutputUrl(rawResp.data?.output);
       }
 
-      if (!outputUrl) throw new Error('LaMa model returned no output URL');
-      console.log('[Inpainting] LaMa removal completed:', outputUrl.slice(0, 80));
-      return outputUrl;
+      if (!resolvedUrl) {
+        const outputSummary = Array.isArray(prediction.output)
+          ? `array(${prediction.output.length})`
+          : prediction.output && typeof prediction.output === 'object'
+            ? `object keys=${Object.keys(prediction.output).join(',') || '(none)'}`
+            : String(prediction.output);
+        console.error('[Inpainting] Unexpected LaMa output shape:', outputSummary);
+        if (prediction.logs) {
+          console.error('[Inpainting] LaMa prediction logs:', prediction.logs.slice(-1000));
+        }
+        throw new Error('LaMa model returned no output URL');
+      }
+
+      console.log('[Inpainting] LaMa removal completed');
+      return resolvedUrl;
     }
 
     if (prediction.status === 'failed' || prediction.status === 'canceled') {
@@ -220,13 +269,66 @@ async function storeInpaintedImage(imageUrl, entityId) {
   return resultUrl;
 }
 
+async function getRemoteImageDimensions(imageUrl) {
+  const response = await axios.get(imageUrl, {
+    responseType: 'arraybuffer',
+    timeout: 30000,
+  });
+
+  const metadata = await sharp(Buffer.from(response.data)).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error('Could not determine source image dimensions');
+  }
+
+  return { width: metadata.width, height: metadata.height };
+}
+
+async function refineRemovalMask(maskBuffer) {
+  // Slight dilation + feathering helps LaMa remove edge halos and leftover fragments.
+  return sharp(maskBuffer)
+    .greyscale()
+    .threshold(16)
+    .dilate(2)
+    .blur(0.8)
+    .png()
+    .toBuffer();
+}
+
 /**
  * Store a mask image (base64 data URL) to S3 for Replicate to access.
  */
-async function storeMask(maskDataUrl, entityId) {
+async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
+  const { forRemoval = false } = options;
   // Convert data:image/png;base64,... to buffer
   const base64Data = maskDataUrl.replace(/^data:image\/\w+;base64,/, '');
-  const buffer = Buffer.from(base64Data, 'base64');
+  let buffer = Buffer.from(base64Data, 'base64');
+
+  if (sourceImageUrl) {
+    const maskMetadata = await sharp(buffer).metadata();
+    let sourceDimensions = null;
+
+    if (!maskMetadata.width || !maskMetadata.height) {
+      sourceDimensions = await getRemoteImageDimensions(sourceImageUrl);
+    }
+
+    if (sourceDimensions && (maskMetadata.width !== sourceDimensions.width || maskMetadata.height !== sourceDimensions.height)) {
+      console.log(
+        `[Inpainting] Resizing mask from ${maskMetadata.width}x${maskMetadata.height} to ${sourceDimensions.width}x${sourceDimensions.height}`
+      );
+
+      buffer = await sharp(buffer)
+        .resize(sourceDimensions.width, sourceDimensions.height, {
+          fit: 'fill',
+          kernel: sharp.kernel.nearest,
+        })
+        .png()
+        .toBuffer();
+    }
+  }
+
+  if (forRemoval) {
+    buffer = await refineRemovalMask(buffer);
+  }
 
   const ts = Date.now();
   const uid = uuidv4().slice(0, 8);
@@ -260,11 +362,14 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
   markInFlight(entityId);
 
   try {
-    // Upload mask to S3 so Replicate can access it
-    const maskUrl = await storeMask(maskDataUrl, entityId);
-
     // Choose model based on mode/prompt
     const isRemoval = mode === 'remove' || !prompt;
+
+    // Upload mask to S3 so Replicate can access it
+    const maskUrl = await storeMask(maskDataUrl, entityId, imageUrl, {
+      forRemoval: isRemoval,
+    });
+
     let resultUrl;
 
     if (isRemoval) {

@@ -14,6 +14,82 @@ import { Line, Group, Rect } from 'react-konva';
 
 const DEFAULT_BRUSH_SIZE = 30;
 
+function getBackgroundExportPoint(point, targetLayout) {
+  return {
+    x: ((point.x - targetLayout.drawX) / targetLayout.drawWidth) * targetLayout.sourceWidth,
+    y: ((point.y - targetLayout.drawY) / targetLayout.drawHeight) * targetLayout.sourceHeight,
+  };
+}
+
+function getObjectLocalPoint(point, targetObject) {
+  const width = targetObject.width || 1;
+  const height = targetObject.height || 1;
+  const rotationDeg = targetObject.rotation || 0;
+  const rad = (rotationDeg * Math.PI) / 180;
+
+  const signedScaleX = (targetObject.flipX ? -1 : 1) * (targetObject.scaleX || 1);
+  const signedScaleY = (targetObject.flipY ? -1 : 1) * (targetObject.scaleY || 1);
+
+  if (signedScaleX === 0 || signedScaleY === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  const offsetX = targetObject.flipX ? width : 0;
+  const offsetY = targetObject.flipY ? height : 0;
+
+  const tx = point.x - (targetObject.x || 0);
+  const ty = point.y - (targetObject.y || 0);
+
+  const cos = Math.cos(-rad);
+  const sin = Math.sin(-rad);
+  const ux = tx * cos - ty * sin;
+  const uy = tx * sin + ty * cos;
+
+  return {
+    x: ux / signedScaleX + offsetX,
+    y: uy / signedScaleY + offsetY,
+  };
+}
+
+function getObjectExportPoint(point, targetObject) {
+  const local = getObjectLocalPoint(point, targetObject);
+  const width = targetObject.width || 1;
+  const height = targetObject.height || 1;
+  const crop = targetObject.cropData;
+
+  if (crop) {
+    return {
+      x: (crop.x || 0) + (local.x / width) * (crop.width || width),
+      y: (crop.y || 0) + (local.y / height) * (crop.height || height),
+    };
+  }
+
+  return {
+    x: (local.x / width) * targetObject.sourceWidth,
+    y: (local.y / height) * targetObject.sourceHeight,
+  };
+}
+
+function getObjectLineScale(targetObject) {
+  const width = targetObject.width || 1;
+  const height = targetObject.height || 1;
+  const crop = targetObject.cropData;
+
+  const sourceW = crop ? (crop.width || width) : (targetObject.sourceWidth || width);
+  const sourceH = crop ? (crop.height || height) : (targetObject.sourceHeight || height);
+
+  const signedScaleX = (targetObject.flipX ? -1 : 1) * (targetObject.scaleX || 1);
+  const signedScaleY = (targetObject.flipY ? -1 : 1) * (targetObject.scaleY || 1);
+
+  const canvasPerLocalX = Math.abs(signedScaleX) || 1;
+  const canvasPerLocalY = Math.abs(signedScaleY) || 1;
+
+  const sourcePerCanvasX = (sourceW / width) / canvasPerLocalX;
+  const sourcePerCanvasY = (sourceH / height) / canvasPerLocalY;
+
+  return (sourcePerCanvasX + sourcePerCanvasY) / 2;
+}
+
 /**
  * Convert screen pointer position to canvas coordinates,
  * accounting for stage zoom (scale) and pan (position).
@@ -72,15 +148,20 @@ export default function MaskLayer({
    * White = areas to inpaint (where user painted).
    * Black = areas to keep.
    */
-  const exportMask = useCallback(() => {
+  const exportMask = useCallback((options = {}) => {
+    const targetLayout = options.targetLayout;
+    const targetObject = options.targetObject;
+
+    const exportWidth = targetObject?.sourceWidth || targetLayout?.sourceWidth || canvasWidth;
+    const exportHeight = targetObject?.sourceHeight || targetLayout?.sourceHeight || canvasHeight;
     const canvas = document.createElement('canvas');
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
+    canvas.width = exportWidth;
+    canvas.height = exportHeight;
     const ctx = canvas.getContext('2d');
 
     // Fill black (keep everything)
     ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    ctx.fillRect(0, 0, exportWidth, exportHeight);
 
     // Draw white where user painted (areas to remove)
     ctx.strokeStyle = '#FFFFFF';
@@ -88,11 +169,22 @@ export default function MaskLayer({
     ctx.lineJoin = 'round';
 
     for (const line of lines) {
-      ctx.lineWidth = line.strokeWidth || DEFAULT_BRUSH_SIZE;
+      const scale = targetObject
+        ? getObjectLineScale(targetObject)
+        : targetLayout
+          ? (targetLayout.sourceWidth / targetLayout.drawWidth)
+          : 1;
+      ctx.lineWidth = (line.strokeWidth || DEFAULT_BRUSH_SIZE) * scale;
       ctx.beginPath();
       for (let i = 0; i < line.points.length; i += 2) {
-        const x = line.points[i];
-        const y = line.points[i + 1];
+        const rawPoint = { x: line.points[i], y: line.points[i + 1] };
+        const point = targetObject
+          ? getObjectExportPoint(rawPoint, targetObject)
+          : targetLayout
+            ? getBackgroundExportPoint(rawPoint, targetLayout)
+            : rawPoint;
+        const x = point.x;
+        const y = point.y;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
