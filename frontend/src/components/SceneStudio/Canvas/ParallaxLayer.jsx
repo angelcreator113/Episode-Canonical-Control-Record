@@ -64,7 +64,7 @@ function generateLayerMasks(depthImage, bgImage, width, height) {
   const canvas = document.createElement('canvas');
   canvas.width = padW;
   canvas.height = padH;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   // Draw depth map with cover-fit into the padded area
   const df = coverFit(depthImage.width, depthImage.height, padW, padH);
