@@ -158,6 +158,7 @@ export default function ParallaxLayer({
   onClick,
   mousePosition, // { x: 0-1, y: 0-1 } normalized
   depthEffects,  // { focusDepth, blurIntensity }
+  onLayoutChange,
 }) {
   // crossOrigin="anonymous" is required so getImageData() can read pixel data
   // without the browser tainting the canvas. The S3 bucket must return
@@ -177,6 +178,27 @@ export default function ParallaxLayer({
 
   const focusDepth = depthEffects?.focusDepth ?? 50;
   const blurIntensity = depthEffects?.blurIntensity ?? 0;
+
+  useEffect(() => {
+    if (!onLayoutChange || !bgImage) return undefined;
+
+    const layout = coverFit(bgImage.width, bgImage.height, width, height);
+    onLayoutChange({
+      sourceWidth: bgImage.width,
+      sourceHeight: bgImage.height,
+      drawX: layout.x,
+      drawY: layout.y,
+      drawWidth: layout.w,
+      drawHeight: layout.h,
+    });
+
+    return undefined;
+  }, [bgImage, height, onLayoutChange, width]);
+
+  useEffect(() => {
+    if (!onLayoutChange) return undefined;
+    return () => onLayoutChange(null);
+  }, [onLayoutChange]);
 
   // Generate base layer masks when images load (requires CORS-enabled images)
   useEffect(() => {

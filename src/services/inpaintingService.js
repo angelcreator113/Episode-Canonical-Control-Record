@@ -13,10 +13,12 @@
 const axios = require('axios');
 const Replicate = require('replicate');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const REPLICATE_INPAINT_VERSION = process.env.REPLICATE_INPAINT_VERSION || 'a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7';
+const REPLICATE_LAMA_VERSION = process.env.REPLICATE_LAMA_VERSION || 'cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -27,8 +29,51 @@ const MAX_POLL_ATTEMPTS = 90;
 
 // ─── MODEL CONFIG ───────────────────────────────────────────────────────────
 
-const LAMA_MODEL = 'allenhooo/lama';
+function extractReplicateOutputUrl(output) {
+  if (!output) return null;
 
+  if (typeof output === 'string') {
+    return output;
+  }
+
+  if (output instanceof URL) {
+    return output.toString();
+  }
+
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      const nestedUrl = extractReplicateOutputUrl(item);
+      if (nestedUrl) return nestedUrl;
+    }
+    return null;
+  }
+
+  if (typeof output.url === 'function') {
+    const resolved = output.url();
+    if (resolved instanceof URL) return resolved.toString();
+    if (typeof resolved === 'string') return resolved;
+  }
+
+  if (typeof output.url === 'string') {
+    return output.url;
+  }
+
+  for (const key of ['image', 'images', 'file', 'files', 'output']) {
+    if (output[key]) {
+      const nestedUrl = extractReplicateOutputUrl(output[key]);
+      if (nestedUrl) return nestedUrl;
+    }
+  }
+
+  if (typeof output.toString === 'function' && output.toString !== Object.prototype.toString) {
+    const resolved = output.toString();
+    if (/^https?:\/\//i.test(resolved)) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
 const inFlight = new Map();
@@ -67,6 +112,7 @@ function incrementUsage(userId) {
  * Run LaMa for clean object removal (no prompt needed).
  * LaMa uses Fourier convolutions to seamlessly fill masked regions
  * with background continuation — ideal for removing objects.
+ * Uses explicit version hash (community model — requires predictions endpoint).
  */
 async function runLamaRemoval(imageUrl, maskUrl) {
   if (!REPLICATE_API_TOKEN) {
@@ -76,12 +122,15 @@ async function runLamaRemoval(imageUrl, maskUrl) {
   console.log('[Inpainting] Using LaMa model for object removal');
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
-  let output;
+  let prediction;
   try {
-    output = await replicate.run(LAMA_MODEL, {
+    prediction = await replicate.predictions.create({
+      version: REPLICATE_LAMA_VERSION,
       input: {
         image: imageUrl,
         mask: maskUrl,
+        hd_strategy: 'Resize',
+        hd_strategy_resize_limit: 2048,
       },
     });
   } catch (err) {
@@ -91,18 +140,48 @@ async function runLamaRemoval(imageUrl, maskUrl) {
     throw new Error(`LaMa API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
-  // replicate.run() may return a string URL, an array, or a ReadableStream
-  let outputUrl;
-  if (typeof output === 'string') {
-    outputUrl = output;
-  } else if (Array.isArray(output)) {
-    outputUrl = typeof output[0] === 'string' ? output[0] : output[0]?.url?.();
-  } else if (output && typeof output.url === 'function') {
-    outputUrl = output.url();
+  console.log(`[Inpainting] LaMa prediction ${prediction.id} created, polling...`);
+
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    prediction = await replicate.predictions.get(prediction.id);
+
+    if (prediction.status === 'succeeded') {
+      const outputUrl = extractReplicateOutputUrl(prediction.output);
+      let resolvedUrl = outputUrl;
+
+      if (!resolvedUrl || resolvedUrl === 'undefined' || resolvedUrl === 'null' || resolvedUrl === '[object Object]') {
+        console.warn('[Inpainting] SDK output unusable; fetching raw prediction payload.');
+        const rawResp = await axios.get(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+          headers: { Authorization: `Bearer ${REPLICATE_API_TOKEN}` },
+          timeout: 10000,
+        });
+        resolvedUrl = extractReplicateOutputUrl(rawResp.data?.output);
+      }
+
+      if (!resolvedUrl) {
+        const outputSummary = Array.isArray(prediction.output)
+          ? `array(${prediction.output.length})`
+          : prediction.output && typeof prediction.output === 'object'
+            ? `object keys=${Object.keys(prediction.output).join(',') || '(none)'}`
+            : String(prediction.output);
+        console.error('[Inpainting] Unexpected LaMa output shape:', outputSummary);
+        if (prediction.logs) {
+          console.error('[Inpainting] LaMa prediction logs:', prediction.logs.slice(-1000));
+        }
+        throw new Error('LaMa model returned no output URL');
+      }
+
+      console.log('[Inpainting] LaMa removal completed');
+      return resolvedUrl;
+    }
+
+    if (prediction.status === 'failed' || prediction.status === 'canceled') {
+      throw new Error(`LaMa ${prediction.status}: ${prediction.error || 'unknown error'}`);
+    }
   }
-  if (!outputUrl) throw new Error('LaMa model returned no output URL');
-  console.log('[Inpainting] LaMa removal completed');
-  return outputUrl;
+
+  throw new Error('LaMa removal timed out');
 }
 
 /**
@@ -190,13 +269,66 @@ async function storeInpaintedImage(imageUrl, entityId) {
   return resultUrl;
 }
 
+async function getRemoteImageDimensions(imageUrl) {
+  const response = await axios.get(imageUrl, {
+    responseType: 'arraybuffer',
+    timeout: 30000,
+  });
+
+  const metadata = await sharp(Buffer.from(response.data)).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error('Could not determine source image dimensions');
+  }
+
+  return { width: metadata.width, height: metadata.height };
+}
+
+async function refineRemovalMask(maskBuffer) {
+  // Slight dilation + feathering helps LaMa remove edge halos and leftover fragments.
+  return sharp(maskBuffer)
+    .greyscale()
+    .threshold(16)
+    .dilate(2)
+    .blur(0.8)
+    .png()
+    .toBuffer();
+}
+
 /**
  * Store a mask image (base64 data URL) to S3 for Replicate to access.
  */
-async function storeMask(maskDataUrl, entityId) {
+async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
+  const { forRemoval = false } = options;
   // Convert data:image/png;base64,... to buffer
   const base64Data = maskDataUrl.replace(/^data:image\/\w+;base64,/, '');
-  const buffer = Buffer.from(base64Data, 'base64');
+  let buffer = Buffer.from(base64Data, 'base64');
+
+  if (sourceImageUrl) {
+    const maskMetadata = await sharp(buffer).metadata();
+    let sourceDimensions = null;
+
+    if (!maskMetadata.width || !maskMetadata.height) {
+      sourceDimensions = await getRemoteImageDimensions(sourceImageUrl);
+    }
+
+    if (sourceDimensions && (maskMetadata.width !== sourceDimensions.width || maskMetadata.height !== sourceDimensions.height)) {
+      console.log(
+        `[Inpainting] Resizing mask from ${maskMetadata.width}x${maskMetadata.height} to ${sourceDimensions.width}x${sourceDimensions.height}`
+      );
+
+      buffer = await sharp(buffer)
+        .resize(sourceDimensions.width, sourceDimensions.height, {
+          fit: 'fill',
+          kernel: sharp.kernel.nearest,
+        })
+        .png()
+        .toBuffer();
+    }
+  }
+
+  if (forRemoval) {
+    buffer = await refineRemovalMask(buffer);
+  }
 
   const ts = Date.now();
   const uid = uuidv4().slice(0, 8);
@@ -230,11 +362,14 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
   markInFlight(entityId);
 
   try {
-    // Upload mask to S3 so Replicate can access it
-    const maskUrl = await storeMask(maskDataUrl, entityId);
-
     // Choose model based on mode/prompt
     const isRemoval = mode === 'remove' || !prompt;
+
+    // Upload mask to S3 so Replicate can access it
+    const maskUrl = await storeMask(maskDataUrl, entityId, imageUrl, {
+      forRemoval: isRemoval,
+    });
+
     let resultUrl;
 
     if (isRemoval) {

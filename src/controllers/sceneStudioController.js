@@ -1169,8 +1169,9 @@ exports.inpaint = async (req, res) => {
       { userId: req.user?.id || null, strength: strength || 0.85, mode }
     );
 
-    // Update scene background with inpainted result
-    if (result.inpainted_url) {
+    // Only update scene background when we inpainted the background image itself.
+    const updatesBackground = !image_url || image_url === scene.background_url;
+    if (result.inpainted_url && updatesBackground) {
       await scene.update({ background_url: result.inpainted_url });
     }
 

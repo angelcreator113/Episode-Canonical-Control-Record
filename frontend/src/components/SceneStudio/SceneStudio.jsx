@@ -106,6 +106,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [isInpainting, setIsInpainting] = useState(false);
   const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [exportScale, setExportScale] = useState(2);
+  const [backgroundLayout, setBackgroundLayout] = useState(null);
 
   // Background removal state
   const [isRemovingBg, setIsRemovingBg] = useState(false);
@@ -693,15 +694,37 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setIsInpainting(true);
     setSaveErrorMsg(null);
     try {
-      const maskDataUrl = MaskLayer._exportMask();
-      if (!maskDataUrl) {
+      const selectedImageExport = selectedObj?.type === 'image' && selectedObj?.assetUrl
+        ? {
+            targetObject: {
+              x: selectedObj.x || 0,
+              y: selectedObj.y || 0,
+              width: selectedObj.width || 1,
+              height: selectedObj.height || 1,
+              rotation: selectedObj.rotation || 0,
+              scaleX: selectedObj.scaleX || 1,
+              scaleY: selectedObj.scaleY || 1,
+              flipX: selectedObj.flipX === true,
+              flipY: selectedObj.flipY === true,
+              cropData: selectedObj.cropData || null,
+              sourceWidth: selectedObj._asset?.width || selectedObj.width || 1,
+              sourceHeight: selectedObj._asset?.height || selectedObj.height || 1,
+            },
+          }
+        : null;
+
+      const exportOptions = selectedImageExport
+        || ((!selectedObj && backgroundLayout) ? { targetLayout: backgroundLayout } : {});
+
+      const preciseMaskDataUrl = MaskLayer._exportMask(exportOptions);
+      if (!preciseMaskDataUrl) {
         setIsInpainting(false);
         return;
       }
 
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
-        maskDataUrl,
+        maskDataUrl: preciseMaskDataUrl,
         prompt: (inpaintPrompt || '').trim() || undefined,
       });
 
@@ -969,6 +992,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             depthEffects={state.depthEffects}
             brushSize={brushSize}
             onMaskChange={setHasMask}
+            onBackgroundLayoutChange={setBackgroundLayout}
           />
 
           {/* Erase tool controls — shown when erase tool is active */}
