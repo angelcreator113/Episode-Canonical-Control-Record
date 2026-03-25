@@ -1086,6 +1086,9 @@ router.post('/:id/generate-object', optionalAuth, asyncHandler(sceneStudioContro
 // POST /api/v1/scene-sets/:id/angles/:angleId/generate-depth - Depth map estimation for angle
 router.post('/:id/angles/:angleId/generate-depth', optionalAuth, asyncHandler(sceneStudioController.generateAngleDepth));
 
+// GET /api/v1/scene-sets/:id/angles/:angleId/depth-map - Proxy depth map image (avoids S3 CORS)
+router.get('/:id/angles/:angleId/depth-map', asyncHandler(sceneStudioController.proxyAngleDepthMap));
+
 // POST /api/v1/scene-sets/:id/objects - Add object to scene set canvas
 router.post('/:id/objects', optionalAuth, asyncHandler(sceneStudioController.addSceneSetObject));
 

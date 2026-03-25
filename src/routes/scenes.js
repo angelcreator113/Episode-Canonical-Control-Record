@@ -238,6 +238,13 @@ router.post(
   asyncHandler(sceneStudioController.generateDepth)
 );
 
+// GET /api/v1/scenes/:id/depth-map - Proxy depth map image (avoids S3 CORS issues)
+router.get(
+  '/:id/depth-map',
+  validateUUIDParam('id'),
+  asyncHandler(sceneStudioController.proxyDepthMap)
+);
+
 // POST /api/v1/scenes/:id/objects - Add object to canvas
 router.post(
   '/:id/objects',
