@@ -50,9 +50,15 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
   const timerRef = useRef(null);
   const promptRef = useRef(null);
 
-  // Focus prompt textarea when requested
+  // Focus prompt textarea when requested, or pre-fill from smart suggestion
   useEffect(() => {
+    if (!focusTarget) return;
     if (focusTarget === 'generate-prompt' && promptRef.current) {
+      promptRef.current.focus();
+      if (onClearFocus) onClearFocus();
+    } else if (focusTarget.startsWith('generate-prefill:') && promptRef.current) {
+      const prefill = focusTarget.slice('generate-prefill:'.length);
+      setPrompt(prefill);
       promptRef.current.focus();
       if (onClearFocus) onClearFocus();
     }

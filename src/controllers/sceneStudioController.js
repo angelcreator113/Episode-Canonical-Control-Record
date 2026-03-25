@@ -140,7 +140,24 @@ exports.saveCanvas = async (req, res) => {
       await scene.update({ canvas_settings: merged }, { transaction });
     }
 
+    if (objects !== undefined && !Array.isArray(objects)) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'objects must be an array' });
+    }
+
     if (Array.isArray(objects)) {
+      // Validate asset_ids exist for objects that reference them
+      const assetIds = [...new Set(objects.filter((o) => o.asset_id).map((o) => o.asset_id))];
+      if (assetIds.length > 0) {
+        const foundAssets = await Asset.findAll({ where: { id: assetIds }, attributes: ['id'], transaction });
+        const foundIds = new Set(foundAssets.map((a) => a.id));
+        const missing = assetIds.filter((aid) => !foundIds.has(aid));
+        if (missing.length > 0) {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, error: `Invalid asset_ids: ${missing.join(', ')}` });
+        }
+      }
+
       // Get existing object IDs for this scene
       const existing = await SceneAsset.findAll({
         where: { scene_id: id },
@@ -458,6 +475,15 @@ exports.createVariant = async (req, res) => {
           });
         }
       }
+      if (!variantGroup) {
+        // Variant group record is missing — recreate it
+        variantGroup = await SceneObjectVariant.create({
+          scene_id: id,
+          variant_group_name: sourceObj.object_label || 'Variant Group',
+          active_variant_id: sourceObj.id,
+          metadata: {},
+        }, { transaction });
+      }
     }
 
     // Clone the source as a new variant (inactive)
@@ -475,8 +501,6 @@ exports.createVariant = async (req, res) => {
       is_active_variant: false,
     }, { transaction });
 
-    await transaction.commit();
-
     const created = await SceneAsset.findByPk(newVariant.id, {
       include: [{
         model: Asset,
@@ -486,7 +510,10 @@ exports.createVariant = async (req, res) => {
           'width', 'height', 'category',
         ],
       }],
+      transaction,
     });
+
+    await transaction.commit();
 
     res.status(201).json({
       success: true,
@@ -589,9 +616,19 @@ exports.getVariantGroup = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Variant group not found' });
     }
 
-    // Get all variants in this group
+    // Get all variants in this group — find variant_group_id from active variant or any member
     const currentActive = await SceneAsset.findByPk(variantGroup.active_variant_id);
-    const varGroupId = currentActive ? currentActive.variant_group_id : null;
+    let varGroupId = currentActive ? currentActive.variant_group_id : null;
+
+    // Fallback: if active variant was deleted, find any remaining member
+    if (!varGroupId) {
+      const anyMember = await SceneAsset.findOne({
+        where: { scene_id: id },
+        attributes: ['variant_group_id'],
+        order: [['created_at', 'ASC']],
+      });
+      varGroupId = anyMember?.variant_group_id || null;
+    }
 
     let variants = [];
     if (varGroupId) {
@@ -717,7 +754,24 @@ exports.saveSceneSetCanvas = async (req, res) => {
       await sceneSet.update({ canvas_settings: merged }, { transaction });
     }
 
+    if (objects !== undefined && !Array.isArray(objects)) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'objects must be an array' });
+    }
+
     if (Array.isArray(objects)) {
+      // Validate asset_ids exist for objects that reference them
+      const assetIds = [...new Set(objects.filter((o) => o.asset_id).map((o) => o.asset_id))];
+      if (assetIds.length > 0) {
+        const foundAssets = await Asset.findAll({ where: { id: assetIds }, attributes: ['id'], transaction });
+        const foundIds = new Set(foundAssets.map((a) => a.id));
+        const missing = assetIds.filter((aid) => !foundIds.has(aid));
+        if (missing.length > 0) {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, error: `Invalid asset_ids: ${missing.join(', ')}` });
+        }
+      }
+
       const existing = await SceneAsset.findAll({
         where: { scene_set_id: id },
         attributes: ['id'],
@@ -928,6 +982,166 @@ exports.generateSceneSetObject = async (req, res) => {
   }
 };
 
+// ── Background Regeneration ──
+
+exports.regenerateBackground = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mood, time_of_day, current_background_url } = req.body;
+
+    const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url', 'description', 'mood', 'episode_id'] });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    const bgUrl = current_background_url || scene.background_url;
+    if (!bgUrl) {
+      return res.status(400).json({ success: false, error: 'No background to regenerate from' });
+    }
+
+    // Build style modifiers from mood and time of day
+    const modifiers = [];
+    if (time_of_day) {
+      const timeMap = {
+        dawn: 'soft dawn lighting, pink and gold sky, early morning atmosphere',
+        day: 'bright daylight, clear warm light, midday sun',
+        golden: 'golden hour lighting, warm amber tones, long shadows, sunset glow',
+        night: 'night scene, moonlight, deep blues and purples, ambient glow, stars',
+      };
+      modifiers.push(timeMap[time_of_day] || '');
+    }
+    if (mood) {
+      const moodMap = {
+        warm: 'warm color palette, inviting atmosphere, soft light',
+        dramatic: 'dramatic lighting, high contrast, deep shadows, cinematic',
+        soft: 'soft dreamy atmosphere, pastel tones, gentle diffused light',
+        moody: 'moody atmosphere, muted tones, atmospheric haze, contemplative',
+        ethereal: 'ethereal glow, otherworldly, luminous, magical light particles',
+      };
+      modifiers.push(moodMap[mood] || '');
+    }
+
+    const styleHints = modifiers.filter(Boolean).join('. ');
+    const sceneDesc = scene.description || 'interior scene';
+
+    // Use DALL-E 3 to generate a background variation
+    const prompt = `A beautiful ${sceneDesc} background scene. ${styleHints}. Wide establishing shot, no people, no text, photographic quality, 16:9 aspect ratio.`;
+
+    let showId = null;
+    try {
+      if (scene.episode_id) {
+        const { Episode } = require('../models');
+        const ep = await Episode.findByPk(scene.episode_id, { attributes: ['show_id'] });
+        showId = ep?.show_id || null;
+      }
+    } catch { /* non-critical */ }
+
+    const options = await objectGenerationService.generateObject(prompt, {
+      sceneId: id,
+      styleHints: 'wide scene background, establishing shot, no isolated object, full scene',
+      count: 2,
+      removeBackground: false,
+      userId: req.user?.id || null,
+      showId,
+      Asset,
+    });
+
+    // Update scene mood if provided
+    if (mood) {
+      await scene.update({ mood });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        options: options.map((o) => ({
+          ...o,
+          type: 'background',
+        })),
+        mood,
+        time_of_day,
+      },
+    });
+  } catch (error) {
+    console.error('Scene Studio regenerateBackground error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+// ── Smart Suggestions ──
+
+exports.suggestObjects = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const scene = await Scene.findByPk(id, {
+      attributes: ['id', 'description', 'mood', 'canvas_settings', 'characters'],
+    });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    // Check cache in canvas_settings
+    const cached = scene.canvas_settings?.suggestions;
+    if (cached && cached.timestamp && (Date.now() - cached.timestamp < 3600000)) {
+      return res.json({ success: true, data: { suggestions: cached.items } });
+    }
+
+    // Get existing objects to understand what's already placed
+    const existingObjects = await SceneAsset.findAll({
+      where: { scene_id: id },
+      attributes: ['object_label', 'object_type', 'asset_role'],
+    });
+    const existingLabels = existingObjects.map((o) => o.object_label).filter(Boolean);
+
+    const sceneDesc = scene.description || 'a scene';
+    const mood = scene.mood || 'warm';
+    const existing = existingLabels.length > 0
+      ? `Already placed: ${existingLabels.join(', ')}.`
+      : 'The scene is empty.';
+
+    // Use Claude for suggestions
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 200,
+      messages: [{
+        role: 'user',
+        content: `You are a scene design assistant for a luxury lifestyle show. Given this scene, suggest 6 objects to add.
+
+Scene: ${sceneDesc}
+Mood: ${mood}
+${existing}
+
+Return ONLY a JSON array of 6 objects, each with "label" (2-3 words) and "prompt" (10-15 word generation prompt). Focus on decor, props, and atmosphere items. No people.
+
+Example: [{"label": "Gold Mirror", "prompt": "ornate gold-framed mirror with soft reflection, baroque style"}]`,
+      }],
+    });
+
+    let suggestions = [];
+    try {
+      const text = response.content[0]?.text || '[]';
+      const match = text.match(/\[[\s\S]*\]/);
+      suggestions = match ? JSON.parse(match[0]) : [];
+    } catch { suggestions = []; }
+
+    // Cache in canvas_settings
+    if (suggestions.length > 0) {
+      const merged = { ...(scene.canvas_settings || {}), suggestions: { items: suggestions, timestamp: Date.now() } };
+      await scene.update({ canvas_settings: merged });
+    }
+
+    res.json({ success: true, data: { suggestions } });
+  } catch (error) {
+    console.error('Scene Studio suggestObjects error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // ── Depth Estimation (Scenes) ──
 
 exports.generateDepth = async (req, res) => {
@@ -1061,7 +1275,7 @@ const axios = require('axios');
 // Generic S3 image proxy — validates URL belongs to our S3 bucket
 function proxyS3Image(req, res, depthUrl) {
   const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
-  if (!depthUrl || !depthUrl.includes('.s3.') || (S3_BUCKET && !depthUrl.includes(S3_BUCKET))) {
+  if (!depthUrl || !depthUrl.includes('.s3.') || !S3_BUCKET || !depthUrl.includes(S3_BUCKET)) {
     return res.status(404).json({ success: false, error: 'No depth map found' });
   }
 
@@ -1074,22 +1288,28 @@ function proxyS3Image(req, res, depthUrl) {
     })
     .catch((error) => {
       console.error('Depth map proxy error:', error.message);
-      res.status(error.response?.status || 502).json({ success: false, error: 'Failed to fetch depth map' });
+      res.status(502).json({ success: false, error: 'Failed to fetch depth map' });
     });
 }
 
 exports.proxyDepthMap = async (req, res) => {
   try {
     const { id } = req.params;
-    let depthUrl = req.query.url || null;
 
-    // If no URL param, look up from DB
-    if (!depthUrl) {
-      const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
-      if (sceneCols.canvas_settings) {
-        const scene = await Scene.findByPk(id, { attributes: ['id', 'canvas_settings'] });
-        depthUrl = scene?.canvas_settings?.depth_map_url;
-      }
+    // First try DB lookup, then fall back to ?url= query param
+    let depthUrl = null;
+
+    const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
+    if (sceneCols.canvas_settings) {
+      const scene = await Scene.findByPk(id, { attributes: ['id', 'canvas_settings'] });
+      depthUrl = scene?.canvas_settings?.depth_map_url;
+    }
+
+    // Allow ?url= fallback for freshly generated depth maps not yet saved
+    if (!depthUrl && req.query.url) {
+      const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
+      const allowed = S3_BUCKET && req.query.url.includes('.s3.') && req.query.url.includes(S3_BUCKET);
+      if (allowed) depthUrl = req.query.url;
     }
 
     proxyS3Image(req, res, depthUrl);
@@ -1102,15 +1322,21 @@ exports.proxyDepthMap = async (req, res) => {
 exports.proxyAngleDepthMap = async (req, res) => {
   try {
     const { id, angleId } = req.params;
-    let depthUrl = req.query.url || null;
 
-    // If no URL param, look up from DB
-    if (!depthUrl) {
-      const angle = await SceneAngle.findOne({
-        where: { id: angleId, scene_set_id: id },
-        attributes: ['id', 'depth_map_url'],
-      });
-      depthUrl = angle?.depth_map_url;
+    // First try DB lookup, then fall back to ?url= query param
+    let depthUrl = null;
+
+    const angle = await SceneAngle.findOne({
+      where: { id: angleId, scene_set_id: id },
+      attributes: ['id', 'depth_map_url'],
+    });
+    depthUrl = angle?.depth_map_url;
+
+    // Allow ?url= fallback for freshly generated depth maps not yet saved
+    if (!depthUrl && req.query.url) {
+      const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
+      const allowed = S3_BUCKET && req.query.url.includes('.s3.') && req.query.url.includes(S3_BUCKET);
+      if (allowed) depthUrl = req.query.url;
     }
 
     proxyS3Image(req, res, depthUrl);

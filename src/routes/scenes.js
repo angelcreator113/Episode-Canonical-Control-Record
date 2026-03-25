@@ -230,6 +230,22 @@ router.post(
   asyncHandler(sceneStudioController.generateObject)
 );
 
+// POST /api/v1/scenes/:id/regenerate-background - AI background variation
+router.post(
+  '/:id/regenerate-background',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.regenerateBackground)
+);
+
+// POST /api/v1/scenes/:id/suggest-objects - AI smart suggestions
+router.post(
+  '/:id/suggest-objects',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.suggestObjects)
+);
+
 // POST /api/v1/scenes/:id/generate-depth - Depth map estimation (DepthAnythingV2)
 router.post(
   '/:id/generate-depth',

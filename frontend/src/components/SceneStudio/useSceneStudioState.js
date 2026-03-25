@@ -53,6 +53,7 @@ function normalizeObject(raw) {
     sceneAngleId: raw.scene_angle_id || null,
     startTimecode: raw.start_timecode || null,
     endTimecode: raw.end_timecode || null,
+    depthLayer: raw.metadata?.depthLayer || 'midground',
     metadata: raw.metadata || {},
     // Keep raw asset reference for inspector
     _asset: asset,
@@ -92,7 +93,7 @@ function serializeObject(obj) {
     start_timecode: obj.startTimecode,
     end_timecode: obj.endTimecode,
     position: null,
-    metadata: obj.metadata,
+    metadata: { ...obj.metadata, depthLayer: obj.depthLayer || 'midground' },
   };
 }
 
@@ -455,6 +456,33 @@ export default function useSceneStudioState() {
     setIsDirty(true);
   }, []);
 
+  // ── Grouping ──
+
+  const groupObjects = useCallback((ids) => {
+    if (!ids || ids.length < 2) return;
+    pushHistory(JSON.parse(JSON.stringify(objects)));
+    const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    setObjects((prev) => prev.map((o) => ids.includes(o.id) ? { ...o, groupId } : o));
+    setIsDirty(true);
+  }, [objects, pushHistory]);
+
+  const ungroupObjects = useCallback((groupId) => {
+    if (!groupId) return;
+    pushHistory(JSON.parse(JSON.stringify(objects)));
+    setObjects((prev) => prev.map((o) => o.groupId === groupId ? { ...o, groupId: null } : o));
+    setIsDirty(true);
+  }, [objects, pushHistory]);
+
+  // ── Replace Asset ──
+
+  const replaceObjectAsset = useCallback((objectId, newAssetId, newAssetUrl, newAsset) => {
+    pushHistory(JSON.parse(JSON.stringify(objects)));
+    setObjects((prev) => prev.map((o) =>
+      o.id === objectId ? { ...o, assetId: newAssetId, assetUrl: newAssetUrl, _asset: newAsset || o._asset } : o
+    ));
+    setIsDirty(true);
+  }, [objects, pushHistory]);
+
   return {
     // State
     objects,
@@ -508,6 +536,9 @@ export default function useSceneStudioState() {
     setSceneSetData,
     updateDepthMapUrl,
     updateDepthEffects,
+    groupObjects,
+    ungroupObjects,
+    replaceObjectAsset,
   };
 }
 

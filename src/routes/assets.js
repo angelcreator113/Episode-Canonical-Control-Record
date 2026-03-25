@@ -13,7 +13,7 @@ const express = require('express');
 const multer = require('multer');
 const AssetService = require('../services/AssetService');
 const { models } = require('../models');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
 const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
 
 const router = express.Router();
@@ -748,7 +748,7 @@ router.get('/:id', validateUUIDParam('id'), async (req, res) => {
  * POST /api/v1/assets
  * Upload new asset
  */
-router.post('/', upload.single('file'), authenticate, validateAssetUpload, async (req, res) => {
+router.post('/', upload.single('file'), optionalAuth, validateAssetUpload, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
