@@ -134,9 +134,10 @@ exports.saveCanvas = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Scene not found' });
     }
 
-    // Update canvas settings on scene
+    // Merge canvas settings (preserve server-set fields like depth_map_url)
     if (canvas_settings !== undefined) {
-      await scene.update({ canvas_settings }, { transaction });
+      const merged = { ...(scene.canvas_settings || {}), ...canvas_settings };
+      await scene.update({ canvas_settings: merged }, { transaction });
     }
 
     if (Array.isArray(objects)) {
@@ -710,8 +711,10 @@ exports.saveSceneSetCanvas = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Scene set not found' });
     }
 
+    // Merge canvas settings (preserve server-set fields like depth_map_url)
     if (canvas_settings !== undefined) {
-      await sceneSet.update({ canvas_settings }, { transaction });
+      const merged = { ...(sceneSet.canvas_settings || {}), ...canvas_settings };
+      await sceneSet.update({ canvas_settings: merged }, { transaction });
     }
 
     if (Array.isArray(objects)) {
@@ -1055,82 +1058,64 @@ exports.generateAngleDepth = async (req, res) => {
 
 const axios = require('axios');
 
+// Generic S3 image proxy — validates URL belongs to our S3 bucket
+function proxyS3Image(req, res, depthUrl) {
+  const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
+  if (!depthUrl || !depthUrl.includes('.s3.') || (S3_BUCKET && !depthUrl.includes(S3_BUCKET))) {
+    return res.status(404).json({ success: false, error: 'No depth map found' });
+  }
+
+  axios.get(depthUrl, { responseType: 'stream', timeout: 15000 })
+    .then((response) => {
+      res.set('Content-Type', response.headers['content-type'] || 'image/png');
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Access-Control-Allow-Origin', '*');
+      response.data.pipe(res);
+    })
+    .catch((error) => {
+      console.error('Depth map proxy error:', error.message);
+      res.status(error.response?.status || 502).json({ success: false, error: 'Failed to fetch depth map' });
+    });
+}
+
 exports.proxyDepthMap = async (req, res) => {
   try {
     const { id } = req.params;
+    let depthUrl = req.query.url || null;
 
-    // First try DB lookup, then fall back to ?url= query param
-    let depthUrl = null;
-
-    const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
-    if (sceneCols.canvas_settings) {
-      const scene = await Scene.findByPk(id, {
-        attributes: ['id', 'canvas_settings'],
-      });
-      depthUrl = scene?.canvas_settings?.depth_map_url;
-    }
-
-    // Allow ?url= fallback for freshly generated depth maps not yet saved
-    if (!depthUrl && req.query.url) {
-      // Validate the URL is from our S3 bucket to prevent open proxy abuse
-      const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
-      const allowed = req.query.url.includes('.s3.') && req.query.url.includes(S3_BUCKET);
-      if (allowed) depthUrl = req.query.url;
-    }
-
+    // If no URL param, look up from DB
     if (!depthUrl) {
-      return res.status(404).json({ success: false, error: 'No depth map found for this scene' });
+      const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
+      if (sceneCols.canvas_settings) {
+        const scene = await Scene.findByPk(id, { attributes: ['id', 'canvas_settings'] });
+        depthUrl = scene?.canvas_settings?.depth_map_url;
+      }
     }
 
-    const response = await axios.get(depthUrl, {
-      responseType: 'stream',
-      timeout: 15000,
-    });
-
-    res.set('Content-Type', response.headers['content-type'] || 'image/png');
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.set('Access-Control-Allow-Origin', '*');
-    response.data.pipe(res);
+    proxyS3Image(req, res, depthUrl);
   } catch (error) {
     console.error('Depth map proxy error:', error.message);
-    res.status(error.response?.status || 500).json({ success: false, error: 'Failed to fetch depth map' });
+    res.status(500).json({ success: false, error: 'Failed to fetch depth map' });
   }
 };
 
 exports.proxyAngleDepthMap = async (req, res) => {
   try {
     const { id, angleId } = req.params;
+    let depthUrl = req.query.url || null;
 
-    let depthUrl = null;
-
-    const angle = await SceneAngle.findOne({
-      where: { id: angleId, scene_set_id: id },
-      attributes: ['id', 'depth_map_url'],
-    });
-    depthUrl = angle?.depth_map_url;
-
-    // Allow ?url= fallback for freshly generated depth maps not yet saved
-    if (!depthUrl && req.query.url) {
-      const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
-      const allowed = req.query.url.includes('.s3.') && req.query.url.includes(S3_BUCKET);
-      if (allowed) depthUrl = req.query.url;
-    }
-
+    // If no URL param, look up from DB
     if (!depthUrl) {
-      return res.status(404).json({ success: false, error: 'No depth map found for this angle' });
+      const angle = await SceneAngle.findOne({
+        where: { id: angleId, scene_set_id: id },
+        attributes: ['id', 'depth_map_url'],
+      });
+      depthUrl = angle?.depth_map_url;
     }
 
-    const response = await axios.get(depthUrl, {
-      responseType: 'stream',
-      timeout: 15000,
-    });
-
-    res.set('Content-Type', response.headers['content-type'] || 'image/png');
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.set('Access-Control-Allow-Origin', '*');
-    response.data.pipe(res);
+    proxyS3Image(req, res, depthUrl);
   } catch (error) {
     console.error('Depth map proxy error:', error.message);
-    res.status(error.response?.status || 500).json({ success: false, error: 'Failed to fetch depth map' });
+    res.status(500).json({ success: false, error: 'Failed to fetch depth map' });
   }
 };
