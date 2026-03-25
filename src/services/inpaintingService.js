@@ -19,6 +19,8 @@ const { v4: uuidv4 } = require('uuid');
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const REPLICATE_INPAINT_VERSION = process.env.REPLICATE_INPAINT_VERSION || 'a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7';
 const REPLICATE_LAMA_VERSION = process.env.REPLICATE_LAMA_VERSION || 'cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72';
+const REPLICATE_FLUX_FILL_PRO_VERSION = process.env.REPLICATE_FLUX_FILL_PRO_VERSION || '';
+const REMOVAL_TIER_DEFAULT = process.env.REMOVAL_TIER_DEFAULT || 'standard';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -203,6 +205,68 @@ async function runSdxlRemoval(imageUrl, maskUrl) {
 }
 
 /**
+ * Premium removal tier using FLUX Fill Pro.
+ * Requires REPLICATE_FLUX_FILL_PRO_VERSION to be configured.
+ */
+async function runFluxFillProRemoval(imageUrl, maskUrl) {
+  if (!REPLICATE_FLUX_FILL_PRO_VERSION) {
+    throw new Error('REPLICATE_FLUX_FILL_PRO_VERSION not configured');
+  }
+
+  if (!REPLICATE_API_TOKEN) {
+    throw new Error('REPLICATE_API_TOKEN not configured');
+  }
+
+  console.log('[Inpainting] Using FLUX Fill Pro premium removal');
+  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+
+  const prompt = [
+    'Remove masked object and reconstruct a realistic background.',
+    'Maintain exact scene perspective, lighting, and texture continuity.',
+    'Photorealistic and artifact-free.',
+  ].join(' ');
+
+  let prediction;
+  try {
+    prediction = await replicate.predictions.create({
+      version: REPLICATE_FLUX_FILL_PRO_VERSION,
+      input: {
+        image: imageUrl,
+        mask: maskUrl,
+        prompt,
+      },
+    });
+  } catch (err) {
+    const status = err.response?.status || err.status;
+    const detail = err.response?.data?.detail || err.message;
+    console.error(`[Inpainting] FLUX Fill Pro API error (${status}):`, detail);
+    throw new Error(`FLUX Fill Pro API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+  }
+
+  console.log(`[Inpainting] FLUX Fill Pro prediction ${prediction.id} created, polling...`);
+
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    prediction = await replicate.predictions.get(prediction.id);
+
+    if (prediction.status === 'succeeded') {
+      const outputUrl = extractReplicateOutputUrl(prediction.output);
+      if (!outputUrl) {
+        throw new Error('FLUX Fill Pro returned no output URL');
+      }
+      console.log('[Inpainting] FLUX Fill Pro removal completed');
+      return outputUrl;
+    }
+
+    if (prediction.status === 'failed' || prediction.status === 'canceled') {
+      throw new Error(`FLUX Fill Pro ${prediction.status}: ${prediction.error || 'unknown error'}`);
+    }
+  }
+
+  throw new Error('FLUX Fill Pro removal timed out');
+}
+
+/**
  * Run SDXL inpainting for creative fills (prompt-driven).
  * Uses explicit version hash for Replicate predictions API compatibility.
  */
@@ -366,11 +430,13 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
 /**
  * Inpaint (remove/fill) an area of a scene background.
  *
- * When mode is 'remove' (or no prompt given), uses SDXL removal with LaMa fallback.
+ * When mode is 'remove' (or no prompt given), uses tiered removal:
+ * premium: FLUX Fill Pro -> SDXL -> LaMa
+ * standard: SDXL -> LaMa
  * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
-  const { userId, strength, mode } = options;
+  const { userId, strength, mode, removalTier } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
   if (!rateCheck.allowed) throw new Error(rateCheck.reason);
@@ -389,12 +455,28 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     let resultUrl;
 
     if (isRemoval) {
-      console.log('[Inpainting] Mode: REMOVAL (SDXL -> LaMa fallback)');
-      try {
-        resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
-      } catch (sdxlError) {
-        console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
-        resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+      const tier = (removalTier || (mode === 'remove-premium' ? 'premium' : REMOVAL_TIER_DEFAULT)).toLowerCase();
+      console.log(`[Inpainting] Mode: REMOVAL (tier=${tier})`);
+
+      if (tier === 'premium') {
+        try {
+          resultUrl = await runFluxFillProRemoval(imageUrl, maskUrl);
+        } catch (fluxError) {
+          console.warn('[Inpainting] FLUX premium removal failed; falling back to SDXL:', fluxError.message);
+          try {
+            resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
+          } catch (sdxlError) {
+            console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
+            resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+          }
+        }
+      } else {
+        try {
+          resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
+        } catch (sdxlError) {
+          console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
+          resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+        }
       }
     } else {
       console.log(`[Inpainting] Mode: FILL (SDXL) — "${prompt.slice(0, 60)}"`);
