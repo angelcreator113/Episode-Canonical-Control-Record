@@ -200,7 +200,7 @@ export default function Toolbar({
           style={isDirty ? { fontWeight: 600 } : undefined}
           onClick={onSave}
           disabled={saveStatus === 'saving'}
-          title="Save (Ctrl+S)"
+          title={saveStatus === 'error' ? 'Save failed — click to retry' : 'Save (Ctrl+S)'}
         >
           {saveStatus === 'saving' ? (
             <><Save size={14} className="scene-studio-spin-icon" /> Saving...</>

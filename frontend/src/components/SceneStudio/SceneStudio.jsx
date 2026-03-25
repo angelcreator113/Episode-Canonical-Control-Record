@@ -52,6 +52,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [isLoading, setIsLoading] = useState(true);
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
+  const [saveErrorMsg, setSaveErrorMsg] = useState(null);
   const saveTimerRef = useRef(null);
   const saveRef = useRef(null);
 
@@ -129,9 +130,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     if (!state.contextId) {
       console.error('Scene Studio save: no contextId — scene not loaded');
       setSaveStatus('error');
+      setSaveErrorMsg('Scene not loaded — try refreshing');
       return;
     }
     isSavingRef.current = true;
+    setSaveErrorMsg(null);
     // Cancel any pending auto-save to avoid double-save
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
@@ -145,11 +148,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         if (mood) payload.canvas_settings.mood = mood;
         if (timeOfDay) payload.canvas_settings.timeOfDay = timeOfDay;
       }
+      console.log('Scene Studio saving:', { contextType: state.contextType, contextId: state.contextId, objectCount: payload.objects?.length });
+      let result;
       if (state.contextType === 'scene') {
-        await sceneService.saveCanvas(state.contextId, payload);
+        result = await sceneService.saveCanvas(state.contextId, payload);
       } else {
-        await sceneService.saveSceneSetCanvas(state.contextId, payload);
+        result = await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
+      console.log('Scene Studio save result:', result);
       state.markClean();
       // Ensure "Saving..." shows for at least 600ms so it doesn't flicker
       const elapsed = Date.now() - startTime;
@@ -163,7 +169,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }, 2000);
     } catch (err) {
       console.error('Scene Studio save error:', err);
-      if (mountedRef.current) setSaveStatus('error');
+      const msg = err.response?.data?.error || err.message || 'Save failed';
+      console.error('Scene Studio save error detail:', msg);
+      if (mountedRef.current) {
+        setSaveStatus('error');
+        setSaveErrorMsg(msg);
+      }
     } finally {
       isSavingRef.current = false;
     }
@@ -629,6 +640,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         onRegenerateVariation={handleRegenerateBackground}
         isRegenerating={isRegeneratingBg}
       />
+
+      {/* Save error banner */}
+      {saveErrorMsg && (
+        <div className="scene-studio-save-error-banner">
+          Save failed: {saveErrorMsg}
+          <button className="scene-studio-icon-btn" onClick={() => setSaveErrorMsg(null)} style={{ marginLeft: 'auto' }}>×</button>
+        </div>
+      )}
 
       {/* Guided Flow Stepper */}
       <GuidedFlow
