@@ -1081,15 +1081,21 @@ function proxyS3Image(req, res, depthUrl) {
 exports.proxyDepthMap = async (req, res) => {
   try {
     const { id } = req.params;
-    let depthUrl = req.query.url || null;
 
-    // If no URL param, look up from DB
-    if (!depthUrl) {
-      const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
-      if (sceneCols.canvas_settings) {
-        const scene = await Scene.findByPk(id, { attributes: ['id', 'canvas_settings'] });
-        depthUrl = scene?.canvas_settings?.depth_map_url;
-      }
+    // First try DB lookup, then fall back to ?url= query param
+    let depthUrl = null;
+
+    const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
+    if (sceneCols.canvas_settings) {
+      const scene = await Scene.findByPk(id, { attributes: ['id', 'canvas_settings'] });
+      depthUrl = scene?.canvas_settings?.depth_map_url;
+    }
+
+    // Allow ?url= fallback for freshly generated depth maps not yet saved
+    if (!depthUrl && req.query.url) {
+      const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
+      const allowed = S3_BUCKET && req.query.url.includes('.s3.') && req.query.url.includes(S3_BUCKET);
+      if (allowed) depthUrl = req.query.url;
     }
 
     proxyS3Image(req, res, depthUrl);
@@ -1102,15 +1108,21 @@ exports.proxyDepthMap = async (req, res) => {
 exports.proxyAngleDepthMap = async (req, res) => {
   try {
     const { id, angleId } = req.params;
-    let depthUrl = req.query.url || null;
 
-    // If no URL param, look up from DB
-    if (!depthUrl) {
-      const angle = await SceneAngle.findOne({
-        where: { id: angleId, scene_set_id: id },
-        attributes: ['id', 'depth_map_url'],
-      });
-      depthUrl = angle?.depth_map_url;
+    // First try DB lookup, then fall back to ?url= query param
+    let depthUrl = null;
+
+    const angle = await SceneAngle.findOne({
+      where: { id: angleId, scene_set_id: id },
+      attributes: ['id', 'depth_map_url'],
+    });
+    depthUrl = angle?.depth_map_url;
+
+    // Allow ?url= fallback for freshly generated depth maps not yet saved
+    if (!depthUrl && req.query.url) {
+      const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
+      const allowed = S3_BUCKET && req.query.url.includes('.s3.') && req.query.url.includes(S3_BUCKET);
+      if (allowed) depthUrl = req.query.url;
     }
 
     proxyS3Image(req, res, depthUrl);
