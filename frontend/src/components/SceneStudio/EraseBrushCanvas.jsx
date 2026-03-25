@@ -190,10 +190,25 @@ export default function EraseBrushCanvas({
     setHasStrokes(true);
   }, [brushSize, brushMode, applySoftBrush]);
 
-  // Draw lasso polygon
+  // Track cursor position for live lasso preview
+  const [cursorPos, setCursorPos] = useState(null);
+
+  // Animated lasso offset for marching ants effect
+  const [lassoOffset, setLassoOffset] = useState(0);
+
+  // Animate the lasso dash offset (marching ants)
+  useEffect(() => {
+    if (drawMode !== 'lasso' || lassoPoints.length === 0) return;
+    const interval = setInterval(() => {
+      setLassoOffset((prev) => (prev + 1) % 20);
+    }, 50);
+    return () => clearInterval(interval);
+  }, [drawMode, lassoPoints.length]);
+
+  // Draw lasso polygon with high visibility
   const drawLasso = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || lassoPoints.length < 2) return;
+    if (!canvas || lassoPoints.length === 0) return;
 
     const ctx = canvas.getContext('2d');
     
@@ -202,16 +217,72 @@ export default function EraseBrushCanvas({
       ctx.putImageData(strokeHistory[historyIndex], 0, 0);
     }
 
-    // Draw the lasso path
-    ctx.strokeStyle = '#667eea';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
+    // Draw lasso path with double-stroke for visibility (white outline + colored inner)
+    // Outer white stroke for contrast
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
     lassoPoints.forEach((pt) => ctx.lineTo(pt.x, pt.y));
+    if (cursorPos && lassoPoints.length > 0) {
+      ctx.lineTo(cursorPos.x, cursorPos.y);
+    }
+    ctx.stroke();
+
+    // Inner colored dashed stroke (marching ants)
+    ctx.strokeStyle = '#667eea';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 6]);
+    ctx.lineDashOffset = -lassoOffset;
+    ctx.beginPath();
+    ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+    lassoPoints.forEach((pt) => ctx.lineTo(pt.x, pt.y));
+    if (cursorPos && lassoPoints.length > 0) {
+      ctx.lineTo(cursorPos.x, cursorPos.y);
+    }
     ctx.stroke();
     ctx.setLineDash([]);
-  }, [lassoPoints, historyIndex, strokeHistory]);
+    ctx.lineDashOffset = 0;
+
+    // Draw point indicators at each lasso vertex
+    lassoPoints.forEach((pt, i) => {
+      // Outer white ring
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner colored dot
+      ctx.fillStyle = i === 0 ? '#22c55e' : '#667eea'; // Green for first point
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      // Point number
+      if (lassoPoints.length > 2) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 9px DM Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(i + 1), pt.x, pt.y);
+      }
+    });
+
+    // Show "closing hint" when near first point
+    if (lassoPoints.length >= 3 && cursorPos) {
+      const first = lassoPoints[0];
+      const dist = Math.hypot(cursorPos.x - first.x, cursorPos.y - first.y);
+      if (dist < 20) {
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(first.x, first.y, 15, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }, [lassoPoints, historyIndex, strokeHistory, cursorPos, lassoOffset]);
 
   // Fill lasso polygon
   const fillLasso = useCallback(() => {
@@ -235,6 +306,7 @@ export default function EraseBrushCanvas({
 
     setHasStrokes(true);
     setLassoPoints([]);
+    setCursorPos(null);
     saveToHistory();
   }, [lassoPoints, historyIndex, strokeHistory, saveToHistory]);
 
@@ -245,6 +317,15 @@ export default function EraseBrushCanvas({
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
 
     if (drawMode === 'lasso') {
+      // Check if clicking near the first point to close the lasso
+      if (lassoPoints.length >= 3) {
+        const first = lassoPoints[0];
+        const dist = Math.hypot(x - first.x, y - first.y);
+        if (dist < 20) {
+          fillLasso();
+          return;
+        }
+      }
       // Add point to lasso
       setLassoPoints((prev) => [...prev, { x, y }]);
       return;
@@ -267,19 +348,24 @@ export default function EraseBrushCanvas({
       ctx.fill();
       setHasStrokes(true);
     }
-  }, [screenToCanvas, brushSize, brushMode, isProcessing, drawMode, applySoftBrush]);
+  }, [screenToCanvas, brushSize, brushMode, isProcessing, drawMode, applySoftBrush, lassoPoints, fillLasso]);
 
   const handleMouseMove = useCallback((e) => {
     if (isProcessing) return;
     
-    if (drawMode === 'lasso' && lassoPoints.length > 0) {
-      drawLasso();
+    const { x, y } = screenToCanvas(e.clientX, e.clientY);
+    
+    if (drawMode === 'lasso') {
+      // Always update cursor position for live preview
+      setCursorPos({ x, y });
+      if (lassoPoints.length > 0) {
+        drawLasso();
+      }
       return;
     }
 
     if (!isDrawing) return;
 
-    const { x, y } = screenToCanvas(e.clientX, e.clientY);
     drawStroke(lastPosRef.current.x, lastPosRef.current.y, x, y);
     lastPosRef.current = { x, y };
   }, [isDrawing, screenToCanvas, drawStroke, isProcessing, drawMode, lassoPoints.length, drawLasso]);
@@ -292,6 +378,9 @@ export default function EraseBrushCanvas({
   }, [drawMode, isDrawing, saveToHistory]);
 
   const handleMouseLeave = useCallback(() => {
+    if (drawMode === 'lasso') {
+      setCursorPos(null);
+    }
     if (drawMode === 'brush' && isDrawing) {
       saveToHistory();
     }
@@ -346,6 +435,7 @@ export default function EraseBrushCanvas({
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
     setHasStrokes(false);
     setLassoPoints([]);
+    setCursorPos(null);
     setStrokeHistory([]);
     setHistoryIndex(-1);
     saveToHistory();
@@ -514,7 +604,11 @@ export default function EraseBrushCanvas({
         <div className="erase-brush-instructions">
           {drawMode === 'brush' 
             ? 'Paint over areas to remove. The AI will fill them intelligently.'
-            : 'Click to add points. Double-click or press Enter to close the shape.'}
+            : lassoPoints.length === 0
+              ? 'Click to start drawing a selection. Each click adds a point.'
+              : lassoPoints.length < 3
+                ? `${lassoPoints.length} point${lassoPoints.length > 1 ? 's' : ''} — need at least 3 to close`
+                : `${lassoPoints.length} points — double-click or click near the green dot to close`}
         </div>
 
         {/* Custom prompt input */}
