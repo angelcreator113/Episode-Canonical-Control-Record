@@ -37,6 +37,7 @@ export default function Toolbar({
   onRedo,
   isDirty,
   isSaving,
+  saveError,
   onSave,
   onExport,
   title,
@@ -194,12 +195,13 @@ export default function Toolbar({
         )}
 
         <button
-          className={`scene-studio-btn ${isDirty ? 'primary' : 'ghost'}`}
+          className={`scene-studio-btn ${saveError ? 'danger' : isDirty ? 'primary' : 'ghost'}`}
           onClick={onSave}
           disabled={isSaving}
+          title={isDirty ? 'Save changes (Ctrl+S)' : 'Click to force save'}
         >
           <Save size={14} />
-          {isSaving ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
+          {isSaving ? 'Saving...' : saveError ? 'Retry Save' : isDirty ? 'Save' : 'Saved'}
         </button>
 
         {onExport && (
