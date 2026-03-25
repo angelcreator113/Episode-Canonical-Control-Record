@@ -1038,9 +1038,10 @@ exports.regenerateBackground = async (req, res) => {
 
     const options = await objectGenerationService.generateObject(prompt, {
       sceneId: id,
-      styleHints: 'wide scene background, establishing shot, no isolated object, full scene',
+      styleHints,
       count: 2,
       removeBackground: false,
+      isScene: true,
       userId: req.user?.id || null,
       showId,
       Asset,

@@ -438,27 +438,19 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   // ── Background mood/time ──
 
-  const handleMoodChange = useCallback((newMood) => {
-    setMood(newMood);
-    state.updateCanvasSettings({ mood: newMood });
-  }, [state]);
-
-  const handleTimeOfDayChange = useCallback((newTime) => {
-    setTimeOfDay(newTime);
-    state.updateCanvasSettings({ timeOfDay: newTime });
-  }, [state]);
-
-  const handleRegenerateBackground = useCallback(async () => {
-    if (isRegeneratingBg || !state.contextId) return;
+  // Core regeneration — accepts overrides so mood/time changes can trigger immediately
+  const regenerateBackground = useCallback(async (overrides = {}) => {
+    if (isRegeneratingBg || !state.contextId || !backgroundUrl) return;
+    const effectiveMood = overrides.mood !== undefined ? overrides.mood : mood;
+    const effectiveTime = overrides.timeOfDay !== undefined ? overrides.timeOfDay : timeOfDay;
     setIsRegeneratingBg(true);
     try {
       const result = await sceneService.regenerateBackground(state.contextId, {
-        mood,
-        timeOfDay,
+        mood: effectiveMood,
+        timeOfDay: effectiveTime,
         currentBackgroundUrl: backgroundUrl,
       });
       if (result?.success && result.data?.options?.length > 0) {
-        // Use the first option as new background
         const newBgUrl = result.data.options[0].url;
         if (state.contextType === 'scene') {
           await sceneService.updateScene(state.contextId, { background_url: newBgUrl });
@@ -471,6 +463,28 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       setIsRegeneratingBg(false);
     }
   }, [isRegeneratingBg, state, mood, timeOfDay, backgroundUrl]);
+
+  const handleMoodChange = useCallback((newMood) => {
+    setMood(newMood);
+    state.updateCanvasSettings({ mood: newMood });
+    // Auto-regenerate background with new mood if we have a background
+    if (newMood && backgroundUrl) {
+      regenerateBackground({ mood: newMood });
+    }
+  }, [state, backgroundUrl, regenerateBackground]);
+
+  const handleTimeOfDayChange = useCallback((newTime) => {
+    setTimeOfDay(newTime);
+    state.updateCanvasSettings({ timeOfDay: newTime });
+    // Auto-regenerate background with new time of day if we have a background
+    if (newTime && backgroundUrl) {
+      regenerateBackground({ timeOfDay: newTime });
+    }
+  }, [state, backgroundUrl, regenerateBackground]);
+
+  const handleRegenerateBackground = useCallback(() => {
+    regenerateBackground();
+  }, [regenerateBackground]);
 
   const handleChangeBackground = useCallback(() => {
     setCreationPanelOpen(true);

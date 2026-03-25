@@ -98,9 +98,24 @@ function buildObjectPrompt(userPrompt, styleHints) {
   return parts.join(' ').trim();
 }
 
+function buildScenePrompt(userPrompt, styleHints) {
+  const parts = [
+    `Scene: ${userPrompt}.`,
+    'Wide establishing shot, cinematic composition, no people, no text, no UI elements.',
+    'Photographic quality, 16:9 aspect ratio, high resolution.',
+    'Style: Pinterest-core femininity, luxury lifestyle, warm tones, editorial photography.',
+  ];
+
+  if (styleHints) {
+    parts.push(styleHints);
+  }
+
+  return parts.join(' ').trim();
+}
+
 // ─── DALL-E 3 API ───────────────────────────────────────────────────────────
 
-async function callDallE3(prompt) {
+async function callDallE3(prompt, size = '1024x1024') {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
 
   const response = await axios.post(
@@ -109,7 +124,7 @@ async function callDallE3(prompt) {
       model: 'dall-e-3',
       prompt,
       n: 1,
-      size: '1024x1024',
+      size,
       quality: 'standard',
       response_format: 'url',
     },
@@ -257,7 +272,7 @@ async function createAssetRecord(Asset, { s3Url, s3UrlProcessed, prompt, styleHi
  * @returns {Promise<Array<{asset_id: string, url: string, width: number, height: number, background_removed: boolean}>>}
  */
 async function generateObject(prompt, options = {}) {
-  const { sceneId, styleHints, count = 2, userId, showId, Asset, removeBackground: doRemoveBg = false } = options;
+  const { sceneId, styleHints, count = 2, userId, showId, Asset, removeBackground: doRemoveBg = false, isScene = false } = options;
 
   // Rate limit check
   const rateCheck = checkRateLimit(userId, sceneId);
@@ -266,13 +281,14 @@ async function generateObject(prompt, options = {}) {
   }
 
   markInFlight(sceneId);
-  const fullPrompt = buildObjectPrompt(prompt, styleHints);
+  const fullPrompt = isScene ? buildScenePrompt(prompt, styleHints) : buildObjectPrompt(prompt, styleHints);
 
   console.log(`[ObjectGen] Generating ${count} object(s): "${prompt}"${doRemoveBg ? ' (with BG removal)' : ''}`);
 
   try {
     // DALL-E 3 only supports n=1, so call in parallel for multiple options
-    const calls = Array.from({ length: Math.min(count, 4) }, () => callDallE3(fullPrompt));
+    const imageSize = isScene ? '1792x1024' : '1024x1024';
+    const calls = Array.from({ length: Math.min(count, 4) }, () => callDallE3(fullPrompt, imageSize));
 
     const results = await Promise.allSettled(calls);
     const optionsOut = [];
