@@ -982,6 +982,166 @@ exports.generateSceneSetObject = async (req, res) => {
   }
 };
 
+// ── Background Regeneration ──
+
+exports.regenerateBackground = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mood, time_of_day, current_background_url } = req.body;
+
+    const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url', 'description', 'mood', 'episode_id'] });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    const bgUrl = current_background_url || scene.background_url;
+    if (!bgUrl) {
+      return res.status(400).json({ success: false, error: 'No background to regenerate from' });
+    }
+
+    // Build style modifiers from mood and time of day
+    const modifiers = [];
+    if (time_of_day) {
+      const timeMap = {
+        dawn: 'soft dawn lighting, pink and gold sky, early morning atmosphere',
+        day: 'bright daylight, clear warm light, midday sun',
+        golden: 'golden hour lighting, warm amber tones, long shadows, sunset glow',
+        night: 'night scene, moonlight, deep blues and purples, ambient glow, stars',
+      };
+      modifiers.push(timeMap[time_of_day] || '');
+    }
+    if (mood) {
+      const moodMap = {
+        warm: 'warm color palette, inviting atmosphere, soft light',
+        dramatic: 'dramatic lighting, high contrast, deep shadows, cinematic',
+        soft: 'soft dreamy atmosphere, pastel tones, gentle diffused light',
+        moody: 'moody atmosphere, muted tones, atmospheric haze, contemplative',
+        ethereal: 'ethereal glow, otherworldly, luminous, magical light particles',
+      };
+      modifiers.push(moodMap[mood] || '');
+    }
+
+    const styleHints = modifiers.filter(Boolean).join('. ');
+    const sceneDesc = scene.description || 'interior scene';
+
+    // Use DALL-E 3 to generate a background variation
+    const prompt = `A beautiful ${sceneDesc} background scene. ${styleHints}. Wide establishing shot, no people, no text, photographic quality, 16:9 aspect ratio.`;
+
+    let showId = null;
+    try {
+      if (scene.episode_id) {
+        const { Episode } = require('../models');
+        const ep = await Episode.findByPk(scene.episode_id, { attributes: ['show_id'] });
+        showId = ep?.show_id || null;
+      }
+    } catch { /* non-critical */ }
+
+    const options = await objectGenerationService.generateObject(prompt, {
+      sceneId: id,
+      styleHints: 'wide scene background, establishing shot, no isolated object, full scene',
+      count: 2,
+      removeBackground: false,
+      userId: req.user?.id || null,
+      showId,
+      Asset,
+    });
+
+    // Update scene mood if provided
+    if (mood) {
+      await scene.update({ mood });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        options: options.map((o) => ({
+          ...o,
+          type: 'background',
+        })),
+        mood,
+        time_of_day,
+      },
+    });
+  } catch (error) {
+    console.error('Scene Studio regenerateBackground error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+// ── Smart Suggestions ──
+
+exports.suggestObjects = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const scene = await Scene.findByPk(id, {
+      attributes: ['id', 'description', 'mood', 'canvas_settings', 'characters'],
+    });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    // Check cache in canvas_settings
+    const cached = scene.canvas_settings?.suggestions;
+    if (cached && cached.timestamp && (Date.now() - cached.timestamp < 3600000)) {
+      return res.json({ success: true, data: { suggestions: cached.items } });
+    }
+
+    // Get existing objects to understand what's already placed
+    const existingObjects = await SceneAsset.findAll({
+      where: { scene_id: id },
+      attributes: ['object_label', 'object_type', 'asset_role'],
+    });
+    const existingLabels = existingObjects.map((o) => o.object_label).filter(Boolean);
+
+    const sceneDesc = scene.description || 'a scene';
+    const mood = scene.mood || 'warm';
+    const existing = existingLabels.length > 0
+      ? `Already placed: ${existingLabels.join(', ')}.`
+      : 'The scene is empty.';
+
+    // Use Claude for suggestions
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 200,
+      messages: [{
+        role: 'user',
+        content: `You are a scene design assistant for a luxury lifestyle show. Given this scene, suggest 6 objects to add.
+
+Scene: ${sceneDesc}
+Mood: ${mood}
+${existing}
+
+Return ONLY a JSON array of 6 objects, each with "label" (2-3 words) and "prompt" (10-15 word generation prompt). Focus on decor, props, and atmosphere items. No people.
+
+Example: [{"label": "Gold Mirror", "prompt": "ornate gold-framed mirror with soft reflection, baroque style"}]`,
+      }],
+    });
+
+    let suggestions = [];
+    try {
+      const text = response.content[0]?.text || '[]';
+      const match = text.match(/\[[\s\S]*\]/);
+      suggestions = match ? JSON.parse(match[0]) : [];
+    } catch { suggestions = []; }
+
+    // Cache in canvas_settings
+    if (suggestions.length > 0) {
+      const merged = { ...(scene.canvas_settings || {}), suggestions: { items: suggestions, timestamp: Date.now() } };
+      await scene.update({ canvas_settings: merged });
+    }
+
+    res.json({ success: true, data: { suggestions } });
+  } catch (error) {
+    console.error('Scene Studio suggestObjects error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // ── Depth Estimation (Scenes) ──
 
 exports.generateDepth = async (req, res) => {

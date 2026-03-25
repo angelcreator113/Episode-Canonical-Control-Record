@@ -2,8 +2,11 @@ import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
+import BackgroundBar from './BackgroundBar';
+import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
+import SmartSuggestions from './panels/SmartSuggestions';
 import useSceneStudioState from './useSceneStudioState';
 import sceneService from '../../services/sceneService';
 import './SceneStudio.css';
@@ -61,6 +64,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [isGeneratingDepth, setIsGeneratingDepth] = useState(false);
   const [depthError, setDepthError] = useState(null);
 
+  // Background mood/time state
+  const [mood, setMood] = useState(null);
+  const [timeOfDay, setTimeOfDay] = useState(null);
+  const [isRegeneratingBg, setIsRegeneratingBg] = useState(false);
+
   // UX guidance state
   const [hasInteracted, setHasInteracted] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
@@ -82,8 +90,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           const result = await sceneService.getCanvas(sceneId);
           if (result.success) {
             state.loadFromApi(result.data, 'scene');
-            const savedPlatform = result.data.scene?.canvas_settings?.platform;
-            if (savedPlatform && PLATFORM_PRESETS[savedPlatform]) setPlatform(savedPlatform);
+            const cs = result.data.scene?.canvas_settings;
+            if (cs?.platform && PLATFORM_PRESETS[cs.platform]) setPlatform(cs.platform);
+            if (cs?.mood) setMood(cs.mood);
+            if (cs?.timeOfDay) setTimeOfDay(cs.timeOfDay);
           }
         } else if (sceneSetId) {
           const result = await sceneService.getSceneSetCanvas(sceneSetId);
@@ -403,6 +413,54 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     state.updateDepthEffects((prev) => ({ ...prev, ...updates }));
   }, [state]);
 
+  // ── Background mood/time ──
+
+  const handleMoodChange = useCallback((newMood) => {
+    setMood(newMood);
+    state.updateCanvasSettings({ mood: newMood });
+  }, [state]);
+
+  const handleTimeOfDayChange = useCallback((newTime) => {
+    setTimeOfDay(newTime);
+    state.updateCanvasSettings({ timeOfDay: newTime });
+  }, [state]);
+
+  const handleRegenerateBackground = useCallback(async () => {
+    if (isRegeneratingBg || !state.contextId) return;
+    setIsRegeneratingBg(true);
+    try {
+      const result = await sceneService.regenerateBackground(state.contextId, {
+        mood,
+        timeOfDay,
+        currentBackgroundUrl: backgroundUrl,
+      });
+      if (result?.success && result.data?.options?.length > 0) {
+        // Use the first option as new background
+        const newBgUrl = result.data.options[0].url;
+        if (state.contextType === 'scene') {
+          await sceneService.updateScene(state.contextId, { background_url: newBgUrl });
+          state.setSceneData((prev) => prev ? { ...prev, background_url: newBgUrl } : prev);
+        }
+      }
+    } catch (err) {
+      console.error('Background regeneration error:', err);
+    } finally {
+      setIsRegeneratingBg(false);
+    }
+  }, [isRegeneratingBg, state, mood, timeOfDay, backgroundUrl]);
+
+  const handleChangeBackground = useCallback(() => {
+    setCreationPanelOpen(true);
+    setActiveCreationTab('library');
+    setFocusTarget('library-search');
+  }, []);
+
+  const handleSuggestionClick = useCallback((prompt) => {
+    setCreationPanelOpen(true);
+    setActiveCreationTab('generate');
+    setFocusTarget(`generate-prefill:${prompt}`);
+  }, []);
+
   // Proxy depth map URL through backend to avoid S3 CORS issues.
   // ParallaxLayer needs crossOrigin pixel access (getImageData) which
   // requires CORS headers that the S3 bucket may not provide.
@@ -523,6 +581,27 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         onBack={onBack}
       />
 
+      {/* Background Bar */}
+      <BackgroundBar
+        backgroundUrl={backgroundUrl}
+        mood={mood}
+        timeOfDay={timeOfDay}
+        onChangeMood={handleMoodChange}
+        onChangeTimeOfDay={handleTimeOfDayChange}
+        onChangeBackground={handleChangeBackground}
+        onRegenerateVariation={handleRegenerateBackground}
+        isRegenerating={isRegeneratingBg}
+      />
+
+      {/* Guided Flow Stepper */}
+      <GuidedFlow
+        hasBackground={!!backgroundUrl}
+        objectCount={state.objects.length}
+        hasEffects={state.objects.some((o) => o.styleData?.shadow?.enabled || o.styleData?.blur > 0)}
+        dismissed={state.canvasSettings.guidedFlowDismissed}
+        onDismiss={() => state.updateCanvasSettings({ guidedFlowDismissed: true })}
+      />
+
       <div className="scene-studio-body">
         {/* Left Panel */}
         {isCreationPanelOpen && (
@@ -549,6 +628,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               focusTarget={focusTarget}
               onClearFocus={() => setFocusTarget(null)}
               hasBackground={!!backgroundUrl}
+              contextType={state.contextType}
+            />
+            <SmartSuggestions
+              sceneId={sceneId}
+              objectCount={state.objects.length}
+              hasBackground={!!backgroundUrl}
+              onSuggestionClick={handleSuggestionClick}
               contextType={state.contextType}
             />
           </div>
@@ -667,8 +753,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onToggleLock={state.toggleLock}
             onUpdateCanvasSettings={state.updateCanvasSettings}
             onActivateVariant={state.activateVariant}
+            onGroupObjects={state.groupObjects}
+            onUngroupObjects={state.ungroupObjects}
             onSetActiveAngle={state.setActiveAngleId}
             contextType={state.contextType}
+            onReplaceAsset={(objectId) => {
+              // TODO: open library picker in replace mode
+              handleChangeBackground();
+            }}
             backgroundSelected={backgroundSelected}
             backgroundUrl={backgroundUrl}
             depthMapUrl={proxiedDepthMapUrl}

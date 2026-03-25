@@ -368,6 +368,28 @@ const sceneService = {
     const { data } = await api.post(`/api/v1/scene-sets/${sceneSetId}/angles/${angleId}/generate-depth`);
     return data;
   },
+
+  /**
+   * Regenerate background variation with mood/time-of-day
+   * POST /api/v1/scenes/:id/regenerate-background
+   */
+  regenerateBackground: async (sceneId, { mood, timeOfDay, currentBackgroundUrl } = {}) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/regenerate-background`, {
+      mood,
+      time_of_day: timeOfDay,
+      current_background_url: currentBackgroundUrl,
+    });
+    return data;
+  },
+
+  /**
+   * Get smart object suggestions for a scene
+   * POST /api/v1/scenes/:id/suggest-objects
+   */
+  suggestObjects: async (sceneId) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/suggest-objects`);
+    return data;
+  },
 };
 
 export default sceneService;
