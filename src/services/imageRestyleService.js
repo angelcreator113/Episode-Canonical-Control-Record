@@ -183,6 +183,7 @@ async function storeRestyledImage(imageUrl, entityId) {
     Key: s3Key,
     Body: Buffer.from(response.data),
     ContentType: 'image/png',
+    ACL: 'public-read',
     CacheControl: 'max-age=31536000',
   }));
 

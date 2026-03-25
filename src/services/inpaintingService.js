@@ -123,6 +123,7 @@ async function storeInpaintedImage(imageUrl, entityId) {
     Key: s3Key,
     Body: Buffer.from(response.data),
     ContentType: 'image/png',
+    ACL: 'public-read',
     CacheControl: 'max-age=31536000',
   }));
 
@@ -148,6 +149,7 @@ async function storeMask(maskDataUrl, entityId) {
     Key: s3Key,
     Body: buffer,
     ContentType: 'image/png',
+    ACL: 'public-read',
     CacheControl: 'max-age=86400',
   }));
 
