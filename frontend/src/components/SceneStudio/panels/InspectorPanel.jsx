@@ -3,7 +3,7 @@ import {
   Settings, Move, RotateCw, Maximize2, Eye, EyeOff, Lock, Unlock,
   FlipHorizontal, FlipVertical, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown,
   Trash2, Copy, Layers, GitBranch, ImageIcon, Box, Loader2, RefreshCw,
-  Droplets, Sun, Moon, Sunrise, Sunset, Blend, Replace, Image,
+  Droplets, Sun, Moon, Sunrise, Sunset, Blend, Replace, Image, Scissors,
 } from 'lucide-react';
 
 const TIME_OPTIONS = [
@@ -95,6 +95,8 @@ export default function InspectorPanel({
   onSetActiveAngle,
   contextType,
   onReplaceAsset,
+  onRemoveBackground,
+  isRemovingBg,
   backgroundSelected,
   backgroundUrl,
   depthMapUrl,
@@ -657,6 +659,21 @@ export default function InspectorPanel({
 
       {/* Actions */}
       <div className="scene-studio-section">
+        {/* Remove Background button — for image objects with an asset */}
+        {obj.assetId && obj.type === 'image' && onRemoveBackground && (
+          <button
+            className="scene-studio-btn primary"
+            onClick={() => onRemoveBackground(obj.id, obj.assetId)}
+            disabled={isRemovingBg}
+            style={{ width: '100%', marginBottom: 6 }}
+          >
+            {isRemovingBg ? (
+              <><Loader2 size={12} className="scene-studio-spin-icon" /> Removing...</>
+            ) : (
+              <><Scissors size={12} /> Remove Background</>
+            )}
+          </button>
+        )}
         <div className="scene-studio-quick-actions">
           {obj.assetId && onReplaceAsset && (
             <button className="scene-studio-chip" onClick={() => onReplaceAsset(obj.id)}>

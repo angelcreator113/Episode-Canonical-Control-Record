@@ -83,6 +83,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [exportScale, setExportScale] = useState(2);
 
+  // Background removal state
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+
   // UX guidance state
   const [hasInteracted, setHasInteracted] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
@@ -635,6 +638,38 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [isInpainting, state, backgroundUrl, hasMask, inpaintPrompt]);
 
+  // ── Remove Background from selected object ──
+
+  const handleRemoveBackground = useCallback(async (objectId, assetId) => {
+    if (isRemovingBg || !assetId) return;
+    setIsRemovingBg(true);
+    setSaveErrorMsg(null);
+    try {
+      const assetService = (await import('../../services/assetService')).default;
+      const result = await assetService.removeBackground(assetId);
+      // Backend returns { status: 'SUCCESS', data: { url } }
+      const newUrl = result?.data?.url || result?.url;
+      if (newUrl) {
+        // Update the object's asset URL to the transparent version
+        state.setObjects((prev) => prev.map((o) =>
+          o.id === objectId ? {
+            ...o,
+            assetUrl: newUrl,
+            _asset: { ...o._asset, s3_url_processed: newUrl },
+          } : o
+        ));
+        state.markDirty?.() || (() => {})(); // trigger auto-save
+      } else {
+        setSaveErrorMsg('Background removal returned no URL — check REMOVEBG_API_KEY');
+      }
+    } catch (err) {
+      console.error('Remove background error:', err);
+      setSaveErrorMsg(err.message || 'Background removal failed — check REMOVEBG_API_KEY');
+    } finally {
+      setIsRemovingBg(false);
+    }
+  }, [isRemovingBg, state]);
+
   const handleExport = useCallback(() => {
     setShowExportDialog(true);
   }, []);
@@ -960,9 +995,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onSetActiveAngle={state.setActiveAngleId}
             contextType={state.contextType}
             onReplaceAsset={(objectId) => {
-              // TODO: open library picker in replace mode
               handleChangeBackground();
             }}
+            onRemoveBackground={handleRemoveBackground}
+            isRemovingBg={isRemovingBg}
             backgroundSelected={backgroundSelected}
             backgroundUrl={backgroundUrl}
             depthMapUrl={proxiedDepthMapUrl}
