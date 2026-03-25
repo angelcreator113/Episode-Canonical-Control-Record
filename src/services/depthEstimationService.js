@@ -17,6 +17,7 @@
  */
 
 const axios = require('axios');
+const Replicate = require('replicate');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
@@ -28,11 +29,8 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── REPLICATE CONFIG ───────────────────────────────────────────────────────
 
-// DepthAnythingV2 — high-quality monocular depth estimation
+// DepthAnythingV2 via chenxwh (community model — requires SDK or version-based endpoint)
 const DEPTH_MODEL = 'chenxwh/depth-anything-v2';
-const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
-const MAX_POLL_ATTEMPTS = 60; // 5 minutes max at 5s intervals
-const POLL_INTERVAL_MS = 5000;
 
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
@@ -73,75 +71,35 @@ function incrementUsage(userId) {
 /**
  * Create a prediction on Replicate and wait for it to complete.
  * Returns the output URL (depth map image).
+ *
+ * Uses the official Replicate SDK which correctly resolves community model
+ * versions (the raw /v1/models/{owner}/{name}/predictions endpoint only
+ * works for official models and returns 404 for community models).
  */
 async function runDepthEstimation(imageUrl) {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
+  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+
   console.log('[DepthEstimation] Creating prediction with DepthAnythingV2...');
 
-  // Create prediction via Replicate's models API
-  let createResponse;
   try {
-    createResponse = await axios.post(
-      `${REPLICATE_API_BASE}/models/${DEPTH_MODEL}/predictions`,
-      {
-        input: {
-          image: imageUrl,
-        },
+    const output = await replicate.run(DEPTH_MODEL, {
+      input: {
+        image: imageUrl,
       },
-      {
-        headers: {
-          'Authorization': `Bearer ${REPLICATE_API_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'wait',
-        },
-        timeout: 300000, // 5 minute timeout for sync wait
-      }
-    );
-  } catch (apiError) {
-    const status = apiError.response?.status;
-    const detail = apiError.response?.data?.detail || apiError.message;
-    throw new Error(`Replicate API error: ${status} — ${detail}`);
-  }
-
-  // If the API responded synchronously (Prefer: wait), check for output
-  if (createResponse.data.status === 'succeeded' && createResponse.data.output) {
-    console.log('[DepthEstimation] Prediction completed synchronously');
-    return createResponse.data.output;
-  }
-
-  // Otherwise, poll for completion
-  const predictionUrl = createResponse.data.urls?.get || `${REPLICATE_API_BASE}/predictions/${createResponse.data.id}`;
-
-  console.log(`[DepthEstimation] Polling prediction ${createResponse.data.id}...`);
-
-  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    await sleep(POLL_INTERVAL_MS);
-
-    const pollResponse = await axios.get(predictionUrl, {
-      headers: { 'Authorization': `Bearer ${REPLICATE_API_TOKEN}` },
-      timeout: 15000,
     });
 
-    const { status, output, error } = pollResponse.data;
-
-    if (status === 'succeeded') {
-      console.log('[DepthEstimation] Prediction completed');
-      return output;
-    }
-
-    if (status === 'failed' || status === 'canceled') {
-      throw new Error(`Depth estimation ${status}: ${error || 'unknown error'}`);
-    }
+    console.log('[DepthEstimation] Prediction completed');
+    return output;
+  } catch (err) {
+    const status = err.response?.status || err.status;
+    const detail = err.response?.data?.detail || err.message;
+    console.error(`[DepthEstimation] Replicate API error (${status}):`, detail);
+    throw new Error(`Replicate API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
-
-  throw new Error('Depth estimation timed out after 5 minutes');
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ─── S3 STORAGE ─────────────────────────────────────────────────────────────
