@@ -238,9 +238,9 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
     (obj) => obj.isVisible || selectedIds.has(obj.id)
   );
 
-  // Filter to only active variants (if part of a variant group)
+  // Filter to only active variants (if part of a variant group), but keep selected objects
   const renderableObjects = visibleObjects.filter(
-    (obj) => !obj.variantGroupId || obj.isActiveVariant
+    (obj) => !obj.variantGroupId || obj.isActiveVariant || selectedIds.has(obj.id)
   );
 
   return (

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Image as KonvaImage } from 'react-konva';
 
 /**
@@ -41,23 +41,26 @@ export default function VideoObject({ obj, isSelected, onSelect, onTransformEnd,
   }, [src]);
 
   // Animation loop to redraw video frames
-  const animate = useCallback(() => {
-    if (imageRef.current) {
-      imageRef.current.getLayer()?.batchDraw();
-    }
-    animFrameRef.current = requestAnimationFrame(animate);
-  }, []);
-
   useEffect(() => {
-    if (videoElement) {
-      animate();
-    }
+    if (!videoElement) return;
+
+    let running = true;
+    const animate = () => {
+      if (!running) return;
+      if (imageRef.current) {
+        imageRef.current.getLayer()?.batchDraw();
+      }
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animate();
+
     return () => {
+      running = false;
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [videoElement, animate]);
+  }, [videoElement]);
 
   if (!obj.isVisible && !isSelected) return null;
 

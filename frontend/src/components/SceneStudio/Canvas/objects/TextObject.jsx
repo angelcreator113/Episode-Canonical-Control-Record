@@ -22,6 +22,9 @@ export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, 
     const stage = textNode.getStage();
     const stageContainer = stage.container();
     const textPosition = textNode.getAbsolutePosition();
+    const rotation = textNode.getAbsoluteRotation();
+    const scaleX = textNode.getAbsoluteScale().x;
+    const scaleY = textNode.getAbsoluteScale().y;
 
     // Create a temporary textarea over the text
     const textarea = document.createElement('textarea');
@@ -31,9 +34,9 @@ export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, 
     textarea.style.position = 'absolute';
     textarea.style.top = `${textPosition.y}px`;
     textarea.style.left = `${textPosition.x}px`;
-    textarea.style.width = `${(obj.width || 200)}px`;
-    textarea.style.height = `${(obj.height || 40)}px`;
-    textarea.style.fontSize = `${style.fontSize || 18}px`;
+    textarea.style.width = `${(obj.width || 200) * scaleX}px`;
+    textarea.style.height = `${(obj.height || 40) * scaleY}px`;
+    textarea.style.fontSize = `${(style.fontSize || 18) * scaleX}px`;
     textarea.style.fontFamily = style.fontFamily || 'Lora, serif';
     textarea.style.color = style.fill || '#FFFFFF';
     textarea.style.background = 'rgba(0,0,0,0.8)';
@@ -43,6 +46,8 @@ export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, 
     textarea.style.zIndex = '10000';
     textarea.style.resize = 'none';
     textarea.style.outline = 'none';
+    textarea.style.transformOrigin = 'top left';
+    textarea.style.transform = `rotate(${rotation}deg)`;
     textarea.focus();
     textarea.select();
 
