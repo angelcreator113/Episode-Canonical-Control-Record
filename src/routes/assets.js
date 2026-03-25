@@ -98,7 +98,7 @@ router.get('/', async (req, res) => {
       sortOrder,
     });
 
-    const { category, character_name, entity_type: entityTypeFilter, location_name, include_global } = req.query;
+    const { category, character_name, entity_type: entityTypeFilter, location_name, include_global, search } = req.query;
     const { Op } = require('sequelize');
 
     const where = {};
@@ -145,6 +145,26 @@ router.get('/', async (req, res) => {
     }
     if (location_name) {
       where.location_name = location_name;
+    }
+    // Text search across multiple fields
+    if (search) {
+      const searchTerms = search.trim().split(/\s+/).filter(Boolean);
+      const searchConditions = searchTerms.map((term) => {
+        const pattern = `%${term}%`;
+        return {
+          [Op.or]: [
+            { name: { [Op.iLike]: pattern } },
+            { character_name: { [Op.iLike]: pattern } },
+            { location_name: { [Op.iLike]: pattern } },
+            { category: { [Op.iLike]: pattern } },
+            { outfit_name: { [Op.iLike]: pattern } },
+            { asset_type: { [Op.iLike]: pattern } },
+            { asset_role: { [Op.iLike]: pattern } },
+          ],
+        };
+      });
+      // All search terms must match (AND across terms, OR across fields)
+      where[Op.and] = [...(where[Op.and] || []), ...searchConditions];
     }
 
     const assets = await models.Asset.findAll({

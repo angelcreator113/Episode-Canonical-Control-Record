@@ -7,7 +7,7 @@
  */
 
 const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4, validate: uuidValidate } = require('uuid');
 const objectGenerationService = require('../services/objectGenerationService');
 const depthEstimationService = require('../services/depthEstimationService');
 const imageRestyleService = require('../services/imageRestyleService');
@@ -221,7 +221,7 @@ exports.saveCanvas = async (req, res) => {
           });
         } else {
           // Create new
-          data.id = obj.id || uuidv4();
+          data.id = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
           await SceneAsset.create(data, { transaction });
         }
       }
@@ -834,7 +834,7 @@ exports.saveSceneSetCanvas = async (req, res) => {
             transaction,
           });
         } else {
-          data.id = obj.id || uuidv4();
+          data.id = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
           await SceneAsset.create(data, { transaction });
         }
       }
