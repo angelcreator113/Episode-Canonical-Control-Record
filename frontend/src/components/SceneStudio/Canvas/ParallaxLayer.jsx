@@ -159,8 +159,11 @@ export default function ParallaxLayer({
   mousePosition, // { x: 0-1, y: 0-1 } normalized
   depthEffects,  // { focusDepth, blurIntensity }
 }) {
-  const [bgImage] = useImage(bgSrc);
-  const [depthImage] = useImage(depthMapSrc);
+  // crossOrigin="anonymous" is required so getImageData() can read pixel data
+  // without the browser tainting the canvas. The S3 bucket must return
+  // Access-Control-Allow-Origin headers (standard for public S3 objects).
+  const [bgImage] = useImage(bgSrc, 'anonymous');
+  const [depthImage] = useImage(depthMapSrc, 'anonymous');
   const [baseLayerCanvases, setBaseLayerCanvases] = useState([]);
   const [layerCanvases, setLayerCanvases] = useState([]);
   const processedRef = useRef(null);
