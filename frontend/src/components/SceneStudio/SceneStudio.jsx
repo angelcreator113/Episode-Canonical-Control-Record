@@ -328,6 +328,25 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [sceneId, sceneSetId, state]);
 
+  // ── Background URL (from scene or scene set angle) ──
+  // IMPORTANT: Must be defined BEFORE any callbacks that reference it (TDZ fix)
+
+  const backgroundUrl = (() => {
+    if (state.contextType === 'scene') {
+      const s = state.sceneData;
+      return s?.background_url
+        || s?.sceneAngle?.enhanced_still_url
+        || s?.sceneAngle?.still_image_url
+        || s?.sceneSet?.base_still_url
+        || null;
+    }
+    if (state.contextType === 'sceneSet') {
+      const angle = state.angles?.find((a) => a.id === state.activeAngleId);
+      return angle?.still_image_url || state.sceneSetData?.base_still_url || null;
+    }
+    return null;
+  })();
+
   // ── Erase (Inpainting) ──
 
   const handleEraseApply = useCallback(async (maskDataUrl, options = {}) => {
@@ -586,24 +605,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       state.setActiveTool('select');
     }
   }, [state, canvasWidth, canvasHeight]);
-
-  // ── Background URL (from scene or scene set angle) ──
-
-  const backgroundUrl = (() => {
-    if (state.contextType === 'scene') {
-      const s = state.sceneData;
-      return s?.background_url
-        || s?.sceneAngle?.enhanced_still_url
-        || s?.sceneAngle?.still_image_url
-        || s?.sceneSet?.base_still_url
-        || null;
-    }
-    if (state.contextType === 'sceneSet') {
-      const angle = state.angles?.find((a) => a.id === state.activeAngleId);
-      return angle?.still_image_url || state.sceneSetData?.base_still_url || null;
-    }
-    return null;
-  })();
 
   // ── Depth Map Generation ──
 
