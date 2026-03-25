@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Image, Video, User, MapPin, Palette, Upload, Plus, X } from 'lucide-react';
+import { Search, Image, Video, User, Palette, Upload, Plus, X } from 'lucide-react';
 import api from '../../../services/api';
 
 /**
@@ -12,7 +12,6 @@ const TABS = [
   { key: 'image', label: 'Images', icon: Image },
   { key: 'video', label: 'Videos', icon: Video },
   { key: 'character', label: 'Characters', icon: User },
-  { key: 'background', label: 'Backgrounds', icon: MapPin },
 ];
 
 export default function AssetDrawer({ showId, episodeId, onAddAsset, isOpen, onToggle }) {
@@ -33,7 +32,6 @@ export default function AssetDrawer({ showId, episodeId, onAddAsset, isOpen, onT
       if (activeTab === 'image') params.asset_type = 'image';
       else if (activeTab === 'video') params.asset_type = 'video';
       else if (activeTab === 'character') params.category = 'character_outfit';
-      else if (activeTab === 'background') params.category = 'background';
 
       const { data } = await api.get('/api/v1/assets', { params });
       setAssets(data.data || data.assets || []);

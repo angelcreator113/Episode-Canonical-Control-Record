@@ -1065,7 +1065,7 @@ export default function SceneSetsTab() {
     } catch {
       // Only show error on initial load, not on poll failures
       if (!initialLoadDone.current) {
-        setError('Failed to load scene sets');
+        setError('Failed to load locations');
       }
     } finally {
       setLoading(false);
@@ -1391,21 +1391,21 @@ export default function SceneSetsTab() {
         showToast(`Created "${setName}"`);
       }
     } catch {
-      showToast('Failed to create scene set', 'error');
+      showToast('Failed to create location', 'error');
     } finally {
       setCreating(false);
     }
   };
 
   const handleDeleteSet = async (set) => {
-    if (!window.confirm(`Delete scene set "${set.name}"? This will soft-delete the set and all its angles.`)) return;
+    if (!window.confirm(`Delete location "${set.name}"? This will soft-delete the location and all its angles.`)) return;
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed');
       showToast(`Deleted "${set.name}"`);
       fetchSets();
     } catch {
-      showToast('Failed to delete scene set', 'error');
+      showToast('Failed to delete location', 'error');
     }
   };
 
@@ -1609,7 +1609,7 @@ export default function SceneSetsTab() {
       {/* Header row */}
       <div className="scene-sets-header">
         <div>
-          <h2 className="scene-sets-title">Scene Sets</h2>
+          <h2 className="scene-sets-title">Locations</h2>
           <p className="scene-sets-subtitle">
             {sets.length} location{sets.length !== 1 ? 's' : ''} — Canonical LalaVerse world
             {totalCost > 0 && (
@@ -1720,7 +1720,7 @@ export default function SceneSetsTab() {
               onClick={handleCreate}
               disabled={creating || !newSet.name.trim()}
             >
-              {creating ? <><Loader size={12} className="spin" /> Creating...</> : <><Plus size={12} /> Create Scene Set</>}
+              {creating ? <><Loader size={12} className="spin" /> Creating...</> : <><Plus size={12} /> Create Location</>}
             </button>
           </div>
         </div>
@@ -1730,7 +1730,7 @@ export default function SceneSetsTab() {
       {loading && (
         <div className="scene-sets-loading">
           <Loader size={20} className="spin" />
-          <p>Loading scene sets...</p>
+          <p>Loading locations...</p>
         </div>
       )}
 
@@ -1745,9 +1745,9 @@ export default function SceneSetsTab() {
       {!loading && !error && filtered.length === 0 && (
         <div className="scene-sets-empty">
           <Camera size={40} strokeWidth={1} />
-          <p className="scene-sets-empty-title">No scene sets yet</p>
+          <p className="scene-sets-empty-title">No locations yet</p>
           <p className="scene-sets-empty-body">
-            Scene sets are canonical LalaVerse locations. Each set contains
+            Locations are canonical LalaVerse worlds. Each location contains
             multiple camera angles that map to episode beats.
           </p>
         </div>
