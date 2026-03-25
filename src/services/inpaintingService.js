@@ -15,6 +15,7 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+const REPLICATE_INPAINT_MODEL = process.env.REPLICATE_INPAINT_MODEL || 'lucataco/sdxl-inpainting';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -103,7 +104,7 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
   let prediction;
   try {
     prediction = await replicate.predictions.create({
-      model: 'stability-ai/sdxl',
+      model: REPLICATE_INPAINT_MODEL,
       input: {
         image: imageUrl,
         mask: maskUrl,
