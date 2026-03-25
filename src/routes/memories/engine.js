@@ -1,19 +1,8 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
 const { v4: uuidv4 } = require('uuid');
-
-// Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
-
-const db = require('../../models');
+const { anthropic, optionalAuth, db } = require('./helpers');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
 
@@ -29,9 +18,6 @@ let buildArcContext, buildArcContextPromptSection, updateArcTracking;
 try {
   ({ buildArcContext, buildArcContextPromptSection, updateArcTracking } = require('../../services/arcTrackingService'));
 } catch { buildArcContext = null; buildArcContextPromptSection = null; updateArcTracking = null; }
-
-require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const anthropic = new Anthropic();
 
 
 router.post('/generate-living-state', optionalAuth, async (req, res) => {

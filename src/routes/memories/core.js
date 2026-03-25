@@ -1,28 +1,12 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const Anthropic = require('@anthropic-ai/sdk');
-
-// Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
-
-const db = require('../../models');
+const { anthropic, optionalAuth, db, buildExtractionPrompt, buildScenesPrompt } = require('./helpers');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
 
 let registrySync;
 try { registrySync = require('../../services/registrySync'); } catch { registrySync = null; }
-
-require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const anthropic = new Anthropic();
-
-const { buildExtractionPrompt, buildScenesPrompt } = require('./helpers');
 
 // ── Routes ─────────────────────────────────────────────────────────────────
 

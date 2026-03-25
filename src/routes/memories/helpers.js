@@ -9,6 +9,15 @@ const Anthropic = require('@anthropic-ai/sdk');
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
 const anthropic = new Anthropic();
 
+// Auth middleware — shared across all sub-routers
+let optionalAuth;
+try {
+  const authModule = require('../../middleware/auth');
+  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
+} catch (e) {
+  optionalAuth = (req, res, next) => next();
+}
+
 const db = require('../../models');
 const { RegistryCharacter } = db;
 
@@ -184,6 +193,9 @@ CHARACTER RULES for ${name}:
 }
 
 module.exports = {
+  anthropic,
+  optionalAuth,
+  db,
   buildExtractionPrompt,
   buildScenesPrompt,
   getCharacterVoiceContext,
