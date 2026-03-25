@@ -10,6 +10,7 @@ const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequ
 const { v4: uuidv4 } = require('uuid');
 const objectGenerationService = require('../services/objectGenerationService');
 const depthEstimationService = require('../services/depthEstimationService');
+const imageRestyleService = require('../services/imageRestyleService');
 
 // ── Canvas Load ──
 
@@ -996,69 +997,30 @@ exports.regenerateBackground = async (req, res) => {
 
     const bgUrl = current_background_url || scene.background_url;
     if (!bgUrl) {
-      return res.status(400).json({ success: false, error: 'No background to regenerate from' });
+      return res.status(400).json({ success: false, error: 'No background to restyle' });
     }
 
-    // Build style modifiers from mood and time of day
-    const modifiers = [];
-    if (time_of_day) {
-      const timeMap = {
-        dawn: 'soft dawn lighting, pink and gold sky, early morning atmosphere',
-        day: 'bright daylight, clear warm light, midday sun',
-        golden: 'golden hour lighting, warm amber tones, long shadows, sunset glow',
-        night: 'night scene, moonlight, deep blues and purples, ambient glow, stars',
-      };
-      modifiers.push(timeMap[time_of_day] || '');
-    }
-    if (mood) {
-      const moodMap = {
-        warm: 'warm color palette, inviting atmosphere, soft light',
-        dramatic: 'dramatic lighting, high contrast, deep shadows, cinematic',
-        soft: 'soft dreamy atmosphere, pastel tones, gentle diffused light',
-        moody: 'moody atmosphere, muted tones, atmospheric haze, contemplative',
-        ethereal: 'ethereal glow, otherworldly, luminous, magical light particles',
-      };
-      modifiers.push(moodMap[mood] || '');
-    }
-
-    const styleHints = modifiers.filter(Boolean).join('. ');
-    const sceneDesc = scene.description || 'interior scene';
-
-    // Use DALL-E 3 to generate a background variation
-    const prompt = `A beautiful ${sceneDesc} background scene. ${styleHints}. Wide establishing shot, no people, no text, photographic quality, 16:9 aspect ratio.`;
-
-    let showId = null;
-    try {
-      if (scene.episode_id) {
-        const { Episode } = require('../models');
-        const ep = await Episode.findByPk(scene.episode_id, { attributes: ['show_id'] });
-        showId = ep?.show_id || null;
-      }
-    } catch { /* non-critical */ }
-
-    const options = await objectGenerationService.generateObject(prompt, {
-      sceneId: id,
-      styleHints,
-      count: 2,
-      removeBackground: false,
-      isScene: true,
+    // Use img2img restyling — transforms the EXISTING photo's lighting/mood
+    // instead of generating a completely new image from text
+    const result = await imageRestyleService.restyleBackground(bgUrl, id, {
+      timeOfDay: time_of_day || null,
+      mood: mood || null,
+      strength: 0.45, // Moderate change — preserves composition
       userId: req.user?.id || null,
-      showId,
-      Asset,
     });
 
-    // Update scene mood if provided
-    if (mood) {
-      await scene.update({ mood });
+    // Update scene mood + background_url
+    const updates = {};
+    if (mood) updates.mood = mood;
+    if (result.restyled_url) updates.background_url = result.restyled_url;
+    if (Object.keys(updates).length > 0) {
+      await scene.update(updates);
     }
 
     res.json({
       success: true,
       data: {
-        options: options.map((o) => ({
-          ...o,
-          type: 'background',
-        })),
+        restyled_url: result.restyled_url,
         mood,
         time_of_day,
       },

@@ -461,10 +461,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         timeOfDay: effectiveTime,
         currentBackgroundUrl: backgroundUrl,
       });
-      if (result?.success && result.data?.options?.length > 0) {
-        const newBgUrl = result.data.options[0].url;
+      if (result?.success && result.data?.restyled_url) {
+        const newBgUrl = result.data.restyled_url;
+        // Backend already updates background_url, just update frontend state
         if (state.contextType === 'scene') {
-          await sceneService.updateScene(state.contextId, { background_url: newBgUrl });
           state.setSceneData((prev) => prev ? { ...prev, background_url: newBgUrl } : prev);
         }
       }
