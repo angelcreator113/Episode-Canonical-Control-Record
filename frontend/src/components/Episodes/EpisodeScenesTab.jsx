@@ -125,13 +125,13 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
       });
       const data = await res.json();
       if (data.success) {
-        toast(`Linked ${selectedPickerIds.length} scene set(s)`, 'success');
+        toast(`Linked ${selectedPickerIds.length} location(s)`, 'success');
         setShowPicker(false);
         fetchSceneSets();
       }
     } catch (err) {
       console.error('Failed to link scene sets:', err);
-      toast('Failed to link scene sets', 'error');
+      toast('Failed to link locations', 'error');
     }
   };
 
@@ -139,7 +139,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     try {
       await fetch(`${API_BASE}/episodes/${episodeId}/scene-sets/${setId}`, { method: 'DELETE' });
       setSceneSets((prev) => prev.filter((s) => s.id !== setId));
-      toast('Scene set unlinked', 'info');
+      toast('Location unlinked', 'info');
     } catch (err) {
       console.error('Failed to unlink scene set:', err);
     }
@@ -191,7 +191,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
       });
       const suggestData = await suggestRes.json();
       if (!suggestData.success || !suggestData.data?.length) {
-        toast(suggestData.error || 'No angles suggested — add a description to the scene set first', 'error');
+        toast(suggestData.error || 'No angles suggested — add a description to the location first', 'error');
         return;
       }
 
@@ -232,7 +232,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         <div className="est-section-header">
           <div className="est-section-title">
             <MapPin size={18} />
-            <h3>Scene Sets (Locations)</h3>
+            <h3>Locations</h3>
             <span className="est-count">{sceneSets.length}</span>
           </div>
           <button className="est-btn est-btn-primary" onClick={openPicker}>
@@ -241,14 +241,14 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         </div>
 
         {loadingSets ? (
-          <div className="est-loading">Loading scene sets...</div>
+          <div className="est-loading">Loading locations...</div>
         ) : sceneSets.length === 0 ? (
           <div className="est-empty">
             <MapPin size={32} className="est-empty-icon" />
-            <p>No scene sets assigned to this episode yet.</p>
-            <p className="est-empty-hint">Assign scene sets (locations) to start building scenes.</p>
+            <p>No locations assigned to this episode yet.</p>
+            <p className="est-empty-hint">Assign locations to start building scenes.</p>
             <button className="est-btn est-btn-primary" onClick={openPicker}>
-              <Plus size={14} /> Assign Your First Set
+              <Plus size={14} /> Assign Your First Location
             </button>
           </div>
         ) : (
@@ -394,7 +394,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
             <Clapperboard size={32} className="est-empty-icon" />
             <p>No scenes composed yet.</p>
             <p className="est-empty-hint">
-              Assign scene sets above, then click "Use in Episode" on an angle to create a scene.
+              Assign locations above, then click "Use in Episode" on an angle to create a scene.
             </p>
           </div>
         ) : (
@@ -451,15 +451,15 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
         <div className="est-modal-overlay" onClick={() => setShowPicker(false)}>
           <div className="est-modal" onClick={(e) => e.stopPropagation()}>
             <div className="est-modal-header">
-              <h3>Assign Scene Sets to Episode</h3>
+              <h3>Assign Locations to Episode</h3>
               <button className="est-btn-icon" onClick={() => setShowPicker(false)}>&times;</button>
             </div>
             <div className="est-modal-body">
               {loadingAllSets ? (
-                <div className="est-loading">Loading scene sets...</div>
+                <div className="est-loading">Loading locations...</div>
               ) : allSets.length === 0 ? (
                 <div className="est-empty">
-                  <p>No scene sets found. Create scene sets first in the Scene Sets tab.</p>
+                  <p>No locations found. Create locations first in the Locations tab.</p>
                 </div>
               ) : (
                 <div className="est-picker-grid">

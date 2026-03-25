@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Image, Video, User, MapPin, Palette } from 'lucide-react';
+import { Search, Image, Video, User, Palette } from 'lucide-react';
 import api from '../../../../services/api';
 import { computeInsertionRect } from './insertionUtils';
 
@@ -13,7 +13,6 @@ const FILTERS = [
   { key: 'image', label: 'Images', icon: Image },
   { key: 'video', label: 'Videos', icon: Video },
   { key: 'character', label: 'Characters', icon: User },
-  { key: 'background', label: 'Backgrounds', icon: MapPin },
 ];
 
 export default function LibraryTab({ showId, episodeId, canvasWidth, canvasHeight, onAddAsset, focusTarget, onClearFocus }) {
@@ -43,7 +42,6 @@ export default function LibraryTab({ showId, episodeId, canvasWidth, canvasHeigh
       if (activeFilter === 'image') params.asset_type = 'image';
       else if (activeFilter === 'video') params.asset_type = 'video';
       else if (activeFilter === 'character') params.category = 'character_outfit';
-      else if (activeFilter === 'background') params.category = 'background';
 
       const { data } = await api.get('/api/v1/assets', { params });
       setAssets(data.data || data.assets || []);
