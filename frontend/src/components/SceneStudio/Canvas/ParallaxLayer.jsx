@@ -161,9 +161,16 @@ export default function ParallaxLayer({
 }) {
   // crossOrigin="anonymous" is required so getImageData() can read pixel data
   // without the browser tainting the canvas. The S3 bucket must return
-  // Access-Control-Allow-Origin headers (standard for public S3 objects).
-  const [bgImage] = useImage(bgSrc, 'anonymous');
-  const [depthImage] = useImage(depthMapSrc, 'anonymous');
+  // Access-Control-Allow-Origin headers for this to work.
+  const [bgImageCors, bgCorsStatus] = useImage(bgSrc, 'anonymous');
+  const [depthImage, depthStatus] = useImage(depthMapSrc, 'anonymous');
+
+  // If CORS loading fails (S3 not configured), load bg without crossOrigin
+  // so the fallback can still display the background image instead of black.
+  const corsFailed = bgCorsStatus === 'failed' || depthStatus === 'failed';
+  const [bgImagePlain] = useImage(corsFailed ? bgSrc : null);
+  const bgImage = bgImageCors || bgImagePlain;
+
   const [baseLayerCanvases, setBaseLayerCanvases] = useState([]);
   const [layerCanvases, setLayerCanvases] = useState([]);
   const processedRef = useRef(null);
@@ -171,22 +178,27 @@ export default function ParallaxLayer({
   const focusDepth = depthEffects?.focusDepth ?? 50;
   const blurIntensity = depthEffects?.blurIntensity ?? 0;
 
-  // Generate base layer masks when images load
+  // Generate base layer masks when images load (requires CORS-enabled images)
   useEffect(() => {
-    if (!bgImage || !depthImage) return;
+    if (!bgImageCors || !depthImage) {
+      if (corsFailed) {
+        console.warn('[ParallaxLayer] CORS blocked — S3 bucket needs Access-Control-Allow-Origin header for parallax. Showing flat background as fallback.');
+      }
+      return;
+    }
 
     const key = `${bgSrc}-${depthMapSrc}-${width}-${height}`;
     if (processedRef.current === key) return;
 
     try {
-      const layers = generateLayerMasks(depthImage, bgImage, width, height);
+      const layers = generateLayerMasks(depthImage, bgImageCors, width, height);
       setBaseLayerCanvases(layers);
       setLayerCanvases(layers);
       processedRef.current = key;
     } catch (err) {
       console.error('[ParallaxLayer] Failed to generate layers:', err);
     }
-  }, [bgImage, depthImage, bgSrc, depthMapSrc, width, height]);
+  }, [bgImageCors, depthImage, bgSrc, depthMapSrc, width, height, corsFailed]);
 
   // Apply DoF blur when focusDepth or blurIntensity changes
   useEffect(() => {
