@@ -9,7 +9,6 @@ import './AssetLibrary.css';
 const ASSET_CATEGORIES = {
   all: { icon: '📁', color: '#64748b', label: 'All Assets' },
   logos: { icon: '🎬', color: '#667eea', label: 'Logos & Branding' },
-  backgrounds: { icon: '🖼️', color: '#10b981', label: 'Backgrounds' },
   intros: { icon: '🎵', color: '#f59e0b', label: 'Intros' },
   outros: { icon: '🎬', color: '#8b5cf6', label: 'Outros' },
   music: { icon: '🎵', color: '#ec4899', label: 'Music & Audio' },
@@ -82,7 +81,7 @@ function AssetLibrary({ embedded = false }) {
     if (!assetType) return 'other';
     const type = assetType.toUpperCase();
     if (type.includes('LOGO') || type.includes('BRAND')) return 'logos';
-    if (type.includes('BACKGROUND') || type.includes('BG')) return 'backgrounds';
+    if (type.includes('BACKGROUND') || type.includes('BG')) return 'other';
     if (type.includes('INTRO')) return 'intros';
     if (type.includes('OUTRO')) return 'outros';
     if (type.includes('MUSIC') || type.includes('AUDIO')) return 'music';
@@ -94,7 +93,6 @@ function AssetLibrary({ embedded = false }) {
   const categoryToAssetType = (category) => {
     const mapping = {
       logos: 'BRAND_LOGO',
-      backgrounds: 'BACKGROUND_IMAGE',
       intros: 'PROMO_VIDEO',
       outros: 'PROMO_VIDEO',
       music: 'PROMO_VIDEO',
