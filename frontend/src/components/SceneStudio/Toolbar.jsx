@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   MousePointer2, Hand, Type, Square, ZoomIn, ZoomOut, Maximize,
-  Undo2, Redo2, Save, Download, Grid3X3,
+  Undo2, Redo2, Save, Download, Grid3X3, Check,
 } from 'lucide-react';
 
 /**
@@ -36,8 +36,7 @@ export default function Toolbar({
   onUndo,
   onRedo,
   isDirty,
-  isSaving,
-  saveError,
+  saveStatus,
   onSave,
   onExport,
   title,
@@ -195,13 +194,26 @@ export default function Toolbar({
         )}
 
         <button
-          className={`scene-studio-btn ${saveError ? 'danger' : isDirty ? 'primary' : 'ghost'}`}
+          className={`scene-studio-btn ${
+            saveStatus === 'error' ? 'danger' :
+            saveStatus === 'saved' ? 'success' :
+            isDirty ? 'primary' : 'ghost'
+          }`}
           onClick={onSave}
-          disabled={isSaving}
-          title={isDirty ? 'Save changes (Ctrl+S)' : 'Click to force save'}
+          disabled={saveStatus === 'saving'}
+          title="Save (Ctrl+S)"
         >
-          <Save size={14} />
-          {isSaving ? 'Saving...' : saveError ? 'Retry Save' : isDirty ? 'Save' : 'Saved'}
+          {saveStatus === 'saving' ? (
+            <><Save size={14} className="scene-studio-spin-icon" /> Saving...</>
+          ) : saveStatus === 'saved' ? (
+            <><Check size={14} /> Saved</>
+          ) : saveStatus === 'error' ? (
+            <><Save size={14} /> Retry</>
+          ) : isDirty ? (
+            <><Save size={14} /> Save</>
+          ) : (
+            <><Save size={14} /> Saved</>
+          )}
         </button>
 
         {onExport && (
