@@ -7,6 +7,7 @@ import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
 import SmartSuggestions from './panels/SmartSuggestions';
+import EraseBrushCanvas from './EraseBrushCanvas';
 import useSceneStudioState from './useSceneStudioState';
 import sceneService from '../../services/sceneService';
 import './SceneStudio.css';
@@ -93,6 +94,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [backgroundSelected, setBackgroundSelected] = useState(false);
   const prevObjectCountRef = useRef(0);
+
+  // Erase (inpainting) state
+  const [isEraseProcessing, setIsEraseProcessing] = useState(false);
+  const [eraseError, setEraseError] = useState(null);
+  const [eraseVariations, setEraseVariations] = useState([]);
+  const [inpaintHistory, setInpaintHistory] = useState([]);
 
   const canvasWidth = PLATFORM_PRESETS[platform]?.width || 1920;
   const canvasHeight = PLATFORM_PRESETS[platform]?.height || 1080;
@@ -320,6 +327,128 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       console.error('Failed to save title:', err);
     }
   }, [sceneId, sceneSetId, state]);
+
+  // ── Erase (Inpainting) ──
+
+  const handleEraseApply = useCallback(async (maskDataUrl, options = {}) => {
+    if (isEraseProcessing || !state.contextId || !backgroundUrl) return;
+
+    const { prompt, strength = 0.85, variationCount = 1 } = options;
+
+    setIsEraseProcessing(true);
+    setEraseError(null);
+    setEraseVariations([]);
+
+    try {
+      // Save current background to history before modifying
+      const historyEntry = {
+        url: backgroundUrl,
+        thumbnail: backgroundUrl,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+
+      if (variationCount > 1) {
+        // Generate multiple variations
+        const variationPromises = [];
+        for (let i = 0; i < variationCount; i++) {
+          variationPromises.push(
+            sceneService.inpaintScene(state.contextId, {
+              imageUrl: backgroundUrl,
+              maskDataUrl,
+              prompt: prompt || 'Remove the selected area and fill with a natural continuation of the background',
+              strength,
+            })
+          );
+        }
+
+        const results = await Promise.allSettled(variationPromises);
+        const successfulVariations = results
+          .filter((r) => r.status === 'fulfilled' && r.value?.success && r.value?.data?.inpainted_url)
+          .map((r, i) => ({
+            url: r.value.data.inpainted_url,
+            score: r.value.data.quality_score || null,
+          }));
+
+        if (successfulVariations.length > 0) {
+          setEraseVariations(successfulVariations);
+          // Don't close erase mode yet - wait for user to pick a variation
+        } else {
+          setEraseError('All variations failed — please try again');
+        }
+      } else {
+        // Single generation (original behavior)
+        const result = await sceneService.inpaintScene(state.contextId, {
+          imageUrl: backgroundUrl,
+          maskDataUrl,
+          prompt: prompt || 'Remove the selected area and fill with a natural continuation of the background',
+          strength,
+        });
+
+        if (result?.success && result.data?.inpainted_url) {
+          // Add to history
+          setInpaintHistory((prev) => [historyEntry, ...prev].slice(0, 10));
+          
+          // Update the background with the inpainted image
+          if (state.contextType === 'scene') {
+            state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+          }
+          // Also save the canvas so the new background persists
+          await save();
+          state.setActiveTool('select');
+        } else {
+          setEraseError(result?.data?.error || 'Inpainting failed — please try again');
+        }
+      }
+    } catch (err) {
+      console.error('Erase/inpaint error:', err);
+      setEraseError(err.response?.data?.error || err.message || 'Erase failed');
+    } finally {
+      setIsEraseProcessing(false);
+    }
+  }, [isEraseProcessing, state, backgroundUrl, save]);
+
+  const handleSelectVariation = useCallback(async (index) => {
+    const variation = eraseVariations[index];
+    if (!variation) return;
+
+    // Save current background to history
+    const historyEntry = {
+      url: backgroundUrl,
+      thumbnail: backgroundUrl,
+      timestamp: new Date().toLocaleTimeString(),
+    };
+    setInpaintHistory((prev) => [historyEntry, ...prev].slice(0, 10));
+
+    // Apply selected variation
+    if (state.contextType === 'scene') {
+      state.setSceneData((prev) => prev ? { ...prev, background_url: variation.url } : prev);
+    }
+    await save();
+    
+    setEraseVariations([]);
+    state.setActiveTool('select');
+  }, [eraseVariations, backgroundUrl, state, save]);
+
+  const handleEraseRevert = useCallback(async (historyIndex) => {
+    const historyItem = inpaintHistory[historyIndex];
+    if (!historyItem) return;
+
+    // Restore the historical background
+    if (state.contextType === 'scene') {
+      state.setSceneData((prev) => prev ? { ...prev, background_url: historyItem.url } : prev);
+    }
+    await save();
+    
+    // Remove this and all newer items from history
+    setInpaintHistory((prev) => prev.slice(historyIndex + 1));
+    state.setActiveTool('select');
+  }, [inpaintHistory, state, save]);
+
+  const handleEraseCancel = useCallback(() => {
+    state.setActiveTool('select');
+    setEraseError(null);
+    setEraseVariations([]);
+  }, [state]);
 
   // ── Keyboard shortcuts ──
 
@@ -949,49 +1078,32 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onMaskChange={setHasMask}
           />
 
-          {/* Erase tool controls — shown when erase tool is active */}
-          {state.activeTool === 'erase' && (() => {
-            const selObj = state.selectedIds.size === 1
-              ? state.objects.find((o) => state.selectedIds.has(o.id))
-              : null;
-            const eraseTarget = (selObj?.type === 'image' && selObj?.assetUrl) ? selObj.label || 'Selected Object' : 'Background';
-            return (
-            <div className="scene-studio-erase-controls">
-              <span className="scene-studio-erase-target">Erasing: {eraseTarget}</span>
-              <label>Brush: {brushSize}px</label>
-              <input
-                type="range"
-                min={5}
-                max={100}
-                value={brushSize}
-                onChange={(e) => setBrushSize(parseInt(e.target.value))}
-              />
-              <input
-                type="text"
-                className="scene-studio-erase-prompt"
-                placeholder="Fill with... (leave empty for auto)"
-                value={inpaintPrompt}
-                onChange={(e) => setInpaintPrompt(e.target.value)}
-              />
-              <button
-                className="scene-studio-btn primary"
-                disabled={!hasMask || isInpainting}
-                onClick={handleInpaint}
-              >
-                {isInpainting ? 'Removing...' : 'Remove'}
-              </button>
-              <button
-                className="scene-studio-btn ghost"
-                onClick={() => {
-                  if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
-                  setHasMask(false);
-                }}
-              >
-                Clear
-              </button>
+          {/* Erase brush overlay (visible when erase tool is active) */}
+          {state.activeTool === 'erase' && backgroundUrl && (
+            <EraseBrushCanvas
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+              zoom={state.canvasSettings.zoom}
+              panX={state.canvasSettings.panX}
+              panY={state.canvasSettings.panY}
+              backgroundUrl={backgroundUrl}
+              onApply={handleEraseApply}
+              onCancel={handleEraseCancel}
+              isProcessing={isEraseProcessing}
+              variations={eraseVariations}
+              onSelectVariation={handleSelectVariation}
+              inpaintHistory={inpaintHistory}
+              onRevert={handleEraseRevert}
+            />
+          )}
+
+          {/* Erase error toast */}
+          {eraseError && (
+            <div className="scene-studio-erase-error">
+              {eraseError}
+              <button onClick={() => setEraseError(null)}>×</button>
             </div>
-            );
-          })()}
+          )}
 
           {/* Empty canvas guidance overlay — hide when background is already set */}
           {state.objects.length === 0 && !hasInteracted && !backgroundUrl && (
