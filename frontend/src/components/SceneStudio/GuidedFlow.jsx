@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Layers, Palette, Download, Check } from 'lucide-react';
+import { Image, Layers, Palette, Check } from 'lucide-react';
 
 /**
  * GuidedFlow — Subtle creation stepper shown below the toolbar.
@@ -12,7 +12,7 @@ const STEPS = [
   { key: 'background', label: 'Background', icon: Image },
   { key: 'objects', label: 'Objects', icon: Layers },
   { key: 'style', label: 'Style', icon: Palette },
-  { key: 'export', label: 'Export', icon: Download },
+  { key: 'export', label: 'Finish', icon: Check },
 ];
 
 function getActiveStep(hasBackground, objectCount, hasEffects) {

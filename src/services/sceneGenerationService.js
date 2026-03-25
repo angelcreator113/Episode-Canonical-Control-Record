@@ -207,6 +207,7 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
     promptImage: imageUrl,
     duration,
     ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
+    ...(cameraMotion ? { cameraMotion } : {}),
   };
 
   const MAX_RETRIES = 3;
@@ -623,39 +624,35 @@ async function generateAngleVideo(sceneAngle, sceneSet, models) {
   const videoDuration = sceneAngle.video_duration || VIDEO_DURATION_MAP[angleLabel] || 5;
   const cameraMotion = sceneAngle.camera_motion || CAMERA_MOTION_MAP[angleLabel] || 'static';
 
-  try {
-    console.log(`[SceneGen] Starting on-demand video for angle: ${sceneAngle.angle_name}`);
+  // Note: errors propagate naturally — angle stays 'complete' so the still image remains accessible
+  console.log(`[SceneGen] Starting on-demand video for angle: ${sceneAngle.angle_name}`);
 
-    const { jobId } = await startImageToVideo(videoPrompt, sourceImageUrl, {
-      duration: videoDuration,
-      cameraMotion,
-    });
-    const result = await pollTask(jobId);
+  const { jobId } = await startImageToVideo(videoPrompt, sourceImageUrl, {
+    duration: videoDuration,
+    cameraMotion,
+  });
+  const result = await pollTask(jobId);
 
-    if (result.status !== 'SUCCEEDED') {
-      throw new Error(`Angle video failed: ${result.error}`);
-    }
-
-    if (sceneAngle.video_clip_url) await deleteOldS3Asset(sceneAngle.video_clip_url);
-
-    const videoUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'video');
-    const totalCost = result.creditsUsed || 0;
-
-    console.log(`[SceneGen] Video complete for angle: ${sceneAngle.angle_name}`);
-
-    await SceneAngle.update({
-      video_clip_url: videoUrl,
-      generation_status: 'complete',
-      generation_cost: parseFloat(sceneAngle.generation_cost || 0) + totalCost,
-    }, { where: { id: sceneAngle.id } });
-
-    await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
-
-    return { success: true, videoUrl };
-  } catch (err) {
-    // Angle stays 'complete' — the still image remains accessible
-    throw err;
+  if (result.status !== 'SUCCEEDED') {
+    throw new Error(`Angle video failed: ${result.error}`);
   }
+
+  if (sceneAngle.video_clip_url) await deleteOldS3Asset(sceneAngle.video_clip_url);
+
+  const videoUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'video');
+  const totalCost = result.creditsUsed || 0;
+
+  console.log(`[SceneGen] Video complete for angle: ${sceneAngle.angle_name}`);
+
+  await SceneAngle.update({
+    video_clip_url: videoUrl,
+    generation_status: 'complete',
+    generation_cost: parseFloat(sceneAngle.generation_cost || 0) + totalCost,
+  }, { where: { id: sceneAngle.id } });
+
+  await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
+
+  return { success: true, videoUrl };
 }
 
 // ─── HIGH-LEVEL: REGENERATE ANGLE WITH REFINED PROMPT ─────────────────────────
@@ -774,6 +771,7 @@ module.exports = {
   generateAngleVideo,
   regenerateAngleRefined,
   generateBestVariation,
+  extractFirstFrame,
   pollTask,
   storeInS3,
   storeBufferInS3,
