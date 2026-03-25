@@ -453,7 +453,7 @@ export default function EraseBrushCanvas({
     
     // Call onApply with all options
     onApply(maskDataUrl, {
-      prompt: customPrompt || 'Remove the selected area and fill with a natural continuation of the background',
+      prompt: customPrompt || undefined,
       strength,
       variationCount,
     });

@@ -699,11 +699,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         return;
       }
 
-      const prompt = inpaintPrompt || 'clean seamless continuation of surrounding area, matching style and lighting';
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
         maskDataUrl,
-        prompt,
+        prompt: (inpaintPrompt || '').trim() || undefined,
       });
 
       if (result?.success && result.data?.inpainted_url) {
