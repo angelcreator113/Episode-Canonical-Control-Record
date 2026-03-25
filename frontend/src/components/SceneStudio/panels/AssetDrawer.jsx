@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Image, Video, User, Palette, Upload, Plus, X } from 'lucide-react';
+import { Search, Image, Video, User, MapPin, Palette, Upload, Plus, X } from 'lucide-react';
 import api from '../../../services/api';
 
 /**
@@ -32,6 +32,7 @@ export default function AssetDrawer({ showId, episodeId, onAddAsset, isOpen, onT
       if (activeTab === 'image') params.asset_type = 'image';
       else if (activeTab === 'video') params.asset_type = 'video';
       else if (activeTab === 'character') params.category = 'character_outfit';
+      // background filter removed — backgrounds come from Scene Sets
 
       const { data } = await api.get('/api/v1/assets', { params });
       setAssets(data.data || data.assets || []);

@@ -575,6 +575,21 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   // ── Export ──
 
+  // ── Use in Timeline ──
+
+  const handleUseInTimeline = useCallback(async () => {
+    if (!state.contextId || state.contextType !== 'scene') return;
+    try {
+      // Save first to ensure latest state is persisted
+      await save();
+      // Mark scene as ready for timeline
+      await sceneService.updateScene(state.contextId, { production_status: 'storyboarded' });
+      state.setSceneData((prev) => prev ? { ...prev, production_status: 'storyboarded' } : prev);
+    } catch (err) {
+      console.error('Use in Timeline error:', err);
+    }
+  }, [state, save]);
+
   const handleExport = useCallback(() => {
     setShowExportDialog(true);
   }, []);
@@ -678,6 +693,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         gridVisible={state.canvasSettings.gridVisible}
         onToggleGrid={() => state.updateCanvasSettings({ gridVisible: !state.canvasSettings.gridVisible })}
         onBack={onBack}
+        onUseInTimeline={state.contextType === 'scene' ? handleUseInTimeline : undefined}
+        productionStatus={state.sceneData?.production_status}
       />
 
       {/* Save error banner */}

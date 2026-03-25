@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   MousePointer2, Hand, Eraser, ZoomIn, ZoomOut, Maximize,
-  Undo2, Redo2, Save, Download, Grid3X3, Check,
+  Undo2, Redo2, Save, Download, Grid3X3, Check, Film,
 } from 'lucide-react';
 
 /**
@@ -46,6 +46,8 @@ export default function Toolbar({
   gridVisible,
   onToggleGrid,
   onBack,
+  onUseInTimeline,
+  productionStatus,
 }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -213,6 +215,16 @@ export default function Toolbar({
             <><Save size={14} /> Save</>
           )}
         </button>
+
+        {onUseInTimeline && (
+          <button
+            className={`scene-studio-btn ${productionStatus === 'ready' ? 'success' : 'primary'}`}
+            onClick={onUseInTimeline}
+            title={productionStatus === 'ready' ? 'Already ready for timeline' : 'Mark as ready and add to timeline'}
+          >
+            <Film size={14} /> {productionStatus === 'ready' ? 'In Timeline' : 'Use in Timeline'}
+          </button>
+        )}
 
         {onExport && (
           <button className="scene-studio-btn ghost" onClick={onExport}>
