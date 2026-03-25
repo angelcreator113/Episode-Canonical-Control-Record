@@ -343,7 +343,6 @@ router.post(
 
     const uploadResult = await S3Service.uploadFile(bucket, key, req.file.buffer, {
       ContentType: req.file.mimetype,
-      ACL: 'public-read',
     });
 
     const thumbnailUrl = uploadResult.location || `https://${bucket}.s3.amazonaws.com/${key}`;

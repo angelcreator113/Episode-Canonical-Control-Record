@@ -146,7 +146,6 @@ class AssetProcessingService {
           Key: key,
           Body: buffer,
           ContentType: 'image/png',
-          ACL: 'public-read',
         })
         .promise();
 
@@ -187,7 +186,6 @@ class AssetProcessingService {
           Key: key,
           Body: processedBuffer,
           ContentType: 'image/png',
-          ACL: 'public-read',
         })
         .promise();
 
@@ -228,7 +226,6 @@ class AssetProcessingService {
           Key: key,
           Body: processedBuffer,
           ContentType: 'image/png',
-          ACL: 'public-read',
         })
         .promise();
 
@@ -268,7 +265,6 @@ class AssetProcessingService {
           Key: key,
           Body: body,
           ContentType: 'image/png',
-          ACL: 'public-read',
           Metadata: {
             templateId: String(templateId),
             assetId: String(assetId),

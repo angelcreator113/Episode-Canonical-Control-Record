@@ -72,6 +72,29 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
   }
 
   const { strength = 0.85, guidanceScale = 7.5 } = options;
+  const qualityPrompt = [
+    prompt,
+    'Photographic quality.',
+    'Make the filled region look like an untouched original image.',
+    'Preserve scene geometry, perspective, lighting direction, shadows, texture continuity, and color balance.',
+    'Blend seamlessly with the surrounding environment and continue nearby structures naturally.',
+  ].join(' ');
+  const negativePrompt = [
+    'text',
+    'watermark',
+    'logo',
+    'blurry',
+    'low quality',
+    'artifacts',
+    'seams',
+    'distorted',
+    'ghosting',
+    'smudges',
+    'duplicated textures',
+    'patches',
+    'painted look',
+    'new objects',
+  ].join(', ');
 
   console.log(`[Inpainting] Starting inpaint: prompt="${prompt.slice(0, 80)}...", strength=${strength}`);
 
@@ -84,13 +107,13 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
       input: {
         image: imageUrl,
         mask: maskUrl,
-        prompt: `${prompt}. Photographic quality, seamless blend, matching lighting and style.`,
-        negative_prompt: 'text, watermark, logo, blurry, low quality, artifacts, seams',
+        prompt: qualityPrompt,
+        negative_prompt: negativePrompt,
         prompt_strength: strength,
         num_outputs: 1,
         width: 1024,
         height: 1024,
-        num_inference_steps: 30,
+        num_inference_steps: 36,
         guidance_scale: guidanceScale,
         scheduler: 'K_EULER',
       },

@@ -56,16 +56,16 @@ const VALID_ASSET_TYPES = [
   'PROMO_GUEST',
   'BRAND_LOGO',
   'EPISODE_FRAME',
-  'BACKGROUND_IMAGE',
   'PROMO_VIDEO',
   'EPISODE_VIDEO',
-  'BACKGROUND_VIDEO',
   'SHOW_JAIA',
   'PROMO_JUSTAMOVIE',
   'THUMBNAIL',
   'GUEST_PHOTO',
   'CUSTOM_GRAPHIC',
   'B_ROLL',
+  // BACKGROUND_IMAGE and BACKGROUND_VIDEO removed —
+  // backgrounds come from Scene Sets (locations), not assets
 ];
 
 /**
