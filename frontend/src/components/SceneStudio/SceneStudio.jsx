@@ -699,7 +699,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         return;
       }
 
-      const prompt = inpaintPrompt || 'clean seamless continuation of surrounding area, matching style and lighting';
+      // Let backend use its stronger removal prompt when user leaves this blank.
+      const prompt = (inpaintPrompt || '').trim() || undefined;
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
         maskDataUrl,
