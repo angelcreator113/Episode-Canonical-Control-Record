@@ -437,13 +437,23 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, canvasWidth, canvasHeight]);
 
-  // Fit on first load
+  // Fit on first load — use ResizeObserver so we fit once the container
+  // has its final dimensions (after panels finish rendering)
+  const hasFittedRef = useRef(false);
   useEffect(() => {
-    if (!isLoading && canvasContainerRef.current) {
-      // Small delay for DOM to settle
-      const timer = setTimeout(handleFitToScreen, 100);
-      return () => clearTimeout(timer);
-    }
+    if (isLoading || hasFittedRef.current) return;
+    const el = canvasContainerRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth > 0 && el.clientHeight > 0 && !hasFittedRef.current) {
+        hasFittedRef.current = true;
+        handleFitToScreen();
+        observer.disconnect();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
