@@ -4,8 +4,8 @@
  * Inpainting Service — Replicate API (Dual-Model)
  *
  * Two modes:
- *   1. Object REMOVAL (no prompt) — uses LaMa (Large Mask Inpainting).
- *      Fast, no prompt needed, seamlessly continues the background.
+ *   1. Object REMOVAL (no prompt) — SDXL context-aware cleanup (with LaMa fallback).
+ *      Higher quality on complex interiors/textures.
  *   2. Creative FILL (with prompt) — uses lucataco/sdxl-inpainting.
  *      Generates new content described by the user's prompt.
  */
@@ -185,6 +185,24 @@ async function runLamaRemoval(imageUrl, maskUrl) {
 }
 
 /**
+ * Advanced object removal using SDXL inpainting with a neutral cleanup prompt.
+ * Falls back to LaMa in caller when this path fails.
+ */
+async function runSdxlRemoval(imageUrl, maskUrl) {
+  const removalPrompt = [
+    'Clean, natural background continuation.',
+    'Remove the masked object completely.',
+    'Preserve scene geometry, lighting, and texture consistency.',
+    'Photorealistic, seamless blend, no artifacts.',
+  ].join(' ');
+
+  return runSdxlInpainting(imageUrl, maskUrl, removalPrompt, {
+    strength: 0.95,
+    guidanceScale: 6.5,
+  });
+}
+
+/**
  * Run SDXL inpainting for creative fills (prompt-driven).
  * Uses explicit version hash for Replicate predictions API compatibility.
  */
@@ -348,7 +366,7 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
 /**
  * Inpaint (remove/fill) an area of a scene background.
  *
- * When mode is 'remove' (or no prompt given), uses LaMa for clean removal.
+ * When mode is 'remove' (or no prompt given), uses SDXL removal with LaMa fallback.
  * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
@@ -371,8 +389,13 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     let resultUrl;
 
     if (isRemoval) {
-      console.log('[Inpainting] Mode: REMOVAL (LaMa)');
-      resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+      console.log('[Inpainting] Mode: REMOVAL (SDXL -> LaMa fallback)');
+      try {
+        resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
+      } catch (sdxlError) {
+        console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
+        resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+      }
     } else {
       console.log(`[Inpainting] Mode: FILL (SDXL) — "${prompt.slice(0, 60)}"`);
       resultUrl = await runSdxlInpainting(imageUrl, maskUrl, prompt, { strength });
