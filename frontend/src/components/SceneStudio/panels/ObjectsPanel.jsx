@@ -1,10 +1,15 @@
-import React, { useCallback } from 'react';
-import { Eye, EyeOff, Lock, Unlock, Trash2, Copy, GripVertical, Image, Video, Type, Square, Layers } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import { Eye, EyeOff, Lock, Unlock, Trash2, Copy, GripVertical, Image, Video, Type, Square, Layers, ChevronDown, ChevronRight } from 'lucide-react';
 
 /**
  * ObjectsPanel — Left panel showing all objects as a layer list.
  * Supports visibility/lock toggles, selection, reorder, delete.
+ * Groups objects by depth layer: Foreground > Midground > Background.
  */
+
+const LAYER_ORDER = ['foreground', 'midground', 'background'];
+const LAYER_LABELS = { foreground: 'Foreground', midground: 'Midground', background: 'Background' };
+
 export default function ObjectsPanel({
   objects,
   selectedIds,
@@ -14,11 +19,24 @@ export default function ObjectsPanel({
   onReorder,
   onDelete,
   onDuplicate,
+  onUpdateObject,
   embedded,
   hasBackground,
 }) {
   // Sort by layer order descending (top layer first in the list)
   const sorted = [...objects].sort((a, b) => (b.layerOrder || 0) - (a.layerOrder || 0));
+  const [collapsedLayers, setCollapsedLayers] = useState({});
+
+  const toggleLayerCollapse = useCallback((layer) => {
+    setCollapsedLayers((prev) => ({ ...prev, [layer]: !prev[layer] }));
+  }, []);
+
+  // Group by depth layer
+  const grouped = LAYER_ORDER.map((layer) => ({
+    layer,
+    label: LAYER_LABELS[layer],
+    items: sorted.filter((o) => (o.depthLayer || 'midground') === layer),
+  }));
 
   const typeIcons = {
     image: Image,
@@ -76,71 +94,85 @@ export default function ObjectsPanel({
           </div>
         )}
 
-        {sorted.map((obj) => {
-          const isSelected = selectedIds.has(obj.id);
-          const TypeIcon = typeIcons[obj.type] || Image;
-          const isVariant = !!obj.variantGroupId;
-          const isInactiveVariant = isVariant && !obj.isActiveVariant;
-
-          return (
+        {sorted.length > 0 && grouped.map(({ layer, label, items }) => (
+          <div key={layer} className="scene-studio-layer-group">
+            {/* Layer header — only show when there are objects across multiple layers */}
             <div
-              key={obj.id}
-              className={`scene-studio-object-row ${isSelected ? 'selected' : ''} ${isInactiveVariant ? 'inactive-variant' : ''}`}
-              onClick={() => onSelect && onSelect(obj.id)}
-              draggable
-              onDragStart={(e) => handleDragStart(e, obj.id)}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, obj.id)}
+              className="scene-studio-layer-header"
+              onClick={() => toggleLayerCollapse(layer)}
             >
-              <GripVertical size={12} className="scene-studio-drag-handle" />
-
-              <TypeIcon size={14} className="scene-studio-type-icon" />
-
-              <span className="scene-studio-object-label" title={obj.label}>
-                {obj.label || 'Untitled'}
-                {isVariant && (
-                  <span className="scene-studio-variant-badge">
-                    {obj.variantLabel || 'variant'}
-                  </span>
-                )}
-              </span>
-
-              <div className="scene-studio-object-actions">
-                <button
-                  className="scene-studio-icon-btn"
-                  onClick={(e) => { e.stopPropagation(); onToggleVisibility && onToggleVisibility(obj.id); }}
-                  title={obj.isVisible ? 'Hide' : 'Show'}
-                >
-                  {obj.isVisible ? <Eye size={12} /> : <EyeOff size={12} />}
-                </button>
-
-                <button
-                  className="scene-studio-icon-btn"
-                  onClick={(e) => { e.stopPropagation(); onToggleLock && onToggleLock(obj.id); }}
-                  title={obj.isLocked ? 'Unlock' : 'Lock'}
-                >
-                  {obj.isLocked ? <Lock size={12} /> : <Unlock size={12} />}
-                </button>
-
-                <button
-                  className="scene-studio-icon-btn"
-                  onClick={(e) => { e.stopPropagation(); onDuplicate && onDuplicate(obj.id); }}
-                  title="Duplicate"
-                >
-                  <Copy size={12} />
-                </button>
-
-                <button
-                  className="scene-studio-icon-btn danger"
-                  onClick={(e) => { e.stopPropagation(); onDelete && onDelete(obj.id); }}
-                  title="Delete"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
+              {collapsedLayers[layer] ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+              <span>{label}</span>
+              <span className="scene-studio-layer-count">{items.length}</span>
             </div>
-          );
-        })}
+
+            {!collapsedLayers[layer] && items.map((obj) => {
+              const isSelected = selectedIds.has(obj.id);
+              const TypeIcon = typeIcons[obj.type] || Image;
+              const isVariant = !!obj.variantGroupId;
+              const isInactiveVariant = isVariant && !obj.isActiveVariant;
+
+              return (
+                <div
+                  key={obj.id}
+                  className={`scene-studio-object-row ${isSelected ? 'selected' : ''} ${isInactiveVariant ? 'inactive-variant' : ''}`}
+                  onClick={() => onSelect && onSelect(obj.id)}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, obj.id)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, obj.id)}
+                >
+                  <GripVertical size={12} className="scene-studio-drag-handle" />
+
+                  <TypeIcon size={14} className="scene-studio-type-icon" />
+
+                  <span className="scene-studio-object-label" title={obj.label}>
+                    {obj.label || 'Untitled'}
+                    {isVariant && (
+                      <span className="scene-studio-variant-badge">
+                        {obj.variantLabel || 'variant'}
+                      </span>
+                    )}
+                  </span>
+
+                  <div className="scene-studio-object-actions">
+                    <button
+                      className="scene-studio-icon-btn"
+                      onClick={(e) => { e.stopPropagation(); onToggleVisibility && onToggleVisibility(obj.id); }}
+                      title={obj.isVisible ? 'Hide' : 'Show'}
+                    >
+                      {obj.isVisible ? <Eye size={12} /> : <EyeOff size={12} />}
+                    </button>
+
+                    <button
+                      className="scene-studio-icon-btn"
+                      onClick={(e) => { e.stopPropagation(); onToggleLock && onToggleLock(obj.id); }}
+                      title={obj.isLocked ? 'Unlock' : 'Lock'}
+                    >
+                      {obj.isLocked ? <Lock size={12} /> : <Unlock size={12} />}
+                    </button>
+
+                    <button
+                      className="scene-studio-icon-btn"
+                      onClick={(e) => { e.stopPropagation(); onDuplicate && onDuplicate(obj.id); }}
+                      title="Duplicate"
+                    >
+                      <Copy size={12} />
+                    </button>
+
+                    <button
+                      className="scene-studio-icon-btn danger"
+                      onClick={(e) => { e.stopPropagation(); onDelete && onDelete(obj.id); }}
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );

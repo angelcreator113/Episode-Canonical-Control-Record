@@ -1870,3 +1870,327 @@
     display: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   BACKGROUND BAR
+   ═══════════════════════════════════════════════════════════════ */
+
+.scene-studio-bg-bar {
+  background: #f0ede6;
+  border-bottom: 1px solid #d6d0c4;
+  padding: 4px 12px;
+  flex-shrink: 0;
+}
+
+.scene-studio-bg-bar-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scene-studio-bg-bar-thumb {
+  width: 32px;
+  height: 20px;
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid #d6d0c4;
+}
+
+.scene-studio-bg-bar-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene-studio-bg-bar-empty {
+  width: 32px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px dashed #bbb5a8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.scene-studio-bg-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.scene-studio-bg-bar-divider {
+  width: 1px;
+  height: 16px;
+  background: #d6d0c4;
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.scene-studio-bg-bar-group {
+  display: flex;
+  gap: 2px;
+}
+
+.scene-studio-bg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 100ms ease;
+  white-space: nowrap;
+}
+
+.scene-studio-bg-chip:hover {
+  background: rgba(184, 150, 46, 0.08);
+  color: #2C2C2C;
+}
+
+.scene-studio-bg-chip.active {
+  background: rgba(184, 150, 46, 0.15);
+  border-color: #B8962E;
+  color: #B8962E;
+}
+
+.scene-studio-mood-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SMART SUGGESTIONS
+   ═══════════════════════════════════════════════════════════════ */
+
+.scene-studio-smart-suggestions {
+  border-top: 1px solid #d6d0c4;
+  padding: 8px 10px;
+  background: rgba(184, 150, 46, 0.04);
+}
+
+.scene-studio-suggestions-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: #B8962E;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.scene-studio-suggestions-header .scene-studio-icon-btn {
+  margin-left: auto;
+}
+
+.scene-studio-suggestions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.scene-studio-suggestions-loading {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #999;
+  font-style: italic;
+}
+
+.scene-studio-suggestion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border: 1px dashed #c4b88a;
+  border-radius: 12px;
+  background: transparent;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: #7a6d4e;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.scene-studio-suggestion-chip:hover {
+  background: rgba(184, 150, 46, 0.1);
+  border-color: #B8962E;
+  color: #B8962E;
+  border-style: solid;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCENE LAYERS (Phase 2 — Foreground / Midground / Background)
+   ═══════════════════════════════════════════════════════════════ */
+
+.scene-studio-layer-group {
+  margin-bottom: 2px;
+}
+
+.scene-studio-layer-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #999;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scene-studio-layer-header:hover {
+  color: #666;
+}
+
+.scene-studio-layer-count {
+  margin-left: auto;
+  background: #e8e4dc;
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: 8px;
+  color: #999;
+}
+
+.scene-studio-layer-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #666;
+  transition: all 100ms ease;
+}
+
+.scene-studio-layer-chip:hover {
+  background: #e8e4dc;
+}
+
+.scene-studio-layer-chip.active {
+  background: rgba(184, 150, 46, 0.12);
+  border-color: #B8962E;
+  color: #B8962E;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OBJECT EFFECTS (Phase 4)
+   ═══════════════════════════════════════════════════════════════ */
+
+.scene-studio-effects-section {
+  border-top: 1px solid #e8e4dc;
+  padding-top: 8px;
+}
+
+.scene-studio-effect-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.scene-studio-effect-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid #d6d0c4;
+  background: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.scene-studio-effect-toggle.active {
+  background: #B8962E;
+  border-color: #B8962E;
+  color: #fff;
+}
+
+.scene-studio-blend-select {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 2px 4px;
+  border: 1px solid #d6d0c4;
+  border-radius: 4px;
+  background: #fff;
+  color: #2C2C2C;
+  width: 100%;
+}
+
+.scene-studio-color-input {
+  width: 24px;
+  height: 18px;
+  border: 1px solid #d6d0c4;
+  border-radius: 3px;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GUIDED FLOW STEPPER (Phase 7)
+   ═══════════════════════════════════════════════════════════════ */
+
+.scene-studio-guided-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 3px 12px;
+  background: #f0ede6;
+  border-bottom: 1px solid #e8e4dc;
+}
+
+.scene-studio-flow-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: #bbb5a8;
+  border: none;
+  background: none;
+  cursor: default;
+  transition: color 150ms ease;
+}
+
+.scene-studio-flow-step.active {
+  color: #B8962E;
+  font-weight: 600;
+}
+
+.scene-studio-flow-step.done {
+  color: #27ae60;
+}
+
+.scene-studio-flow-arrow {
+  color: #d6d0c4;
+  font-size: 10px;
+  padding: 0 2px;
+}

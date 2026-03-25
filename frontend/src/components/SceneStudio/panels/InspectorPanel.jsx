@@ -3,7 +3,18 @@ import {
   Settings, Move, RotateCw, Maximize2, Eye, EyeOff, Lock, Unlock,
   FlipHorizontal, FlipVertical, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown,
   Trash2, Copy, Layers, GitBranch, ImageIcon, Box, Loader2, RefreshCw,
+  Droplets, Sun, Blend, Replace,
 } from 'lucide-react';
+
+const DEPTH_LAYERS = [
+  { key: 'foreground', label: 'FG' },
+  { key: 'midground', label: 'MG' },
+  { key: 'background', label: 'BG' },
+];
+
+const BLEND_MODES = [
+  'normal', 'multiply', 'screen', 'overlay', 'soft-light',
+];
 
 /**
  * InspectorPanel — Right panel showing properties of selected object(s).
@@ -62,10 +73,13 @@ export default function InspectorPanel({
   onDuplicate,
   onToggleVisibility,
   onToggleLock,
+  onGroupObjects,
+  onUngroupObjects,
   onUpdateCanvasSettings,
   onActivateVariant,
   onSetActiveAngle,
   contextType,
+  onReplaceAsset,
   backgroundSelected,
   backgroundUrl,
   depthMapUrl,
@@ -255,8 +269,9 @@ export default function InspectorPanel({
     );
   }
 
-  // Multi-selection — show limited controls
+  // Multi-selection — show group + delete controls
   if (selectedObjects.length > 1) {
+    const allSameGroup = selectedObjects.every((o) => o.groupId && o.groupId === selectedObjects[0].groupId);
     return (
       <div className="scene-studio-inspector">
         <div className="scene-studio-panel-header">
@@ -264,6 +279,24 @@ export default function InspectorPanel({
           <span>{selectedObjects.length} objects selected</span>
         </div>
         <div className="scene-studio-section">
+          {onGroupObjects && !allSameGroup && (
+            <button
+              className="scene-studio-btn primary"
+              onClick={() => onGroupObjects(selectedObjects.map((o) => o.id))}
+              style={{ marginBottom: 6 }}
+            >
+              <Layers size={14} /> Group
+            </button>
+          )}
+          {onUngroupObjects && allSameGroup && (
+            <button
+              className="scene-studio-btn ghost"
+              onClick={() => onUngroupObjects(selectedObjects[0].groupId)}
+              style={{ marginBottom: 6 }}
+            >
+              <Layers size={14} /> Ungroup
+            </button>
+          )}
           <button
             className="scene-studio-btn danger"
             onClick={() => selectedObjects.forEach((o) => onDelete(o.id))}
@@ -337,9 +370,25 @@ export default function InspectorPanel({
         </div>
       </div>
 
-      {/* Layer */}
+      {/* Depth Layer */}
       <div className="scene-studio-section">
-        <h4><Layers size={12} /> Layer</h4>
+        <h4><Layers size={12} /> Depth Layer</h4>
+        <div className="scene-studio-quick-actions">
+          {DEPTH_LAYERS.map((dl) => (
+            <button
+              key={dl.key}
+              className={`scene-studio-layer-chip ${(obj.depthLayer || 'midground') === dl.key ? 'active' : ''}`}
+              onClick={() => onUpdateObject(obj.id, { depthLayer: dl.key })}
+            >
+              {dl.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Layer Order */}
+      <div className="scene-studio-section">
+        <h4>Stack Order</h4>
         <div className="scene-studio-quick-actions">
           <button className="scene-studio-chip" onClick={() => onReorder(obj.id, 'front')} title="Bring to Front">
             <ChevronsUp size={12} /> Front
@@ -355,6 +404,82 @@ export default function InspectorPanel({
           </button>
         </div>
       </div>
+
+      {/* Effects */}
+      {obj.type !== 'text' && (
+        <div className="scene-studio-section scene-studio-effects-section">
+          <h4><Droplets size={12} /> Effects</h4>
+          {/* Shadow */}
+          <div className="scene-studio-effect-row">
+            <button
+              className={`scene-studio-effect-toggle ${obj.styleData?.shadow?.enabled ? 'active' : ''}`}
+              onClick={() => onUpdateObject(obj.id, {
+                styleData: {
+                  ...obj.styleData,
+                  shadow: {
+                    ...(obj.styleData?.shadow || { offsetX: 4, offsetY: 4, blur: 8, color: 'rgba(0,0,0,0.3)' }),
+                    enabled: !obj.styleData?.shadow?.enabled,
+                  },
+                },
+              })}
+              title="Toggle shadow"
+            >
+              {obj.styleData?.shadow?.enabled ? '✓' : ''}
+            </button>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '10px' }}>Shadow</span>
+          </div>
+          {obj.styleData?.shadow?.enabled && (
+            <div className="scene-studio-input-grid">
+              <NumberInput label="X" value={obj.styleData?.shadow?.offsetX ?? 4} onChange={(v) => onUpdateObject(obj.id, { styleData: { ...obj.styleData, shadow: { ...obj.styleData.shadow, offsetX: v } } })} min={-50} max={50} />
+              <NumberInput label="Y" value={obj.styleData?.shadow?.offsetY ?? 4} onChange={(v) => onUpdateObject(obj.id, { styleData: { ...obj.styleData, shadow: { ...obj.styleData.shadow, offsetY: v } } })} min={-50} max={50} />
+              <NumberInput label="Blur" value={obj.styleData?.shadow?.blur ?? 8} onChange={(v) => onUpdateObject(obj.id, { styleData: { ...obj.styleData, shadow: { ...obj.styleData.shadow, blur: v } } })} min={0} max={50} />
+            </div>
+          )}
+          {/* Blur */}
+          <div className="scene-studio-input-row">
+            <label><Droplets size={10} /> Blur</label>
+            <div className="scene-studio-slider-group">
+              <input
+                type="range"
+                value={obj.styleData?.blur ?? 0}
+                onChange={(e) => onUpdateObject(obj.id, { styleData: { ...obj.styleData, blur: parseInt(e.target.value) } })}
+                min={0}
+                max={20}
+                step={1}
+              />
+              <span className="scene-studio-slider-value">{obj.styleData?.blur ?? 0}px</span>
+            </div>
+          </div>
+          {/* Brightness */}
+          <div className="scene-studio-input-row">
+            <label><Sun size={10} /> Bright</label>
+            <div className="scene-studio-slider-group">
+              <input
+                type="range"
+                value={obj.styleData?.brightness ?? 100}
+                onChange={(e) => onUpdateObject(obj.id, { styleData: { ...obj.styleData, brightness: parseInt(e.target.value) } })}
+                min={0}
+                max={200}
+                step={5}
+              />
+              <span className="scene-studio-slider-value">{obj.styleData?.brightness ?? 100}%</span>
+            </div>
+          </div>
+          {/* Blend Mode */}
+          <div className="scene-studio-input-row">
+            <label><Blend size={10} /> Blend</label>
+            <select
+              className="scene-studio-blend-select"
+              value={obj.styleData?.blendMode || 'normal'}
+              onChange={(e) => onUpdateObject(obj.id, { styleData: { ...obj.styleData, blendMode: e.target.value } })}
+            >
+              {BLEND_MODES.map((m) => (
+                <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Visibility & Lock */}
       <div className="scene-studio-section">
@@ -394,6 +519,11 @@ export default function InspectorPanel({
       {/* Actions */}
       <div className="scene-studio-section">
         <div className="scene-studio-quick-actions">
+          {obj.assetId && onReplaceAsset && (
+            <button className="scene-studio-chip" onClick={() => onReplaceAsset(obj.id)}>
+              <Replace size={12} /> Replace
+            </button>
+          )}
           <button className="scene-studio-chip" onClick={() => onDuplicate(obj.id)}>
             <Copy size={12} /> Duplicate
           </button>
