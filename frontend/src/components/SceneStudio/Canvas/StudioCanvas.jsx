@@ -6,6 +6,7 @@ import VideoObject from './objects/VideoObject';
 import TextObject from './objects/TextObject';
 import ShapeObject from './objects/ShapeObject';
 import ParallaxLayer from './ParallaxLayer';
+import MaskLayer from './MaskLayer';
 
 /**
  * StudioCanvas — Main Konva canvas for Scene Studio.
@@ -134,6 +135,8 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
   onBackgroundSelect,
   depthMapUrl,
   depthEffects,
+  brushSize,
+  onMaskChange,
 }, forwardedRef) {
   const stageRef = useRef(null);
 
@@ -142,6 +145,13 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
   const transformerRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [mousePosition, setMousePosition] = useState({ x: 0.5, y: 0.5 });
+
+  // Drag selection box
+  const [selectionBox, setSelectionBox] = useState(null); // { x1, y1, x2, y2 }
+  const isSelecting = useRef(false);
+
+  // Snap guides
+  const [activeGuides, setActiveGuides] = useState([]);
 
   const parallaxEnabled = depthEffects?.parallaxEnabled && depthMapUrl;
 
@@ -189,13 +199,111 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
     transformer.getLayer().batchDraw();
   }, [selectedIds, objects]);
 
-  // Handle click on stage background (deselect)
+  // Handle click on stage background (deselect) — skip when erase tool active
   const handleStageClick = useCallback((e) => {
-    // Clicked on stage itself (not on an object)
+    if (activeTool === 'erase') return; // Don't deselect while erasing
     if (e.target === e.target.getStage() || e.target.name() === 'canvas-bg') {
       if (onDeselect) onDeselect();
     }
-  }, [onDeselect]);
+  }, [onDeselect, activeTool]);
+
+  // Drag selection box — click and drag on empty canvas to select multiple objects
+  const handleStageMouseDown = useCallback((e) => {
+    if (activeTool !== 'select') return;
+    // Only start selection on stage/bg click, not on objects
+    if (e.target !== e.target.getStage() && e.target.name() !== 'canvas-bg') return;
+    const stage = e.target.getStage();
+    const pos = stage.getAbsoluteTransform().copy().invert().point(stage.getPointerPosition());
+    isSelecting.current = true;
+    setSelectionBox({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y });
+  }, [activeTool]);
+
+  const handleStageMouseMove2 = useCallback((e) => {
+    if (!isSelecting.current || !selectionBox) return;
+    const stage = e.target.getStage();
+    const pos = stage.getAbsoluteTransform().copy().invert().point(stage.getPointerPosition());
+    setSelectionBox((prev) => prev ? { ...prev, x2: pos.x, y2: pos.y } : null);
+  }, [selectionBox]);
+
+  const handleStageMouseUp = useCallback(() => {
+    if (!isSelecting.current || !selectionBox) {
+      isSelecting.current = false;
+      setSelectionBox(null);
+      return;
+    }
+    isSelecting.current = false;
+    // Find objects within the selection box
+    const x1 = Math.min(selectionBox.x1, selectionBox.x2);
+    const y1 = Math.min(selectionBox.y1, selectionBox.y2);
+    const x2 = Math.max(selectionBox.x1, selectionBox.x2);
+    const y2 = Math.max(selectionBox.y1, selectionBox.y2);
+    const boxW = x2 - x1;
+    const boxH = y2 - y1;
+
+    // Only select if box is big enough (avoid click-as-select)
+    if (boxW > 10 && boxH > 10 && onSelect) {
+      objects.forEach((obj) => {
+        const ox = obj.x || 0;
+        const oy = obj.y || 0;
+        const ow = obj.width || 0;
+        const oh = obj.height || 0;
+        // Check if object intersects selection box
+        if (ox < x2 && ox + ow > x1 && oy < y2 && oy + oh > y1) {
+          onSelect(obj.id, true); // true = add to selection
+        }
+      });
+    }
+    setSelectionBox(null);
+  }, [selectionBox, objects, onSelect]);
+
+  // Compute snap guides during drag
+  const SNAP_THRESHOLD = 8;
+  const handleObjectDragMove = useCallback((e) => {
+    const node = e.target;
+    const guides = [];
+    const nodeX = node.x();
+    const nodeY = node.y();
+    const nodeW = node.width() * Math.abs(node.scaleX());
+    const nodeH = node.height() * Math.abs(node.scaleY());
+    const nodeCX = nodeX + nodeW / 2;
+    const nodeCY = nodeY + nodeH / 2;
+
+    // Canvas center guides
+    const canvasCX = canvasWidth / 2;
+    const canvasCY = canvasHeight / 2;
+    if (Math.abs(nodeCX - canvasCX) < SNAP_THRESHOLD) {
+      guides.push({ orientation: 'vertical', position: canvasCX });
+      node.x(canvasCX - nodeW / 2);
+    }
+    if (Math.abs(nodeCY - canvasCY) < SNAP_THRESHOLD) {
+      guides.push({ orientation: 'horizontal', position: canvasCY });
+      node.y(canvasCY - nodeH / 2);
+    }
+    // Canvas edge guides
+    if (Math.abs(nodeX) < SNAP_THRESHOLD) {
+      guides.push({ orientation: 'vertical', position: 0 });
+      node.x(0);
+    }
+    if (Math.abs(nodeY) < SNAP_THRESHOLD) {
+      guides.push({ orientation: 'horizontal', position: 0 });
+      node.y(0);
+    }
+    if (Math.abs(nodeX + nodeW - canvasWidth) < SNAP_THRESHOLD) {
+      guides.push({ orientation: 'vertical', position: canvasWidth });
+      node.x(canvasWidth - nodeW);
+    }
+    if (Math.abs(nodeY + nodeH - canvasHeight) < SNAP_THRESHOLD) {
+      guides.push({ orientation: 'horizontal', position: canvasHeight });
+      node.y(canvasHeight - nodeH);
+    }
+
+    setActiveGuides(guides);
+  }, [canvasWidth, canvasHeight]);
+
+  const handleObjectDragEnd = useCallback((id, changes) => {
+    setActiveGuides([]); // Clear guides
+    if (onDragEnd) onDragEnd(id, changes);
+  }, [onDragEnd]);
 
   // Handle object selection
   const handleObjectSelect = useCallback((objId) => (e) => {
@@ -255,14 +363,16 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
       onClick={handleStageClick}
       onTap={handleStageClick}
       onWheel={handleWheel}
-      onMouseMove={handleMouseMove}
+      onMouseMove={(e) => { handleMouseMove(e); handleStageMouseMove2(e); }}
+      onMouseDown={handleStageMouseDown}
+      onMouseUp={handleStageMouseUp}
       draggable={activeTool === 'hand'}
       onDragEnd={(e) => {
         if (activeTool === 'hand' && onPan) {
           onPan(e.target.x(), e.target.y());
         }
       }}
-      style={{ cursor: activeTool === 'hand' ? 'grab' : 'default' }}
+      style={{ cursor: activeTool === 'hand' ? 'grab' : activeTool === 'erase' ? 'crosshair' : 'default' }}
     >
       {/* Background layer */}
       <Layer>
@@ -330,8 +440,8 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
         ))}
       </Layer>
 
-      {/* Objects layer */}
-      <Layer>
+      {/* Objects layer — disabled when erase tool is active */}
+      <Layer listening={activeTool !== 'erase'}>
         {renderableObjects.map((obj) => {
           const Renderer = OBJECT_RENDERERS[obj.type] || ImageObject;
           return (
@@ -340,7 +450,8 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
               obj={obj}
               isSelected={selectedIds.has(obj.id)}
               onSelect={handleObjectSelect(obj.id)}
-              onDragEnd={onDragEnd}
+              onDragMove={handleObjectDragMove}
+              onDragEnd={handleObjectDragEnd}
               onTransformEnd={onTransformEnd}
               onUpdateObject={onUpdateObject}
               autoEdit={obj.type === 'text' && editingTextId === obj.id}
@@ -377,6 +488,48 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           guides={snapGuides}
           canvasWidth={canvasWidth}
           canvasHeight={canvasHeight}
+        />
+
+        {/* Canvas center snap guides — shown when dragging near center */}
+        {activeGuides.map((guide, i) => (
+          <Line
+            key={`snap-${i}`}
+            points={guide.orientation === 'vertical'
+              ? [guide.position, 0, guide.position, canvasHeight]
+              : [0, guide.position, canvasWidth, guide.position]
+            }
+            stroke="rgba(184, 150, 46, 0.5)"
+            strokeWidth={1}
+            dash={[4, 4]}
+            listening={false}
+          />
+        ))}
+
+        {/* Drag selection box */}
+        {selectionBox && (
+          <Rect
+            x={Math.min(selectionBox.x1, selectionBox.x2)}
+            y={Math.min(selectionBox.y1, selectionBox.y2)}
+            width={Math.abs(selectionBox.x2 - selectionBox.x1)}
+            height={Math.abs(selectionBox.y2 - selectionBox.y1)}
+            fill="rgba(102, 126, 234, 0.1)"
+            stroke="#667eea"
+            strokeWidth={1}
+            dash={[4, 4]}
+            listening={false}
+          />
+        )}
+      </Layer>
+
+      {/* Mask layer for erase/inpaint tool — always rendered to preserve strokes, on top of everything */}
+      <Layer listening={activeTool === 'erase'}>
+        <MaskLayer
+          active={activeTool === 'erase'}
+          canvasWidth={canvasWidth}
+          canvasHeight={canvasHeight}
+          brushSize={brushSize || 30}
+          onMaskChange={onMaskChange}
+          stageRef={stageRef}
         />
       </Layer>
     </Stage>

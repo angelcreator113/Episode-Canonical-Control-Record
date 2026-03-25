@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  MousePointer2, Hand, ZoomIn, ZoomOut, Maximize,
-  Undo2, Redo2, Save, Download, Grid3X3, Check,
+  MousePointer2, Hand, Eraser, ZoomIn, ZoomOut, Maximize,
+  Undo2, Redo2, Save, Download, Grid3X3, Check, Film,
 } from 'lucide-react';
 
 /**
@@ -20,6 +20,7 @@ const PLATFORM_PRESETS = {
 const TOOLS = [
   { key: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
   { key: 'hand', icon: Hand, label: 'Pan', shortcut: 'H' },
+  { key: 'erase', icon: Eraser, label: 'Erase', shortcut: 'E' },
 ];
 
 export default function Toolbar({
@@ -45,6 +46,8 @@ export default function Toolbar({
   gridVisible,
   onToggleGrid,
   onBack,
+  onUseInTimeline,
+  productionStatus,
 }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -197,9 +200,10 @@ export default function Toolbar({
             saveStatus === 'saved' ? 'success' :
             isDirty ? 'primary' : 'ghost'
           }`}
+          style={isDirty ? { fontWeight: 600 } : undefined}
           onClick={onSave}
           disabled={saveStatus === 'saving'}
-          title="Save (Ctrl+S)"
+          title={saveStatus === 'error' ? 'Save failed — click to retry' : 'Save (Ctrl+S)'}
         >
           {saveStatus === 'saving' ? (
             <><Save size={14} className="scene-studio-spin-icon" /> Saving...</>
@@ -207,12 +211,20 @@ export default function Toolbar({
             <><Check size={14} /> Saved</>
           ) : saveStatus === 'error' ? (
             <><Save size={14} /> Retry</>
-          ) : isDirty ? (
-            <><Save size={14} /> Save</>
           ) : (
-            <><Save size={14} /> Saved</>
+            <><Save size={14} /> Save</>
           )}
         </button>
+
+        {onUseInTimeline && (
+          <button
+            className={`scene-studio-btn ${productionStatus === 'ready' ? 'success' : 'primary'}`}
+            onClick={onUseInTimeline}
+            title={productionStatus === 'ready' ? 'Already ready for timeline' : 'Mark as ready and add to timeline'}
+          >
+            <Film size={14} /> {productionStatus === 'ready' ? 'In Timeline' : 'Use in Timeline'}
+          </button>
+        )}
 
         {onExport && (
           <button className="scene-studio-btn ghost" onClick={onExport}>

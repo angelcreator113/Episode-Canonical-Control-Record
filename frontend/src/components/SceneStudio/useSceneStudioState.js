@@ -456,6 +456,66 @@ export default function useSceneStudioState() {
     setIsDirty(true);
   }, []);
 
+  // ── Scene States ──
+
+  const createSceneState = useCallback((name) => {
+    const stateId = `state-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    const snapshot = objects.map((o) => ({ ...o }));
+    setCanvasSettings((prev) => {
+      const states = [...(prev.sceneStates || []), {
+        id: stateId,
+        name,
+        objectCount: snapshot.length,
+        snapshot: JSON.parse(JSON.stringify(snapshot)),
+      }];
+      return { ...prev, sceneStates: states, activeSceneState: stateId };
+    });
+    setIsDirty(true);
+  }, [objects]);
+
+  const activateSceneState = useCallback((stateId) => {
+    const states = canvasSettings.sceneStates || [];
+    const target = states.find((s) => s.id === stateId);
+    if (!target || !target.snapshot) return;
+
+    // Save current objects to the currently active state before switching
+    const currentStateId = canvasSettings.activeSceneState;
+    if (currentStateId) {
+      setCanvasSettings((prev) => {
+        const updated = (prev.sceneStates || []).map((s) =>
+          s.id === currentStateId ? { ...s, snapshot: JSON.parse(JSON.stringify(objects)), objectCount: objects.length } : s
+        );
+        return { ...prev, sceneStates: updated, activeSceneState: stateId };
+      });
+    } else {
+      setCanvasSettings((prev) => ({ ...prev, activeSceneState: stateId }));
+    }
+
+    // Restore the target state's objects
+    pushHistory(JSON.parse(JSON.stringify(objects)));
+    setObjects(target.snapshot.map((o) => ({ ...o })));
+    setIsDirty(true);
+  }, [canvasSettings, objects, pushHistory]);
+
+  const deleteSceneState = useCallback((stateId) => {
+    setCanvasSettings((prev) => {
+      const states = (prev.sceneStates || []).filter((s) => s.id !== stateId);
+      const active = prev.activeSceneState === stateId ? (states[0]?.id || null) : prev.activeSceneState;
+      return { ...prev, sceneStates: states, activeSceneState: active };
+    });
+    setIsDirty(true);
+  }, []);
+
+  const renameSceneState = useCallback((stateId, newName) => {
+    setCanvasSettings((prev) => {
+      const states = (prev.sceneStates || []).map((s) =>
+        s.id === stateId ? { ...s, name: newName } : s
+      );
+      return { ...prev, sceneStates: states };
+    });
+    setIsDirty(true);
+  }, []);
+
   // ── Grouping ──
 
   const groupObjects = useCallback((ids) => {
@@ -539,6 +599,10 @@ export default function useSceneStudioState() {
     groupObjects,
     ungroupObjects,
     replaceObjectAsset,
+    createSceneState,
+    activateSceneState,
+    deleteSceneState,
+    renameSceneState,
   };
 }
 

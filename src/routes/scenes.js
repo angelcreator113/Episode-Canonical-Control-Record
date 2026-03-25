@@ -246,6 +246,22 @@ router.post(
   asyncHandler(sceneStudioController.suggestObjects)
 );
 
+// POST /api/v1/scenes/:id/inpaint - AI object removal via inpainting
+router.post(
+  '/:id/inpaint',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.inpaint)
+);
+
+// POST /api/v1/scenes/:id/animate - Scene animation via Runway image-to-video
+router.post(
+  '/:id/animate',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.animateScene)
+);
+
 // POST /api/v1/scenes/:id/generate-depth - Depth map estimation (DepthAnythingV2)
 router.post(
   '/:id/generate-depth',

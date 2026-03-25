@@ -81,7 +81,6 @@ function AssetLibrary({ embedded = false }) {
     if (!assetType) return 'other';
     const type = assetType.toUpperCase();
     if (type.includes('LOGO') || type.includes('BRAND')) return 'logos';
-    if (type.includes('BACKGROUND') || type.includes('BG')) return 'other';
     if (type.includes('INTRO')) return 'intros';
     if (type.includes('OUTRO')) return 'outros';
     if (type.includes('MUSIC') || type.includes('AUDIO')) return 'music';

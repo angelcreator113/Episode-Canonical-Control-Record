@@ -308,6 +308,12 @@ exports.updateScene = async (req, res) => {
       'end_timecode',
       'endTimecode',
       'characters',
+      'background_url',
+      'backgroundUrl',
+      'scene_set_id',
+      'sceneSetId',
+      'scene_angle_id',
+      'sceneAngleId',
     ];
 
     Object.keys(updates).forEach((key) => {

@@ -51,7 +51,7 @@ export default function BackgroundBar({
           <button
             className="scene-studio-chip"
             onClick={onChangeBackground}
-            title="Browse library for backgrounds"
+            title="Browse library for objects"
           >
             <Image size={12} /> {backgroundUrl ? 'Change' : 'Set Background'}
           </button>

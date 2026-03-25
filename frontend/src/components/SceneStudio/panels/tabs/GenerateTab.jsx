@@ -148,6 +148,11 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
       if (data.success && data.data?.options) {
         setResults(data.data.options);
 
+        // Warn if background removal was requested but skipped
+        if (removeBackground && data.data.options.some(o => !o.background_removed)) {
+          setError('Background removal unavailable — REMOVEBG_API_KEY not configured. Objects generated without transparent background.');
+        }
+
         // Save to history
         const newEntry = {
           id: Date.now(),

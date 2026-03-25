@@ -21,7 +21,6 @@ const mapAssetTypeToCategory = (assetType) => {
   if (!assetType) return 'other';
   const type = assetType.toUpperCase();
   if (type.includes('LOGO') || type.includes('BRAND')) return 'logos';
-  if (type.includes('BACKGROUND') || type.includes('BG')) return 'backgrounds';
   if (type.includes('INTRO')) return 'intros';
   if (type.includes('OUTRO')) return 'outros';
   if (type.includes('MUSIC') || type.includes('AUDIO')) return 'music';
@@ -34,7 +33,6 @@ const mapAssetTypeToCategory = (assetType) => {
 const generatePlaceholderThumbnail = (category) => {
   const icons = {
     logos: '🎬',
-    backgrounds: '🖼️',
     intros: '🎵',
     outros: '🎬',
     music: '🎵',
