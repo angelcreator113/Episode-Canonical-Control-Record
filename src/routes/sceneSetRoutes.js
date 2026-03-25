@@ -6,6 +6,7 @@ const { Op }  = require('sequelize');
 const multer  = require('multer');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { optionalAuth } = require('../middleware/auth');
+const { validateUUIDParam } = require('../middleware/requestValidation');
 const Anthropic          = require('@anthropic-ai/sdk');
 const sceneGenService    = require('../services/sceneGenerationService');
 const artifactService    = require('../services/artifactDetectionService');
@@ -152,7 +153,7 @@ router.post('/', optionalAuth, async (req, res) => {
 
 // ─── GET /:id  — single scene set with angles ────────────────────────────────
 
-router.get('/:id', optionalAuth, async (req, res) => {
+router.get('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const includes = [{ model: SceneAngle, as: 'angles' }];
     if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'] });
@@ -178,7 +179,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
 // ─── PUT /:id  — update a scene set ──────────────────────────────────────────
 
-router.put('/:id', optionalAuth, async (req, res) => {
+router.put('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -204,7 +205,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
 
 // ─── DELETE /:id  — soft-delete a scene set ──────────────────────────────────
 
-router.delete('/:id', optionalAuth, async (req, res) => {
+router.delete('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -218,7 +219,7 @@ router.delete('/:id', optionalAuth, async (req, res) => {
 
 // ─── POST /:id/upload-base  — upload a custom base image ─────────────────────
 
-router.post('/:id/upload-base', optionalAuth, upload.single('image'), async (req, res) => {
+router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, upload.single('image'), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -273,7 +274,7 @@ router.post('/:id/upload-base', optionalAuth, upload.single('image'), async (req
 
 // ─── POST /:id/generate-base  — generate the base scene ─────────────────────
 
-router.post('/:id/generate-base', optionalAuth, async (req, res) => {
+router.post('/:id/generate-base', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -310,7 +311,7 @@ router.post('/:id/generate-base', optionalAuth, async (req, res) => {
 
 const VALID_ANGLE_LABELS = ['WIDE', 'CLOSET', 'VANITY', 'WINDOW', 'DOORWAY', 'ESTABLISHING', 'ACTION', 'CLOSE', 'OVERHEAD', 'OTHER'];
 
-router.post('/:id/suggest-angles', optionalAuth, async (req, res) => {
+router.post('/:id/suggest-angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id, {
       include: [{ model: SceneAngle, as: 'angles' }],
@@ -384,7 +385,7 @@ Return raw JSON only, no markdown or explanation.`;
 
 // ─── POST /:id/ai-camera-direction  — AI generates camera direction for an angle
 
-router.post('/:id/ai-camera-direction', optionalAuth, async (req, res) => {
+router.post('/:id/ai-camera-direction', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -419,7 +420,7 @@ Write a concise camera placement and framing direction (1-2 sentences). Describe
 
 // ─── POST /:id/angles  — add an angle to a scene set ────────────────────────
 
-router.post('/:id/angles', optionalAuth, async (req, res) => {
+router.post('/:id/angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -463,7 +464,7 @@ router.post('/:id/angles', optionalAuth, async (req, res) => {
 
 // ─── POST /:id/angles/:angleId/generate  — generate a specific angle ────────
 
-router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
+router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -497,7 +498,7 @@ router.post('/:id/angles/:angleId/generate', optionalAuth, async (req, res) => {
 
 // ─── POST /:id/angles/:angleId/generate-video  — on-demand video for an angle ─
 
-router.post('/:id/angles/:angleId/generate-video', optionalAuth, async (req, res) => {
+router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -532,7 +533,7 @@ router.post('/:id/angles/:angleId/generate-video', optionalAuth, async (req, res
 
 // ─── DELETE /:id/angles/:angleId  — soft-delete a single angle ──────────────
 
-router.delete('/:id/angles/:angleId', optionalAuth, async (req, res) => {
+router.delete('/:id/angles/:angleId', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: req.params.id },
@@ -548,7 +549,7 @@ router.delete('/:id/angles/:angleId', optionalAuth, async (req, res) => {
 
 // ─── DELETE /:id/angles  — delete all angles for a scene set ─────────────────
 
-router.delete('/:id/angles', optionalAuth, async (req, res) => {
+router.delete('/:id/angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -563,12 +564,17 @@ router.delete('/:id/angles', optionalAuth, async (req, res) => {
 // ─── GET /artifact-categories  — list all artifact categories ────────────────
 
 router.get('/artifact-categories', optionalAuth, async (req, res) => {
-  res.json({ success: true, data: artifactService.ARTIFACT_CATEGORIES });
+  try {
+    res.json({ success: true, data: artifactService.ARTIFACT_CATEGORIES });
+  } catch (err) {
+    console.error('Scene Sets GET /artifact-categories error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ─── POST /:id/angles/:angleId/review  — submit manual quality review ───────
 
-router.post('/:id/angles/:angleId/review', optionalAuth, async (req, res) => {
+router.post('/:id/angles/:angleId/review', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: req.params.id },
@@ -597,7 +603,7 @@ router.post('/:id/angles/:angleId/review', optionalAuth, async (req, res) => {
 
 // ─── POST /:id/angles/:angleId/analyze  — run auto quality analysis ─────────
 
-router.post('/:id/angles/:angleId/analyze', optionalAuth, async (req, res) => {
+router.post('/:id/angles/:angleId/analyze', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: req.params.id },
@@ -623,7 +629,7 @@ router.post('/:id/angles/:angleId/analyze', optionalAuth, async (req, res) => {
 
 // ─── POST /:id/angles/:angleId/regenerate  — regenerate with refined prompt ──
 
-router.post('/:id/angles/:angleId/regenerate', optionalAuth, async (req, res) => {
+router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -657,7 +663,7 @@ router.post('/:id/angles/:angleId/regenerate', optionalAuth, async (req, res) =>
 
 // ─── POST /:id/angles/:angleId/post-process  — run post-processing pipeline ─
 
-router.post('/:id/angles/:angleId/post-process', optionalAuth, async (req, res) => {
+router.post('/:id/angles/:angleId/post-process', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -690,7 +696,7 @@ router.post('/:id/angles/:angleId/post-process', optionalAuth, async (req, res) 
 
 // ─── POST /:id/angles/:angleId/auto-refine  — queue auto-refinement ─────────
 
-router.post('/:id/angles/:angleId/auto-refine', optionalAuth, async (req, res) => {
+router.post('/:id/angles/:angleId/auto-refine', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -842,7 +848,7 @@ router.get('/for-beat/:beatNumber', optionalAuth, async (req, res) => {
 
 // ─── GET /:id/preview-prompt  — preview the AI prompt without generating ─────
 
-router.get('/:id/preview-prompt', optionalAuth, async (req, res) => {
+router.get('/:id/preview-prompt', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -870,7 +876,7 @@ router.get('/:id/preview-prompt', optionalAuth, async (req, res) => {
 
 // ─── PATCH /:id/angles/reorder  — reorder angles by sort_order ───────────────
 
-router.patch('/:id/angles/reorder', optionalAuth, async (req, res) => {
+router.patch('/:id/angles/reorder', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -902,7 +908,7 @@ router.patch('/:id/angles/reorder', optionalAuth, async (req, res) => {
 
 // ─── POST /:id/cascade-regenerate  — save + regen base + all angles ──────────
 
-router.post('/:id/cascade-regenerate', optionalAuth, async (req, res) => {
+router.post('/:id/cascade-regenerate', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -986,7 +992,7 @@ router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
 
 // ─── PATCH /:id/cover-angle  — set persistent cover image ───────────────────
 
-router.patch('/:id/cover-angle', optionalAuth, async (req, res) => {
+router.patch('/:id/cover-angle', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1011,7 +1017,7 @@ router.patch('/:id/cover-angle', optionalAuth, async (req, res) => {
 
 // ─── POST /:id/episodes  — link episodes to a scene set ────────────────────
 
-router.post('/:id/episodes', optionalAuth, async (req, res) => {
+router.post('/:id/episodes', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1051,7 +1057,7 @@ router.post('/:id/episodes', optionalAuth, async (req, res) => {
 
 // ─── DELETE /:id/episodes/:episodeId  — unlink an episode ───────────────────
 
-router.delete('/:id/episodes/:episodeId', optionalAuth, async (req, res) => {
+router.delete('/:id/episodes/:episodeId', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const destroyed = await SceneSetEpisode.destroy({
       where: {
@@ -1075,30 +1081,30 @@ const sceneStudioController = require('../controllers/sceneStudioController');
 const { asyncHandler } = require('../middleware/errorHandler');
 
 // GET /api/v1/scene-sets/:id/canvas - Load canvas state for scene set
-router.get('/:id/canvas', asyncHandler(sceneStudioController.getSceneSetCanvas));
+router.get('/:id/canvas', validateUUIDParam('id'), asyncHandler(sceneStudioController.getSceneSetCanvas));
 
 // PUT /api/v1/scene-sets/:id/canvas - Bulk save canvas for scene set
-router.put('/:id/canvas', optionalAuth, asyncHandler(sceneStudioController.saveSceneSetCanvas));
+router.put('/:id/canvas', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.saveSceneSetCanvas));
 
 // POST /api/v1/scene-sets/:id/generate-object - AI object generation (DALL-E 3) for scene sets
-router.post('/:id/generate-object', optionalAuth, asyncHandler(sceneStudioController.generateSceneSetObject));
+router.post('/:id/generate-object', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.generateSceneSetObject));
 
 // POST /api/v1/scene-sets/:id/angles/:angleId/generate-depth - Depth map estimation for angle
-router.post('/:id/angles/:angleId/generate-depth', optionalAuth, asyncHandler(sceneStudioController.generateAngleDepth));
+router.post('/:id/angles/:angleId/generate-depth', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.generateAngleDepth));
 
 // GET /api/v1/scene-sets/:id/angles/:angleId/depth-map - Proxy depth map image (avoids S3 CORS)
-router.get('/:id/angles/:angleId/depth-map', asyncHandler(sceneStudioController.proxyAngleDepthMap));
+router.get('/:id/angles/:angleId/depth-map', validateUUIDParam('id'), asyncHandler(sceneStudioController.proxyAngleDepthMap));
 
 // POST /api/v1/scene-sets/:id/objects - Add object to scene set canvas
-router.post('/:id/objects', optionalAuth, asyncHandler(sceneStudioController.addSceneSetObject));
+router.post('/:id/objects', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.addSceneSetObject));
 
 // PATCH /api/v1/scene-sets/:id/objects/:objectId - Update object on scene set
-router.patch('/:id/objects/:objectId', optionalAuth, asyncHandler(sceneStudioController.updateObject));
+router.patch('/:id/objects/:objectId', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.updateObject));
 
 // DELETE /api/v1/scene-sets/:id/objects/:objectId - Remove object from scene set
-router.delete('/:id/objects/:objectId', optionalAuth, asyncHandler(sceneStudioController.deleteObject));
+router.delete('/:id/objects/:objectId', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.deleteObject));
 
 // POST /api/v1/scene-sets/:id/objects/:objectId/duplicate - Duplicate object
-router.post('/:id/objects/:objectId/duplicate', optionalAuth, asyncHandler(sceneStudioController.duplicateObject));
+router.post('/:id/objects/:objectId/duplicate', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.duplicateObject));
 
 module.exports = router;

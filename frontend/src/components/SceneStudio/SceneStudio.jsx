@@ -105,9 +105,20 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   // ── Save ──
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
   const save = useCallback(async () => {
     if (isSavingRef.current) return;
     isSavingRef.current = true;
+    // Cancel any pending auto-save to avoid double-save
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
     setSaveStatus('saving');
     const startTime = Date.now();
@@ -127,12 +138,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       const elapsed = Date.now() - startTime;
       const remaining = Math.max(0, 600 - elapsed);
       await new Promise((r) => setTimeout(r, remaining));
+      if (!mountedRef.current) return;
       setSaveStatus('saved');
       // Show "Saved" confirmation for 2s then go back to idle
-      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+      saveStatusTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) setSaveStatus('idle');
+      }, 2000);
     } catch (err) {
       console.error('Scene Studio save error:', err);
-      setSaveStatus('error');
+      if (mountedRef.current) setSaveStatus('error');
     } finally {
       isSavingRef.current = false;
     }

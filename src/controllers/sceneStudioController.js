@@ -140,7 +140,24 @@ exports.saveCanvas = async (req, res) => {
       await scene.update({ canvas_settings: merged }, { transaction });
     }
 
+    if (objects !== undefined && !Array.isArray(objects)) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'objects must be an array' });
+    }
+
     if (Array.isArray(objects)) {
+      // Validate asset_ids exist for objects that reference them
+      const assetIds = [...new Set(objects.filter((o) => o.asset_id).map((o) => o.asset_id))];
+      if (assetIds.length > 0) {
+        const foundAssets = await Asset.findAll({ where: { id: assetIds }, attributes: ['id'], transaction });
+        const foundIds = new Set(foundAssets.map((a) => a.id));
+        const missing = assetIds.filter((aid) => !foundIds.has(aid));
+        if (missing.length > 0) {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, error: `Invalid asset_ids: ${missing.join(', ')}` });
+        }
+      }
+
       // Get existing object IDs for this scene
       const existing = await SceneAsset.findAll({
         where: { scene_id: id },
@@ -458,6 +475,15 @@ exports.createVariant = async (req, res) => {
           });
         }
       }
+      if (!variantGroup) {
+        // Variant group record is missing — recreate it
+        variantGroup = await SceneObjectVariant.create({
+          scene_id: id,
+          variant_group_name: sourceObj.object_label || 'Variant Group',
+          active_variant_id: sourceObj.id,
+          metadata: {},
+        }, { transaction });
+      }
     }
 
     // Clone the source as a new variant (inactive)
@@ -475,8 +501,6 @@ exports.createVariant = async (req, res) => {
       is_active_variant: false,
     }, { transaction });
 
-    await transaction.commit();
-
     const created = await SceneAsset.findByPk(newVariant.id, {
       include: [{
         model: Asset,
@@ -486,7 +510,10 @@ exports.createVariant = async (req, res) => {
           'width', 'height', 'category',
         ],
       }],
+      transaction,
     });
+
+    await transaction.commit();
 
     res.status(201).json({
       success: true,
@@ -589,9 +616,19 @@ exports.getVariantGroup = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Variant group not found' });
     }
 
-    // Get all variants in this group
+    // Get all variants in this group — find variant_group_id from active variant or any member
     const currentActive = await SceneAsset.findByPk(variantGroup.active_variant_id);
-    const varGroupId = currentActive ? currentActive.variant_group_id : null;
+    let varGroupId = currentActive ? currentActive.variant_group_id : null;
+
+    // Fallback: if active variant was deleted, find any remaining member
+    if (!varGroupId) {
+      const anyMember = await SceneAsset.findOne({
+        where: { scene_id: id },
+        attributes: ['variant_group_id'],
+        order: [['created_at', 'ASC']],
+      });
+      varGroupId = anyMember?.variant_group_id || null;
+    }
 
     let variants = [];
     if (varGroupId) {
@@ -717,7 +754,24 @@ exports.saveSceneSetCanvas = async (req, res) => {
       await sceneSet.update({ canvas_settings: merged }, { transaction });
     }
 
+    if (objects !== undefined && !Array.isArray(objects)) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'objects must be an array' });
+    }
+
     if (Array.isArray(objects)) {
+      // Validate asset_ids exist for objects that reference them
+      const assetIds = [...new Set(objects.filter((o) => o.asset_id).map((o) => o.asset_id))];
+      if (assetIds.length > 0) {
+        const foundAssets = await Asset.findAll({ where: { id: assetIds }, attributes: ['id'], transaction });
+        const foundIds = new Set(foundAssets.map((a) => a.id));
+        const missing = assetIds.filter((aid) => !foundIds.has(aid));
+        if (missing.length > 0) {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, error: `Invalid asset_ids: ${missing.join(', ')}` });
+        }
+      }
+
       const existing = await SceneAsset.findAll({
         where: { scene_set_id: id },
         attributes: ['id'],
@@ -1061,7 +1115,7 @@ const axios = require('axios');
 // Generic S3 image proxy — validates URL belongs to our S3 bucket
 function proxyS3Image(req, res, depthUrl) {
   const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || '';
-  if (!depthUrl || !depthUrl.includes('.s3.') || (S3_BUCKET && !depthUrl.includes(S3_BUCKET))) {
+  if (!depthUrl || !depthUrl.includes('.s3.') || !S3_BUCKET || !depthUrl.includes(S3_BUCKET)) {
     return res.status(404).json({ success: false, error: 'No depth map found' });
   }
 
@@ -1074,7 +1128,7 @@ function proxyS3Image(req, res, depthUrl) {
     })
     .catch((error) => {
       console.error('Depth map proxy error:', error.message);
-      res.status(error.response?.status || 502).json({ success: false, error: 'Failed to fetch depth map' });
+      res.status(502).json({ success: false, error: 'Failed to fetch depth map' });
     });
 }
 

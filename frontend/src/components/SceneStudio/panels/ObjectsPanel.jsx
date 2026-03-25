@@ -45,14 +45,14 @@ export default function ObjectsPanel({
     if (!dragId || dragId === targetId || !onReorder) return;
 
     // Find target layer order and move dragged item there
+    // List is sorted descending — higher layerOrder = higher in the list
     const target = objects.find((o) => o.id === targetId);
     if (target) {
-      // Moving to the target's position; direction depends on relative position
       const dragObj = objects.find((o) => o.id === dragId);
-      if (dragObj && dragObj.layerOrder < target.layerOrder) {
-        onReorder(dragId, 'up');
-      } else {
+      if (dragObj && dragObj.layerOrder > target.layerOrder) {
         onReorder(dragId, 'down');
+      } else {
+        onReorder(dragId, 'up');
       }
     }
   }, [objects, onReorder]);
