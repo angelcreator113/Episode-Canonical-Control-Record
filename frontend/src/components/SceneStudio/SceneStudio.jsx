@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
+import MaskLayer from './Canvas/MaskLayer';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
 import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
@@ -669,7 +670,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setIsInpainting(true);
     setSaveErrorMsg(null);
     try {
-      const MaskLayer = require('./Canvas/MaskLayer').default;
       const maskDataUrl = MaskLayer._exportMask();
       if (!maskDataUrl) {
         setIsInpainting(false);
@@ -694,7 +694,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
         }
         // Clear the mask
-        MaskLayer._clearMask();
+        if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
         setHasMask(false);
         setInpaintPrompt('');
       }
@@ -983,8 +983,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               <button
                 className="scene-studio-btn ghost"
                 onClick={() => {
-                  const MaskLayer = require('./Canvas/MaskLayer').default;
-                  MaskLayer._clearMask();
+                  if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
                   setHasMask(false);
                 }}
               >

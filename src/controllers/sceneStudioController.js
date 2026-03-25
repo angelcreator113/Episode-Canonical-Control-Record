@@ -1065,7 +1065,11 @@ exports.suggestObjects = async (req, res) => {
       ? `Already placed: ${existingLabels.join(', ')}.`
       : 'The scene is empty.';
 
-    // Use Claude for suggestions
+    // Use Claude for suggestions — gracefully skip if API key missing
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.json({ success: true, data: { suggestions: [] } });
+    }
+
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -1101,8 +1105,9 @@ Example: [{"label": "Gold Mirror", "prompt": "ornate gold-framed mirror with sof
 
     res.json({ success: true, data: { suggestions } });
   } catch (error) {
-    console.error('Scene Studio suggestObjects error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Scene Studio suggestObjects error:', error.message);
+    // Return empty suggestions instead of 500 — suggestions are non-critical
+    res.json({ success: true, data: { suggestions: [] } });
   }
 };
 
