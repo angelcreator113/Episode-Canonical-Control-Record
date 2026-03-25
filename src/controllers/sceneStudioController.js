@@ -1047,3 +1047,72 @@ exports.generateAngleDepth = async (req, res) => {
     res.status(status).json({ success: false, error: error.message });
   }
 };
+
+// ── Depth Map Proxy ──
+// Proxies S3 depth map images through the backend to avoid CORS issues.
+// The browser needs crossOrigin pixel access (getImageData) for parallax,
+// but the S3 bucket may not have CORS headers configured.
+
+const axios = require('axios');
+
+exports.proxyDepthMap = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
+    if (!sceneCols.canvas_settings) {
+      return res.status(404).json({ success: false, error: 'No depth map available' });
+    }
+
+    const scene = await Scene.findByPk(id, {
+      attributes: ['id', 'canvas_settings'],
+    });
+
+    const depthUrl = scene?.canvas_settings?.depth_map_url;
+    if (!depthUrl) {
+      return res.status(404).json({ success: false, error: 'No depth map found for this scene' });
+    }
+
+    const response = await axios.get(depthUrl, {
+      responseType: 'stream',
+      timeout: 15000,
+    });
+
+    res.set('Content-Type', response.headers['content-type'] || 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Access-Control-Allow-Origin', '*');
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('Depth map proxy error:', error.message);
+    res.status(error.response?.status || 500).json({ success: false, error: 'Failed to fetch depth map' });
+  }
+};
+
+exports.proxyAngleDepthMap = async (req, res) => {
+  try {
+    const { id, angleId } = req.params;
+
+    const angle = await SceneAngle.findOne({
+      where: { id: angleId, scene_set_id: id },
+      attributes: ['id', 'depth_map_url'],
+    });
+
+    const depthUrl = angle?.depth_map_url;
+    if (!depthUrl) {
+      return res.status(404).json({ success: false, error: 'No depth map found for this angle' });
+    }
+
+    const response = await axios.get(depthUrl, {
+      responseType: 'stream',
+      timeout: 15000,
+    });
+
+    res.set('Content-Type', response.headers['content-type'] || 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Access-Control-Allow-Origin', '*');
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('Depth map proxy error:', error.message);
+    res.status(error.response?.status || 500).json({ success: false, error: 'Failed to fetch depth map' });
+  }
+};

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
@@ -371,6 +371,20 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     state.updateDepthEffects((prev) => ({ ...prev, ...updates }));
   }, [state]);
 
+  // Proxy depth map URL through backend to avoid S3 CORS issues.
+  // ParallaxLayer needs crossOrigin pixel access (getImageData) which
+  // requires CORS headers that the S3 bucket may not provide.
+  const proxiedDepthMapUrl = useMemo(() => {
+    if (!state.depthMapUrl) return null;
+    if (state.contextType === 'scene' && state.contextId) {
+      return `/api/v1/scenes/${state.contextId}/depth-map`;
+    }
+    if (state.contextType === 'sceneSet' && state.contextId && state.activeAngleId) {
+      return `/api/v1/scene-sets/${state.contextId}/angles/${state.activeAngleId}/depth-map`;
+    }
+    return state.depthMapUrl;
+  }, [state.depthMapUrl, state.contextType, state.contextId, state.activeAngleId]);
+
   const rawTitle = state.contextType === 'scene'
     ? state.sceneData?.title || ''
     : state.sceneSetData?.name || '';
@@ -532,7 +546,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onZoom={state.setZoom}
             onPan={state.setPan}
             containerRef={canvasContainerRef}
-            depthMapUrl={state.depthMapUrl}
+            depthMapUrl={proxiedDepthMapUrl}
             depthEffects={state.depthEffects}
           />
 
@@ -612,7 +626,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             contextType={state.contextType}
             backgroundSelected={backgroundSelected}
             backgroundUrl={backgroundUrl}
-            depthMapUrl={state.depthMapUrl}
+            depthMapUrl={proxiedDepthMapUrl}
             depthEffects={state.depthEffects}
             isGeneratingDepth={isGeneratingDepth}
             depthError={depthError}
