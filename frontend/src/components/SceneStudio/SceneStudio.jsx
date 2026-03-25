@@ -43,8 +43,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const canvasContainerRef = useRef(null);
   const stageRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const isSavingRef = useRef(false);
+  const saveStatusTimerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
@@ -81,11 +82,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           const result = await sceneService.getCanvas(sceneId);
           if (result.success) {
             state.loadFromApi(result.data, 'scene');
+            const savedPlatform = result.data.scene?.canvas_settings?.platform;
+            if (savedPlatform && PLATFORM_PRESETS[savedPlatform]) setPlatform(savedPlatform);
           }
         } else if (sceneSetId) {
           const result = await sceneService.getSceneSetCanvas(sceneSetId);
           if (result.success) {
             state.loadFromApi(result.data, 'sceneSet');
+            const savedPlatform = result.data.sceneSet?.canvas_settings?.platform;
+            if (savedPlatform && PLATFORM_PRESETS[savedPlatform]) setPlatform(savedPlatform);
           }
         }
       } catch (err) {
@@ -103,22 +108,35 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const save = useCallback(async () => {
     if (isSavingRef.current) return;
     isSavingRef.current = true;
-    setIsSaving(true);
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    setSaveStatus('saving');
+    const startTime = Date.now();
     try {
       const payload = state.serializeForSave();
+      // Include platform in canvas_settings for persistence
+      if (payload.canvas_settings) {
+        payload.canvas_settings.platform = platform;
+      }
       if (state.contextType === 'scene') {
         await sceneService.saveCanvas(state.contextId, payload);
       } else {
         await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
       state.markClean();
+      // Ensure "Saving..." shows for at least 600ms so it doesn't flicker
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 600 - elapsed);
+      await new Promise((r) => setTimeout(r, remaining));
+      setSaveStatus('saved');
+      // Show "Saved" confirmation for 2s then go back to idle
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err) {
       console.error('Scene Studio save error:', err);
+      setSaveStatus('error');
     } finally {
       isSavingRef.current = false;
-      setIsSaving(false);
     }
-  }, [state]);
+  }, [state, platform]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -374,13 +392,16 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // Proxy depth map URL through backend to avoid S3 CORS issues.
   // ParallaxLayer needs crossOrigin pixel access (getImageData) which
   // requires CORS headers that the S3 bucket may not provide.
+  // Pass the raw S3 URL as ?url= fallback for freshly generated maps
+  // that haven't been persisted to DB yet.
   const proxiedDepthMapUrl = useMemo(() => {
     if (!state.depthMapUrl) return null;
+    const urlParam = encodeURIComponent(state.depthMapUrl);
     if (state.contextType === 'scene' && state.contextId) {
-      return `/api/v1/scenes/${state.contextId}/depth-map`;
+      return `/api/v1/scenes/${state.contextId}/depth-map?url=${urlParam}`;
     }
     if (state.contextType === 'sceneSet' && state.contextId && state.activeAngleId) {
-      return `/api/v1/scene-sets/${state.contextId}/angles/${state.activeAngleId}/depth-map`;
+      return `/api/v1/scene-sets/${state.contextId}/angles/${state.activeAngleId}/depth-map?url=${urlParam}`;
     }
     return state.depthMapUrl;
   }, [state.depthMapUrl, state.contextType, state.contextId, state.activeAngleId]);
@@ -423,13 +444,23 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, canvasWidth, canvasHeight]);
 
-  // Fit on first load
+  // Fit on first load — use ResizeObserver so we fit once the container
+  // has its final dimensions (after panels finish rendering)
+  const hasFittedRef = useRef(false);
   useEffect(() => {
-    if (!isLoading && canvasContainerRef.current) {
-      // Small delay for DOM to settle
-      const timer = setTimeout(handleFitToScreen, 100);
-      return () => clearTimeout(timer);
-    }
+    if (isLoading || hasFittedRef.current) return;
+    const el = canvasContainerRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth > 0 && el.clientHeight > 0 && !hasFittedRef.current) {
+        hasFittedRef.current = true;
+        handleFitToScreen();
+        observer.disconnect();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
@@ -465,14 +496,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         onUndo={state.undo}
         onRedo={state.redo}
         isDirty={state.isDirty}
-        isSaving={isSaving}
+        saveStatus={saveStatus}
         onSave={save}
         onExport={handleExport}
         title={formatTitle(rawTitle) || studioTitle}
         rawTitle={rawTitle}
         onTitleChange={handleTitleChange}
         platform={platform}
-        onPlatformChange={setPlatform}
+        onPlatformChange={(p) => { setPlatform(p); state.updateCanvasSettings({ platform: p }); }}
         gridVisible={state.canvasSettings.gridVisible}
         onToggleGrid={() => state.updateCanvasSettings({ gridVisible: !state.canvasSettings.gridVisible })}
         onBack={onBack}

@@ -450,13 +450,13 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
         <div className="scene-studio-gen-empty-state">
           <Sparkles size={20} className="scene-studio-gen-empty-icon" />
           <div className="scene-studio-gen-empty-title">Generate AI Objects</div>
-          <div className="scene-studio-gen-empty-desc">
+          <div className="scene-studio-gen-empty-text">
             Describe furniture, decor, or props to create transparent overlays for your scene.
           </div>
           <div className="scene-studio-gen-empty-examples">
-            <span onClick={() => setPrompt('ornate gold mirror with cherub details')}>ornate gold mirror</span>
-            <span onClick={() => setPrompt('pink velvet armchair with gold legs')}>velvet armchair</span>
-            <span onClick={() => setPrompt('crystal chandelier with soft glow')}>crystal chandelier</span>
+            <button type="button" onClick={() => setPrompt('ornate gold mirror with cherub details')}>ornate gold mirror</button>
+            <button type="button" onClick={() => setPrompt('pink velvet armchair with gold legs')}>velvet armchair</button>
+            <button type="button" onClick={() => setPrompt('crystal chandelier with soft glow')}>crystal chandelier</button>
           </div>
         </div>
       )}

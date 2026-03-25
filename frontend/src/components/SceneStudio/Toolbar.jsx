@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  MousePointer2, Hand, Type, Square, ZoomIn, ZoomOut, Maximize,
-  Undo2, Redo2, Save, Download, Grid3X3,
+  MousePointer2, Hand, ZoomIn, ZoomOut, Maximize,
+  Undo2, Redo2, Save, Download, Grid3X3, Check,
 } from 'lucide-react';
 
 /**
@@ -20,8 +20,6 @@ const PLATFORM_PRESETS = {
 const TOOLS = [
   { key: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
   { key: 'hand', icon: Hand, label: 'Pan', shortcut: 'H' },
-  { key: 'text', icon: Type, label: 'Text', shortcut: 'T' },
-  { key: 'shape', icon: Square, label: 'Shape', shortcut: 'S' },
 ];
 
 export default function Toolbar({
@@ -36,7 +34,7 @@ export default function Toolbar({
   onUndo,
   onRedo,
   isDirty,
-  isSaving,
+  saveStatus,
   onSave,
   onExport,
   title,
@@ -194,12 +192,26 @@ export default function Toolbar({
         )}
 
         <button
-          className={`scene-studio-btn ${isDirty ? 'primary' : 'ghost'}`}
+          className={`scene-studio-btn ${
+            saveStatus === 'error' ? 'danger' :
+            saveStatus === 'saved' ? 'success' :
+            isDirty ? 'primary' : 'ghost'
+          }`}
           onClick={onSave}
-          disabled={isSaving}
+          disabled={saveStatus === 'saving'}
+          title="Save (Ctrl+S)"
         >
-          <Save size={14} />
-          {isSaving ? 'Saving...' : isDirty ? 'Save' : 'Saved'}
+          {saveStatus === 'saving' ? (
+            <><Save size={14} className="scene-studio-spin-icon" /> Saving...</>
+          ) : saveStatus === 'saved' ? (
+            <><Check size={14} /> Saved</>
+          ) : saveStatus === 'error' ? (
+            <><Save size={14} /> Retry</>
+          ) : isDirty ? (
+            <><Save size={14} /> Save</>
+          ) : (
+            <><Save size={14} /> Saved</>
+          )}
         </button>
 
         {onExport && (
