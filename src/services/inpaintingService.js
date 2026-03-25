@@ -17,6 +17,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const REPLICATE_INPAINT_VERSION = process.env.REPLICATE_INPAINT_VERSION || 'a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7';
+const REPLICATE_LAMA_VERSION = process.env.REPLICATE_LAMA_VERSION || 'cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -24,10 +25,6 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 90;
-
-// ─── MODEL CONFIG ───────────────────────────────────────────────────────────
-
-const LAMA_MODEL = 'allenhooo/lama';
 
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
@@ -67,6 +64,7 @@ function incrementUsage(userId) {
  * Run LaMa for clean object removal (no prompt needed).
  * LaMa uses Fourier convolutions to seamlessly fill masked regions
  * with background continuation — ideal for removing objects.
+ * Uses explicit version hash (community model — requires predictions endpoint).
  */
 async function runLamaRemoval(imageUrl, maskUrl) {
   if (!REPLICATE_API_TOKEN) {
@@ -76,9 +74,10 @@ async function runLamaRemoval(imageUrl, maskUrl) {
   console.log('[Inpainting] Using LaMa model for object removal');
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
-  let output;
+  let prediction;
   try {
-    output = await replicate.run(LAMA_MODEL, {
+    prediction = await replicate.predictions.create({
+      version: REPLICATE_LAMA_VERSION,
       input: {
         image: imageUrl,
         mask: maskUrl,
@@ -91,18 +90,25 @@ async function runLamaRemoval(imageUrl, maskUrl) {
     throw new Error(`LaMa API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
-  // replicate.run() may return a string URL, an array, or a ReadableStream
-  let outputUrl;
-  if (typeof output === 'string') {
-    outputUrl = output;
-  } else if (Array.isArray(output)) {
-    outputUrl = typeof output[0] === 'string' ? output[0] : output[0]?.url?.();
-  } else if (output && typeof output.url === 'function') {
-    outputUrl = output.url();
+  console.log(`[Inpainting] LaMa prediction ${prediction.id} created, polling...`);
+
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    prediction = await replicate.predictions.get(prediction.id);
+
+    if (prediction.status === 'succeeded') {
+      console.log('[Inpainting] LaMa removal completed');
+      const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+      if (!outputUrl) throw new Error('LaMa model returned no output URL');
+      return outputUrl;
+    }
+
+    if (prediction.status === 'failed' || prediction.status === 'canceled') {
+      throw new Error(`LaMa ${prediction.status}: ${prediction.error || 'unknown error'}`);
+    }
   }
-  if (!outputUrl) throw new Error('LaMa model returned no output URL');
-  console.log('[Inpainting] LaMa removal completed');
-  return outputUrl;
+
+  throw new Error('LaMa removal timed out');
 }
 
 /**
