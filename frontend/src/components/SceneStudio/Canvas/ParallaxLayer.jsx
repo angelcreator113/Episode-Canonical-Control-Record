@@ -21,7 +21,7 @@ const MAX_OFFSET = 20; // max pixel displacement at edges
 
 /**
  * Generate layer masks from a depth map image.
- * Returns an array of ImageData objects representing each depth layer.
+ * Returns an array of canvas elements representing each depth layer.
  */
 function generateLayerMasks(depthImage, bgImage, width, height) {
   const canvas = document.createElement('canvas');
@@ -70,6 +70,45 @@ function generateLayerMasks(depthImage, bgImage, width, height) {
   return layers;
 }
 
+/**
+ * Apply CSS blur to a layer canvas and return a new blurred canvas.
+ * Uses CanvasRenderingContext2D.filter for GPU-accelerated blur.
+ */
+function applyBlurToCanvas(sourceCanvas, blurRadius) {
+  if (blurRadius <= 0) return sourceCanvas;
+
+  const blurred = document.createElement('canvas');
+  blurred.width = sourceCanvas.width;
+  blurred.height = sourceCanvas.height;
+  const ctx = blurred.getContext('2d');
+  ctx.filter = `blur(${blurRadius}px)`;
+  ctx.drawImage(sourceCanvas, 0, 0);
+  return blurred;
+}
+
+/**
+ * Compute per-layer blur amounts based on focus depth and blur intensity.
+ *
+ * focusDepth: 0–100 (maps to layer index space)
+ * blurIntensity: 0–20 (max blur in px)
+ *
+ * Returns an array of blur radii (one per layer). The layer closest to
+ * focusDepth gets 0 blur; others increase proportionally to their distance.
+ */
+function computeLayerBlurs(focusDepth, blurIntensity, numLayers) {
+  if (blurIntensity <= 0) return new Array(numLayers).fill(0);
+
+  // Map focusDepth (0–100) to a fractional layer index (0 to numLayers-1)
+  const focusLayer = (focusDepth / 100) * (numLayers - 1);
+
+  const blurs = [];
+  for (let i = 0; i < numLayers; i++) {
+    const distance = Math.abs(i - focusLayer) / (numLayers - 1);
+    blurs.push(distance * blurIntensity);
+  }
+  return blurs;
+}
+
 export default function ParallaxLayer({
   bgSrc,
   depthMapSrc,
@@ -78,13 +117,18 @@ export default function ParallaxLayer({
   isSelected,
   onClick,
   mousePosition, // { x: 0-1, y: 0-1 } normalized
+  depthEffects,  // { focusDepth, blurIntensity }
 }) {
   const [bgImage] = useImage(bgSrc);
   const [depthImage] = useImage(depthMapSrc);
+  const [baseLayerCanvases, setBaseLayerCanvases] = useState([]);
   const [layerCanvases, setLayerCanvases] = useState([]);
   const processedRef = useRef(null);
 
-  // Generate layer masks when images load
+  const focusDepth = depthEffects?.focusDepth ?? 50;
+  const blurIntensity = depthEffects?.blurIntensity ?? 0;
+
+  // Generate base layer masks when images load
   useEffect(() => {
     if (!bgImage || !depthImage) return;
 
@@ -93,12 +137,24 @@ export default function ParallaxLayer({
 
     try {
       const layers = generateLayerMasks(depthImage, bgImage, width, height);
+      setBaseLayerCanvases(layers);
       setLayerCanvases(layers);
       processedRef.current = key;
     } catch (err) {
       console.error('[ParallaxLayer] Failed to generate layers:', err);
     }
   }, [bgImage, depthImage, bgSrc, depthMapSrc, width, height]);
+
+  // Apply DoF blur when focusDepth or blurIntensity changes
+  useEffect(() => {
+    if (baseLayerCanvases.length === 0) return;
+
+    const blurs = computeLayerBlurs(focusDepth, blurIntensity, NUM_LAYERS);
+    const blurred = baseLayerCanvases.map((canvas, i) =>
+      applyBlurToCanvas(canvas, blurs[i])
+    );
+    setLayerCanvases(blurred);
+  }, [baseLayerCanvases, focusDepth, blurIntensity]);
 
   // Fallback: if no layers yet, just render the background image
   if (!layerCanvases.length) {

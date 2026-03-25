@@ -285,6 +285,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
             isSelected={backgroundSelected}
             onClick={onBackgroundSelect}
             mousePosition={mousePosition}
+            depthEffects={depthEffects}
           />
         ) : backgroundUrl ? (
           <BackgroundImage
