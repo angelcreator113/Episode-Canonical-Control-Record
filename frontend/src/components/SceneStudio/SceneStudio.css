@@ -2408,6 +2408,14 @@
   width: 80px;
 }
 
+.scene-studio-erase-target {
+  font-weight: 600;
+  color: #B8962E;
+  white-space: nowrap;
+  border-right: 1px solid #d6d0c4;
+  padding-right: 8px;
+}
+
 .scene-studio-erase-prompt {
   padding: 4px 8px;
   border: 1px solid #d6d0c4;

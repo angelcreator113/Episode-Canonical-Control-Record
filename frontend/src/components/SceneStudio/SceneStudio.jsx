@@ -602,12 +602,25 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── Inpaint (erase) ──
 
   const handleInpaint = useCallback(async () => {
-    if (isInpainting || !state.contextId || !backgroundUrl) return;
+    if (isInpainting || !state.contextId) return;
     if (!hasMask) return;
 
+    // Determine target: selected object's image or the scene background
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    if (!targetUrl) {
+      setSaveErrorMsg('No image to erase from — select an image object or ensure background is set');
+      return;
+    }
+
     setIsInpainting(true);
+    setSaveErrorMsg(null);
     try {
-      // Get the mask from MaskLayer
       const MaskLayer = require('./Canvas/MaskLayer').default;
       const maskDataUrl = MaskLayer._exportMask();
       if (!maskDataUrl) {
@@ -617,14 +630,21 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       const prompt = inpaintPrompt || 'clean seamless continuation of surrounding area, matching style and lighting';
       const result = await sceneService.inpaintScene(state.contextId, {
-        imageUrl: backgroundUrl,
+        imageUrl: targetUrl,
         maskDataUrl,
         prompt,
       });
 
       if (result?.success && result.data?.inpainted_url) {
-        // Update background with inpainted result
-        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
+          // Update the selected object's image
+          state.setObjects((prev) => prev.map((o) =>
+            o.id === selectedObj.id ? { ...o, assetUrl: result.data.inpainted_url } : o
+          ));
+        } else {
+          // Update the scene background
+          state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        }
         // Clear the mask
         MaskLayer._clearMask();
         setHasMask(false);
@@ -881,8 +901,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           />
 
           {/* Erase tool controls — shown when erase tool is active */}
-          {state.activeTool === 'erase' && (
+          {state.activeTool === 'erase' && (() => {
+            const selObj = state.selectedIds.size === 1
+              ? state.objects.find((o) => state.selectedIds.has(o.id))
+              : null;
+            const eraseTarget = (selObj?.type === 'image' && selObj?.assetUrl) ? selObj.label || 'Selected Object' : 'Background';
+            return (
             <div className="scene-studio-erase-controls">
+              <span className="scene-studio-erase-target">Erasing: {eraseTarget}</span>
               <label>Brush: {brushSize}px</label>
               <input
                 type="range"
@@ -916,7 +942,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                 Clear
               </button>
             </div>
-          )}
+            );
+          })()}
 
           {/* Empty canvas guidance overlay — hide when background is already set */}
           {state.objects.length === 0 && !hasInteracted && !backgroundUrl && (
