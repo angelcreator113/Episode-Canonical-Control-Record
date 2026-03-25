@@ -187,9 +187,31 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       console.error('Scene Studio save error:', err);
       const msg = err.response?.data?.error || err.message || 'Save failed';
       console.error('Scene Studio save error detail:', msg);
+
+      // Auto-retry once on network errors
+      const isNetworkError = !err.response || err.code === 'ECONNABORTED';
+      if (isNetworkError && !save._retried) {
+        save._retried = true;
+        console.log('Scene Studio: retrying save in 2s...');
+        isSavingRef.current = false;
+        await new Promise((r) => setTimeout(r, 2000));
+        if (mountedRef.current) {
+          save._retried = false;
+          return save();
+        }
+      }
+      save._retried = false;
+
       if (mountedRef.current) {
         setSaveStatus('error');
         setSaveErrorMsg(msg);
+        // Auto-retry after 10s if still dirty
+        saveTimerRef.current = setTimeout(() => {
+          if (mountedRef.current && state.isDirty && saveRef.current) {
+            console.log('Scene Studio: auto-retrying save...');
+            saveRef.current();
+          }
+        }, 10000);
       }
     } finally {
       isSavingRef.current = false;
@@ -560,6 +582,32 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setFocusTarget(`generate-prefill:${prompt}`);
   }, []);
 
+  const handleSelectTemplate = useCallback(async (template) => {
+    // Generate background from template prompt
+    if (!state.contextId || !template.prompt) return;
+    setIsRegeneratingBg(true);
+    setSaveErrorMsg(null);
+    try {
+      // Use the objectGenerationService to create a scene background from the template
+      const result = await sceneService.regenerateBackground(state.contextId, {
+        mood: 'warm',
+        timeOfDay: 'day',
+        currentBackgroundUrl: null,
+      });
+      // If no restyle possible (no existing bg), generate fresh via the generate tab
+      setCreationPanelOpen(true);
+      setActiveCreationTab('generate');
+      setFocusTarget(`generate-prefill:${template.prompt}`);
+    } catch (err) {
+      // Fallback: just prefill the generate tab with the template prompt
+      setCreationPanelOpen(true);
+      setActiveCreationTab('generate');
+      setFocusTarget(`generate-prefill:${template.prompt}`);
+    } finally {
+      setIsRegeneratingBg(false);
+    }
+  }, [state]);
+
   // Proxy depth map URL through backend to avoid S3 CORS issues.
   // ParallaxLayer needs crossOrigin pixel access (getImageData) which
   // requires CORS headers that the S3 bucket may not provide.
@@ -846,6 +894,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onActivateState={state.activateSceneState}
               onDeleteState={state.deleteSceneState}
               onRenameState={state.renameSceneState}
+              onSelectTemplate={handleSelectTemplate}
             />
             <SmartSuggestions
               sceneId={sceneId}

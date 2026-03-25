@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Upload, Sparkles, Pentagon, Type, Flower2, Layers, GitBranch } from 'lucide-react';
+import { Image, Upload, Sparkles, Pentagon, Type, Flower2, Layers, GitBranch, LayoutTemplate } from 'lucide-react';
 import LibraryTab from './tabs/LibraryTab';
 import UploadTab from './tabs/UploadTab';
 import GenerateTab from './tabs/GenerateTab';
@@ -7,6 +7,7 @@ import ShapesTab from './tabs/ShapesTab';
 import TextTab from './tabs/TextTab';
 import DecorTab from './tabs/DecorTab';
 import SceneStatesTab from './tabs/SceneStatesTab';
+import TemplatesTab from './tabs/TemplatesTab';
 import ObjectsPanel from './ObjectsPanel';
 
 /**
@@ -24,6 +25,7 @@ const CREATION_TABS = [
   { key: 'text', label: 'Text', icon: Type },
   { key: 'decor', label: 'Decor', icon: Flower2 },
   { key: 'states', label: 'States', icon: GitBranch },
+  { key: 'templates', label: 'Templates', icon: LayoutTemplate },
 ];
 
 export default function CreationPanel({
@@ -59,6 +61,7 @@ export default function CreationPanel({
   onActivateState,
   onDeleteState,
   onRenameState,
+  onSelectTemplate,
 }) {
   const [internalTab, setInternalTab] = useState('objects');
   const activeTab = controlledTab !== undefined ? controlledTab : internalTab;
@@ -143,6 +146,10 @@ export default function CreationPanel({
             canvasHeight={canvasHeight}
             onAddAsset={onAddAsset}
           />
+        );
+      case 'templates':
+        return (
+          <TemplatesTab onSelectTemplate={onSelectTemplate} />
         );
       case 'states':
         return (
