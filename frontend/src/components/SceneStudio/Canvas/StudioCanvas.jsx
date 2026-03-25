@@ -192,13 +192,13 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
     transformer.getLayer().batchDraw();
   }, [selectedIds, objects]);
 
-  // Handle click on stage background (deselect)
+  // Handle click on stage background (deselect) — skip when erase tool active
   const handleStageClick = useCallback((e) => {
-    // Clicked on stage itself (not on an object)
+    if (activeTool === 'erase') return; // Don't deselect while erasing
     if (e.target === e.target.getStage() || e.target.name() === 'canvas-bg') {
       if (onDeselect) onDeselect();
     }
-  }, [onDeselect]);
+  }, [onDeselect, activeTool]);
 
   // Handle object selection
   const handleObjectSelect = useCallback((objId) => (e) => {
@@ -333,20 +333,8 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
         ))}
       </Layer>
 
-      {/* Mask layer for erase/inpaint tool */}
-      <Layer>
-        <MaskLayer
-          active={activeTool === 'erase'}
-          canvasWidth={canvasWidth}
-          canvasHeight={canvasHeight}
-          brushSize={brushSize || 30}
-          onMaskChange={onMaskChange}
-          stageRef={stageRef}
-        />
-      </Layer>
-
-      {/* Objects layer */}
-      <Layer>
+      {/* Objects layer — disabled when erase tool is active */}
+      <Layer listening={activeTool !== 'erase'}>
         {renderableObjects.map((obj) => {
           const Renderer = OBJECT_RENDERERS[obj.type] || ImageObject;
           return (
@@ -392,6 +380,18 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           guides={snapGuides}
           canvasWidth={canvasWidth}
           canvasHeight={canvasHeight}
+        />
+      </Layer>
+
+      {/* Mask layer for erase/inpaint tool — always rendered to preserve strokes, on top of everything */}
+      <Layer listening={activeTool === 'erase'}>
+        <MaskLayer
+          active={activeTool === 'erase'}
+          canvasWidth={canvasWidth}
+          canvasHeight={canvasHeight}
+          brushSize={brushSize || 30}
+          onMaskChange={onMaskChange}
+          stageRef={stageRef}
         />
       </Layer>
     </Stage>
