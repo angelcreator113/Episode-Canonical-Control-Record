@@ -1,0 +1,10 @@
+﻿{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://dev.primepisodes.com"],
+      "AllowedMethods": ["GET"],
+      "AllowedHeaders": ["*"],
+      "MaxAgeSeconds": 86400
+    }
+  ]
+}
