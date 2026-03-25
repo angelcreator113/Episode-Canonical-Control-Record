@@ -1370,16 +1370,17 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 12px;
+  padding: 16px 12px;
   text-align: center;
+  margin-top: 8px;
 }
 
 .scene-studio-gen-empty-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   background: rgba(184, 150, 46, 0.08);
   border-radius: 50%;
   color: #B8962E;
