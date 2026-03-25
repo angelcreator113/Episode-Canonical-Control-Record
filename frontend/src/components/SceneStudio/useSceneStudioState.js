@@ -431,9 +431,14 @@ export default function useSceneStudioState() {
 
   // ── Canvas settings ──
 
+  // UI-only keys that shouldn't trigger save
+  const VIEW_ONLY_KEYS = new Set(['gridVisible', 'snapEnabled', 'zoom', 'panX', 'panY']);
+
   const updateCanvasSettings = useCallback((changes) => {
     setCanvasSettings((prev) => ({ ...prev, ...changes }));
-    setIsDirty(true);
+    // Only mark dirty if a data-relevant setting changed (not viewport preferences)
+    const hasDataChange = Object.keys(changes).some((k) => !VIEW_ONLY_KEYS.has(k));
+    if (hasDataChange) setIsDirty(true);
   }, []);
 
   const markClean = useCallback(() => {
