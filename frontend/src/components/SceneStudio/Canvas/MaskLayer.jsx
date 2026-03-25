@@ -7,9 +7,23 @@ import { Line, Group, Rect } from 'react-konva';
  * When active, captures mouse/touch events and draws red semi-transparent
  * strokes on a mask layer. The mask can be exported as a black/white PNG
  * data URL for the inpainting API (white = area to fill, black = keep).
+ *
+ * Coordinates are transformed from screen space to canvas space so the
+ * brush paints accurately regardless of zoom/pan level.
  */
 
 const DEFAULT_BRUSH_SIZE = 30;
+
+/**
+ * Convert screen pointer position to canvas coordinates,
+ * accounting for stage zoom (scale) and pan (position).
+ */
+function getCanvasPoint(stage) {
+  const pointer = stage.getPointerPosition();
+  if (!pointer) return null;
+  const transform = stage.getAbsoluteTransform().copy().invert();
+  return transform.point(pointer);
+}
 
 export default function MaskLayer({
   active,
@@ -25,14 +39,17 @@ export default function MaskLayer({
   const handleMouseDown = useCallback((e) => {
     if (!active) return;
     isDrawing.current = true;
-    const pos = e.target.getStage().getPointerPosition();
+    const stage = e.target.getStage();
+    const pos = getCanvasPoint(stage);
+    if (!pos) return;
     setLines((prev) => [...prev, { points: [pos.x, pos.y], strokeWidth: brushSize }]);
   }, [active, brushSize]);
 
   const handleMouseMove = useCallback((e) => {
     if (!active || !isDrawing.current) return;
     const stage = e.target.getStage();
-    const point = stage.getPointerPosition();
+    const point = getCanvasPoint(stage);
+    if (!point) return;
     setLines((prev) => {
       const lastLine = prev[prev.length - 1];
       if (!lastLine) return prev;
@@ -47,7 +64,6 @@ export default function MaskLayer({
   const handleMouseUp = useCallback(() => {
     if (!active) return;
     isDrawing.current = false;
-    // Notify parent that mask changed
     if (onMaskChange) onMaskChange(lines.length > 0);
   }, [active, lines.length, onMaskChange]);
 
@@ -93,16 +109,12 @@ export default function MaskLayer({
 
   const hasMask = lines.length > 0;
 
-  // Expose exportMask and clearMask to parent via ref pattern
-  // Parent can call these by passing a ref callback
+  // Expose exportMask and clearMask to parent via static methods
   React.useEffect(() => {
-    if (onMaskChange) {
-      // Attach methods to a global so parent can call them
-      MaskLayer._exportMask = exportMask;
-      MaskLayer._clearMask = clearMask;
-      MaskLayer._hasMask = hasMask;
-    }
-  }, [exportMask, clearMask, hasMask, onMaskChange]);
+    MaskLayer._exportMask = exportMask;
+    MaskLayer._clearMask = clearMask;
+    MaskLayer._hasMask = hasMask;
+  }, [exportMask, clearMask, hasMask]);
 
   if (!active && lines.length === 0) return null;
 
