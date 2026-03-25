@@ -3,8 +3,23 @@ import {
   Settings, Move, RotateCw, Maximize2, Eye, EyeOff, Lock, Unlock,
   FlipHorizontal, FlipVertical, ArrowUp, ArrowDown, ChevronsUp, ChevronsDown,
   Trash2, Copy, Layers, GitBranch, ImageIcon, Box, Loader2, RefreshCw,
-  Droplets, Sun, Blend, Replace,
+  Droplets, Sun, Moon, Sunrise, Sunset, Blend, Replace, Image,
 } from 'lucide-react';
+
+const TIME_OPTIONS = [
+  { key: 'dawn', label: 'Dawn', icon: Sunrise },
+  { key: 'day', label: 'Day', icon: Sun },
+  { key: 'golden', label: 'Golden Hour', icon: Sunset },
+  { key: 'night', label: 'Night', icon: Moon },
+];
+
+const MOOD_OPTIONS = [
+  { key: 'warm', label: 'Warm', color: '#E8A87C' },
+  { key: 'dramatic', label: 'Dramatic', color: '#6C5B7B' },
+  { key: 'soft', label: 'Soft', color: '#F8C3CD' },
+  { key: 'moody', label: 'Moody', color: '#355C7D' },
+  { key: 'ethereal', label: 'Ethereal', color: '#C3AED6' },
+];
 
 const DEPTH_LAYERS = [
   { key: 'foreground', label: 'FG' },
@@ -88,6 +103,13 @@ export default function InspectorPanel({
   depthError,
   onGenerateDepth,
   onUpdateDepthEffects,
+  mood,
+  timeOfDay,
+  onChangeMood,
+  onChangeTimeOfDay,
+  onChangeBackground,
+  onRegenerateVariation,
+  isRegenerating,
 }) {
   const selectedObjects = useMemo(
     () => objects.filter((o) => selectedIds.has(o.id)),
@@ -106,9 +128,65 @@ export default function InspectorPanel({
         </div>
 
         <div className="scene-studio-section">
-          <p className="scene-studio-bg-hint">
-            Click the canvas background to select it. Use the Background Bar above to change mood or regenerate.
-          </p>
+          <div className="scene-studio-bg-preview">
+            <img src={backgroundUrl} alt="Background" />
+          </div>
+
+          <div className="scene-studio-bg-actions">
+            <button className="scene-studio-chip" onClick={onChangeBackground}>
+              <Image size={12} /> Change
+            </button>
+            {backgroundUrl && (
+              <button
+                className="scene-studio-chip"
+                onClick={onRegenerateVariation}
+                disabled={isRegenerating}
+              >
+                {isRegenerating ? (
+                  <><Loader2 size={12} className="scene-studio-spin-icon" /> Generating...</>
+                ) : (
+                  <><RefreshCw size={12} /> Variation</>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="scene-studio-section">
+          <h4>Time of Day</h4>
+          <div className="scene-studio-bg-chips">
+            {TIME_OPTIONS.map((opt) => {
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.key}
+                  className={`scene-studio-bg-chip ${timeOfDay === opt.key ? 'active' : ''}`}
+                  onClick={() => onChangeTimeOfDay(opt.key === timeOfDay ? null : opt.key)}
+                  title={opt.label}
+                >
+                  <Icon size={11} />
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="scene-studio-section">
+          <h4>Mood</h4>
+          <div className="scene-studio-bg-chips">
+            {MOOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                className={`scene-studio-bg-chip ${mood === opt.key ? 'active' : ''}`}
+                onClick={() => onChangeMood(opt.key === mood ? null : opt.key)}
+                title={opt.label}
+              >
+                <span className="scene-studio-mood-dot" style={{ backgroundColor: opt.color }} />
+                <span>{opt.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="scene-studio-section">
@@ -239,6 +317,70 @@ export default function InspectorPanel({
             >
               {canvasSettings.snapEnabled ? 'On' : 'Off'}
             </button>
+          </div>
+        </div>
+
+        <div className="scene-studio-section">
+          <h4>Background</h4>
+          {backgroundUrl && (
+            <div className="scene-studio-bg-preview" style={{ marginBottom: 8 }}>
+              <img src={backgroundUrl} alt="Background" />
+            </div>
+          )}
+          <div className="scene-studio-bg-actions">
+            <button className="scene-studio-chip" onClick={onChangeBackground}>
+              <Image size={12} /> {backgroundUrl ? 'Change' : 'Set Background'}
+            </button>
+            {backgroundUrl && (
+              <button
+                className="scene-studio-chip"
+                onClick={onRegenerateVariation}
+                disabled={isRegenerating}
+              >
+                {isRegenerating ? (
+                  <><Loader2 size={12} className="scene-studio-spin-icon" /> Generating...</>
+                ) : (
+                  <><RefreshCw size={12} /> Variation</>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="scene-studio-section">
+          <h4>Time of Day</h4>
+          <div className="scene-studio-bg-chips">
+            {TIME_OPTIONS.map((opt) => {
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.key}
+                  className={`scene-studio-bg-chip ${timeOfDay === opt.key ? 'active' : ''}`}
+                  onClick={() => onChangeTimeOfDay(opt.key === timeOfDay ? null : opt.key)}
+                  title={opt.label}
+                >
+                  <Icon size={11} />
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="scene-studio-section">
+          <h4>Mood</h4>
+          <div className="scene-studio-bg-chips">
+            {MOOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                className={`scene-studio-bg-chip ${mood === opt.key ? 'active' : ''}`}
+                onClick={() => onChangeMood(opt.key === mood ? null : opt.key)}
+                title={opt.label}
+              >
+                <span className="scene-studio-mood-dot" style={{ backgroundColor: opt.color }} />
+                <span>{opt.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 

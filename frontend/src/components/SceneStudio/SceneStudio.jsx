@@ -2,7 +2,6 @@ import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
-import BackgroundBar from './BackgroundBar';
 import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
@@ -681,18 +680,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         onBack={onBack}
       />
 
-      {/* Background Bar */}
-      <BackgroundBar
-        backgroundUrl={backgroundUrl}
-        mood={mood}
-        timeOfDay={timeOfDay}
-        onChangeMood={handleMoodChange}
-        onChangeTimeOfDay={handleTimeOfDayChange}
-        onChangeBackground={handleChangeBackground}
-        onRegenerateVariation={handleRegenerateBackground}
-        isRegenerating={isRegeneratingBg}
-      />
-
       {/* Save error banner */}
       {saveErrorMsg && (
         <div className="scene-studio-save-error-banner">
@@ -700,7 +687,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           <button className="scene-studio-icon-btn" onClick={() => setSaveErrorMsg(null)} style={{ marginLeft: 'auto' }}>×</button>
         </div>
       )}
-
       {/* Guided Flow Stepper */}
       <GuidedFlow
         hasBackground={!!backgroundUrl}
@@ -883,6 +869,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             depthError={depthError}
             onGenerateDepth={handleGenerateDepth}
             onUpdateDepthEffects={handleUpdateDepthEffects}
+            mood={mood}
+            timeOfDay={timeOfDay}
+            onChangeMood={handleMoodChange}
+            onChangeTimeOfDay={handleTimeOfDayChange}
+            onChangeBackground={handleChangeBackground}
+            onRegenerateVariation={handleRegenerateBackground}
+            isRegenerating={isRegeneratingBg}
           />
         </div>
       </div>
