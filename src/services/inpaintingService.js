@@ -77,25 +77,24 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
 
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
-  let output;
+  let prediction;
   try {
-    // Use replicate.run() with the SDXL inpainting model
-    // This model expects: image, mask, prompt, negative_prompt, strength, guidance_scale
-    output = await replicate.run(
-      'lucataco/sdxl-inpainting:a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7',
-      {
-        input: {
-          image: imageUrl,
-          mask: maskUrl,
-          prompt: `${prompt}. Photographic quality, seamless blend, matching lighting and style.`,
-          negative_prompt: 'text, watermark, logo, blurry, low quality, artifacts, seams, distorted',
-          strength: strength,
-          num_outputs: 1,
-          guidance_scale: guidanceScale,
-          num_inference_steps: 30,
-        },
-      }
-    );
+    prediction = await replicate.predictions.create({
+      model: 'stability-ai/sdxl',
+      input: {
+        image: imageUrl,
+        mask: maskUrl,
+        prompt: `${prompt}. Photographic quality, seamless blend, matching lighting and style.`,
+        negative_prompt: 'text, watermark, logo, blurry, low quality, artifacts, seams',
+        prompt_strength: strength,
+        num_outputs: 1,
+        width: 1024,
+        height: 1024,
+        num_inference_steps: 30,
+        guidance_scale: guidanceScale,
+        scheduler: 'K_EULER',
+      },
+    });
   } catch (err) {
     const status = err.response?.status || err.status;
     const detail = err.response?.data?.detail || err.message;
@@ -103,10 +102,25 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
     throw new Error(`Replicate API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
-  console.log('[Inpainting] Prediction completed');
-  const outputUrl = Array.isArray(output) ? output[0] : output;
-  if (!outputUrl) throw new Error('Inpainting model returned no output URL');
-  return outputUrl;
+  console.log(`[Inpainting] Prediction ${prediction.id} created, polling...`);
+
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    prediction = await replicate.predictions.get(prediction.id);
+
+    if (prediction.status === 'succeeded') {
+      console.log('[Inpainting] Prediction completed');
+      const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+      if (!outputUrl) throw new Error('Inpainting model returned no output URL');
+      return outputUrl;
+    }
+
+    if (prediction.status === 'failed' || prediction.status === 'canceled') {
+      throw new Error(`Inpainting ${prediction.status}: ${prediction.error || 'unknown error'}`);
+    }
+  }
+
+  throw new Error('Inpainting timed out');
 }
 
 // ─── S3 STORAGE ─────────────────────────────────────────────────────────────
@@ -123,7 +137,6 @@ async function storeInpaintedImage(imageUrl, entityId) {
     Key: s3Key,
     Body: Buffer.from(response.data),
     ContentType: 'image/png',
-    ACL: 'public-read',
     CacheControl: 'max-age=31536000',
   }));
 
@@ -149,7 +162,6 @@ async function storeMask(maskDataUrl, entityId) {
     Key: s3Key,
     Body: buffer,
     ContentType: 'image/png',
-    ACL: 'public-read',
     CacheControl: 'max-age=86400',
   }));
 
