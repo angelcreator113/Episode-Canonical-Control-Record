@@ -106,11 +106,8 @@ export default function InspectorPanel({
         </div>
 
         <div className="scene-studio-section">
-          <div className="scene-studio-bg-preview">
-            <img src={backgroundUrl} alt="Background" />
-          </div>
           <p className="scene-studio-bg-hint">
-            This is the scene background image. Use the Generate tab to create objects to layer on top, or the Library tab to add existing assets.
+            Click the canvas background to select it. Use the Background Bar above to change mood or regenerate.
           </p>
         </div>
 

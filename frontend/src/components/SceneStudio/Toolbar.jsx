@@ -197,6 +197,7 @@ export default function Toolbar({
             saveStatus === 'saved' ? 'success' :
             isDirty ? 'primary' : 'ghost'
           }`}
+          style={isDirty ? { fontWeight: 600 } : undefined}
           onClick={onSave}
           disabled={saveStatus === 'saving'}
           title="Save (Ctrl+S)"
@@ -207,10 +208,8 @@ export default function Toolbar({
             <><Check size={14} /> Saved</>
           ) : saveStatus === 'error' ? (
             <><Save size={14} /> Retry</>
-          ) : isDirty ? (
-            <><Save size={14} /> Save</>
           ) : (
-            <><Save size={14} /> Saved</>
+            <><Save size={14} /> Save</>
           )}
         </button>
 

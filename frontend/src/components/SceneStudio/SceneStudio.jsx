@@ -126,6 +126,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   const save = useCallback(async () => {
     if (isSavingRef.current) return;
+    if (!state.contextId) {
+      console.error('Scene Studio save: no contextId — scene not loaded');
+      setSaveStatus('error');
+      return;
+    }
     isSavingRef.current = true;
     // Cancel any pending auto-save to avoid double-save
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -137,6 +142,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       // Include platform in canvas_settings for persistence
       if (payload.canvas_settings) {
         payload.canvas_settings.platform = platform;
+        if (mood) payload.canvas_settings.mood = mood;
+        if (timeOfDay) payload.canvas_settings.timeOfDay = timeOfDay;
       }
       if (state.contextType === 'scene') {
         await sceneService.saveCanvas(state.contextId, payload);
@@ -160,7 +167,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     } finally {
       isSavingRef.current = false;
     }
-  }, [state, platform]);
+  }, [state, platform, mood, timeOfDay]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -388,17 +395,33 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   const handleGenerateDepth = useCallback(async () => {
     if (isGeneratingDepth) return;
+
+    if (!state.contextId) {
+      setDepthError('Scene not loaded — cannot generate depth map');
+      return;
+    }
+    if (!backgroundUrl) {
+      setDepthError('No background image — add a background first');
+      return;
+    }
+
     setIsGeneratingDepth(true);
     setDepthError(null);
     try {
       let result;
-      if (state.contextType === 'scene' && state.contextId) {
+      if (state.contextType === 'scene') {
         result = await sceneService.generateDepth(state.contextId, backgroundUrl);
-      } else if (state.contextType === 'sceneSet' && state.contextId && state.activeAngleId) {
+      } else if (state.contextType === 'sceneSet' && state.activeAngleId) {
         result = await sceneService.generateAngleDepth(state.contextId, state.activeAngleId);
+      } else {
+        setDepthError('Select a camera angle first');
+        setIsGeneratingDepth(false);
+        return;
       }
       if (result?.success && result.data?.depth_map_url) {
         state.updateDepthMapUrl(result.data.depth_map_url);
+      } else {
+        setDepthError('Depth map generation returned no result');
       }
     } catch (err) {
       console.error('Depth generation error:', err);
