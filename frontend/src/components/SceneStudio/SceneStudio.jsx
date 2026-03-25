@@ -385,13 +385,16 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // Proxy depth map URL through backend to avoid S3 CORS issues.
   // ParallaxLayer needs crossOrigin pixel access (getImageData) which
   // requires CORS headers that the S3 bucket may not provide.
+  // Pass the raw S3 URL as ?url= fallback for freshly generated maps
+  // that haven't been persisted to DB yet.
   const proxiedDepthMapUrl = useMemo(() => {
     if (!state.depthMapUrl) return null;
+    const urlParam = encodeURIComponent(state.depthMapUrl);
     if (state.contextType === 'scene' && state.contextId) {
-      return `/api/v1/scenes/${state.contextId}/depth-map`;
+      return `/api/v1/scenes/${state.contextId}/depth-map?url=${urlParam}`;
     }
     if (state.contextType === 'sceneSet' && state.contextId && state.activeAngleId) {
-      return `/api/v1/scene-sets/${state.contextId}/angles/${state.activeAngleId}/depth-map`;
+      return `/api/v1/scene-sets/${state.contextId}/angles/${state.activeAngleId}/depth-map?url=${urlParam}`;
     }
     return state.depthMapUrl;
   }, [state.depthMapUrl, state.contextType, state.contextId, state.activeAngleId]);
