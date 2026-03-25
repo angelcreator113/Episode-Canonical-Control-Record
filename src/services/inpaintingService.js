@@ -15,6 +15,8 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+const REPLICATE_INPAINT_MODEL = process.env.REPLICATE_INPAINT_MODEL || 'lucataco/sdxl-inpainting';
+const REPLICATE_INPAINT_VERSION = process.env.REPLICATE_INPAINT_VERSION || 'a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -103,7 +105,8 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
   let prediction;
   try {
     prediction = await replicate.predictions.create({
-      model: 'lucataco/sdxl-inpainting',
+      // Use explicit model version for compatibility with Replicate predictions API.
+      version: REPLICATE_INPAINT_VERSION,
       input: {
         image: imageUrl,
         mask: maskUrl,
@@ -119,7 +122,7 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
   } catch (err) {
     const status = err.response?.status || err.status;
     const detail = err.response?.data?.detail || err.message;
-    console.error(`[Inpainting] Replicate API error (${status}):`, detail);
+    console.error(`[Inpainting] Replicate API error (${status}) [${REPLICATE_INPAINT_MODEL}@${REPLICATE_INPAINT_VERSION}]:`, detail);
     throw new Error(`Replicate API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
