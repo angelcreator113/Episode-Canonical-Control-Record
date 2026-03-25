@@ -97,17 +97,33 @@ async function runLamaRemoval(imageUrl, maskUrl) {
     prediction = await replicate.predictions.get(prediction.id);
 
     if (prediction.status === 'succeeded') {
-      console.log('[Inpainting] LaMa removal completed, output:', JSON.stringify(prediction.output));
       const raw = prediction.output;
+      console.log('[Inpainting] LaMa succeeded, output type:', typeof raw, 'value:', JSON.stringify(raw)?.slice(0, 200));
+
+      // Extract URL from whatever format the SDK returns
       let outputUrl;
       if (typeof raw === 'string') {
         outputUrl = raw;
       } else if (Array.isArray(raw)) {
-        outputUrl = typeof raw[0] === 'string' ? raw[0] : (raw[0]?.url?.() || String(raw[0]));
+        outputUrl = typeof raw[0] === 'string' ? raw[0] : (raw[0]?.url?.() || raw[0]?.href || String(raw[0]));
       } else if (raw && typeof raw === 'object') {
         outputUrl = raw.url?.() || raw.href || String(raw);
       }
-      if (!outputUrl || outputUrl === 'undefined') throw new Error('LaMa model returned no output URL');
+
+      // If SDK didn't give us a usable URL, fetch raw prediction via HTTP
+      if (!outputUrl || outputUrl === 'undefined' || outputUrl === 'null' || outputUrl === '[object Object]') {
+        console.log('[Inpainting] SDK output unusable, fetching raw prediction via HTTP...');
+        const rawResp = await axios.get(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+          headers: { Authorization: `Bearer ${REPLICATE_API_TOKEN}` },
+          timeout: 10000,
+        });
+        const rawOutput = rawResp.data?.output;
+        console.log('[Inpainting] Raw API output:', JSON.stringify(rawOutput)?.slice(0, 200));
+        outputUrl = typeof rawOutput === 'string' ? rawOutput : (Array.isArray(rawOutput) ? rawOutput[0] : null);
+      }
+
+      if (!outputUrl) throw new Error('LaMa model returned no output URL');
+      console.log('[Inpainting] LaMa removal completed:', outputUrl.slice(0, 80));
       return outputUrl;
     }
 
