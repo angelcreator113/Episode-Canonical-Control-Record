@@ -699,12 +699,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         return;
       }
 
-      // Empty prompt means strict object removal with no replacement object.
-      const prompt = (inpaintPrompt || '').trim() || 'Remove the masked object and leave only clean background. Do not add any new object, furniture, fixture, decoration, text, or pattern. Keep lighting, perspective, and textures continuous with surrounding pixels.';
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
         maskDataUrl,
-        prompt,
+        prompt: (inpaintPrompt || '').trim() || undefined,
       });
 
       if (result?.success && result.data?.inpainted_url) {

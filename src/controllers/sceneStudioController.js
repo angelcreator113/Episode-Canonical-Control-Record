@@ -1160,12 +1160,13 @@ exports.inpaint = async (req, res) => {
       return res.status(400).json({ success: false, error: 'No source image available' });
     }
 
+    const mode = prompt ? 'fill' : 'remove';
     const result = await inpaintingService.inpaintImage(
       sourceUrl,
       mask_data_url,
-      prompt || 'Remove the masked object completely and reconstruct the background as if nothing had ever been there. Preserve the original perspective, depth, lighting direction, shadows, surface texture, color balance, and natural detail. Extend surrounding structures and patterns seamlessly into the masked region. Do not add new objects, blur, seams, artifacts, or repeated textures.',
+      prompt || null,
       id,
-      { userId: req.user?.id || null, strength: strength || 0.85 }
+      { userId: req.user?.id || null, strength: strength || 0.85, mode }
     );
 
     // Update scene background with inpainted result

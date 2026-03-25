@@ -1,12 +1,13 @@
 'use strict';
 
 /**
- * Inpainting Service — Replicate API (SDXL Inpainting)
+ * Inpainting Service — Replicate API (Dual-Model)
  *
- * Removes unwanted objects from images by painting over them with a mask,
- * then using AI to fill the masked area with contextually appropriate content.
- *
- * Uses lucataco/sdxl-inpainting model via Replicate.
+ * Two modes:
+ *   1. Object REMOVAL (no prompt) — uses LaMa (Large Mask Inpainting).
+ *      Fast, no prompt needed, seamlessly continues the background.
+ *   2. Creative FILL (with prompt) — uses lucataco/sdxl-inpainting.
+ *      Generates new content described by the user's prompt.
  */
 
 const axios = require('axios');
@@ -15,7 +16,6 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
-const REPLICATE_INPAINT_MODEL = process.env.REPLICATE_INPAINT_MODEL || 'lucataco/sdxl-inpainting';
 const REPLICATE_INPAINT_VERSION = process.env.REPLICATE_INPAINT_VERSION || 'a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -24,6 +24,10 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 90;
+
+// ─── MODEL CONFIG ───────────────────────────────────────────────────────────
+
+const LAMA_MODEL = 'allenhooo/lama';
 
 // ─── RATE LIMITING ──────────────────────────────────────────────────────────
 
@@ -60,52 +64,69 @@ function incrementUsage(userId) {
 // ─── REPLICATE API ──────────────────────────────────────────────────────────
 
 /**
- * Run SDXL inpainting on Replicate.
- *
- * @param {string} imageUrl - Source image URL
- * @param {string} maskUrl - Mask image URL (white = area to fill, black = keep)
- * @param {string} prompt - What to fill the area with
- * @param {object} options
- * @returns {Promise<string>} Output image URL from Replicate
+ * Run LaMa for clean object removal (no prompt needed).
+ * LaMa uses Fourier convolutions to seamlessly fill masked regions
+ * with background continuation — ideal for removing objects.
  */
-async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
+async function runLamaRemoval(imageUrl, maskUrl) {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  const { strength = 0.85, guidanceScale = 7.5, width = 1920, height = 1080 } = options;
+  console.log('[Inpainting] Using LaMa model for object removal');
+  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+
+  let output;
+  try {
+    output = await replicate.run(LAMA_MODEL, {
+      input: {
+        image: imageUrl,
+        mask: maskUrl,
+      },
+    });
+  } catch (err) {
+    const status = err.response?.status || err.status;
+    const detail = err.response?.data?.detail || err.message;
+    console.error(`[Inpainting] LaMa API error (${status}):`, detail);
+    throw new Error(`LaMa API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+  }
+
+  // replicate.run() may return a string URL, an array, or a ReadableStream
+  let outputUrl;
+  if (typeof output === 'string') {
+    outputUrl = output;
+  } else if (Array.isArray(output)) {
+    outputUrl = typeof output[0] === 'string' ? output[0] : output[0]?.url?.();
+  } else if (output && typeof output.url === 'function') {
+    outputUrl = output.url();
+  }
+  if (!outputUrl) throw new Error('LaMa model returned no output URL');
+  console.log('[Inpainting] LaMa removal completed');
+  return outputUrl;
+}
+
+/**
+ * Run SDXL inpainting for creative fills (prompt-driven).
+ * Uses explicit version hash for Replicate predictions API compatibility.
+ */
+async function runSdxlInpainting(imageUrl, maskUrl, prompt, options = {}) {
+  if (!REPLICATE_API_TOKEN) {
+    throw new Error('REPLICATE_API_TOKEN not configured');
+  }
+
+  const { strength = 0.85, guidanceScale = 7.5 } = options;
   const qualityPrompt = [
     prompt,
-    'Photographic quality.',
-    'Make the filled region look like an untouched original image.',
-    'Preserve scene geometry, perspective, lighting direction, shadows, texture continuity, and color balance.',
-    'Blend seamlessly with the surrounding environment and continue nearby structures naturally.',
+    'Photographic quality, seamless blend with surrounding area.',
   ].join(' ');
-  const negativePrompt = [
-    'text',
-    'watermark',
-    'logo',
-    'blurry',
-    'low quality',
-    'artifacts',
-    'seams',
-    'distorted',
-    'ghosting',
-    'smudges',
-    'duplicated textures',
-    'patches',
-    'painted look',
-    'new objects',
-  ].join(', ');
+  const negativePrompt = 'text, watermark, logo, blurry, low quality, artifacts, seams, distorted, ghosting, smudges, duplicated textures, patches, painted look';
 
-  console.log(`[Inpainting] Starting inpaint: prompt="${prompt.slice(0, 80)}...", strength=${strength}`);
-
+  console.log(`[Inpainting] Using SDXL inpainting: prompt="${prompt.slice(0, 80)}...", strength=${strength}`);
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
   let prediction;
   try {
     prediction = await replicate.predictions.create({
-      // Use explicit model version for compatibility with Replicate predictions API.
       version: REPLICATE_INPAINT_VERSION,
       input: {
         image: imageUrl,
@@ -114,17 +135,15 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
         negative_prompt: negativePrompt,
         strength: strength,
         num_outputs: 1,
-        num_inference_steps: 36,
+        num_inference_steps: 40,
         guidance_scale: guidanceScale,
         scheduler: 'K_EULER',
-        width: width,
-        height: height,
       },
     });
   } catch (err) {
     const status = err.response?.status || err.status;
     const detail = err.response?.data?.detail || err.message;
-    console.error(`[Inpainting] Replicate API error (${status}) [${REPLICATE_INPAINT_MODEL}@${REPLICATE_INPAINT_VERSION}]:`, detail);
+    console.error(`[Inpainting] Replicate API error (${status}):`, detail);
     throw new Error(`Replicate API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 
@@ -135,7 +154,7 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
     prediction = await replicate.predictions.get(prediction.id);
 
     if (prediction.status === 'succeeded') {
-      console.log('[Inpainting] Prediction completed');
+      console.log('[Inpainting] SDXL prediction completed');
       const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
       if (!outputUrl) throw new Error('Inpainting model returned no output URL');
       return outputUrl;
@@ -199,15 +218,11 @@ async function storeMask(maskDataUrl, entityId) {
 /**
  * Inpaint (remove/fill) an area of a scene background.
  *
- * @param {string} imageUrl - Source background image URL
- * @param {string} maskDataUrl - Base64 data URL of the mask (white = fill area)
- * @param {string} prompt - What to fill with (default: "clean seamless background")
- * @param {string} entityId - Scene ID for S3 path + rate limiting
- * @param {object} options - { userId, strength }
- * @returns {Promise<{inpainted_url: string}>}
+ * When mode is 'remove' (or no prompt given), uses LaMa for clean removal.
+ * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
-  const { userId, strength } = options;
+  const { userId, strength, mode } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
   if (!rateCheck.allowed) throw new Error(rateCheck.reason);
@@ -218,8 +233,17 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     // Upload mask to S3 so Replicate can access it
     const maskUrl = await storeMask(maskDataUrl, entityId);
 
-    // Run inpainting
-    const resultUrl = await runInpainting(imageUrl, maskUrl, prompt || 'clean seamless continuation of surrounding area', { strength });
+    // Choose model based on mode/prompt
+    const isRemoval = mode === 'remove' || !prompt;
+    let resultUrl;
+
+    if (isRemoval) {
+      console.log('[Inpainting] Mode: REMOVAL (LaMa)');
+      resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+    } else {
+      console.log(`[Inpainting] Mode: FILL (SDXL) — "${prompt.slice(0, 60)}"`);
+      resultUrl = await runSdxlInpainting(imageUrl, maskUrl, prompt, { strength });
+    }
 
     // Store result in S3
     const s3Url = await storeInpaintedImage(resultUrl, entityId);
