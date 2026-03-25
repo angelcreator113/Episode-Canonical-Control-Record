@@ -1,18 +1,19 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Group, Rect, Image as KonvaImage, Text } from 'react-konva';
 import useImage from 'use-image';
 
 /**
  * ImageObject — Renders an image asset on the Konva canvas.
- * Handles loading, scaling, flip, and crop.
+ * Handles loading, scaling, flip, crop, and visual effects
+ * (shadow, blur, brightness) from styleData.
  *
  * Uses a Group with a transparent Rect hit region so the object is always
- * clickable, draggable, and selectable — even while the image is loading
- * or if the URL is broken/CORS-blocked.
+ * clickable, draggable, and selectable — even while the image is loading.
  */
 export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd }) {
   const src = obj.assetUrl || '';
   const [image, imageStatus] = useImage(src);
+  const imageRef = useRef(null);
 
   if (!obj.isVisible && !isSelected) return null;
 
@@ -20,6 +21,33 @@ export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd,
   const h = obj.height || 200;
   const scaleX = (obj.flipX ? -1 : 1) * (obj.scaleX || 1);
   const scaleY = (obj.flipY ? -1 : 1) * (obj.scaleY || 1);
+  const style = obj.styleData || {};
+
+  // Build Konva filters array based on styleData
+  const filters = [];
+  if (style.blur > 0) filters.push(Konva.Filters.Blur);
+  if (style.brightness != null && style.brightness !== 100) filters.push(Konva.Filters.Brighten);
+
+  // Apply filters when image or style changes
+  useEffect(() => {
+    if (imageRef.current && image) {
+      imageRef.current.cache();
+      imageRef.current.getLayer()?.batchDraw();
+    }
+  }, [image, style.blur, style.brightness, style.shadow?.enabled]);
+
+  // Shadow props from styleData
+  const shadowProps = style.shadow?.enabled ? {
+    shadowColor: style.shadow.color || 'rgba(0,0,0,0.3)',
+    shadowBlur: style.shadow.blur || 8,
+    shadowOffsetX: style.shadow.offsetX || 4,
+    shadowOffsetY: style.shadow.offsetY || 4,
+    shadowEnabled: true,
+  } : {};
+
+  // Blend mode via CSS globalCompositeOperation
+  const blendMode = style.blendMode && style.blendMode !== 'normal'
+    ? style.blendMode : undefined;
 
   return (
     <Group
@@ -64,10 +92,16 @@ export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd,
 
       {image ? (
         <KonvaImage
+          ref={imageRef}
           image={image}
           width={w}
           height={h}
           listening={false}
+          filters={filters.length > 0 ? filters : undefined}
+          blurRadius={style.blur || 0}
+          brightness={style.brightness != null ? (style.brightness - 100) / 100 : 0}
+          globalCompositeOperation={blendMode}
+          {...shadowProps}
           {...(obj.cropData ? {
             crop: {
               x: obj.cropData.x || 0,
@@ -79,7 +113,6 @@ export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd,
         />
       ) : (
         <>
-          {/* Loading / error placeholder */}
           <Rect
             width={w}
             height={h}

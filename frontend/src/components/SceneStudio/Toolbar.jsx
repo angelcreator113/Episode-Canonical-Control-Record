@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  MousePointer2, Hand, ZoomIn, ZoomOut, Maximize,
+  MousePointer2, Hand, Eraser, ZoomIn, ZoomOut, Maximize,
   Undo2, Redo2, Save, Download, Grid3X3, Check,
 } from 'lucide-react';
 
@@ -20,6 +20,7 @@ const PLATFORM_PRESETS = {
 const TOOLS = [
   { key: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
   { key: 'hand', icon: Hand, label: 'Pan', shortcut: 'H' },
+  { key: 'erase', icon: Eraser, label: 'Erase', shortcut: 'E' },
 ];
 
 export default function Toolbar({

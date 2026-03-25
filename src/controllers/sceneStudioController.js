@@ -11,6 +11,7 @@ const { v4: uuidv4 } = require('uuid');
 const objectGenerationService = require('../services/objectGenerationService');
 const depthEstimationService = require('../services/depthEstimationService');
 const imageRestyleService = require('../services/imageRestyleService');
+const inpaintingService = require('../services/inpaintingService');
 
 // ── Canvas Load ──
 
@@ -1102,6 +1103,97 @@ Example: [{"label": "Gold Mirror", "prompt": "ornate gold-framed mirror with sof
   } catch (error) {
     console.error('Scene Studio suggestObjects error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ── Inpainting (Object Removal) ──
+
+exports.inpaint = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url, mask_data_url, prompt, strength } = req.body;
+
+    if (!mask_data_url) {
+      return res.status(400).json({ success: false, error: 'mask_data_url is required — paint over the area to remove' });
+    }
+
+    const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url'] });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    const sourceUrl = image_url || scene.background_url;
+    if (!sourceUrl) {
+      return res.status(400).json({ success: false, error: 'No source image available' });
+    }
+
+    const result = await inpaintingService.inpaintImage(
+      sourceUrl,
+      mask_data_url,
+      prompt || 'clean seamless continuation of surrounding area, matching style and lighting',
+      id,
+      { userId: req.user?.id || null, strength: strength || 0.85 }
+    );
+
+    // Update scene background with inpainted result
+    if (result.inpainted_url) {
+      await scene.update({ background_url: result.inpainted_url });
+    }
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Scene Studio inpaint error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+// ── Scene Animation (Runway Image-to-Video) ──
+
+exports.animateScene = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url, prompt, duration, camera_motion } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ success: false, error: 'Animation prompt is required' });
+    }
+
+    const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url', 'description'] });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    const sourceUrl = image_url || scene.background_url;
+    if (!sourceUrl) {
+      return res.status(400).json({ success: false, error: 'No source image to animate' });
+    }
+
+    const sceneGenService = require('../services/sceneGenerationService');
+    const { jobId } = await sceneGenService.startImageToVideo(prompt, sourceUrl, {
+      duration: duration || 5,
+      cameraMotion: camera_motion || 'static',
+    });
+
+    // Poll for completion
+    const result = await sceneGenService.pollTask(jobId);
+
+    if (result.status === 'SUCCEEDED' && result.outputUrl) {
+      res.json({
+        success: true,
+        data: {
+          video_url: result.outputUrl,
+          duration: duration || 5,
+          job_id: jobId,
+        },
+      });
+    } else {
+      res.status(500).json({ success: false, error: result.error || 'Animation failed' });
+    }
+  } catch (error) {
+    console.error('Scene Studio animateScene error:', error);
+    const status = error.message.includes('limit') || error.message.includes('429') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
   }
 };
 

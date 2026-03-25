@@ -70,6 +70,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [timeOfDay, setTimeOfDay] = useState(null);
   const [isRegeneratingBg, setIsRegeneratingBg] = useState(false);
 
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, objectId }
+
+  // Export dialog state
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportFormat, setExportFormat] = useState('png');
+  const [exportScale, setExportScale] = useState(2);
+
   // UX guidance state
   const [hasInteracted, setHasInteracted] = useState(false);
   const [showFirstHint, setShowFirstHint] = useState(false);
@@ -304,6 +312,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         e.preventDefault();
         state.selectedIds.forEach((id) => state.removeObject(id));
       }
+      // Arrow key nudge (1px, or 10px with shift)
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && state.selectedIds.size > 0) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+        state.selectedIds.forEach((id) => {
+          const obj = state.objects.find((o) => o.id === id);
+          if (obj) state.updateObject(id, { x: (obj.x || 0) + dx, y: (obj.y || 0) + dy });
+        });
+      }
       // Copy
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         e.preventDefault();
@@ -323,6 +342,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       if (e.key === 'h' || e.key === 'H') state.setActiveTool('hand');
       if (e.key === 't' || e.key === 'T') state.setActiveTool('text');
       if (e.key === 's' && !e.ctrlKey && !e.metaKey) state.setActiveTool('shape');
+      if (e.key === 'e' || e.key === 'E') state.setActiveTool('erase');
       // Save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -333,6 +353,29 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state, save]);
+
+  // ── Context menu ──
+
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault();
+    // Find if we right-clicked on an object
+    const target = e.target;
+    const studioObj = target.closest?.('.scene-studio-object-row');
+    if (studioObj) return; // Let ObjectsPanel handle its own context
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Close context menu on any click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('contextmenu', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+    };
+  }, [contextMenu]);
 
   // ── Tool actions (click on canvas to add text/shape) ──
 
@@ -534,18 +577,27 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── Export ──
 
   const handleExport = useCallback(() => {
+    setShowExportDialog(true);
+  }, []);
+
+  const doExport = useCallback(() => {
     const stage = stageRef.current;
     if (!stage) return;
 
-    const pixelRatio = Math.min(2, 2000 / canvasWidth);
-    const dataUrl = stage.toDataURL({ pixelRatio });
+    const pixelRatio = exportScale;
+    const mimeType = exportFormat === 'jpg' ? 'image/jpeg' : exportFormat === 'webp' ? 'image/webp' : 'image/png';
+    const quality = exportFormat === 'png' ? undefined : 0.9;
+    const ext = exportFormat;
+
+    const dataUrl = stage.toDataURL({ pixelRatio, mimeType, quality });
     const link = document.createElement('a');
-    link.download = `${slugify(rawTitle || 'scene')}.png`;
+    link.download = `${slugify(rawTitle || 'scene')}.${ext}`;
     link.href = dataUrl;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [canvasWidth, rawTitle]);
+    setShowExportDialog(false);
+  }, [exportScale, exportFormat, canvasWidth, rawTitle]);
 
   // ── Zoom handlers ──
 
@@ -685,6 +737,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onClearFocus={() => setFocusTarget(null)}
               hasBackground={!!backgroundUrl}
               contextType={state.contextType}
+              sceneStates={state.canvasSettings.sceneStates}
+              activeSceneState={state.canvasSettings.activeSceneState}
+              onCreateState={state.createSceneState}
+              onActivateState={state.activateSceneState}
+              onDeleteState={state.deleteSceneState}
+              onRenameState={state.renameSceneState}
             />
             <SmartSuggestions
               sceneId={sceneId}
@@ -697,7 +755,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         )}
 
         {/* Canvas */}
-        <div className="scene-studio-canvas-container" ref={canvasContainerRef}>
+        <div className="scene-studio-canvas-container" ref={canvasContainerRef} onContextMenu={handleContextMenu}>
           <StudioCanvas
             ref={stageRef}
             canvasWidth={canvasWidth}
@@ -828,6 +886,65 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           />
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="scene-studio-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button className="scene-studio-context-item" onClick={() => { state.copySelected(); setContextMenu(null); }}>
+            Copy <span className="scene-studio-context-shortcut">Ctrl+C</span>
+          </button>
+          <button className="scene-studio-context-item" onClick={() => { state.pasteClipboard(); setContextMenu(null); }}>
+            Paste <span className="scene-studio-context-shortcut">Ctrl+V</span>
+          </button>
+          <div className="scene-studio-context-divider" />
+          {state.selectedIds.size > 0 && (
+            <>
+              <button className="scene-studio-context-item" onClick={() => { state.selectedIds.forEach((id) => state.duplicateObject(id)); setContextMenu(null); }}>
+                Duplicate <span className="scene-studio-context-shortcut">Ctrl+D</span>
+              </button>
+              <button className="scene-studio-context-item danger" onClick={() => { state.selectedIds.forEach((id) => state.removeObject(id)); setContextMenu(null); }}>
+                Delete <span className="scene-studio-context-shortcut">Del</span>
+              </button>
+            </>
+          )}
+          <div className="scene-studio-context-divider" />
+          <button className="scene-studio-context-item" onClick={() => { state.selectObject(null); state.deselectAll(); setContextMenu(null); }}>
+            Deselect All <span className="scene-studio-context-shortcut">Esc</span>
+          </button>
+        </div>
+      )}
+
+      {/* Export Dialog */}
+      {showExportDialog && (
+        <div className="scene-studio-export-dialog" onClick={() => setShowExportDialog(false)}>
+          <div className="scene-studio-export-panel" onClick={(e) => e.stopPropagation()}>
+            <h3>Export Scene</h3>
+            <div className="scene-studio-export-option">
+              <label>Format</label>
+              <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)}>
+                <option value="png">PNG (lossless)</option>
+                <option value="jpg">JPG (smaller)</option>
+                <option value="webp">WebP (best)</option>
+              </select>
+            </div>
+            <div className="scene-studio-export-option">
+              <label>Scale</label>
+              <select value={exportScale} onChange={(e) => setExportScale(Number(e.target.value))}>
+                <option value={1}>1x ({canvasWidth}×{canvasHeight})</option>
+                <option value={2}>2x ({canvasWidth * 2}×{canvasHeight * 2})</option>
+                <option value={3}>3x ({canvasWidth * 3}×{canvasHeight * 3})</option>
+              </select>
+            </div>
+            <div className="scene-studio-export-actions">
+              <button className="scene-studio-btn ghost" onClick={() => setShowExportDialog(false)}>Cancel</button>
+              <button className="scene-studio-btn primary" onClick={doExport}>Export</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
