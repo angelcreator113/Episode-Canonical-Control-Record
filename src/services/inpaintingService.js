@@ -305,15 +305,13 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
 
   if (sourceImageUrl) {
     const maskMetadata = await sharp(buffer).metadata();
-    let sourceDimensions = null;
+    const sourceDimensions = await getRemoteImageDimensions(sourceImageUrl);
+    const maskWidth = maskMetadata.width || 0;
+    const maskHeight = maskMetadata.height || 0;
 
-    if (!maskMetadata.width || !maskMetadata.height) {
-      sourceDimensions = await getRemoteImageDimensions(sourceImageUrl);
-    }
-
-    if (sourceDimensions && (maskMetadata.width !== sourceDimensions.width || maskMetadata.height !== sourceDimensions.height)) {
+    if (maskWidth !== sourceDimensions.width || maskHeight !== sourceDimensions.height) {
       console.log(
-        `[Inpainting] Resizing mask from ${maskMetadata.width}x${maskMetadata.height} to ${sourceDimensions.width}x${sourceDimensions.height}`
+        `[Inpainting] Resizing mask from ${maskWidth}x${maskHeight} to ${sourceDimensions.width}x${sourceDimensions.height}`
       );
 
       buffer = await sharp(buffer)
