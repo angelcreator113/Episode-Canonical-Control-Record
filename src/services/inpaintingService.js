@@ -73,7 +73,7 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  const { strength = 0.85, guidanceScale = 7.5 } = options;
+  const { strength = 0.85, guidanceScale = 7.5, width = 1920, height = 1080 } = options;
   const qualityPrompt = [
     prompt,
     'Photographic quality.',
@@ -117,6 +117,8 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
         num_inference_steps: 36,
         guidance_scale: guidanceScale,
         scheduler: 'K_EULER',
+        width: width,
+        height: height,
       },
     });
   } catch (err) {
