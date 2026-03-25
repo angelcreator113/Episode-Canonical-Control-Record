@@ -135,7 +135,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [state.isDirty, state.objects, isLoading]);
+  }, [state.isDirty, state.objects, state.depthEffects, state.depthMapUrl, isLoading]);
 
   // ── Track first object add (for overlay + hint) ──
 
@@ -356,7 +356,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         result = await sceneService.generateAngleDepth(state.contextId, state.activeAngleId);
       }
       if (result?.success && result.data?.depth_map_url) {
-        state.setDepthMapUrl(result.data.depth_map_url);
+        state.updateDepthMapUrl(result.data.depth_map_url);
       }
     } catch (err) {
       console.error('Depth generation error:', err);
@@ -368,7 +368,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, [isGeneratingDepth, state.contextType, state.contextId, state.activeAngleId, backgroundUrl, state]);
 
   const handleUpdateDepthEffects = useCallback((updates) => {
-    state.setDepthEffects((prev) => ({ ...prev, ...updates }));
+    state.updateDepthEffects((prev) => ({ ...prev, ...updates }));
   }, [state]);
 
   const rawTitle = state.contextType === 'scene'
