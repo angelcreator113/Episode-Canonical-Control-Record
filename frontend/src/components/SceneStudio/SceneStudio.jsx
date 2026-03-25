@@ -132,7 +132,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err) {
       console.error('Scene Studio save error:', err);
-      setSaveStatus('error');
+      if (mountedRef.current) setSaveStatus('error');
     } finally {
       isSavingRef.current = false;
     }
