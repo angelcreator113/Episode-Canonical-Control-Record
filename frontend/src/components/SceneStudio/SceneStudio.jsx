@@ -43,9 +43,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const canvasContainerRef = useRef(null);
   const stageRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const isSavingRef = useRef(false);
-  const [saveError, setSaveError] = useState(false);
+  const saveStatusTimerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
@@ -108,8 +108,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const save = useCallback(async () => {
     if (isSavingRef.current) return;
     isSavingRef.current = true;
-    setIsSaving(true);
-    setSaveError(false);
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    setSaveStatus('saving');
+    const startTime = Date.now();
     try {
       const payload = state.serializeForSave();
       // Include platform in canvas_settings for persistence
@@ -122,12 +123,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
       state.markClean();
+      // Ensure "Saving..." shows for at least 600ms so it doesn't flicker
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 600 - elapsed);
+      await new Promise((r) => setTimeout(r, remaining));
+      setSaveStatus('saved');
+      // Show "Saved" confirmation for 2s then go back to idle
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err) {
       console.error('Scene Studio save error:', err);
-      setSaveError(true);
+      setSaveStatus('error');
     } finally {
       isSavingRef.current = false;
-      setIsSaving(false);
     }
   }, [state, platform]);
 
@@ -489,8 +496,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         onUndo={state.undo}
         onRedo={state.redo}
         isDirty={state.isDirty}
-        isSaving={isSaving}
-        saveError={saveError}
+        saveStatus={saveStatus}
         onSave={save}
         onExport={handleExport}
         title={formatTitle(rawTitle) || studioTitle}
