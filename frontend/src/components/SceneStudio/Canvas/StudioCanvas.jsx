@@ -61,27 +61,33 @@ function BackgroundImage({ src, width, height, isSelected, onClick, onLayoutChan
   }, [image]);
 
   const activeImage = displayImage || image;
-  // Compute layout only when image is ready; null otherwise so hooks below are safe.
-  const layout = activeImage
-    ? getCoverLayout(activeImage.width, activeImage.height, width, height)
-    : null;
+
+  // Derive layout primitives so effect deps are stable scalars, not object refs.
+  const imgW = activeImage ? activeImage.width : 0;
+  const imgH = activeImage ? activeImage.height : 0;
+  const layout = activeImage ? getCoverLayout(imgW, imgH, width, height) : null;
+  const layoutX = layout ? layout.x : 0;
+  const layoutY = layout ? layout.y : 0;
+  const layoutW = layout ? layout.width : 0;
+  const layoutH = layout ? layout.height : 0;
 
   // These effects must be declared unconditionally (Rules of Hooks).
-  // Guard logic is handled inside the effect bodies.
+  // Guards and primitive deps prevent infinite loops.
   useEffect(() => {
     if (!onLayoutChange || !activeImage || !layout) return undefined;
 
     onLayoutChange({
-      sourceWidth: activeImage.width,
-      sourceHeight: activeImage.height,
-      drawX: layout.x,
-      drawY: layout.y,
-      drawWidth: layout.width,
-      drawHeight: layout.height,
+      sourceWidth: imgW,
+      sourceHeight: imgH,
+      drawX: layoutX,
+      drawY: layoutY,
+      drawWidth: layoutW,
+      drawHeight: layoutH,
     });
 
     return undefined;
-  }, [activeImage, layout, onLayoutChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imgW, imgH, layoutX, layoutY, layoutW, layoutH, onLayoutChange]);
 
   useEffect(() => {
     if (!onLayoutChange) return undefined;
