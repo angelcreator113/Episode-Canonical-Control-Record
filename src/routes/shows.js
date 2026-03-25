@@ -90,7 +90,6 @@ router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
         Key: s3Key,
         Body: processedImage,
         ContentType: 'image/jpeg',
-        ACL: 'public-read',
       })
     );
 

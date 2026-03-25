@@ -160,23 +160,19 @@ exports.saveCanvas = async (req, res) => {
         }
       }
 
-      // Get existing object IDs for this scene
+      // Get existing objects for this scene
       const existing = await SceneAsset.findAll({
         where: { scene_id: id },
-        attributes: ['id'],
+        attributes: ['id', 'asset_id', 'usage_type'],
         transaction,
       });
-      const existingIds = new Set(existing.map((e) => e.id));
-      const incomingIds = new Set(objects.filter((o) => o.id).map((o) => o.id));
-
-      // Delete objects removed from canvas
-      const toDelete = [...existingIds].filter((eid) => !incomingIds.has(eid));
-      if (toDelete.length > 0) {
-        await SceneAsset.destroy({
-          where: { id: toDelete, scene_id: id },
-          transaction,
-        });
-      }
+      const existingById = new Map(existing.map((e) => [e.id, e]));
+      const existingByComposite = new Map(
+        existing
+          .filter((e) => e.asset_id)
+          .map((e) => [`${e.asset_id}::${e.usage_type}`, e])
+      );
+      const keptExistingIds = new Set();
 
       // Upsert each object
       for (const obj of objects) {
@@ -213,17 +209,39 @@ exports.saveCanvas = async (req, res) => {
           metadata: obj.metadata || {},
         };
 
-        if (obj.id && existingIds.has(obj.id)) {
+        if (obj.id && existingById.has(obj.id)) {
           // Update existing
           await SceneAsset.update(data, {
             where: { id: obj.id, scene_id: id },
             transaction,
           });
+          keptExistingIds.add(obj.id);
+        } else if (obj.asset_id && existingByComposite.has(`${obj.asset_id}::${data.usage_type}`)) {
+          // Fallback for clients that temporarily omit/purge object IDs during autosave.
+          // Updating in place avoids unique-index collisions on soft-deleted rows.
+          const match = existingByComposite.get(`${obj.asset_id}::${data.usage_type}`);
+          await SceneAsset.update(data, {
+            where: { id: match.id, scene_id: id },
+            transaction,
+          });
+          keptExistingIds.add(match.id);
         } else {
           // Create new
           data.id = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
           await SceneAsset.create(data, { transaction });
         }
+      }
+
+      // Delete objects removed from canvas (after upsert).
+      // This ordering avoids soft-delete + recreate collisions on unique indexes.
+      const toDelete = existing
+        .map((e) => e.id)
+        .filter((eid) => !keptExistingIds.has(eid));
+      if (toDelete.length > 0) {
+        await SceneAsset.destroy({
+          where: { id: toDelete, scene_id: id },
+          transaction,
+        });
       }
     }
 
@@ -233,6 +251,16 @@ exports.saveCanvas = async (req, res) => {
   } catch (error) {
     await transaction.rollback();
     console.error('Scene Studio saveCanvas error:', error);
+    if (error?.name === 'SequelizeValidationError' || error?.name === 'SequelizeUniqueConstraintError') {
+      const details = Array.isArray(error.errors)
+        ? error.errors.map((e) => `${e.path}: ${e.message}`)
+        : [];
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        details,
+      });
+    }
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -1135,7 +1163,7 @@ exports.inpaint = async (req, res) => {
     const result = await inpaintingService.inpaintImage(
       sourceUrl,
       mask_data_url,
-      prompt || 'clean seamless continuation of surrounding area, matching style and lighting',
+      prompt || 'Remove the masked object completely and reconstruct the background as if nothing had ever been there. Preserve the original perspective, depth, lighting direction, shadows, surface texture, color balance, and natural detail. Extend surrounding structures and patterns seamlessly into the masked region. Do not add new objects, blur, seams, artifacts, or repeated textures.',
       id,
       { userId: req.user?.id || null, strength: strength || 0.85 }
     );

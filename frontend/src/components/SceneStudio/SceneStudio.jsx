@@ -33,6 +33,29 @@ function formatTitle(raw) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function getNetworkAwareApiError(err, fallbackMessage, actionLabel = 'Request') {
+  const serverError = err?.response?.data?.error;
+  if (serverError) return serverError;
+
+  const status = err?.response?.status;
+  if (typeof status === 'number') {
+    return `${actionLabel} failed (${status})`;
+  }
+
+  const code = String(err?.code || '');
+  const message = String(err?.message || '');
+  const causeMessage = String(err?.cause?.message || '');
+  const combined = `${code} ${message} ${causeMessage}`.toUpperCase();
+  const isNetworkError = code === 'ERR_NETWORK' || /NETWORK\s+ERROR/i.test(message);
+  const isAddressIssue = /ERR_ADDRESS_UNREACHABLE|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED|ENOTFOUND|EHOSTUNREACH|ECONNREFUSED/.test(combined);
+
+  if (isNetworkError || isAddressIssue || !err?.response) {
+    return 'Network path to dev.primepisodes.com is unreachable right now. Try a hard refresh, disable VPN/proxy/extensions, and retry.';
+  }
+
+  return err?.message || fallbackMessage;
+}
+
 const QUICK_ADD_OPTIONS = [
   { key: 'generate', label: 'Generate', icon: Sparkles },
   { key: 'upload', label: 'Upload', icon: Upload },
@@ -700,7 +723,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
     } catch (err) {
       console.error('Inpaint error:', err);
-      setSaveErrorMsg(err.response?.data?.error || err.message || 'Inpainting failed');
+      setSaveErrorMsg(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
     } finally {
       setIsInpainting(false);
     }

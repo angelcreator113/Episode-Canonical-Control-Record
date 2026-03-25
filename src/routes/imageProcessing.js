@@ -59,15 +59,19 @@ router.post('/:id/remove-background', optionalAuth, async (req, res) => {
 
     console.log('🎨 Starting background removal for asset:', id);
 
+    // Validate API key exists before marking this asset as processing
+    if (!process.env.REMOVE_BG_API_KEY) {
+      return res.status(503).json({
+        status: 'ERROR',
+        message: 'Background removal service is not configured',
+        code: 'REMOVE_BG_NOT_CONFIGURED',
+      });
+    }
+
     // Update status to processing
     await asset.update({
       processing_status: 'processing_bg_removal',
     });
-
-    // Validate API key exists
-    if (!process.env.REMOVE_BG_API_KEY) {
-      throw new Error('REMOVE_BG_API_KEY not configured');
-    }
 
     // Call Remove.bg API
     const formData = new FormData();
@@ -150,9 +154,14 @@ router.post('/:id/remove-background', optionalAuth, async (req, res) => {
       }
     }
 
-    res.status(500).json({
+    const isRemoveBgConfigError = error?.message === 'REMOVE_BG_API_KEY not configured';
+
+    res.status(isRemoveBgConfigError ? 503 : 500).json({
       status: 'ERROR',
-      message: error.message,
+      message: isRemoveBgConfigError
+        ? 'Background removal service is not configured'
+        : error.message,
+      ...(isRemoveBgConfigError ? { code: 'REMOVE_BG_NOT_CONFIGURED' } : {}),
     });
   }
 });
