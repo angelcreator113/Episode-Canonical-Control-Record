@@ -6,7 +6,7 @@
  * Removes unwanted objects from images by painting over them with a mask,
  * then using AI to fill the masked area with contextually appropriate content.
  *
- * Uses Stability AI's SDXL Inpainting model via Replicate.
+ * Uses lucataco/sdxl-inpainting model via Replicate.
  */
 
 const axios = require('axios');
@@ -103,16 +103,14 @@ async function runInpainting(imageUrl, maskUrl, prompt, options = {}) {
   let prediction;
   try {
     prediction = await replicate.predictions.create({
-      model: 'stability-ai/sdxl',
+      model: 'lucataco/sdxl-inpainting',
       input: {
         image: imageUrl,
         mask: maskUrl,
         prompt: qualityPrompt,
         negative_prompt: negativePrompt,
-        prompt_strength: strength,
+        strength: strength,
         num_outputs: 1,
-        width: 1024,
-        height: 1024,
         num_inference_steps: 36,
         guidance_scale: guidanceScale,
         scheduler: 'K_EULER',
