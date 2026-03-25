@@ -15,7 +15,7 @@ const FormData = require('form-data');
 const fetch = require('node-fetch');
 const { models } = require('../models');
 const s3Service = require('../services/S3Service');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, optionalAuth } = require('../middleware/auth');
 
 /**
  * POST /api/v1/assets/:id/remove-background
@@ -23,7 +23,7 @@ const { authenticate } = require('../middleware/auth');
  *
  * @returns {Object} { status, message, data: { asset_id, url, original_url, cached? } }
  */
-router.post('/:id/remove-background', authenticate, async (req, res) => {
+router.post('/:id/remove-background', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
 

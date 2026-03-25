@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import Timeline from '../components/Timeline/Timeline';
 import PreviewMonitor from '../components/Timeline/PreviewMonitor';
+import ScenePicker from '../components/Timeline/ScenePicker';
 import KeyframePropertyEditor from '../components/Timeline/KeyframePropertyEditor';
 import SaveIndicator from '../components/SaveIndicator/SaveIndicator';
 import ExportDropdown from '../components/ExportDropdown/ExportDropdown';
@@ -482,7 +483,14 @@ function TimelineEditor() {
     setSelectedScene(sceneId);
   };
 
+  const [showScenePicker, setShowScenePicker] = useState(false);
+
   const handleAddScene = () => {
+    // Open scene picker to select from Scene Studio outputs
+    setShowScenePicker(true);
+  };
+
+  const handleAddBlankScene = () => {
     pushHistory();
     const newScene = {
       id: `scene-${Date.now()}`,
@@ -495,7 +503,24 @@ function TimelineEditor() {
     };
     setScenes([...scenes, newScene]);
     markDirty();
-    console.log('✅ Scene added:', newScene);
+  };
+
+  const handleScenePickerSelect = (scene) => {
+    pushHistory();
+    const newScene = {
+      id: scene.id,
+      scene_number: scenes.length + 1,
+      title: scene.title || `Scene ${scenes.length + 1}`,
+      duration_seconds: parseFloat(scene.duration_seconds) || 5.0,
+      background_url: scene.background_url || scene.backgroundUrl || null,
+      characters: scene.characters || [],
+      ui_elements: scene.ui_elements || [],
+      scene_set_id: scene.scene_set_id || scene.sceneSetId || null,
+      scene_angle_id: scene.scene_angle_id || scene.sceneAngleId || null,
+    };
+    setScenes([...scenes, newScene]);
+    setShowScenePicker(false);
+    markDirty();
   };
 
   const handleDeleteScene = (sceneId) => {
@@ -923,6 +948,13 @@ function TimelineEditor() {
             </div>
           </div>
     </div>
+      {showScenePicker && (
+        <ScenePicker
+          episodeId={episodeId}
+          onSelect={handleScenePickerSelect}
+          onClose={() => setShowScenePicker(false)}
+        />
+      )}
     </LandscapeRequired>
   );
 }

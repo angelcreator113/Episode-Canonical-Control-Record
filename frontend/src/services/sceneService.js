@@ -390,6 +390,34 @@ const sceneService = {
     const { data } = await api.post(`/api/v1/scenes/${sceneId}/suggest-objects`);
     return data;
   },
+
+  /**
+   * Inpaint (remove/fill) an area of the scene background
+   * POST /api/v1/scenes/:id/inpaint
+   */
+  inpaintScene: async (sceneId, { imageUrl, maskDataUrl, prompt, strength } = {}) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/inpaint`, {
+      image_url: imageUrl,
+      mask_data_url: maskDataUrl,
+      prompt,
+      strength,
+    });
+    return data;
+  },
+
+  /**
+   * Animate scene via Runway image-to-video
+   * POST /api/v1/scenes/:id/animate
+   */
+  animateScene: async (sceneId, { imageUrl, prompt, duration, cameraMotion } = {}) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/animate`, {
+      image_url: imageUrl,
+      prompt,
+      duration,
+      camera_motion: cameraMotion,
+    });
+    return data;
+  },
 };
 
 export default sceneService;

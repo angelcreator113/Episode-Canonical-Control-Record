@@ -7,9 +7,11 @@
  */
 
 const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequelize } = require('../models');
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4, validate: uuidValidate } = require('uuid');
 const objectGenerationService = require('../services/objectGenerationService');
 const depthEstimationService = require('../services/depthEstimationService');
+const imageRestyleService = require('../services/imageRestyleService');
+const inpaintingService = require('../services/inpaintingService');
 
 // ── Canvas Load ──
 
@@ -219,7 +221,7 @@ exports.saveCanvas = async (req, res) => {
           });
         } else {
           // Create new
-          data.id = obj.id || uuidv4();
+          data.id = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
           await SceneAsset.create(data, { transaction });
         }
       }
@@ -832,7 +834,7 @@ exports.saveSceneSetCanvas = async (req, res) => {
             transaction,
           });
         } else {
-          data.id = obj.id || uuidv4();
+          data.id = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
           await SceneAsset.create(data, { transaction });
         }
       }
@@ -996,68 +998,30 @@ exports.regenerateBackground = async (req, res) => {
 
     const bgUrl = current_background_url || scene.background_url;
     if (!bgUrl) {
-      return res.status(400).json({ success: false, error: 'No background to regenerate from' });
+      return res.status(400).json({ success: false, error: 'No background to restyle' });
     }
 
-    // Build style modifiers from mood and time of day
-    const modifiers = [];
-    if (time_of_day) {
-      const timeMap = {
-        dawn: 'soft dawn lighting, pink and gold sky, early morning atmosphere',
-        day: 'bright daylight, clear warm light, midday sun',
-        golden: 'golden hour lighting, warm amber tones, long shadows, sunset glow',
-        night: 'night scene, moonlight, deep blues and purples, ambient glow, stars',
-      };
-      modifiers.push(timeMap[time_of_day] || '');
-    }
-    if (mood) {
-      const moodMap = {
-        warm: 'warm color palette, inviting atmosphere, soft light',
-        dramatic: 'dramatic lighting, high contrast, deep shadows, cinematic',
-        soft: 'soft dreamy atmosphere, pastel tones, gentle diffused light',
-        moody: 'moody atmosphere, muted tones, atmospheric haze, contemplative',
-        ethereal: 'ethereal glow, otherworldly, luminous, magical light particles',
-      };
-      modifiers.push(moodMap[mood] || '');
-    }
-
-    const styleHints = modifiers.filter(Boolean).join('. ');
-    const sceneDesc = scene.description || 'interior scene';
-
-    // Use DALL-E 3 to generate a background variation
-    const prompt = `A beautiful ${sceneDesc} background scene. ${styleHints}. Wide establishing shot, no people, no text, photographic quality, 16:9 aspect ratio.`;
-
-    let showId = null;
-    try {
-      if (scene.episode_id) {
-        const { Episode } = require('../models');
-        const ep = await Episode.findByPk(scene.episode_id, { attributes: ['show_id'] });
-        showId = ep?.show_id || null;
-      }
-    } catch { /* non-critical */ }
-
-    const options = await objectGenerationService.generateObject(prompt, {
-      sceneId: id,
-      styleHints: 'wide scene background, establishing shot, no isolated object, full scene',
-      count: 2,
-      removeBackground: false,
+    // Use img2img restyling — transforms the EXISTING photo's lighting/mood
+    // instead of generating a completely new image from text
+    const result = await imageRestyleService.restyleBackground(bgUrl, id, {
+      timeOfDay: time_of_day || null,
+      mood: mood || null,
+      strength: 0.45, // Moderate change — preserves composition
       userId: req.user?.id || null,
-      showId,
-      Asset,
     });
 
-    // Update scene mood if provided
-    if (mood) {
-      await scene.update({ mood });
+    // Update scene mood + background_url
+    const updates = {};
+    if (mood) updates.mood = mood;
+    if (result.restyled_url) updates.background_url = result.restyled_url;
+    if (Object.keys(updates).length > 0) {
+      await scene.update(updates);
     }
 
     res.json({
       success: true,
       data: {
-        options: options.map((o) => ({
-          ...o,
-          type: 'background',
-        })),
+        restyled_url: result.restyled_url,
         mood,
         time_of_day,
       },
@@ -1101,7 +1065,11 @@ exports.suggestObjects = async (req, res) => {
       ? `Already placed: ${existingLabels.join(', ')}.`
       : 'The scene is empty.';
 
-    // Use Claude for suggestions
+    // Use Claude for suggestions — gracefully skip if API key missing
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.json({ success: true, data: { suggestions: [] } });
+    }
+
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -1137,8 +1105,100 @@ Example: [{"label": "Gold Mirror", "prompt": "ornate gold-framed mirror with sof
 
     res.json({ success: true, data: { suggestions } });
   } catch (error) {
-    console.error('Scene Studio suggestObjects error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Scene Studio suggestObjects error:', error.message);
+    // Return empty suggestions instead of 500 — suggestions are non-critical
+    res.json({ success: true, data: { suggestions: [] } });
+  }
+};
+
+// ── Inpainting (Object Removal) ──
+
+exports.inpaint = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url, mask_data_url, prompt, strength } = req.body;
+
+    if (!mask_data_url) {
+      return res.status(400).json({ success: false, error: 'mask_data_url is required — paint over the area to remove' });
+    }
+
+    const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url'] });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    const sourceUrl = image_url || scene.background_url;
+    if (!sourceUrl) {
+      return res.status(400).json({ success: false, error: 'No source image available' });
+    }
+
+    const result = await inpaintingService.inpaintImage(
+      sourceUrl,
+      mask_data_url,
+      prompt || 'clean seamless continuation of surrounding area, matching style and lighting',
+      id,
+      { userId: req.user?.id || null, strength: strength || 0.85 }
+    );
+
+    // Update scene background with inpainted result
+    if (result.inpainted_url) {
+      await scene.update({ background_url: result.inpainted_url });
+    }
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Scene Studio inpaint error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+// ── Scene Animation (Runway Image-to-Video) ──
+
+exports.animateScene = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url, prompt, duration, camera_motion } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ success: false, error: 'Animation prompt is required' });
+    }
+
+    const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url', 'description'] });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    const sourceUrl = image_url || scene.background_url;
+    if (!sourceUrl) {
+      return res.status(400).json({ success: false, error: 'No source image to animate' });
+    }
+
+    const sceneGenService = require('../services/sceneGenerationService');
+    const { jobId } = await sceneGenService.startImageToVideo(prompt, sourceUrl, {
+      duration: duration || 5,
+      cameraMotion: camera_motion || 'static',
+    });
+
+    // Poll for completion
+    const result = await sceneGenService.pollTask(jobId);
+
+    if (result.status === 'SUCCEEDED' && result.outputUrl) {
+      res.json({
+        success: true,
+        data: {
+          video_url: result.outputUrl,
+          duration: duration || 5,
+          job_id: jobId,
+        },
+      });
+    } else {
+      res.status(500).json({ success: false, error: result.error || 'Animation failed' });
+    }
+  } catch (error) {
+    console.error('Scene Studio animateScene error:', error);
+    const status = error.message.includes('limit') || error.message.includes('429') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
   }
 };
 

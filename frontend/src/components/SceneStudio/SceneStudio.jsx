@@ -1,8 +1,8 @@
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
+import MaskLayer from './Canvas/MaskLayer';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
-import BackgroundBar from './BackgroundBar';
 import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
@@ -52,6 +52,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [isLoading, setIsLoading] = useState(true);
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
+  const [saveErrorMsg, setSaveErrorMsg] = useState(null);
   const saveTimerRef = useRef(null);
   const saveRef = useRef(null);
 
@@ -68,6 +69,23 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [mood, setMood] = useState(null);
   const [timeOfDay, setTimeOfDay] = useState(null);
   const [isRegeneratingBg, setIsRegeneratingBg] = useState(false);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, objectId }
+
+  // Export dialog state
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportFormat, setExportFormat] = useState('png');
+
+  // Erase / inpaint state
+  const [hasMask, setHasMask] = useState(false);
+  const [brushSize, setBrushSize] = useState(30);
+  const [isInpainting, setIsInpainting] = useState(false);
+  const [inpaintPrompt, setInpaintPrompt] = useState('');
+  const [exportScale, setExportScale] = useState(2);
+
+  // Background removal state
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
 
   // UX guidance state
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -126,7 +144,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   const save = useCallback(async () => {
     if (isSavingRef.current) return;
+    if (!state.contextId) {
+      console.error('Scene Studio save: no contextId — scene not loaded');
+      setSaveStatus('error');
+      setSaveErrorMsg('Scene not loaded — try refreshing');
+      return;
+    }
     isSavingRef.current = true;
+    setSaveErrorMsg(null);
     // Cancel any pending auto-save to avoid double-save
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
@@ -137,12 +162,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       // Include platform in canvas_settings for persistence
       if (payload.canvas_settings) {
         payload.canvas_settings.platform = platform;
+        if (mood) payload.canvas_settings.mood = mood;
+        if (timeOfDay) payload.canvas_settings.timeOfDay = timeOfDay;
       }
+      console.log('Scene Studio saving:', { contextType: state.contextType, contextId: state.contextId, objectCount: payload.objects?.length });
+      let result;
       if (state.contextType === 'scene') {
-        await sceneService.saveCanvas(state.contextId, payload);
+        result = await sceneService.saveCanvas(state.contextId, payload);
       } else {
-        await sceneService.saveSceneSetCanvas(state.contextId, payload);
+        result = await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
+      console.log('Scene Studio save result:', result);
       state.markClean();
       // Ensure "Saving..." shows for at least 600ms so it doesn't flicker
       const elapsed = Date.now() - startTime;
@@ -156,11 +186,38 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }, 2000);
     } catch (err) {
       console.error('Scene Studio save error:', err);
-      if (mountedRef.current) setSaveStatus('error');
+      const msg = err.response?.data?.error || err.message || 'Save failed';
+      console.error('Scene Studio save error detail:', msg);
+
+      // Auto-retry once on network errors
+      const isNetworkError = !err.response || err.code === 'ECONNABORTED';
+      if (isNetworkError && !save._retried) {
+        save._retried = true;
+        console.log('Scene Studio: retrying save in 2s...');
+        isSavingRef.current = false;
+        await new Promise((r) => setTimeout(r, 2000));
+        if (mountedRef.current) {
+          save._retried = false;
+          return save();
+        }
+      }
+      save._retried = false;
+
+      if (mountedRef.current) {
+        setSaveStatus('error');
+        setSaveErrorMsg(msg);
+        // Auto-retry after 10s if still dirty
+        saveTimerRef.current = setTimeout(() => {
+          if (mountedRef.current && state.isDirty && saveRef.current) {
+            console.log('Scene Studio: auto-retrying save...');
+            saveRef.current();
+          }
+        }, 10000);
+      }
     } finally {
       isSavingRef.current = false;
     }
-  }, [state, platform]);
+  }, [state, platform, mood, timeOfDay]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -286,6 +343,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         e.preventDefault();
         state.selectedIds.forEach((id) => state.removeObject(id));
       }
+      // Arrow key nudge (1px, or 10px with shift)
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && state.selectedIds.size > 0) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+        state.selectedIds.forEach((id) => {
+          const obj = state.objects.find((o) => o.id === id);
+          if (obj) state.updateObject(id, { x: (obj.x || 0) + dx, y: (obj.y || 0) + dy });
+        });
+      }
       // Copy
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         e.preventDefault();
@@ -305,6 +373,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       if (e.key === 'h' || e.key === 'H') state.setActiveTool('hand');
       if (e.key === 't' || e.key === 'T') state.setActiveTool('text');
       if (e.key === 's' && !e.ctrlKey && !e.metaKey) state.setActiveTool('shape');
+      if (e.key === 'e' || e.key === 'E') state.setActiveTool('erase');
       // Save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -315,6 +384,29 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state, save]);
+
+  // ── Context menu ──
+
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault();
+    // Find if we right-clicked on an object
+    const target = e.target;
+    const studioObj = target.closest?.('.scene-studio-object-row');
+    if (studioObj) return; // Let ObjectsPanel handle its own context
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Close context menu on any click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('contextmenu', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+    };
+  }, [contextMenu]);
 
   // ── Tool actions (click on canvas to add text/shape) ──
 
@@ -388,17 +480,33 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   const handleGenerateDepth = useCallback(async () => {
     if (isGeneratingDepth) return;
+
+    if (!state.contextId) {
+      setDepthError('Scene not loaded — cannot generate depth map');
+      return;
+    }
+    if (!backgroundUrl) {
+      setDepthError('No background image — add a background first');
+      return;
+    }
+
     setIsGeneratingDepth(true);
     setDepthError(null);
     try {
       let result;
-      if (state.contextType === 'scene' && state.contextId) {
+      if (state.contextType === 'scene') {
         result = await sceneService.generateDepth(state.contextId, backgroundUrl);
-      } else if (state.contextType === 'sceneSet' && state.contextId && state.activeAngleId) {
+      } else if (state.contextType === 'sceneSet' && state.activeAngleId) {
         result = await sceneService.generateAngleDepth(state.contextId, state.activeAngleId);
+      } else {
+        setDepthError('Select a camera angle first');
+        setIsGeneratingDepth(false);
+        return;
       }
       if (result?.success && result.data?.depth_map_url) {
         state.updateDepthMapUrl(result.data.depth_map_url);
+      } else {
+        setDepthError('Depth map generation returned no result');
       }
     } catch (err) {
       console.error('Depth generation error:', err);
@@ -415,30 +523,22 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   // ── Background mood/time ──
 
-  const handleMoodChange = useCallback((newMood) => {
-    setMood(newMood);
-    state.updateCanvasSettings({ mood: newMood });
-  }, [state]);
-
-  const handleTimeOfDayChange = useCallback((newTime) => {
-    setTimeOfDay(newTime);
-    state.updateCanvasSettings({ timeOfDay: newTime });
-  }, [state]);
-
-  const handleRegenerateBackground = useCallback(async () => {
-    if (isRegeneratingBg || !state.contextId) return;
+  // Core regeneration — accepts overrides so mood/time changes can trigger immediately
+  const regenerateBackground = useCallback(async (overrides = {}) => {
+    if (isRegeneratingBg || !state.contextId || !backgroundUrl) return;
+    const effectiveMood = overrides.mood !== undefined ? overrides.mood : mood;
+    const effectiveTime = overrides.timeOfDay !== undefined ? overrides.timeOfDay : timeOfDay;
     setIsRegeneratingBg(true);
     try {
       const result = await sceneService.regenerateBackground(state.contextId, {
-        mood,
-        timeOfDay,
+        mood: effectiveMood,
+        timeOfDay: effectiveTime,
         currentBackgroundUrl: backgroundUrl,
       });
-      if (result?.success && result.data?.options?.length > 0) {
-        // Use the first option as new background
-        const newBgUrl = result.data.options[0].url;
+      if (result?.success && result.data?.restyled_url) {
+        const newBgUrl = result.data.restyled_url;
+        // Backend already updates background_url, just update frontend state
         if (state.contextType === 'scene') {
-          await sceneService.updateScene(state.contextId, { background_url: newBgUrl });
           state.setSceneData((prev) => prev ? { ...prev, background_url: newBgUrl } : prev);
         }
       }
@@ -448,6 +548,28 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       setIsRegeneratingBg(false);
     }
   }, [isRegeneratingBg, state, mood, timeOfDay, backgroundUrl]);
+
+  const handleMoodChange = useCallback((newMood) => {
+    setMood(newMood);
+    state.updateCanvasSettings({ mood: newMood });
+    // Auto-regenerate background with new mood if we have a background
+    if (newMood && backgroundUrl) {
+      regenerateBackground({ mood: newMood });
+    }
+  }, [state, backgroundUrl, regenerateBackground]);
+
+  const handleTimeOfDayChange = useCallback((newTime) => {
+    setTimeOfDay(newTime);
+    state.updateCanvasSettings({ timeOfDay: newTime });
+    // Auto-regenerate background with new time of day if we have a background
+    if (newTime && backgroundUrl) {
+      regenerateBackground({ timeOfDay: newTime });
+    }
+  }, [state, backgroundUrl, regenerateBackground]);
+
+  const handleRegenerateBackground = useCallback(() => {
+    regenerateBackground();
+  }, [regenerateBackground]);
 
   const handleChangeBackground = useCallback(() => {
     setCreationPanelOpen(true);
@@ -460,6 +582,32 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setActiveCreationTab('generate');
     setFocusTarget(`generate-prefill:${prompt}`);
   }, []);
+
+  const handleSelectTemplate = useCallback(async (template) => {
+    // Generate background from template prompt
+    if (!state.contextId || !template.prompt) return;
+    setIsRegeneratingBg(true);
+    setSaveErrorMsg(null);
+    try {
+      // Use the objectGenerationService to create a scene background from the template
+      const result = await sceneService.regenerateBackground(state.contextId, {
+        mood: 'warm',
+        timeOfDay: 'day',
+        currentBackgroundUrl: null,
+      });
+      // If no restyle possible (no existing bg), generate fresh via the generate tab
+      setCreationPanelOpen(true);
+      setActiveCreationTab('generate');
+      setFocusTarget(`generate-prefill:${template.prompt}`);
+    } catch (err) {
+      // Fallback: just prefill the generate tab with the template prompt
+      setCreationPanelOpen(true);
+      setActiveCreationTab('generate');
+      setFocusTarget(`generate-prefill:${template.prompt}`);
+    } finally {
+      setIsRegeneratingBg(false);
+    }
+  }, [state]);
 
   // Proxy depth map URL through backend to avoid S3 CORS issues.
   // ParallaxLayer needs crossOrigin pixel access (getImageData) which
@@ -485,19 +633,133 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   // ── Export ──
 
+  // ── Use in Timeline ──
+
+  const handleUseInTimeline = useCallback(async () => {
+    if (!state.contextId || state.contextType !== 'scene') return;
+    try {
+      // Save first to ensure latest state is persisted
+      await save();
+      // Mark scene as ready for timeline
+      await sceneService.updateScene(state.contextId, { production_status: 'storyboarded' });
+      state.setSceneData((prev) => prev ? { ...prev, production_status: 'storyboarded' } : prev);
+    } catch (err) {
+      console.error('Use in Timeline error:', err);
+    }
+  }, [state, save]);
+
+  // ── Inpaint (erase) ──
+
+  const handleInpaint = useCallback(async () => {
+    if (isInpainting || !state.contextId) return;
+    if (!hasMask) return;
+
+    // Determine target: selected object's image or the scene background
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    if (!targetUrl) {
+      setSaveErrorMsg('No image to erase from — select an image object or ensure background is set');
+      return;
+    }
+
+    setIsInpainting(true);
+    setSaveErrorMsg(null);
+    try {
+      const maskDataUrl = MaskLayer._exportMask();
+      if (!maskDataUrl) {
+        setIsInpainting(false);
+        return;
+      }
+
+      const prompt = inpaintPrompt || 'clean seamless continuation of surrounding area, matching style and lighting';
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: targetUrl,
+        maskDataUrl,
+        prompt,
+      });
+
+      if (result?.success && result.data?.inpainted_url) {
+        if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
+          // Update the selected object's image
+          state.setObjects((prev) => prev.map((o) =>
+            o.id === selectedObj.id ? { ...o, assetUrl: result.data.inpainted_url } : o
+          ));
+        } else {
+          // Update the scene background
+          state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        }
+        // Clear the mask
+        if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
+        setHasMask(false);
+        setInpaintPrompt('');
+      }
+    } catch (err) {
+      console.error('Inpaint error:', err);
+      setSaveErrorMsg(err.response?.data?.error || err.message || 'Inpainting failed');
+    } finally {
+      setIsInpainting(false);
+    }
+  }, [isInpainting, state, backgroundUrl, hasMask, inpaintPrompt]);
+
+  // ── Remove Background from selected object ──
+
+  const handleRemoveBackground = useCallback(async (objectId, assetId) => {
+    if (isRemovingBg || !assetId) return;
+    setIsRemovingBg(true);
+    setSaveErrorMsg(null);
+    try {
+      const assetService = (await import('../../services/assetService')).default;
+      const result = await assetService.removeBackground(assetId);
+      // Backend returns { status: 'SUCCESS', data: { url } }
+      const newUrl = result?.data?.url || result?.url;
+      if (newUrl) {
+        // Update the object's asset URL to the transparent version
+        state.setObjects((prev) => prev.map((o) =>
+          o.id === objectId ? {
+            ...o,
+            assetUrl: newUrl,
+            _asset: { ...o._asset, s3_url_processed: newUrl },
+          } : o
+        ));
+        state.markDirty?.() || (() => {})(); // trigger auto-save
+      } else {
+        setSaveErrorMsg('Background removal returned no URL — check REMOVEBG_API_KEY');
+      }
+    } catch (err) {
+      console.error('Remove background error:', err);
+      setSaveErrorMsg(err.message || 'Background removal failed — check REMOVEBG_API_KEY');
+    } finally {
+      setIsRemovingBg(false);
+    }
+  }, [isRemovingBg, state]);
+
   const handleExport = useCallback(() => {
+    setShowExportDialog(true);
+  }, []);
+
+  const doExport = useCallback(() => {
     const stage = stageRef.current;
     if (!stage) return;
 
-    const pixelRatio = Math.min(2, 2000 / canvasWidth);
-    const dataUrl = stage.toDataURL({ pixelRatio });
+    const pixelRatio = exportScale;
+    const mimeType = exportFormat === 'jpg' ? 'image/jpeg' : exportFormat === 'webp' ? 'image/webp' : 'image/png';
+    const quality = exportFormat === 'png' ? undefined : 0.9;
+    const ext = exportFormat;
+
+    const dataUrl = stage.toDataURL({ pixelRatio, mimeType, quality });
     const link = document.createElement('a');
-    link.download = `${slugify(rawTitle || 'scene')}.png`;
+    link.download = `${slugify(rawTitle || 'scene')}.${ext}`;
     link.href = dataUrl;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [canvasWidth, rawTitle]);
+    setShowExportDialog(false);
+  }, [exportScale, exportFormat, canvasWidth, rawTitle]);
 
   // ── Zoom handlers ──
 
@@ -579,20 +841,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         gridVisible={state.canvasSettings.gridVisible}
         onToggleGrid={() => state.updateCanvasSettings({ gridVisible: !state.canvasSettings.gridVisible })}
         onBack={onBack}
+        onUseInTimeline={state.contextType === 'scene' ? handleUseInTimeline : undefined}
+        productionStatus={state.sceneData?.production_status}
       />
 
-      {/* Background Bar */}
-      <BackgroundBar
-        backgroundUrl={backgroundUrl}
-        mood={mood}
-        timeOfDay={timeOfDay}
-        onChangeMood={handleMoodChange}
-        onChangeTimeOfDay={handleTimeOfDayChange}
-        onChangeBackground={handleChangeBackground}
-        onRegenerateVariation={handleRegenerateBackground}
-        isRegenerating={isRegeneratingBg}
-      />
-
+      {/* Save error banner */}
+      {saveErrorMsg && (
+        <div className="scene-studio-save-error-banner">
+          Save failed: {saveErrorMsg}
+          <button className="scene-studio-icon-btn" onClick={() => setSaveErrorMsg(null)} style={{ marginLeft: 'auto' }}>×</button>
+        </div>
+      )}
       {/* Guided Flow Stepper */}
       <GuidedFlow
         hasBackground={!!backgroundUrl}
@@ -629,6 +888,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onClearFocus={() => setFocusTarget(null)}
               hasBackground={!!backgroundUrl}
               contextType={state.contextType}
+              sceneStates={state.canvasSettings.sceneStates}
+              activeSceneState={state.canvasSettings.activeSceneState}
+              onCreateState={state.createSceneState}
+              onActivateState={state.activateSceneState}
+              onDeleteState={state.deleteSceneState}
+              onRenameState={state.renameSceneState}
+              onSelectTemplate={handleSelectTemplate}
             />
             <SmartSuggestions
               sceneId={sceneId}
@@ -641,7 +907,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         )}
 
         {/* Canvas */}
-        <div className="scene-studio-canvas-container" ref={canvasContainerRef}>
+        <div className="scene-studio-canvas-container" ref={canvasContainerRef} onContextMenu={handleContextMenu}>
           <StudioCanvas
             ref={stageRef}
             canvasWidth={canvasWidth}
@@ -679,7 +945,53 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             containerRef={canvasContainerRef}
             depthMapUrl={proxiedDepthMapUrl}
             depthEffects={state.depthEffects}
+            brushSize={brushSize}
+            onMaskChange={setHasMask}
           />
+
+          {/* Erase tool controls — shown when erase tool is active */}
+          {state.activeTool === 'erase' && (() => {
+            const selObj = state.selectedIds.size === 1
+              ? state.objects.find((o) => state.selectedIds.has(o.id))
+              : null;
+            const eraseTarget = (selObj?.type === 'image' && selObj?.assetUrl) ? selObj.label || 'Selected Object' : 'Background';
+            return (
+            <div className="scene-studio-erase-controls">
+              <span className="scene-studio-erase-target">Erasing: {eraseTarget}</span>
+              <label>Brush: {brushSize}px</label>
+              <input
+                type="range"
+                min={5}
+                max={100}
+                value={brushSize}
+                onChange={(e) => setBrushSize(parseInt(e.target.value))}
+              />
+              <input
+                type="text"
+                className="scene-studio-erase-prompt"
+                placeholder="Fill with... (leave empty for auto)"
+                value={inpaintPrompt}
+                onChange={(e) => setInpaintPrompt(e.target.value)}
+              />
+              <button
+                className="scene-studio-btn primary"
+                disabled={!hasMask || isInpainting}
+                onClick={handleInpaint}
+              >
+                {isInpainting ? 'Removing...' : 'Remove'}
+              </button>
+              <button
+                className="scene-studio-btn ghost"
+                onClick={() => {
+                  if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
+                  setHasMask(false);
+                }}
+              >
+                Clear
+              </button>
+            </div>
+            );
+          })()}
 
           {/* Empty canvas guidance overlay — hide when background is already set */}
           {state.objects.length === 0 && !hasInteracted && !backgroundUrl && (
@@ -758,9 +1070,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onSetActiveAngle={state.setActiveAngleId}
             contextType={state.contextType}
             onReplaceAsset={(objectId) => {
-              // TODO: open library picker in replace mode
               handleChangeBackground();
             }}
+            onRemoveBackground={handleRemoveBackground}
+            isRemovingBg={isRemovingBg}
             backgroundSelected={backgroundSelected}
             backgroundUrl={backgroundUrl}
             depthMapUrl={proxiedDepthMapUrl}
@@ -769,9 +1082,75 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             depthError={depthError}
             onGenerateDepth={handleGenerateDepth}
             onUpdateDepthEffects={handleUpdateDepthEffects}
+            mood={mood}
+            timeOfDay={timeOfDay}
+            onChangeMood={handleMoodChange}
+            onChangeTimeOfDay={handleTimeOfDayChange}
+            onChangeBackground={handleChangeBackground}
+            onRegenerateVariation={handleRegenerateBackground}
+            isRegenerating={isRegeneratingBg}
           />
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="scene-studio-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button className="scene-studio-context-item" onClick={() => { state.copySelected(); setContextMenu(null); }}>
+            Copy <span className="scene-studio-context-shortcut">Ctrl+C</span>
+          </button>
+          <button className="scene-studio-context-item" onClick={() => { state.pasteClipboard(); setContextMenu(null); }}>
+            Paste <span className="scene-studio-context-shortcut">Ctrl+V</span>
+          </button>
+          <div className="scene-studio-context-divider" />
+          {state.selectedIds.size > 0 && (
+            <>
+              <button className="scene-studio-context-item" onClick={() => { state.selectedIds.forEach((id) => state.duplicateObject(id)); setContextMenu(null); }}>
+                Duplicate <span className="scene-studio-context-shortcut">Ctrl+D</span>
+              </button>
+              <button className="scene-studio-context-item danger" onClick={() => { state.selectedIds.forEach((id) => state.removeObject(id)); setContextMenu(null); }}>
+                Delete <span className="scene-studio-context-shortcut">Del</span>
+              </button>
+            </>
+          )}
+          <div className="scene-studio-context-divider" />
+          <button className="scene-studio-context-item" onClick={() => { state.selectObject(null); state.deselectAll(); setContextMenu(null); }}>
+            Deselect All <span className="scene-studio-context-shortcut">Esc</span>
+          </button>
+        </div>
+      )}
+
+      {/* Export Dialog */}
+      {showExportDialog && (
+        <div className="scene-studio-export-dialog" onClick={() => setShowExportDialog(false)}>
+          <div className="scene-studio-export-panel" onClick={(e) => e.stopPropagation()}>
+            <h3>Export Scene</h3>
+            <div className="scene-studio-export-option">
+              <label>Format</label>
+              <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)}>
+                <option value="png">PNG (lossless)</option>
+                <option value="jpg">JPG (smaller)</option>
+                <option value="webp">WebP (best)</option>
+              </select>
+            </div>
+            <div className="scene-studio-export-option">
+              <label>Scale</label>
+              <select value={exportScale} onChange={(e) => setExportScale(Number(e.target.value))}>
+                <option value={1}>1x ({canvasWidth}×{canvasHeight})</option>
+                <option value={2}>2x ({canvasWidth * 2}×{canvasHeight * 2})</option>
+                <option value={3}>3x ({canvasWidth * 3}×{canvasHeight * 3})</option>
+              </select>
+            </div>
+            <div className="scene-studio-export-actions">
+              <button className="scene-studio-btn ghost" onClick={() => setShowExportDialog(false)}>Cancel</button>
+              <button className="scene-studio-btn primary" onClick={doExport}>Export</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
