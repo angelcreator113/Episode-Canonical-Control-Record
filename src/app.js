@@ -353,81 +353,65 @@ if (process.env.NODE_ENV !== 'production') {
 // ============================================================================
 // AUTHENTICATION ROUTES
 // ============================================================================
-let authRoutes;
-authRoutes = trackRouteLoad('auth', () => require('./routes/auth'));
+const authRoutes = trackRouteLoad('auth', () => require('./routes/auth'));
 app.use('/api/v1/auth', authRoutes);
 
 // ============================================================================
 // API ROUTES
 // ============================================================================
-let episodeRoutes, thumbnailRoutes, metadataRoutes, processingRoutes;
-let filesRoutes, searchRoutes, jobsRoutes;
-let assetRoutes, compositionRoutes, templateRoutes;
-let sceneRoutes, wardrobeRoutes;
-
 // Characters routes
-let characterRoutes;
-characterRoutes = trackRouteLoad('characters', () => require('./routes/characters'));
+const characterRoutes = trackRouteLoad('characters', () => require('./routes/characters'));
 
-episodeRoutes = trackRouteLoad('episodes', () => require('./routes/episodes'));
+const episodeRoutes = trackRouteLoad('episodes', () => require('./routes/episodes'));
 
-thumbnailRoutes = trackRouteLoad('thumbnails', () => require('./routes/thumbnails'));
+const thumbnailRoutes = trackRouteLoad('thumbnails', () => require('./routes/thumbnails'));
 
-metadataRoutes = trackRouteLoad('metadata', () => require('./routes/metadata'));
+const metadataRoutes = trackRouteLoad('metadata', () => require('./routes/metadata'));
 
-processingRoutes = trackRouteLoad('processing', () => require('./routes/processing'));
+const processingRoutes = trackRouteLoad('processing', () => require('./routes/processing'));
 
 // Phase 2 routes (file storage, search, job management)
-filesRoutes = trackRouteLoad('files', () => require('./routes/files'));
+const filesRoutes = trackRouteLoad('files', () => require('./routes/files'));
 
-searchRoutes = trackRouteLoad('search', () => require('./routes/search'));
+const searchRoutes = trackRouteLoad('search', () => require('./routes/search'));
 
-jobsRoutes = trackRouteLoad('jobs', () => require('./routes/jobs'));
+const jobsRoutes = trackRouteLoad('jobs', () => require('./routes/jobs'));
 
 // Phase 2.5 routes (composite thumbnails)
-assetRoutes = trackRouteLoad('assets', () => require('./routes/assets'));
+const assetRoutes = trackRouteLoad('assets', () => require('./routes/assets'));
 
 // Asset roles routes
-let rolesRoutes;
-rolesRoutes = trackRouteLoad('roles', () => require('./routes/roles'));
+const rolesRoutes = trackRouteLoad('roles', () => require('./routes/roles'));
 
-compositionRoutes = trackRouteLoad('compositions', () => require('./routes/compositions'));
+const compositionRoutes = trackRouteLoad('compositions', () => require('./routes/compositions'));
 
-templateRoutes = trackRouteLoad('templates', () => require('./routes/templates'));
+const templateRoutes = trackRouteLoad('templates', () => require('./routes/templates'));
 
 // Scene routes
-sceneRoutes = trackRouteLoad('scenes', () => {
+const sceneRoutes = trackRouteLoad('scenes', () => {
   delete require.cache[require.resolve('./routes/scenes')];
   return require('./routes/scenes');
 });
 
 
-let sceneTemplateRoutes;
-sceneTemplateRoutes = trackRouteLoad('sceneTemplates', () => require('./routes/sceneTemplates'));
+const sceneTemplateRoutes = trackRouteLoad('sceneTemplates', () => require('./routes/sceneTemplates'));
 
-let sceneLibraryRoutes;
-sceneLibraryRoutes = trackRouteLoad('sceneLibrary', () => require('./routes/sceneLibrary'));
+const sceneLibraryRoutes = trackRouteLoad('sceneLibrary', () => require('./routes/sceneLibrary'));
 
 // Wardrobe routes
-wardrobeRoutes = trackRouteLoad('wardrobe', () => require('./routes/wardrobe'));
+const wardrobeRoutes = trackRouteLoad('wardrobe', () => require('./routes/wardrobe'));
 
-let wardrobeLibraryRoutes;
-wardrobeLibraryRoutes = trackRouteLoad('wardrobeLibrary', () => require('./routes/wardrobeLibrary'));
+const wardrobeLibraryRoutes = trackRouteLoad('wardrobeLibrary', () => require('./routes/wardrobeLibrary'));
 
-let outfitSetsRoutes;
-outfitSetsRoutes = trackRouteLoad('outfitSets', () => require('./routes/outfitSets'));
+const outfitSetsRoutes = trackRouteLoad('outfitSets', () => require('./routes/outfitSets'));
 
-let scriptsRoutes;
-scriptsRoutes = trackRouteLoad('scripts', () => require('./routes/scripts'));
+const scriptsRoutes = trackRouteLoad('scripts', () => require('./routes/scripts'));
 
-let footageRoutes;
-footageRoutes = trackRouteLoad('footage', () => require('./routes/footage'));
+const footageRoutes = trackRouteLoad('footage', () => require('./routes/footage'));
 
-let sceneLinksRoutes;
-sceneLinksRoutes = trackRouteLoad('sceneLinks', () => require('./routes/sceneLinks'));
+const sceneLinksRoutes = trackRouteLoad('sceneLinks', () => require('./routes/sceneLinks'));
 
-let scriptAnalysisRoutes;
-scriptAnalysisRoutes = trackRouteLoad('scriptAnalysis', () => require('./routes/scriptAnalysis'));
+const scriptAnalysisRoutes = trackRouteLoad('scriptAnalysis', () => require('./routes/scriptAnalysis'));
 
 // Phase 3A controllers (real-time notifications)
 let notificationController, activityController, presenceController, socketController;
