@@ -1111,18 +1111,33 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         ctx.drawImage(clipCanvas, 0, 0);
       }
 
-      // Convert to data URL
-      const resultDataUrl = canvas.toDataURL('image/png');
+      // Convert to blob and upload to S3 via asset API
+      const resultBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const formData = new FormData();
+      formData.append('file', resultBlob, `composite-${Date.now()}.png`);
+      formData.append('asset_type', 'image');
+      formData.append('label', 'composited-background');
 
-      // Update the background directly with the composited result
-      state.setSceneData((prev) => prev ? { ...prev, background_url: resultDataUrl } : prev);
+      let resultUrl;
+      try {
+        const uploadRes = await assetService.uploadAsset(formData);
+        resultUrl = uploadRes?.data?.data?.url || uploadRes?.data?.url;
+      } catch (uploadErr) {
+        console.warn('Asset upload failed, using data URL:', uploadErr.message);
+        resultUrl = canvas.toDataURL('image/png');
+      }
+
+      // Update background with the S3 URL (or data URL fallback)
+      state.setSceneData((prev) => prev ? { ...prev, background_url: resultUrl } : prev);
       state.setActiveTool('select');
 
-      // Persist the new background to the server in the background
-      try {
-        await sceneService.updateScene(state.contextId, { background_url: resultDataUrl });
-      } catch (saveErr) {
-        console.warn('Failed to persist composited background:', saveErr.message);
+      // Persist to DB
+      if (resultUrl && !resultUrl.startsWith('data:')) {
+        try {
+          await sceneService.updateScene(state.contextId, { background_url: resultUrl });
+        } catch (saveErr) {
+          console.warn('Failed to persist composited background:', saveErr.message);
+        }
       }
     } catch (err) {
       console.error('Replace with image error:', err);
