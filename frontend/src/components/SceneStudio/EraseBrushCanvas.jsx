@@ -141,14 +141,19 @@ export default function EraseBrushCanvas({
     const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
 
-    const x = (screenX - rect.left - panX) / zoom;
-    const y = (screenY - rect.top - panY) / zoom;
+    const safeZoom = zoom || 1;
+    const x = (screenX - rect.left - (panX || 0)) / safeZoom;
+    const y = (screenY - rect.top - (panY || 0)) / safeZoom;
     return { x, y };
   }, [zoom, panX, panY]);
 
   // Apply soft brush effect (gaussian blur on edges)
   const applySoftBrush = useCallback((ctx, x, y, size) => {
-    const gradient = ctx.createRadialGradient(x, y, 0, x, y, size / 2);
+    const r = (size || 1) / 2;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || r <= 0) {
+      return 'rgba(255, 255, 255, 1)';
+    }
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
     gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.8)');
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
