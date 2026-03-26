@@ -206,7 +206,7 @@ router.post('/:episodeId/script-suggestions', optionalAuth, async (req, res) => 
 router.post('/:templateId/generate', optionalAuth, async (req, res) => {
   try {
     const { templateId } = req.params;
-    const { episode_id, variables } = req.body;
+    const { episode_id: _episode_id, variables } = req.body;
 
     const template = await db.ScriptTemplate.findByPk(templateId);
 
@@ -293,7 +293,7 @@ router.post('/:scriptId/parse-scenes', optionalAuth, async (req, res) => {
 /**
  * AI suggestion generation helper
  */
-async function generateSmartSuggestion({ variable, episode, patterns, pastScripts }) {
+async function _generateSmartSuggestion({ variable, episode, patterns, pastScripts }) {
   // Context gathering
   const context = {
     episode_number: episode.episode_number,
@@ -307,11 +307,12 @@ async function generateSmartSuggestion({ variable, episode, patterns, pastScript
   let reasoning = '';
 
   switch (variable.key) {
-    case 'EMOTIONAL_FOCUS':
+    case 'EMOTIONAL_FOCUS': {
       const emotions = ['confidence', 'empowerment', 'self-discovery', 'transformation', 'freedom'];
       suggestedValue = emotions[Math.floor(Math.random() * emotions.length)];
       reasoning = `Based on ${patterns.emotional_tone} tone from past episodes`;
       break;
+    }
 
     case 'OUTFIT_INTENTION':
       if (context.wardrobe_items.length > 0) {
@@ -323,11 +324,12 @@ async function generateSmartSuggestion({ variable, episode, patterns, pastScript
       }
       break;
 
-    case 'SOCIAL_PROOF':
+    case 'SOCIAL_PROOF': {
       const engagement = 1000 + (episode.episode_number * 247);
       suggestedValue = `${engagement.toLocaleString()} besties already love this look`;
       reasoning = `Estimated based on episode ${episode.episode_number}`;
       break;
+    }
 
     default:
       if (variable.examples && variable.examples.length > 0) {

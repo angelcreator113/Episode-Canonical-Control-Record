@@ -17,13 +17,13 @@ const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
 
-let registrySync;
+let _registrySync;
 try { _registrySync = require('../../services/registrySync'); } catch { _registrySync = null; }
 
-let buildKnowledgeInjection, getTechContext;
+let _buildKnowledgeInjection, _getTechContext;
 try {
-  ({ buildKnowledgeInjection, getTechContext } = require('../franchiseBrainRoutes'));
-} catch { buildKnowledgeInjection = null; getTechContext = null; }
+  ({ buildKnowledgeInjection: _buildKnowledgeInjection, getTechContext: _getTechContext } = require('../franchiseBrainRoutes'));
+} catch { _buildKnowledgeInjection = null; _getTechContext = null; }
 
 let buildArcContext, buildArcContextPromptSection, updateArcTracking;
 try {
@@ -555,12 +555,12 @@ router.get('/relationship-map', optionalAuth, async (req, res) => {
     }
 
     // Helper: resolve a relationship target to a canonical node key
-    function resolveKey(target) {
+    const resolveKey = (target) => {
       if (!target) return null;
       if (nodeMap.has(target)) return target;
       const alias = aliasMap.get(target) || aliasMap.get(target.toLowerCase());
       return alias && nodeMap.has(alias) ? alias : null;
-    }
+    };
 
     const nodes = Array.from(nodeMap.values());
 
@@ -680,7 +680,7 @@ router.get('/relationship-map', optionalAuth, async (req, res) => {
 
 // ─── POST /generate-relationship-web — Claude enriches from manuscript ────────
 router.post('/generate-relationship-web', optionalAuth, async (req, res) => {
-  const { registryId } = req.body;
+  const { registryId: _registryId } = req.body;
   const db = req.app.locals.db || require('../../models');
 
   try {
@@ -1169,7 +1169,7 @@ This loop must be woven across the 50 stories — not as a single plot, but as a
 // ARC SYSTEM PROMPT BUILDER
 // Constructs the full system prompt for arc generation.
 // ═══════════════════════════════════════════════════════════════════════════════
-function buildArcSystemPrompt({ dna, profileSection, memoriesSection, worldSection }) {
+function _buildArcSystemPrompt({ dna, profileSection, memoriesSection, worldSection }) {
   const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
   const isBook1 = dna.world === 'book1' || dna.world === 'book-1';
 
@@ -1662,7 +1662,7 @@ async function loadCharacterRelationships(characterKey) {
     if (!charRows.length) return null;
 
     const charIds = charRows.map(r => r.id);
-    const charName = charRows[0].display_name;
+    const _charName = charRows[0].display_name;
 
     // Fetch all relationships where this character is either side
     const rels = await CharacterRelationship.findAll({

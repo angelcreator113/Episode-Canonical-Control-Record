@@ -288,7 +288,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
   if (!checkRateLimit(req, res)) return;
   const {
     handle, platform, vibe_sentence, series_id,
-    character_context, character_key, advanced_context,
+    character_context, character_key: _character_key, advanced_context,
     feed_layer, city, lala_relationship, career_pressure,
   } = req.body;
 
@@ -568,7 +568,7 @@ function computeFollowScore(characterKey, profileData, dynamicProfile) {
   }
   // Partial match — try splitting the category
   if (categoryScore === 0 && category) {
-    const words = category.split(/[\s\/,&]+/);
+    const words = category.split(/[\s/,&]+/);
     for (const word of words) {
       for (const [cat, weight] of Object.entries(charProfile.category_affinity)) {
         if (cat.includes(word) || word.includes(cat)) {
@@ -719,7 +719,7 @@ async function autoAssignAllFollowers(db, profileId, profileData) {
       if (!evaluation) continue;
 
       if (evaluation.probability >= charProfile.base_follow_threshold) {
-        const [follower, created] = await db.SocialProfileFollower.findOrCreate({
+        const [_follower, created] = await db.SocialProfileFollower.findOrCreate({
           where: { social_profile_id: profileId, character_key: charKey },
           defaults: {
             character_name: charProfile.name,
@@ -784,7 +784,7 @@ async function autoAssignAllFollowers(db, profileId, profileData) {
           if (!evaluation) continue;
 
           if (evaluation.probability >= charProfile.base_follow_threshold) {
-            const [follower, created] = await db.SocialProfileFollower.findOrCreate({
+            const [_follower, created] = await db.SocialProfileFollower.findOrCreate({
               where: { social_profile_id: profileId, character_key: dbp.character_key },
               defaults: {
                 character_name: dbp.character_name,
@@ -1778,7 +1778,7 @@ router.post('/follow-engine/run', optionalAuth, async (req, res) => {
 router.get('/follow-engine/stats', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileFollower) return res.json({ stats: {} });
-  const { fn, col, literal } = require('sequelize');
+  const { fn, col } = require('sequelize');
 
   try {
     // Total follows per character

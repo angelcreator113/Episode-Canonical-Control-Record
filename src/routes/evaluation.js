@@ -16,8 +16,8 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const {
   evaluate,
-  computeOutfitMatch,
-  computeAccessoryMatch,
+  computeOutfitMatch: _computeOutfitMatch,
+  computeAccessoryMatch: _computeAccessoryMatch,
   computeStatDeltas,
   applyDeltas,
   validateOverride,
@@ -25,8 +25,8 @@ const {
   DEFAULT_STATS,
   FORMULA_VERSION,
   OVERRIDE_REASONS,
-  TIERS,
-  TIER_ORDER,
+  TIERS: _TIERS,
+  TIER_ORDER: _TIER_ORDER,
 } = require('../utils/evaluationFormula');
 
 // Optional auth
@@ -668,7 +668,7 @@ router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
 router.post('/characters/:key/state/update', optionalAuth, async (req, res) => {
   try {
     const { key } = req.params;
-    const { show_id, coins, reputation, brand_trust, influence, stress, source = 'manual', notes } = req.body;
+    const { show_id, coins, reputation, brand_trust, influence, stress, source: _source = 'manual', notes } = req.body;
 
     if (!show_id) return res.status(400).json({ error: 'show_id is required' });
 

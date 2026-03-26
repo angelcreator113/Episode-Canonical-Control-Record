@@ -2493,7 +2493,7 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
     const character_count = Math.max(3, Math.min(20, parseInt(rawCount, 10) || 8));
 
     const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
-    const series_label = req.body.series_label || wCfg.series_label;
+    const _series_label = req.body.series_label || wCfg.series_label;
 
     const {
       city         = wCfg.defaults.city,
@@ -2646,14 +2646,13 @@ Return JSON only:
  * Takes the user-selected characters from the preview and commits them to DB + registry.
  */
 router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) => {
+  const { show_id, preview_id } = req.body;
   const t = await sequelize.transaction();
   try {
     let {
       characters = [],
       generation_notes = '',
-      show_id,
       world_tag = 'lalaverse',
-      preview_id,
     } = req.body;
 
     // If preview_id provided, restore from server-side cache (survives browser refresh)

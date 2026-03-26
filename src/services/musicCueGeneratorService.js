@@ -146,7 +146,7 @@ class MusicCueGeneratorService {
   /**
    * Infer Lala Formula beat from scene
    */
-  inferBeatFromScene(scene, episodeData) {
+  inferBeatFromScene(scene, _episodeData) {
     const sceneName = (scene.name || '').toLowerCase();
     const sceneMetadata = scene.metadata || {};
     
@@ -188,7 +188,7 @@ class MusicCueGeneratorService {
   /**
    * Map scene to music properties
    */
-  mapSceneToMusic(sceneName, sceneType, sceneBeat, scene) {
+  mapSceneToMusic(sceneName, sceneType, sceneBeat, _scene) {
     const beatMappings = {
       stream_open: {
         track_type: 'instrumental',

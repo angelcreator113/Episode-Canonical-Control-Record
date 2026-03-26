@@ -7,7 +7,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
-const anthropic = new Anthropic();
+const _anthropic = new Anthropic();
 
 const db = require('../../models');
 const { RegistryCharacter } = db;
