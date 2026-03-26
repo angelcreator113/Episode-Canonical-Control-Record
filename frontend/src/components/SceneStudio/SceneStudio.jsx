@@ -156,6 +156,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [isInpainting, setIsInpainting] = useState(false);
   const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [inpaintNotice, setInpaintNotice] = useState(null);
+  const [inpaintError, setInpaintError] = useState('');
   const [inpaintCooldownUntil, setInpaintCooldownUntil] = useState(0);
   const [inpaintCooldownSeconds, setInpaintCooldownSeconds] = useState(0);
   const [exportScale, setExportScale] = useState(2);
@@ -824,6 +825,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
     setIsInpainting(true);
     setInpaintNotice(null);
+    setInpaintError('');
     setSaveErrorMsg(null);
     try {
       const selectedImageExport = selectedObj?.type === 'image' && selectedObj?.assetUrl
@@ -888,16 +890,16 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           const waitSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
           setInpaintCooldownUntil(Date.now() + cooldownMs);
           const retryAfterFromServer = err?.response?.data?.retry_after;
-          setInpaintNotice(
+          setInpaintError(
             retryAfterFromServer
               ? `Too many requests. Try again in ${retryAfterFromServer}s.`
               : `Too many requests. Please wait ${waitSeconds}s and try again.`
           );
         } else {
-          setInpaintNotice(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+          setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
         }
       } else {
-        setInpaintNotice(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+        setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
       }
     } finally {
       setIsInpainting(false);
@@ -908,6 +910,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
     setHasMask(false);
     setInpaintNotice(null);
+    setInpaintError('');
   }, []);
 
   // ── Remove Background from selected object ──
@@ -1254,6 +1257,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   Clear Mask
                 </button>
               </div>
+              {inpaintError && (
+                <div className="scene-studio-erase-error">{inpaintError}</div>
+              )}
               {inpaintNotice && (
                 <div className="scene-studio-erase-notice">{inpaintNotice}</div>
               )}
