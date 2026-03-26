@@ -76,6 +76,13 @@ export const assetService = {
     return data;
   },
 
+  /**
+   * Check backend feature configuration flags.
+   */
+  getConfigCheck: async () => {
+    return api.get('/api/v1/assets/config/check');
+  },
+
   // ==================== LABELS ====================
 
   /**

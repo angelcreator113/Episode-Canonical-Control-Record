@@ -97,6 +97,7 @@ export default function InspectorPanel({
   onReplaceAsset,
   onRemoveBackground,
   isRemovingBg,
+  removeBgConfigured,
   backgroundSelected,
   backgroundUrl,
   depthMapUrl,
@@ -664,11 +665,14 @@ export default function InspectorPanel({
           <button
             className="scene-studio-btn primary"
             onClick={() => onRemoveBackground(obj.id, obj.assetId)}
-            disabled={isRemovingBg}
+            disabled={isRemovingBg || removeBgConfigured === false}
+            title={removeBgConfigured === false ? 'Background removal is not configured on the server' : ''}
             style={{ width: '100%', marginBottom: 6 }}
           >
             {isRemovingBg ? (
               <><Loader2 size={12} className="scene-studio-spin-icon" /> Removing...</>
+            ) : removeBgConfigured === false ? (
+              <><Scissors size={12} /> Remove Background (Unavailable)</>
             ) : (
               <><Scissors size={12} /> Remove Background</>
             )}

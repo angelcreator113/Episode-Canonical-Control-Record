@@ -154,6 +154,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   // Background removal state
   const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [isRemoveBgConfigured, setIsRemoveBgConfigured] = useState(null);
 
   // UX guidance state
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -214,6 +215,28 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
     load();
   }, [sceneId, sceneSetId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadFeatureConfig() {
+      try {
+        const assetService = (await import('../../services/assetService')).default;
+        const result = await assetService.getConfigCheck();
+        const status = String(result?.data?.data?.removeBgApiKey || '').toLowerCase();
+        if (alive) {
+          setIsRemoveBgConfigured(status === 'configured');
+        }
+      } catch {
+        if (alive) {
+          setIsRemoveBgConfigured(false);
+        }
+      }
+    }
+
+    loadFeatureConfig();
+    return () => { alive = false; };
+  }, []);
 
   // ── Save ──
 
@@ -849,6 +872,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── Remove Background from selected object ──
 
   const handleRemoveBackground = useCallback(async (objectId, assetId) => {
+    if (isRemoveBgConfigured === false) {
+      setSaveErrorMsg('Background removal service is not configured');
+      return;
+    }
     if (isRemovingBg || !assetId) return;
     setIsRemovingBg(true);
     setSaveErrorMsg(null);
@@ -876,7 +903,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     } finally {
       setIsRemovingBg(false);
     }
-  }, [isRemovingBg, state]);
+  }, [isRemovingBg, state, isRemoveBgConfigured]);
 
   const handleExport = useCallback(() => {
     setShowExportDialog(true);
@@ -1251,6 +1278,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             }}
             onRemoveBackground={handleRemoveBackground}
             isRemovingBg={isRemovingBg}
+            removeBgConfigured={isRemoveBgConfigured}
             backgroundSelected={backgroundSelected}
             backgroundUrl={backgroundUrl}
             depthMapUrl={proxiedDepthMapUrl}
