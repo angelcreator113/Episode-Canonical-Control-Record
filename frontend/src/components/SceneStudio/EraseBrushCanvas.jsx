@@ -490,33 +490,48 @@ export default function EraseBrushCanvas({
     saveToHistory();
   }, [canvasWidth, canvasHeight, saveToHistory]);
 
+  // Export a proper white-on-black mask from the transparent canvas
+  const exportMaskDataUrl = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+
+    // Create a separate canvas with black background + white strokes
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const ctx = exportCanvas.getContext('2d');
+
+    // Black background (= keep)
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+    // Draw the user's strokes on top (white on black)
+    ctx.drawImage(canvas, 0, 0);
+
+    return exportCanvas.toDataURL('image/png');
+  }, []);
+
   // Apply the mask — export as data URL and call onApply with options
   const handleApply = useCallback(() => {
     if (!hasStrokes || isProcessing) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const maskDataUrl = exportMaskDataUrl();
+    if (!maskDataUrl) return;
 
-    // Export the mask as PNG data URL
-    const maskDataUrl = canvas.toDataURL('image/png');
-    
-    // Call onApply with all options
     onApply(maskDataUrl, {
       prompt: customPrompt || undefined,
       strength,
       variationCount,
     });
-  }, [hasStrokes, isProcessing, onApply, customPrompt, strength, variationCount]);
+  }, [hasStrokes, isProcessing, onApply, customPrompt, strength, variationCount, exportMaskDataUrl]);
 
   // Replace with image handler
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file || !hasStrokes || isProcessing) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const maskDataUrl = canvas.toDataURL('image/png');
+    const maskDataUrl = exportMaskDataUrl();
+    if (!maskDataUrl) return;
     const reader = new FileReader();
     reader.onload = () => {
       onReplaceWithImage?.(maskDataUrl, {
@@ -528,22 +543,21 @@ export default function EraseBrushCanvas({
 
     // Reset file input so the same file can be selected again
     e.target.value = '';
-  }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg]);
+  }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg, exportMaskDataUrl]);
 
   // Replace with library asset handler
   const handleLibraryAssetSelect = useCallback((assetUrl) => {
     if (!hasStrokes || isProcessing || !assetUrl) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const maskDataUrl = exportMaskDataUrl();
+    if (!maskDataUrl) return;
 
-    const maskDataUrl = canvas.toDataURL('image/png');
     onReplaceWithImage?.(maskDataUrl, {
       imageDataUrl: assetUrl,
       removeBg,
     });
     setShowImageMenu(false);
-  }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg]);
+  }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg, exportMaskDataUrl]);
 
   // Fetch library images when menu opens
   useEffect(() => {
