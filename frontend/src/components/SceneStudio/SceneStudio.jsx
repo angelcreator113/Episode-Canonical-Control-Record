@@ -56,6 +56,40 @@ function getNetworkAwareApiError(err, fallbackMessage, actionLabel = 'Request') 
   return err?.message || fallbackMessage;
 }
 
+function getInpaintCooldownMs(err) {
+  if (err?.response?.status !== 429) return 0;
+
+  const headers = err?.response?.headers || {};
+  const retryAfterRaw = headers['retry-after'];
+  const retryAfterSec = Number.parseInt(String(retryAfterRaw || ''), 10);
+  if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
+    return retryAfterSec * 1000;
+  }
+
+  const resetRaw = headers['ratelimit-reset'] || headers['x-ratelimit-reset'];
+  const resetValue = Number.parseInt(String(resetRaw || ''), 10);
+  if (Number.isFinite(resetValue) && resetValue > 0) {
+    // Some servers emit epoch seconds, others emit seconds-until-reset.
+    if (resetValue > 1000000000) {
+      const untilMs = (resetValue * 1000) - Date.now();
+      if (untilMs > 0) return untilMs;
+    }
+    return resetValue * 1000;
+  }
+
+  const serverError = String(err?.response?.data?.error || '');
+  const minutesMatch = serverError.match(/resets\s+in\s+(\d+)\s+minutes?/i);
+  if (minutesMatch) {
+    return Number.parseInt(minutesMatch[1], 10) * 60 * 1000;
+  }
+
+  if (/in\s+progress/i.test(serverError)) {
+    return 8000;
+  }
+
+  return 20000;
+}
+
 const QUICK_ADD_OPTIONS = [
   { key: 'generate', label: 'Generate', icon: Sparkles },
   { key: 'upload', label: 'Upload', icon: Upload },
@@ -108,6 +142,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [maskExpand, setMaskExpand] = useState(3);
   const [maskFeather, setMaskFeather] = useState(1.1);
   const [isInpainting, setIsInpainting] = useState(false);
+  const [inpaintCooldownUntil, setInpaintCooldownUntil] = useState(0);
+  const [inpaintCooldownSeconds, setInpaintCooldownSeconds] = useState(0);
   const [exportScale, setExportScale] = useState(2);
   const [backgroundLayout, setBackgroundLayout] = useState(null);
 
@@ -120,6 +156,22 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [backgroundSelected, setBackgroundSelected] = useState(false);
   const prevObjectCountRef = useRef(0);
+
+  useEffect(() => {
+    if (!inpaintCooldownUntil || inpaintCooldownUntil <= Date.now()) {
+      setInpaintCooldownSeconds(0);
+      return undefined;
+    }
+
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((inpaintCooldownUntil - Date.now()) / 1000));
+      setInpaintCooldownSeconds(remaining);
+    };
+
+    updateRemaining();
+    const intervalId = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [inpaintCooldownUntil]);
 
   const canvasWidth = PLATFORM_PRESETS[platform]?.width || 1920;
   const canvasHeight = PLATFORM_PRESETS[platform]?.height || 1080;
@@ -689,6 +741,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const handleInpaint = useCallback(async () => {
     if (isInpainting || !state.contextId) return;
     if (!hasMask) return;
+    if (inpaintCooldownUntil > Date.now()) {
+      const seconds = Math.ceil((inpaintCooldownUntil - Date.now()) / 1000);
+      setSaveErrorMsg(`Inpaint is temporarily limited. Please wait ${seconds}s.`);
+      return;
+    }
 
     // Determine target: selected object's image or the scene background
     const selectedObj = state.selectedIds.size === 1
@@ -759,11 +816,23 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
     } catch (err) {
       console.error('Inpaint error:', err);
-      setSaveErrorMsg(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+      if (err?.response?.status === 429) {
+        const cooldownMs = getInpaintCooldownMs(err);
+        if (cooldownMs > 0) {
+          const waitSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
+          setInpaintCooldownUntil(Date.now() + cooldownMs);
+          const serverMsg = err?.response?.data?.error;
+          setSaveErrorMsg(serverMsg || `Inpaint is rate-limited. Wait ${waitSeconds}s before trying again.`);
+        } else {
+          setSaveErrorMsg(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+        }
+      } else {
+        setSaveErrorMsg(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+      }
     } finally {
       setIsInpainting(false);
     }
-  }, [isInpainting, state, backgroundUrl, hasMask, maskExpand, maskFeather]);
+  }, [isInpainting, state, backgroundUrl, hasMask, maskExpand, maskFeather, inpaintCooldownUntil]);
 
   // ── Remove Background from selected object ──
 
@@ -1070,10 +1139,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               <div className="scene-studio-erase-actions">
                 <button
                   className="scene-studio-btn primary"
-                  disabled={!hasMask || isInpainting}
+                  disabled={!hasMask || isInpainting || inpaintCooldownSeconds > 0}
                   onClick={handleInpaint}
                 >
-                  {isInpainting ? 'Removing...' : 'Remove'}
+                  {isInpainting ? 'Removing...' : (inpaintCooldownSeconds > 0 ? `Wait ${inpaintCooldownSeconds}s` : 'Remove')}
                 </button>
                 <button
                   className="scene-studio-btn ghost"
