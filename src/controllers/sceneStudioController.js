@@ -1144,7 +1144,16 @@ Example: [{"label": "Gold Mirror", "prompt": "ornate gold-framed mirror with sof
 exports.inpaint = async (req, res) => {
   try {
     const { id } = req.params;
-    const { image_url, mask_data_url, prompt, strength, mode: requestedMode } = req.body;
+    const {
+      image_url,
+      mask_data_url,
+      prompt,
+      strength,
+      mode: requestedMode,
+      strict_remove: strictRemove,
+      mask_expand: maskExpand,
+      mask_feather: maskFeather,
+    } = req.body;
 
     if (!mask_data_url) {
       return res.status(400).json({ success: false, error: 'mask_data_url is required — paint over the area to remove' });
@@ -1171,7 +1180,14 @@ exports.inpaint = async (req, res) => {
       mask_data_url,
       prompt || null,
       id,
-      { userId: req.user?.id || null, strength: strength || 0.85, mode }
+      {
+        userId: req.user?.id || null,
+        strength: strength || 0.85,
+        mode,
+        strictRemove: strictRemove === true || strictRemove === 'true',
+        maskExpand: Number.isFinite(Number(maskExpand)) ? Number(maskExpand) : undefined,
+        maskFeather: Number.isFinite(Number(maskFeather)) ? Number(maskFeather) : undefined,
+      }
     );
 
     // Only update scene background when we inpainted the background image itself.

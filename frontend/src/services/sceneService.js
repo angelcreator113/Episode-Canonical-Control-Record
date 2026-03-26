@@ -395,13 +395,25 @@ const sceneService = {
    * Inpaint (remove/fill) an area of the scene background
    * POST /api/v1/scenes/:id/inpaint
    */
-  inpaintScene: async (sceneId, { imageUrl, maskDataUrl, prompt, strength, mode } = {}) => {
+  inpaintScene: async (sceneId, {
+    imageUrl,
+    maskDataUrl,
+    prompt,
+    strength,
+    mode,
+    strictRemove,
+    maskExpand,
+    maskFeather,
+  } = {}) => {
     const { data } = await api.post(`/api/v1/scenes/${sceneId}/inpaint`, {
       image_url: imageUrl,
       mask_data_url: maskDataUrl,
       prompt,
       strength,
       mode,
+      strict_remove: strictRemove,
+      mask_expand: maskExpand,
+      mask_feather: maskFeather,
     });
     return data;
   },

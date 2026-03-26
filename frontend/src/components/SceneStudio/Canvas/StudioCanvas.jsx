@@ -187,6 +187,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
   depthMapUrl,
   depthEffects,
   brushSize,
+  maskMode,
   onMaskChange,
 }, forwardedRef) {
   const stageRef = useRef(null);
@@ -583,6 +584,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           brushSize={brushSize || 30}
           onMaskChange={onMaskChange}
           stageRef={stageRef}
+          mode={maskMode}
         />
       </Layer>
     </Stage>

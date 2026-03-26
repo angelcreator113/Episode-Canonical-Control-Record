@@ -103,6 +103,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // Erase / inpaint state
   const [hasMask, setHasMask] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
+  const [maskMode, setMaskMode] = useState('add');
+  const [maskExpand, setMaskExpand] = useState(2);
+  const [maskFeather, setMaskFeather] = useState(0.8);
   const [isInpainting, setIsInpainting] = useState(false);
   const [exportScale, setExportScale] = useState(2);
   const [backgroundLayout, setBackgroundLayout] = useState(null);
@@ -725,6 +728,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         imageUrl: targetUrl,
         maskDataUrl: preciseMaskDataUrl,
         mode: 'remove',
+        strictRemove: true,
+        maskExpand,
+        maskFeather,
       });
 
       if (result?.success && result.data?.inpainted_url) {
@@ -747,7 +753,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     } finally {
       setIsInpainting(false);
     }
-  }, [isInpainting, state, backgroundUrl, hasMask]);
+  }, [isInpainting, state, backgroundUrl, hasMask, maskExpand, maskFeather]);
 
   // ── Remove Background from selected object ──
 
@@ -989,6 +995,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             depthMapUrl={proxiedDepthMapUrl}
             depthEffects={state.depthEffects}
             brushSize={brushSize}
+            maskMode={maskMode}
             onMaskChange={setHasMask}
             onBackgroundLayoutChange={setBackgroundLayout}
           />
@@ -1009,6 +1016,40 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                 max={100}
                 value={brushSize}
                 onChange={(e) => setBrushSize(parseInt(e.target.value))}
+              />
+              <div className="scene-studio-segmented-control" role="group" aria-label="Mask mode">
+                <button
+                  type="button"
+                  className={`scene-studio-btn ghost ${maskMode === 'add' ? 'active' : ''}`}
+                  onClick={() => setMaskMode('add')}
+                >
+                  Add Mask
+                </button>
+                <button
+                  type="button"
+                  className={`scene-studio-btn ghost ${maskMode === 'subtract' ? 'active' : ''}`}
+                  onClick={() => setMaskMode('subtract')}
+                >
+                  Subtract Mask
+                </button>
+              </div>
+              <label>Mask Expand: {maskExpand}px</label>
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={maskExpand}
+                onChange={(e) => setMaskExpand(parseInt(e.target.value, 10))}
+              />
+              <label>Mask Feather: {maskFeather.toFixed(1)}px</label>
+              <input
+                type="range"
+                min={0}
+                max={3}
+                step={0.1}
+                value={maskFeather}
+                onChange={(e) => setMaskFeather(parseFloat(e.target.value))}
               />
               <button
                 className="scene-studio-btn primary"

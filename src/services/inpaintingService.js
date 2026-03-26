@@ -387,13 +387,16 @@ async function getRemoteImageDimensions(imageUrl) {
   return { width: metadata.width, height: metadata.height };
 }
 
-async function refineRemovalMask(maskBuffer) {
+async function refineRemovalMask(maskBuffer, options = {}) {
+  const expandPx = Math.max(0, Math.min(20, Math.round(options.expandPx ?? 2)));
+  const featherPx = Math.max(0, Math.min(5, Number(options.featherPx ?? 0.8)));
+
   // Slight dilation + feathering helps LaMa remove edge halos and leftover fragments.
   return sharp(maskBuffer)
     .greyscale()
     .threshold(16)
-    .dilate(2)
-    .blur(0.8)
+    .dilate(expandPx)
+    .blur(featherPx)
     .png()
     .toBuffer();
 }
@@ -402,7 +405,7 @@ async function refineRemovalMask(maskBuffer) {
  * Store a mask image (base64 data URL) to S3 for Replicate to access.
  */
 async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
-  const { forRemoval = false } = options;
+  const { forRemoval = false, maskExpand, maskFeather } = options;
   // Convert data:image/png;base64,... to buffer
   const base64Data = maskDataUrl.replace(/^data:image\/\w+;base64,/, '');
   let buffer = Buffer.from(base64Data, 'base64');
@@ -429,7 +432,10 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
   }
 
   if (forRemoval) {
-    buffer = await refineRemovalMask(buffer);
+    buffer = await refineRemovalMask(buffer, {
+      expandPx: maskExpand,
+      featherPx: maskFeather,
+    });
   }
 
   const ts = Date.now();
@@ -458,7 +464,7 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
  * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
-  const { userId, strength, mode, removalTier } = options;
+  const { userId, strength, mode, removalTier, strictRemove = false, maskExpand, maskFeather } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
   if (!rateCheck.allowed) throw new Error(rateCheck.reason);
@@ -472,15 +478,24 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     // Upload mask to S3 so Replicate can access it
     const maskUrl = await storeMask(maskDataUrl, entityId, imageUrl, {
       forRemoval: isRemoval,
+      maskExpand,
+      maskFeather,
     });
 
     let resultUrl;
 
     if (isRemoval) {
       const tier = (removalTier || (mode === 'remove-premium' ? 'premium' : REMOVAL_TIER_DEFAULT)).toLowerCase();
-      console.log(`[Inpainting] Mode: REMOVAL (tier=${tier})`);
+      console.log(`[Inpainting] Mode: REMOVAL (tier=${tier}, strict=${strictRemove})`);
 
-      if (tier === 'premium') {
+      if (strictRemove) {
+        try {
+          resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+        } catch (lamaError) {
+          console.warn('[Inpainting] Strict LaMa removal failed; falling back to SDXL:', lamaError.message);
+          resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
+        }
+      } else if (tier === 'premium') {
         try {
           resultUrl = await runFluxFillProRemoval(imageUrl, maskUrl);
         } catch (fluxError) {
