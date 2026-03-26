@@ -49,6 +49,24 @@ export default function EraseBrushCanvas({
   const [showImageMenu, setShowImageMenu] = useState(false);
   const [libraryImages, setLibraryImages] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
+
+  const normalizeLibraryAsset = useCallback((asset) => {
+    const thumbnailUrl = asset?.thumbnail_url
+      || asset?.metadata?.thumbnail_url
+      || asset?.s3_url_processed
+      || asset?.s3_url_raw
+      || null;
+    const assetUrl = asset?.url
+      || asset?.s3_url_processed
+      || asset?.s3_url_raw
+      || thumbnailUrl;
+
+    return {
+      ...asset,
+      url: assetUrl,
+      thumbnail_url: thumbnailUrl,
+    };
+  }, []);
   
   // Basic drawing state
   const [isDrawing, setIsDrawing] = useState(false);
@@ -590,7 +608,7 @@ export default function EraseBrushCanvas({
 
   // Fetch library images when menu opens
   useEffect(() => {
-    if (!showImageMenu || libraryImages.length > 0 || libraryLoading) return;
+    if (!showImageMenu || libraryImages.length > 0) return;
     let cancelled = false;
     setLibraryLoading(true);
     const params = { limit: 20 };
@@ -599,7 +617,10 @@ export default function EraseBrushCanvas({
     api.get('/api/v1/assets', { params })
       .then(({ data }) => {
         if (!cancelled) {
-          setLibraryImages(data.data || data.assets || []);
+          const assets = (data.data || data.assets || [])
+            .map(normalizeLibraryAsset)
+            .filter((asset) => asset.url || asset.thumbnail_url);
+          setLibraryImages(assets);
         }
       })
       .catch((err) => {

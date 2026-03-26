@@ -834,7 +834,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       : backgroundUrl;
 
     if (!targetUrl) {
-      setSaveErrorMsg('No image to erase from — select an image object or ensure background is set');
+      setInpaintNotice('No image to erase from. Select an image object or ensure background is set.');
       return;
     }
 
@@ -842,7 +842,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setIsInpainting(true);
     setInpaintNotice(null);
     setInpaintError('');
-    setSaveErrorMsg(null);
     try {
       const selectedImageExport = selectedObj?.type === 'image' && selectedObj?.assetUrl
         ? {
