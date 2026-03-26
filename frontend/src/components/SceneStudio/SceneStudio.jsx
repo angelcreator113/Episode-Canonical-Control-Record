@@ -1009,14 +1009,16 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             return (
             <div className="scene-studio-erase-controls">
               <span className="scene-studio-erase-target">Erasing: {eraseTarget}</span>
-              <label>Brush: {brushSize}px</label>
-              <input
-                type="range"
-                min={5}
-                max={100}
-                value={brushSize}
-                onChange={(e) => setBrushSize(parseInt(e.target.value))}
-              />
+              <div className="scene-studio-erase-range-field">
+                <label>Brush: {brushSize}px</label>
+                <input
+                  type="range"
+                  min={5}
+                  max={100}
+                  value={brushSize}
+                  onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                />
+              </div>
               <div className="scene-studio-segmented-control" role="group" aria-label="Mask mode">
                 <button
                   type="button"
@@ -1033,40 +1035,46 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   Subtract Mask
                 </button>
               </div>
-              <label>Mask Expand: {maskExpand}px</label>
-              <input
-                type="range"
-                min={0}
-                max={10}
-                step={1}
-                value={maskExpand}
-                onChange={(e) => setMaskExpand(parseInt(e.target.value, 10))}
-              />
-              <label>Mask Feather: {maskFeather.toFixed(1)}px</label>
-              <input
-                type="range"
-                min={0}
-                max={3}
-                step={0.1}
-                value={maskFeather}
-                onChange={(e) => setMaskFeather(parseFloat(e.target.value))}
-              />
-              <button
-                className="scene-studio-btn primary"
-                disabled={!hasMask || isInpainting}
-                onClick={handleInpaint}
-              >
-                {isInpainting ? 'Removing...' : 'Remove'}
-              </button>
-              <button
-                className="scene-studio-btn ghost"
-                onClick={() => {
-                  if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
-                  setHasMask(false);
-                }}
-              >
-                Clear
-              </button>
+              <div className="scene-studio-erase-range-field">
+                <label>Mask Expand: {maskExpand}px</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={maskExpand}
+                  onChange={(e) => setMaskExpand(parseInt(e.target.value, 10))}
+                />
+              </div>
+              <div className="scene-studio-erase-range-field">
+                <label>Mask Feather: {maskFeather.toFixed(1)}px</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={3}
+                  step={0.1}
+                  value={maskFeather}
+                  onChange={(e) => setMaskFeather(parseFloat(e.target.value))}
+                />
+              </div>
+              <div className="scene-studio-erase-actions">
+                <button
+                  className="scene-studio-btn primary"
+                  disabled={!hasMask || isInpainting}
+                  onClick={handleInpaint}
+                >
+                  {isInpainting ? 'Removing...' : 'Remove'}
+                </button>
+                <button
+                  className="scene-studio-btn ghost"
+                  onClick={() => {
+                    if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
+                    setHasMask(false);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
             </div>
             );
           })()}
