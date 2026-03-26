@@ -1245,11 +1245,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                 className="scene-studio-erase-prompt"
                 value={inpaintPrompt}
                 onChange={(e) => setInpaintPrompt(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                 placeholder="Describe replacement (leave empty to just remove)..."
                 disabled={isInpainting}
               />
               <div className="scene-studio-erase-actions">
                 <button
+                  type="button"
                   className="scene-studio-btn primary"
                   disabled={!hasMask || isInpainting || inpaintCooldownSeconds > 0}
                   onClick={handleInpaint}
@@ -1261,6 +1263,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                       : (inpaintPrompt.trim() ? 'Apply Inpaint' : 'Remove')}
                 </button>
                 <button
+                  type="button"
                   className="scene-studio-btn ghost"
                   onClick={handleClearMask}
                   disabled={isInpainting || !hasMask}
