@@ -2,6 +2,7 @@ import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
+import EraseBrushCanvas from './EraseBrushCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
 import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
@@ -919,6 +920,78 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setInpaintError('');
   }, []);
 
+  // ── EraseBrushCanvas apply handler ──
+  // Bridges from EraseBrushCanvas's onApply(maskDataUrl, { prompt, strength }) to the API.
+  const handleEraseApply = useCallback(async (maskDataUrl, options = {}) => {
+    if (isInpaintingRef.current) return;
+    if (!state.contextId) return;
+    if (inpaintCooldownRef.current > Date.now()) {
+      const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
+      setInpaintError(`Too many requests. Please wait ${seconds}s and try again.`);
+      return;
+    }
+
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    if (!targetUrl) {
+      setInpaintError('No image to erase from — select an image object or ensure background is set');
+      return;
+    }
+
+    isInpaintingRef.current = true;
+    setIsInpainting(true);
+    setInpaintNotice(null);
+    setInpaintError('');
+    try {
+      const trimmedPrompt = (options.prompt || '').trim();
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: targetUrl,
+        maskDataUrl,
+        prompt: trimmedPrompt || undefined,
+        mode: trimmedPrompt ? 'fill' : 'remove',
+        strength: options.strength,
+        strictRemove: !trimmedPrompt,
+        maskExpand,
+        maskFeather,
+      });
+
+      if (result?.success && result.data?.inpainted_url) {
+        if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
+          state.setObjects((prev) => prev.map((o) =>
+            o.id === selectedObj.id ? { ...o, assetUrl: result.data.inpainted_url } : o
+          ));
+        } else {
+          state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        }
+        // Exit erase mode on success
+        state.setActiveTool('select');
+      }
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        console.warn('Inpaint rate-limited (429):', err?.response?.data?.error || err.message);
+        const cooldownMs = getInpaintCooldownMs(err);
+        if (cooldownMs > 0) {
+          const cooldownUntil = Date.now() + cooldownMs;
+          inpaintCooldownRef.current = cooldownUntil;
+          setInpaintCooldownUntil(cooldownUntil);
+        }
+        const serverMsg = err?.response?.data?.error;
+        setInpaintError(serverMsg || 'Too many requests. Please wait and try again.');
+      } else {
+        console.error('Inpaint error:', err);
+        setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+      }
+    } finally {
+      isInpaintingRef.current = false;
+      setIsInpainting(false);
+    }
+  }, [state, backgroundUrl, maskExpand, maskFeather]);
+
   // ── Remove Background from selected object ──
 
   const handleRemoveBackground = useCallback(async (objectId, assetId) => {
@@ -1178,111 +1251,23 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onBackgroundLayoutChange={handleBackgroundLayoutChange}
           />
 
-          {/* Erase tool controls — shown when erase tool is active */}
-          {state.activeTool === 'erase' && (() => {
-            const selObj = state.selectedIds.size === 1
-              ? state.objects.find((o) => state.selectedIds.has(o.id))
-              : null;
-            const eraseTarget = (selObj?.type === 'image' && selObj?.assetUrl) ? selObj.label || 'Selected Object' : 'Background';
-            return (
-            <div className="scene-studio-erase-controls">
-              <span className="scene-studio-erase-target">Erasing: {eraseTarget}</span>
-              <div className="scene-studio-erase-range-field">
-                <label>Brush: {brushSize}px</label>
-                <input
-                  type="range"
-                  min={5}
-                  max={100}
-                  value={brushSize}
-                  onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                  disabled={isInpainting}
-                />
-              </div>
-              <div className="scene-studio-segmented-control" role="group" aria-label="Mask mode">
-                <button
-                  type="button"
-                  className={`scene-studio-btn ghost ${maskMode === 'add' ? 'active' : ''}`}
-                  onClick={() => setMaskMode('add')}
-                  disabled={isInpainting}
-                >
-                  Add Mask
-                </button>
-                <button
-                  type="button"
-                  className={`scene-studio-btn ghost ${maskMode === 'subtract' ? 'active' : ''}`}
-                  onClick={() => setMaskMode('subtract')}
-                  disabled={isInpainting}
-                >
-                  Subtract Mask
-                </button>
-              </div>
-              <div className="scene-studio-erase-range-field">
-                <label>Mask Expand: {maskExpand}px</label>
-                <input
-                  type="range"
-                  min={0}
-                  max={10}
-                  step={1}
-                  value={maskExpand}
-                  onChange={(e) => setMaskExpand(parseInt(e.target.value, 10))}
-                  disabled={isInpainting}
-                />
-              </div>
-              <div className="scene-studio-erase-range-field">
-                <label>Mask Feather: {maskFeather.toFixed(1)}px</label>
-                <input
-                  type="range"
-                  min={0}
-                  max={3}
-                  step={0.1}
-                  value={maskFeather}
-                  onChange={(e) => setMaskFeather(parseFloat(e.target.value))}
-                  disabled={isInpainting}
-                />
-              </div>
-              <input
-                type="text"
-                className="scene-studio-erase-prompt"
-                value={inpaintPrompt}
-                onChange={(e) => setInpaintPrompt(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                placeholder="Describe replacement (leave empty to just remove)..."
-                disabled={isInpainting}
-              />
-              <div className="scene-studio-erase-actions">
-                <button
-                  type="button"
-                  className="scene-studio-btn primary"
-                  disabled={!hasMask || isInpainting || inpaintCooldownSeconds > 0}
-                  onClick={handleInpaint}
-                >
-                  {isInpainting
-                    ? (inpaintPrompt.trim() ? 'Processing...' : 'Removing...')
-                    : inpaintCooldownSeconds > 0
-                      ? `Wait ${inpaintCooldownSeconds}s`
-                      : (inpaintPrompt.trim() ? 'Apply Inpaint' : 'Remove')}
-                </button>
-                <button
-                  type="button"
-                  className="scene-studio-btn ghost"
-                  onClick={handleClearMask}
-                  disabled={isInpainting || !hasMask}
-                >
-                  Clear Mask
-                </button>
-              </div>
-              {isInpainting && (
-                <div className="scene-studio-erase-notice">Generating edit… This can take a few seconds.</div>
-              )}
-              {inpaintError && (
-                <div className="scene-studio-erase-error">{inpaintError}</div>
-              )}
-              {!isInpainting && inpaintNotice && (
-                <div className="scene-studio-erase-notice">{inpaintNotice}</div>
-              )}
-            </div>
-            );
-          })()}
+          {/* Advanced erase tool overlay */}
+          {state.activeTool === 'erase' && (
+            <EraseBrushCanvas
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+              zoom={state.zoom}
+              panX={state.panX}
+              panY={state.panY}
+              backgroundUrl={backgroundUrl}
+              onApply={handleEraseApply}
+              onCancel={() => state.setActiveTool('select')}
+              isProcessing={isInpainting}
+            />
+          )}
+          {inpaintError && (
+            <div className="scene-studio-erase-error">{inpaintError}</div>
+          )}
 
           {/* Empty canvas guidance overlay — hide when background is already set */}
           {state.objects.length === 0 && !hasInteracted && !backgroundUrl && (
