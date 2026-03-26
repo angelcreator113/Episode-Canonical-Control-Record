@@ -857,7 +857,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       const preciseMaskDataUrl = MaskLayer._exportMask(exportOptions);
       if (!preciseMaskDataUrl) {
+        isInpaintingRef.current = false;
         setIsInpainting(false);
+        setInpaintError('Failed to export mask. Please try painting again.');
         return;
       }
 
@@ -1197,6 +1199,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   max={100}
                   value={brushSize}
                   onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                  disabled={isInpainting}
                 />
               </div>
               <div className="scene-studio-segmented-control" role="group" aria-label="Mask mode">
@@ -1204,6 +1207,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   type="button"
                   className={`scene-studio-btn ghost ${maskMode === 'add' ? 'active' : ''}`}
                   onClick={() => setMaskMode('add')}
+                  disabled={isInpainting}
                 >
                   Add Mask
                 </button>
@@ -1211,6 +1215,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   type="button"
                   className={`scene-studio-btn ghost ${maskMode === 'subtract' ? 'active' : ''}`}
                   onClick={() => setMaskMode('subtract')}
+                  disabled={isInpainting}
                 >
                   Subtract Mask
                 </button>
@@ -1224,6 +1229,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   step={1}
                   value={maskExpand}
                   onChange={(e) => setMaskExpand(parseInt(e.target.value, 10))}
+                  disabled={isInpainting}
                 />
               </div>
               <div className="scene-studio-erase-range-field">
@@ -1235,6 +1241,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   step={0.1}
                   value={maskFeather}
                   onChange={(e) => setMaskFeather(parseFloat(e.target.value))}
+                  disabled={isInpainting}
                 />
               </div>
               <input
@@ -1265,10 +1272,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   Clear Mask
                 </button>
               </div>
+              {isInpainting && (
+                <div className="scene-studio-erase-notice">Generating edit… This can take a few seconds.</div>
+              )}
               {inpaintError && (
                 <div className="scene-studio-erase-error">{inpaintError}</div>
               )}
-              {inpaintNotice && (
+              {!isInpainting && inpaintNotice && (
                 <div className="scene-studio-erase-notice">{inpaintNotice}</div>
               )}
             </div>
