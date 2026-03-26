@@ -35,8 +35,8 @@ try {
 const db = require('../models');
 const {
   RegistryCharacter, CharacterRegistry, CharacterRelationship,
-  StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter,
-  CharacterTherapyProfile, Universe, BookSeries,
+  StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter: _StorytellerChapter,
+  CharacterTherapyProfile, Universe: _Universe, BookSeries: _BookSeries,
 } = db;
 const { buildUniverseContext } = require('../utils/universeContext');
 

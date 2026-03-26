@@ -64,7 +64,7 @@ let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset, Layer,
 let SceneFootageLink;
 let UserDecision, DecisionPattern, DecisionLog;
 let ShowConfig, ScriptTemplate, ScriptLearningProfile, ScriptEditHistory, ScriptSuggestion;
-let EditMap, CharacterProfile, RawFootage;
+let EditMap, CharacterProfile;
 let Character; // Characters model
 let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration

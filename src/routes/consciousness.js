@@ -83,7 +83,7 @@ const CONSCIOUSNESS_FIELDS = {
 };
 
 // ─── Lala's inherited consciousness fields ────────────────────────────────────
-const LALA_CONSCIOUSNESS_FIELDS = {
+const _LALA_CONSCIOUSNESS_FIELDS = {
   inherited_instincts: {
     label: 'Inherited Instincts',
     description: 'The specific ways JustAWoman\'s experience surfaces in Lala as unexplained certainty.',
@@ -293,7 +293,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
 
 // ─── POST /generate-lala ──────────────────────────────────────────────────────
 router.post('/generate-lala', optionalAuth, async (req, res) => {
-  const { lala_character, justawoman_consciousness, justawoman_psychology } = req.body;
+  const { lala_character: _lala_character, justawoman_consciousness, justawoman_psychology } = req.body;
 
   try {
     const Anthropic = require('@anthropic-ai/sdk');
@@ -483,7 +483,7 @@ Return ONLY valid JSON:
 // ─── POST /interview ──────────────────────────────────────────────────────────
 router.post('/interview', optionalAuth, async (req, res) => {
   try {
-    const { character, psychology } = req.body;
+    const { character, psychology: _psychology } = req.body;
 
     if (!character) return res.status(400).json({ error: 'character required' });
 

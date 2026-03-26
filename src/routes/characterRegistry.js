@@ -964,7 +964,7 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
 
     const created = [];
     for (const c of seedCharacters) {
-      const [record, wasCreated] = await RegistryCharacter.findOrCreate({
+      const [record, _wasCreated] = await RegistryCharacter.findOrCreate({
         where: { registry_id: registry.id, character_key: c.character_key },
         defaults: { ...sectionDefaults, ...c, registry_id: registry.id },
       });
@@ -1190,7 +1190,7 @@ router.delete('/characters/:id/portrait', async (req, res) => {
     // Delete file from disk if it exists
     if (character.portrait_url) {
       const filePath = path.join(__dirname, '../..', character.portrait_url);
-      try { fs.unlinkSync(filePath); } catch {}
+      try { fs.unlinkSync(filePath); } catch { /* intentionally empty */ }
     }
 
     character.portrait_url = null;
@@ -1679,7 +1679,7 @@ ${config.schema}`,
     });
 
     const raw = extractAIText(response);
-    const jsonMatch = raw.match(/[\[{][\s\S]*[\]}]/);
+    const jsonMatch = raw.match(/[[{][\s\S]*[\]}]/);
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse AI response' });
     const generated = JSON.parse(jsonMatch[0]);
 
