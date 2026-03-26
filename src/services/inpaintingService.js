@@ -20,6 +20,7 @@ const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const REPLICATE_INPAINT_VERSION = process.env.REPLICATE_INPAINT_VERSION || 'a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7';
 const REPLICATE_LAMA_VERSION = process.env.REPLICATE_LAMA_VERSION || 'cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72';
 const REPLICATE_FLUX_FILL_PRO_VERSION = process.env.REPLICATE_FLUX_FILL_PRO_VERSION || '';
+const REPLICATE_FLUX_FILL_PRO_MODEL = process.env.REPLICATE_FLUX_FILL_PRO_MODEL || 'black-forest-labs/flux-fill-pro';
 const REMOVAL_TIER_DEFAULT = process.env.REMOVAL_TIER_DEFAULT || 'standard';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -206,13 +207,9 @@ async function runSdxlRemoval(imageUrl, maskUrl) {
 
 /**
  * Premium removal tier using FLUX Fill Pro.
- * Requires REPLICATE_FLUX_FILL_PRO_VERSION to be configured.
+ * Uses version hash when configured, otherwise falls back to model slug run.
  */
 async function runFluxFillProRemoval(imageUrl, maskUrl) {
-  if (!REPLICATE_FLUX_FILL_PRO_VERSION) {
-    throw new Error('REPLICATE_FLUX_FILL_PRO_VERSION not configured');
-  }
-
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
@@ -225,6 +222,31 @@ async function runFluxFillProRemoval(imageUrl, maskUrl) {
     'Maintain exact scene perspective, lighting, and texture continuity.',
     'Photorealistic and artifact-free.',
   ].join(' ');
+
+  if (!REPLICATE_FLUX_FILL_PRO_VERSION) {
+    try {
+      const output = await replicate.run(REPLICATE_FLUX_FILL_PRO_MODEL, {
+        input: {
+          image: imageUrl,
+          mask: maskUrl,
+          prompt,
+        },
+      });
+
+      const outputUrl = extractReplicateOutputUrl(output);
+      if (!outputUrl) {
+        throw new Error('FLUX Fill Pro model run returned no output URL');
+      }
+
+      console.log('[Inpainting] FLUX Fill Pro removal completed (model slug run)');
+      return outputUrl;
+    } catch (err) {
+      const status = err.response?.status || err.status;
+      const detail = err.response?.data?.detail || err.message;
+      console.error(`[Inpainting] FLUX Fill Pro model-run error (${status}):`, detail);
+      throw new Error(`FLUX Fill Pro model-run error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    }
+  }
 
   let prediction;
   try {
