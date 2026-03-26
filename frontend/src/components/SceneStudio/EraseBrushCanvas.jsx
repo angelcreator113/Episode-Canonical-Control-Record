@@ -3,7 +3,7 @@ import {
   Eraser, Check, X, Loader, Minus, Plus,
   Undo2, Redo2, Circle, Hexagon, Eye, EyeOff,
   Sliders, Sparkles, History, ChevronDown, ChevronUp,
-  ImagePlus
+  ImagePlus, Upload
 } from 'lucide-react';
 
 /**
@@ -31,6 +31,7 @@ export default function EraseBrushCanvas({
   onReplaceWithImage,
   onCancel,
   isProcessing,
+  sceneId,
   // New props for enhanced features
   variations = [],
   onSelectVariation,
@@ -41,6 +42,9 @@ export default function EraseBrushCanvas({
   const overlayRef = useRef(null);
   const fileInputRef = useRef(null);
   const [removeBg, setRemoveBg] = useState(false);
+  const [showImageMenu, setShowImageMenu] = useState(false);
+  const [libraryImages, setLibraryImages] = useState([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
   
   // Basic drawing state
   const [isDrawing, setIsDrawing] = useState(false);
@@ -490,6 +494,38 @@ export default function EraseBrushCanvas({
     e.target.value = '';
   }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg]);
 
+  // Replace with library asset handler
+  const handleLibraryAssetSelect = useCallback((assetUrl) => {
+    if (!hasStrokes || isProcessing || !assetUrl) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const maskDataUrl = canvas.toDataURL('image/png');
+    onReplaceWithImage?.(maskDataUrl, {
+      imageDataUrl: assetUrl,
+      removeBg,
+    });
+    setShowImageMenu(false);
+  }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg]);
+
+  // Fetch library images when menu opens
+  useEffect(() => {
+    if (!showImageMenu || libraryImages.length > 0 || libraryLoading) return;
+    let cancelled = false;
+    setLibraryLoading(true);
+    fetch(`/api/v1/assets?type=image&limit=20${sceneId ? `&scene_id=${sceneId}` : ''}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled) {
+          setLibraryImages(json.data || json.assets || []);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLibraryLoading(false); });
+    return () => { cancelled = true; };
+  }, [showImageMenu, libraryImages.length, libraryLoading, sceneId]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -721,17 +757,53 @@ export default function EraseBrushCanvas({
           </div>
 
           <div className="erase-toolbar-group erase-toolbar-actions">
-            <button
-              type="button"
-              className="erase-brush-btn secondary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!hasStrokes || isProcessing}
-              title="Replace masked area with an uploaded image"
-            >
-              <ImagePlus size={14} />
-              <span className="erase-btn-label">Use Image</span>
-            </button>
-            <label className="erase-remove-bg-toggle" title="Remove background from uploaded image before compositing">
+            <div className="erase-image-picker">
+              <button
+                type="button"
+                className="erase-brush-btn secondary"
+                onClick={() => setShowImageMenu(!showImageMenu)}
+                disabled={!hasStrokes || isProcessing}
+                title="Replace masked area with an image"
+              >
+                <ImagePlus size={14} />
+                <span className="erase-btn-label">Use Image</span>
+                <ChevronUp size={10} />
+              </button>
+              {showImageMenu && (
+                <div className="erase-image-menu">
+                  <button
+                    type="button"
+                    className="erase-image-menu-item"
+                    onClick={() => { fileInputRef.current?.click(); setShowImageMenu(false); }}
+                  >
+                    <Upload size={14} />
+                    Upload File
+                  </button>
+                  <div className="erase-image-menu-divider" />
+                  <div className="erase-image-menu-label">From Library</div>
+                  {libraryLoading ? (
+                    <div className="erase-image-menu-loading">Loading...</div>
+                  ) : libraryImages.length > 0 ? (
+                    <div className="erase-image-menu-grid">
+                      {libraryImages.filter((a) => a.url || a.thumbnail_url).slice(0, 12).map((asset) => (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          className="erase-image-menu-thumb"
+                          onClick={() => handleLibraryAssetSelect(asset.url || asset.thumbnail_url)}
+                          title={asset.label || asset.name || 'Library asset'}
+                        >
+                          <img src={asset.thumbnail_url || asset.url} alt={asset.label || 'Asset'} />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="erase-image-menu-loading">No images in library</div>
+                  )}
+                </div>
+              )}
+            </div>
+            <label className="erase-remove-bg-toggle" title="Remove background from replacement image before compositing">
               <input type="checkbox" checked={removeBg} onChange={(e) => setRemoveBg(e.target.checked)} disabled={isProcessing} />
               <span className="erase-remove-bg-label">Remove BG</span>
             </label>

@@ -2965,6 +2965,100 @@
   display: inline;
 }
 
+/* ── Image picker menu (opens upward from Use Image) ── */
+
+.erase-image-picker {
+  position: relative;
+}
+
+.erase-image-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: #FAF7F0;
+  border: 1px solid #d6d0c4;
+  border-radius: 8px;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  min-width: 220px;
+  max-width: 320px;
+  z-index: 60;
+}
+
+.erase-image-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #2C2C2C;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.erase-image-menu-item:hover {
+  background: #f0ece4;
+}
+
+.erase-image-menu-divider {
+  height: 1px;
+  background: #e8e2d6;
+  margin: 4px 0;
+}
+
+.erase-image-menu-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+}
+
+.erase-image-menu-loading {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #999;
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.erase-image-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.erase-image-menu-thumb {
+  border: 2px solid transparent;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  background: none;
+  padding: 0;
+  aspect-ratio: 1;
+  transition: border-color 0.15s;
+}
+
+.erase-image-menu-thumb:hover {
+  border-color: #B8962E;
+}
+
+.erase-image-menu-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 /* ── Action buttons ── */
 
 .erase-brush-btn {

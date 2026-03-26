@@ -1347,6 +1347,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onReplaceWithImage={handleReplaceWithImage}
               onCancel={() => state.setActiveTool('select')}
               isProcessing={isInpainting}
+              sceneId={sceneId || sceneSetId}
             />
           )}
           {inpaintError && (
