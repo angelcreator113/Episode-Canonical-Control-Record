@@ -34,6 +34,8 @@ export default function EraseBrushCanvas({
   onCancel,
   isProcessing,
   sceneId,
+  showId,
+  episodeId,
   // New props for enhanced features
   variations = [],
   onSelectVariation,
@@ -591,8 +593,9 @@ export default function EraseBrushCanvas({
     if (!showImageMenu || libraryImages.length > 0 || libraryLoading) return;
     let cancelled = false;
     setLibraryLoading(true);
-    const params = { asset_type: 'image', limit: 20 };
-    if (sceneId) params.scene_id = sceneId;
+    const params = { limit: 20 };
+    if (showId) params.show_id = showId;
+    if (episodeId) params.episode_id = episodeId;
     api.get('/api/v1/assets', { params })
       .then(({ data }) => {
         if (!cancelled) {
@@ -605,7 +608,7 @@ export default function EraseBrushCanvas({
       })
       .finally(() => { if (!cancelled) setLibraryLoading(false); });
     return () => { cancelled = true; };
-  }, [showImageMenu, libraryImages.length, libraryLoading, sceneId]);
+  }, [showImageMenu, libraryImages.length, libraryLoading, showId, episodeId]);
 
   // Keyboard shortcuts
   useEffect(() => {

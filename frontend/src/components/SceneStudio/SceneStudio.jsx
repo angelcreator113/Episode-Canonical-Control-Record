@@ -1383,6 +1383,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onCancel={() => state.setActiveTool('select')}
               isProcessing={isInpainting}
               sceneId={sceneId || sceneSetId}
+              showId={showId}
+              episodeId={episodeId}
             />
           )}
           {inpaintError && (
