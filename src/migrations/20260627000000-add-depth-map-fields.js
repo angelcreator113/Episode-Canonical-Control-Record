@@ -12,8 +12,13 @@ module.exports = {
     const transaction = await queryInterface.sequelize.transaction();
 
     try {
-      // Check if columns already exist (idempotent)
-      const tableDesc = await queryInterface.describeTable('scene_angles');
+      // Check if table/columns already exist (idempotent)
+      const tableDesc = await queryInterface.describeTable('scene_angles').catch(() => null);
+      if (!tableDesc) {
+        console.log('[Migration] scene_angles table does not exist — skipping');
+        await transaction.commit();
+        return;
+      }
 
       if (!tableDesc.depth_map_url) {
         await queryInterface.addColumn('scene_angles', 'depth_map_url', {
