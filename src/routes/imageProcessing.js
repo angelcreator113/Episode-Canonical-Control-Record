@@ -59,8 +59,11 @@ router.post('/:id/remove-background', optionalAuth, async (req, res) => {
 
     console.log('🎨 Starting background removal for asset:', id);
 
-    // Validate API key exists before marking this asset as processing
-    if (!process.env.REMOVE_BG_API_KEY) {
+    const removeBgApiKey = process.env.REMOVE_BG_API_KEY || process.env.REMOVEBG_API_KEY;
+    const hasRunwayFallback = !!process.env.RUNWAY_ML_API_KEY;
+
+    // Validate at least one provider is available before marking this asset as processing
+    if (!removeBgApiKey && !hasRunwayFallback) {
       return res.status(503).json({
         status: 'ERROR',
         message: 'Background removal service is not configured',
@@ -73,30 +76,46 @@ router.post('/:id/remove-background', optionalAuth, async (req, res) => {
       processing_status: 'processing_bg_removal',
     });
 
-    // Call Remove.bg API
-    const formData = new FormData();
     const sourceUrl = asset.s3_url_raw || asset.s3_url;
-    formData.append('image_url', sourceUrl);
-    formData.append('size', 'auto');
+    let imageBuffer;
+    let provider = 'remove.bg';
 
-    console.log('📤 Calling Remove.bg API with URL:', sourceUrl.substring(0, 60));
+    if (removeBgApiKey) {
+      // Call Remove.bg API (primary)
+      const formData = new FormData();
+      formData.append('image_url', sourceUrl);
+      formData.append('size', 'auto');
 
-    const removeBgResponse = await fetch('https://api.remove.bg/v1.0/removebg', {
-      method: 'POST',
-      headers: {
-        'X-Api-Key': process.env.REMOVE_BG_API_KEY,
-      },
-      body: formData,
-    });
+      console.log('📤 Calling Remove.bg API with URL:', sourceUrl.substring(0, 60));
 
-    if (!removeBgResponse.ok) {
-      const error = await removeBgResponse.text();
-      console.error('❌ Remove.bg API error:', error);
-      throw new Error(`Remove.bg API error: ${error}`);
+      const removeBgResponse = await fetch('https://api.remove.bg/v1.0/removebg', {
+        method: 'POST',
+        headers: {
+          'X-Api-Key': removeBgApiKey,
+        },
+        body: formData,
+      });
+
+      if (!removeBgResponse.ok) {
+        const error = await removeBgResponse.text();
+        console.error('❌ Remove.bg API error:', error);
+        throw new Error(`Remove.bg API error: ${error}`);
+      }
+
+      imageBuffer = await removeBgResponse.buffer();
+    } else {
+      // Fallback: Runway remove-background
+      console.log('📤 Remove.bg key missing; using Runway fallback for background removal');
+      const sourceResponse = await fetch(sourceUrl);
+      if (!sourceResponse.ok) {
+        throw new Error(`Failed to fetch source image for Runway: HTTP ${sourceResponse.status}`);
+      }
+      const sourceBuffer = await sourceResponse.buffer();
+      const runwayService = require('../services/RunwayMLService');
+      imageBuffer = await runwayService.removeBackground(sourceBuffer);
+      provider = 'runway_ml';
     }
 
-    // Get processed image buffer
-    const imageBuffer = await removeBgResponse.buffer();
     console.log('✅ Received processed image, size:', imageBuffer.length, 'bytes');
 
     // Upload to S3
@@ -114,7 +133,7 @@ router.post('/:id/remove-background', optionalAuth, async (req, res) => {
       processing_metadata: {
         ...asset.processing_metadata,
         background_removal: {
-          provider: 'remove.bg',
+          provider,
           timestamp: new Date().toISOString(),
           status: 'completed',
           original_url: sourceUrl,
@@ -154,7 +173,10 @@ router.post('/:id/remove-background', optionalAuth, async (req, res) => {
       }
     }
 
-    const isRemoveBgConfigError = error?.message === 'REMOVE_BG_API_KEY not configured';
+    const isRemoveBgConfigError =
+      error?.message === 'REMOVE_BG_API_KEY not configured'
+      || error?.message === 'REMOVEBG_API_KEY not configured'
+      || error?.message === 'Runway ML API key not configured. Set RUNWAY_ML_API_KEY in .env';
 
     res.status(isRemoveBgConfigError ? 503 : 500).json({
       status: 'ERROR',
