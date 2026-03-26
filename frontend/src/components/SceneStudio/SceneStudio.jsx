@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
-import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
+import { Plus, Image, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
 import EraseBrushCanvas from './EraseBrushCanvas';
@@ -1380,32 +1380,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             </div>
           )}
 
-          {/* Quick Add floating button */}
-          <div className="scene-studio-quick-add-wrapper" onMouseDown={(e) => e.stopPropagation()}>
-            <button
-              className="scene-studio-quick-add-btn"
-              onClick={() => setQuickAddOpen(!quickAddOpen)}
-            >
-              <Plus size={16} /> Add
-            </button>
-            {quickAddOpen && (
-              <div className="scene-studio-quick-add-popup">
-                {QUICK_ADD_OPTIONS.map((opt) => {
-                  const Icon = opt.icon;
-                  return (
-                    <button
-                      key={opt.key}
-                      className="scene-studio-quick-add-option"
-                      onClick={() => handleQuickAdd(opt.key)}
-                    >
-                      <Icon size={14} />
-                      <span>{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Right Panel */}
@@ -1453,6 +1427,100 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           />
         </div>
       </div>
+
+      {/* ── Bottom Action Bar ── */}
+      {state.activeTool !== 'erase' && (
+        <div className="scene-studio-action-bar">
+          {/* Add menu */}
+          <div className="scene-studio-action-bar-group">
+            <div className="scene-studio-action-bar-add" onMouseDown={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="scene-studio-action-btn accent"
+                onClick={() => setQuickAddOpen(!quickAddOpen)}
+              >
+                <Plus size={14} />
+                <span>Add</span>
+                <ChevronUp size={10} />
+              </button>
+              {quickAddOpen && (
+                <div className="scene-studio-action-bar-popup">
+                  {QUICK_ADD_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        className="scene-studio-action-bar-popup-item"
+                        onClick={() => handleQuickAdd(opt.key)}
+                      >
+                        <Icon size={14} />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="scene-studio-action-bar-divider" />
+
+          {/* Editing actions */}
+          <div className="scene-studio-action-bar-group">
+            {(() => {
+              const selObj = state.selectedIds.size === 1
+                ? state.objects.find((o) => state.selectedIds.has(o.id))
+                : null;
+              const canRemoveBg = selObj?.type === 'image' && selObj?.assetUrl && selObj?._asset?.id;
+              return (
+                <>
+                  <button
+                    type="button"
+                    className="scene-studio-action-btn"
+                    onClick={() => {
+                      if (canRemoveBg) {
+                        handleRemoveBackground(selObj.id, selObj._asset.id);
+                      }
+                    }}
+                    disabled={!canRemoveBg || isRemovingBg}
+                    title={canRemoveBg ? 'Remove background from selected image' : 'Select an image object first'}
+                  >
+                    <Scissors size={14} />
+                    <span>{isRemovingBg ? 'Removing...' : 'Remove BG'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="scene-studio-action-btn"
+                    onClick={() => state.setActiveTool('erase')}
+                    disabled={!backgroundUrl && state.objects.length === 0}
+                    title="Erase areas and fill with AI or an image"
+                  >
+                    <Eraser size={14} />
+                    <span>Erase & Fill</span>
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="scene-studio-action-bar-divider" />
+
+          {/* Undo */}
+          <div className="scene-studio-action-bar-group">
+            <button
+              type="button"
+              className="scene-studio-action-btn"
+              onClick={() => state.undo?.()}
+              disabled={!state.canUndo}
+              title="Undo last action (Ctrl+Z)"
+            >
+              <Undo2 size={14} />
+              <span>Undo</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Context Menu */}
       {contextMenu && (
