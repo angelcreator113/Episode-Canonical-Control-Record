@@ -1,6 +1,20 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { Stage, Layer, Rect, Transformer, Image as KonvaImage, Line } from 'react-konva';
+import React, {
+  useRef,
+  useEffect,
+  useCallback,
+  useState,
+  useImperativeHandle,
+} from 'react';
+import {
+  Stage,
+  Layer,
+  Rect,
+  Transformer,
+  Image as KonvaImage,
+  Line,
+} from 'react-konva';
 import useImage from 'use-image';
+
 import ImageObject from './objects/ImageObject';
 import VideoObject from './objects/VideoObject';
 import TextObject from './objects/TextObject';
@@ -12,7 +26,7 @@ import MaskLayer from './MaskLayer';
  * StudioCanvas — Main Konva canvas for Scene Studio.
  *
  * Renders all scene objects with transform handles, handles selection,
- * zoom/pan, and background image.
+ * zoom/pan, mask painting, and background image/parallax.
  */
 
 const OBJECT_RENDERERS = {
@@ -49,7 +63,14 @@ function getCoverLayout(imageWidth, imageHeight, canvasWidth, canvasHeight) {
   };
 }
 
-function BackgroundImage({ src, width, height, isSelected, onClick, onLayoutChange }) {
+function BackgroundImage({
+  src,
+  width,
+  height,
+  isSelected,
+  onClick,
+  onLayoutChange,
+}) {
   // Load without crossOrigin to avoid CORS failures on S3 images
   const [image] = useImage(src);
   const [displayImage, setDisplayImage] = useState(null);
@@ -61,48 +82,57 @@ function BackgroundImage({ src, width, height, isSelected, onClick, onLayoutChan
   }, [image]);
 
   const activeImage = displayImage || image;
-  if (!activeImage) return null;
 
-  const layout = getCoverLayout(activeImage.width, activeImage.height, width, height);
+  const imgW = activeImage ? activeImage.width : 0;
+  const imgH = activeImage ? activeImage.height : 0;
+  const layout = activeImage ? getCoverLayout(imgW, imgH, width, height) : null;
+
+  const layoutX = layout ? layout.x : 0;
+  const layoutY = layout ? layout.y : 0;
+  const layoutW = layout ? layout.width : 0;
+  const layoutH = layout ? layout.height : 0;
 
   useEffect(() => {
-    if (!onLayoutChange) return undefined;
+    if (!onLayoutChange || !activeImage || !layout) return;
 
     onLayoutChange({
-      sourceWidth: activeImage.width,
-      sourceHeight: activeImage.height,
-      drawX: layout.x,
-      drawY: layout.y,
-      drawWidth: layout.width,
-      drawHeight: layout.height,
+      sourceWidth: imgW,
+      sourceHeight: imgH,
+      drawX: layoutX,
+      drawY: layoutY,
+      drawWidth: layoutW,
+      drawHeight: layoutH,
     });
-
-    return undefined;
-  }, [activeImage.height, activeImage.width, layout.height, layout.width, layout.x, layout.y, onLayoutChange]);
+  }, [imgW, imgH, layoutX, layoutY, layoutW, layoutH, onLayoutChange, activeImage]);
 
   useEffect(() => {
-    if (!onLayoutChange) return undefined;
-    return () => onLayoutChange(null);
+    return () => {
+      onLayoutChange?.(null);
+    };
   }, [onLayoutChange]);
+
+  if (!activeImage || !layout) return null;
+
 
   return (
     <>
       <KonvaImage
         image={activeImage}
-        x={layout.x}
-        y={layout.y}
-        width={layout.width}
-        height={layout.height}
-        listening={true}
+        x={layoutX}
+        y={layoutY}
+        width={layoutW}
+        height={layoutH}
+        listening
         onClick={(e) => {
           e.cancelBubble = true;
-          if (onClick) onClick();
+          onClick?.();
         }}
         onTap={(e) => {
           e.cancelBubble = true;
-          if (onClick) onClick();
+          onClick?.();
         }}
       />
+
       {isSelected && (
         <Rect
           x={0}
@@ -119,7 +149,7 @@ function BackgroundImage({ src, width, height, isSelected, onClick, onLayoutChan
   );
 }
 
-function SnapGuides({ guides, canvasWidth, canvasHeight }) {
+function SnapGuides({ guides, canvasWidth, canvasHeight, stroke = '#FFD700' }) {
   if (!guides || guides.length === 0) return null;
 
   return guides.map((guide, i) => {
@@ -128,18 +158,19 @@ function SnapGuides({ guides, canvasWidth, canvasHeight }) {
         <Line
           key={`guide-${i}`}
           points={[guide.position, 0, guide.position, canvasHeight]}
-          stroke="#FFD700"
+          stroke={stroke}
           strokeWidth={1}
           dash={[4, 4]}
           listening={false}
         />
       );
     }
+
     return (
       <Line
         key={`guide-${i}`}
         points={[0, guide.position, canvasWidth, guide.position]}
-        stroke="#FFD700"
+        stroke={stroke}
         strokeWidth={1}
         dash={[4, 4]}
         listening={false}
@@ -148,122 +179,170 @@ function SnapGuides({ guides, canvasWidth, canvasHeight }) {
   });
 }
 
-const StudioCanvas = React.forwardRef(function StudioCanvas({
-  canvasWidth,
-  canvasHeight,
-  backgroundUrl,
-  objects,
-  selectedIds,
-  activeTool,
-  zoom,
-  panX,
-  panY,
-  snapGuides,
-  onSelect,
-  onDeselect,
-  onUpdateObject,
-  onDragEnd,
-  onTransformEnd,
-  onZoom,
-  onPan,
-  gridVisible,
-  containerRef,
-  editingTextId,
-  onClearEditingText,
-  backgroundSelected,
-  onBackgroundSelect,
-  onBackgroundLayoutChange,
-  depthMapUrl,
-  depthEffects,
-  brushSize,
-  onMaskChange,
-}, forwardedRef) {
-  const stageRef = useRef(null);
+const StudioCanvas = React.forwardRef(function StudioCanvas(props, forwardedRef) {
+  const {
+    canvasWidth,
+    canvasHeight,
+    backgroundUrl,
+    objects,
+    selectedIds,
+    activeTool,
+    zoom,
+    panX,
+    panY,
+    snapGuides,
+    onSelect,
+    onDeselect,
+    onUpdateObject,
+    onDragEnd,
+    onTransformEnd,
+    onZoom,
+    onPan,
+    gridVisible,
+    containerRef,
+    editingTextId,
+    onClearEditingText,
+    backgroundSelected,
+    onBackgroundSelect,
+    onBackgroundLayoutChange,
+    depthMapUrl,
+    depthEffects,
+    brushSize,
+    maskMode,
+    onMaskChange,
+  } = props;
 
-  // Expose stage ref to parent for export
-  React.useImperativeHandle(forwardedRef, () => stageRef.current, []);
+  const stageRef = useRef(null);
   const transformerRef = useRef(null);
+  const maskLayerRef = useRef(null);
+
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [mousePosition, setMousePosition] = useState({ x: 0.5, y: 0.5 });
 
-  // Drag selection box
-  const [selectionBox, setSelectionBox] = useState(null); // { x1, y1, x2, y2 }
+  const [selectionBox, setSelectionBox] = useState(null);
   const isSelecting = useRef(false);
 
-  // Snap guides
-  const [activeGuides, setActiveGuides] = useState([]);
+  const [localDragGuides, setLocalDragGuides] = useState([]);
 
-  const parallaxEnabled = depthEffects?.parallaxEnabled && depthMapUrl;
+  const parallaxEnabled = Boolean(depthEffects?.parallaxEnabled && depthMapUrl);
 
-  // Mouse tracking for parallax
-  const handleMouseMove = useCallback((e) => {
-    if (!parallaxEnabled) return;
-    const stage = stageRef.current;
-    if (!stage) return;
-    const pointer = stage.getPointerPosition();
-    if (pointer) {
+  useImperativeHandle(
+    forwardedRef,
+    () => ({
+      getStage: () => stageRef.current,
+      exportImage: (pixelRatio = 2) => {
+        const stage = stageRef.current;
+        if (!stage) return null;
+        return stage.toDataURL({ pixelRatio });
+      },
+      exportMask: (options) => maskLayerRef.current?.exportMask(options),
+      clearMask: () => maskLayerRef.current?.clearMask(),
+      hasMask: () => maskLayerRef.current?.hasMask?.() || false,
+    }),
+    []
+  );
+
+  const handleMouseMove = useCallback(
+    (e) => {
+      if (!parallaxEnabled) return;
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      const pointer = stage.getPointerPosition();
+      if (!pointer || !stageSize.width || !stageSize.height) return;
+
       setMousePosition({
         x: pointer.x / stageSize.width,
         y: pointer.y / stageSize.height,
       });
-    }
-  }, [parallaxEnabled, stageSize.width, stageSize.height]);
+    },
+    [parallaxEnabled, stageSize.width, stageSize.height]
+  );
 
-  // Fit stage to container
   useEffect(() => {
     const updateSize = () => {
-      if (containerRef?.current) {
-        const { clientWidth, clientHeight } = containerRef.current;
-        setStageSize({ width: clientWidth, height: clientHeight });
-      }
+      if (!containerRef?.current) return;
+      const { clientWidth, clientHeight } = containerRef.current;
+      setStageSize({
+        width: clientWidth || 800,
+        height: clientHeight || 600,
+      });
     };
+
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
   }, [containerRef]);
 
-  // Update Transformer when selection changes
   useEffect(() => {
     const transformer = transformerRef.current;
     const stage = stageRef.current;
     if (!transformer || !stage) return;
 
     const selectedNodes = [];
-    if (selectedIds.size > 0) {
+    if (selectedIds?.size > 0) {
       selectedIds.forEach((id) => {
         const node = stage.findOne(`#${id}`);
         if (node) selectedNodes.push(node);
       });
     }
+
     transformer.nodes(selectedNodes);
-    transformer.getLayer().batchDraw();
+    transformer.getLayer()?.batchDraw();
   }, [selectedIds, objects]);
 
-  // Handle click on stage background (deselect) — skip when erase tool active
-  const handleStageClick = useCallback((e) => {
-    if (activeTool === 'erase') return; // Don't deselect while erasing
-    if (e.target === e.target.getStage() || e.target.name() === 'canvas-bg') {
-      if (onDeselect) onDeselect();
-    }
-  }, [onDeselect, activeTool]);
+  const handleStageClick = useCallback(
+    (e) => {
+      if (activeTool === 'erase') return;
 
-  // Drag selection box — click and drag on empty canvas to select multiple objects
-  const handleStageMouseDown = useCallback((e) => {
-    if (activeTool !== 'select') return;
-    // Only start selection on stage/bg click, not on objects
-    if (e.target !== e.target.getStage() && e.target.name() !== 'canvas-bg') return;
-    const stage = e.target.getStage();
-    const pos = stage.getAbsoluteTransform().copy().invert().point(stage.getPointerPosition());
-    isSelecting.current = true;
-    setSelectionBox({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y });
-  }, [activeTool]);
+      const isStage = e.target === e.target.getStage();
+      const isCanvasBg = e.target.name && e.target.name() === 'canvas-bg';
 
-  const handleStageMouseMove2 = useCallback((e) => {
-    if (!isSelecting.current || !selectionBox) return;
-    const stage = e.target.getStage();
-    const pos = stage.getAbsoluteTransform().copy().invert().point(stage.getPointerPosition());
-    setSelectionBox((prev) => prev ? { ...prev, x2: pos.x, y2: pos.y } : null);
-  }, [selectionBox]);
+      if (isStage || isCanvasBg) {
+        onDeselect?.();
+      }
+    },
+    [onDeselect, activeTool]
+  );
+
+  const getCanvasPoint = useCallback((stage) => {
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return null;
+    const transform = stage.getAbsoluteTransform().copy().invert();
+    return transform.point(pointer);
+  }, []);
+
+  const handleStageMouseDown = useCallback(
+    (e) => {
+      if (activeTool !== 'select') return;
+
+      const isStage = e.target === e.target.getStage();
+      const isCanvasBg = e.target.name && e.target.name() === 'canvas-bg';
+      if (!isStage && !isCanvasBg) return;
+
+      const stage = e.target.getStage();
+      const pos = getCanvasPoint(stage);
+      if (!pos) return;
+
+      isSelecting.current = true;
+      setSelectionBox({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y });
+    },
+    [activeTool, getCanvasPoint]
+  );
+
+  const handleStageMouseMoveSelection = useCallback(
+    (e) => {
+      if (!isSelecting.current || !selectionBox) return;
+      const stage = e.target.getStage();
+      const pos = getCanvasPoint(stage);
+      if (!pos) return;
+
+      setSelectionBox((prev) =>
+        prev ? { ...prev, x2: pos.x, y2: pos.y } : null
+      );
+    },
+    [selectionBox, getCanvasPoint]
+  );
 
   const handleStageMouseUp = useCallback(() => {
     if (!isSelecting.current || !selectionBox) {
@@ -271,125 +350,151 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
       setSelectionBox(null);
       return;
     }
+
     isSelecting.current = false;
-    // Find objects within the selection box
+
     const x1 = Math.min(selectionBox.x1, selectionBox.x2);
     const y1 = Math.min(selectionBox.y1, selectionBox.y2);
     const x2 = Math.max(selectionBox.x1, selectionBox.x2);
     const y2 = Math.max(selectionBox.y1, selectionBox.y2);
+
     const boxW = x2 - x1;
     const boxH = y2 - y1;
 
-    // Only select if box is big enough (avoid click-as-select)
     if (boxW > 10 && boxH > 10 && onSelect) {
       objects.forEach((obj) => {
         const ox = obj.x || 0;
         const oy = obj.y || 0;
         const ow = obj.width || 0;
         const oh = obj.height || 0;
-        // Check if object intersects selection box
-        if (ox < x2 && ox + ow > x1 && oy < y2 && oy + oh > y1) {
-          onSelect(obj.id, true); // true = add to selection
+
+        const intersects =
+          ox < x2 && ox + ow > x1 && oy < y2 && oy + oh > y1;
+
+        if (intersects) {
+          onSelect(obj.id, true);
         }
       });
     }
+
     setSelectionBox(null);
   }, [selectionBox, objects, onSelect]);
 
-  // Compute snap guides during drag
   const SNAP_THRESHOLD = 8;
-  const handleObjectDragMove = useCallback((e) => {
-    const node = e.target;
-    const guides = [];
-    const nodeX = node.x();
-    const nodeY = node.y();
-    const nodeW = node.width() * Math.abs(node.scaleX());
-    const nodeH = node.height() * Math.abs(node.scaleY());
-    const nodeCX = nodeX + nodeW / 2;
-    const nodeCY = nodeY + nodeH / 2;
 
-    // Canvas center guides
-    const canvasCX = canvasWidth / 2;
-    const canvasCY = canvasHeight / 2;
-    if (Math.abs(nodeCX - canvasCX) < SNAP_THRESHOLD) {
-      guides.push({ orientation: 'vertical', position: canvasCX });
-      node.x(canvasCX - nodeW / 2);
-    }
-    if (Math.abs(nodeCY - canvasCY) < SNAP_THRESHOLD) {
-      guides.push({ orientation: 'horizontal', position: canvasCY });
-      node.y(canvasCY - nodeH / 2);
-    }
-    // Canvas edge guides
-    if (Math.abs(nodeX) < SNAP_THRESHOLD) {
-      guides.push({ orientation: 'vertical', position: 0 });
-      node.x(0);
-    }
-    if (Math.abs(nodeY) < SNAP_THRESHOLD) {
-      guides.push({ orientation: 'horizontal', position: 0 });
-      node.y(0);
-    }
-    if (Math.abs(nodeX + nodeW - canvasWidth) < SNAP_THRESHOLD) {
-      guides.push({ orientation: 'vertical', position: canvasWidth });
-      node.x(canvasWidth - nodeW);
-    }
-    if (Math.abs(nodeY + nodeH - canvasHeight) < SNAP_THRESHOLD) {
-      guides.push({ orientation: 'horizontal', position: canvasHeight });
-      node.y(canvasHeight - nodeH);
-    }
+  const handleObjectDragMove = useCallback(
+    (e) => {
+      const node = e.target;
+      const guides = [];
 
-    setActiveGuides(guides);
-  }, [canvasWidth, canvasHeight]);
+      const nodeX = node.x();
+      const nodeY = node.y();
+      const nodeW = node.width() * Math.abs(node.scaleX());
+      const nodeH = node.height() * Math.abs(node.scaleY());
+      const nodeCX = nodeX + nodeW / 2;
+      const nodeCY = nodeY + nodeH / 2;
 
-  const handleObjectDragEnd = useCallback((id, changes) => {
-    setActiveGuides([]); // Clear guides
-    if (onDragEnd) onDragEnd(id, changes);
-  }, [onDragEnd]);
+      const canvasCX = canvasWidth / 2;
+      const canvasCY = canvasHeight / 2;
 
-  // Handle object selection
-  const handleObjectSelect = useCallback((objId) => (e) => {
-    e.cancelBubble = true;
-    if (onSelect) {
+      if (Math.abs(nodeCX - canvasCX) < SNAP_THRESHOLD) {
+        guides.push({ orientation: 'vertical', position: canvasCX });
+        node.x(canvasCX - nodeW / 2);
+      }
+
+      if (Math.abs(nodeCY - canvasCY) < SNAP_THRESHOLD) {
+        guides.push({ orientation: 'horizontal', position: canvasCY });
+        node.y(canvasCY - nodeH / 2);
+      }
+
+      if (Math.abs(nodeX) < SNAP_THRESHOLD) {
+        guides.push({ orientation: 'vertical', position: 0 });
+        node.x(0);
+      }
+
+      if (Math.abs(nodeY) < SNAP_THRESHOLD) {
+        guides.push({ orientation: 'horizontal', position: 0 });
+        node.y(0);
+      }
+
+      if (Math.abs(nodeX + nodeW - canvasWidth) < SNAP_THRESHOLD) {
+        guides.push({ orientation: 'vertical', position: canvasWidth });
+        node.x(canvasWidth - nodeW);
+      }
+
+      if (Math.abs(nodeY + nodeH - canvasHeight) < SNAP_THRESHOLD) {
+        guides.push({ orientation: 'horizontal', position: canvasHeight });
+        node.y(canvasHeight - nodeH);
+      }
+
+      setLocalDragGuides(guides);
+    },
+    [canvasWidth, canvasHeight]
+  );
+
+  const handleObjectDragEnd = useCallback(
+    (id, changes) => {
+      setLocalDragGuides([]);
+      onDragEnd?.(id, changes);
+    },
+    [onDragEnd]
+  );
+
+  const handleObjectSelect = useCallback(
+    (objId) => (e) => {
+      e.cancelBubble = true;
       const shiftKey = e.evt?.shiftKey || false;
-      onSelect(objId, shiftKey);
-    }
-  }, [onSelect]);
+      onSelect?.(objId, shiftKey);
+    },
+    [onSelect]
+  );
 
-  // Wheel zoom
-  const handleWheel = useCallback((e) => {
-    e.evt.preventDefault();
-    if (!onZoom) return;
+  const handleWheel = useCallback(
+    (e) => {
+      e.evt.preventDefault();
+      if (!onZoom) return;
 
-    const scaleBy = 1.08;
-    const stage = stageRef.current;
-    const pointer = stage.getPointerPosition();
-    const oldScale = zoom;
-    const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-    const clampedScale = Math.max(0.1, Math.min(5, newScale));
+      const stage = stageRef.current;
+      if (!stage) return;
 
-    // Zoom toward pointer
-    const mousePointTo = {
-      x: (pointer.x - panX) / oldScale,
-      y: (pointer.y - panY) / oldScale,
-    };
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
 
-    onZoom(clampedScale, {
-      x: pointer.x - mousePointTo.x * clampedScale,
-      y: pointer.y - mousePointTo.y * clampedScale,
-    });
-  }, [zoom, panX, panY, onZoom]);
+      const scaleBy = 1.08;
+      const oldScale = zoom;
+      const newScale =
+        e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+      const clampedScale = Math.max(0.1, Math.min(5, newScale));
 
-  // Sort objects by layer_order for rendering
-  const sortedObjects = [...objects].sort((a, b) => (a.layerOrder || 0) - (b.layerOrder || 0));
+      const mousePointTo = {
+        x: (pointer.x - panX) / oldScale,
+        y: (pointer.y - panY) / oldScale,
+      };
 
-  // Only show objects that are visible or selected
+      onZoom(clampedScale, {
+        x: pointer.x - mousePointTo.x * clampedScale,
+        y: pointer.y - mousePointTo.y * clampedScale,
+      });
+    },
+    [zoom, panX, panY, onZoom]
+  );
+
+  const sortedObjects = [...objects].sort(
+    (a, b) => (a.layerOrder || 0) - (b.layerOrder || 0)
+  );
+
   const visibleObjects = sortedObjects.filter(
     (obj) => obj.isVisible || selectedIds.has(obj.id)
   );
 
-  // Filter to only active variants (if part of a variant group), but keep selected objects
   const renderableObjects = visibleObjects.filter(
     (obj) => !obj.variantGroupId || obj.isActiveVariant || selectedIds.has(obj.id)
   );
+
+  const allGuides = [
+    ...(snapGuides || []),
+    ...localDragGuides,
+  ];
 
   return (
     <Stage
@@ -403,20 +508,28 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
       onClick={handleStageClick}
       onTap={handleStageClick}
       onWheel={handleWheel}
-      onMouseMove={(e) => { handleMouseMove(e); handleStageMouseMove2(e); }}
+      onMouseMove={(e) => {
+        handleMouseMove(e);
+        handleStageMouseMoveSelection(e);
+      }}
       onMouseDown={handleStageMouseDown}
       onMouseUp={handleStageMouseUp}
       draggable={activeTool === 'hand'}
       onDragEnd={(e) => {
-        if (activeTool === 'hand' && onPan) {
-          onPan(e.target.x(), e.target.y());
+        if (activeTool === 'hand') {
+          onPan?.(e.target.x(), e.target.y());
         }
       }}
-      style={{ cursor: activeTool === 'hand' ? 'grab' : activeTool === 'erase' ? 'crosshair' : 'default' }}
+      style={{
+        cursor:
+          activeTool === 'hand'
+            ? 'grab'
+            : activeTool === 'erase'
+              ? 'crosshair'
+              : 'default',
+      }}
     >
-      {/* Background layer */}
       <Layer>
-        {/* Canvas background color */}
         <Rect
           name="canvas-bg"
           x={0}
@@ -424,8 +537,9 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           width={canvasWidth}
           height={canvasHeight}
           fill="#1a1a2e"
-          listening={true}
+          listening
         />
+
         {backgroundUrl && parallaxEnabled ? (
           <ParallaxLayer
             bgSrc={backgroundUrl}
@@ -448,6 +562,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
             onLayoutChange={onBackgroundLayoutChange}
           />
         ) : null}
+
         {backgroundSelected && parallaxEnabled && (
           <Rect
             x={0}
@@ -461,31 +576,33 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           />
         )}
 
-        {/* Grid */}
-        {gridVisible && Array.from({ length: Math.floor(canvasWidth / 100) }, (_, i) => (
-          <Line
-            key={`grid-v-${i}`}
-            points={[(i + 1) * 100, 0, (i + 1) * 100, canvasHeight]}
-            stroke="rgba(255,255,255,0.05)"
-            strokeWidth={1}
-            listening={false}
-          />
-        ))}
-        {gridVisible && Array.from({ length: Math.floor(canvasHeight / 100) }, (_, i) => (
-          <Line
-            key={`grid-h-${i}`}
-            points={[0, (i + 1) * 100, canvasWidth, (i + 1) * 100]}
-            stroke="rgba(255,255,255,0.05)"
-            strokeWidth={1}
-            listening={false}
-          />
-        ))}
+        {gridVisible &&
+          Array.from({ length: Math.floor(canvasWidth / 100) }, (_, i) => (
+            <Line
+              key={`grid-v-${i}`}
+              points={[(i + 1) * 100, 0, (i + 1) * 100, canvasHeight]}
+              stroke="rgba(255,255,255,0.05)"
+              strokeWidth={1}
+              listening={false}
+            />
+          ))}
+
+        {gridVisible &&
+          Array.from({ length: Math.floor(canvasHeight / 100) }, (_, i) => (
+            <Line
+              key={`grid-h-${i}`}
+              points={[0, (i + 1) * 100, canvasWidth, (i + 1) * 100]}
+              stroke="rgba(255,255,255,0.05)"
+              strokeWidth={1}
+              listening={false}
+            />
+          ))}
       </Layer>
 
-      {/* Objects layer — disabled when erase tool is active */}
       <Layer listening={activeTool !== 'erase'}>
         {renderableObjects.map((obj) => {
           const Renderer = OBJECT_RENDERERS[obj.type] || ImageObject;
+
           return (
             <Renderer
               key={obj.id}
@@ -502,16 +619,20 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           );
         })}
 
-        {/* Transform handles */}
         <Transformer
           ref={transformerRef}
-          rotateEnabled={true}
+          rotateEnabled
           enabledAnchors={[
-            'top-left', 'top-right', 'bottom-left', 'bottom-right',
-            'middle-left', 'middle-right', 'top-center', 'bottom-center',
+            'top-left',
+            'top-right',
+            'bottom-left',
+            'bottom-right',
+            'middle-left',
+            'middle-right',
+            'top-center',
+            'bottom-center',
           ]}
           boundBoxFunc={(oldBox, newBox) => {
-            // Enforce minimum size
             if (Math.abs(newBox.width) < 20 || Math.abs(newBox.height) < 20) {
               return oldBox;
             }
@@ -525,29 +646,13 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
           rotateAnchorOffset={25}
         />
 
-        {/* Snap guides */}
         <SnapGuides
-          guides={snapGuides}
+          guides={allGuides}
           canvasWidth={canvasWidth}
           canvasHeight={canvasHeight}
+          stroke="rgba(184, 150, 46, 0.5)"
         />
 
-        {/* Canvas center snap guides — shown when dragging near center */}
-        {activeGuides.map((guide, i) => (
-          <Line
-            key={`snap-${i}`}
-            points={guide.orientation === 'vertical'
-              ? [guide.position, 0, guide.position, canvasHeight]
-              : [0, guide.position, canvasWidth, guide.position]
-            }
-            stroke="rgba(184, 150, 46, 0.5)"
-            strokeWidth={1}
-            dash={[4, 4]}
-            listening={false}
-          />
-        ))}
-
-        {/* Drag selection box */}
         {selectionBox && (
           <Rect
             x={Math.min(selectionBox.x1, selectionBox.x2)}
@@ -563,15 +668,15 @@ const StudioCanvas = React.forwardRef(function StudioCanvas({
         )}
       </Layer>
 
-      {/* Mask layer for erase/inpaint tool — always rendered to preserve strokes, on top of everything */}
       <Layer listening={activeTool === 'erase'}>
         <MaskLayer
+          ref={maskLayerRef}
           active={activeTool === 'erase'}
           canvasWidth={canvasWidth}
           canvasHeight={canvasHeight}
           brushSize={brushSize || 30}
           onMaskChange={onMaskChange}
-          stageRef={stageRef}
+          mode={maskMode}
         />
       </Layer>
     </Stage>

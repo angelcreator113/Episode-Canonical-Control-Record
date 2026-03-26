@@ -163,9 +163,11 @@ exports.saveCanvas = async (req, res) => {
       // Get existing objects for this scene
       const existing = await SceneAsset.findAll({
         where: { scene_id: id },
-        attributes: ['id', 'asset_id', 'usage_type'],
+        attributes: ['id', 'asset_id', 'usage_type', 'deleted_at'],
+        paranoid: false,
         transaction,
       });
+      const activeExisting = existing.filter((e) => !e.deleted_at);
       const existingById = new Map(existing.map((e) => [e.id, e]));
       const existingByComposite = new Map(
         existing
@@ -210,6 +212,10 @@ exports.saveCanvas = async (req, res) => {
         };
 
         if (obj.id && existingById.has(obj.id)) {
+          const match = existingById.get(obj.id);
+          if (match.deleted_at) {
+            await SceneAsset.restore({ where: { id: match.id }, transaction });
+          }
           // Update existing
           await SceneAsset.update(data, {
             where: { id: obj.id, scene_id: id },
@@ -220,6 +226,9 @@ exports.saveCanvas = async (req, res) => {
           // Fallback for clients that temporarily omit/purge object IDs during autosave.
           // Updating in place avoids unique-index collisions on soft-deleted rows.
           const match = existingByComposite.get(`${obj.asset_id}::${data.usage_type}`);
+          if (match.deleted_at) {
+            await SceneAsset.restore({ where: { id: match.id }, transaction });
+          }
           await SceneAsset.update(data, {
             where: { id: match.id, scene_id: id },
             transaction,
@@ -235,6 +244,7 @@ exports.saveCanvas = async (req, res) => {
       // Delete objects removed from canvas (after upsert).
       // This ordering avoids soft-delete + recreate collisions on unique indexes.
       const toDelete = existing
+        .filter((e) => !e.deleted_at)
         .map((e) => e.id)
         .filter((eid) => !keptExistingIds.has(eid));
       if (toDelete.length > 0) {
@@ -1144,7 +1154,16 @@ Example: [{"label": "Gold Mirror", "prompt": "ornate gold-framed mirror with sof
 exports.inpaint = async (req, res) => {
   try {
     const { id } = req.params;
-    const { image_url, mask_data_url, prompt, strength } = req.body;
+    const {
+      image_url,
+      mask_data_url,
+      prompt,
+      strength,
+      mode: requestedMode,
+      strict_remove: strictRemove,
+      mask_expand: maskExpand,
+      mask_feather: maskFeather,
+    } = req.body;
 
     if (!mask_data_url) {
       return res.status(400).json({ success: false, error: 'mask_data_url is required — paint over the area to remove' });
@@ -1160,13 +1179,25 @@ exports.inpaint = async (req, res) => {
       return res.status(400).json({ success: false, error: 'No source image available' });
     }
 
-    const mode = prompt ? 'fill' : 'remove';
+    const normalizedMode = String(requestedMode || '').toLowerCase();
+    const mode = normalizedMode === 'fill'
+      ? 'fill'
+      : normalizedMode === 'remove'
+        ? 'remove'
+        : (prompt ? 'fill' : 'remove');
     const result = await inpaintingService.inpaintImage(
       sourceUrl,
       mask_data_url,
       prompt || null,
       id,
-      { userId: req.user?.id || null, strength: strength || 0.85, mode }
+      {
+        userId: req.user?.id || null,
+        strength: strength || 0.85,
+        mode,
+        strictRemove: strictRemove === true || strictRemove === 'true',
+        maskExpand: Number.isFinite(Number(maskExpand)) ? Number(maskExpand) : undefined,
+        maskFeather: Number.isFinite(Number(maskFeather)) ? Number(maskFeather) : undefined,
+      }
     );
 
     // Only update scene background when we inpainted the background image itself.
@@ -1178,8 +1209,18 @@ exports.inpaint = async (req, res) => {
     res.json({ success: true, data: result });
   } catch (error) {
     console.error('Scene Studio inpaint error:', error);
-    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
-    res.status(status).json({ success: false, error: error.message });
+    const status = Number.isFinite(Number(error?.status))
+      ? Number(error.status)
+      : (error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500);
+    const retryAfter = Number.parseInt(String(error?.retryAfter || ''), 10);
+    if (status === 429 && retryAfter > 0) {
+      res.setHeader('Retry-After', String(retryAfter));
+    }
+    res.status(status).json({
+      success: false,
+      error: error.message,
+      retry_after: status === 429 && retryAfter > 0 ? retryAfter : undefined,
+    });
   }
 };
 

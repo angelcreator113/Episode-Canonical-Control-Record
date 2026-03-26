@@ -9,6 +9,7 @@ import InspectorPanel from './panels/InspectorPanel';
 import SmartSuggestions from './panels/SmartSuggestions';
 import useSceneStudioState from './useSceneStudioState';
 import sceneService from '../../services/sceneService';
+import assetService from '../../services/assetService';
 import './SceneStudio.css';
 
 /**
@@ -56,6 +57,50 @@ function getNetworkAwareApiError(err, fallbackMessage, actionLabel = 'Request') 
   return err?.message || fallbackMessage;
 }
 
+function getInpaintCooldownMs(err) {
+  if (err?.response?.status !== 429) return 0;
+
+  const dataRetryAfter = Number.parseInt(String(err?.response?.data?.retry_after || ''), 10);
+  if (Number.isFinite(dataRetryAfter) && dataRetryAfter > 0) {
+    return dataRetryAfter * 1000;
+  }
+
+  const headers = err?.response?.headers || {};
+  const retryAfterRaw = headers['retry-after'];
+  const retryAfterSec = Number.parseInt(String(retryAfterRaw || ''), 10);
+  if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
+    return retryAfterSec * 1000;
+  }
+
+  const resetRaw = headers['ratelimit-reset'] || headers['x-ratelimit-reset'];
+  const resetValue = Number.parseInt(String(resetRaw || ''), 10);
+  if (Number.isFinite(resetValue) && resetValue > 0) {
+    // Some servers emit epoch seconds, others emit seconds-until-reset.
+    if (resetValue > 1000000000) {
+      const untilMs = (resetValue * 1000) - Date.now();
+      if (untilMs > 0) return untilMs;
+    }
+    return resetValue * 1000;
+  }
+
+  const serverError = String(err?.response?.data?.error || '');
+  const retryAfterMatch = serverError.match(/retry_after["':\s]+(\d+)/i);
+  if (retryAfterMatch) {
+    return Number.parseInt(retryAfterMatch[1], 10) * 1000;
+  }
+
+  const minutesMatch = serverError.match(/resets\s+in\s+(\d+)\s+minutes?/i);
+  if (minutesMatch) {
+    return Number.parseInt(minutesMatch[1], 10) * 60 * 1000;
+  }
+
+  if (/in\s+progress/i.test(serverError)) {
+    return 8000;
+  }
+
+  return 20000;
+}
+
 const QUICK_ADD_OPTIONS = [
   { key: 'generate', label: 'Generate', icon: Sparkles },
   { key: 'upload', label: 'Upload', icon: Upload },
@@ -76,8 +121,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
   const [saveErrorMsg, setSaveErrorMsg] = useState(null);
+  const [bannerErrorKind, setBannerErrorKind] = useState('save');
   const saveTimerRef = useRef(null);
   const saveRef = useRef(null);
+  const pendingSaveRef = useRef(false);
 
   // Lifted creation panel state
   const [activeCreationTab, setActiveCreationTab] = useState('objects');
@@ -103,13 +150,40 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // Erase / inpaint state
   const [hasMask, setHasMask] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
+  const [maskMode, setMaskMode] = useState('add');
+  const [maskExpand, setMaskExpand] = useState(3);
+  const [maskFeather, setMaskFeather] = useState(1.1);
   const [isInpainting, setIsInpainting] = useState(false);
+  const isInpaintingRef = useRef(false);
   const [inpaintPrompt, setInpaintPrompt] = useState('');
+  const [inpaintNotice, setInpaintNotice] = useState(null);
+  const [inpaintError, setInpaintError] = useState('');
+  const [inpaintCooldownUntil, setInpaintCooldownUntil] = useState(0);
+  const inpaintCooldownRef = useRef(0);
+  const [inpaintCooldownSeconds, setInpaintCooldownSeconds] = useState(0);
   const [exportScale, setExportScale] = useState(2);
   const [backgroundLayout, setBackgroundLayout] = useState(null);
+  const handleBackgroundLayoutChange = useCallback((nextLayout) => {
+    setBackgroundLayout((prev) => {
+      if (!nextLayout && !prev) return prev;
+      if (!nextLayout || !prev) return nextLayout;
+      if (
+        prev.sourceWidth === nextLayout.sourceWidth &&
+        prev.sourceHeight === nextLayout.sourceHeight &&
+        prev.drawX === nextLayout.drawX &&
+        prev.drawY === nextLayout.drawY &&
+        prev.drawWidth === nextLayout.drawWidth &&
+        prev.drawHeight === nextLayout.drawHeight
+      ) {
+        return prev;
+      }
+      return nextLayout;
+    });
+  }, []);
 
   // Background removal state
   const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [isRemoveBgConfigured, setIsRemoveBgConfigured] = useState(null);
 
   // UX guidance state
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -117,6 +191,22 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [backgroundSelected, setBackgroundSelected] = useState(false);
   const prevObjectCountRef = useRef(0);
+
+  useEffect(() => {
+    if (!inpaintCooldownUntil || inpaintCooldownUntil <= Date.now()) {
+      setInpaintCooldownSeconds(0);
+      return undefined;
+    }
+
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((inpaintCooldownUntil - Date.now()) / 1000));
+      setInpaintCooldownSeconds(remaining);
+    };
+
+    updateRemaining();
+    const intervalId = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [inpaintCooldownUntil]);
 
   const canvasWidth = PLATFORM_PRESETS[platform]?.width || 1920;
   const canvasHeight = PLATFORM_PRESETS[platform]?.height || 1080;
@@ -155,6 +245,27 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     load();
   }, [sceneId, sceneSetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    let alive = true;
+
+    async function loadFeatureConfig() {
+      try {
+        const result = await assetService.getConfigCheck();
+        const status = String(result?.data?.data?.removeBgApiKey || '').toLowerCase();
+        if (alive) {
+          setIsRemoveBgConfigured(status === 'configured');
+        }
+      } catch {
+        if (alive) {
+          setIsRemoveBgConfigured(false);
+        }
+      }
+    }
+
+    loadFeatureConfig();
+    return () => { alive = false; };
+  }, []);
+
   // ── Save ──
 
   const mountedRef = useRef(true);
@@ -167,7 +278,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, []);
 
   const save = useCallback(async () => {
-    if (isSavingRef.current) return;
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
     if (!state.contextId) {
       console.error('Scene Studio save: no contextId — scene not loaded');
       setSaveStatus('error');
@@ -175,6 +289,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       return;
     }
     isSavingRef.current = true;
+    setBannerErrorKind('save');
     setSaveErrorMsg(null);
     // Cancel any pending auto-save to avoid double-save
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -210,7 +325,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }, 2000);
     } catch (err) {
       console.error('Scene Studio save error:', err);
-      const msg = err.response?.data?.error || err.message || 'Save failed';
+      const details = Array.isArray(err?.response?.data?.details) ? err.response.data.details : [];
+      const detailText = details.length ? ` (${details.join('; ')})` : '';
+      const msg = (err.response?.data?.error || err.message || 'Save failed') + detailText;
       console.error('Scene Studio save error detail:', msg);
 
       // Auto-retry once on network errors
@@ -227,19 +344,31 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
       save._retried = false;
 
+      const status = err?.response?.status;
+      const isClientValidationError = typeof status === 'number' && status >= 400 && status < 500;
+
       if (mountedRef.current) {
+        setBannerErrorKind('save');
         setSaveStatus('error');
         setSaveErrorMsg(msg);
-        // Auto-retry after 10s if still dirty
-        saveTimerRef.current = setTimeout(() => {
-          if (mountedRef.current && state.isDirty && saveRef.current) {
-            console.log('Scene Studio: auto-retrying save...');
-            saveRef.current();
-          }
-        }, 10000);
+        if (!isClientValidationError) {
+          // Auto-retry after 10s for server/network failures only.
+          saveTimerRef.current = setTimeout(() => {
+            if (mountedRef.current && state.isDirty && saveRef.current) {
+              console.log('Scene Studio: auto-retrying save...');
+              saveRef.current();
+            }
+          }, 10000);
+        }
       }
     } finally {
       isSavingRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        if (saveRef.current) {
+          saveRef.current();
+        }
+      }
     }
   }, [state, platform, mood, timeOfDay]);
 
@@ -675,8 +804,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── Inpaint (erase) ──
 
   const handleInpaint = useCallback(async () => {
+    // Ref guard is synchronous — prevents double-click race before React batches state
+    if (isInpaintingRef.current) return;
     if (isInpainting || !state.contextId) return;
     if (!hasMask) return;
+    if (inpaintCooldownRef.current > Date.now()) {
+      const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
+      setInpaintNotice(`Too many requests. Please wait ${seconds}s and try again.`);
+      return;
+    }
 
     // Determine target: selected object's image or the scene background
     const selectedObj = state.selectedIds.size === 1
@@ -691,7 +827,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       return;
     }
 
+    isInpaintingRef.current = true;
     setIsInpainting(true);
+    setInpaintNotice(null);
+    setInpaintError('');
     setSaveErrorMsg(null);
     try {
       const selectedImageExport = selectedObj?.type === 'image' && selectedObj?.assetUrl
@@ -718,14 +857,21 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       const preciseMaskDataUrl = MaskLayer._exportMask(exportOptions);
       if (!preciseMaskDataUrl) {
+        isInpaintingRef.current = false;
         setIsInpainting(false);
+        setInpaintError('Failed to export mask. Please try painting again.');
         return;
       }
 
+      const trimmedPrompt = inpaintPrompt.trim();
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
         maskDataUrl: preciseMaskDataUrl,
-        prompt: (inpaintPrompt || '').trim() || undefined,
+        prompt: trimmedPrompt || undefined,
+        mode: trimmedPrompt ? 'fill' : 'remove',
+        strictRemove: !trimmedPrompt,
+        maskExpand,
+        maskFeather,
       });
 
       if (result?.success && result.data?.inpainted_url) {
@@ -738,27 +884,58 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           // Update the scene background
           state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
         }
-        // Clear the mask
+        // Clear the mask and prompt
         if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
         setHasMask(false);
         setInpaintPrompt('');
       }
     } catch (err) {
       console.error('Inpaint error:', err);
-      setSaveErrorMsg(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+      if (err?.response?.status === 429) {
+        const cooldownMs = getInpaintCooldownMs(err);
+        if (cooldownMs > 0) {
+          const waitSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
+          const cooldownUntil = Date.now() + cooldownMs;
+          inpaintCooldownRef.current = cooldownUntil;
+          setInpaintCooldownUntil(cooldownUntil);
+          const retryAfterFromServer = err?.response?.data?.retry_after;
+          setInpaintError(
+            retryAfterFromServer
+              ? `Too many requests. Try again in ${retryAfterFromServer}s.`
+              : `Too many requests. Please wait ${waitSeconds}s and try again.`
+          );
+        } else {
+          setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+        }
+      } else {
+        setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+      }
     } finally {
+      isInpaintingRef.current = false;
       setIsInpainting(false);
     }
-  }, [isInpainting, state, backgroundUrl, hasMask, inpaintPrompt]);
+  }, [isInpainting, state, backgroundUrl, hasMask, maskExpand, maskFeather, inpaintPrompt]);
+
+  const handleClearMask = useCallback(() => {
+    if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
+    setHasMask(false);
+    setInpaintNotice(null);
+    setInpaintError('');
+  }, []);
 
   // ── Remove Background from selected object ──
 
   const handleRemoveBackground = useCallback(async (objectId, assetId) => {
+    if (isRemoveBgConfigured === false) {
+      setBannerErrorKind('remove-bg');
+      setSaveErrorMsg('Background removal service is not configured');
+      return;
+    }
     if (isRemovingBg || !assetId) return;
     setIsRemovingBg(true);
+    setBannerErrorKind('remove-bg');
     setSaveErrorMsg(null);
     try {
-      const assetService = (await import('../../services/assetService')).default;
       const result = await assetService.removeBackground(assetId);
       // Backend returns { status: 'SUCCESS', data: { url } }
       const newUrl = result?.data?.url || result?.url;
@@ -773,15 +950,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         ));
         state.markDirty?.() || (() => {})(); // trigger auto-save
       } else {
-        setSaveErrorMsg('Background removal returned no URL — check REMOVEBG_API_KEY');
+        setSaveErrorMsg('Background removal returned no URL');
       }
     } catch (err) {
       console.error('Remove background error:', err);
-      setSaveErrorMsg(err.message || 'Background removal failed — check REMOVEBG_API_KEY');
+      setSaveErrorMsg(err.message || 'Background removal failed');
     } finally {
       setIsRemovingBg(false);
     }
-  }, [isRemovingBg, state]);
+  }, [isRemovingBg, state, isRemoveBgConfigured]);
 
   const handleExport = useCallback(() => {
     setShowExportDialog(true);
@@ -893,8 +1070,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       {/* Save error banner */}
       {saveErrorMsg && (
         <div className="scene-studio-save-error-banner">
-          Save failed: {saveErrorMsg}
-          <button className="scene-studio-icon-btn" onClick={() => setSaveErrorMsg(null)} style={{ marginLeft: 'auto' }}>×</button>
+          {bannerErrorKind === 'remove-bg' ? 'Background removal failed' : 'Save failed'}: {saveErrorMsg}
+          <button
+            className="scene-studio-icon-btn"
+            onClick={() => {
+              setSaveErrorMsg(null);
+              setBannerErrorKind('save');
+            }}
+            style={{ marginLeft: 'auto' }}
+          >
+            ×
+          </button>
         </div>
       )}
       {/* Guided Flow Stepper */}
@@ -991,8 +1177,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             depthMapUrl={proxiedDepthMapUrl}
             depthEffects={state.depthEffects}
             brushSize={brushSize}
+            maskMode={maskMode}
             onMaskChange={setHasMask}
-            onBackgroundLayoutChange={setBackgroundLayout}
+            onBackgroundLayoutChange={handleBackgroundLayoutChange}
           />
 
           {/* Erase tool controls — shown when erase tool is active */}
@@ -1004,37 +1191,96 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             return (
             <div className="scene-studio-erase-controls">
               <span className="scene-studio-erase-target">Erasing: {eraseTarget}</span>
-              <label>Brush: {brushSize}px</label>
-              <input
-                type="range"
-                min={5}
-                max={100}
-                value={brushSize}
-                onChange={(e) => setBrushSize(parseInt(e.target.value))}
-              />
+              <div className="scene-studio-erase-range-field">
+                <label>Brush: {brushSize}px</label>
+                <input
+                  type="range"
+                  min={5}
+                  max={100}
+                  value={brushSize}
+                  onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                  disabled={isInpainting}
+                />
+              </div>
+              <div className="scene-studio-segmented-control" role="group" aria-label="Mask mode">
+                <button
+                  type="button"
+                  className={`scene-studio-btn ghost ${maskMode === 'add' ? 'active' : ''}`}
+                  onClick={() => setMaskMode('add')}
+                  disabled={isInpainting}
+                >
+                  Add Mask
+                </button>
+                <button
+                  type="button"
+                  className={`scene-studio-btn ghost ${maskMode === 'subtract' ? 'active' : ''}`}
+                  onClick={() => setMaskMode('subtract')}
+                  disabled={isInpainting}
+                >
+                  Subtract Mask
+                </button>
+              </div>
+              <div className="scene-studio-erase-range-field">
+                <label>Mask Expand: {maskExpand}px</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={maskExpand}
+                  onChange={(e) => setMaskExpand(parseInt(e.target.value, 10))}
+                  disabled={isInpainting}
+                />
+              </div>
+              <div className="scene-studio-erase-range-field">
+                <label>Mask Feather: {maskFeather.toFixed(1)}px</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={3}
+                  step={0.1}
+                  value={maskFeather}
+                  onChange={(e) => setMaskFeather(parseFloat(e.target.value))}
+                  disabled={isInpainting}
+                />
+              </div>
               <input
                 type="text"
                 className="scene-studio-erase-prompt"
-                placeholder="Fill with... (leave empty for auto)"
                 value={inpaintPrompt}
                 onChange={(e) => setInpaintPrompt(e.target.value)}
+                placeholder="Describe replacement (leave empty to just remove)..."
+                disabled={isInpainting}
               />
-              <button
-                className="scene-studio-btn primary"
-                disabled={!hasMask || isInpainting}
-                onClick={handleInpaint}
-              >
-                {isInpainting ? 'Removing...' : 'Remove'}
-              </button>
-              <button
-                className="scene-studio-btn ghost"
-                onClick={() => {
-                  if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
-                  setHasMask(false);
-                }}
-              >
-                Clear
-              </button>
+              <div className="scene-studio-erase-actions">
+                <button
+                  className="scene-studio-btn primary"
+                  disabled={!hasMask || isInpainting || inpaintCooldownSeconds > 0}
+                  onClick={handleInpaint}
+                >
+                  {isInpainting
+                    ? (inpaintPrompt.trim() ? 'Processing...' : 'Removing...')
+                    : inpaintCooldownSeconds > 0
+                      ? `Wait ${inpaintCooldownSeconds}s`
+                      : (inpaintPrompt.trim() ? 'Apply Inpaint' : 'Remove')}
+                </button>
+                <button
+                  className="scene-studio-btn ghost"
+                  onClick={handleClearMask}
+                  disabled={isInpainting || !hasMask}
+                >
+                  Clear Mask
+                </button>
+              </div>
+              {isInpainting && (
+                <div className="scene-studio-erase-notice">Generating edit… This can take a few seconds.</div>
+              )}
+              {inpaintError && (
+                <div className="scene-studio-erase-error">{inpaintError}</div>
+              )}
+              {!isInpainting && inpaintNotice && (
+                <div className="scene-studio-erase-notice">{inpaintNotice}</div>
+              )}
             </div>
             );
           })()}
@@ -1120,6 +1366,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             }}
             onRemoveBackground={handleRemoveBackground}
             isRemovingBg={isRemovingBg}
+            removeBgConfigured={isRemoveBgConfigured}
             backgroundSelected={backgroundSelected}
             backgroundUrl={backgroundUrl}
             depthMapUrl={proxiedDepthMapUrl}

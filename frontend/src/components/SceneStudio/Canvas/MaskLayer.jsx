@@ -106,6 +106,7 @@ export default function MaskLayer({
   canvasWidth,
   canvasHeight,
   brushSize = DEFAULT_BRUSH_SIZE,
+  mode = 'add',
   onMaskChange,
   stageRef,
 }) {
@@ -118,8 +119,8 @@ export default function MaskLayer({
     const stage = e.target.getStage();
     const pos = getCanvasPoint(stage);
     if (!pos) return;
-    setLines((prev) => [...prev, { points: [pos.x, pos.y], strokeWidth: brushSize }]);
-  }, [active, brushSize]);
+    setLines((prev) => [...prev, { points: [pos.x, pos.y], strokeWidth: brushSize, mode }]);
+  }, [active, brushSize, mode]);
 
   const handleMouseMove = useCallback((e) => {
     if (!active || !isDrawing.current) return;
@@ -176,6 +177,7 @@ export default function MaskLayer({
           : 1;
       ctx.lineWidth = (line.strokeWidth || DEFAULT_BRUSH_SIZE) * scale;
       ctx.beginPath();
+      ctx.globalCompositeOperation = line.mode === 'subtract' ? 'destination-out' : 'source-over';
       for (let i = 0; i < line.points.length; i += 2) {
         const rawPoint = { x: line.points[i], y: line.points[i + 1] };
         const point = targetObject
@@ -190,6 +192,8 @@ export default function MaskLayer({
       }
       ctx.stroke();
     }
+
+    ctx.globalCompositeOperation = 'source-over';
 
     return canvas.toDataURL('image/png');
   }, [lines, canvasWidth, canvasHeight]);
@@ -235,7 +239,7 @@ export default function MaskLayer({
         <Line
           key={i}
           points={line.points}
-          stroke="rgba(220, 53, 53, 0.4)"
+          stroke={line.mode === 'subtract' ? 'rgba(30, 144, 255, 0.45)' : 'rgba(220, 53, 53, 0.4)'}
           strokeWidth={line.strokeWidth || DEFAULT_BRUSH_SIZE}
           lineCap="round"
           lineJoin="round"

@@ -1321,6 +1321,12 @@ router.post('/process', authenticate, async (req, res) => {
  */
 router.get('/config/check', async (req, res) => {
   try {
+    const hasRemoveBgProvider = !!(
+      process.env.REMOVEBG_API_KEY
+      || process.env.REMOVE_BG_API_KEY
+      || process.env.RUNWAY_ML_API_KEY
+    );
+
     const config = {
       awsRegion: process.env.AWS_REGION || 'not set',
       awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID
@@ -1329,7 +1335,7 @@ router.get('/config/check', async (req, res) => {
       awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'configured' : 'not set',
       s3Bucket: process.env.AWS_S3_BUCKET || 'not set',
       runwayApiKey: process.env.RUNWAY_ML_API_KEY ? 'configured' : 'not set',
-      removeBgApiKey: process.env.REMOVEBG_API_KEY ? 'configured' : 'not set',
+      removeBgApiKey: hasRemoveBgProvider ? 'configured' : 'not set',
     };
 
     res.json({

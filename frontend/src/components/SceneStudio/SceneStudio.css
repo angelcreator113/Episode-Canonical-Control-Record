@@ -2387,25 +2387,27 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
   background: #FAF7F0;
   border: 1px solid #d6d0c4;
   border-radius: 8px;
-  padding: 8px 14px;
+  padding: 8px 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 15;
   font-family: 'DM Mono', monospace;
-  font-size: 10px;
+  font-size: 9px;
+  width: min(90vw, 980px);
 }
 
 .scene-studio-erase-controls label {
   color: #666;
   white-space: nowrap;
-  min-width: 70px;
+  min-width: auto;
 }
 
 .scene-studio-erase-controls input[type="range"] {
-  width: 80px;
+  width: clamp(90px, 10vw, 130px);
 }
 
 .scene-studio-erase-target {
@@ -2416,15 +2418,90 @@
   padding-right: 8px;
 }
 
+.scene-studio-erase-range-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.scene-studio-segmented-control {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scene-studio-segmented-control .scene-studio-btn.active {
+  background: #B8962E;
+  color: #fff;
+  border-color: #B8962E;
+}
+
+.scene-studio-erase-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.scene-studio-erase-actions .scene-studio-btn,
+.scene-studio-segmented-control .scene-studio-btn {
+  white-space: nowrap;
+}
+
+.scene-studio-erase-notice {
+  width: 100%;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #8a6f1f;
+  background: #fff8e1;
+  border: 1px solid #e8d8a8;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.scene-studio-erase-error {
+  width: 100%;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9c2626;
+  background: #fef2f2;
+  border: 1px solid #e8a8a8;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+@media (max-width: 1100px) {
+  .scene-studio-erase-controls {
+    width: min(95vw, 760px);
+    font-size: 10px;
+  }
+
+  .scene-studio-erase-controls input[type="range"] {
+    width: clamp(100px, 18vw, 150px);
+  }
+
+  .scene-studio-erase-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
 .scene-studio-erase-prompt {
   padding: 4px 8px;
   border: 1px solid #d6d0c4;
   border-radius: 4px;
   font-family: 'DM Mono', monospace;
   font-size: 10px;
-  width: 180px;
+  width: 100%;
+  min-width: 180px;
   background: #fff;
   color: #2C2C2C;
+}
+
+.scene-studio-erase-prompt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ═══════════════════════════════════════════════════════════════

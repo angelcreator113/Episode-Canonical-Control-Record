@@ -4,8 +4,8 @@
  * Inpainting Service — Replicate API (Dual-Model)
  *
  * Two modes:
- *   1. Object REMOVAL (no prompt) — uses LaMa (Large Mask Inpainting).
- *      Fast, no prompt needed, seamlessly continues the background.
+ *   1. Object REMOVAL (no prompt) — SDXL context-aware cleanup (with LaMa fallback).
+ *      Higher quality on complex interiors/textures.
  *   2. Creative FILL (with prompt) — uses lucataco/sdxl-inpainting.
  *      Generates new content described by the user's prompt.
  */
@@ -19,6 +19,9 @@ const { v4: uuidv4 } = require('uuid');
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const REPLICATE_INPAINT_VERSION = process.env.REPLICATE_INPAINT_VERSION || 'a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7';
 const REPLICATE_LAMA_VERSION = process.env.REPLICATE_LAMA_VERSION || 'cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72';
+const REPLICATE_FLUX_FILL_PRO_VERSION = process.env.REPLICATE_FLUX_FILL_PRO_VERSION || '';
+const REPLICATE_FLUX_FILL_PRO_MODEL = process.env.REPLICATE_FLUX_FILL_PRO_MODEL || 'black-forest-labs/flux-fill-pro';
+const REMOVAL_TIER_DEFAULT = process.env.REMOVAL_TIER_DEFAULT || 'standard';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -26,6 +29,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 90;
+const STRICT_REMOVE_PASSES = Math.max(1, Math.min(3, parseInt(process.env.STRICT_REMOVE_PASSES || '2', 10)));
 
 // ─── MODEL CONFIG ───────────────────────────────────────────────────────────
 
@@ -78,14 +82,57 @@ function extractReplicateOutputUrl(output) {
 
 const inFlight = new Map();
 const hourlyUsage = new Map();
+const providerCooldownUntil = new Map();
 const MAX_PER_HOUR = 15;
 
-function checkRateLimit(userId, entityId) {
-  if (inFlight.get(entityId)) {
-    return { allowed: false, reason: 'An inpainting operation is already in progress. Please wait.' };
+function parseRetryAfterSeconds(error) {
+  const direct = Number.parseInt(String(error?.retryAfter || ''), 10);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+
+  const responseRetry = Number.parseInt(String(error?.response?.data?.retry_after || ''), 10);
+  if (Number.isFinite(responseRetry) && responseRetry > 0) return responseRetry;
+
+  const msg = String(error?.message || '');
+  const retryAfterMatch = msg.match(/retry_after["':\s]+(\d+)/i);
+  if (retryAfterMatch) {
+    return Number.parseInt(retryAfterMatch[1], 10);
   }
+
+  const approxMatch = msg.match(/resets\s+in\s+~?(\d+)s/i);
+  if (approxMatch) {
+    return Number.parseInt(approxMatch[1], 10);
+  }
+
+  return 0;
+}
+
+function setProviderCooldown(userId, entityId, seconds) {
+  const durationSec = Math.max(1, Math.min(120, Number.parseInt(String(seconds || 0), 10) || 8));
+  const until = Date.now() + (durationSec * 1000);
+  const userKey = userId || 'anonymous';
+  providerCooldownUntil.set(`entity:${entityId}`, until);
+  providerCooldownUntil.set(`user:${userKey}`, until);
+}
+
+function checkRateLimit(userId, entityId) {
   const now = Date.now();
   const userKey = userId || 'anonymous';
+  const entityUntil = providerCooldownUntil.get(`entity:${entityId}`) || 0;
+  const userUntil = providerCooldownUntil.get(`user:${userKey}`) || 0;
+  const providerUntil = Math.max(entityUntil, userUntil);
+  if (providerUntil > now) {
+    const secondsLeft = Math.max(1, Math.ceil((providerUntil - now) / 1000));
+    return {
+      allowed: false,
+      reason: `Inpainting provider is rate-limited. Retry in ${secondsLeft}s.`,
+      retryAfter: secondsLeft,
+      status: 429,
+    };
+  }
+
+  if (inFlight.get(entityId)) {
+    return { allowed: false, reason: 'An inpainting operation is already in progress. Please wait.', status: 429, retryAfter: 8 };
+  }
   let usage = hourlyUsage.get(userKey);
   if (!usage || now > usage.resetAt) {
     usage = { count: 0, resetAt: now + 3600000 };
@@ -93,7 +140,12 @@ function checkRateLimit(userId, entityId) {
   }
   if (usage.count >= MAX_PER_HOUR) {
     const minutesLeft = Math.ceil((usage.resetAt - now) / 60000);
-    return { allowed: false, reason: `Inpainting limit reached (${MAX_PER_HOUR}/hour). Resets in ${minutesLeft} minutes.` };
+    return {
+      allowed: false,
+      reason: `Inpainting limit reached (${MAX_PER_HOUR}/hour). Resets in ${minutesLeft} minutes.`,
+      status: 429,
+      retryAfter: minutesLeft * 60,
+    };
   }
   return { allowed: true };
 }
@@ -182,6 +234,122 @@ async function runLamaRemoval(imageUrl, maskUrl) {
   }
 
   throw new Error('LaMa removal timed out');
+}
+
+/**
+ * Advanced object removal using SDXL inpainting with a neutral cleanup prompt.
+ * Falls back to LaMa in caller when this path fails.
+ */
+async function runSdxlRemoval(imageUrl, maskUrl) {
+  const removalPrompt = [
+    'Clean, natural background continuation.',
+    'Remove the masked object completely.',
+    'Preserve scene geometry, lighting, and texture consistency.',
+    'Photorealistic, seamless blend, no artifacts.',
+  ].join(' ');
+
+  return runSdxlInpainting(imageUrl, maskUrl, removalPrompt, {
+    strength: 0.95,
+    guidanceScale: 6.5,
+  });
+}
+
+/**
+ * Strict deterministic removal path for erase tool.
+ * Runs LaMa for one or more passes and avoids generative models entirely.
+ */
+async function runStrictLamaRemoval(imageUrl, maskUrl) {
+  let currentUrl = imageUrl;
+
+  for (let pass = 1; pass <= STRICT_REMOVE_PASSES; pass++) {
+    console.log(`[Inpainting] Strict LaMa pass ${pass}/${STRICT_REMOVE_PASSES}`);
+    currentUrl = await runLamaRemoval(currentUrl, maskUrl);
+  }
+
+  return currentUrl;
+}
+
+/**
+ * Premium removal tier using FLUX Fill Pro.
+ * Uses version hash when configured, otherwise falls back to model slug run.
+ */
+async function runFluxFillProRemoval(imageUrl, maskUrl) {
+  if (!REPLICATE_API_TOKEN) {
+    throw new Error('REPLICATE_API_TOKEN not configured');
+  }
+
+  console.log('[Inpainting] Using FLUX Fill Pro premium removal');
+  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+
+  const prompt = [
+    'Remove masked object and reconstruct a realistic background.',
+    'Maintain exact scene perspective, lighting, and texture continuity.',
+    'Photorealistic and artifact-free.',
+  ].join(' ');
+
+  if (!REPLICATE_FLUX_FILL_PRO_VERSION) {
+    try {
+      const output = await replicate.run(REPLICATE_FLUX_FILL_PRO_MODEL, {
+        input: {
+          image: imageUrl,
+          mask: maskUrl,
+          prompt,
+        },
+      });
+
+      const outputUrl = extractReplicateOutputUrl(output);
+      if (!outputUrl) {
+        throw new Error('FLUX Fill Pro model run returned no output URL');
+      }
+
+      console.log('[Inpainting] FLUX Fill Pro removal completed (model slug run)');
+      return outputUrl;
+    } catch (err) {
+      const status = err.response?.status || err.status;
+      const detail = err.response?.data?.detail || err.message;
+      console.error(`[Inpainting] FLUX Fill Pro model-run error (${status}):`, detail);
+      throw new Error(`FLUX Fill Pro model-run error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    }
+  }
+
+  let prediction;
+  try {
+    prediction = await replicate.predictions.create({
+      version: REPLICATE_FLUX_FILL_PRO_VERSION,
+      input: {
+        image: imageUrl,
+        mask: maskUrl,
+        prompt,
+      },
+    });
+  } catch (err) {
+    const status = err.response?.status || err.status;
+    const detail = err.response?.data?.detail || err.message;
+    console.error(`[Inpainting] FLUX Fill Pro API error (${status}):`, detail);
+    throw new Error(`FLUX Fill Pro API error: ${status || 'unknown'} — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+  }
+
+  console.log(`[Inpainting] FLUX Fill Pro prediction ${prediction.id} created, polling...`);
+
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    prediction = await replicate.predictions.get(prediction.id);
+
+    if (prediction.status === 'succeeded') {
+      const outputUrl = extractReplicateOutputUrl(prediction.output);
+      if (!outputUrl) {
+        throw new Error('FLUX Fill Pro returned no output URL');
+      }
+      console.log('[Inpainting] FLUX Fill Pro removal completed');
+      return outputUrl;
+    }
+
+    if (prediction.status === 'failed' || prediction.status === 'canceled') {
+      throw new Error(`FLUX Fill Pro ${prediction.status}: ${prediction.error || 'unknown error'}`);
+    }
+  }
+
+  throw new Error('FLUX Fill Pro removal timed out');
 }
 
 /**
@@ -283,13 +451,16 @@ async function getRemoteImageDimensions(imageUrl) {
   return { width: metadata.width, height: metadata.height };
 }
 
-async function refineRemovalMask(maskBuffer) {
+async function refineRemovalMask(maskBuffer, options = {}) {
+  const expandPx = Math.max(0, Math.min(20, Math.round(options.expandPx ?? 2)));
+  const featherPx = Math.max(0, Math.min(5, Number(options.featherPx ?? 0.8)));
+
   // Slight dilation + feathering helps LaMa remove edge halos and leftover fragments.
   return sharp(maskBuffer)
     .greyscale()
     .threshold(16)
-    .dilate(2)
-    .blur(0.8)
+    .dilate(expandPx)
+    .blur(featherPx)
     .png()
     .toBuffer();
 }
@@ -298,22 +469,20 @@ async function refineRemovalMask(maskBuffer) {
  * Store a mask image (base64 data URL) to S3 for Replicate to access.
  */
 async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
-  const { forRemoval = false } = options;
+  const { forRemoval = false, maskExpand, maskFeather } = options;
   // Convert data:image/png;base64,... to buffer
   const base64Data = maskDataUrl.replace(/^data:image\/\w+;base64,/, '');
   let buffer = Buffer.from(base64Data, 'base64');
 
   if (sourceImageUrl) {
     const maskMetadata = await sharp(buffer).metadata();
-    let sourceDimensions = null;
+    const sourceDimensions = await getRemoteImageDimensions(sourceImageUrl);
+    const maskWidth = maskMetadata.width || 0;
+    const maskHeight = maskMetadata.height || 0;
 
-    if (!maskMetadata.width || !maskMetadata.height) {
-      sourceDimensions = await getRemoteImageDimensions(sourceImageUrl);
-    }
-
-    if (sourceDimensions && (maskMetadata.width !== sourceDimensions.width || maskMetadata.height !== sourceDimensions.height)) {
+    if (maskWidth !== sourceDimensions.width || maskHeight !== sourceDimensions.height) {
       console.log(
-        `[Inpainting] Resizing mask from ${maskMetadata.width}x${maskMetadata.height} to ${sourceDimensions.width}x${sourceDimensions.height}`
+        `[Inpainting] Resizing mask from ${maskWidth}x${maskHeight} to ${sourceDimensions.width}x${sourceDimensions.height}`
       );
 
       buffer = await sharp(buffer)
@@ -327,7 +496,10 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
   }
 
   if (forRemoval) {
-    buffer = await refineRemovalMask(buffer);
+    buffer = await refineRemovalMask(buffer, {
+      expandPx: maskExpand,
+      featherPx: maskFeather,
+    });
   }
 
   const ts = Date.now();
@@ -350,14 +522,21 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
 /**
  * Inpaint (remove/fill) an area of a scene background.
  *
- * When mode is 'remove' (or no prompt given), uses LaMa for clean removal.
+ * When mode is 'remove' (or no prompt given), uses tiered removal:
+ * premium: FLUX Fill Pro -> SDXL -> LaMa
+ * standard: SDXL -> LaMa
  * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
-  const { userId, strength, mode } = options;
+  const { userId, strength, mode, removalTier, strictRemove = false, maskExpand, maskFeather } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
-  if (!rateCheck.allowed) throw new Error(rateCheck.reason);
+  if (!rateCheck.allowed) {
+    const blockedError = new Error(rateCheck.reason);
+    blockedError.status = rateCheck.status || 429;
+    if (rateCheck.retryAfter) blockedError.retryAfter = rateCheck.retryAfter;
+    throw blockedError;
+  }
 
   markInFlight(entityId);
 
@@ -368,13 +547,39 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     // Upload mask to S3 so Replicate can access it
     const maskUrl = await storeMask(maskDataUrl, entityId, imageUrl, {
       forRemoval: isRemoval,
+      maskExpand,
+      maskFeather,
     });
 
     let resultUrl;
 
     if (isRemoval) {
-      console.log('[Inpainting] Mode: REMOVAL (LaMa)');
-      resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+      const tier = (removalTier || (mode === 'remove-premium' ? 'premium' : REMOVAL_TIER_DEFAULT)).toLowerCase();
+      console.log(`[Inpainting] Mode: REMOVAL (tier=${tier}, strict=${strictRemove})`);
+
+      if (strictRemove) {
+        // Never use generative fallback in strict remove mode.
+        resultUrl = await runStrictLamaRemoval(imageUrl, maskUrl);
+      } else if (tier === 'premium') {
+        try {
+          resultUrl = await runFluxFillProRemoval(imageUrl, maskUrl);
+        } catch (fluxError) {
+          console.warn('[Inpainting] FLUX premium removal failed; falling back to SDXL:', fluxError.message);
+          try {
+            resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
+          } catch (sdxlError) {
+            console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
+            resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+          }
+        }
+      } else {
+        try {
+          resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
+        } catch (sdxlError) {
+          console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
+          resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+        }
+      }
     } else {
       console.log(`[Inpainting] Mode: FILL (SDXL) — "${prompt.slice(0, 60)}"`);
       resultUrl = await runSdxlInpainting(imageUrl, maskUrl, prompt, { strength });
@@ -386,6 +591,21 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     incrementUsage(userId);
 
     return { inpainted_url: s3Url };
+  } catch (error) {
+    const status = Number.parseInt(String(error?.status || error?.response?.status || ''), 10);
+    const isProviderRateLimit = status === 429 || /rate[-\s]?limit|throttled|too many requests/i.test(String(error?.message || ''));
+
+    if (isProviderRateLimit) {
+      const retryAfter = parseRetryAfterSeconds(error) || 8;
+      setProviderCooldown(userId, entityId, retryAfter);
+
+      const limitError = new Error(`Inpainting provider is rate-limited. Retry in ${retryAfter}s.`);
+      limitError.status = 429;
+      limitError.retryAfter = retryAfter;
+      throw limitError;
+    }
+
+    throw error;
   } finally {
     clearInFlight(entityId);
   }
