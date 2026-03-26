@@ -179,21 +179,28 @@ export default function ParallaxLayer({
   const focusDepth = depthEffects?.focusDepth ?? 50;
   const blurIntensity = depthEffects?.blurIntensity ?? 0;
 
-  useEffect(() => {
-    if (!onLayoutChange || !bgImage) return undefined;
+  const bgLayout = bgImage ? coverFit(bgImage.width, bgImage.height, width, height) : null;
+  const bgLayoutX = bgLayout ? bgLayout.x : 0;
+  const bgLayoutY = bgLayout ? bgLayout.y : 0;
+  const bgLayoutW = bgLayout ? bgLayout.w : 0;
+  const bgLayoutH = bgLayout ? bgLayout.h : 0;
+  const sourceW = bgImage ? bgImage.width : 0;
+  const sourceH = bgImage ? bgImage.height : 0;
 
-    const layout = coverFit(bgImage.width, bgImage.height, width, height);
+  useEffect(() => {
+    if (!onLayoutChange || !bgImage || !bgLayout) return undefined;
+
     onLayoutChange({
-      sourceWidth: bgImage.width,
-      sourceHeight: bgImage.height,
-      drawX: layout.x,
-      drawY: layout.y,
-      drawWidth: layout.w,
-      drawHeight: layout.h,
+      sourceWidth: sourceW,
+      sourceHeight: sourceH,
+      drawX: bgLayoutX,
+      drawY: bgLayoutY,
+      drawWidth: bgLayoutW,
+      drawHeight: bgLayoutH,
     });
 
     return undefined;
-  }, [bgImage, height, onLayoutChange, width]);
+  }, [onLayoutChange, sourceW, sourceH, bgLayoutX, bgLayoutY, bgLayoutW, bgLayoutH, bgImage]);
 
   useEffect(() => {
     if (!onLayoutChange) return undefined;

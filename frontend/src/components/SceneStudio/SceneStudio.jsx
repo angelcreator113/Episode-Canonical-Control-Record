@@ -161,6 +161,23 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const inpaintRetryAttemptRef = useRef(0);
   const [exportScale, setExportScale] = useState(2);
   const [backgroundLayout, setBackgroundLayout] = useState(null);
+  const handleBackgroundLayoutChange = useCallback((nextLayout) => {
+    setBackgroundLayout((prev) => {
+      if (!nextLayout && !prev) return prev;
+      if (!nextLayout || !prev) return nextLayout;
+      if (
+        prev.sourceWidth === nextLayout.sourceWidth &&
+        prev.sourceHeight === nextLayout.sourceHeight &&
+        prev.drawX === nextLayout.drawX &&
+        prev.drawY === nextLayout.drawY &&
+        prev.drawWidth === nextLayout.drawWidth &&
+        prev.drawHeight === nextLayout.drawHeight
+      ) {
+        return prev;
+      }
+      return nextLayout;
+    });
+  }, []);
 
   // Background removal state
   const [isRemovingBg, setIsRemovingBg] = useState(false);
@@ -1149,7 +1166,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             brushSize={brushSize}
             maskMode={maskMode}
             onMaskChange={setHasMask}
-            onBackgroundLayoutChange={setBackgroundLayout}
+            onBackgroundLayoutChange={handleBackgroundLayoutChange}
           />
 
           {/* Erase tool controls — shown when erase tool is active */}

@@ -86,18 +86,23 @@ function BackgroundImage({
   const imgH = activeImage ? activeImage.height : 0;
   const layout = activeImage ? getCoverLayout(imgW, imgH, width, height) : null;
 
+  const layoutX = layout ? layout.x : 0;
+  const layoutY = layout ? layout.y : 0;
+  const layoutW = layout ? layout.width : 0;
+  const layoutH = layout ? layout.height : 0;
+
   useEffect(() => {
     if (!onLayoutChange || !activeImage || !layout) return;
 
     onLayoutChange({
       sourceWidth: imgW,
       sourceHeight: imgH,
-      drawX: layout.x,
-      drawY: layout.y,
-      drawWidth: layout.width,
-      drawHeight: layout.height,
+      drawX: layoutX,
+      drawY: layoutY,
+      drawWidth: layoutW,
+      drawHeight: layoutH,
     });
-  }, [imgW, imgH, layout, onLayoutChange, activeImage]);
+  }, [imgW, imgH, layoutX, layoutY, layoutW, layoutH, onLayoutChange, activeImage]);
 
   useEffect(() => {
     return () => {
@@ -111,10 +116,10 @@ function BackgroundImage({
     <>
       <KonvaImage
         image={activeImage}
-        x={layout.x}
-        y={layout.y}
-        width={layout.width}
-        height={layout.height}
+        x={layoutX}
+        y={layoutY}
+        width={layoutW}
+        height={layoutH}
         listening
         onClick={(e) => {
           e.cancelBubble = true;
