@@ -154,10 +154,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [maskExpand, setMaskExpand] = useState(3);
   const [maskFeather, setMaskFeather] = useState(1.1);
   const [isInpainting, setIsInpainting] = useState(false);
+  const isInpaintingRef = useRef(false);
   const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [inpaintNotice, setInpaintNotice] = useState(null);
   const [inpaintError, setInpaintError] = useState('');
   const [inpaintCooldownUntil, setInpaintCooldownUntil] = useState(0);
+  const inpaintCooldownRef = useRef(0);
   const [inpaintCooldownSeconds, setInpaintCooldownSeconds] = useState(0);
   const [exportScale, setExportScale] = useState(2);
   const [backgroundLayout, setBackgroundLayout] = useState(null);
@@ -802,11 +804,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── Inpaint (erase) ──
 
   const handleInpaint = useCallback(async () => {
+    // Ref guard is synchronous — prevents double-click race before React batches state
+    if (isInpaintingRef.current) return;
     if (isInpainting || !state.contextId) return;
     if (!hasMask) return;
-    if (inpaintCooldownUntil > Date.now()) {
-      const seconds = Math.ceil((inpaintCooldownUntil - Date.now()) / 1000);
-      setInpaintNotice(`Provider is rate-limited. Retrying window in ${seconds}s.`);
+    if (inpaintCooldownRef.current > Date.now()) {
+      const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
+      setInpaintNotice(`Too many requests. Please wait ${seconds}s and try again.`);
       return;
     }
 
@@ -823,6 +827,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       return;
     }
 
+    isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintNotice(null);
     setInpaintError('');
@@ -888,7 +893,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         const cooldownMs = getInpaintCooldownMs(err);
         if (cooldownMs > 0) {
           const waitSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
-          setInpaintCooldownUntil(Date.now() + cooldownMs);
+          const cooldownUntil = Date.now() + cooldownMs;
+          inpaintCooldownRef.current = cooldownUntil;
+          setInpaintCooldownUntil(cooldownUntil);
           const retryAfterFromServer = err?.response?.data?.retry_after;
           setInpaintError(
             retryAfterFromServer
@@ -902,9 +909,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
       }
     } finally {
+      isInpaintingRef.current = false;
       setIsInpainting(false);
     }
-  }, [isInpainting, state, backgroundUrl, hasMask, maskExpand, maskFeather, inpaintCooldownUntil, inpaintPrompt]);
+  }, [isInpainting, state, backgroundUrl, hasMask, maskExpand, maskFeather, inpaintPrompt]);
 
   const handleClearMask = useCallback(() => {
     if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
