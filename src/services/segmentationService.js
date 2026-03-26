@@ -21,8 +21,9 @@ const s3 = new S3Client({ region: AWS_REGION });
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
-// SAM 2 model — Meta's Segment Anything Model
-const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'meta/sam-2-base';
+// SAM model for click-to-segment
+// Default: schananas/grounded_sam — supports point-based image segmentation
+const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'schananas/grounded_sam';
 
 /**
  * Extract output URL from Replicate output (handles various formats).
@@ -44,7 +45,7 @@ function extractOutputUrl(output) {
     if (typeof resolved === 'string') return resolved;
   }
   if (typeof output.url === 'string') return output.url;
-  for (const key of ['combined_mask', 'mask', 'masks', 'image', 'output']) {
+  for (const key of ['combined_mask', 'mask', 'masks', 'output_image', 'image', 'output']) {
     if (output[key]) {
       const url = extractOutputUrl(output[key]);
       if (url) return url;
@@ -55,6 +56,17 @@ function extractOutputUrl(output) {
     if (/^https?:\/\//i.test(resolved)) return resolved;
   }
   return null;
+}
+
+/**
+ * Get image dimensions from a remote URL.
+ */
+async function getImageDimensions(imageUrl) {
+  const sharp = require('sharp');
+  const axios = require('axios');
+  const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000 });
+  const metadata = await sharp(Buffer.from(response.data)).metadata();
+  return { width: metadata.width, height: metadata.height };
 }
 
 /**
@@ -71,22 +83,65 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
-  console.log(`[Segmentation] SAM segment at (${pointX.toFixed(3)}, ${pointY.toFixed(3)})`);
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
+  // Get image dimensions to convert normalized coords to pixel coords
+  let imgWidth = 1024;
+  let imgHeight = 1024;
   try {
-    const output = await replicate.run(SAM_MODEL, {
-      input: {
-        image: imageUrl,
-        point_coords: `${pointX},${pointY}`,
-        point_labels: '1', // 1 = foreground point
-      },
-    });
+    const dims = await getImageDimensions(imageUrl);
+    imgWidth = dims.width;
+    imgHeight = dims.height;
+  } catch (dimErr) {
+    console.warn('[Segmentation] Could not get image dimensions, using defaults:', dimErr.message);
+  }
+
+  const pixelX = Math.round(pointX * imgWidth);
+  const pixelY = Math.round(pointY * imgHeight);
+  console.log(`[Segmentation] SAM segment at pixel (${pixelX}, ${pixelY}) of ${imgWidth}x${imgHeight} using ${SAM_MODEL}`);
+
+  try {
+    // Try multiple input formats depending on the model
+    let output;
+    const modelLower = SAM_MODEL.toLowerCase();
+
+    if (modelLower.includes('grounded_sam') || modelLower.includes('grounded-sam')) {
+      // grounded_sam expects point_coords as pixel values
+      output = await replicate.run(SAM_MODEL, {
+        input: {
+          image: imageUrl,
+          input_point: `[${pixelX}, ${pixelY}]`,
+          input_label: '[1]',
+        },
+      });
+    } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
+      // sam-2 models — use point_coords format
+      output = await replicate.run(SAM_MODEL, {
+        input: {
+          image: imageUrl,
+          point_coords: [[pixelX, pixelY]],
+          point_labels: [1],
+          multimask_output: false,
+        },
+      });
+    } else {
+      // Default format for facebook/sam and similar
+      output = await replicate.run(SAM_MODEL, {
+        input: {
+          image: imageUrl,
+          point_coords: `${pixelX},${pixelY}`,
+          point_labels: '1',
+        },
+      });
+    }
+
+    console.log('[Segmentation] SAM raw output type:', typeof output,
+      Array.isArray(output) ? `array[${output.length}]` : '');
 
     const maskUrl = extractOutputUrl(output);
     if (!maskUrl) {
       console.error('[Segmentation] SAM returned no output URL. Output:', JSON.stringify(output).slice(0, 500));
-      throw new Error('SAM returned no mask output');
+      throw new Error('SAM returned no mask output — the model may not support point-based segmentation');
     }
 
     console.log('[Segmentation] SAM mask generated successfully');
