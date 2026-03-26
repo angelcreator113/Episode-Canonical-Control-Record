@@ -1144,7 +1144,7 @@ Example: [{"label": "Gold Mirror", "prompt": "ornate gold-framed mirror with sof
 exports.inpaint = async (req, res) => {
   try {
     const { id } = req.params;
-    const { image_url, mask_data_url, prompt, strength } = req.body;
+    const { image_url, mask_data_url, prompt, strength, mode: requestedMode } = req.body;
 
     if (!mask_data_url) {
       return res.status(400).json({ success: false, error: 'mask_data_url is required — paint over the area to remove' });
@@ -1160,7 +1160,12 @@ exports.inpaint = async (req, res) => {
       return res.status(400).json({ success: false, error: 'No source image available' });
     }
 
-    const mode = prompt ? 'fill' : 'remove';
+    const normalizedMode = String(requestedMode || '').toLowerCase();
+    const mode = normalizedMode === 'fill'
+      ? 'fill'
+      : normalizedMode === 'remove'
+        ? 'remove'
+        : (prompt ? 'fill' : 'remove');
     const result = await inpaintingService.inpaintImage(
       sourceUrl,
       mask_data_url,

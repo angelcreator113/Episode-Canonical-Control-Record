@@ -104,7 +104,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [hasMask, setHasMask] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
   const [isInpainting, setIsInpainting] = useState(false);
-  const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [exportScale, setExportScale] = useState(2);
   const [backgroundLayout, setBackgroundLayout] = useState(null);
 
@@ -725,7 +724,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
         maskDataUrl: preciseMaskDataUrl,
-        prompt: (inpaintPrompt || '').trim() || undefined,
+        mode: 'remove',
       });
 
       if (result?.success && result.data?.inpainted_url) {
@@ -741,7 +740,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         // Clear the mask
         if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
         setHasMask(false);
-        setInpaintPrompt('');
       }
     } catch (err) {
       console.error('Inpaint error:', err);
@@ -749,7 +747,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     } finally {
       setIsInpainting(false);
     }
-  }, [isInpainting, state, backgroundUrl, hasMask, inpaintPrompt]);
+  }, [isInpainting, state, backgroundUrl, hasMask]);
 
   // ── Remove Background from selected object ──
 
@@ -1011,13 +1009,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                 max={100}
                 value={brushSize}
                 onChange={(e) => setBrushSize(parseInt(e.target.value))}
-              />
-              <input
-                type="text"
-                className="scene-studio-erase-prompt"
-                placeholder="Fill with... (leave empty for auto)"
-                value={inpaintPrompt}
-                onChange={(e) => setInpaintPrompt(e.target.value)}
               />
               <button
                 className="scene-studio-btn primary"
