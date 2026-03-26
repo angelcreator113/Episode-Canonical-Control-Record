@@ -157,16 +157,20 @@ export default function EraseBrushCanvas({
     return { x, y };
   }, [zoom, panX, panY]);
 
-  // Apply soft brush effect (gaussian blur on edges)
+  // Visible mask color for display (red semi-transparent)
+  const MASK_COLOR = 'rgba(220, 53, 53, 0.5)';
+  const MASK_COLOR_SOLID = 'rgba(220, 53, 53, 0.8)';
+
+  // Apply soft brush effect (gaussian blur on edges) — visible red for display
   const applySoftBrush = useCallback((ctx, x, y, size) => {
     const r = (size || 1) / 2;
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || r <= 0) {
-      return 'rgba(255, 255, 255, 1)';
+      return MASK_COLOR;
     }
     const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.8)');
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    gradient.addColorStop(0, MASK_COLOR_SOLID);
+    gradient.addColorStop(0.5, MASK_COLOR);
+    gradient.addColorStop(1, 'rgba(220, 53, 53, 0)');
     return gradient;
   }, []);
 
@@ -191,8 +195,8 @@ export default function EraseBrushCanvas({
         ctx.fill();
       }
     } else {
-      // Hard brush with sharp edges
-      ctx.strokeStyle = 'white';
+      // Hard brush with sharp edges — visible red for display
+      ctx.strokeStyle = MASK_COLOR;
       ctx.lineWidth = brushSize;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -311,8 +315,8 @@ export default function EraseBrushCanvas({
       ctx.putImageData(strokeHistory[historyIndex], 0, 0);
     }
 
-    // Fill the polygon
-    ctx.fillStyle = 'white';
+    // Fill the polygon — visible red for display
+    ctx.fillStyle = MASK_COLOR;
     ctx.beginPath();
     ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
     lassoPoints.forEach((pt) => ctx.lineTo(pt.x, pt.y));
@@ -390,7 +394,7 @@ export default function EraseBrushCanvas({
       if (brushMode === 'soft') {
         ctx.fillStyle = applySoftBrush(ctx, x, y, brushSize);
       } else {
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = MASK_COLOR;
       }
       ctx.beginPath();
       ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
@@ -490,24 +494,39 @@ export default function EraseBrushCanvas({
     saveToHistory();
   }, [canvasWidth, canvasHeight, saveToHistory]);
 
-  // Export a proper white-on-black mask from the transparent canvas
+  // Export a proper white-on-black mask from the display canvas.
+  // Display canvas uses visible red strokes; export converts any
+  // painted pixel (alpha > 0) to white on a black background.
   const exportMaskDataUrl = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
 
-    // Create a separate canvas with black background + white strokes
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = canvas.width;
     exportCanvas.height = canvas.height;
     const ctx = exportCanvas.getContext('2d');
 
-    // Black background (= keep)
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-
-    // Draw the user's strokes on top (white on black)
+    // Draw the display canvas to read its pixel data
     ctx.drawImage(canvas, 0, 0);
+    const imageData = ctx.getImageData(0, 0, exportCanvas.width, exportCanvas.height);
+    const data = imageData.data;
 
+    // Convert: any pixel with alpha > 0 becomes white, else black
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 10) { // has some alpha = was painted
+        data[i] = 255;     // R
+        data[i + 1] = 255; // G
+        data[i + 2] = 255; // B
+        data[i + 3] = 255; // A
+      } else {
+        data[i] = 0;       // R
+        data[i + 1] = 0;   // G
+        data[i + 2] = 0;   // B
+        data[i + 3] = 255; // A
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
     return exportCanvas.toDataURL('image/png');
   }, []);
 
