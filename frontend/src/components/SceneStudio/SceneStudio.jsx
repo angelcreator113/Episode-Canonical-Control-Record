@@ -78,6 +78,11 @@ function getInpaintCooldownMs(err) {
   }
 
   const serverError = String(err?.response?.data?.error || '');
+  const retryAfterMatch = serverError.match(/retry_after["':\s]+(\d+)/i);
+  if (retryAfterMatch) {
+    return Number.parseInt(retryAfterMatch[1], 10) * 1000;
+  }
+
   const minutesMatch = serverError.match(/resets\s+in\s+(\d+)\s+minutes?/i);
   if (minutesMatch) {
     return Number.parseInt(minutesMatch[1], 10) * 60 * 1000;
@@ -268,7 +273,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }, 2000);
     } catch (err) {
       console.error('Scene Studio save error:', err);
-      const msg = err.response?.data?.error || err.message || 'Save failed';
+      const details = Array.isArray(err?.response?.data?.details) ? err.response.data.details : [];
+      const detailText = details.length ? ` (${details.join('; ')})` : '';
+      const msg = (err.response?.data?.error || err.message || 'Save failed') + detailText;
       console.error('Scene Studio save error detail:', msg);
 
       // Auto-retry once on network errors
@@ -285,16 +292,21 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
       save._retried = false;
 
+      const status = err?.response?.status;
+      const isClientValidationError = typeof status === 'number' && status >= 400 && status < 500;
+
       if (mountedRef.current) {
         setSaveStatus('error');
         setSaveErrorMsg(msg);
-        // Auto-retry after 10s if still dirty
-        saveTimerRef.current = setTimeout(() => {
-          if (mountedRef.current && state.isDirty && saveRef.current) {
-            console.log('Scene Studio: auto-retrying save...');
-            saveRef.current();
-          }
-        }, 10000);
+        if (!isClientValidationError) {
+          // Auto-retry after 10s for server/network failures only.
+          saveTimerRef.current = setTimeout(() => {
+            if (mountedRef.current && state.isDirty && saveRef.current) {
+              console.log('Scene Studio: auto-retrying save...');
+              saveRef.current();
+            }
+          }, 10000);
+        }
       }
     } finally {
       isSavingRef.current = false;

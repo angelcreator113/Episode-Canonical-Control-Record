@@ -163,9 +163,11 @@ exports.saveCanvas = async (req, res) => {
       // Get existing objects for this scene
       const existing = await SceneAsset.findAll({
         where: { scene_id: id },
-        attributes: ['id', 'asset_id', 'usage_type'],
+        attributes: ['id', 'asset_id', 'usage_type', 'deleted_at'],
+        paranoid: false,
         transaction,
       });
+      const activeExisting = existing.filter((e) => !e.deleted_at);
       const existingById = new Map(existing.map((e) => [e.id, e]));
       const existingByComposite = new Map(
         existing
@@ -210,6 +212,10 @@ exports.saveCanvas = async (req, res) => {
         };
 
         if (obj.id && existingById.has(obj.id)) {
+          const match = existingById.get(obj.id);
+          if (match.deleted_at) {
+            await SceneAsset.restore({ where: { id: match.id }, transaction });
+          }
           // Update existing
           await SceneAsset.update(data, {
             where: { id: obj.id, scene_id: id },
@@ -220,6 +226,9 @@ exports.saveCanvas = async (req, res) => {
           // Fallback for clients that temporarily omit/purge object IDs during autosave.
           // Updating in place avoids unique-index collisions on soft-deleted rows.
           const match = existingByComposite.get(`${obj.asset_id}::${data.usage_type}`);
+          if (match.deleted_at) {
+            await SceneAsset.restore({ where: { id: match.id }, transaction });
+          }
           await SceneAsset.update(data, {
             where: { id: match.id, scene_id: id },
             transaction,
@@ -235,6 +244,7 @@ exports.saveCanvas = async (req, res) => {
       // Delete objects removed from canvas (after upsert).
       // This ordering avoids soft-delete + recreate collisions on unique indexes.
       const toDelete = existing
+        .filter((e) => !e.deleted_at)
         .map((e) => e.id)
         .filter((eid) => !keptExistingIds.has(eid));
       if (toDelete.length > 0) {
