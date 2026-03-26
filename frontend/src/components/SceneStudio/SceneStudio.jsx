@@ -1075,6 +1075,35 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, backgroundUrl]);
 
+  // ── Smart Select (SAM segmentation) ──
+  const handleSegment = useCallback(async (normalizedX, normalizedY) => {
+    const contextId = state.contextId;
+    if (!contextId) return null;
+
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    try {
+      const result = await sceneService.segmentObject(contextId, {
+        imageUrl: targetUrl,
+        pointX: normalizedX,
+        pointY: normalizedY,
+      });
+      if (result?.success && result.data?.maskUrl) {
+        return result.data.maskUrl;
+      }
+      return null;
+    } catch (err) {
+      console.error('Segment error:', err);
+      setInpaintError(err?.response?.data?.error || 'Smart select failed. Try brush or lasso instead.');
+      return null;
+    }
+  }, [state, backgroundUrl]);
+
   // ── Remove Background from selected object ──
 
   const handleRemoveBackground = useCallback(async (objectId, assetId) => {
@@ -1345,6 +1374,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               backgroundUrl={backgroundUrl}
               onApply={handleEraseApply}
               onReplaceWithImage={handleReplaceWithImage}
+              onSegment={handleSegment}
               onCancel={() => state.setActiveTool('select')}
               isProcessing={isInpainting}
               sceneId={sceneId || sceneSetId}

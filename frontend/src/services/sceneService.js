@@ -419,6 +419,19 @@ const sceneService = {
   },
 
   /**
+   * Smart Select — SAM click-to-segment
+   * POST /api/v1/scenes/:id/segment
+   */
+  segmentObject: async (sceneId, { imageUrl, pointX, pointY } = {}) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/segment`, {
+      image_url: imageUrl,
+      point_x: pointX,
+      point_y: pointY,
+    });
+    return data;
+  },
+
+  /**
    * Animate scene via Runway image-to-video
    * POST /api/v1/scenes/:id/animate
    */

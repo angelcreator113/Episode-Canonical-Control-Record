@@ -3,7 +3,7 @@ import {
   Eraser, Check, X, Loader, Minus, Plus,
   Undo2, Redo2, Circle, Hexagon, Eye, EyeOff,
   Sliders, Sparkles, History, ChevronDown, ChevronUp,
-  ImagePlus, Upload
+  ImagePlus, Upload, MousePointer
 } from 'lucide-react';
 
 /**
@@ -29,6 +29,7 @@ export default function EraseBrushCanvas({
   backgroundUrl,
   onApply,
   onReplaceWithImage,
+  onSegment,
   onCancel,
   isProcessing,
   sceneId,
@@ -51,6 +52,7 @@ export default function EraseBrushCanvas({
   const [brushSize, setBrushSize] = useState(40);
   const [hasStrokes, setHasStrokes] = useState(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
+  const [isSegmenting, setIsSegmenting] = useState(false);
 
   // Enhanced features state
   const [customPrompt, setCustomPrompt] = useState('');
@@ -325,9 +327,43 @@ export default function EraseBrushCanvas({
 
   // Mouse event handlers
   const handleMouseDown = useCallback((e) => {
-    if (isProcessing) return;
+    if (isProcessing || isSegmenting) return;
 
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
+
+    if (drawMode === 'smart') {
+      // Smart Select: send click to SAM, get mask back
+      const normalizedX = x / canvasWidth;
+      const normalizedY = y / canvasHeight;
+      if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
+
+      setIsSegmenting(true);
+      onSegment?.(normalizedX, normalizedY)
+        .then((maskImageUrl) => {
+          if (!maskImageUrl) return;
+          // Draw the SAM mask onto our canvas
+          const img = new window.Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            // Draw mask as white on our canvas (SAM masks are white-on-black)
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            setHasStrokes(true);
+            saveToHistory();
+          };
+          img.src = maskImageUrl;
+        })
+        .catch((err) => {
+          console.error('Smart select failed:', err);
+        })
+        .finally(() => {
+          setIsSegmenting(false);
+        });
+      return;
+    }
 
     if (drawMode === 'lasso') {
       // Check if clicking near the first point to close the lasso
@@ -558,6 +594,8 @@ export default function EraseBrushCanvas({
         setDrawMode('brush');
       } else if (e.key === 'l' || e.key === 'L') {
         setDrawMode('lasso');
+      } else if (e.key === 's' || e.key === 'S') {
+        setDrawMode('smart');
       }
     };
 
@@ -605,11 +643,13 @@ export default function EraseBrushCanvas({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           style={{
-            cursor: isProcessing 
-              ? 'wait' 
-              : drawMode === 'lasso'
+            cursor: isProcessing || isSegmenting
+              ? 'wait'
+              : drawMode === 'smart'
                 ? 'crosshair'
-                : `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize}" height="${brushSize}" viewBox="0 0 ${brushSize} ${brushSize}"><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 1}" fill="${brushMode === 'soft' ? 'rgba(255,255,255,0.3)' : 'none'}" stroke="%23667eea" stroke-width="2"/></svg>') ${brushSize/2} ${brushSize/2}, crosshair`,
+                : drawMode === 'lasso'
+                  ? 'crosshair'
+                  : `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize}" height="${brushSize}" viewBox="0 0 ${brushSize} ${brushSize}"><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 1}" fill="${brushMode === 'soft' ? 'rgba(255,255,255,0.3)' : 'none'}" stroke="%23667eea" stroke-width="2"/></svg>') ${brushSize/2} ${brushSize/2}, crosshair`,
           }}
         />
       </div>
@@ -672,6 +712,16 @@ export default function EraseBrushCanvas({
               >
                 <Hexagon size={12} />
                 <span>Lasso</span>
+              </button>
+              <button
+                type="button"
+                className={`erase-mode-btn ${drawMode === 'smart' ? 'active' : ''}`}
+                onClick={() => setDrawMode('smart')}
+                disabled={isProcessing}
+                title="Smart Select — click on an object to auto-select it (S)"
+              >
+                <MousePointer size={12} />
+                <span>Smart</span>
               </button>
             </div>
           </div>
@@ -862,15 +912,20 @@ export default function EraseBrushCanvas({
         )}
 
         {/* Processing indicator */}
+        {isSegmenting && (
+          <div className="erase-brush-progress">AI is detecting the object... This may take a few seconds.</div>
+        )}
         {isProcessing && (
           <div className="erase-brush-progress">AI is filling the selected area. This may take 10-30 seconds...</div>
         )}
 
         {/* Keyboard shortcuts hint */}
         <div className="erase-brush-shortcuts">
-          {drawMode === 'brush'
-            ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • Esc cancel'
-            : 'Click to add points • Enter to close • Esc cancel'}
+          {drawMode === 'smart'
+            ? 'Click on any object to auto-select it • S smart • B brush • L lasso'
+            : drawMode === 'brush'
+              ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • S smart • Esc cancel'
+              : 'Click to add points • Enter to close • Esc cancel'}
         </div>
       </div>
     </div>

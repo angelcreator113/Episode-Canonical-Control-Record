@@ -254,6 +254,14 @@ router.post(
   asyncHandler(sceneStudioController.inpaint)
 );
 
+// POST /api/v1/scenes/:id/segment - Smart Select via SAM (click-to-segment)
+router.post(
+  '/:id/segment',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.segmentObject)
+);
+
 // POST /api/v1/scenes/:id/animate - Scene animation via Runway image-to-video
 router.post(
   '/:id/animate',
