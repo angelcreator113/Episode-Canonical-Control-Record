@@ -29,6 +29,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 90;
+const STRICT_REMOVE_PASSES = Math.max(1, Math.min(3, parseInt(process.env.STRICT_REMOVE_PASSES || '2', 10)));
 
 // ─── MODEL CONFIG ───────────────────────────────────────────────────────────
 
@@ -203,6 +204,21 @@ async function runSdxlRemoval(imageUrl, maskUrl) {
     strength: 0.95,
     guidanceScale: 6.5,
   });
+}
+
+/**
+ * Strict deterministic removal path for erase tool.
+ * Runs LaMa for one or more passes and avoids generative models entirely.
+ */
+async function runStrictLamaRemoval(imageUrl, maskUrl) {
+  let currentUrl = imageUrl;
+
+  for (let pass = 1; pass <= STRICT_REMOVE_PASSES; pass++) {
+    console.log(`[Inpainting] Strict LaMa pass ${pass}/${STRICT_REMOVE_PASSES}`);
+    currentUrl = await runLamaRemoval(currentUrl, maskUrl);
+  }
+
+  return currentUrl;
 }
 
 /**
@@ -489,12 +505,8 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
       console.log(`[Inpainting] Mode: REMOVAL (tier=${tier}, strict=${strictRemove})`);
 
       if (strictRemove) {
-        try {
-          resultUrl = await runLamaRemoval(imageUrl, maskUrl);
-        } catch (lamaError) {
-          console.warn('[Inpainting] Strict LaMa removal failed; falling back to SDXL:', lamaError.message);
-          resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
-        }
+        // Never use generative fallback in strict remove mode.
+        resultUrl = await runStrictLamaRemoval(imageUrl, maskUrl);
       } else if (tier === 'premium') {
         try {
           resultUrl = await runFluxFillProRemoval(imageUrl, maskUrl);
