@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import api from '../../services/api';
 import {
   Eraser, Check, X, Loader, Minus, Plus,
   Undo2, Redo2, Circle, Hexagon, Eye, EyeOff,
@@ -583,14 +584,18 @@ export default function EraseBrushCanvas({
     if (!showImageMenu || libraryImages.length > 0 || libraryLoading) return;
     let cancelled = false;
     setLibraryLoading(true);
-    fetch(`/api/v1/assets?type=image&limit=20${sceneId ? `&scene_id=${sceneId}` : ''}`)
-      .then((res) => res.json())
-      .then((json) => {
+    const params = { asset_type: 'image', limit: 20 };
+    if (sceneId) params.scene_id = sceneId;
+    api.get('/api/v1/assets', { params })
+      .then(({ data }) => {
         if (!cancelled) {
-          setLibraryImages(json.data || json.assets || []);
+          setLibraryImages(data.data || data.assets || []);
         }
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.warn('Library fetch failed:', err.message);
+        if (!cancelled) setLibraryImages([]);
+      })
       .finally(() => { if (!cancelled) setLibraryLoading(false); });
     return () => { cancelled = true; };
   }, [showImageMenu, libraryImages.length, libraryLoading, sceneId]);
