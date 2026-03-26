@@ -2427,7 +2427,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ERASE BRUSH CANVAS (Advanced overlay)
+   ERASE BRUSH CANVAS — Bottom-docked toolbar
    ═══════════════════════════════════════════════════════════════ */
 
 .erase-brush-overlay {
@@ -2435,7 +2435,8 @@
   inset: 0;
   z-index: 50;
   display: flex;
-  pointer-events: auto;
+  flex-direction: column;
+  pointer-events: none;
 }
 
 .erase-brush-canvas-wrapper {
@@ -2443,6 +2444,7 @@
   top: 0;
   left: 0;
   overflow: hidden;
+  pointer-events: auto;
 }
 
 .erase-brush-backdrop {
@@ -2460,55 +2462,76 @@
   touch-action: none;
 }
 
-/* ── Controls panel ── */
+/* ── Bottom-docked toolbar ── */
 
-.erase-brush-controls {
+.erase-toolbar {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 260px;
-  max-height: calc(100% - 24px);
-  overflow-y: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
   background: #FAF7F0;
-  border: 1px solid #d6d0c4;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  padding: 12px;
+  border-top: 1px solid #d6d0c4;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
   color: #2C2C2C;
   z-index: 51;
+  pointer-events: auto;
 }
 
-.erase-brush-header {
+.erase-toolbar-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  font-size: 12px;
-  color: #B8962E;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-height: 32px;
+}
+
+.erase-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.erase-toolbar-spacer {
+  flex: 1;
+}
+
+.erase-toolbar-actions {
+  margin-left: auto;
+}
+
+.erase-toolbar-fill-row {
+  border-top: 1px solid #e8e2d6;
+  padding-top: 6px;
+}
+
+.erase-toolbar-fill {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ── Mode toggle (Brush / Lasso) ── */
 
 .erase-brush-mode-toggle {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   background: #f0ece4;
   border-radius: 6px;
   padding: 2px;
 }
 
 .erase-mode-btn {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 5px 8px;
+  gap: 3px;
+  padding: 4px 10px;
   border: none;
   border-radius: 5px;
   background: transparent;
@@ -2517,6 +2540,7 @@
   font-size: 10px;
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 
 .erase-mode-btn:hover:not(:disabled) {
@@ -2535,124 +2559,23 @@
   cursor: not-allowed;
 }
 
-/* ── Instructions ── */
-
-.erase-brush-instructions {
-  font-size: 10px;
-  color: #888;
-  line-height: 1.4;
-}
-
-/* ── Prompt section ── */
-
-.erase-brush-prompt-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.erase-brush-prompt-section label {
-  font-size: 10px;
-  font-weight: 500;
-  color: #666;
-}
-
-.erase-prompt-input-wrapper {
-  display: flex;
-  gap: 4px;
-}
-
-.erase-prompt-input {
-  flex: 1;
-  padding: 5px 8px;
-  border: 1px solid #d6d0c4;
-  border-radius: 5px;
-  font-family: 'DM Mono', monospace;
-  font-size: 10px;
-  background: #fff;
-  color: #2C2C2C;
-}
-
-.erase-prompt-input:focus {
-  outline: none;
-  border-color: #B8962E;
-}
-
-.erase-prompt-input:disabled {
-  opacity: 0.5;
-}
-
-.erase-prompt-suggestions-btn {
-  padding: 4px 6px;
-  border: 1px solid #d6d0c4;
-  border-radius: 5px;
-  background: #fff;
-  color: #B8962E;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-}
-
-.erase-prompt-suggestions-btn:hover:not(:disabled) {
-  background: #f8f4eb;
-}
-
-.erase-prompt-suggestions {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
-  padding: 4px;
-  background: #fff;
-  border: 1px solid #d6d0c4;
-  border-radius: 6px;
-}
-
-.erase-prompt-suggestion {
-  padding: 5px 8px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  text-align: left;
-  font-family: 'DM Mono', monospace;
-  font-size: 10px;
-  color: #2C2C2C;
-  cursor: pointer;
-}
-
-.erase-prompt-suggestion:hover {
-  background: #f8f4eb;
-}
-
-/* ── Brush size control ── */
-
-.erase-brush-size-control {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.erase-brush-size-control label {
-  font-size: 10px;
-  font-weight: 500;
-  color: #666;
-}
+/* ── Brush size (inline in toolbar) ── */
 
 .erase-brush-size-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .erase-brush-size-row input[type="range"] {
-  flex: 1;
+  width: 80px;
   height: 4px;
   accent-color: #B8962E;
 }
 
 .erase-brush-size-btn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: 1px solid #d6d0c4;
   border-radius: 4px;
   background: #fff;
@@ -2675,22 +2598,21 @@
 }
 
 .erase-brush-size-value {
-  min-width: 36px;
-  text-align: right;
   font-size: 10px;
   color: #888;
+  min-width: 32px;
+  text-align: right;
 }
 
 /* ── Brush type (Soft / Hard) ── */
 
 .erase-brush-type-toggle {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .erase-brush-type-btn {
-  flex: 1;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border: 1px solid #d6d0c4;
   border-radius: 4px;
   background: #fff;
@@ -2721,12 +2643,12 @@
 .erase-brush-undo-redo {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .erase-brush-action-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: 1px solid #d6d0c4;
   border-radius: 5px;
   background: #fff;
@@ -2750,19 +2672,20 @@
 
 .erase-brush-undo-count {
   font-size: 9px;
-  color: #999;
-  margin-left: 4px;
+  color: #B8962E;
+  font-weight: 600;
 }
 
-/* ── Advanced options ── */
+/* ── Advanced options toggle ── */
 
 .erase-brush-advanced-toggle {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 0;
-  border: none;
-  background: none;
+  gap: 3px;
+  padding: 3px 6px;
+  border: 1px solid #d6d0c4;
+  border-radius: 4px;
+  background: #fff;
   color: #888;
   font-family: 'DM Mono', monospace;
   font-size: 10px;
@@ -2771,21 +2694,43 @@
 
 .erase-brush-advanced-toggle:hover {
   color: #2C2C2C;
+  border-color: #B8962E;
 }
+
+.erase-brush-opacity-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #d6d0c4;
+  border-radius: 4px;
+  background: #fff;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.erase-brush-opacity-btn:hover {
+  background: #f8f4eb;
+}
+
+/* ── Advanced panel (slides up) ── */
 
 .erase-brush-advanced {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 8px;
+  gap: 16px;
+  padding: 8px 12px;
   background: #f8f4eb;
   border-radius: 6px;
+  border: 1px solid #e8e2d6;
 }
 
 .erase-brush-slider-group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
+  min-width: 140px;
 }
 
 .erase-brush-slider-group label {
@@ -2807,121 +2752,143 @@
   accent-color: #B8962E;
 }
 
-.erase-brush-slider-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 9px;
-  color: #aaa;
-}
+/* ── Prompt input (in fill row) ── */
 
-.erase-brush-opacity-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.erase-brush-opacity-row input[type="range"] {
+.erase-prompt-input {
   flex: 1;
+  padding: 5px 10px;
+  border: 1px solid #d6d0c4;
+  border-radius: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  background: #fff;
+  color: #2C2C2C;
+  min-width: 0;
 }
 
-.erase-brush-opacity-btn {
-  width: 26px;
-  height: 26px;
+.erase-prompt-input:focus {
+  outline: none;
+  border-color: #B8962E;
+}
+
+.erase-prompt-input:disabled {
+  opacity: 0.5;
+}
+
+.erase-prompt-suggestions-btn {
+  padding: 4px 6px;
   border: 1px solid #d6d0c4;
-  border-radius: 4px;
+  border-radius: 5px;
   background: #fff;
-  color: #666;
+  color: #B8962E;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
 }
 
-.erase-brush-opacity-btn:hover {
+.erase-prompt-suggestions-btn:hover:not(:disabled) {
   background: #f8f4eb;
 }
 
-/* ── History ── */
-
-.erase-brush-history-toggle {
+.erase-prompt-suggestions {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 0;
-  border: none;
-  background: none;
-  color: #888;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #d6d0c4;
+  border-radius: 6px;
+}
+
+.erase-prompt-suggestion {
+  padding: 4px 10px;
+  border: 1px solid #e8e2d6;
+  border-radius: 12px;
+  background: transparent;
   font-family: 'DM Mono', monospace;
   font-size: 10px;
-  cursor: pointer;
-}
-
-.erase-brush-history-toggle:hover {
   color: #2C2C2C;
-}
-
-.erase-brush-history {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 160px;
-  overflow-y: auto;
-}
-
-.erase-history-item {
-  display: flex;
-  gap: 8px;
-  padding: 4px;
-  background: #fff;
-  border-radius: 5px;
-  border: 1px solid #e8e2d6;
-}
-
-.erase-history-item img {
-  width: 48px;
-  height: 36px;
-  object-fit: cover;
-  border-radius: 3px;
-}
-
-.erase-history-info {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-}
-
-.erase-history-time {
-  font-size: 9px;
-  color: #999;
-}
-
-.erase-history-revert {
-  padding: 2px 6px;
-  border: 1px solid #d6d0c4;
-  border-radius: 3px;
-  background: #fff;
-  color: #666;
-  font-family: 'DM Mono', monospace;
-  font-size: 9px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.erase-history-revert:hover:not(:disabled) {
+.erase-prompt-suggestion:hover {
   background: #f8f4eb;
   border-color: #B8962E;
 }
 
-.erase-history-revert:disabled {
-  opacity: 0.4;
+/* ── Replace with Image / Remove BG ── */
+
+.erase-remove-bg-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.erase-remove-bg-toggle input[type="checkbox"] {
+  accent-color: #B8962E;
+  width: 13px;
+  height: 13px;
+}
+
+.erase-remove-bg-label {
+  font-family: 'DM Mono', monospace;
+}
+
+.erase-btn-label {
+  display: inline;
+}
+
+/* ── Action buttons ── */
+
+.erase-brush-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.erase-brush-btn.primary {
+  background: #B8962E;
+  color: #fff;
+}
+
+.erase-brush-btn.primary:hover:not(:disabled) {
+  background: #a6841f;
+}
+
+.erase-brush-btn.secondary {
+  background: #f0ece4;
+  color: #2C2C2C;
+}
+
+.erase-brush-btn.secondary:hover:not(:disabled) {
+  background: #e8e2d6;
+}
+
+.erase-brush-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Variations overlay ── */
 
 .erase-variations-overlay {
   position: absolute;
-  bottom: 16px;
+  bottom: 120px;
   left: 50%;
   transform: translateX(-50%);
   background: #FAF7F0;
@@ -2982,67 +2949,20 @@
   border-radius: 3px;
 }
 
-/* ── Keyboard shortcuts ── */
-
-.erase-brush-shortcuts {
-  font-size: 9px;
-  color: #bbb;
-  text-align: center;
-}
-
-/* ── Action buttons ── */
-
-.erase-brush-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.erase-brush-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 7px 10px;
-  border: none;
-  border-radius: 6px;
-  font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.erase-brush-btn.primary {
-  background: #B8962E;
-  color: #fff;
-}
-
-.erase-brush-btn.primary:hover:not(:disabled) {
-  background: #a6841f;
-}
-
-.erase-brush-btn.secondary {
-  background: #f0ece4;
-  color: #2C2C2C;
-}
-
-.erase-brush-btn.secondary:hover:not(:disabled) {
-  background: #e8e2d6;
-}
-
-.erase-brush-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ── Processing state ── */
+/* ── Processing + shortcuts ── */
 
 .erase-brush-progress {
   font-size: 10px;
   color: #B8962E;
   text-align: center;
-  padding: 4px 0;
+  padding: 2px 0;
+}
+
+.erase-brush-shortcuts {
+  font-size: 9px;
+  color: #bbb;
+  text-align: center;
+  padding: 0;
 }
 
 @keyframes erase-spin {
@@ -3056,11 +2976,21 @@
 
 /* ── Responsive ── */
 
-@media (max-width: 768px) {
-  .erase-brush-controls {
-    width: 220px;
-    padding: 10px;
-    font-size: 10px;
+@media (max-width: 900px) {
+  .erase-toolbar-row {
+    flex-wrap: wrap;
+  }
+
+  .erase-toolbar-spacer {
+    display: none;
+  }
+
+  .erase-btn-label {
+    display: none;
+  }
+
+  .erase-brush-size-row input[type="range"] {
+    width: 60px;
   }
 }
 

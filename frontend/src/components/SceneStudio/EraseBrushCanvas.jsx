@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  Eraser, Check, X, Loader, Minus, Plus, 
+import {
+  Eraser, Check, X, Loader, Minus, Plus,
   Undo2, Redo2, Circle, Hexagon, Eye, EyeOff,
-  Sliders, Sparkles, History, ChevronDown, ChevronUp
+  Sliders, Sparkles, History, ChevronDown, ChevronUp,
+  ImagePlus
 } from 'lucide-react';
 
 /**
@@ -27,6 +28,7 @@ export default function EraseBrushCanvas({
   panY,
   backgroundUrl,
   onApply,
+  onReplaceWithImage,
   onCancel,
   isProcessing,
   // New props for enhanced features
@@ -37,6 +39,8 @@ export default function EraseBrushCanvas({
 }) {
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [removeBg, setRemoveBg] = useState(false);
   
   // Basic drawing state
   const [isDrawing, setIsDrawing] = useState(false);
@@ -464,6 +468,28 @@ export default function EraseBrushCanvas({
     });
   }, [hasStrokes, isProcessing, onApply, customPrompt, strength, variationCount]);
 
+  // Replace with image handler
+  const handleFileSelect = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file || !hasStrokes || isProcessing) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const maskDataUrl = canvas.toDataURL('image/png');
+    const reader = new FileReader();
+    reader.onload = () => {
+      onReplaceWithImage?.(maskDataUrl, {
+        imageDataUrl: reader.result,
+        removeBg,
+      });
+    };
+    reader.readAsDataURL(file);
+
+    // Reset file input so the same file can be selected again
+    e.target.value = '';
+  }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -576,317 +602,204 @@ export default function EraseBrushCanvas({
         </div>
       )}
 
-      {/* Controls panel */}
-      <div className="erase-brush-controls">
-        <div className="erase-brush-header">
-          <Eraser size={14} />
-          <span>Erase Tool</span>
+      {/* Hidden file input for Replace with Image */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+      />
+
+      {/* Bottom-docked toolbar */}
+      <div className="erase-toolbar">
+        {/* Row 1: Drawing tools */}
+        <div className="erase-toolbar-row">
+          <div className="erase-toolbar-group">
+            <div className="erase-brush-mode-toggle">
+              <button
+                type="button"
+                className={`erase-mode-btn ${drawMode === 'brush' ? 'active' : ''}`}
+                onClick={() => setDrawMode('brush')}
+                disabled={isProcessing}
+                title="Brush mode (B)"
+              >
+                <Circle size={12} />
+                <span>Brush</span>
+              </button>
+              <button
+                type="button"
+                className={`erase-mode-btn ${drawMode === 'lasso' ? 'active' : ''}`}
+                onClick={() => setDrawMode('lasso')}
+                disabled={isProcessing}
+                title="Lasso mode (L)"
+              >
+                <Hexagon size={12} />
+                <span>Lasso</span>
+              </button>
+            </div>
+          </div>
+
+          {drawMode === 'brush' && (
+            <div className="erase-toolbar-group">
+              <div className="erase-brush-size-row">
+                <button type="button" className="erase-brush-size-btn" onClick={() => setBrushSize((prev) => Math.max(5, prev - 10))} disabled={isProcessing}>
+                  <Minus size={12} />
+                </button>
+                <input type="range" min="5" max="200" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} disabled={isProcessing} />
+                <button type="button" className="erase-brush-size-btn" onClick={() => setBrushSize((prev) => Math.min(200, prev + 10))} disabled={isProcessing}>
+                  <Plus size={12} />
+                </button>
+                <span className="erase-brush-size-value">{brushSize}px</span>
+              </div>
+              <div className="erase-brush-type-toggle">
+                <button type="button" className={`erase-brush-type-btn ${brushMode === 'soft' ? 'active' : ''}`} onClick={() => setBrushMode('soft')} disabled={isProcessing}>Soft</button>
+                <button type="button" className={`erase-brush-type-btn ${brushMode === 'hard' ? 'active' : ''}`} onClick={() => setBrushMode('hard')} disabled={isProcessing}>Hard</button>
+              </div>
+            </div>
+          )}
+
+          <div className="erase-toolbar-group">
+            <div className="erase-brush-undo-redo">
+              <button type="button" className="erase-brush-action-btn" onClick={handleUndo} disabled={!canUndo || isProcessing} title="Undo (Ctrl+Z)">
+                <Undo2 size={14} />
+              </button>
+              <button type="button" className="erase-brush-action-btn" onClick={handleRedo} disabled={!canRedo || isProcessing} title="Redo (Ctrl+Y)">
+                <Redo2 size={14} />
+              </button>
+              {historyIndex > 0 && <span className="erase-brush-undo-count">{historyIndex}</span>}
+            </div>
+          </div>
+
+          <div className="erase-toolbar-group">
+            <button type="button" className="erase-brush-advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
+              <Sliders size={12} />
+              {showAdvanced ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+            </button>
+            {maskOpacity > 0 ? (
+              <button type="button" className="erase-brush-opacity-btn" onClick={() => setMaskOpacity(0)} title="Hide mask overlay">
+                <Eye size={14} />
+              </button>
+            ) : (
+              <button type="button" className="erase-brush-opacity-btn" onClick={() => setMaskOpacity(0.6)} title="Show mask overlay">
+                <EyeOff size={14} />
+              </button>
+            )}
+          </div>
+
+          <div className="erase-toolbar-spacer" />
+
+          <div className="erase-toolbar-group erase-toolbar-actions">
+            <button type="button" className="erase-brush-btn secondary" onClick={handleClear} disabled={!hasStrokes || isProcessing}>Clear</button>
+            <button type="button" className="erase-brush-btn secondary" onClick={onCancel} disabled={isProcessing}>
+              <X size={14} /> Cancel
+            </button>
+          </div>
         </div>
 
-        {/* Drawing mode toggle */}
-        <div className="erase-brush-mode-toggle">
-          <button
-            className={`erase-mode-btn ${drawMode === 'brush' ? 'active' : ''}`}
-            onClick={() => setDrawMode('brush')}
-            disabled={isProcessing}
-            title="Brush mode (B)"
-          >
-            <Circle size={12} />
-            <span>Brush</span>
-          </button>
-          <button
-            className={`erase-mode-btn ${drawMode === 'lasso' ? 'active' : ''}`}
-            onClick={() => setDrawMode('lasso')}
-            disabled={isProcessing}
-            title="Lasso mode (L)"
-          >
-            <Hexagon size={12} />
-            <span>Lasso</span>
-          </button>
-        </div>
-
-        {/* Instructions based on mode */}
-        <div className="erase-brush-instructions">
-          {drawMode === 'brush' 
-            ? 'Paint over areas to remove. The AI will fill them intelligently.'
-            : lassoPoints.length === 0
-              ? 'Click to start drawing a selection. Each click adds a point.'
-              : lassoPoints.length < 3
-                ? `${lassoPoints.length} point${lassoPoints.length > 1 ? 's' : ''} — need at least 3 to close`
-                : `${lassoPoints.length} points — double-click or click near the green dot to close`}
-        </div>
-
-        {/* Custom prompt input */}
-        <div className="erase-brush-prompt-section">
-          <label>Fill with (optional)</label>
-          <div className="erase-prompt-input-wrapper">
+        {/* Row 2: Fill options + Apply */}
+        <div className="erase-toolbar-row erase-toolbar-fill-row">
+          <div className="erase-toolbar-group erase-toolbar-fill">
             <input
               type="text"
               value={customPrompt}
               onChange={(e) => setCustomPrompt(e.target.value)}
-              placeholder="e.g., blue sky with clouds"
+              onKeyDown={(e) => { if (e.key === 'Enter' && hasStrokes && !isProcessing) handleApply(); }}
+              placeholder="Describe replacement (leave empty for AI fill)..."
               disabled={isProcessing}
               className="erase-prompt-input"
             />
             <button
+              type="button"
               className="erase-prompt-suggestions-btn"
               onClick={() => setShowPromptSuggestions(!showPromptSuggestions)}
               disabled={isProcessing}
+              title="Prompt suggestions"
             >
               <Sparkles size={12} />
             </button>
           </div>
-          {showPromptSuggestions && (
-            <div className="erase-prompt-suggestions">
-              {promptSuggestions.map((suggestion, i) => (
-                <button
-                  key={i}
-                  className="erase-prompt-suggestion"
-                  onClick={() => {
-                    setCustomPrompt(suggestion);
-                    setShowPromptSuggestions(false);
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          )}
+
+          <div className="erase-toolbar-group erase-toolbar-actions">
+            <button
+              type="button"
+              className="erase-brush-btn secondary"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!hasStrokes || isProcessing}
+              title="Replace masked area with an uploaded image"
+            >
+              <ImagePlus size={14} />
+              <span className="erase-btn-label">Use Image</span>
+            </button>
+            <label className="erase-remove-bg-toggle" title="Remove background from uploaded image before compositing">
+              <input type="checkbox" checked={removeBg} onChange={(e) => setRemoveBg(e.target.checked)} disabled={isProcessing} />
+              <span className="erase-remove-bg-label">Remove BG</span>
+            </label>
+            <button
+              type="button"
+              className="erase-brush-btn primary"
+              onClick={handleApply}
+              disabled={!hasStrokes || isProcessing}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader size={14} className="erase-brush-spinner" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Check size={14} />
+                  Apply
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Brush size control (only for brush mode) */}
-        {drawMode === 'brush' && (
-          <div className="erase-brush-size-control">
-            <label>Brush Size</label>
-            <div className="erase-brush-size-row">
+        {/* Prompt suggestions dropdown */}
+        {showPromptSuggestions && (
+          <div className="erase-prompt-suggestions">
+            {promptSuggestions.map((suggestion, i) => (
               <button
-                className="erase-brush-size-btn"
-                onClick={() => setBrushSize((prev) => Math.max(5, prev - 10))}
-                disabled={isProcessing}
+                type="button"
+                key={i}
+                className="erase-prompt-suggestion"
+                onClick={() => {
+                  setCustomPrompt(suggestion);
+                  setShowPromptSuggestions(false);
+                }}
               >
-                <Minus size={12} />
+                {suggestion}
               </button>
-              <input
-                type="range"
-                min="5"
-                max="200"
-                value={brushSize}
-                onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                disabled={isProcessing}
-              />
-              <button
-                className="erase-brush-size-btn"
-                onClick={() => setBrushSize((prev) => Math.min(200, prev + 10))}
-                disabled={isProcessing}
-              >
-                <Plus size={12} />
-              </button>
-              <span className="erase-brush-size-value">{brushSize}px</span>
-            </div>
-
-            {/* Soft/Hard brush toggle */}
-            <div className="erase-brush-type-toggle">
-              <button
-                className={`erase-brush-type-btn ${brushMode === 'soft' ? 'active' : ''}`}
-                onClick={() => setBrushMode('soft')}
-                disabled={isProcessing}
-              >
-                Soft
-              </button>
-              <button
-                className={`erase-brush-type-btn ${brushMode === 'hard' ? 'active' : ''}`}
-                onClick={() => setBrushMode('hard')}
-                disabled={isProcessing}
-              >
-                Hard
-              </button>
-            </div>
+            ))}
           </div>
         )}
 
-        {/* Undo/Redo buttons */}
-        <div className="erase-brush-undo-redo">
-          <button
-            className="erase-brush-action-btn"
-            onClick={handleUndo}
-            disabled={!canUndo || isProcessing}
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 size={14} />
-          </button>
-          <button
-            className="erase-brush-action-btn"
-            onClick={handleRedo}
-            disabled={!canRedo || isProcessing}
-            title="Redo (Ctrl+Y)"
-          >
-            <Redo2 size={14} />
-          </button>
-          <span className="erase-brush-undo-count">
-            {historyIndex > 0 ? `${historyIndex} stroke${historyIndex > 1 ? 's' : ''}` : ''}
-          </span>
-        </div>
-
-        {/* Advanced options toggle */}
-        <button
-          className="erase-brush-advanced-toggle"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          <Sliders size={12} />
-          <span>Advanced Options</span>
-          {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
-
+        {/* Advanced options panel (slides up from toolbar) */}
         {showAdvanced && (
           <div className="erase-brush-advanced">
-            {/* Strength slider */}
             <div className="erase-brush-slider-group">
-              <label>
-                Strength
-                <span className="erase-brush-slider-value">{Math.round(strength * 100)}%</span>
-              </label>
-              <input
-                type="range"
-                min="50"
-                max="100"
-                value={strength * 100}
-                onChange={(e) => setStrength(parseInt(e.target.value) / 100)}
-                disabled={isProcessing}
-              />
-              <div className="erase-brush-slider-labels">
-                <span>Subtle</span>
-                <span>Strong</span>
-              </div>
+              <label>Strength <span className="erase-brush-slider-value">{Math.round(strength * 100)}%</span></label>
+              <input type="range" min="50" max="100" value={strength * 100} onChange={(e) => setStrength(parseInt(e.target.value) / 100)} disabled={isProcessing} />
             </div>
-
-            {/* Mask opacity slider */}
             <div className="erase-brush-slider-group">
-              <label>
-                Mask Opacity
-                <span className="erase-brush-slider-value">{Math.round(maskOpacity * 100)}%</span>
-              </label>
-              <div className="erase-brush-opacity-row">
-                <button
-                  className="erase-brush-opacity-btn"
-                  onClick={() => setMaskOpacity(maskOpacity > 0 ? 0 : 0.6)}
-                >
-                  {maskOpacity > 0 ? <Eye size={14} /> : <EyeOff size={14} />}
-                </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={maskOpacity * 100}
-                  onChange={(e) => setMaskOpacity(parseInt(e.target.value) / 100)}
-                  disabled={isProcessing}
-                />
-              </div>
-            </div>
-
-            {/* Variation count */}
-            <div className="erase-brush-slider-group">
-              <label>
-                Generate Variations
-                <span className="erase-brush-slider-value">{variationCount}</span>
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="4"
-                value={variationCount}
-                onChange={(e) => setVariationCount(parseInt(e.target.value))}
-                disabled={isProcessing}
-              />
-              <div className="erase-brush-slider-labels">
-                <span>1 (fast)</span>
-                <span>4 (best)</span>
-              </div>
+              <label>Mask Opacity <span className="erase-brush-slider-value">{Math.round(maskOpacity * 100)}%</span></label>
+              <input type="range" min="0" max="100" value={maskOpacity * 100} onChange={(e) => setMaskOpacity(parseInt(e.target.value) / 100)} disabled={isProcessing} />
             </div>
           </div>
         )}
 
-        {/* Inpaint history */}
-        {inpaintHistory.length > 0 && (
-          <>
-            <button
-              className="erase-brush-history-toggle"
-              onClick={() => setShowHistory(!showHistory)}
-            >
-              <History size={12} />
-              <span>History ({inpaintHistory.length})</span>
-              {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            </button>
-
-            {showHistory && (
-              <div className="erase-brush-history">
-                {inpaintHistory.map((item, i) => (
-                  <div key={i} className="erase-history-item">
-                    <img src={item.thumbnail} alt={`History ${i + 1}`} />
-                    <div className="erase-history-info">
-                      <span className="erase-history-time">{item.timestamp}</span>
-                      <button
-                        className="erase-history-revert"
-                        onClick={() => onRevert?.(i)}
-                        disabled={isProcessing}
-                      >
-                        Revert
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        <div className="erase-brush-shortcuts">
-          {drawMode === 'brush' 
-            ? '[ / ] size • Ctrl+Z undo • B brush • L lasso'
-            : 'Click to add points • Enter/double-click to close • Esc to cancel'}
-        </div>
-
-        <div className="erase-brush-actions">
-          <button
-            className="erase-brush-btn secondary"
-            onClick={handleClear}
-            disabled={!hasStrokes || isProcessing}
-          >
-            Clear
-          </button>
-          <button
-            className="erase-brush-btn secondary"
-            onClick={onCancel}
-            disabled={isProcessing}
-          >
-            <X size={14} />
-            Cancel
-          </button>
-          <button
-            className="erase-brush-btn primary"
-            onClick={handleApply}
-            disabled={!hasStrokes || isProcessing}
-          >
-            {isProcessing ? (
-              <>
-                <Loader size={14} className="erase-brush-spinner" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Check size={14} />
-                Apply{variationCount > 1 ? ` (${variationCount}×)` : ''}
-              </>
-            )}
-          </button>
-        </div>
-
+        {/* Processing indicator */}
         {isProcessing && (
-          <div className="erase-brush-progress">
-            {variationCount > 1 
-              ? `Generating ${variationCount} variations... This may take 30-60 seconds.`
-              : 'AI is removing the selected areas. This may take 10-30 seconds...'}
-          </div>
+          <div className="erase-brush-progress">AI is filling the selected area. This may take 10-30 seconds...</div>
         )}
+
+        {/* Keyboard shortcuts hint */}
+        <div className="erase-brush-shortcuts">
+          {drawMode === 'brush'
+            ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • Esc cancel'
+            : 'Click to add points • Enter to close • Esc cancel'}
+        </div>
       </div>
     </div>
   );

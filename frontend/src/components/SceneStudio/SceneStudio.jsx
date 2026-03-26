@@ -58,6 +58,16 @@ function getNetworkAwareApiError(err, fallbackMessage, actionLabel = 'Request') 
   return err?.message || fallbackMessage;
 }
 
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image: ${src.slice(0, 80)}`));
+    img.src = src;
+  });
+}
+
 function getInpaintCooldownMs(err) {
   if (err?.response?.status !== 429) return 0;
 
@@ -992,6 +1002,79 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, backgroundUrl, maskExpand, maskFeather]);
 
+  // ── Replace with Image handler ──
+  // Composites an uploaded image into the masked area using frontend canvas compositing.
+  // No API call needed — instant and free. Mask defines where the replacement goes.
+  const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
+    if (isInpaintingRef.current) return;
+    const { imageDataUrl } = options;
+    if (!imageDataUrl || !backgroundUrl) {
+      setInpaintError('No background image to composite into');
+      return;
+    }
+
+    isInpaintingRef.current = true;
+    setIsInpainting(true);
+    setInpaintError('');
+    setInpaintNotice('Compositing image...');
+    try {
+      // Load all three images: background, mask, replacement
+      const [bgImg, maskImg, replImg] = await Promise.all([
+        loadImage(backgroundUrl),
+        loadImage(maskDataUrl),
+        loadImage(imageDataUrl),
+      ]);
+
+      // Create output canvas at background size
+      const canvas = document.createElement('canvas');
+      canvas.width = bgImg.width;
+      canvas.height = bgImg.height;
+      const ctx = canvas.getContext('2d');
+
+      // Draw original background
+      ctx.drawImage(bgImg, 0, 0);
+
+      // Draw replacement image scaled to fit the canvas
+      ctx.save();
+      // Use mask as clip: white areas = where replacement shows through
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      // Draw replacement behind the "holes" we just cut
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-over';
+      ctx.drawImage(replImg, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      // Convert to data URL and upload as new background
+      const resultDataUrl = canvas.toDataURL('image/png');
+
+      // Upload the composited result to S3 via the scene API
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: backgroundUrl,
+        maskDataUrl: resultDataUrl,
+        mode: 'composite',
+      });
+
+      if (result?.success && result.data?.inpainted_url) {
+        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        state.setActiveTool('select');
+      } else {
+        // If the API doesn't support 'composite' mode, set the data URL directly as a fallback
+        state.setSceneData((prev) => prev ? { ...prev, background_url: resultDataUrl } : prev);
+        state.setActiveTool('select');
+      }
+    } catch (err) {
+      console.error('Replace with image error:', err);
+      setInpaintError(err.message || 'Failed to composite image');
+    } finally {
+      isInpaintingRef.current = false;
+      setIsInpainting(false);
+      setInpaintNotice(null);
+    }
+  }, [state, backgroundUrl]);
+
   // ── Remove Background from selected object ──
 
   const handleRemoveBackground = useCallback(async (objectId, assetId) => {
@@ -1261,6 +1344,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               panY={state.panY}
               backgroundUrl={backgroundUrl}
               onApply={handleEraseApply}
+              onReplaceWithImage={handleReplaceWithImage}
               onCancel={() => state.setActiveTool('select')}
               isProcessing={isInpainting}
             />
