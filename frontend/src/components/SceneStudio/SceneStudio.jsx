@@ -61,10 +61,23 @@ function getNetworkAwareApiError(err, fallbackMessage, actionLabel = 'Request') 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load image: ${src.slice(0, 80)}`));
-    img.src = src;
+    // Data URLs don't need CORS; remote URLs try with CORS first, fallback without
+    if (src.startsWith('data:')) {
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load data URL image'));
+      img.src = src;
+    } else {
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        // CORS failed — retry without crossOrigin (canvas will be tainted but image loads)
+        const fallback = new Image();
+        fallback.onload = () => resolve(fallback);
+        fallback.onerror = () => reject(new Error(`Failed to load image: ${src.slice(0, 80)}`));
+        fallback.src = src;
+      };
+      img.src = src;
+    }
   });
 }
 
@@ -1015,8 +1028,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintError('');
-    setInpaintNotice('Compositing image...');
+    setInpaintNotice('Compositing replacement image...');
     try {
+      console.log('[Replace] Frontend compositing — no AI call');
       // Load all three images: background, mask, replacement
       const [bgImg, maskImg, replImg] = await Promise.all([
         loadImage(backgroundUrl),
