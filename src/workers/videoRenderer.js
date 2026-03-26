@@ -43,7 +43,7 @@ videoQueue.process(
   'export-video',
   parseInt(process.env.EXPORT_MAX_CONCURRENT_JOBS, 10) || 2,
   async (job) => {
-    const { episodeId, episode, scenes, platform, timeline, userId } = job.data;
+    const { episodeId, episode: _episode, scenes, platform, timeline, userId: _userId } = job.data;
 
     console.log(`🎬 [Job ${job.id}] Starting export for episode ${episodeId}`);
 

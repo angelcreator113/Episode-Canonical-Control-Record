@@ -21,7 +21,7 @@
 
 const express  = require('express');
 const router   = express.Router();
-const path     = require('path');
+const _path    = require('path');
 
 // Auth middleware — matches all other routes
 let optionalAuth;
@@ -162,8 +162,8 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
 
     const {
       Document, Packer, Paragraph, TextRun,
-      AlignmentType, HeadingLevel, PageBreak,
-      PageNumber, NumberFormat, Footer, Header,
+      AlignmentType, HeadingLevel: _HeadingLevel, PageBreak,
+      PageNumber, NumberFormat: _NumberFormat, Footer, Header: _Header,
     } = require('docx');
 
     const children = [];
@@ -239,7 +239,7 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
     }));
 
     // ── Helper: centered italic page ─────────────────────────────────
-    function addFrontMatterPage(title, body, { italic = true, afterBreak = true } = {}) {
+    const addFrontMatterPage = function(title, body, { italic = true, afterBreak = true } = {}) {
       if (!body || !body.trim()) return;
       children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -272,7 +272,7 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
       if (afterBreak) {
         children.push(new Paragraph({ children: [new PageBreak()] }));
       }
-    }
+    };
 
     // ── Front Matter ─────────────────────────────────────────────────
     const fm = book.front_matter || {};
@@ -308,7 +308,7 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
     }
 
     // ── Helper: Roman numeral ────────────────────────────────────────
-    function toRoman(n) {
+    const toRoman = function(n) {
       const vals = [1000,900,500,400,100,90,50,40,10,9,5,4,1];
       const syms = ['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
       let r = '';
@@ -316,7 +316,7 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
         while (n >= vals[i]) { r += syms[i]; n -= vals[i]; }
       }
       return r;
-    }
+    };
 
     // ── Chapters (with Part dividers and chapter type labels) ────────
     let lastPart = null;
@@ -450,7 +450,7 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
     // ── Back Matter ──────────────────────────────────────────────────────
     const bm = book.back_matter || {};
 
-    function addBackMatterSection(title, body) {
+    const addBackMatterSection = function(title, body) {
       if (!body || !body.trim()) return;
       // Page break before each back matter section
       children.push(new Paragraph({ children: [new PageBreak()] }));
@@ -489,7 +489,7 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
           ],
         }));
       });
-    }
+    };
 
     if (bm.about_author)     addBackMatterSection('About the Author', bm.about_author);
     if (bm.acknowledgments)  addBackMatterSection('Acknowledgments', bm.acknowledgments);
@@ -592,7 +592,7 @@ router.get('/book/:bookId/pdf', optionalAuth, async (req, res) => {
       // ── Fonts ──────────────────────────────────────────────────────────
       const SERIF = 'Times-Roman';
       const SERIF_ITALIC = 'Times-Italic';
-      const SERIF_BOLD   = 'Times-Bold';
+      const _SERIF_BOLD  = 'Times-Bold';
       const SERIF_BOLD_I = 'Times-BoldItalic';
       const MONO  = 'Courier';
 
@@ -709,7 +709,7 @@ router.get('/book/:bookId/pdf', optionalAuth, async (req, res) => {
       let lastPartPdf = null;
       let chapterNumPdf = 0;
 
-      book.chapters.forEach((chapter, chIdx) => {
+      book.chapters.forEach((chapter, _chIdx) => {
 
         // Part divider page
         if (chapter.part_number && chapter.part_number !== lastPartPdf) {
@@ -773,7 +773,7 @@ router.get('/book/:bookId/pdf', optionalAuth, async (req, res) => {
         doc.moveDown(2);
 
         // Lines
-        chapter.lines.forEach((line, lineIdx) => {
+        chapter.lines.forEach((line, _lineIdx) => {
           const lala = isLalaLine(line);
 
           // Check if we need a new page (leave 72pt bottom margin)

@@ -13,7 +13,7 @@ try {
 }
 
 const db = require('../../models');
-const { _StorytellerMemory, _StorytellerLine, _StorytellerBook, _StorytellerChapter, _RegistryCharacter } = db;
+// Models accessed via db.* as needed
 const { buildUniverseContext } = require('../../utils/universeContext');
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });

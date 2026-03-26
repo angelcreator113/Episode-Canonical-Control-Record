@@ -39,7 +39,7 @@ function generateScriptSkeleton(event, options = {}) {
   const dressCode = e.dress_code || 'elegant';
   const location = e.location_hint || 'elegant venue';
   const bias = e.browse_pool_bias || 'balanced';
-  const stakes = e.narrative_stakes || '';
+  const _stakes = e.narrative_stakes || '';
 
   // Determine episode mood from stats
   const isStressed = (characterState.stress || 0) >= 4;
@@ -407,7 +407,7 @@ function generateTransformationSegments(checklist, dressCode, bias) {
   return segments;
 }
 
-function generateItemName(dressCode, type, adjectives) {
+function generateItemName(dressCode, type, _adjectives) {
   const dc = (dressCode || '').toLowerCase();
   const names = {
     outfit: {

@@ -2829,7 +2829,6 @@ router.post('/world/characters/seed-cross-batch', optionalAuth, async (req, res)
     if (characters.length < 2) return res.json({ seeded: 0, message: 'Need at least 2 active characters' });
 
     // Only pair characters from DIFFERENT batches
-    const crossBatchChars = [];
     const batches = [...new Set(characters.map(c => c.batch_id).filter(Boolean))];
     if (batches.length < 2) return res.json({ seeded: 0, message: 'Need characters from at least 2 batches' });
 

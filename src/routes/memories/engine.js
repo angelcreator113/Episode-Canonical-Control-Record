@@ -1744,7 +1744,7 @@ async function loadCharacterRelationships(characterKey) {
 }
 
 // ─── Load active story threads ───────────────────────────────────────────────
-async function loadActiveThreads(characterKey, worldBookTag) {
+async function loadActiveThreads(characterKey, _worldBookTag) {
   try {
     const { StoryThread } = require('../../models');
     if (!StoryThread) return null;
@@ -1915,9 +1915,9 @@ async function loadProseStyleAnchor(characterKey) {
 }
 
 // ─── Load dialogue voice cards for characters in a story ─────────────────────
-async function loadDialogueVoiceCards(characterKey) {
+async function loadDialogueVoiceCards(_characterKey) {
   try {
-    const { RegistryCharacter, CharacterRelationship } = require('../../models');
+    const { RegistryCharacter, CharacterRelationship: _CharacterRelationship } = require('../../models');
     if (!RegistryCharacter) return null;
 
     // Get the main character's relationships to find who appears in stories
@@ -2073,7 +2073,7 @@ async function loadDramaticIrony(characterKey) {
 }
 
 // ─── 50-story arc phases ──────────────────────────────────────────────────────
-const SE_ARC_PHASES = {
+const _SE_ARC_PHASES = {
   establishment: { range: [1, 10],  label: 'Establishment', description: 'Who she is. Her rhythms. What she reaches for and what she\'s afraid of. The reader learns her world.' },
   pressure:      { range: [11, 25], label: 'Pressure',      description: 'Obstacles hit harder. Strengths start to be used against her. The antagonist activates.' },
   crisis:        { range: [26, 40], label: 'Crisis',        description: 'Something load-bearing breaks. The wound underneath the wound shows its edge.' },
@@ -2081,7 +2081,7 @@ const SE_ARC_PHASES = {
 };
 
 // ─── Story types ──────────────────────────────────────────────────────────────
-const SE_STORY_TYPES = [
+const _SE_STORY_TYPES = [
   { type: 'internal',   label: 'Internal',   description: 'Single character facing obstacle alone. Psychological. Reader inside her head.' },
   { type: 'collision',  label: 'Collision',  description: 'Two characters with different worldviews hitting each other. No resolution guaranteed.' },
   { type: 'wrong_win',  label: 'Wrong Win',  description: 'Character succeeds at exactly the wrong moment. Gets what she wanted. It costs something unexpected.' },
@@ -2231,7 +2231,7 @@ async function loadGrowthLogs(characterKey) {
 }
 
 // ─── Load franchise knowledge (world rules / lore) ───────────────────────────
-async function loadFranchiseKnowledge(characterKey) {
+async function loadFranchiseKnowledge(_characterKey) {
   try {
     const { FranchiseKnowledge } = require('../../models');
     if (!FranchiseKnowledge) return null;
@@ -3040,7 +3040,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
 
   // Try hardcoded DNA first, then build from DB
   let dna = CHARACTER_DNA[characterKey];
-  let dynamicChar = false;
+  let _dynamicChar = false;
 
   if (!dna) {
     // Dynamic character — build DNA from the DB profile
@@ -3083,7 +3083,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
         friends: 'To be developed across stories.',
       },
     };
-    dynamicChar = true;
+    _dynamicChar = true;
   }
 
   // Return cached arc unless regeneration is forced
@@ -3230,7 +3230,7 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
 
   // Send keepalive comments every 15s to prevent proxy timeouts
   const keepalive = setInterval(() => {
-    try { res.write(': keepalive\n\n'); } catch (_) {}
+    try { res.write(': keepalive\n\n'); } catch (_) { /* intentionally empty */ }
   }, 15000);
 
   // Clean up on client disconnect
@@ -3546,9 +3546,9 @@ router.post('/generate-next-chapter', optionalAuth, async (req, res) => {
     }
 
     // Load approved story texts for context
-    let approvedStories = [];
+    let _approvedStories = [];
     try {
-      approvedStories = await db.StorytellerStory.unscoped().findAll({
+      _approvedStories = await db.StorytellerStory.unscoped().findAll({
         where: { character_key: characterKey, status: 'approved' },
         order: [['story_number', 'ASC']],
         attributes: ['story_number', 'title', 'scene_brief', 'status'],
@@ -4161,6 +4161,7 @@ Write the complete story now. No preamble. Begin with the title, then the story.
     }
 
     // ── Quality gate — fast check for show-don't-tell and craft issues ──
+    let qualityReport;
     try {
       const qualityCheck = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
@@ -4221,10 +4222,8 @@ Check specifically:
       try { quality = JSON.parse(qRaw.replace(/```json|```/g, '').trim()); } catch { quality = null; }
 
       if (quality) {
-        // Attach quality report to the response
-        storyText = storyText; // keep original — quality report attached separately
-        // Store quality result for response
-        var qualityReport = quality;
+        // Store quality result for response — keep original storyText, quality report attached separately
+        qualityReport = quality;
       }
     } catch (qErr) {
       console.error('[quality-gate] non-blocking error:', qErr?.message);
@@ -4273,7 +4272,7 @@ Return ONLY valid JSON:
 
         const extractRaw = extractResponse.content?.[0]?.text || '';
         let extracted;
-        try { extracted = JSON.parse(extractRaw.replace(/\`\`\`json|\`\`\`/g, '').trim()); } catch { return; }
+        try { extracted = JSON.parse(extractRaw.replace(/```json|```/g, '').trim()); } catch { return; }
 
         const { RegistryCharacter } = require('../../models');
         const { Op } = require('sequelize');
