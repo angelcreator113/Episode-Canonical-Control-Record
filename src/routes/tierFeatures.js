@@ -121,7 +121,7 @@ router.get('/deep-memory-context/:registryId', optionalAuth, async (req, res) =>
 
 router.post('/continuity-check', optionalAuth, async (req, res) => {
   try {
-    const { book_id, chapter_id, scene_text, characters_in_scene, registry_id } = req.body;
+    const { book_id: _book_id, chapter_id: _chapter_id, scene_text, characters_in_scene, registry_id } = req.body;
     if (!scene_text || !characters_in_scene?.length) {
       return res.status(400).json({ error: 'scene_text and characters_in_scene required' });
     }

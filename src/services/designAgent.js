@@ -140,7 +140,7 @@ function tokenCompliance() {
 
   // 2. Scan page CSS files for hard-coded colours
   const cssFiles = listFiles(PAGES_DIR, '.css');
-  let hardCodedColours = 0;
+  let _hardCodedColours = 0;
   const hardCodedPages = [];
   const hexRe = /#[0-9a-fA-F]{3,8}\b/g;
   const rgbRe = /rgba?\s*\(\s*\d/g;
@@ -168,7 +168,7 @@ function tokenCompliance() {
 
   // 3. Scan JSX inline styles for hard-coded colours
   const jsxFiles = listFiles(PAGES_DIR, '.jsx');
-  let inlineHardCoded = 0;
+  let _inlineHardCoded = 0;
   const inlineWorst = [];
 
   jsxFiles.forEach(f => {

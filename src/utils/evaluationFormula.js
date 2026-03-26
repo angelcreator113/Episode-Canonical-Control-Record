@@ -372,7 +372,7 @@ function applyDeltas(state, deltas) {
  * Generate narrative result lines
  */
 function generateNarrativeLine(evaluation) {
-  const { tier_final, score, breakdown } = evaluation;
+  const { tier_final, score, breakdown: _breakdown } = evaluation;
   const lines = {
     slay: [
       `Besties, she didn't just show up — she owned the room. Score: ${score}.`,

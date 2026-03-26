@@ -1,5 +1,5 @@
 const { sequelize } = require('../models');
-const { Op } = require('sequelize');
+const { Op: _Op } = require('sequelize');
 
 class DecisionAnalyticsService {
 

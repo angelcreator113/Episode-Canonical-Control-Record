@@ -4571,7 +4571,7 @@ router.post('/revise-story', optionalAuth, async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   let finished = false;
   const keepAlive = setInterval(() => {
-    if (!finished) try { res.write(' '); } catch (_) {}
+    if (!finished) try { res.write(' '); } catch (_) { /* intentionally empty */ }
   }, 15000);
 
   const finish = (data) => {
@@ -4784,7 +4784,7 @@ router.post('/pipeline-generate', optionalAuth, async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   let finished = false;
   const keepAlive = setInterval(() => {
-    if (!finished) try { res.write(' '); } catch (_) {}
+    if (!finished) try { res.write(' '); } catch (_) { /* intentionally empty */ }
   }, 15000);
 
   try {

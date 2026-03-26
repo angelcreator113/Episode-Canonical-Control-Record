@@ -163,7 +163,7 @@ Write a 2500–3500 word scene. Adult literary fiction — explicit language, se
 // ── Character depth knowledge classification ─────────────────────────────────
 // CHARACTER_KNOWLEDGE → injected into all 3 generation agents (A, B, C)
 // AUTHOR_KNOWLEDGE_ONLY → injected into evaluation agent + author layer ONLY
-const CHARACTER_KNOWLEDGE_FIELDS = [
+const _CHARACTER_KNOWLEDGE_FIELDS = [
   'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
   'money_behavior_pattern', 'money_behavior_note',
   'time_orientation_v2', 'time_orientation_note',
@@ -175,7 +175,7 @@ const CHARACTER_KNOWLEDGE_FIELDS = [
   'joy_source', 'joy_accessibility', 'joy_vs_ambition',
 ];
 
-const AUTHOR_KNOWLEDGE_ONLY_FIELDS = [
+const _AUTHOR_KNOWLEDGE_ONLY_FIELDS = [
   'blind_spot',
   'blind_spot_category',
   'blind_spot_visible_to',
@@ -808,7 +808,7 @@ async function loadSceneArcMetadata(chapterId) {
 }
 
 // ── Helper: load continuity timeline context (beats, conflicts, character positions) ──
-async function loadContinuityContext(characterKeys, registryId) {
+async function loadContinuityContext(characterKeys, _registryId) {
   if (!characterKeys?.length) return '';
   try {
     if (!db.ContinuityTimeline || !db.ContinuityBeat) return '';

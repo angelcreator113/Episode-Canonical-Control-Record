@@ -576,7 +576,7 @@ Return JSON only. No preamble.`;
 // ══════════════════════════════════════════════════════════════════════
 // AMBER — First Reader
 // ══════════════════════════════════════════════════════════════════════
-async function amberReads(story, texture, arcContext, characterData) {
+async function amberReads(story, texture, arcContext, _characterData) {
   const prompt = `You are Amber — a creative collaborator embedded in Prime Studios. You have just read everything generated for Story ${story.story_number}.
 
 Your job is to NOTICE things. Not evaluate quality. Notice the human things. Contradictions worth using. Patterns the author might not have seen. Moments that carry more weight than they might realize.

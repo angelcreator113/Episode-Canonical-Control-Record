@@ -178,7 +178,7 @@ function parseScript(scriptContent, options = {}) {
         wordCount += dialogue.split(/\s+/).length;
 
         if (speaker === 'lala' && !voiceActivateSeen) {
-          lalaHasSpoken = true;
+          _lalaHasSpoken = true;
           warnings.push({
             code: 'lala_without_voice_activate',
             severity: 'warning',

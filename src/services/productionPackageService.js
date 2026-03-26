@@ -23,7 +23,7 @@ const AWS = require('aws-sdk');
 const archiver = require('archiver');
 const fs = require('fs');
 const path = require('path');
-const { promisify } = require('util');
+const { promisify: _promisify } = require('util');
 
 const s3 = new AWS.S3({
   region: process.env.AWS_REGION || 'us-east-1',

@@ -328,7 +328,7 @@ function flowAnalyzer() {
     zoneCounts[zoneName] = topItems;
   }
 
-  const counts = Object.values(zoneCounts);
+  const _counts = Object.values(zoneCounts);
   const maxZone = Object.entries(zoneCounts).sort((a, b) => b[1] - a[1])[0];
   const minZone = Object.entries(zoneCounts).sort((a, b) => a[1] - b[1])[0];
   if (maxZone && minZone && maxZone[1] > minZone[1] * 4) {
