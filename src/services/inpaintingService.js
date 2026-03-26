@@ -82,14 +82,57 @@ function extractReplicateOutputUrl(output) {
 
 const inFlight = new Map();
 const hourlyUsage = new Map();
+const providerCooldownUntil = new Map();
 const MAX_PER_HOUR = 15;
 
-function checkRateLimit(userId, entityId) {
-  if (inFlight.get(entityId)) {
-    return { allowed: false, reason: 'An inpainting operation is already in progress. Please wait.' };
+function parseRetryAfterSeconds(error) {
+  const direct = Number.parseInt(String(error?.retryAfter || ''), 10);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+
+  const responseRetry = Number.parseInt(String(error?.response?.data?.retry_after || ''), 10);
+  if (Number.isFinite(responseRetry) && responseRetry > 0) return responseRetry;
+
+  const msg = String(error?.message || '');
+  const retryAfterMatch = msg.match(/retry_after["':\s]+(\d+)/i);
+  if (retryAfterMatch) {
+    return Number.parseInt(retryAfterMatch[1], 10);
   }
+
+  const approxMatch = msg.match(/resets\s+in\s+~?(\d+)s/i);
+  if (approxMatch) {
+    return Number.parseInt(approxMatch[1], 10);
+  }
+
+  return 0;
+}
+
+function setProviderCooldown(userId, entityId, seconds) {
+  const durationSec = Math.max(1, Math.min(120, Number.parseInt(String(seconds || 0), 10) || 8));
+  const until = Date.now() + (durationSec * 1000);
+  const userKey = userId || 'anonymous';
+  providerCooldownUntil.set(`entity:${entityId}`, until);
+  providerCooldownUntil.set(`user:${userKey}`, until);
+}
+
+function checkRateLimit(userId, entityId) {
   const now = Date.now();
   const userKey = userId || 'anonymous';
+  const entityUntil = providerCooldownUntil.get(`entity:${entityId}`) || 0;
+  const userUntil = providerCooldownUntil.get(`user:${userKey}`) || 0;
+  const providerUntil = Math.max(entityUntil, userUntil);
+  if (providerUntil > now) {
+    const secondsLeft = Math.max(1, Math.ceil((providerUntil - now) / 1000));
+    return {
+      allowed: false,
+      reason: `Inpainting provider is rate-limited. Retry in ${secondsLeft}s.`,
+      retryAfter: secondsLeft,
+      status: 429,
+    };
+  }
+
+  if (inFlight.get(entityId)) {
+    return { allowed: false, reason: 'An inpainting operation is already in progress. Please wait.', status: 429, retryAfter: 8 };
+  }
   let usage = hourlyUsage.get(userKey);
   if (!usage || now > usage.resetAt) {
     usage = { count: 0, resetAt: now + 3600000 };
@@ -97,7 +140,12 @@ function checkRateLimit(userId, entityId) {
   }
   if (usage.count >= MAX_PER_HOUR) {
     const minutesLeft = Math.ceil((usage.resetAt - now) / 60000);
-    return { allowed: false, reason: `Inpainting limit reached (${MAX_PER_HOUR}/hour). Resets in ${minutesLeft} minutes.` };
+    return {
+      allowed: false,
+      reason: `Inpainting limit reached (${MAX_PER_HOUR}/hour). Resets in ${minutesLeft} minutes.`,
+      status: 429,
+      retryAfter: minutesLeft * 60,
+    };
   }
   return { allowed: true };
 }
@@ -483,7 +531,12 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
   const { userId, strength, mode, removalTier, strictRemove = false, maskExpand, maskFeather } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
-  if (!rateCheck.allowed) throw new Error(rateCheck.reason);
+  if (!rateCheck.allowed) {
+    const blockedError = new Error(rateCheck.reason);
+    blockedError.status = rateCheck.status || 429;
+    if (rateCheck.retryAfter) blockedError.retryAfter = rateCheck.retryAfter;
+    throw blockedError;
+  }
 
   markInFlight(entityId);
 
@@ -538,6 +591,21 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     incrementUsage(userId);
 
     return { inpainted_url: s3Url };
+  } catch (error) {
+    const status = Number.parseInt(String(error?.status || error?.response?.status || ''), 10);
+    const isProviderRateLimit = status === 429 || /rate[-\s]?limit|throttled|too many requests/i.test(String(error?.message || ''));
+
+    if (isProviderRateLimit) {
+      const retryAfter = parseRetryAfterSeconds(error) || 8;
+      setProviderCooldown(userId, entityId, retryAfter);
+
+      const limitError = new Error(`Inpainting provider is rate-limited. Retry in ${retryAfter}s.`);
+      limitError.status = 429;
+      limitError.retryAfter = retryAfter;
+      throw limitError;
+    }
+
+    throw error;
   } finally {
     clearInFlight(entityId);
   }

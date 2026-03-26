@@ -59,6 +59,11 @@ function getNetworkAwareApiError(err, fallbackMessage, actionLabel = 'Request') 
 function getInpaintCooldownMs(err) {
   if (err?.response?.status !== 429) return 0;
 
+  const dataRetryAfter = Number.parseInt(String(err?.response?.data?.retry_after || ''), 10);
+  if (Number.isFinite(dataRetryAfter) && dataRetryAfter > 0) {
+    return dataRetryAfter * 1000;
+  }
+
   const headers = err?.response?.headers || {};
   const retryAfterRaw = headers['retry-after'];
   const retryAfterSec = Number.parseInt(String(retryAfterRaw || ''), 10);

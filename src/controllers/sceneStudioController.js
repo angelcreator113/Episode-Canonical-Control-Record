@@ -1209,8 +1209,18 @@ exports.inpaint = async (req, res) => {
     res.json({ success: true, data: result });
   } catch (error) {
     console.error('Scene Studio inpaint error:', error);
-    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
-    res.status(status).json({ success: false, error: error.message });
+    const status = Number.isFinite(Number(error?.status))
+      ? Number(error.status)
+      : (error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500);
+    const retryAfter = Number.parseInt(String(error?.retryAfter || ''), 10);
+    if (status === 429 && retryAfter > 0) {
+      res.setHeader('Retry-After', String(retryAfter));
+    }
+    res.status(status).json({
+      success: false,
+      error: error.message,
+      retry_after: status === 429 && retryAfter > 0 ? retryAfter : undefined,
+    });
   }
 };
 
