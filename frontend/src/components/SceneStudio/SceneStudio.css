@@ -2448,6 +2448,17 @@
   white-space: nowrap;
 }
 
+.scene-studio-erase-notice {
+  width: 100%;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #8a6f1f;
+  background: #fff8e1;
+  border: 1px solid #e8d8a8;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
 @media (max-width: 1100px) {
   .scene-studio-erase-controls {
     width: min(95vw, 760px);

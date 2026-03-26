@@ -152,8 +152,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [maskExpand, setMaskExpand] = useState(3);
   const [maskFeather, setMaskFeather] = useState(1.1);
   const [isInpainting, setIsInpainting] = useState(false);
+  const [inpaintNotice, setInpaintNotice] = useState(null);
   const [inpaintCooldownUntil, setInpaintCooldownUntil] = useState(0);
   const [inpaintCooldownSeconds, setInpaintCooldownSeconds] = useState(0);
+  const inpaintRetryTimerRef = useRef(null);
+  const inpaintRetryAttemptRef = useRef(0);
   const [exportScale, setExportScale] = useState(2);
   const [backgroundLayout, setBackgroundLayout] = useState(null);
 
@@ -251,6 +254,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       mountedRef.current = false;
       if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (inpaintRetryTimerRef.current) clearTimeout(inpaintRetryTimerRef.current);
     };
   }, []);
 
@@ -783,7 +787,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     if (!hasMask) return;
     if (inpaintCooldownUntil > Date.now()) {
       const seconds = Math.ceil((inpaintCooldownUntil - Date.now()) / 1000);
-      setSaveErrorMsg(`Inpaint is temporarily limited. Please wait ${seconds}s.`);
+      setInpaintNotice(`Provider is rate-limited. Retrying window in ${seconds}s.`);
       return;
     }
 
@@ -801,6 +805,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
 
     setIsInpainting(true);
+    setInpaintNotice(null);
     setSaveErrorMsg(null);
     try {
       const selectedImageExport = selectedObj?.type === 'image' && selectedObj?.assetUrl
@@ -841,6 +846,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       });
 
       if (result?.success && result.data?.inpainted_url) {
+        inpaintRetryAttemptRef.current = 0;
         if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
           // Update the selected object's image
           state.setObjects((prev) => prev.map((o) =>
@@ -861,13 +867,23 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         if (cooldownMs > 0) {
           const waitSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
           setInpaintCooldownUntil(Date.now() + cooldownMs);
-          const serverMsg = err?.response?.data?.error;
-          setSaveErrorMsg(serverMsg || `Inpaint is rate-limited. Wait ${waitSeconds}s before trying again.`);
+          if (inpaintRetryAttemptRef.current < 1) {
+            inpaintRetryAttemptRef.current += 1;
+            setInpaintNotice(`Provider is rate-limited. Auto-retrying in ${waitSeconds}s...`);
+            if (inpaintRetryTimerRef.current) clearTimeout(inpaintRetryTimerRef.current);
+            inpaintRetryTimerRef.current = setTimeout(() => {
+              if (mountedRef.current && hasMask) {
+                handleInpaint();
+              }
+            }, cooldownMs + 150);
+          } else {
+            setInpaintNotice(`Provider is rate-limited. Please try again in ${waitSeconds}s.`);
+          }
         } else {
-          setSaveErrorMsg(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+          setInpaintNotice(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
         }
       } else {
-        setSaveErrorMsg(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+        setInpaintNotice(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
       }
     } finally {
       setIsInpainting(false);
@@ -1193,11 +1209,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   onClick={() => {
                     if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
                     setHasMask(false);
+                    setInpaintNotice(null);
                   }}
                 >
                   Clear
                 </button>
               </div>
+              {inpaintNotice && (
+                <div className="scene-studio-erase-notice">{inpaintNotice}</div>
+              )}
             </div>
             );
           })()}
