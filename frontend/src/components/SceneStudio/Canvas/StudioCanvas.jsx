@@ -71,6 +71,7 @@ function BackgroundImage({
   onClick,
   onLayoutChange,
 }) {
+  // Load without crossOrigin to avoid CORS failures on S3 images
   const [image] = useImage(src);
   const [displayImage, setDisplayImage] = useState(null);
 
@@ -111,6 +112,7 @@ function BackgroundImage({
   }, [onLayoutChange]);
 
   if (!activeImage || !layout) return null;
+
 
   return (
     <>
