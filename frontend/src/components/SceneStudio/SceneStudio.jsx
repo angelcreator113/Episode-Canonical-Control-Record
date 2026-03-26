@@ -1368,9 +1368,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             <EraseBrushCanvas
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
-              zoom={state.zoom}
-              panX={state.panX}
-              panY={state.panY}
+              zoom={state.canvasSettings.zoom}
+              panX={state.canvasSettings.panX}
+              panY={state.canvasSettings.panY}
               backgroundUrl={backgroundUrl}
               onApply={handleEraseApply}
               onReplaceWithImage={handleReplaceWithImage}
