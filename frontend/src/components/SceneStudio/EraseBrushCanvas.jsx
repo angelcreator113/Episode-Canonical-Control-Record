@@ -60,8 +60,15 @@ export default function EraseBrushCanvas({
   const [strength, setStrength] = useState(0.85);
   const [brushMode, setBrushMode] = useState('soft'); // 'soft' | 'hard'
   const [maskOpacity, setMaskOpacity] = useState(0.6);
-  const [drawMode, setDrawMode] = useState('brush'); // 'brush' | 'lasso'
+  const [drawMode, setDrawModeRaw] = useState('brush'); // 'brush' | 'lasso' | 'smart'
   const [lassoPoints, setLassoPoints] = useState([]);
+
+  // Switching modes clears any in-progress lasso
+  const setDrawMode = useCallback((mode) => {
+    setLassoPoints([]);
+    setCursorPos(null);
+    setDrawModeRaw(mode);
+  }, []);
   const [variationCount, setVariationCount] = useState(1);
   
   // Undo/redo state - stores canvas ImageData snapshots
