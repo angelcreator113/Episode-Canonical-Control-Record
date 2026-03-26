@@ -1046,23 +1046,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       ctx.drawImage(replImg, 0, 0, canvas.width, canvas.height);
       ctx.restore();
 
-      // Convert to data URL and upload as new background
+      // Convert to data URL
       const resultDataUrl = canvas.toDataURL('image/png');
 
-      // Upload the composited result to S3 via the scene API
-      const result = await sceneService.inpaintScene(state.contextId, {
-        imageUrl: backgroundUrl,
-        maskDataUrl: resultDataUrl,
-        mode: 'composite',
-      });
+      // Update the background directly with the composited result
+      state.setSceneData((prev) => prev ? { ...prev, background_url: resultDataUrl } : prev);
+      state.setActiveTool('select');
 
-      if (result?.success && result.data?.inpainted_url) {
-        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
-        state.setActiveTool('select');
-      } else {
-        // If the API doesn't support 'composite' mode, set the data URL directly as a fallback
-        state.setSceneData((prev) => prev ? { ...prev, background_url: resultDataUrl } : prev);
-        state.setActiveTool('select');
+      // Persist the new background to the server in the background
+      try {
+        await sceneService.updateScene(state.contextId, { background_url: resultDataUrl });
+      } catch (saveErr) {
+        console.warn('Failed to persist composited background:', saveErr.message);
       }
     } catch (err) {
       console.error('Replace with image error:', err);
