@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     // Check if table already exists
     const tableExists = await queryInterface.tableExists('lala_episode_formulas');
     if (tableExists) {
@@ -390,7 +390,7 @@ module.exports = {
     await queryInterface.addIndex('lala_cash_grab_quests', ['episode_id']);
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     await queryInterface.dropTable('lala_cash_grab_quests');
     await queryInterface.dropTable('lala_friend_archetypes');
     await queryInterface.dropTable('lala_micro_goals');

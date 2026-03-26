@@ -44,7 +44,7 @@ function getRedisClient() {
   if (!redisClient) {
     let redisConnErrorLogged = false;
     let redisGaveUp = false;
-    let __redisReconnectCount = 0;
+    let _redisReconnectCount = 0;
 
     redisClient = Redis.createClient({
       url: `redis://${redisConfig.host}:${redisConfig.port}`,

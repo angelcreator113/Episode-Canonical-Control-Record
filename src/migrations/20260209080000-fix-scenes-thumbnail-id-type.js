@@ -8,7 +8,7 @@
  */
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     // Drop the foreign key constraint if it exists
     await queryInterface.sequelize.query(`
       ALTER TABLE scenes
@@ -49,7 +49,7 @@ module.exports = {
     `);
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     // Drop constraints and index
     await queryInterface.sequelize.query(`
       ALTER TABLE scenes

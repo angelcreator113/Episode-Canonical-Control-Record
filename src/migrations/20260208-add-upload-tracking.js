@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     // Check if raw_footage table exists, if not we'll create stubs for it
     const tables = await queryInterface.showAllTables();
     
@@ -149,7 +149,7 @@ module.exports = {
     await queryInterface.addIndex('upload_logs', ['raw_footage_id']);
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     await queryInterface.dropTable('upload_logs');
     // Don't drop raw_footage if it existed before
   }

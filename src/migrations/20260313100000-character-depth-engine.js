@@ -1,6 +1,6 @@
 'use strict';
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     const cols = [
 
       // ── BODY ──────────────────────────────────────────────────
@@ -100,7 +100,7 @@ module.exports = {
     }
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     const names = [
       'body_relationship','body_history','body_currency','body_control_pattern',
       'money_behavior_pattern','money_behavior_note',

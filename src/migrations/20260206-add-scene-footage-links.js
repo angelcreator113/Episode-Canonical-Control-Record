@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  async up(queryInterface, Sequelize) {
+  async up(queryInterface, _Sequelize) {
     // Create scene_footage_links table
     await queryInterface.createTable('scene_footage_links', {
       id: {
@@ -68,7 +68,7 @@ module.exports = {
     });
   },
 
-  async down(queryInterface, Sequelize) {
+  async down(queryInterface, _Sequelize) {
     await queryInterface.dropTable('scene_footage_links');
   },
 };

@@ -26,7 +26,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 module.exports = {
-  async up(queryInterface, Sequelize) {
+  async up(queryInterface, _Sequelize) {
     // ── 1. Add depth_level ─────────────────────────────────────────────────
     await queryInterface.addColumn('registry_characters', 'depth_level', {
       type: Sequelize.ENUM('sparked', 'breathing', 'active', 'alive'),
@@ -259,7 +259,7 @@ module.exports = {
     await queryInterface.addIndex('registry_characters', ['time_orientation']);
   },
 
-  async down(queryInterface, Sequelize) {
+  async down(queryInterface, _Sequelize) {
     // Remove indexes
     await queryInterface.removeIndex('registry_characters', ['depth_level']);
     await queryInterface.removeIndex('registry_characters', ['social_presence']);

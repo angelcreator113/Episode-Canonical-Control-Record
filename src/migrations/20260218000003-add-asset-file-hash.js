@@ -8,7 +8,7 @@
  */
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     await queryInterface.sequelize.query(
       `ALTER TABLE assets ADD COLUMN IF NOT EXISTS "file_hash" VARCHAR(64);`
     );

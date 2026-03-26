@@ -1,4 +1,4 @@
-exports.up = async (queryInterface, Sequelize) => {
+exports.up = async (queryInterface, _Sequelize) => {
   console.log('Checking if layer_assets table exists...');
   
   // Check if table exists
@@ -66,7 +66,7 @@ exports.up = async (queryInterface, Sequelize) => {
   console.log('✅ Clip timing fields added successfully!');
 };
 
-exports.down = async (queryInterface, Sequelize) => {
+exports.down = async (queryInterface, _Sequelize) => {
   await queryInterface.removeColumn('layer_assets', 'in_point_seconds');
   await queryInterface.removeColumn('layer_assets', 'out_point_seconds');
   await queryInterface.removeColumn('layer_assets', 'transition_in');

@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     const table = await queryInterface.describeTable('scenes');
     
     // Add script_notes column
@@ -103,7 +103,7 @@ module.exports = {
     }
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     await queryInterface.removeColumn('scenes', 'script_notes');
     await queryInterface.removeColumn('scenes', 'start_timecode');
     await queryInterface.removeColumn('scenes', 'end_timecode');

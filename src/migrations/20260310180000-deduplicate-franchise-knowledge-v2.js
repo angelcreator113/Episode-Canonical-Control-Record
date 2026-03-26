@@ -31,7 +31,7 @@
 module.exports = {
   async up(queryInterface) {
     // ── Step 1: soft-delete duplicates ────────────────────────────────────────
-    const [, meta] = await queryInterface.sequelize.query(`
+    const [, _meta] = await queryInterface.sequelize.query(`
       WITH ranked AS (
         SELECT
           id,

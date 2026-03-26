@@ -38,7 +38,7 @@ function setBudget(updates) {
 // ═══════════════════════════════════════════════════════════════
 // SUB-AGENT 1: Cost Watchdog
 // ═══════════════════════════════════════════════════════════════
-async function costWatchdog(db, options = {}) {
+async function costWatchdog(db, _options = {}) {
   const findings = [];
   const recommendations = [];
   let score = 100; // start perfect, deduct for issues
@@ -426,7 +426,7 @@ async function lightsOff(db) {
     }
 
     // 2. AI routes that haven't been called in 30+ days
-    const [aiRoutesTotal] = await db.sequelize.query(`
+    const [_aiRoutesTotal] = await db.sequelize.query(`
       SELECT COUNT(DISTINCT route_name)::int AS cnt
       FROM ai_usage_logs
     `, { type: db.sequelize.QueryTypes.SELECT });

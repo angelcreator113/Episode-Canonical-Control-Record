@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     const table = await queryInterface.describeTable('thumbnails');
     
     // Add url column - computed/cached URL for thumbnail
@@ -22,7 +22,7 @@ module.exports = {
     }
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     await queryInterface.removeColumn('thumbnails', 'url');
     await queryInterface.removeColumn('thumbnails', 'metadata');
   },

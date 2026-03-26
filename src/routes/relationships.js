@@ -41,7 +41,7 @@ function getLayer(roleType) {
  *  - Only block truly impossible combos (none currently — all are valid)
  *  - When a dedicated world_layer column exists, tighten this back up
  */
-function isLayerCompatible(layerA, layerB) {
+function isLayerCompatible(_layerA, _layerB) {
   // All narrative-role layers are compatible with each other
   return true;
 }

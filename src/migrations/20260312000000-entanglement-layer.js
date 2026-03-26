@@ -10,7 +10,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 module.exports = {
-  async up(queryInterface, Sequelize) {
+  async up(queryInterface, _Sequelize) {
     // ── 1. Extend social_profiles with state tracking ──────────────────────
     await queryInterface.addColumn('social_profiles', 'current_state', {
       type: Sequelize.ENUM(
@@ -283,7 +283,7 @@ module.exports = {
       { unique: true, name: 'eu_unique_char_profile' }
     );
   },
-  async down(queryInterface, Sequelize) {
+  async down(queryInterface, _Sequelize) {
     await queryInterface.dropTable('entanglement_unfollows');
     await queryInterface.dropTable('entanglement_events');
     await queryInterface.dropTable('character_entanglements');

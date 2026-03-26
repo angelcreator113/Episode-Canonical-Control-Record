@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     // Edit Maps (AI analysis results)
     await queryInterface.createTable('edit_maps', {
       id: {
@@ -161,7 +161,7 @@ module.exports = {
     await queryInterface.addIndex('character_profiles', ['character_name']);
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     await queryInterface.dropTable('character_profiles');
     await queryInterface.dropTable('edit_maps');
   }

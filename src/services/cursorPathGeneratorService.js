@@ -108,7 +108,7 @@ class CursorPathGeneratorService {
   /**
    * Generate cursor paths for a single icon cue
    */
-  async generatePathsForCue(cue, prevCue, episodeId) {
+  async generatePathsForCue(cue, prevCue, _episodeId) {
     const paths = [];
     
     // Get icon position from slot mapping
@@ -201,7 +201,7 @@ class CursorPathGeneratorService {
   /**
    * Save cursor paths to database
    */
-  async savePaths(episodeId, cursorPaths, userId) {
+  async savePaths(episodeId, cursorPaths, _userId) {
     const savedPaths = [];
     
     for (const path of cursorPaths) {

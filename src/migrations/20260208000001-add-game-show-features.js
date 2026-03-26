@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     // Show Format Types - columns already exist, skip them
     // await queryInterface.addColumn('shows', 'show_format', {
     //   type: Sequelize.STRING(50),
@@ -273,7 +273,7 @@ module.exports = {
     await queryInterface.addIndex('ai_interactions', ['episode_id', 'trigger_time']);
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     await queryInterface.dropTable('ai_interactions');
     await queryInterface.dropTable('episode_phases');
     await queryInterface.dropTable('layout_templates');

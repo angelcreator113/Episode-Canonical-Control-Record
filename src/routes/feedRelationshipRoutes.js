@@ -197,7 +197,7 @@ const SPR_TO_FEED = {
 // POST /auto-generate — create feed relationships from SocialProfileRelationship + shared entanglements
 router.post('/auto-generate', async (req, res) => {
   const models = getModels(req);
-  const { FeedProfileRelationship, SocialProfileRelationship, SocialProfile, CharacterEntanglement } = models;
+  const { FeedProfileRelationship, SocialProfileRelationship, CharacterEntanglement } = models;
   try {
     // ── 1. From SocialProfileRelationship ──────────────────────────
     const sprRows = SocialProfileRelationship

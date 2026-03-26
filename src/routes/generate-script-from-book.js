@@ -256,7 +256,7 @@ router.post('/generate-script-from-book', optionalAuth, async (req, res) => {
     const {
       book_id,
       chapter_id,
-      show_id,
+      show_id: _show_id,
       event_name     = 'Upcoming Event',
       event_prestige = 7,
       dress_code     = 'Luxury',
