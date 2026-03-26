@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
-import { Plus, Image, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp } from 'lucide-react';
+import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
 import EraseBrushCanvas from './EraseBrushCanvas';
@@ -115,7 +115,7 @@ function getInpaintCooldownMs(err) {
 const QUICK_ADD_OPTIONS = [
   { key: 'generate', label: 'Generate', icon: Sparkles },
   { key: 'upload', label: 'Upload', icon: Upload },
-  { key: 'library', label: 'Library', icon: Image },
+  { key: 'library', label: 'Library', icon: ImageIcon },
   { key: 'text', label: 'Text', icon: Type },
   { key: 'shapes', label: 'Shapes', icon: Pentagon },
 ];
@@ -1397,7 +1397,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                 <p className="scene-studio-overlay-title">Start building your scene</p>
                 <div className="scene-studio-overlay-ctas">
                   <button className="scene-studio-overlay-cta" onClick={() => handleOverlayCta('library')}>
-                    <Image size={16} /> Add from Library
+                    <ImageIcon size={16} /> Add from Library
                   </button>
                   <button className="scene-studio-overlay-cta" onClick={() => handleOverlayCta('upload')}>
                     <Upload size={16} /> Upload
