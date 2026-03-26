@@ -78,6 +78,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [saveErrorMsg, setSaveErrorMsg] = useState(null);
   const saveTimerRef = useRef(null);
   const saveRef = useRef(null);
+  const pendingSaveRef = useRef(false);
 
   // Lifted creation panel state
   const [activeCreationTab, setActiveCreationTab] = useState('objects');
@@ -169,7 +170,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, []);
 
   const save = useCallback(async () => {
-    if (isSavingRef.current) return;
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
     if (!state.contextId) {
       console.error('Scene Studio save: no contextId — scene not loaded');
       setSaveStatus('error');
@@ -242,6 +246,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
     } finally {
       isSavingRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        if (saveRef.current) {
+          saveRef.current();
+        }
+      }
     }
   }, [state, platform, mood, timeOfDay]);
 
