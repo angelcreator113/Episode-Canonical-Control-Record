@@ -9,6 +9,7 @@ import InspectorPanel from './panels/InspectorPanel';
 import SmartSuggestions from './panels/SmartSuggestions';
 import useSceneStudioState from './useSceneStudioState';
 import sceneService from '../../services/sceneService';
+import assetService from '../../services/assetService';
 import './SceneStudio.css';
 
 /**
@@ -120,6 +121,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [editingTextId, setEditingTextId] = useState(null);
   const [error, setError] = useState(null);
   const [saveErrorMsg, setSaveErrorMsg] = useState(null);
+  const [bannerErrorKind, setBannerErrorKind] = useState('save');
   const saveTimerRef = useRef(null);
   const saveRef = useRef(null);
   const pendingSaveRef = useRef(false);
@@ -229,7 +231,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
     async function loadFeatureConfig() {
       try {
-        const assetService = (await import('../../services/assetService')).default;
         const result = await assetService.getConfigCheck();
         const status = String(result?.data?.data?.removeBgApiKey || '').toLowerCase();
         if (alive) {
@@ -270,6 +271,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       return;
     }
     isSavingRef.current = true;
+    setBannerErrorKind('save');
     setSaveErrorMsg(null);
     // Cancel any pending auto-save to avoid double-save
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -328,6 +330,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       const isClientValidationError = typeof status === 'number' && status >= 400 && status < 500;
 
       if (mountedRef.current) {
+        setBannerErrorKind('save');
         setSaveStatus('error');
         setSaveErrorMsg(msg);
         if (!isClientValidationError) {
@@ -894,14 +897,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   const handleRemoveBackground = useCallback(async (objectId, assetId) => {
     if (isRemoveBgConfigured === false) {
+      setBannerErrorKind('remove-bg');
       setSaveErrorMsg('Background removal service is not configured');
       return;
     }
     if (isRemovingBg || !assetId) return;
     setIsRemovingBg(true);
+    setBannerErrorKind('remove-bg');
     setSaveErrorMsg(null);
     try {
-      const assetService = (await import('../../services/assetService')).default;
       const result = await assetService.removeBackground(assetId);
       // Backend returns { status: 'SUCCESS', data: { url } }
       const newUrl = result?.data?.url || result?.url;
@@ -916,11 +920,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         ));
         state.markDirty?.() || (() => {})(); // trigger auto-save
       } else {
-        setSaveErrorMsg('Background removal returned no URL — check REMOVEBG_API_KEY');
+        setSaveErrorMsg('Background removal returned no URL');
       }
     } catch (err) {
       console.error('Remove background error:', err);
-      setSaveErrorMsg(err.message || 'Background removal failed — check REMOVEBG_API_KEY');
+      setSaveErrorMsg(err.message || 'Background removal failed');
     } finally {
       setIsRemovingBg(false);
     }
@@ -1036,8 +1040,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       {/* Save error banner */}
       {saveErrorMsg && (
         <div className="scene-studio-save-error-banner">
-          Save failed: {saveErrorMsg}
-          <button className="scene-studio-icon-btn" onClick={() => setSaveErrorMsg(null)} style={{ marginLeft: 'auto' }}>×</button>
+          {bannerErrorKind === 'remove-bg' ? 'Background removal failed' : 'Save failed'}: {saveErrorMsg}
+          <button
+            className="scene-studio-icon-btn"
+            onClick={() => {
+              setSaveErrorMsg(null);
+              setBannerErrorKind('save');
+            }}
+            style={{ marginLeft: 'auto' }}
+          >
+            ×
+          </button>
         </div>
       )}
       {/* Guided Flow Stepper */}
