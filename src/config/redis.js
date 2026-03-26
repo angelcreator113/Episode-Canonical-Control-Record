@@ -44,7 +44,7 @@ function getRedisClient() {
   if (!redisClient) {
     let redisConnErrorLogged = false;
     let redisGaveUp = false;
-    let redisReconnectCount = 0;
+    let __redisReconnectCount = 0;
 
     redisClient = Redis.createClient({
       url: `redis://${redisConfig.host}:${redisConfig.port}`,
@@ -52,7 +52,7 @@ function getRedisClient() {
       socket: {
         connectTimeout: 5000,
         reconnectStrategy(retries) {
-          redisReconnectCount = retries;
+          _redisReconnectCount = retries;
           if (retries > 5) {
             if (!redisGaveUp) {
               console.warn('⚠️  Redis client: giving up after 5 reconnect attempts');
@@ -71,7 +71,7 @@ function getRedisClient() {
       console.log('✅ Redis client connected');
       redisConnErrorLogged = false;
       redisGaveUp = false;
-      redisReconnectCount = 0;
+      _redisReconnectCount = 0;
     });
 
     redisClient.on('error', (err) => {

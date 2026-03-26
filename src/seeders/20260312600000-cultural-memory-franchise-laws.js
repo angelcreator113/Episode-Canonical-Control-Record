@@ -268,7 +268,6 @@ module.exports = {
   },
 
   async down(queryInterface) {
-    const { Op } = require('sequelize');
     await queryInterface.bulkDelete('franchise_knowledge', {
       source_document: 'cultural-memory-v1.0',
     });

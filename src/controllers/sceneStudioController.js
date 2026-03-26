@@ -167,7 +167,7 @@ exports.saveCanvas = async (req, res) => {
         paranoid: false,
         transaction,
       });
-      const activeExisting = existing.filter((e) => !e.deleted_at);
+      const _activeExisting = existing.filter((e) => !e.deleted_at);
       const existingById = new Map(existing.map((e) => [e.id, e]));
       const existingByComposite = new Map(
         existing

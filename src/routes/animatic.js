@@ -4,7 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const beatService = require('../services/beatService');
-const { Scene, Beat, CharacterClip, AudioClip } = require('../models');
+const { Scene, AudioClip } = require('../models');
 const asyncHandler = require('express-async-handler');
 
 // ==========================================

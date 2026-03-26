@@ -177,7 +177,7 @@ exports.downloadPackage = async (req, res) => {
       });
     }
     
-    const { zip_file_s3_url, package_version } = result.rows[0];
+    const { zip_file_s3_url, package_version: _package_version } = result.rows[0];
     
     if (!zip_file_s3_url) {
       return res.status(404).json({

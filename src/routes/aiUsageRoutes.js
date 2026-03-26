@@ -37,7 +37,7 @@ function getDaysFilter(req) {
 router.get('/summary', async (req, res) => {
   try {
     const db = getDb();
-    const where = getDaysFilter(req);
+    const _where = getDaysFilter(req);
 
     const [totals] = await db.sequelize.query(`
       SELECT

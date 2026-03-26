@@ -961,10 +961,6 @@ module.exports = {
       console.log('[listEpisodeScenes] Starting...', { episodeId: req.params.id });
       const { id } = req.params;
       const { SceneLibrary, EpisodeScene } = models;
-      const S3Service = require('../services/S3Service');
-      const BUCKET_NAME =
-        process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
-
       // Verify episode exists
       console.log('[listEpisodeScenes] Checking episode exists...');
       const episode = await Episode.findByPk(id);
