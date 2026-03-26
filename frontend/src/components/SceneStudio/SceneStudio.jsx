@@ -158,8 +158,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [inpaintNotice, setInpaintNotice] = useState(null);
   const [inpaintCooldownUntil, setInpaintCooldownUntil] = useState(0);
   const [inpaintCooldownSeconds, setInpaintCooldownSeconds] = useState(0);
-  const inpaintRetryTimerRef = useRef(null);
-  const inpaintRetryAttemptRef = useRef(0);
   const [exportScale, setExportScale] = useState(2);
   const [backgroundLayout, setBackgroundLayout] = useState(null);
   const handleBackgroundLayoutChange = useCallback((nextLayout) => {
@@ -273,7 +271,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       mountedRef.current = false;
       if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      if (inpaintRetryTimerRef.current) clearTimeout(inpaintRetryTimerRef.current);
     };
   }, []);
 
@@ -869,7 +866,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       });
 
       if (result?.success && result.data?.inpainted_url) {
-        inpaintRetryAttemptRef.current = 0;
         if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
           // Update the selected object's image
           state.setObjects((prev) => prev.map((o) =>
@@ -891,18 +887,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         if (cooldownMs > 0) {
           const waitSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
           setInpaintCooldownUntil(Date.now() + cooldownMs);
-          if (inpaintRetryAttemptRef.current < 1) {
-            inpaintRetryAttemptRef.current += 1;
-            setInpaintNotice(`Provider is rate-limited. Auto-retrying in ${waitSeconds}s...`);
-            if (inpaintRetryTimerRef.current) clearTimeout(inpaintRetryTimerRef.current);
-            inpaintRetryTimerRef.current = setTimeout(() => {
-              if (mountedRef.current && hasMask) {
-                handleInpaint();
-              }
-            }, cooldownMs + 150);
-          } else {
-            setInpaintNotice(`Provider is rate-limited. Please try again in ${waitSeconds}s.`);
-          }
+          const retryAfterFromServer = err?.response?.data?.retry_after;
+          setInpaintNotice(
+            retryAfterFromServer
+              ? `Too many requests. Try again in ${retryAfterFromServer}s.`
+              : `Too many requests. Please wait ${waitSeconds}s and try again.`
+          );
         } else {
           setInpaintNotice(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
         }
