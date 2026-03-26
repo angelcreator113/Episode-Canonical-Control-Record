@@ -149,7 +149,7 @@ function parseScript(scriptContent, options = {}) {
   const allUiActions = [];
   const warnings = [];
   let orderPosition = 0;
-  let lalaHasSpoken = false;
+  let _lalaHasSpoken = false;
   let voiceActivateSeen = false;
   let loginSeen = false;
 

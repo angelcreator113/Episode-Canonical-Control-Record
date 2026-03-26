@@ -290,7 +290,7 @@ function flowAnalyzer() {
   let score = 100;
 
   const zones   = extractZoneStructure();
-  const sidebar = extractSidebarEntries();
+  const _sidebar = extractSidebarEntries();
   const routes  = extractRoutes();
 
   // 1.  Zone coverage — each zone should have items

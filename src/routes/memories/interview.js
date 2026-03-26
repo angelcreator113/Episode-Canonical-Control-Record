@@ -501,7 +501,7 @@ router.post('/rewrite-options', optionalAuth, async (req, res) => {
   try {
     const {
       book_id,
-      line_id,
+      line_id: _line_id,
       content,
       character_id,
       chapter_brief = {},
@@ -1124,7 +1124,7 @@ router.post('/character-interview-complete', optionalAuth, async (req, res) => {
   try {
     const {
       book_id,
-      character_id,
+      character_id: _character_id,
       character_name,
       character_type,
       answers = [],

@@ -861,7 +861,7 @@ router.delete('/story-threads/:threadId', optionalAuth, async (req, res) => {
 // Dead thread detection via AI analysis
 router.post('/dead-thread-detection', optionalAuth, async (req, res) => {
   try {
-    const { book_id, registry_id } = req.body;
+    const { book_id, registry_id: _registry_id } = req.body;
     if (!book_id) return res.status(400).json({ error: 'book_id required' });
 
     // Load all threads

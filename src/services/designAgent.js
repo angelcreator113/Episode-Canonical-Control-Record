@@ -152,7 +152,7 @@ function tokenCompliance() {
     const total = hexes + rgbs;
     if (total > 10) {
       hardCodedPages.push({ file: f.replace('.css', ''), count: total });
-      hardCodedColours += total;
+      _hardCodedColours += total;
     }
   });
 
@@ -176,7 +176,7 @@ function tokenCompliance() {
     const matches = countOccurrences(src, /#[0-9a-fA-F]{6}\b/g);
     if (matches > 15) {
       inlineWorst.push({ file: f.replace('.jsx', ''), count: matches });
-      inlineHardCoded += matches;
+      _inlineHardCoded += matches;
     }
   });
 

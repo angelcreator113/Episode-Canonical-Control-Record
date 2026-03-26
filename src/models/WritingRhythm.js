@@ -2,7 +2,7 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class WritingRhythm extends Model {
-    static associate(models) {}
+    static associate(_models) {}
   }
   WritingRhythm.init({
     id:               { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },

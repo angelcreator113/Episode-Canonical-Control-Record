@@ -4154,7 +4154,7 @@ Write the complete story now. No preamble. Begin with the title, then the story.
       messages: [{ role: 'user', content: `Write Story ${storyNumber}: "${taskBrief.title}"` }],
     });
 
-    let storyText = response.content?.[0]?.text || '';
+    const storyText = response.content?.[0]?.text || '';
 
     if (!storyText || storyText.length < 500) {
       return fallback();
