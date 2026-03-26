@@ -890,24 +890,20 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         setInpaintPrompt('');
       }
     } catch (err) {
-      console.error('Inpaint error:', err);
       if (err?.response?.status === 429) {
+        console.warn('Inpaint rate-limited (429):', err?.response?.data?.error || err.message);
         const cooldownMs = getInpaintCooldownMs(err);
         if (cooldownMs > 0) {
-          const waitSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
           const cooldownUntil = Date.now() + cooldownMs;
           inpaintCooldownRef.current = cooldownUntil;
           setInpaintCooldownUntil(cooldownUntil);
-          const retryAfterFromServer = err?.response?.data?.retry_after;
-          setInpaintError(
-            retryAfterFromServer
-              ? `Too many requests. Try again in ${retryAfterFromServer}s.`
-              : `Too many requests. Please wait ${waitSeconds}s and try again.`
-          );
-        } else {
-          setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
         }
+        // Surface the server's specific reason (e.g. "limit reached 15/hour",
+        // "operation in progress", "provider rate-limited") rather than generic text.
+        const serverMsg = err?.response?.data?.error;
+        setInpaintError(serverMsg || 'Too many requests. Please wait and try again.');
       } else {
+        console.error('Inpaint error:', err);
         setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
       }
     } finally {
