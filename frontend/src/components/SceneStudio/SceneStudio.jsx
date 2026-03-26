@@ -1042,23 +1042,74 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       const canvas = document.createElement('canvas');
       canvas.width = bgImg.width;
       canvas.height = bgImg.height;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      // Draw original background
+      // Step 1: Draw original background as the base
       ctx.drawImage(bgImg, 0, 0);
 
-      // Draw replacement image scaled to fit the canvas
-      ctx.save();
-      // Use mask as clip: white areas = where replacement shows through
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
-      ctx.restore();
+      // Step 2: Draw the mask onto a temp canvas to find the bounding box
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = canvas.width;
+      maskCanvas.height = canvas.height;
+      const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+      maskCtx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
+      const maskData = maskCtx.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Draw replacement behind the "holes" we just cut
-      ctx.save();
-      ctx.globalCompositeOperation = 'destination-over';
-      ctx.drawImage(replImg, 0, 0, canvas.width, canvas.height);
-      ctx.restore();
+      // Find the bounding box of the white (masked) area
+      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const i = (y * canvas.width + x) * 4;
+          // White pixel = part of mask (R > 200)
+          if (maskData.data[i] > 200) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      const maskW = maxX - minX + 1;
+      const maskH = maxY - minY + 1;
+
+      if (maskW > 0 && maskH > 0) {
+        // Step 3: Create a clipped replacement — only draw within the mask area
+        // Use the mask as a clip path via 'source-in' compositing
+        const clipCanvas = document.createElement('canvas');
+        clipCanvas.width = canvas.width;
+        clipCanvas.height = canvas.height;
+        const clipCtx = clipCanvas.getContext('2d');
+
+        // Draw replacement image scaled to fit the mask bounding box
+        // (cover fit — maintain aspect ratio, fill the bounding box)
+        const replAspect = replImg.width / replImg.height;
+        const maskAspect = maskW / maskH;
+        let drawW, drawH, drawX, drawY;
+        if (replAspect > maskAspect) {
+          // Replacement is wider — fit height, crop width
+          drawH = maskH;
+          drawW = maskH * replAspect;
+          drawX = minX - (drawW - maskW) / 2;
+          drawY = minY;
+        } else {
+          // Replacement is taller — fit width, crop height
+          drawW = maskW;
+          drawH = maskW / replAspect;
+          drawX = minX;
+          drawY = minY - (drawH - maskH) / 2;
+        }
+
+        // Draw the replacement at the correct position/size
+        clipCtx.drawImage(replImg, drawX, drawY, drawW, drawH);
+
+        // Clip to mask: only keep pixels where mask is white
+        clipCtx.globalCompositeOperation = 'destination-in';
+        clipCtx.drawImage(maskCanvas, 0, 0);
+
+        // Step 4: Composite the clipped replacement onto the background
+        ctx.drawImage(clipCanvas, 0, 0);
+      }
 
       // Convert to data URL
       const resultDataUrl = canvas.toDataURL('image/png');
