@@ -2481,9 +2481,15 @@
   border-radius: 4px;
   font-family: 'DM Mono', monospace;
   font-size: 10px;
-  width: 180px;
+  width: 100%;
+  min-width: 180px;
   background: #fff;
   color: #2C2C2C;
+}
+
+.scene-studio-erase-prompt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ═══════════════════════════════════════════════════════════════

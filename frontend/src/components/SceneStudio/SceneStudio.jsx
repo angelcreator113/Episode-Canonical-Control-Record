@@ -154,6 +154,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [maskExpand, setMaskExpand] = useState(3);
   const [maskFeather, setMaskFeather] = useState(1.1);
   const [isInpainting, setIsInpainting] = useState(false);
+  const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [inpaintNotice, setInpaintNotice] = useState(null);
   const [inpaintCooldownUntil, setInpaintCooldownUntil] = useState(0);
   const [inpaintCooldownSeconds, setInpaintCooldownSeconds] = useState(0);
@@ -856,11 +857,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         return;
       }
 
+      const trimmedPrompt = inpaintPrompt.trim();
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
         maskDataUrl: preciseMaskDataUrl,
-        mode: 'remove',
-        strictRemove: true,
+        prompt: trimmedPrompt || undefined,
+        mode: trimmedPrompt ? 'fill' : 'remove',
+        strictRemove: !trimmedPrompt,
         maskExpand,
         maskFeather,
       });
@@ -876,9 +879,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           // Update the scene background
           state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
         }
-        // Clear the mask
+        // Clear the mask and prompt
         if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
         setHasMask(false);
+        setInpaintPrompt('');
       }
     } catch (err) {
       console.error('Inpaint error:', err);
@@ -908,7 +912,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     } finally {
       setIsInpainting(false);
     }
-  }, [isInpainting, state, backgroundUrl, hasMask, maskExpand, maskFeather, inpaintCooldownUntil]);
+  }, [isInpainting, state, backgroundUrl, hasMask, maskExpand, maskFeather, inpaintCooldownUntil, inpaintPrompt]);
+
+  const handleClearMask = useCallback(() => {
+    if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
+    setHasMask(false);
+    setInpaintNotice(null);
+  }, []);
 
   // ── Remove Background from selected object ──
 
@@ -1226,23 +1236,32 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   onChange={(e) => setMaskFeather(parseFloat(e.target.value))}
                 />
               </div>
+              <input
+                type="text"
+                className="scene-studio-erase-prompt"
+                value={inpaintPrompt}
+                onChange={(e) => setInpaintPrompt(e.target.value)}
+                placeholder="Describe replacement (leave empty to just remove)..."
+                disabled={isInpainting}
+              />
               <div className="scene-studio-erase-actions">
                 <button
                   className="scene-studio-btn primary"
                   disabled={!hasMask || isInpainting || inpaintCooldownSeconds > 0}
                   onClick={handleInpaint}
                 >
-                  {isInpainting ? 'Removing...' : (inpaintCooldownSeconds > 0 ? `Wait ${inpaintCooldownSeconds}s` : 'Remove')}
+                  {isInpainting
+                    ? (inpaintPrompt.trim() ? 'Processing...' : 'Removing...')
+                    : inpaintCooldownSeconds > 0
+                      ? `Wait ${inpaintCooldownSeconds}s`
+                      : (inpaintPrompt.trim() ? 'Apply Inpaint' : 'Remove')}
                 </button>
                 <button
                   className="scene-studio-btn ghost"
-                  onClick={() => {
-                    if (typeof MaskLayer._clearMask === 'function') MaskLayer._clearMask();
-                    setHasMask(false);
-                    setInpaintNotice(null);
-                  }}
+                  onClick={handleClearMask}
+                  disabled={isInpainting || !hasMask}
                 >
-                  Clear
+                  Clear Mask
                 </button>
               </div>
               {inpaintNotice && (
