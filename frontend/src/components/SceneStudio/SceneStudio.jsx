@@ -1098,8 +1098,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
       return null;
     } catch (err) {
-      console.error('Segment error:', err);
-      setInpaintError(err?.response?.data?.error || 'Smart select failed. Try brush or lasso instead.');
+      if (err?.response?.status === 429) {
+        console.warn('Segment rate-limited (429):', err?.response?.data?.error || err.message);
+        setInpaintError(err?.response?.data?.error || 'Too many requests. Wait a few seconds and try again.');
+      } else {
+        console.error('Segment error:', err);
+        setInpaintError(err?.response?.data?.error || 'Smart select failed. Try brush or lasso instead.');
+      }
       return null;
     }
   }, [state, backgroundUrl]);
