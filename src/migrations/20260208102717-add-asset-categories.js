@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, _Sequelize) => {
+  up: async (queryInterface, Sequelize) => {
     // Check if category column exists
     const table = await queryInterface.describeTable('assets');
     
@@ -40,7 +40,7 @@ module.exports = {
     `);
   },
 
-  down: async (queryInterface, _Sequelize) => {
+  down: async (queryInterface, Sequelize) => {
     try {
       await queryInterface.removeIndex('assets', 'assets_category_idx');
     } catch (error) {

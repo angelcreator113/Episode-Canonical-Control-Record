@@ -254,7 +254,7 @@ module.exports = {
     }
   },
 
-  async down(_queryInterface, _Sequelize) {
+  async down(_queryInterface, Sequelize) {
     // This is a fixup migration — down would remove columns that should exist
     // Only drop what we exclusively own: the safety net additions
     console.log('Down migration: no-op (fixup migration)');

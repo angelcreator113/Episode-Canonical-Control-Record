@@ -1,4 +1,4 @@
-exports.up = async (queryInterface, _Sequelize) => {
+exports.up = async (queryInterface, Sequelize) => {
   console.log('Creating decision_logs table for AI training...');
   
   await queryInterface.createTable('decision_logs', {
@@ -69,6 +69,6 @@ exports.up = async (queryInterface, _Sequelize) => {
   console.log('✅ decision_logs table created successfully!');
 };
 
-exports.down = async (queryInterface, _Sequelize) => {
+exports.down = async (queryInterface, Sequelize) => {
   await queryInterface.dropTable('decision_logs');
 };

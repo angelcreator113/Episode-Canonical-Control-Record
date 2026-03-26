@@ -13,7 +13,7 @@
  *   - Negative prompt on SceneSet
  */
 module.exports = {
-  async up(queryInterface, _Sequelize) {
+  async up(queryInterface, Sequelize) {
     // ── SceneAngle new columns ──────────────────────────────────────────
     const angleTable = await queryInterface.describeTable('scene_angles').catch(() => null);
     if (!angleTable) return;
@@ -66,7 +66,7 @@ module.exports = {
     }
   },
 
-  async down(queryInterface, _Sequelize) {
+  async down(queryInterface, Sequelize) {
     const angleColumns = [
       'camera_motion', 'video_duration', 'style_reference_url',
       'variation_count', 'variation_data', 'post_processing_status',

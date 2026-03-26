@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, _Sequelize) => {
+  up: async (queryInterface, Sequelize) => {
     // user_decisions table
     await queryInterface.createTable('user_decisions', {
       id: {
@@ -139,7 +139,7 @@ module.exports = {
     );
   },
 
-  down: async (queryInterface, _Sequelize) => {
+  down: async (queryInterface, Sequelize) => {
     await queryInterface.dropTable('decision_patterns');
     await queryInterface.dropTable('user_decisions');
   }

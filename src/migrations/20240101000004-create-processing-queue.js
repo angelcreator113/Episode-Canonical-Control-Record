@@ -88,7 +88,7 @@ module.exports = {
     });
   },
 
-  down: async (queryInterface, _Sequelize) => {
+  down: async (queryInterface, Sequelize) => {
     await queryInterface.dropTable('processing_queues');
   },
 };

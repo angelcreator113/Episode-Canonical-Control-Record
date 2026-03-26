@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  async up(queryInterface, _Sequelize) {
+  async up(queryInterface, Sequelize) {
 
     // ── scene_proposals ───────────────────────────────────────────────────────
     await queryInterface.createTable('scene_proposals', {
@@ -272,7 +272,7 @@ module.exports = {
     });
   },
 
-  async down(queryInterface, _Sequelize) {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('character_growth_log');
     await queryInterface.dropTable('scene_proposals');
     await queryInterface.removeColumn('storyteller_books', 'current_arc_stage');

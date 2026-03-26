@@ -170,7 +170,7 @@ module.exports = {
     }
   },
 
-  async down(queryInterface, _Sequelize) {
+  async down(queryInterface, Sequelize) {
     const transaction = await queryInterface.sequelize.transaction();
     try {
       await queryInterface.dropTable('timeline_data', { transaction });

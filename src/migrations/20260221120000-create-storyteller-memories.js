@@ -2,7 +2,7 @@
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
-  async up(queryInterface, _Sequelize) {
+  async up(queryInterface, Sequelize) {
     await queryInterface.createTable('storyteller_memories', {
       id: {
         type: Sequelize.UUID,
@@ -136,7 +136,7 @@ module.exports = {
     );
   },
 
-  async down(queryInterface, _Sequelize) {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('storyteller_memories');
   },
 };

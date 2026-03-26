@@ -10,7 +10,7 @@
  */
 
 module.exports = {
-  up: async (queryInterface, _Sequelize) => {
+  up: async (queryInterface, Sequelize) => {
     const transaction = await queryInterface.sequelize.transaction();
 
     try {
@@ -345,7 +345,7 @@ module.exports = {
     }
   },
 
-  down: async (queryInterface, _Sequelize) => {
+  down: async (queryInterface, Sequelize) => {
     const transaction = await queryInterface.sequelize.transaction();
 
     try {
