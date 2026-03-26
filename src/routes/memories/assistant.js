@@ -14,8 +14,7 @@ try {
 }
 
 const db = require('../../models');
-const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
-const { buildUniverseContext } = require('../../utils/universeContext');
+// Models and universeContext available via db if needed
 
 let buildKnowledgeInjection, getTechContext;
 try {

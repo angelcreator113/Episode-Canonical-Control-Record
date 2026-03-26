@@ -13,7 +13,7 @@ try {
 }
 
 const db = require('../../models');
-const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
+const { StorytellerLine, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
 
 let buildArcContext, buildArcContextPromptSection, updateArcTracking;

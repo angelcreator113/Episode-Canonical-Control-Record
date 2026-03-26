@@ -333,7 +333,7 @@ async function ensurePreviewsTable() {
   `).catch(e => console.warn('[world-studio] ecosystem_previews table create error:', e?.message));
 }
 let previewsTableReady = false;
-async function persistPreviewToDB(previewId, data, ownerId = null) {
+async function persistPreviewToDB(previewId, data, _ownerId = null) {
   if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
   await sequelize.query(`
     INSERT INTO ecosystem_previews (preview_id, world_tag, characters, generation_notes, status)
@@ -386,7 +386,7 @@ async function findOrCreateRegistryForWorld(req, worldTag = 'lalaverse') {
 }
 
 // Backward-compat alias
-async function findOrCreateLalaVerseRegistry(req) {
+async function _findOrCreateLalaVerseRegistry(req) {
   return findOrCreateRegistryForWorld(req, 'lalaverse');
 }
 
@@ -826,7 +826,6 @@ async function backfillRelationshipsMap(seededPairs) {
       }
       const map = charRels.get(self.registry_character_id);
       const entry = other.name;
-      const rt = relType.toLowerCase();
       if (/roman|love|affair|attract|triangle|blurred|office romance|complicated history|old vs new|competing/i.test(relType)) {
         map.love_interests.push(entry);
       } else if (/rival|pressure|politics|competition/i.test(relType)) {
@@ -871,7 +870,7 @@ async function backfillRelationshipsMap(seededPairs) {
 }
 
 // Variable scene length logic based on relationship depth and type
-function resolveSceneLength(characterType, sceneType, dynamic) {
+function resolveSceneLength(characterType, sceneType, _dynamic) {
   // One-night stands: punchy, electric, not drawn out
   if (sceneType === 'one_night_stand' || characterType === 'one_night_stand') return { min: 400, max: 700,  label: 'short' };
   // First encounters: tension-heavy, slow build
@@ -1424,7 +1423,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
         { replacements: { id: req.params.id } }
       );
       if (rc) {
-        const wCfgSync = WORLD_CONFIGS[updated.world_tag] || WORLD_CONFIGS['lalaverse'];
+        const _wCfgSync = WORLD_CONFIGS[updated.world_tag] || WORLD_CONFIGS['lalaverse'];
         const roleType = ROLE_MAP[updated.character_type] || 'special';
         await sequelize.query(
           `UPDATE registry_characters SET
@@ -1562,7 +1561,7 @@ router.post('/world/characters/:id/re-sync', optionalAuth, async (req, res) => {
     );
     if (!rc) return res.status(404).json({ error: 'No linked registry character found — was this character synced?' });
 
-    const wCfg = WORLD_CONFIGS[char.world_tag] || WORLD_CONFIGS['lalaverse'];
+    const _wCfg = WORLD_CONFIGS[char.world_tag] || WORLD_CONFIGS['lalaverse'];
     const roleType = ROLE_MAP[char.character_type] || 'special';
 
     await sequelize.query(
@@ -1997,7 +1996,7 @@ router.post('/world/scenes/generate', optionalAuth, async (req, res) => {
     `, { replacements: { a: character_a_id, b: character_b_id || character_a_id } }).catch(e => { console.warn('[world-studio] scene history query error:', e?.message); return []; });
 
     // Determine scene length
-    const { min, max, label } = resolveSceneLength(charA.character_type, scene_type, charA.dynamic);
+    const { min, max, label: _label } = resolveSceneLength(charA.character_type, scene_type, charA.dynamic);
 
     const careerVoice = {
       early_career: 'She is still learning the dimensions of her own power. She moves toward what she wants but there is still something discovering itself in her.',

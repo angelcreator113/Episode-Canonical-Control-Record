@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
-const { v4: uuidv4 } = require('uuid');
+const { v4: _uuidv4 } = require('uuid');
 
 // Auth middleware
 let optionalAuth;
@@ -18,7 +18,7 @@ const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter,
 const { buildUniverseContext } = require('../../utils/universeContext');
 
 let registrySync;
-try { registrySync = require('../../services/registrySync'); } catch { registrySync = null; }
+try { _registrySync = require('../../services/registrySync'); } catch { _registrySync = null; }
 
 let buildKnowledgeInjection, getTechContext;
 try {
