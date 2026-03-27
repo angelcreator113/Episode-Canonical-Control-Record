@@ -122,54 +122,54 @@ function getInpaintCooldownMs(err) {
     return 8000;
   }
 
-  async function getMaskBoundingBoxFromDataUrl(maskDataUrl) {
-    const maskImg = await loadImage(maskDataUrl);
-    const w = maskImg.naturalWidth || maskImg.width;
-    const h = maskImg.naturalHeight || maskImg.height;
-    if (!w || !h) return null;
+  return 20000;
+}
 
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return null;
+async function getMaskBoundingBoxFromDataUrl(maskDataUrl) {
+  const maskImg = await loadImage(maskDataUrl);
+  const w = maskImg.naturalWidth || maskImg.width;
+  const h = maskImg.naturalHeight || maskImg.height;
+  if (!w || !h) return null;
 
-    ctx.drawImage(maskImg, 0, 0, w, h);
-    const { data } = ctx.getImageData(0, 0, w, h);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
 
-    let minX = w;
-    let minY = h;
-    let maxX = -1;
-    let maxY = -1;
+  ctx.drawImage(maskImg, 0, 0, w, h);
+  const { data } = ctx.getImageData(0, 0, w, h);
 
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = (y * w + x) * 4;
-        const r = data[idx] || 0;
-        const g = data[idx + 1] || 0;
-        const b = data[idx + 2] || 0;
-        const a = data[idx + 3] || 0;
-        const lum = (r + g + b) / 3;
-        const on = a > 8 && lum > 8;
-        if (!on) continue;
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      const r = data[idx] || 0;
+      const g = data[idx + 1] || 0;
+      const b = data[idx + 2] || 0;
+      const a = data[idx + 3] || 0;
+      const lum = (r + g + b) / 3;
+      const on = a > 8 && lum > 8;
+      if (!on) continue;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
     }
-
-    if (maxX < minX || maxY < minY) return null;
-
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX + 1,
-      height: maxY - minY + 1,
-    };
   }
 
-  return 20000;
+  if (maxX < minX || maxY < minY) return null;
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX + 1,
+    height: maxY - minY + 1,
+  };
 }
 
 const QUICK_ADD_OPTIONS = [
