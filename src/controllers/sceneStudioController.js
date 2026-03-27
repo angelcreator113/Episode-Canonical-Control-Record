@@ -1164,6 +1164,7 @@ exports.inpaint = async (req, res) => {
       mask_expand: maskExpand,
       mask_feather: maskFeather,
       reference_image_url: referenceImageUrl,
+      remove_reference_bg: removeReferenceBg,
     } = req.body;
 
     if (!mask_data_url) {
@@ -1199,6 +1200,7 @@ exports.inpaint = async (req, res) => {
         maskExpand: Number.isFinite(Number(maskExpand)) ? Number(maskExpand) : undefined,
         maskFeather: Number.isFinite(Number(maskFeather)) ? Number(maskFeather) : undefined,
         referenceImageUrl: referenceImageUrl || undefined,
+        removeReferenceBg: removeReferenceBg === true || removeReferenceBg === 'true',
       }
     );
 
