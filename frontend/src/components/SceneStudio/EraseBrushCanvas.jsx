@@ -698,7 +698,8 @@ export default function EraseBrushCanvas({
   }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg, exportMaskDataUrl]);
 
   // Replace with library asset handler
-  const handleLibraryAssetSelect = useCallback((assetUrl) => {
+  const handleLibraryAssetSelect = useCallback((asset) => {
+    const assetUrl = asset?.url || asset?.thumbnail_url;
     if (!hasStrokes || isProcessing || !assetUrl) return;
 
     const maskDataUrl = exportMaskDataUrl();
@@ -706,6 +707,7 @@ export default function EraseBrushCanvas({
 
     onReplaceWithImage?.(maskDataUrl, {
       imageDataUrl: assetUrl,
+      assetId: asset?.id || null,
       removeBg,
     });
     setShowImageMenu(false);
@@ -1060,7 +1062,7 @@ export default function EraseBrushCanvas({
                           key={asset.id}
                           type="button"
                           className="erase-image-menu-thumb"
-                          onClick={() => handleLibraryAssetSelect(asset.url || asset.thumbnail_url)}
+                          onClick={() => handleLibraryAssetSelect(asset)}
                           title={asset.label || asset.name || 'Library asset'}
                         >
                           <img src={asset.thumbnail_url || asset.url} alt={asset.label || 'Asset'} />
