@@ -360,14 +360,23 @@ async function removeBackgroundFromReference(referenceUrl, entityId) {
   }
 
   try {
-    console.log('[Inpainting] Removing background from reference image via remove.bg');
-    const response = await axios.post(
-      'https://api.remove.bg/v1.0/removebg',
-      {
+    const isDataUrl = typeof referenceUrl === 'string' && /^data:image\//i.test(referenceUrl);
+    console.log(`[Inpainting] Removing background from reference image via remove.bg${isDataUrl ? ' (data URL)' : ''}`);
+    const requestBody = isDataUrl
+      ? {
+        image_file_b64: referenceUrl.replace(/^data:image\/\w+;base64,/, ''),
+        size: 'auto',
+        format: 'png',
+      }
+      : {
         image_url: referenceUrl,
         size: 'auto',
         format: 'png',
-      },
+      };
+
+    const response = await axios.post(
+      'https://api.remove.bg/v1.0/removebg',
+      requestBody,
       {
         headers: {
           'X-Api-Key': removeBgApiKey,
