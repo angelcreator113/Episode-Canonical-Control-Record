@@ -441,7 +441,7 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
   const bgW = bgMeta.width;
   const bgH = bgMeta.height;
 
-  // Resize mask to match background
+  // Resize mask to match background (greyscale, single channel)
   const maskResized = await sharp(maskBuffer)
     .resize(bgW, bgH, { fit: 'fill' })
     .greyscale()
@@ -453,8 +453,7 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
   let minX = bgW, minY = bgH, maxX = 0, maxY = 0;
   for (let y = 0; y < bgH; y++) {
     for (let x = 0; x < bgW; x++) {
-      const pixel = maskRaw[y * bgW + x];
-      if (pixel > 200) {
+      if (maskRaw[y * bgW + x] > 200) {
         if (x < minX) minX = x;
         if (y < minY) minY = y;
         if (x > maxX) maxX = x;
@@ -478,71 +477,38 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
   const refAspect = refMeta.width / refMeta.height;
   const maskAspect = maskRegionW / maskRegionH;
 
-  let cropW, cropH;
+  let fitW, fitH;
   if (refAspect > maskAspect) {
-    cropH = maskRegionH;
-    cropW = Math.round(maskRegionH * refAspect);
+    fitH = maskRegionH;
+    fitW = Math.round(maskRegionH * refAspect);
   } else {
-    cropW = maskRegionW;
-    cropH = Math.round(maskRegionW / refAspect);
+    fitW = maskRegionW;
+    fitH = Math.round(maskRegionW / refAspect);
   }
 
-  const refResized = await sharp(refBuffer)
-    .resize(cropW, cropH, { fit: 'fill' })
+  // Resize and center-crop to exactly the mask region size
+  const refCropped = await sharp(refBuffer)
+    .resize(fitW, fitH, { fit: 'fill' })
     .extract({
-      left: Math.max(0, Math.round((cropW - maskRegionW) / 2)),
-      top: Math.max(0, Math.round((cropH - maskRegionH) / 2)),
-      width: Math.min(maskRegionW, cropW),
-      height: Math.min(maskRegionH, cropH),
+      left: Math.max(0, Math.round((fitW - maskRegionW) / 2)),
+      top: Math.max(0, Math.round((fitH - maskRegionH) / 2)),
+      width: Math.min(maskRegionW, fitW),
+      height: Math.min(maskRegionH, fitH),
     })
+    .ensureAlpha()
     .png()
     .toBuffer();
 
-  // Create the reference layer at full background size (transparent everywhere except mask region)
-  const refLayer = await sharp({
-    create: { width: bgW, height: bgH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
-  })
-    .composite([{ input: refResized, left: minX, top: minY }])
-    .png()
-    .toBuffer();
-
-  // Composite: background + reference clipped to mask
-  // 1. Use the mask as alpha for the reference layer
-  const refWithMask = await sharp(refLayer)
-    .joinChannel(maskResized) // adds mask as alpha
-    .png()
-    .toBuffer();
-
-  // Actually, sharp's joinChannel replaces channels. Let me use composite instead.
-  // Strategy: composite reference onto background using mask as opacity
+  // Simple approach: composite the reference onto background at the mask position,
+  // then use the mask to blend. Sharp composite with 'over' blend handles this.
+  // We just need to place the cropped reference at the right position.
   const result = await sharp(bgBuffer)
     .resize(bgW, bgH)
-    .composite([{
-      input: refLayer,
-      blend: 'over',
-      // We need to mask this — use the mask as the alpha channel
-    }])
-    .png()
-    .toBuffer();
-
-  // Better approach: create ref layer with mask as alpha channel
-  // Step 1: Make ref layer with correct alpha from mask
-  const refRGBA = await sharp(refLayer).ensureAlpha().raw().toBuffer();
-  const maskPixels = await sharp(maskResized).raw().toBuffer();
-
-  // Apply mask as alpha
-  for (let i = 0; i < bgW * bgH; i++) {
-    refRGBA[i * 4 + 3] = maskPixels[i]; // set alpha from mask
-  }
-
-  const maskedRef = await sharp(refRGBA, { raw: { width: bgW, height: bgH, channels: 4 } })
-    .png()
-    .toBuffer();
-
-  // Final composite
-  const finalResult = await sharp(bgBuffer)
-    .resize(bgW, bgH)
-    .composite([{ input: maskedRef, blend: 'over' }])
+    .ensureAlpha()
+    .composite([
+      // Place the reference image at the mask bounding box position
+      { input: refCropped, left: minX, top: minY, blend: 'over' },
+    ])
     .png()
     .toBuffer();
 
@@ -554,7 +520,7 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET,
     Key: s3Key,
-    Body: finalResult,
+    Body: result,
     ContentType: 'image/png',
     CacheControl: 'max-age=31536000',
   }));
