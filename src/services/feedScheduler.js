@@ -18,13 +18,8 @@
 /* eslint-disable no-console */
 const Anthropic = require('@anthropic-ai/sdk');
 
-const {
-  generateHandleFromCharacter,
-  inferArchetypeFromRole,
-  inferLalaRelationship,
-  inferCareerPressure,
-  inferFollowerTier,
-} = require('../utils/feedProfileUtils');
+// feedProfileUtils imported for future use
+// const { generateHandleFromCharacter, inferArchetypeFromRole, inferLalaRelationship, inferCareerPressure, inferFollowerTier } = require('../utils/feedProfileUtils');
 
 const AI_MODEL = 'claude-sonnet-4-6';
 const AI_FALLBACK_MODEL = 'claude-sonnet-4-20250514';
@@ -81,7 +76,7 @@ async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES }
 function parseAIJson(text) {
   const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
   // Try direct parse first
-  try { return JSON.parse(cleaned); } catch {}
+  try { return JSON.parse(cleaned); } catch { /* ignore parse error, try regex extraction */ }
   // Extract JSON object with regex
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('AI did not return valid JSON');
@@ -95,7 +90,7 @@ function parseAIJson(text) {
  */
 function parseAIJsonArray(text) {
   const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-  try { return JSON.parse(cleaned); } catch {}
+  try { return JSON.parse(cleaned); } catch { /* ignore parse error, try regex extraction */ }
   const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
   if (!arrayMatch) throw new Error('AI did not return valid JSON array');
   const fixed = arrayMatch[0].replace(/,\s*([\]}])/g, '$1');

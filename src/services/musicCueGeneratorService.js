@@ -146,7 +146,7 @@ class MusicCueGeneratorService {
   /**
    * Infer Lala Formula beat from scene
    */
-  inferBeatFromScene(scene, episodeData) {
+  inferBeatFromScene(scene, _episodeData) {
     const sceneName = (scene.name || '').toLowerCase();
     const sceneMetadata = scene.metadata || {};
     
@@ -188,7 +188,7 @@ class MusicCueGeneratorService {
   /**
    * Map scene to music properties
    */
-  mapSceneToMusic(sceneName, sceneType, sceneBeat, scene) {
+  mapSceneToMusic(sceneName, sceneType, sceneBeat, _scene) {
     const beatMappings = {
       stream_open: {
         track_type: 'instrumental',
@@ -252,7 +252,7 @@ class MusicCueGeneratorService {
   /**
    * Suggest track name based on beat and intensity
    */
-  suggestTrackName(sceneBeat, intensity) {
+  suggestTrackName(sceneBeat, _intensity) {
     const trackNames = {
       stream_open: 'Lala Theme v1 (Intro)',
       inciting_moment: 'Lala Theme v1 (Continues)',
@@ -306,7 +306,7 @@ class MusicCueGeneratorService {
    * Generate from episode (when no scenes available)
    */
   async generateFromEpisode(episodeId, episodeData, userId) {
-    const { episode, formula } = episodeData;
+    const { episode } = episodeData;
     const duration = episode.duration_seconds || 600; // Default 10 min
     
     const musicCues = [];
@@ -368,7 +368,7 @@ class MusicCueGeneratorService {
   /**
    * Save music cues to database
    */
-  async saveCues(episodeId, musicCues, userId) {
+  async saveCues(episodeId, musicCues, _userId) {
     const savedCues = [];
     
     for (const cue of musicCues) {

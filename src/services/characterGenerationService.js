@@ -31,7 +31,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const DEEP_PROFILE_DIMENSIONS = [
+const _DEEP_PROFILE_DIMENSIONS = [
   'life_stage', 'the_body', 'class_money', 'religion_meaning',
   'race_culture', 'sexuality_desire', 'family_architecture',
   'friendship_loyalty', 'ambition_identity', 'habits_rituals',

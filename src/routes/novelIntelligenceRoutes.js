@@ -378,7 +378,7 @@ router.patch('/manuscript/metadata/:id/override', optionalAuth, async (req, res)
 
 // POST /api/v1/novel/brain/check-duplicate
 router.post('/brain/check-duplicate', optionalAuth, async (req, res) => {
-  const { content, title, brain_type = 'story', series_id, source_document, source_version } = req.body;
+  const { content, title, brain_type = 'story', series_id: _series_id, source_document, source_version } = req.body;
   if (!content) return res.status(400).json({ error: 'content required' });
 
   const contentHash = sha256(content);

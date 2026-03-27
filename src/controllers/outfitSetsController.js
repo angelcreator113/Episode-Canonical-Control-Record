@@ -1,6 +1,5 @@
 const db = require('../models');
-const { models, sequelize, Sequelize } = db;
-const { Op } = require('sequelize');
+const { sequelize, Sequelize } = db;
 
 /**
  * Outfit Sets Controller

@@ -210,8 +210,8 @@ function updateEmotionalState(current, baseline, shifts = {}) {
 function buildTherapyContext(body) {
   const {
     character_name, archetype, nature,
-    emotional_state, baseline, known, sensed, never_knows,
-    primary_defense, deja_vu_events, sessions_completed,
+    emotional_state, baseline: _baseline, known, sensed, never_knows,
+    primary_defense, deja_vu_events: _deja_vu_events, sessions_completed,
   } = body;
 
   const highEmotions = Object.entries(emotional_state || {})

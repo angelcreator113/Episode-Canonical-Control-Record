@@ -9,7 +9,7 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const path = require('path');
 const db = require('../models');
 const { Asset } = db.models;
-const { sequelize, Sequelize } = db;
+const { sequelize } = db;
 
 // Configure S3 client
 const s3Client = new S3Client({
@@ -196,7 +196,7 @@ async function queueImageProcessing(assetId) {
     // Mark as processing
     await Asset.update(
       {
-        metadata: models.sequelize.literal(`
+        metadata: db.sequelize.literal(`
           COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
             'processing_status', 'queued',
             'queued_at', NOW()

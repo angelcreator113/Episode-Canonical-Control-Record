@@ -41,7 +41,7 @@ router.post('/:episodeId/phases/bulk', optionalAuth, async (req, res) => {
     
     // Calculate start/end times based on order
     let currentTime = 0;
-    const phasesWithTiming = phases.map((phase, idx) => {
+    const phasesWithTiming = phases.map((phase, _idx) => {
       const duration = phase.duration || 60; // default 60s per phase
       const start = currentTime;
       const end = currentTime + duration;

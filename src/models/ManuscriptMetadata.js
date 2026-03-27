@@ -2,7 +2,7 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class ManuscriptMetadata extends Model {
-    static associate(models) {}
+    static associate(_models) {}
   }
   ManuscriptMetadata.init({
     id:               { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },

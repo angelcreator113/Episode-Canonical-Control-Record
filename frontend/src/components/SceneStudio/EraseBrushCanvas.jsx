@@ -1,8 +1,10 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  Eraser, Check, X, Loader, Minus, Plus, 
+import api from '../../services/api';
+import {
+  Eraser, Check, X, Loader, Minus, Plus,
   Undo2, Redo2, Circle, Hexagon, Eye, EyeOff,
-  Sliders, Sparkles, History, ChevronDown, ChevronUp
+  Sliders, Sparkles, History, ChevronDown, ChevronUp,
+  ImagePlus, Upload, MousePointer
 } from 'lucide-react';
 
 /**
@@ -27,8 +29,13 @@ export default function EraseBrushCanvas({
   panY,
   backgroundUrl,
   onApply,
+  onReplaceWithImage,
+  onSegment,
   onCancel,
   isProcessing,
+  sceneId,
+  showId,
+  episodeId,
   // New props for enhanced features
   variations = [],
   onSelectVariation,
@@ -37,20 +44,51 @@ export default function EraseBrushCanvas({
 }) {
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [removeBg, setRemoveBg] = useState(false);
+  const [showImageMenu, setShowImageMenu] = useState(false);
+  const [libraryImages, setLibraryImages] = useState([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+
+  const normalizeLibraryAsset = useCallback((asset) => {
+    const thumbnailUrl = asset?.thumbnail_url
+      || asset?.metadata?.thumbnail_url
+      || asset?.s3_url_processed
+      || asset?.s3_url_raw
+      || null;
+    const assetUrl = asset?.url
+      || asset?.s3_url_processed
+      || asset?.s3_url_raw
+      || thumbnailUrl;
+
+    return {
+      ...asset,
+      url: assetUrl,
+      thumbnail_url: thumbnailUrl,
+    };
+  }, []);
   
   // Basic drawing state
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize, setBrushSize] = useState(40);
   const [hasStrokes, setHasStrokes] = useState(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
+  const [isSegmenting, setIsSegmenting] = useState(false);
 
   // Enhanced features state
   const [customPrompt, setCustomPrompt] = useState('');
   const [strength, setStrength] = useState(0.85);
   const [brushMode, setBrushMode] = useState('soft'); // 'soft' | 'hard'
   const [maskOpacity, setMaskOpacity] = useState(0.6);
-  const [drawMode, setDrawMode] = useState('brush'); // 'brush' | 'lasso'
+  const [drawMode, setDrawModeRaw] = useState('brush'); // 'brush' | 'lasso' | 'smart'
   const [lassoPoints, setLassoPoints] = useState([]);
+
+  // Switching modes clears any in-progress lasso
+  const setDrawMode = useCallback((mode) => {
+    setLassoPoints([]);
+    setCursorPos(null);
+    setDrawModeRaw(mode);
+  }, []);
   const [variationCount, setVariationCount] = useState(1);
   
   // Undo/redo state - stores canvas ImageData snapshots
@@ -141,17 +179,26 @@ export default function EraseBrushCanvas({
     const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
 
-    const x = (screenX - rect.left - panX) / zoom;
-    const y = (screenY - rect.top - panY) / zoom;
+    const safeZoom = zoom || 1;
+    const x = (screenX - rect.left - (panX || 0)) / safeZoom;
+    const y = (screenY - rect.top - (panY || 0)) / safeZoom;
     return { x, y };
   }, [zoom, panX, panY]);
 
-  // Apply soft brush effect (gaussian blur on edges)
+  // Visible mask color for display (red semi-transparent)
+  const MASK_COLOR = 'rgba(220, 53, 53, 0.5)';
+  const MASK_COLOR_SOLID = 'rgba(220, 53, 53, 0.8)';
+
+  // Apply soft brush effect (gaussian blur on edges) — visible red for display
   const applySoftBrush = useCallback((ctx, x, y, size) => {
-    const gradient = ctx.createRadialGradient(x, y, 0, x, y, size / 2);
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.8)');
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    const r = (size || 1) / 2;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || r <= 0) {
+      return MASK_COLOR;
+    }
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
+    gradient.addColorStop(0, MASK_COLOR_SOLID);
+    gradient.addColorStop(0.5, MASK_COLOR);
+    gradient.addColorStop(1, 'rgba(220, 53, 53, 0)');
     return gradient;
   }, []);
 
@@ -176,8 +223,8 @@ export default function EraseBrushCanvas({
         ctx.fill();
       }
     } else {
-      // Hard brush with sharp edges
-      ctx.strokeStyle = 'white';
+      // Hard brush with sharp edges — visible red for display
+      ctx.strokeStyle = MASK_COLOR;
       ctx.lineWidth = brushSize;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -296,8 +343,8 @@ export default function EraseBrushCanvas({
       ctx.putImageData(strokeHistory[historyIndex], 0, 0);
     }
 
-    // Fill the polygon
-    ctx.fillStyle = 'white';
+    // Fill the polygon — visible red for display
+    ctx.fillStyle = MASK_COLOR;
     ctx.beginPath();
     ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
     lassoPoints.forEach((pt) => ctx.lineTo(pt.x, pt.y));
@@ -312,9 +359,43 @@ export default function EraseBrushCanvas({
 
   // Mouse event handlers
   const handleMouseDown = useCallback((e) => {
-    if (isProcessing) return;
+    if (isProcessing || isSegmenting) return;
 
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
+
+    if (drawMode === 'smart') {
+      // Smart Select: send click to SAM, get mask back
+      const normalizedX = x / canvasWidth;
+      const normalizedY = y / canvasHeight;
+      if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
+
+      setIsSegmenting(true);
+      onSegment?.(normalizedX, normalizedY)
+        .then((maskImageUrl) => {
+          if (!maskImageUrl) return;
+          // Draw the SAM mask onto our canvas
+          const img = new window.Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            // Draw mask as white on our canvas (SAM masks are white-on-black)
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            setHasStrokes(true);
+            saveToHistory();
+          };
+          img.src = maskImageUrl;
+        })
+        .catch((err) => {
+          console.error('Smart select failed:', err);
+        })
+        .finally(() => {
+          setIsSegmenting(false);
+        });
+      return;
+    }
 
     if (drawMode === 'lasso') {
       // Check if clicking near the first point to close the lasso
@@ -341,7 +422,7 @@ export default function EraseBrushCanvas({
       if (brushMode === 'soft') {
         ctx.fillStyle = applySoftBrush(ctx, x, y, brushSize);
       } else {
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = MASK_COLOR;
       }
       ctx.beginPath();
       ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
@@ -441,23 +522,114 @@ export default function EraseBrushCanvas({
     saveToHistory();
   }, [canvasWidth, canvasHeight, saveToHistory]);
 
+  // Export a proper white-on-black mask from the display canvas.
+  // Display canvas uses visible red strokes; export converts any
+  // painted pixel (alpha > 0) to white on a black background.
+  const exportMaskDataUrl = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const ctx = exportCanvas.getContext('2d');
+
+    // Draw the display canvas to read its pixel data
+    ctx.drawImage(canvas, 0, 0);
+    const imageData = ctx.getImageData(0, 0, exportCanvas.width, exportCanvas.height);
+    const data = imageData.data;
+
+    // Convert: any pixel with alpha > 0 becomes white, else black
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 10) { // has some alpha = was painted
+        data[i] = 255;     // R
+        data[i + 1] = 255; // G
+        data[i + 2] = 255; // B
+        data[i + 3] = 255; // A
+      } else {
+        data[i] = 0;       // R
+        data[i + 1] = 0;   // G
+        data[i + 2] = 0;   // B
+        data[i + 3] = 255; // A
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return exportCanvas.toDataURL('image/png');
+  }, []);
+
   // Apply the mask — export as data URL and call onApply with options
   const handleApply = useCallback(() => {
     if (!hasStrokes || isProcessing) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const maskDataUrl = exportMaskDataUrl();
+    if (!maskDataUrl) return;
 
-    // Export the mask as PNG data URL
-    const maskDataUrl = canvas.toDataURL('image/png');
-    
-    // Call onApply with all options
     onApply(maskDataUrl, {
       prompt: customPrompt || undefined,
       strength,
       variationCount,
     });
-  }, [hasStrokes, isProcessing, onApply, customPrompt, strength, variationCount]);
+  }, [hasStrokes, isProcessing, onApply, customPrompt, strength, variationCount, exportMaskDataUrl]);
+
+  // Replace with image handler
+  const handleFileSelect = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file || !hasStrokes || isProcessing) return;
+
+    const maskDataUrl = exportMaskDataUrl();
+    if (!maskDataUrl) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      onReplaceWithImage?.(maskDataUrl, {
+        imageDataUrl: reader.result,
+        removeBg,
+      });
+    };
+    reader.readAsDataURL(file);
+
+    // Reset file input so the same file can be selected again
+    e.target.value = '';
+  }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg, exportMaskDataUrl]);
+
+  // Replace with library asset handler
+  const handleLibraryAssetSelect = useCallback((assetUrl) => {
+    if (!hasStrokes || isProcessing || !assetUrl) return;
+
+    const maskDataUrl = exportMaskDataUrl();
+    if (!maskDataUrl) return;
+
+    onReplaceWithImage?.(maskDataUrl, {
+      imageDataUrl: assetUrl,
+      removeBg,
+    });
+    setShowImageMenu(false);
+  }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg, exportMaskDataUrl]);
+
+  // Fetch library images when menu opens
+  useEffect(() => {
+    if (!showImageMenu || libraryImages.length > 0) return;
+    let cancelled = false;
+    setLibraryLoading(true);
+    const params = { limit: 20 };
+    if (showId) params.show_id = showId;
+    if (episodeId) params.episode_id = episodeId;
+    api.get('/api/v1/assets', { params })
+      .then(({ data }) => {
+        if (!cancelled) {
+          const assets = (data.data || data.assets || [])
+            .map(normalizeLibraryAsset)
+            .filter((asset) => asset.url || asset.thumbnail_url);
+          setLibraryImages(assets);
+        }
+      })
+      .catch((err) => {
+        console.warn('Library fetch failed:', err.message);
+        if (!cancelled) setLibraryImages([]);
+      })
+      .finally(() => { if (!cancelled) setLibraryLoading(false); });
+    return () => { cancelled = true; };
+  }, [showImageMenu, libraryImages.length, libraryLoading, showId, episodeId]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -491,6 +663,8 @@ export default function EraseBrushCanvas({
         setDrawMode('brush');
       } else if (e.key === 'l' || e.key === 'L') {
         setDrawMode('lasso');
+      } else if (e.key === 's' || e.key === 'S') {
+        setDrawMode('smart');
       }
     };
 
@@ -538,11 +712,13 @@ export default function EraseBrushCanvas({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           style={{
-            cursor: isProcessing 
-              ? 'wait' 
-              : drawMode === 'lasso'
+            cursor: isProcessing || isSegmenting
+              ? 'wait'
+              : drawMode === 'smart'
                 ? 'crosshair'
-                : `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize}" height="${brushSize}" viewBox="0 0 ${brushSize} ${brushSize}"><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 1}" fill="${brushMode === 'soft' ? 'rgba(255,255,255,0.3)' : 'none'}" stroke="%23667eea" stroke-width="2"/></svg>') ${brushSize/2} ${brushSize/2}, crosshair`,
+                : drawMode === 'lasso'
+                  ? 'crosshair'
+                  : `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize}" height="${brushSize}" viewBox="0 0 ${brushSize} ${brushSize}"><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 1}" fill="${brushMode === 'soft' ? 'rgba(255,255,255,0.3)' : 'none'}" stroke="%23667eea" stroke-width="2"/></svg>') ${brushSize/2} ${brushSize/2}, crosshair`,
           }}
         />
       </div>
@@ -571,317 +747,255 @@ export default function EraseBrushCanvas({
         </div>
       )}
 
-      {/* Controls panel */}
-      <div className="erase-brush-controls">
-        <div className="erase-brush-header">
-          <Eraser size={14} />
-          <span>Erase Tool</span>
+      {/* Hidden file input for Replace with Image */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+      />
+
+      {/* Bottom-docked toolbar */}
+      <div className="erase-toolbar">
+        {/* Row 1: Drawing tools */}
+        <div className="erase-toolbar-row">
+          <div className="erase-toolbar-group">
+            <div className="erase-brush-mode-toggle">
+              <button
+                type="button"
+                className={`erase-mode-btn ${drawMode === 'brush' ? 'active' : ''}`}
+                onClick={() => setDrawMode('brush')}
+                disabled={isProcessing}
+                title="Brush mode (B)"
+              >
+                <Circle size={12} />
+                <span>Brush</span>
+              </button>
+              <button
+                type="button"
+                className={`erase-mode-btn ${drawMode === 'lasso' ? 'active' : ''}`}
+                onClick={() => setDrawMode('lasso')}
+                disabled={isProcessing}
+                title="Lasso mode (L)"
+              >
+                <Hexagon size={12} />
+                <span>Lasso</span>
+              </button>
+              <button
+                type="button"
+                className={`erase-mode-btn ${drawMode === 'smart' ? 'active' : ''}`}
+                onClick={() => setDrawMode('smart')}
+                disabled={isProcessing}
+                title="Smart Select — click on an object to auto-select it (S)"
+              >
+                <MousePointer size={12} />
+                <span>Smart</span>
+              </button>
+            </div>
+          </div>
+
+          {drawMode === 'brush' && (
+            <div className="erase-toolbar-group">
+              <div className="erase-brush-size-row">
+                <button type="button" className="erase-brush-size-btn" onClick={() => setBrushSize((prev) => Math.max(5, prev - 10))} disabled={isProcessing}>
+                  <Minus size={12} />
+                </button>
+                <input type="range" min="5" max="200" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} disabled={isProcessing} />
+                <button type="button" className="erase-brush-size-btn" onClick={() => setBrushSize((prev) => Math.min(200, prev + 10))} disabled={isProcessing}>
+                  <Plus size={12} />
+                </button>
+                <span className="erase-brush-size-value">{brushSize}px</span>
+              </div>
+              <div className="erase-brush-type-toggle">
+                <button type="button" className={`erase-brush-type-btn ${brushMode === 'soft' ? 'active' : ''}`} onClick={() => setBrushMode('soft')} disabled={isProcessing}>Soft</button>
+                <button type="button" className={`erase-brush-type-btn ${brushMode === 'hard' ? 'active' : ''}`} onClick={() => setBrushMode('hard')} disabled={isProcessing}>Hard</button>
+              </div>
+            </div>
+          )}
+
+          <div className="erase-toolbar-group">
+            <div className="erase-brush-undo-redo">
+              <button type="button" className="erase-brush-action-btn" onClick={handleUndo} disabled={!canUndo || isProcessing} title="Undo (Ctrl+Z)">
+                <Undo2 size={14} />
+              </button>
+              <button type="button" className="erase-brush-action-btn" onClick={handleRedo} disabled={!canRedo || isProcessing} title="Redo (Ctrl+Y)">
+                <Redo2 size={14} />
+              </button>
+              {historyIndex > 0 && <span className="erase-brush-undo-count">{historyIndex}</span>}
+            </div>
+          </div>
+
+          <div className="erase-toolbar-group">
+            <button type="button" className="erase-brush-advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
+              <Sliders size={12} />
+              {showAdvanced ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+            </button>
+            {maskOpacity > 0 ? (
+              <button type="button" className="erase-brush-opacity-btn" onClick={() => setMaskOpacity(0)} title="Hide mask overlay">
+                <Eye size={14} />
+              </button>
+            ) : (
+              <button type="button" className="erase-brush-opacity-btn" onClick={() => setMaskOpacity(0.6)} title="Show mask overlay">
+                <EyeOff size={14} />
+              </button>
+            )}
+          </div>
+
+          <div className="erase-toolbar-spacer" />
+
+          <div className="erase-toolbar-group erase-toolbar-actions">
+            <button type="button" className="erase-brush-btn secondary" onClick={handleClear} disabled={!hasStrokes || isProcessing}>Clear</button>
+            <button type="button" className="erase-brush-btn secondary" onClick={onCancel} disabled={isProcessing}>
+              <X size={14} /> Cancel
+            </button>
+          </div>
         </div>
 
-        {/* Drawing mode toggle */}
-        <div className="erase-brush-mode-toggle">
-          <button
-            className={`erase-mode-btn ${drawMode === 'brush' ? 'active' : ''}`}
-            onClick={() => setDrawMode('brush')}
-            disabled={isProcessing}
-            title="Brush mode (B)"
-          >
-            <Circle size={12} />
-            <span>Brush</span>
-          </button>
-          <button
-            className={`erase-mode-btn ${drawMode === 'lasso' ? 'active' : ''}`}
-            onClick={() => setDrawMode('lasso')}
-            disabled={isProcessing}
-            title="Lasso mode (L)"
-          >
-            <Hexagon size={12} />
-            <span>Lasso</span>
-          </button>
-        </div>
-
-        {/* Instructions based on mode */}
-        <div className="erase-brush-instructions">
-          {drawMode === 'brush' 
-            ? 'Paint over areas to remove. The AI will fill them intelligently.'
-            : lassoPoints.length === 0
-              ? 'Click to start drawing a selection. Each click adds a point.'
-              : lassoPoints.length < 3
-                ? `${lassoPoints.length} point${lassoPoints.length > 1 ? 's' : ''} — need at least 3 to close`
-                : `${lassoPoints.length} points — double-click or click near the green dot to close`}
-        </div>
-
-        {/* Custom prompt input */}
-        <div className="erase-brush-prompt-section">
-          <label>Fill with (optional)</label>
-          <div className="erase-prompt-input-wrapper">
+        {/* Row 2: Fill options + Apply */}
+        <div className="erase-toolbar-row erase-toolbar-fill-row">
+          <div className="erase-toolbar-group erase-toolbar-fill">
             <input
               type="text"
               value={customPrompt}
               onChange={(e) => setCustomPrompt(e.target.value)}
-              placeholder="e.g., blue sky with clouds"
+              onKeyDown={(e) => { if (e.key === 'Enter' && hasStrokes && !isProcessing) handleApply(); }}
+              placeholder="Describe replacement (leave empty for AI fill)..."
               disabled={isProcessing}
               className="erase-prompt-input"
             />
             <button
+              type="button"
               className="erase-prompt-suggestions-btn"
               onClick={() => setShowPromptSuggestions(!showPromptSuggestions)}
               disabled={isProcessing}
+              title="Prompt suggestions"
             >
               <Sparkles size={12} />
             </button>
           </div>
-          {showPromptSuggestions && (
-            <div className="erase-prompt-suggestions">
-              {promptSuggestions.map((suggestion, i) => (
-                <button
-                  key={i}
-                  className="erase-prompt-suggestion"
-                  onClick={() => {
-                    setCustomPrompt(suggestion);
-                    setShowPromptSuggestions(false);
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
+
+          <div className="erase-toolbar-group erase-toolbar-actions">
+            <div className="erase-image-picker">
+              <button
+                type="button"
+                className="erase-brush-btn secondary"
+                onClick={() => setShowImageMenu(!showImageMenu)}
+                disabled={!hasStrokes || isProcessing}
+                title="Replace masked area with an image"
+              >
+                <ImagePlus size={14} />
+                <span className="erase-btn-label">Use Image</span>
+                <ChevronUp size={10} />
+              </button>
+              {showImageMenu && (
+                <div className="erase-image-menu">
+                  <button
+                    type="button"
+                    className="erase-image-menu-item"
+                    onClick={() => { fileInputRef.current?.click(); setShowImageMenu(false); }}
+                  >
+                    <Upload size={14} />
+                    Upload File
+                  </button>
+                  <div className="erase-image-menu-divider" />
+                  <div className="erase-image-menu-label">From Library</div>
+                  {libraryLoading ? (
+                    <div className="erase-image-menu-loading">Loading...</div>
+                  ) : libraryImages.length > 0 ? (
+                    <div className="erase-image-menu-grid">
+                      {libraryImages.filter((a) => a.url || a.thumbnail_url).slice(0, 12).map((asset) => (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          className="erase-image-menu-thumb"
+                          onClick={() => handleLibraryAssetSelect(asset.url || asset.thumbnail_url)}
+                          title={asset.label || asset.name || 'Library asset'}
+                        >
+                          <img src={asset.thumbnail_url || asset.url} alt={asset.label || 'Asset'} />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="erase-image-menu-loading">No images in library</div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+            <label className="erase-remove-bg-toggle" title="Remove background from replacement image before compositing">
+              <input type="checkbox" checked={removeBg} onChange={(e) => setRemoveBg(e.target.checked)} disabled={isProcessing} />
+              <span className="erase-remove-bg-label">Remove BG</span>
+            </label>
+            <button
+              type="button"
+              className="erase-brush-btn primary"
+              onClick={handleApply}
+              disabled={!hasStrokes || isProcessing}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader size={14} className="erase-brush-spinner" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Check size={14} />
+                  Apply
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Brush size control (only for brush mode) */}
-        {drawMode === 'brush' && (
-          <div className="erase-brush-size-control">
-            <label>Brush Size</label>
-            <div className="erase-brush-size-row">
+        {/* Prompt suggestions dropdown */}
+        {showPromptSuggestions && (
+          <div className="erase-prompt-suggestions">
+            {promptSuggestions.map((suggestion, i) => (
               <button
-                className="erase-brush-size-btn"
-                onClick={() => setBrushSize((prev) => Math.max(5, prev - 10))}
-                disabled={isProcessing}
+                type="button"
+                key={i}
+                className="erase-prompt-suggestion"
+                onClick={() => {
+                  setCustomPrompt(suggestion);
+                  setShowPromptSuggestions(false);
+                }}
               >
-                <Minus size={12} />
+                {suggestion}
               </button>
-              <input
-                type="range"
-                min="5"
-                max="200"
-                value={brushSize}
-                onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                disabled={isProcessing}
-              />
-              <button
-                className="erase-brush-size-btn"
-                onClick={() => setBrushSize((prev) => Math.min(200, prev + 10))}
-                disabled={isProcessing}
-              >
-                <Plus size={12} />
-              </button>
-              <span className="erase-brush-size-value">{brushSize}px</span>
-            </div>
-
-            {/* Soft/Hard brush toggle */}
-            <div className="erase-brush-type-toggle">
-              <button
-                className={`erase-brush-type-btn ${brushMode === 'soft' ? 'active' : ''}`}
-                onClick={() => setBrushMode('soft')}
-                disabled={isProcessing}
-              >
-                Soft
-              </button>
-              <button
-                className={`erase-brush-type-btn ${brushMode === 'hard' ? 'active' : ''}`}
-                onClick={() => setBrushMode('hard')}
-                disabled={isProcessing}
-              >
-                Hard
-              </button>
-            </div>
+            ))}
           </div>
         )}
 
-        {/* Undo/Redo buttons */}
-        <div className="erase-brush-undo-redo">
-          <button
-            className="erase-brush-action-btn"
-            onClick={handleUndo}
-            disabled={!canUndo || isProcessing}
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 size={14} />
-          </button>
-          <button
-            className="erase-brush-action-btn"
-            onClick={handleRedo}
-            disabled={!canRedo || isProcessing}
-            title="Redo (Ctrl+Y)"
-          >
-            <Redo2 size={14} />
-          </button>
-          <span className="erase-brush-undo-count">
-            {historyIndex > 0 ? `${historyIndex} stroke${historyIndex > 1 ? 's' : ''}` : ''}
-          </span>
-        </div>
-
-        {/* Advanced options toggle */}
-        <button
-          className="erase-brush-advanced-toggle"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          <Sliders size={12} />
-          <span>Advanced Options</span>
-          {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
-
+        {/* Advanced options panel (slides up from toolbar) */}
         {showAdvanced && (
           <div className="erase-brush-advanced">
-            {/* Strength slider */}
             <div className="erase-brush-slider-group">
-              <label>
-                Strength
-                <span className="erase-brush-slider-value">{Math.round(strength * 100)}%</span>
-              </label>
-              <input
-                type="range"
-                min="50"
-                max="100"
-                value={strength * 100}
-                onChange={(e) => setStrength(parseInt(e.target.value) / 100)}
-                disabled={isProcessing}
-              />
-              <div className="erase-brush-slider-labels">
-                <span>Subtle</span>
-                <span>Strong</span>
-              </div>
+              <label>Strength <span className="erase-brush-slider-value">{Math.round(strength * 100)}%</span></label>
+              <input type="range" min="50" max="100" value={strength * 100} onChange={(e) => setStrength(parseInt(e.target.value) / 100)} disabled={isProcessing} />
             </div>
-
-            {/* Mask opacity slider */}
             <div className="erase-brush-slider-group">
-              <label>
-                Mask Opacity
-                <span className="erase-brush-slider-value">{Math.round(maskOpacity * 100)}%</span>
-              </label>
-              <div className="erase-brush-opacity-row">
-                <button
-                  className="erase-brush-opacity-btn"
-                  onClick={() => setMaskOpacity(maskOpacity > 0 ? 0 : 0.6)}
-                >
-                  {maskOpacity > 0 ? <Eye size={14} /> : <EyeOff size={14} />}
-                </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={maskOpacity * 100}
-                  onChange={(e) => setMaskOpacity(parseInt(e.target.value) / 100)}
-                  disabled={isProcessing}
-                />
-              </div>
-            </div>
-
-            {/* Variation count */}
-            <div className="erase-brush-slider-group">
-              <label>
-                Generate Variations
-                <span className="erase-brush-slider-value">{variationCount}</span>
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="4"
-                value={variationCount}
-                onChange={(e) => setVariationCount(parseInt(e.target.value))}
-                disabled={isProcessing}
-              />
-              <div className="erase-brush-slider-labels">
-                <span>1 (fast)</span>
-                <span>4 (best)</span>
-              </div>
+              <label>Mask Opacity <span className="erase-brush-slider-value">{Math.round(maskOpacity * 100)}%</span></label>
+              <input type="range" min="0" max="100" value={maskOpacity * 100} onChange={(e) => setMaskOpacity(parseInt(e.target.value) / 100)} disabled={isProcessing} />
             </div>
           </div>
         )}
 
-        {/* Inpaint history */}
-        {inpaintHistory.length > 0 && (
-          <>
-            <button
-              className="erase-brush-history-toggle"
-              onClick={() => setShowHistory(!showHistory)}
-            >
-              <History size={12} />
-              <span>History ({inpaintHistory.length})</span>
-              {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            </button>
-
-            {showHistory && (
-              <div className="erase-brush-history">
-                {inpaintHistory.map((item, i) => (
-                  <div key={i} className="erase-history-item">
-                    <img src={item.thumbnail} alt={`History ${i + 1}`} />
-                    <div className="erase-history-info">
-                      <span className="erase-history-time">{item.timestamp}</span>
-                      <button
-                        className="erase-history-revert"
-                        onClick={() => onRevert?.(i)}
-                        disabled={isProcessing}
-                      >
-                        Revert
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
+        {/* Processing indicator */}
+        {isSegmenting && (
+          <div className="erase-brush-progress">AI is detecting the object... This may take a few seconds.</div>
         )}
-
-        <div className="erase-brush-shortcuts">
-          {drawMode === 'brush' 
-            ? '[ / ] size • Ctrl+Z undo • B brush • L lasso'
-            : 'Click to add points • Enter/double-click to close • Esc to cancel'}
-        </div>
-
-        <div className="erase-brush-actions">
-          <button
-            className="erase-brush-btn secondary"
-            onClick={handleClear}
-            disabled={!hasStrokes || isProcessing}
-          >
-            Clear
-          </button>
-          <button
-            className="erase-brush-btn secondary"
-            onClick={onCancel}
-            disabled={isProcessing}
-          >
-            <X size={14} />
-            Cancel
-          </button>
-          <button
-            className="erase-brush-btn primary"
-            onClick={handleApply}
-            disabled={!hasStrokes || isProcessing}
-          >
-            {isProcessing ? (
-              <>
-                <Loader size={14} className="erase-brush-spinner" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Check size={14} />
-                Apply{variationCount > 1 ? ` (${variationCount}×)` : ''}
-              </>
-            )}
-          </button>
-        </div>
-
         {isProcessing && (
-          <div className="erase-brush-progress">
-            {variationCount > 1 
-              ? `Generating ${variationCount} variations... This may take 30-60 seconds.`
-              : 'AI is removing the selected areas. This may take 10-30 seconds...'}
-          </div>
+          <div className="erase-brush-progress">AI is filling the selected area. This may take 10-30 seconds...</div>
         )}
+
+        {/* Keyboard shortcuts hint */}
+        <div className="erase-brush-shortcuts">
+          {drawMode === 'smart'
+            ? 'Click on any object to auto-select it • S smart • B brush • L lasso'
+            : drawMode === 'brush'
+              ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • S smart • Esc cancel'
+              : 'Click to add points • Enter to close • Esc cancel'}
+        </div>
       </div>
     </div>
   );

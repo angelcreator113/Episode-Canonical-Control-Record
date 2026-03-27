@@ -401,7 +401,7 @@ router.get('/status/:showId', optionalAuth, async (req, res) => {
 
   try {
     // Query all relevant tables in parallel — try show-scoped first
-    let [books, registries, universes] = await Promise.all([
+    let [books, registries, universes] = await Promise.all([ // eslint-disable-line prefer-const
       db.StorytellerBook.findAll({ where: { show_id: showId }, attributes: ['id', 'title'] }),
       db.CharacterRegistry.findAll({
         where: { show_id: showId },

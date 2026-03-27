@@ -64,7 +64,7 @@ let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset, Layer,
 let SceneFootageLink;
 let UserDecision, DecisionPattern, DecisionLog;
 let ShowConfig, ScriptTemplate, ScriptLearningProfile, ScriptEditHistory, ScriptSuggestion;
-let EditMap, CharacterProfile, RawFootage;
+let EditMap, CharacterProfile;
 let Character; // Characters model
 let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration
@@ -233,12 +233,12 @@ try {
   ScriptSuggestion = require('./ScriptSuggestion')(sequelize);
   
   // Try to load optional models (may not exist yet)
-  let RawFootage;
+  let _RawFootage;
   try {
-    RawFootage = require('./RawFootage')(sequelize);
+    _RawFootage = require('./RawFootage')(sequelize);
   } catch (e) {
     console.log('⚠️  RawFootage model not found, creating minimal stub');
-    RawFootage = sequelize.define('RawFootage', {
+    _RawFootage = sequelize.define('RawFootage', {
       id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
       episode_id: DataTypes.UUID,
       s3_key: DataTypes.STRING,

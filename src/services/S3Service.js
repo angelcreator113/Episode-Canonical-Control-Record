@@ -106,7 +106,7 @@ class S3Service {
   async downloadFromS3(s3Key, bucketName = null) {
     const fs = require('fs');
     const path = require('path');
-    const { pipeline } = require('stream/promises');
+    require('stream/promises');
 
     try {
       const bucket = bucketName || process.env.S3_TRAINING_BUCKET || 'episode-metadata-training';

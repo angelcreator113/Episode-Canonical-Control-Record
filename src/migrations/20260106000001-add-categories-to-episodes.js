@@ -19,7 +19,7 @@ module.exports = {
     }
   },
 
-  down: async (queryInterface, _Sequelize) => {
+  down: async (queryInterface, Sequelize) => {
     try {
       const tableDescription = await queryInterface.describeTable('episodes');
       if (tableDescription.categories) {

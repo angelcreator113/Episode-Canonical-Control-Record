@@ -127,7 +127,7 @@ router.get('/', async (req, res) => {
   try {
     const Show = getShow();
     const { Episode } = require('../models');
-    const { fn, col, literal } = require('sequelize');
+    const { fn, col } = require('sequelize');
 
     const shows = await Show.findAll({
       attributes: {

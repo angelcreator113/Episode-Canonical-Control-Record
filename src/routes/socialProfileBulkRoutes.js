@@ -19,7 +19,7 @@ const multer  = require('multer');
 const path    = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 
-const { buildGenerationPrompt, autoAssignFollower, autoAssignAllFollowers } = require('./socialProfileRoutes');
+const { buildGenerationPrompt, autoAssignAllFollowers } = require('./socialProfileRoutes');
 
 let optionalAuth;
 try {
@@ -86,7 +86,7 @@ function categorizeError(err) {
 // SHARED PROFILE GENERATION — Deduplicated (#4)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey }) {
+async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey: _characterKey }) {
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext);
   const aiRes = await Promise.race([
     client.messages.create({
@@ -784,7 +784,7 @@ async function processJobInBackground(jobId, concurrency = 3) {
       const clients = jobSSEClients.get(String(jobId));
       if (clients) {
         for (const client of clients) {
-          try { client.end(); } catch {}
+          try { client.end(); } catch { /* intentionally empty */ }
         }
         jobSSEClients.delete(String(jobId));
       }

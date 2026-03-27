@@ -176,7 +176,7 @@ router.post('/confirm-feed', async (req, res) => {
     if (!character) return res.status(404).json({ error: 'Character not found' });
 
     // Map follower_range to a number
-    const followerMap = {
+    const _followerMap = {
       'nano':  5000,
       'micro': 50000,
       'mid':   250000,
@@ -233,7 +233,7 @@ router.post('/confirm-feed', async (req, res) => {
 router.post('/promote-ghost/:characterId', async (req, res) => {
   const { ghost_name, registry_id } = req.body;
   const models = getModels(req);
-  const { RegistryCharacter, CharacterRegistry } = models;
+  const { RegistryCharacter } = models;
 
   if (!ghost_name || !registry_id) {
     return res.status(400).json({ error: 'ghost_name and registry_id required' });

@@ -3,7 +3,7 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class PostGenerationReview extends Model {
-    static associate(models) {}
+    static associate(_models) {}
   }
   PostGenerationReview.init({
     id:                        { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },

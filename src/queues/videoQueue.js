@@ -32,7 +32,7 @@ const sharedRedisOpts = {
 
 // Bull uses ioredis-style config (host/port), not the redis URL format
 const videoQueue = new Bull('video-export', {
-  createClient(type) {
+  createClient(_type) {
     const IORedis = require('ioredis');
     const client = new IORedis(sharedRedisOpts);
     // Attach error handler immediately to prevent unhandled rejections

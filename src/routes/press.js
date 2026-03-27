@@ -361,7 +361,7 @@ function isLalaStageReached(character, careerData) {
 
 router.post('/seed-characters', optionalAuth, async (req, res) => {
   try {
-    let { show_id, registry_id } = req.body || {};
+    let { show_id, registry_id } = req.body || {}; // eslint-disable-line prefer-const
     const models = getModels();
     const { RegistryCharacter, CharacterRegistry, Show } = models;
 
@@ -700,7 +700,7 @@ router.post('/generate-scene', optionalAuth, async (req, res) => {
       character_slug,
       chapter_brief,
       lala_context,
-      pov = 'lala',
+      pov: _pov = 'lala',
     } = req.body;
 
     const pc = PRESS_CHARACTERS.find(c => c.slug === character_slug);

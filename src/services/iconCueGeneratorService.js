@@ -130,7 +130,7 @@ class IconCueGeneratorService {
    * Reads structured scene data with icon hints
    */
   async generateFromSceneMetadata(episodeId, episodeData) {
-    const { scenes, formula } = episodeData;
+    const { scenes } = episodeData;
     
     if (!scenes || scenes.length === 0) {
       console.log('[IconCueGenerator] No scenes found for metadata method');
@@ -203,7 +203,7 @@ class IconCueGeneratorService {
   /**
    * Create cue from interactive element
    */
-  async createCueFromInteractive(element, sceneStart, scene) {
+  async createCueFromInteractive(element, sceneStart, _scene) {
     // element: "to_do_list", "closet_open", etc.
     const iconType = element.replace('_open', '').replace('_click', '');
     const assetRole = this.iconTypeToAssetRole(iconType);
@@ -231,7 +231,7 @@ class IconCueGeneratorService {
   async inferIconsFromScene(scene) {
     const cues = [];
     const sceneName = (scene.name || '').toLowerCase();
-    const sceneType = (scene.type || '').toLowerCase();
+    const _sceneType = (scene.type || '').toLowerCase();
     const sceneStart = scene.start_time_seconds || 0;
     
     // Styling Phase → Closet icon
@@ -285,7 +285,7 @@ class IconCueGeneratorService {
   /**
    * Add persistent icons (voice, gallery)
    */
-  async addPersistentIcons(episodeData) {
+  async addPersistentIcons(_episodeData) {
     const cues = [];
     
     // Voice icon (always at 00:08)
@@ -327,8 +327,8 @@ class IconCueGeneratorService {
    * Uses Claude to analyze script and suggest icon placements
    */
   async generateFromAIAnalysis(episodeId, episodeData) {
-    const { episode, script, formula } = episodeData;
-    
+    const { script } = episodeData;
+
     if (!script || !script.content) {
       console.log('[IconCueGenerator] No script content for AI analysis');
       return [];
@@ -360,8 +360,8 @@ class IconCueGeneratorService {
    * Build AI prompt for icon cue generation
    */
   buildAIPrompt(episodeData) {
-    const { episode, script, formula } = episodeData;
-    
+    const { episode, script } = episodeData;
+
     return `You are generating icon cue suggestions for a video game-style interactive episode.
 
 Episode: ${episode.title}
@@ -462,7 +462,7 @@ Focus on story-relevant moments. Be conservative - only suggest icons when clear
   /**
    * Save generated cues to database
    */
-  async saveCues(episodeId, iconCues, method, userId) {
+  async saveCues(episodeId, iconCues, method, _userId) {
     const savedCues = [];
     
     for (const cue of iconCues) {

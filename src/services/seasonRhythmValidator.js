@@ -242,7 +242,7 @@ function countDistribution(episodes) {
   }, { slay: 0, pass: 0, safe: 0, fail: 0 });
 }
 
-function checkDistributionFeasibility(projected, remaining, target, positionInArc) {
+function checkDistributionFeasibility(projected, remaining, target, _positionInArc) {
   const violations = [];
 
   for (const [outcome, targetCount] of Object.entries(target)) {

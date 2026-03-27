@@ -11,7 +11,7 @@ const episodeAssetsController = require('../controllers/episodeAssetsController'
 const timelinePlacementsController = require('../controllers/timelinePlacementsController');
 const videoCompositionController = require('../controllers/videoCompositionController');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/rbac');
+const { requirePermission: _requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/requestValidation');
 
@@ -206,7 +206,7 @@ router.post(
     const { id } = req.params;
     const { episode: episodeData, platform: platformData, scenes, timeline } = req.body;
 
-    const result = await Episode.sequelize.transaction(async (t) => {
+    const _result = await Episode.sequelize.transaction(async (t) => {
       // 1. Update episode metadata + platform
       const episodeRecord = await Episode.findByPk(id, { transaction: t });
       if (!episodeRecord) throw new Error('Episode not found');
@@ -225,7 +225,7 @@ router.post(
       }
 
       // 2. Upsert scenes
-      let savedSceneCount = 0;
+      let _savedSceneCount = 0;
       if (scenes && Array.isArray(scenes)) {
         // Delete existing scenes for this episode, then bulk create
         const deletedCount = await Scene.destroy({ where: { episode_id: id }, transaction: t, force: true });
@@ -247,7 +247,7 @@ router.post(
             })),
             { transaction: t }
           );
-          savedSceneCount = created.length;
+          _savedSceneCount = created.length;
           console.log(`[Save] Created ${created.length} scenes`);
           if (scenes.length > 0) {
             console.log(`[Save] Scene 1 background_url: ${scenes[0].background_url || 'null'}`);

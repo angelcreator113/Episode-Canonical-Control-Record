@@ -3,7 +3,7 @@ const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
   class FranchiseKnowledge extends Model {
-    static associate(models) {
+    static associate(_models) {
       // Intentionally isolated — no foreign key associations
     }
   }

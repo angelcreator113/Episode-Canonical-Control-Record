@@ -24,7 +24,7 @@ const SILENT_FIELDS = [
   'appearance',
 ];
 
-const CONTRADICTION_FIELDS = [
+const _CONTRADICTION_FIELDS = [
   'wound',
   'psychology',
   'relationship_to_jaw',

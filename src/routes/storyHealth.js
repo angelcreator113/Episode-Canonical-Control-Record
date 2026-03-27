@@ -393,7 +393,7 @@ router.get('/therapy-suggestions/:characterKey', optionalAuth, async (req, res) 
     const suggestions = [];
 
     if (therapyProfile) {
-      const known = typeof therapyProfile.known === 'string' ? JSON.parse(therapyProfile.known || '{}') : (therapyProfile.known || {});
+      const _known = typeof therapyProfile.known === 'string' ? JSON.parse(therapyProfile.known || '{}') : (therapyProfile.known || {});
       const sensed = typeof therapyProfile.sensed === 'string' ? JSON.parse(therapyProfile.sensed || '{}') : (therapyProfile.sensed || {});
 
       if (therapyProfile.primary_defense) {

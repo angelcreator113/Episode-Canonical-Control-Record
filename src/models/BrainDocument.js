@@ -3,7 +3,7 @@ const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
   class BrainDocument extends Model {
-    static associate(models) {
+    static associate(_models) {
       // Intentionally isolated
     }
   }

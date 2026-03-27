@@ -724,7 +724,7 @@ Return ONLY JSON:
       for (const proposal of (parsed.memory_proposals || [])) {
         try {
           // Find the character associated with this chapter/book
-          const charLine = chapterLines.find(l => l.id === lineId);
+          const _charLine = chapterLines.find(l => l.id === lineId);
           await db.StorytellerMemory.create({
             character_id: null, // Will be assigned on confirmation
             line_id: lineId,

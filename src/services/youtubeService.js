@@ -30,7 +30,7 @@ class YouTubeService {
    * Extract video ID from URL
    */
   getVideoID(url) {
-    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const regex = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/;
     const match = url.match(regex);
     return match ? match[1] : null;
   }
@@ -132,13 +132,10 @@ class YouTubeService {
         path: finalPath,
         size: stats.size
       };
-      
+    } catch (error) {
       if (error.killed) {
         throw new Error('Video download timed out after 5 minutes. The video may be too large or network is slow.');
       }
-      
-      
-    } catch (error) {
       console.error('yt-dlp download error:', error.message);
       throw new Error(`Download failed: ${error.message}`);
     }

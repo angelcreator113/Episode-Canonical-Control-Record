@@ -329,7 +329,6 @@ module.exports = {
   },
 
   async down(queryInterface) {
-    const { Op } = require('sequelize');
     await queryInterface.bulkDelete('franchise_knowledge', {
       source_document: 'world-infrastructure-v1.0'
     });

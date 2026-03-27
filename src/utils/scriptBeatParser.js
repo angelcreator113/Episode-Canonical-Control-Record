@@ -458,7 +458,7 @@ function parseBeatHeader(raw) {
   const indexMatch = raw.match(/#(\d+)\s*$/);
   const index = indexMatch ? parseInt(indexMatch[1]) : 1;
   let typeStr = raw.replace(/#\d+\s*$/, '').trim();
-  typeStr = typeStr.replace(/[\u2014\u2013\-]/g, '_').replace(/\s+/g, '_').toLowerCase();
+  typeStr = typeStr.replace(/[\u2014\u2013-]/g, '_').replace(/\s+/g, '_').toLowerCase();
   const mapped = BEAT_TYPES.find(t => typeStr.includes(t));
   return { type: mapped || typeStr, index };
 }

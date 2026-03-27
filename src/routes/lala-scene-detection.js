@@ -168,7 +168,7 @@ router.post('/backfill/:bookId', optionalAuth, async (req, res) => {
   try {
     const db = req.app.get('db') || require('../models');
     const {
-      LalaEmergenceScene,
+      LalaEmergenceScene: _LalaEmergenceScene,
       StorytellerBook,
       StorytellerChapter,
       StorytellerLine,

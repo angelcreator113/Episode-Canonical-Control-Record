@@ -13,7 +13,7 @@ module.exports = {
     }
   },
 
-  down: async (queryInterface, _Sequelize) => {
+  down: async (queryInterface, Sequelize) => {
     await queryInterface.removeColumn('episodes', 'current_ai_edit_plan_id');
   },
 };

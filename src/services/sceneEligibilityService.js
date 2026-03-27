@@ -62,7 +62,7 @@ const INTENSITY_MAP = {
 
 const ELIGIBLE_STORY_TYPES = ['collision', 'wrong_win'];
 
-async function checkSceneEligibility(db, { storyId, characterKey, storyText, storyType, storyNumber, charactersPresent = [] }) {
+async function checkSceneEligibility(db, { storyId: _storyId, characterKey, storyText, storyType, storyNumber, charactersPresent = [] }) {
   // internal stories only eligible if second character is present + direct relationship
   if (storyType === 'internal') {
     const hasDirectPartner = charactersPresent.some(c =>

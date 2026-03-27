@@ -178,9 +178,9 @@ async function ffmpegEnhanceVideo(videoUrl, options = {}) {
     brightness = 0.02,
     contrast = 1.05,
     saturation = 1.1,
-    gamma_r = 1.02,
-    gamma_g = 1.0,
-    gamma_b = 0.97,
+    gamma_r: _gamma_r = 1.02,
+    gamma_g: _gamma_g = 1.0,
+    gamma_b: _gamma_b = 0.97,
   } = options;
 
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'scene-postproc-'));

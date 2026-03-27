@@ -2,7 +2,7 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class MultiProductContent extends Model {
-    static associate(models) {}
+    static associate(_models) {}
   }
   MultiProductContent.init({
     id:       { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },

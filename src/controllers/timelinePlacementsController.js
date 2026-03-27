@@ -1,5 +1,5 @@
 const { models } = require('../models');
-const { TimelinePlacement, EpisodeScene, Asset, Wardrobe, Episode } = models;
+const { TimelinePlacement, EpisodeScene, Asset, Wardrobe } = models;
 const { literal } = require('sequelize');
 
 /**

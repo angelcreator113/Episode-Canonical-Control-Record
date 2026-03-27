@@ -32,7 +32,7 @@
  */
 const express  = require('express');
 const router   = express.Router();
-const { Op }   = require('sequelize');
+const { Op: _Op }   = require('sequelize');
 const { optionalAuth } = require('../middleware/auth');
 const { fireRipple, resolveEvent } = require('../services/rippleEngine');
 

@@ -13,7 +13,7 @@ try {
 }
 
 const db = require('../../models');
-const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
+const { RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
@@ -31,7 +31,7 @@ router.post('/scene-interview', optionalAuth, async (req, res) => {
   try {
     const {
       book_id,
-      chapter_id,
+      chapter_id: _chapter_id,
       chapter_title,
       answers,
       characters = [],
@@ -184,7 +184,7 @@ router.post('/narrative-intelligence', optionalAuth, async (req, res) => {
       characters = [],
       // ── venture context fields ───────────────────────────────────────────
       venture_context = '',
-      pnos_act = 'act_1',
+      pnos_act: _pnos_act = 'act_1',
       incoming_echoes = [],
       active_threads = [],
       // ── alive system fields ──────────────────────────────────────────────
@@ -399,7 +399,7 @@ router.post('/continuity-check', optionalAuth, async (req, res) => {
   try {
     const {
       book_id,
-      chapter_id,
+      chapter_id: _chapter_id2,
       chapter_brief = {},
       all_lines,
       trigger_line,
@@ -501,7 +501,7 @@ router.post('/rewrite-options', optionalAuth, async (req, res) => {
   try {
     const {
       book_id,
-      line_id,
+      line_id: _line_id,
       content,
       character_id,
       chapter_brief = {},
@@ -1124,7 +1124,7 @@ router.post('/character-interview-complete', optionalAuth, async (req, res) => {
   try {
     const {
       book_id,
-      character_id,
+      character_id: _character_id,
       character_name,
       character_type,
       answers = [],

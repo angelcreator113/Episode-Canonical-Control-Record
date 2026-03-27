@@ -333,7 +333,7 @@ async function ensurePreviewsTable() {
   `).catch(e => console.warn('[world-studio] ecosystem_previews table create error:', e?.message));
 }
 let previewsTableReady = false;
-async function persistPreviewToDB(previewId, data, ownerId = null) {
+async function persistPreviewToDB(previewId, data, _ownerId = null) {
   if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
   await sequelize.query(`
     INSERT INTO ecosystem_previews (preview_id, world_tag, characters, generation_notes, status)
@@ -386,7 +386,7 @@ async function findOrCreateRegistryForWorld(req, worldTag = 'lalaverse') {
 }
 
 // Backward-compat alias
-async function findOrCreateLalaVerseRegistry(req) {
+async function _findOrCreateLalaVerseRegistry(req) {
   return findOrCreateRegistryForWorld(req, 'lalaverse');
 }
 
@@ -826,7 +826,6 @@ async function backfillRelationshipsMap(seededPairs) {
       }
       const map = charRels.get(self.registry_character_id);
       const entry = other.name;
-      const rt = relType.toLowerCase();
       if (/roman|love|affair|attract|triangle|blurred|office romance|complicated history|old vs new|competing/i.test(relType)) {
         map.love_interests.push(entry);
       } else if (/rival|pressure|politics|competition/i.test(relType)) {
@@ -871,7 +870,7 @@ async function backfillRelationshipsMap(seededPairs) {
 }
 
 // Variable scene length logic based on relationship depth and type
-function resolveSceneLength(characterType, sceneType, dynamic) {
+function resolveSceneLength(characterType, sceneType, _dynamic) {
   // One-night stands: punchy, electric, not drawn out
   if (sceneType === 'one_night_stand' || characterType === 'one_night_stand') return { min: 400, max: 700,  label: 'short' };
   // First encounters: tension-heavy, slow build
@@ -1424,7 +1423,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
         { replacements: { id: req.params.id } }
       );
       if (rc) {
-        const wCfgSync = WORLD_CONFIGS[updated.world_tag] || WORLD_CONFIGS['lalaverse'];
+        const _wCfgSync = WORLD_CONFIGS[updated.world_tag] || WORLD_CONFIGS['lalaverse'];
         const roleType = ROLE_MAP[updated.character_type] || 'special';
         await sequelize.query(
           `UPDATE registry_characters SET
@@ -1562,7 +1561,7 @@ router.post('/world/characters/:id/re-sync', optionalAuth, async (req, res) => {
     );
     if (!rc) return res.status(404).json({ error: 'No linked registry character found — was this character synced?' });
 
-    const wCfg = WORLD_CONFIGS[char.world_tag] || WORLD_CONFIGS['lalaverse'];
+    const _wCfg = WORLD_CONFIGS[char.world_tag] || WORLD_CONFIGS['lalaverse'];
     const roleType = ROLE_MAP[char.character_type] || 'special';
 
     await sequelize.query(
@@ -1997,7 +1996,7 @@ router.post('/world/scenes/generate', optionalAuth, async (req, res) => {
     `, { replacements: { a: character_a_id, b: character_b_id || character_a_id } }).catch(e => { console.warn('[world-studio] scene history query error:', e?.message); return []; });
 
     // Determine scene length
-    const { min, max, label } = resolveSceneLength(charA.character_type, scene_type, charA.dynamic);
+    const { min, max, label: _label } = resolveSceneLength(charA.character_type, scene_type, charA.dynamic);
 
     const careerVoice = {
       early_career: 'She is still learning the dimensions of her own power. She moves toward what she wants but there is still something discovering itself in her.',
@@ -2494,7 +2493,7 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
     const character_count = Math.max(3, Math.min(20, parseInt(rawCount, 10) || 8));
 
     const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
-    const series_label = req.body.series_label || wCfg.series_label;
+    const _series_label = req.body.series_label || wCfg.series_label;
 
     const {
       city         = wCfg.defaults.city,
@@ -2647,14 +2646,13 @@ Return JSON only:
  * Takes the user-selected characters from the preview and commits them to DB + registry.
  */
 router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) => {
+  const { show_id, preview_id } = req.body;
   const t = await sequelize.transaction();
   try {
     let {
       characters = [],
       generation_notes = '',
-      show_id,
       world_tag = 'lalaverse',
-      preview_id,
     } = req.body;
 
     // If preview_id provided, restore from server-side cache (survives browser refresh)
@@ -2831,7 +2829,6 @@ router.post('/world/characters/seed-cross-batch', optionalAuth, async (req, res)
     if (characters.length < 2) return res.json({ seeded: 0, message: 'Need at least 2 active characters' });
 
     // Only pair characters from DIFFERENT batches
-    const crossBatchChars = [];
     const batches = [...new Set(characters.map(c => c.batch_id).filter(Boolean))];
     if (batches.length < 2) return res.json({ seeded: 0, message: 'Need characters from at least 2 batches' });
 

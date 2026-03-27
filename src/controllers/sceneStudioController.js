@@ -167,7 +167,7 @@ exports.saveCanvas = async (req, res) => {
         paranoid: false,
         transaction,
       });
-      const activeExisting = existing.filter((e) => !e.deleted_at);
+      const _activeExisting = existing.filter((e) => !e.deleted_at);
       const existingById = new Map(existing.map((e) => [e.id, e]));
       const existingByComposite = new Map(
         existing
@@ -1163,6 +1163,8 @@ exports.inpaint = async (req, res) => {
       strict_remove: strictRemove,
       mask_expand: maskExpand,
       mask_feather: maskFeather,
+      reference_image_url: referenceImageUrl,
+      remove_reference_bg: removeReferenceBg,
     } = req.body;
 
     if (!mask_data_url) {
@@ -1197,6 +1199,8 @@ exports.inpaint = async (req, res) => {
         strictRemove: strictRemove === true || strictRemove === 'true',
         maskExpand: Number.isFinite(Number(maskExpand)) ? Number(maskExpand) : undefined,
         maskFeather: Number.isFinite(Number(maskFeather)) ? Number(maskFeather) : undefined,
+        referenceImageUrl: referenceImageUrl || undefined,
+        removeReferenceBg: removeReferenceBg === true || removeReferenceBg === 'true',
       }
     );
 
@@ -1212,6 +1216,52 @@ exports.inpaint = async (req, res) => {
     const status = Number.isFinite(Number(error?.status))
       ? Number(error.status)
       : (error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500);
+    const retryAfter = Number.parseInt(String(error?.retryAfter || ''), 10);
+    if (status === 429 && retryAfter > 0) {
+      res.setHeader('Retry-After', String(retryAfter));
+    }
+    res.status(status).json({
+      success: false,
+      error: error.message,
+      retry_after: status === 429 && retryAfter > 0 ? retryAfter : undefined,
+    });
+  }
+};
+
+// ── Smart Select (SAM Segmentation) ──
+
+exports.segmentObject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url, point_x, point_y } = req.body;
+
+    if (point_x == null || point_y == null) {
+      return res.status(400).json({ success: false, error: 'point_x and point_y are required (0-1 normalized coordinates)' });
+    }
+
+    const Scene = require('../models').Scene;
+    const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url'] });
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    const sourceUrl = image_url || scene.background_url;
+    if (!sourceUrl) {
+      return res.status(400).json({ success: false, error: 'No source image available' });
+    }
+
+    const segmentationService = require('../services/segmentationService');
+    const result = await segmentationService.segmentAtPoint(
+      sourceUrl,
+      Number(point_x),
+      Number(point_y),
+      id
+    );
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Scene Studio segment error:', error);
+    const status = Number.isFinite(Number(error?.status)) ? Number(error.status) : 500;
     const retryAfter = Number.parseInt(String(error?.retryAfter || ''), 10);
     if (status === 429 && retryAfter > 0) {
       res.setHeader('Retry-After', String(retryAfter));

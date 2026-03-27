@@ -15,7 +15,7 @@ const express    = require('express');
 const router     = express.Router();
 const Anthropic  = require('@anthropic-ai/sdk');
 const rateLimit  = require('express-rate-limit');
-const { optionalAuth, authenticate } = require('../middleware/auth');
+const { optionalAuth } = require('../middleware/auth');
 const db = require('../models');
 
 const client = new Anthropic();
@@ -69,7 +69,7 @@ Examples of what a next step sounds like:
 Frame it as world logic, not productivity advice. This is about the world staying alive.`;
 
 // ── Read system state for greeting context ────────────────────────────────────
-async function readSystemState(userId) {
+async function readSystemState(_userId) {
   const state = {
     lastLogin:            null,
     daysSinceNovelWork:   null,

@@ -13,7 +13,7 @@ try {
 }
 
 const db = require('../../models');
-const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
+const { StorytellerMemory, StorytellerLine, StorytellerBook: _StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../../utils/universeContext');
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
@@ -33,7 +33,7 @@ const anthropic = new Anthropic();
 router.post('/character-voice-session', optionalAuth, async (req, res) => {
   try {
     const {
-      character_id,
+      character_id: _character_id,
       character_name,
       character_type,
       character_profile,  // pre-built summary string from frontend
@@ -318,7 +318,7 @@ router.post('/generate-chapter-draft', optionalAuth, async (req, res) => {
       target_lines = 20,
       // ── venture context fields ───────────────────────────────────────────
       venture_context = '',
-      pnos_act = '',
+      pnos_act: _pnos_act = '',
       incoming_echoes = [],
       active_threads = [],
       // ── alive system fields ──────────────────────────────────────────────

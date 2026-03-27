@@ -34,7 +34,7 @@ const ROLE_DEFINITIONS = {
 };
 
 // ─── 14 character role types (v5.3 narrative function roles) ─────────────────
-const CHARACTER_ROLE_TYPES = [
+const _CHARACTER_ROLE_TYPES = [
   'love_interest', 'one_night_stand', 'industry_peer', 'mentor',
   'antagonist', 'rival', 'collaborator', 'spouse', 'partner',
   'temptation', 'ex', 'confidant', 'friend', 'coworker',
@@ -539,7 +539,7 @@ Return JSON array only.`;
 }
 
 // ─── PAIN CATEGORIES ─────────────────────────────────────────────────────────
-const PAIN_CATEGORIES = [
+const _PAIN_CATEGORIES = [
   'comparison_spiral', 'visibility_gap', 'identity_drift',
   'financial_risk', 'consistency_collapse', 'clarity_deficit',
   'external_validation', 'restart_cycle',
@@ -640,7 +640,7 @@ router.post('/propose-seeds', optionalAuth, async (req, res) => {
   const {
     world,
     count: seedCount,
-    role_type_focus,
+    role_type_focus: _role_type_focus,
     existing_names,
     ecosystem_stats,
   } = req.body;

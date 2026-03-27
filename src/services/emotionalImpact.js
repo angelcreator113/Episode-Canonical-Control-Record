@@ -138,7 +138,7 @@ function applyShifts(currentState, deltas) {
    Analyze → shift → save → check thresholds
    ================================================================ */
 
-async function processChapterProse({ prose, characterId, chapterId }) {
+async function processChapterProse({ prose, characterId, chapterId: _chapterId }) {
   const models = getModels();
 
   if (!prose || !characterId) {

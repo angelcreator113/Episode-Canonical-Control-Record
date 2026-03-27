@@ -7,7 +7,7 @@
 const express = require('express');
 const { models } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
-const AuditLogger = require('../services/AuditLogger');
+const _AuditLogger = require('../services/AuditLogger');
 
 const router = express.Router();
 

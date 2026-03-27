@@ -404,6 +404,8 @@ const sceneService = {
     strictRemove,
     maskExpand,
     maskFeather,
+    referenceImageUrl,
+    removeReferenceBg,
   } = {}) => {
     const { data } = await api.post(`/api/v1/scenes/${sceneId}/inpaint`, {
       image_url: imageUrl,
@@ -414,6 +416,21 @@ const sceneService = {
       strict_remove: strictRemove,
       mask_expand: maskExpand,
       mask_feather: maskFeather,
+      remove_reference_bg: removeReferenceBg,
+      reference_image_url: referenceImageUrl,
+    });
+    return data;
+  },
+
+  /**
+   * Smart Select — SAM click-to-segment
+   * POST /api/v1/scenes/:id/segment
+   */
+  segmentObject: async (sceneId, { imageUrl, pointX, pointY } = {}) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/segment`, {
+      image_url: imageUrl,
+      point_x: pointX,
+      point_y: pointY,
     });
     return data;
   },

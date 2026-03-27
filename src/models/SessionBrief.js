@@ -2,7 +2,7 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class SessionBrief extends Model {
-    static associate(models) {}
+    static associate(_models) {}
   }
   SessionBrief.init({
     id:             { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },

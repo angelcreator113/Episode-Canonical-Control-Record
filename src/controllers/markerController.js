@@ -1,4 +1,4 @@
-const { models, sequelize } = require('../models');
+const { models } = require('../models');
 const { Marker, Episode, Scene } = models;
 const { Op } = require('sequelize');
 

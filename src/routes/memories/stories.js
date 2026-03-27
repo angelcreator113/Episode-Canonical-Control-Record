@@ -13,13 +13,13 @@ try {
 }
 
 const db = require('../../models');
-const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
-const { buildUniverseContext } = require('../../utils/universeContext');
+const { StorytellerLine, RegistryCharacter } = db;
+const { buildUniverseContext: _buildUniverseContext } = require('../../utils/universeContext');
 
-let buildArcContext, buildArcContextPromptSection, updateArcTracking;
+let _buildArcContext, _buildArcContextPromptSection, _updateArcTracking;
 try {
-  ({ buildArcContext, buildArcContextPromptSection, updateArcTracking } = require('../../services/arcTrackingService'));
-} catch { buildArcContext = null; buildArcContextPromptSection = null; updateArcTracking = null; }
+  ({ buildArcContext: _buildArcContext, buildArcContextPromptSection: _buildArcContextPromptSection, updateArcTracking: _updateArcTracking } = require('../../services/arcTrackingService'));
+} catch { _buildArcContext = null; _buildArcContextPromptSection = null; _updateArcTracking = null; }
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
 const anthropic = new Anthropic();
@@ -77,7 +77,7 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
       chapter_title  = '',
       chapter_brief  = '',
       pnos_act       = 'act_1',
-      book_character = 'JustAWoman',
+      book_character: _book_character = 'JustAWoman',
       session_log    = [],
       character_id   = null,
       gen_length     = 'paragraph',
@@ -386,7 +386,7 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
       chapter_title  = '',
       chapter_brief  = '',
       pnos_act       = 'act_1',
-      book_character = 'JustAWoman',
+      book_character: _book_character2 = 'JustAWoman',
       character_id   = null,
       gen_length     = 'paragraph',
       stream         = false,
@@ -729,7 +729,7 @@ router.post('/story-nudge', optionalAuth, async (req, res) => {
       emotional_state_start = '',
       emotional_state_end   = '',
       theme                 = '',
-      pov                   = '',
+      pov: _pov             = '',
       characters_present    = '',
       tone                  = '',
       setting               = '',

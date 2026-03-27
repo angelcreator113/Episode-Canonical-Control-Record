@@ -42,7 +42,7 @@ const sharedRedisOpts = {
 };
 
 const refinementQueue = new Bull('scene-refinement', {
-  createClient(type) {
+  createClient(_type) {
     const IORedis = require('ioredis');
     const client = new IORedis(sharedRedisOpts);
     client.on('error', (err) => {

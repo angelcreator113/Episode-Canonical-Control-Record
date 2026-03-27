@@ -281,7 +281,7 @@ module.exports = {
     console.log('✅ registry_characters column fix complete');
   },
 
-  async down(queryInterface) {
+  async down(_queryInterface) {
     // This is a corrective migration — down is a no-op
     // The original migrations handle their own down logic
   },

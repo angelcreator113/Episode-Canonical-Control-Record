@@ -1,7 +1,8 @@
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
-import { Plus, Image, Upload, Sparkles, Pentagon, Type } from 'lucide-react';
+import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
+import EraseBrushCanvas from './EraseBrushCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
 import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
@@ -57,6 +58,29 @@ function getNetworkAwareApiError(err, fallbackMessage, actionLabel = 'Request') 
   return err?.message || fallbackMessage;
 }
 
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    // Data URLs don't need CORS; remote URLs try with CORS first, fallback without
+    if (src.startsWith('data:')) {
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load data URL image'));
+      img.src = src;
+    } else {
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        // CORS failed — retry without crossOrigin (canvas will be tainted but image loads)
+        const fallback = new Image();
+        fallback.onload = () => resolve(fallback);
+        fallback.onerror = () => reject(new Error(`Failed to load image: ${src.slice(0, 80)}`));
+        fallback.src = src;
+      };
+      img.src = src;
+    }
+  });
+}
+
 function getInpaintCooldownMs(err) {
   if (err?.response?.status !== 429) return 0;
 
@@ -104,7 +128,7 @@ function getInpaintCooldownMs(err) {
 const QUICK_ADD_OPTIONS = [
   { key: 'generate', label: 'Generate', icon: Sparkles },
   { key: 'upload', label: 'Upload', icon: Upload },
-  { key: 'library', label: 'Library', icon: Image },
+  { key: 'library', label: 'Library', icon: ImageIcon },
   { key: 'text', label: 'Text', icon: Type },
   { key: 'shapes', label: 'Shapes', icon: Pentagon },
 ];
@@ -823,7 +847,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       : backgroundUrl;
 
     if (!targetUrl) {
-      setSaveErrorMsg('No image to erase from — select an image object or ensure background is set');
+      setInpaintNotice('No image to erase from. Select an image object or ensure background is set.');
       return;
     }
 
@@ -831,7 +855,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setIsInpainting(true);
     setInpaintNotice(null);
     setInpaintError('');
-    setSaveErrorMsg(null);
     try {
       const selectedImageExport = selectedObj?.type === 'image' && selectedObj?.assetUrl
         ? {
@@ -869,7 +892,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         maskDataUrl: preciseMaskDataUrl,
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
-        strictRemove: !trimmedPrompt,
+        strictRemove: false,
         maskExpand,
         maskFeather,
       });
@@ -890,24 +913,20 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         setInpaintPrompt('');
       }
     } catch (err) {
-      console.error('Inpaint error:', err);
       if (err?.response?.status === 429) {
+        console.warn('Inpaint rate-limited (429):', err?.response?.data?.error || err.message);
         const cooldownMs = getInpaintCooldownMs(err);
         if (cooldownMs > 0) {
-          const waitSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
           const cooldownUntil = Date.now() + cooldownMs;
           inpaintCooldownRef.current = cooldownUntil;
           setInpaintCooldownUntil(cooldownUntil);
-          const retryAfterFromServer = err?.response?.data?.retry_after;
-          setInpaintError(
-            retryAfterFromServer
-              ? `Too many requests. Try again in ${retryAfterFromServer}s.`
-              : `Too many requests. Please wait ${waitSeconds}s and try again.`
-          );
-        } else {
-          setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
         }
+        // Surface the server's specific reason (e.g. "limit reached 15/hour",
+        // "operation in progress", "provider rate-limited") rather than generic text.
+        const serverMsg = err?.response?.data?.error;
+        setInpaintError(serverMsg || 'Too many requests. Please wait and try again.');
       } else {
+        console.error('Inpaint error:', err);
         setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
       }
     } finally {
@@ -922,6 +941,171 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setInpaintNotice(null);
     setInpaintError('');
   }, []);
+
+  // ── EraseBrushCanvas apply handler ──
+  // Bridges from EraseBrushCanvas's onApply(maskDataUrl, { prompt, strength }) to the API.
+  const handleEraseApply = useCallback(async (maskDataUrl, options = {}) => {
+    if (isInpaintingRef.current) return;
+    if (!state.contextId) return;
+    if (inpaintCooldownRef.current > Date.now()) {
+      const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
+      setInpaintError(`Too many requests. Please wait ${seconds}s and try again.`);
+      return;
+    }
+
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    if (!targetUrl) {
+      setInpaintError('No image to erase from — select an image object or ensure background is set');
+      return;
+    }
+
+    isInpaintingRef.current = true;
+    setIsInpainting(true);
+    setInpaintNotice(null);
+    setInpaintError('');
+    try {
+      const trimmedPrompt = (options.prompt || '').trim();
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: targetUrl,
+        maskDataUrl,
+        prompt: trimmedPrompt || undefined,
+        mode: trimmedPrompt ? 'fill' : 'remove',
+        strength: options.strength,
+        strictRemove: false,
+        maskExpand,
+        maskFeather,
+      });
+
+      if (result?.success && result.data?.inpainted_url) {
+        if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
+          state.setObjects((prev) => prev.map((o) =>
+            o.id === selectedObj.id ? { ...o, assetUrl: result.data.inpainted_url } : o
+          ));
+        } else {
+          state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        }
+        // Exit erase mode on success
+        state.setActiveTool('select');
+      }
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        console.warn('Inpaint rate-limited (429):', err?.response?.data?.error || err.message);
+        const cooldownMs = getInpaintCooldownMs(err);
+        if (cooldownMs > 0) {
+          const cooldownUntil = Date.now() + cooldownMs;
+          inpaintCooldownRef.current = cooldownUntil;
+          setInpaintCooldownUntil(cooldownUntil);
+        }
+        const serverMsg = err?.response?.data?.error;
+        setInpaintError(serverMsg || 'Too many requests. Please wait and try again.');
+      } else {
+        console.error('Inpaint error:', err);
+        setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
+      }
+    } finally {
+      isInpaintingRef.current = false;
+      setIsInpainting(false);
+    }
+  }, [state, backgroundUrl, maskExpand, maskFeather]);
+
+  // ── Replace with Image handler ──
+  // Uses AI-guided reference fill: composites the reference onto the background
+  // server-side, then runs SDXL to blend edges naturally.
+  const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
+    if (isInpaintingRef.current) return;
+    const { imageDataUrl, removeBg: shouldRemoveBg } = options;
+    if (!imageDataUrl || !backgroundUrl) {
+      setInpaintError('No background image to replace into');
+      return;
+    }
+    if (inpaintCooldownRef.current > Date.now()) {
+      const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
+      setInpaintError(`Too many requests. Please wait ${seconds}s and try again.`);
+      return;
+    }
+
+    isInpaintingRef.current = true;
+    setIsInpainting(true);
+    setInpaintError('');
+    setInpaintNotice('Replacing with image and blending edges...');
+    try {
+      console.log('[Replace] AI-guided reference fill', shouldRemoveBg ? '(with bg removal)' : '');
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: backgroundUrl,
+        maskDataUrl,
+        referenceImageUrl: imageDataUrl,
+        removeReferenceBg: shouldRemoveBg || false,
+        prompt: 'Seamless blend, match surrounding lighting and perspective',
+        mode: 'fill',
+        strength: 0.45,
+        maskExpand,
+        maskFeather,
+      });
+
+      if (result?.success && result.data?.inpainted_url) {
+        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        state.setActiveTool('select');
+      }
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        console.warn('Replace rate-limited (429):', err?.response?.data?.error || err.message);
+        const cooldownMs = getInpaintCooldownMs(err);
+        if (cooldownMs > 0) {
+          const cooldownUntil = Date.now() + cooldownMs;
+          inpaintCooldownRef.current = cooldownUntil;
+          setInpaintCooldownUntil(cooldownUntil);
+        }
+        setInpaintError(err?.response?.data?.error || 'Too many requests. Please wait and try again.');
+      } else {
+        console.error('Replace with image error:', err);
+        setInpaintError(err?.response?.data?.error || err.message || 'Failed to replace with image');
+      }
+    } finally {
+      isInpaintingRef.current = false;
+      setIsInpainting(false);
+      setInpaintNotice(null);
+    }
+  }, [state, backgroundUrl, maskExpand, maskFeather]);
+
+  // ── Smart Select (SAM segmentation) ──
+  const handleSegment = useCallback(async (normalizedX, normalizedY) => {
+    const contextId = state.contextId;
+    if (!contextId) return null;
+
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    try {
+      const result = await sceneService.segmentObject(contextId, {
+        imageUrl: targetUrl,
+        pointX: normalizedX,
+        pointY: normalizedY,
+      });
+      if (result?.success && result.data?.maskUrl) {
+        return result.data.maskUrl;
+      }
+      return null;
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        console.warn('Segment rate-limited (429):', err?.response?.data?.error || err.message);
+        setInpaintError(err?.response?.data?.error || 'Too many requests. Wait a few seconds and try again.');
+      } else {
+        console.error('Segment error:', err);
+        setInpaintError(err?.response?.data?.error || 'Smart select failed. Try brush or lasso instead.');
+      }
+      return null;
+    }
+  }, [state, backgroundUrl]);
 
   // ── Remove Background from selected object ──
 
@@ -1182,108 +1366,28 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onBackgroundLayoutChange={handleBackgroundLayoutChange}
           />
 
-          {/* Erase tool controls — shown when erase tool is active */}
-          {state.activeTool === 'erase' && (() => {
-            const selObj = state.selectedIds.size === 1
-              ? state.objects.find((o) => state.selectedIds.has(o.id))
-              : null;
-            const eraseTarget = (selObj?.type === 'image' && selObj?.assetUrl) ? selObj.label || 'Selected Object' : 'Background';
-            return (
-            <div className="scene-studio-erase-controls">
-              <span className="scene-studio-erase-target">Erasing: {eraseTarget}</span>
-              <div className="scene-studio-erase-range-field">
-                <label>Brush: {brushSize}px</label>
-                <input
-                  type="range"
-                  min={5}
-                  max={100}
-                  value={brushSize}
-                  onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                  disabled={isInpainting}
-                />
-              </div>
-              <div className="scene-studio-segmented-control" role="group" aria-label="Mask mode">
-                <button
-                  type="button"
-                  className={`scene-studio-btn ghost ${maskMode === 'add' ? 'active' : ''}`}
-                  onClick={() => setMaskMode('add')}
-                  disabled={isInpainting}
-                >
-                  Add Mask
-                </button>
-                <button
-                  type="button"
-                  className={`scene-studio-btn ghost ${maskMode === 'subtract' ? 'active' : ''}`}
-                  onClick={() => setMaskMode('subtract')}
-                  disabled={isInpainting}
-                >
-                  Subtract Mask
-                </button>
-              </div>
-              <div className="scene-studio-erase-range-field">
-                <label>Mask Expand: {maskExpand}px</label>
-                <input
-                  type="range"
-                  min={0}
-                  max={10}
-                  step={1}
-                  value={maskExpand}
-                  onChange={(e) => setMaskExpand(parseInt(e.target.value, 10))}
-                  disabled={isInpainting}
-                />
-              </div>
-              <div className="scene-studio-erase-range-field">
-                <label>Mask Feather: {maskFeather.toFixed(1)}px</label>
-                <input
-                  type="range"
-                  min={0}
-                  max={3}
-                  step={0.1}
-                  value={maskFeather}
-                  onChange={(e) => setMaskFeather(parseFloat(e.target.value))}
-                  disabled={isInpainting}
-                />
-              </div>
-              <input
-                type="text"
-                className="scene-studio-erase-prompt"
-                value={inpaintPrompt}
-                onChange={(e) => setInpaintPrompt(e.target.value)}
-                placeholder="Describe replacement (leave empty to just remove)..."
-                disabled={isInpainting}
-              />
-              <div className="scene-studio-erase-actions">
-                <button
-                  className="scene-studio-btn primary"
-                  disabled={!hasMask || isInpainting || inpaintCooldownSeconds > 0}
-                  onClick={handleInpaint}
-                >
-                  {isInpainting
-                    ? (inpaintPrompt.trim() ? 'Processing...' : 'Removing...')
-                    : inpaintCooldownSeconds > 0
-                      ? `Wait ${inpaintCooldownSeconds}s`
-                      : (inpaintPrompt.trim() ? 'Apply Inpaint' : 'Remove')}
-                </button>
-                <button
-                  className="scene-studio-btn ghost"
-                  onClick={handleClearMask}
-                  disabled={isInpainting || !hasMask}
-                >
-                  Clear Mask
-                </button>
-              </div>
-              {isInpainting && (
-                <div className="scene-studio-erase-notice">Generating edit… This can take a few seconds.</div>
-              )}
-              {inpaintError && (
-                <div className="scene-studio-erase-error">{inpaintError}</div>
-              )}
-              {!isInpainting && inpaintNotice && (
-                <div className="scene-studio-erase-notice">{inpaintNotice}</div>
-              )}
-            </div>
-            );
-          })()}
+          {/* Advanced erase tool overlay */}
+          {state.activeTool === 'erase' && (
+            <EraseBrushCanvas
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+              zoom={state.canvasSettings.zoom}
+              panX={state.canvasSettings.panX}
+              panY={state.canvasSettings.panY}
+              backgroundUrl={backgroundUrl}
+              onApply={handleEraseApply}
+              onReplaceWithImage={handleReplaceWithImage}
+              onSegment={handleSegment}
+              onCancel={() => state.setActiveTool('select')}
+              isProcessing={isInpainting}
+              sceneId={sceneId || sceneSetId}
+              showId={showId}
+              episodeId={episodeId}
+            />
+          )}
+          {inpaintError && (
+            <div className="scene-studio-erase-error">{inpaintError}</div>
+          )}
 
           {/* Empty canvas guidance overlay — hide when background is already set */}
           {state.objects.length === 0 && !hasInteracted && !backgroundUrl && (
@@ -1292,7 +1396,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                 <p className="scene-studio-overlay-title">Start building your scene</p>
                 <div className="scene-studio-overlay-ctas">
                   <button className="scene-studio-overlay-cta" onClick={() => handleOverlayCta('library')}>
-                    <Image size={16} /> Add from Library
+                    <ImageIcon size={16} /> Add from Library
                   </button>
                   <button className="scene-studio-overlay-cta" onClick={() => handleOverlayCta('upload')}>
                     <Upload size={16} /> Upload
@@ -1312,32 +1416,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             </div>
           )}
 
-          {/* Quick Add floating button */}
-          <div className="scene-studio-quick-add-wrapper" onMouseDown={(e) => e.stopPropagation()}>
-            <button
-              className="scene-studio-quick-add-btn"
-              onClick={() => setQuickAddOpen(!quickAddOpen)}
-            >
-              <Plus size={16} /> Add
-            </button>
-            {quickAddOpen && (
-              <div className="scene-studio-quick-add-popup">
-                {QUICK_ADD_OPTIONS.map((opt) => {
-                  const Icon = opt.icon;
-                  return (
-                    <button
-                      key={opt.key}
-                      className="scene-studio-quick-add-option"
-                      onClick={() => handleQuickAdd(opt.key)}
-                    >
-                      <Icon size={14} />
-                      <span>{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Right Panel */}
@@ -1385,6 +1463,100 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           />
         </div>
       </div>
+
+      {/* ── Bottom Action Bar ── */}
+      {state.activeTool !== 'erase' && (
+        <div className="scene-studio-action-bar">
+          {/* Add menu */}
+          <div className="scene-studio-action-bar-group">
+            <div className="scene-studio-action-bar-add" onMouseDown={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="scene-studio-action-btn accent"
+                onClick={() => setQuickAddOpen(!quickAddOpen)}
+              >
+                <Plus size={14} />
+                <span>Add</span>
+                <ChevronUp size={10} />
+              </button>
+              {quickAddOpen && (
+                <div className="scene-studio-action-bar-popup">
+                  {QUICK_ADD_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        className="scene-studio-action-bar-popup-item"
+                        onClick={() => handleQuickAdd(opt.key)}
+                      >
+                        <Icon size={14} />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="scene-studio-action-bar-divider" />
+
+          {/* Editing actions */}
+          <div className="scene-studio-action-bar-group">
+            {(() => {
+              const selObj = state.selectedIds.size === 1
+                ? state.objects.find((o) => state.selectedIds.has(o.id))
+                : null;
+              const canRemoveBg = selObj?.type === 'image' && selObj?.assetUrl && selObj?._asset?.id;
+              return (
+                <>
+                  <button
+                    type="button"
+                    className="scene-studio-action-btn"
+                    onClick={() => {
+                      if (canRemoveBg) {
+                        handleRemoveBackground(selObj.id, selObj._asset.id);
+                      }
+                    }}
+                    disabled={!canRemoveBg || isRemovingBg}
+                    title={canRemoveBg ? 'Remove background from selected image' : 'Select an image object first'}
+                  >
+                    <Scissors size={14} />
+                    <span>{isRemovingBg ? 'Removing...' : 'Remove BG'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="scene-studio-action-btn"
+                    onClick={() => state.setActiveTool('erase')}
+                    disabled={!backgroundUrl && state.objects.length === 0}
+                    title="Erase areas and fill with AI or an image"
+                  >
+                    <Eraser size={14} />
+                    <span>Erase & Fill</span>
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="scene-studio-action-bar-divider" />
+
+          {/* Undo */}
+          <div className="scene-studio-action-bar-group">
+            <button
+              type="button"
+              className="scene-studio-action-btn"
+              onClick={() => state.undo?.()}
+              disabled={!state.canUndo}
+              title="Undo last action (Ctrl+Z)"
+            >
+              <Undo2 size={14} />
+              <span>Undo</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Context Menu */}
       {contextMenu && (

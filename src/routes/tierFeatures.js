@@ -121,7 +121,7 @@ router.get('/deep-memory-context/:registryId', optionalAuth, async (req, res) =>
 
 router.post('/continuity-check', optionalAuth, async (req, res) => {
   try {
-    const { book_id, chapter_id, scene_text, characters_in_scene, registry_id } = req.body;
+    const { book_id: _book_id, chapter_id: _chapter_id, scene_text, characters_in_scene, registry_id } = req.body;
     if (!scene_text || !characters_in_scene?.length) {
       return res.status(400).json({ error: 'scene_text and characters_in_scene required' });
     }
@@ -861,7 +861,7 @@ router.delete('/story-threads/:threadId', optionalAuth, async (req, res) => {
 // Dead thread detection via AI analysis
 router.post('/dead-thread-detection', optionalAuth, async (req, res) => {
   try {
-    const { book_id, registry_id } = req.body;
+    const { book_id, registry_id: _registry_id } = req.body;
     if (!book_id) return res.status(400).json({ error: 'book_id required' });
 
     // Load all threads

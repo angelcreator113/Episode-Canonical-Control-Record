@@ -50,6 +50,10 @@ const sharedEnv = {
 
   // Runway ML (scene generation)
   RUNWAY_ML_API_KEY: process.env.RUNWAY_ML_API_KEY || '',
+
+  // Replicate (inpainting / depth / SAM)
+  REPLICATE_API_TOKEN: process.env.REPLICATE_API_TOKEN || '',
+  REPLICATE_SAM_MODEL: process.env.REPLICATE_SAM_MODEL || '',
 };
 
 module.exports = {

@@ -790,7 +790,7 @@ router.post('/', upload.single('file'), optionalAuth, validateAssetUpload, async
       transformation_stage: transformStage,
       location_name: locName,
       location_version: locVersion,
-      tags: rawTags,
+      tags: _rawTags,
       color_palette: rawPalette,
       mood_tags: rawMoodTags,
       show_id: bodyShowId,

@@ -333,7 +333,7 @@ router.get('/writing-rhythm/stats', optionalAuth, async (req, res) => {
     const sessionDates = new Set(sessions.map(s => s.session_date));
 
     const checkDate = new Date();
-    while (true) {
+    for (;;) {
       const dateStr = checkDate.toISOString().split('T')[0];
       if (sessionDates.has(dateStr)) {
         streak++;

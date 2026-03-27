@@ -37,5 +37,11 @@ module.exports = {
         'no-undef': 'off',
       },
     },
+    {
+      files: ['src/migrations/**/*.js', 'src/seeders/**/*.js'],
+      rules: {
+        'no-unused-vars': ['error', { argsIgnorePattern: '^_|^Sequelize$', varsIgnorePattern: '^_' }],
+      },
+    },
   ],
 };

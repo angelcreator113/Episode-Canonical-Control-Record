@@ -1,5 +1,5 @@
 const { models } = require('../models');
-const { EpisodeAsset, Asset, Episode } = models;
+const { EpisodeAsset, Asset } = models;
 const { Op } = require('sequelize');
 
 /**
@@ -14,7 +14,7 @@ const { Op } = require('sequelize');
 exports.listEpisodeAssets = async (req, res) => {
   try {
     const { id: episodeId } = req.params;
-    const { folder, search, tags } = req.query;
+    const { folder, search, tags: _tags } = req.query;
 
     const where = { episode_id: episodeId };
     

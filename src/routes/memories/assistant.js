@@ -14,18 +14,17 @@ try {
 }
 
 const db = require('../../models');
-const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
-const { buildUniverseContext } = require('../../utils/universeContext');
+// Models and universeContext available via db if needed
 
 let buildKnowledgeInjection, getTechContext;
 try {
   ({ buildKnowledgeInjection, getTechContext } = require('../franchiseBrainRoutes'));
 } catch { buildKnowledgeInjection = null; getTechContext = null; }
 
-let buildArcContext, buildArcContextPromptSection, updateArcTracking;
+let _buildArcContext, _buildArcContextPromptSection, _updateArcTracking;
 try {
-  ({ buildArcContext, buildArcContextPromptSection, updateArcTracking } = require('../../services/arcTrackingService'));
-} catch { buildArcContext = null; buildArcContextPromptSection = null; updateArcTracking = null; }
+  ({ buildArcContext: _buildArcContext, buildArcContextPromptSection: _buildArcContextPromptSection, updateArcTracking: _updateArcTracking } = require('../../services/arcTrackingService'));
+} catch { _buildArcContext = null; _buildArcContextPromptSection = null; _updateArcTracking = null; }
 
 require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
 const anthropic = new Anthropic();
@@ -1429,7 +1428,7 @@ Respond ONLY in valid JSON:
 
       // ── Character Follow Influence — what characters watch and why ────
       case 'read_character_follows': {
-        const charKey = args?.character_key || args?.characterKey;
+        const charKey = params?.character_key || params?.characterKey;
         if (!charKey) return { replyAppend: '\nSpecify a character_key to see their follows.' };
 
         const charFollows = await sequelize.query(
@@ -1900,7 +1899,7 @@ The nextBestAction field is ALWAYS populated. Every single response includes one
    Migrated from memoriesRoutes-intimate-patch.js
 ═══════════════════════════════════════════════════════════════════════════ */
 
-const INTIMATE_WORD_TARGETS = {
+const _INTIMATE_WORD_TARGETS = {
   one_night_stand:  { min: 300, max: 700 },
   charged_moment:   { min: 300, max: 700 },
   first_encounter:  { min: 500, max: 900 },

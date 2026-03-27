@@ -213,7 +213,7 @@ class FFmpegService {
    * Analyze scene characteristics (brightness, motion, etc.)
    */
   async analyzeSceneCharacteristics(videoPath, startTime, duration) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _reject) => {
       let output = '';
       
       ffmpeg(videoPath)
@@ -237,7 +237,7 @@ class FFmpegService {
             has_text_overlay: false // TODO: Implement OCR
           });
         })
-        .on('error', (err) => {
+        .on('error', (_err) => {
           // Don't fail if analysis fails, return defaults
           resolve({
             brightness_level: 'normal',

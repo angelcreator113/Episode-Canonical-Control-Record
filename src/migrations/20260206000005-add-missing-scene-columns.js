@@ -98,7 +98,7 @@ module.exports = {
     }
   },
 
-  down: async (queryInterface, _Sequelize) => {
+  down: async (queryInterface, Sequelize) => {
     await queryInterface.removeColumn('scenes', 'scene_type');
     await queryInterface.removeColumn('scenes', 'production_status');
     await queryInterface.removeColumn('scenes', 'mood');

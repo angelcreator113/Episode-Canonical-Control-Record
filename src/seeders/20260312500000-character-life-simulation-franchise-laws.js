@@ -278,7 +278,6 @@ module.exports = {
   },
 
   async down(queryInterface) {
-    const { Op } = require('sequelize');
     await queryInterface.bulkDelete('franchise_knowledge', {
       source_document: 'character-life-simulation-v1.0',
     });

@@ -25,8 +25,8 @@ async function enrichAfterWriteBack(db, {
   story,
   chapter,
   storyText,
-  confirmedMemories,
-  confirmedRegistryUpdates,
+  confirmedMemories: _confirmedMemories,
+  confirmedRegistryUpdates: _confirmedRegistryUpdates,
 }) {
   const status = {
     continuity_beats_created: 0,

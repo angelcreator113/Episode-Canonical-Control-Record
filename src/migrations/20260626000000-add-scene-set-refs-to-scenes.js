@@ -2,20 +2,33 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
+    const scenesDesc = await queryInterface.describeTable('scenes').catch(() => null);
+    if (!scenesDesc) return;
+    if (scenesDesc.scene_set_id) {
+      console.log('scene_set_id already exists on scenes — skipping');
+      return;
+    }
+    const setsExist = await queryInterface.describeTable('scene_sets').catch(() => null);
+    const anglesExist = await queryInterface.describeTable('scene_angles').catch(() => null);
+
     await queryInterface.addColumn('scenes', 'scene_set_id', {
       type: Sequelize.UUID,
       allowNull: true,
-      references: { model: 'scene_sets', key: 'id' },
-      onDelete: 'SET NULL',
-      onUpdate: 'CASCADE',
+      ...(setsExist ? {
+        references: { model: 'scene_sets', key: 'id' },
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      } : {}),
     });
 
     await queryInterface.addColumn('scenes', 'scene_angle_id', {
       type: Sequelize.UUID,
       allowNull: true,
-      references: { model: 'scene_angles', key: 'id' },
-      onDelete: 'SET NULL',
-      onUpdate: 'CASCADE',
+      ...(anglesExist ? {
+        references: { model: 'scene_angles', key: 'id' },
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      } : {}),
     });
 
     await queryInterface.addIndex('scenes', ['scene_set_id'], {

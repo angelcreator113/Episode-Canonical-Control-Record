@@ -224,7 +224,7 @@ router.delete('/characters/:id', async (req, res) => {
 /** POST /timelines/:id/beats — add a beat with character assignments */
 router.post('/timelines/:id/beats', async (req, res) => {
   try {
-    const { ContinuityTimeline, ContinuityBeat, ContinuityCharacter, ContinuityBeatCharacter, sequelize } = getModels();
+    const { ContinuityTimeline, ContinuityBeat, ContinuityCharacter, ContinuityBeatCharacter } = getModels();
     const timeline = await ContinuityTimeline.findByPk(req.params.id);
     if (!timeline) return res.status(404).json({ success: false, error: 'Timeline not found' });
 
