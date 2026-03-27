@@ -80,32 +80,6 @@ function loadImage(src) {
   });
 }
 
-async function getMaskBoundingBoxFromDataUrl(maskDataUrl) {
-  const img = await loadImage(maskDataUrl);
-  const canvas = document.createElement('canvas');
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(img, 0, 0);
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-
-  let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-  for (let y = 0; y < canvas.height; y++) {
-    for (let x = 0; x < canvas.width; x++) {
-      // White pixel in mask = selected area
-      if (data[(y * canvas.width + x) * 4] > 128) {
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-
-  if (maxX <= minX || maxY <= minY) return null;
-  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
-}
-
 function getInpaintCooldownMs(err) {
   if (err?.response?.status !== 429) return 0;
 
