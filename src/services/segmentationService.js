@@ -154,6 +154,14 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
     const detail = err.response?.data?.detail || err.message;
     console.error(`[Segmentation] SAM error (${status}):`, detail);
 
+    // If the configured SAM model is missing/unavailable, fall back to a
+    // deterministic circular click mask instead of failing the tool.
+    if (status === 404 || /requested resource could not be found|not found/i.test(String(detail))) {
+      console.warn('[Segmentation] SAM model unavailable, using fallback click mask');
+      const fallbackUrl = await createFallbackClickMask(pixelX, pixelY, imgWidth, imgHeight, entityId);
+      return { maskUrl: fallbackUrl, fallback: true };
+    }
+
     if (status === 429 || /rate[-\s]?limit|throttled/i.test(String(detail))) {
       const limitError = new Error('Segmentation provider is rate-limited. Please try again in a few seconds.');
       limitError.status = 429;
@@ -163,6 +171,42 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
 
     throw new Error(`SAM segmentation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
+}
+
+async function createFallbackClickMask(pixelX, pixelY, width, height, entityId) {
+  const sharp = require('sharp');
+
+  const safeW = Math.max(64, Number(width) || 1024);
+  const safeH = Math.max(64, Number(height) || 1024);
+  const radius = Math.max(24, Math.round(Math.min(safeW, safeH) * 0.08));
+  const cx = Math.max(0, Math.min(safeW - 1, Number(pixelX) || Math.round(safeW / 2)));
+  const cy = Math.max(0, Math.min(safeH - 1, Number(pixelY) || Math.round(safeH / 2)));
+
+  const svg = `
+    <svg width="${safeW}" height="${safeH}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="black"/>
+      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="white"/>
+    </svg>
+  `;
+
+  const maskBuffer = await sharp(Buffer.from(svg))
+    .blur(2)
+    .png()
+    .toBuffer();
+
+  const ts = Date.now();
+  const uid = uuidv4().slice(0, 8);
+  const s3Key = `scene-studio/${entityId}/masks/${ts}-${uid}-fallback-mask.png`;
+
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: s3Key,
+    Body: maskBuffer,
+    ContentType: 'image/png',
+    CacheControl: 'max-age=86400',
+  }));
+
+  return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
 /**
