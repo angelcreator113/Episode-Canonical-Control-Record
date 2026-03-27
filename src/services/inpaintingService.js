@@ -518,7 +518,7 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
     .png()
     .toBuffer();
 
-  // Crop the same mask region and use it as the reference alpha channel.
+  // Crop the same mask region and soften edges for a natural blend.
   const maskCrop = await sharp(maskPng)
     .extract({
       left: minX,
@@ -528,9 +528,16 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
     })
     .toBuffer();
 
+  const featherPx = Math.max(2, Math.min(24, Math.round(Math.min(maskRegionW, maskRegionH) * 0.03)));
+  const softMaskCrop = await sharp(maskCrop)
+    .blur(Math.max(0.8, featherPx / 3))
+    .toBuffer();
+
+  console.log(`[Inpainting] Soft edge feather: ${featherPx}px`);
+
   const refMasked = await sharp(refCropped)
     .ensureAlpha()
-    .joinChannel(maskCrop)
+    .joinChannel(softMaskCrop)
     .png()
     .toBuffer();
 
