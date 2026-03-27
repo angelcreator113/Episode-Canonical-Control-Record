@@ -2952,6 +2952,17 @@
   margin: 4px 0;
 }
 
+.erase-image-menu-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #B8962E;
+  background: rgba(184, 150, 46, 0.08);
+  padding: 5px 8px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  line-height: 1.3;
+}
+
 .erase-image-menu-label {
   font-family: 'DM Mono', monospace;
   font-size: 9px;

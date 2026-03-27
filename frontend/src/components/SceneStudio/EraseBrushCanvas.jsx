@@ -1036,7 +1036,7 @@ export default function EraseBrushCanvas({
                 className="erase-brush-btn secondary"
                 onClick={() => setShowImageMenu(!showImageMenu)}
                 disabled={!hasStrokes || isProcessing}
-                title="Replace masked area with an image"
+                title="Replace masked area with an image — lasso one object at a time"
               >
                 <ImagePlus size={14} />
                 <span className="erase-btn-label">Use Image</span>
@@ -1044,6 +1044,7 @@ export default function EraseBrushCanvas({
               </button>
               {showImageMenu && (
                 <div className="erase-image-menu">
+                  <div className="erase-image-menu-hint">Tip: Select one object at a time for best results</div>
                   <button
                     type="button"
                     className="erase-image-menu-item"
