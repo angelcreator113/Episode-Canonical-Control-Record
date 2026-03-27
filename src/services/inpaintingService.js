@@ -441,19 +441,32 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
   const bgW = bgMeta.width;
   const bgH = bgMeta.height;
 
-  // Resize mask to match background (greyscale, single channel)
-  const maskResized = await sharp(maskBuffer)
+  // Build an alpha-aware binary mask so transparent areas do not count toward bbox.
+  const { data: maskRgba, info: maskInfo } = await sharp(maskBuffer)
     .resize(bgW, bgH, { fit: 'fill' })
-    .greyscale()
-    .png()
-    .toBuffer();
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
 
-  // Find the bounding box of the white area in the mask
-  const maskRaw = await sharp(maskResized).raw().toBuffer();
-  let minX = bgW, minY = bgH, maxX = 0, maxY = 0;
+  const channels = maskInfo.channels;
+  const maskBinary = Buffer.alloc(bgW * bgH);
+  let minX = bgW;
+  let minY = bgH;
+  let maxX = -1;
+  let maxY = -1;
+
   for (let y = 0; y < bgH; y++) {
     for (let x = 0; x < bgW; x++) {
-      if (maskRaw[y * bgW + x] > 200) {
+      const idx = (y * bgW + x) * channels;
+      const r = maskRgba[idx] || 0;
+      const g = maskRgba[idx + 1] || r;
+      const b = maskRgba[idx + 2] || r;
+      const a = channels >= 4 ? (maskRgba[idx + 3] || 0) : 255;
+      const luminance = Math.round((r + g + b) / 3);
+      const on = a > 16 && luminance > 16;
+
+      if (on) {
+        maskBinary[y * bgW + x] = 255;
         if (x < minX) minX = x;
         if (y < minY) minY = y;
         if (x > maxX) maxX = x;
@@ -462,8 +475,8 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
     }
   }
 
-  const maskRegionW = maxX - minX + 1;
-  const maskRegionH = maxY - minY + 1;
+  const maskRegionW = maxX >= minX ? (maxX - minX + 1) : 0;
+  const maskRegionH = maxY >= minY ? (maxY - minY + 1) : 0;
 
   if (maskRegionW <= 0 || maskRegionH <= 0) {
     console.warn('[Inpainting] Empty mask — returning background as-is');
@@ -471,6 +484,12 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
   }
 
   console.log(`[Inpainting] Mask bounding box: (${minX},${minY}) ${maskRegionW}x${maskRegionH}`);
+
+  const maskPng = await sharp(maskBinary, {
+    raw: { width: bgW, height: bgH, channels: 1 },
+  })
+    .png()
+    .toBuffer();
 
   // Resize reference to cover-fit the mask bounding box
   const refMeta = await sharp(refBuffer).metadata();
@@ -499,6 +518,22 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
     .png()
     .toBuffer();
 
+  // Crop the same mask region and use it as the reference alpha channel.
+  const maskCrop = await sharp(maskPng)
+    .extract({
+      left: minX,
+      top: minY,
+      width: maskRegionW,
+      height: maskRegionH,
+    })
+    .toBuffer();
+
+  const refMasked = await sharp(refCropped)
+    .ensureAlpha()
+    .joinChannel(maskCrop)
+    .png()
+    .toBuffer();
+
   // Simple approach: composite the reference onto background at the mask position,
   // then use the mask to blend. Sharp composite with 'over' blend handles this.
   // We just need to place the cropped reference at the right position.
@@ -507,7 +542,7 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
     .ensureAlpha()
     .composite([
       // Place the reference image at the mask bounding box position
-      { input: refCropped, left: minX, top: minY, blend: 'over' },
+      { input: refMasked, left: minX, top: minY, blend: 'over' },
     ])
     .png()
     .toBuffer();
