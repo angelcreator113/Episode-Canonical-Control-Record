@@ -355,8 +355,8 @@ async function runFluxFillProRemoval(imageUrl, maskUrl) {
 async function removeBackgroundFromReference(referenceUrl, entityId) {
   const removeBgApiKey = process.env.REMOVEBG_API_KEY;
   if (!removeBgApiKey) {
-    console.log('[Inpainting] REMOVEBG_API_KEY not configured, skipping reference BG removal');
-    return referenceUrl;
+    console.log('[Inpainting] REMOVEBG_API_KEY not configured, falling back to Replicate background removal');
+    return removeImageBackground(referenceUrl, entityId);
   }
 
   try {
