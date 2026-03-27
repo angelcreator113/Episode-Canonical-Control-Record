@@ -1117,18 +1117,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         throw new Error('Could not determine mask area');
       }
 
-      // Determine replacement URL — optionally remove bg
-      let replacementUrl = imageDataUrl;
-      if (shouldRemoveBg && assetId) {
-        try {
-          setInpaintNotice('Step 2/3: Removing background from replacement...');
-          const bgResult = await assetService.removeBackground(assetId);
-          const removedUrl = bgResult?.data?.url || bgResult?.url;
-          if (removedUrl) replacementUrl = removedUrl;
-        } catch (bgErr) {
-          console.warn('BG removal failed, using original:', bgErr.message);
-        }
-      }
+      // Determine replacement URL — bg removal happens server-side in Step 3
+      const replacementUrl = imageDataUrl;
 
       // Scale replacement to fit mask bounds
       const refImg = await loadImage(replacementUrl);
@@ -1175,6 +1165,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           imageUrl: cleanBackgroundUrl,
           maskDataUrl,
           referenceImageUrl: replacementUrl,
+          removeReferenceBg: shouldRemoveBg || false,
           prompt: 'Seamless blend, match surrounding lighting, texture and perspective. Photorealistic.',
           mode: 'fill',
           strength: 0.4,
