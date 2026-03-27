@@ -778,7 +778,17 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
  * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
-  const { userId, strength, mode, removalTier, strictRemove = false, maskExpand, maskFeather, referenceImageUrl, removeReferenceBg } = options;
+  const {
+    userId,
+    strength,
+    mode,
+    removalTier,
+    strictRemove = false,
+    maskExpand,
+    maskFeather,
+    referenceImageUrl,
+    removeBackground = false,
+  } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
   if (!rateCheck.allowed) {
@@ -806,20 +816,13 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     // Reference image mode: composite the reference onto the background
     // and return directly without SDXL blending.
     if (referenceImageUrl) {
-      console.log(`[Inpainting] Mode: REFERENCE FILL — compositing + AI edge blend (removeBg=${!!removeReferenceBg})`);
-      // Optionally remove background from reference image first
-      let processedRefUrl = referenceImageUrl;
-      if (removeReferenceBg) {
-        processedRefUrl = await removeImageBackground(referenceImageUrl, entityId);
-      }
-      const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, processedRefUrl, entityId);
-      // Now inpaint the composited result with a soft edge blend
-      const blendPrompt = prompt || 'Seamless blend, match surrounding lighting, texture, and perspective. Photorealistic.';
-      // Create a dilated mask for edge blending only (expand the mask edges)
-      resultUrl = await runSdxlInpainting(compositedUrl, maskUrl, blendPrompt, {
-        strength: strength || 0.45,
-        guidanceScale: 5.0,
-      });
+      console.log('[Inpainting] Mode: REFERENCE FILL - direct compositing (no AI blend)');
+      const preparedReferenceUrl = removeBackground
+        ? await removeBackgroundFromReference(referenceImageUrl, entityId)
+        : referenceImageUrl;
+      const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, preparedReferenceUrl, entityId);
+      console.log('[Replace] Frontend compositing - no AI call');
+      resultUrl = compositedUrl;
     } else if (isRemoval) {
       const tier = (removalTier || (mode === 'remove-premium' ? 'premium' : REMOVAL_TIER_DEFAULT)).toLowerCase();
       console.log(`[Inpainting] Mode: REMOVAL (tier=${tier}, strict=${strictRemove})`);

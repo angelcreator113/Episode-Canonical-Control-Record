@@ -1015,11 +1015,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, [state, backgroundUrl, maskExpand, maskFeather]);
 
   // ── Replace with Image handler ──
-  // Uses AI-guided reference fill: composites the reference onto the background
-  // server-side, then runs SDXL to blend edges naturally.
+  // Uses direct reference fill: server composites the replacement into the mask.
   const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
     if (isInpaintingRef.current) return;
-    const { imageDataUrl, removeBg: shouldRemoveBg } = options;
+    const { imageDataUrl, removeBg = false } = options;
     if (!imageDataUrl || !backgroundUrl) {
       setInpaintError('No background image to replace into');
       return;
@@ -1033,14 +1032,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintError('');
-    setInpaintNotice('Replacing with image and blending edges...');
+    setInpaintNotice('Replacing with image...');
     try {
-      console.log('[Replace] AI-guided reference fill', shouldRemoveBg ? '(with bg removal)' : '');
+      console.log('[Replace] Direct reference fill', removeBg ? '(with bg removal)' : '');
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: backgroundUrl,
         maskDataUrl,
         referenceImageUrl: imageDataUrl,
-        removeReferenceBg: shouldRemoveBg || false,
+        removeBackground: removeBg,
         prompt: 'Seamless blend, match surrounding lighting and perspective',
         mode: 'fill',
         strength: 0.45,
