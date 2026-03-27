@@ -1015,139 +1015,62 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, [state, backgroundUrl, maskExpand, maskFeather]);
 
   // ── Replace with Image handler ──
-  // Composites an uploaded image into the masked area using frontend canvas compositing.
-  // No API call needed — instant and free. Mask defines where the replacement goes.
+  // Uses AI-guided reference fill: composites the reference onto the background
+  // server-side, then runs SDXL to blend edges naturally.
   const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
     if (isInpaintingRef.current) return;
     const { imageDataUrl } = options;
     if (!imageDataUrl || !backgroundUrl) {
-      setInpaintError('No background image to composite into');
+      setInpaintError('No background image to replace into');
+      return;
+    }
+    if (inpaintCooldownRef.current > Date.now()) {
+      const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
+      setInpaintError(`Too many requests. Please wait ${seconds}s and try again.`);
       return;
     }
 
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintError('');
-    setInpaintNotice('Compositing replacement image...');
+    setInpaintNotice('Replacing with image and blending edges...');
     try {
-      console.log('[Replace] Frontend compositing — no AI call');
-      // Load all three images: background, mask, replacement
-      const [bgImg, maskImg, replImg] = await Promise.all([
-        loadImage(backgroundUrl),
-        loadImage(maskDataUrl),
-        loadImage(imageDataUrl),
-      ]);
+      console.log('[Replace] AI-guided reference fill');
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: backgroundUrl,
+        maskDataUrl,
+        referenceImageUrl: imageDataUrl,
+        prompt: 'Seamless blend, match surrounding lighting and perspective',
+        mode: 'fill',
+        strength: 0.45,
+        maskExpand,
+        maskFeather,
+      });
 
-      // Create output canvas at background size
-      const canvas = document.createElement('canvas');
-      canvas.width = bgImg.width;
-      canvas.height = bgImg.height;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-      // Step 1: Draw original background as the base
-      ctx.drawImage(bgImg, 0, 0);
-
-      // Step 2: Draw the mask onto a temp canvas to find the bounding box
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = canvas.width;
-      maskCanvas.height = canvas.height;
-      const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
-      maskCtx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
-      const maskData = maskCtx.getImageData(0, 0, canvas.width, canvas.height);
-
-      // Find the bounding box of the white (masked) area
-      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-      for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-          const i = (y * canvas.width + x) * 4;
-          // White pixel = part of mask (R > 200)
-          if (maskData.data[i] > 200) {
-            if (x < minX) minX = x;
-            if (y < minY) minY = y;
-            if (x > maxX) maxX = x;
-            if (y > maxY) maxY = y;
-          }
-        }
-      }
-
-      const maskW = maxX - minX + 1;
-      const maskH = maxY - minY + 1;
-
-      if (maskW > 0 && maskH > 0) {
-        // Step 3: Create a clipped replacement — only draw within the mask area
-        // Use the mask as a clip path via 'source-in' compositing
-        const clipCanvas = document.createElement('canvas');
-        clipCanvas.width = canvas.width;
-        clipCanvas.height = canvas.height;
-        const clipCtx = clipCanvas.getContext('2d');
-
-        // Draw replacement image scaled to fit the mask bounding box
-        // (cover fit — maintain aspect ratio, fill the bounding box)
-        const replAspect = replImg.width / replImg.height;
-        const maskAspect = maskW / maskH;
-        let drawW, drawH, drawX, drawY;
-        if (replAspect > maskAspect) {
-          // Replacement is wider — fit height, crop width
-          drawH = maskH;
-          drawW = maskH * replAspect;
-          drawX = minX - (drawW - maskW) / 2;
-          drawY = minY;
-        } else {
-          // Replacement is taller — fit width, crop height
-          drawW = maskW;
-          drawH = maskW / replAspect;
-          drawX = minX;
-          drawY = minY - (drawH - maskH) / 2;
-        }
-
-        // Draw the replacement at the correct position/size
-        clipCtx.drawImage(replImg, drawX, drawY, drawW, drawH);
-
-        // Clip to mask: only keep pixels where mask is white
-        clipCtx.globalCompositeOperation = 'destination-in';
-        clipCtx.drawImage(maskCanvas, 0, 0);
-
-        // Step 4: Composite the clipped replacement onto the background
-        ctx.drawImage(clipCanvas, 0, 0);
-      }
-
-      // Convert to blob and upload to S3 via asset API
-      const resultBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      const formData = new FormData();
-      formData.append('file', resultBlob, `composite-${Date.now()}.png`);
-      formData.append('asset_type', 'image');
-      formData.append('label', 'composited-background');
-
-      let resultUrl;
-      try {
-        const uploadRes = await assetService.uploadAsset(formData);
-        resultUrl = uploadRes?.data?.data?.url || uploadRes?.data?.url;
-      } catch (uploadErr) {
-        console.warn('Asset upload failed, using data URL:', uploadErr.message);
-        resultUrl = canvas.toDataURL('image/png');
-      }
-
-      // Update background with the S3 URL (or data URL fallback)
-      state.setSceneData((prev) => prev ? { ...prev, background_url: resultUrl } : prev);
-      state.setActiveTool('select');
-
-      // Persist to DB
-      if (resultUrl && !resultUrl.startsWith('data:')) {
-        try {
-          await sceneService.updateScene(state.contextId, { background_url: resultUrl });
-        } catch (saveErr) {
-          console.warn('Failed to persist composited background:', saveErr.message);
-        }
+      if (result?.success && result.data?.inpainted_url) {
+        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+        state.setActiveTool('select');
       }
     } catch (err) {
-      console.error('Replace with image error:', err);
-      setInpaintError(err.message || 'Failed to composite image');
+      if (err?.response?.status === 429) {
+        console.warn('Replace rate-limited (429):', err?.response?.data?.error || err.message);
+        const cooldownMs = getInpaintCooldownMs(err);
+        if (cooldownMs > 0) {
+          const cooldownUntil = Date.now() + cooldownMs;
+          inpaintCooldownRef.current = cooldownUntil;
+          setInpaintCooldownUntil(cooldownUntil);
+        }
+        setInpaintError(err?.response?.data?.error || 'Too many requests. Please wait and try again.');
+      } else {
+        console.error('Replace with image error:', err);
+        setInpaintError(err?.response?.data?.error || err.message || 'Failed to replace with image');
+      }
     } finally {
       isInpaintingRef.current = false;
       setIsInpainting(false);
       setInpaintNotice(null);
     }
-  }, [state, backgroundUrl]);
+  }, [state, backgroundUrl, maskExpand, maskFeather]);
 
   // ── Smart Select (SAM segmentation) ──
   const handleSegment = useCallback(async (normalizedX, normalizedY) => {

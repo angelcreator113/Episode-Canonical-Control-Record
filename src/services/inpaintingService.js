@@ -415,6 +415,155 @@ async function runSdxlInpainting(imageUrl, maskUrl, prompt, options = {}) {
   throw new Error('Inpainting timed out');
 }
 
+// ─── REFERENCE IMAGE COMPOSITING ────────────────────────────────────────────
+
+/**
+ * Composite a reference image onto the background using a mask.
+ * The reference image is scaled to fit the mask's bounding box (cover fit).
+ * Returns a publicly-accessible S3 URL of the composited result.
+ */
+async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, entityId) {
+  console.log('[Inpainting] Server-side compositing: background + reference via mask');
+
+  // Download all three images
+  const [bgRes, maskRes, refRes] = await Promise.all([
+    axios.get(backgroundUrl, { responseType: 'arraybuffer', timeout: 30000 }),
+    axios.get(maskUrl, { responseType: 'arraybuffer', timeout: 30000 }),
+    axios.get(referenceUrl, { responseType: 'arraybuffer', timeout: 30000 }),
+  ]);
+
+  const bgBuffer = Buffer.from(bgRes.data);
+  const maskBuffer = Buffer.from(maskRes.data);
+  const refBuffer = Buffer.from(refRes.data);
+
+  // Get background dimensions
+  const bgMeta = await sharp(bgBuffer).metadata();
+  const bgW = bgMeta.width;
+  const bgH = bgMeta.height;
+
+  // Resize mask to match background
+  const maskResized = await sharp(maskBuffer)
+    .resize(bgW, bgH, { fit: 'fill' })
+    .greyscale()
+    .png()
+    .toBuffer();
+
+  // Find the bounding box of the white area in the mask
+  const maskRaw = await sharp(maskResized).raw().toBuffer();
+  let minX = bgW, minY = bgH, maxX = 0, maxY = 0;
+  for (let y = 0; y < bgH; y++) {
+    for (let x = 0; x < bgW; x++) {
+      const pixel = maskRaw[y * bgW + x];
+      if (pixel > 200) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  const maskRegionW = maxX - minX + 1;
+  const maskRegionH = maxY - minY + 1;
+
+  if (maskRegionW <= 0 || maskRegionH <= 0) {
+    console.warn('[Inpainting] Empty mask — returning background as-is');
+    return backgroundUrl;
+  }
+
+  console.log(`[Inpainting] Mask bounding box: (${minX},${minY}) ${maskRegionW}x${maskRegionH}`);
+
+  // Resize reference to cover-fit the mask bounding box
+  const refMeta = await sharp(refBuffer).metadata();
+  const refAspect = refMeta.width / refMeta.height;
+  const maskAspect = maskRegionW / maskRegionH;
+
+  let cropW, cropH;
+  if (refAspect > maskAspect) {
+    cropH = maskRegionH;
+    cropW = Math.round(maskRegionH * refAspect);
+  } else {
+    cropW = maskRegionW;
+    cropH = Math.round(maskRegionW / refAspect);
+  }
+
+  const refResized = await sharp(refBuffer)
+    .resize(cropW, cropH, { fit: 'fill' })
+    .extract({
+      left: Math.max(0, Math.round((cropW - maskRegionW) / 2)),
+      top: Math.max(0, Math.round((cropH - maskRegionH) / 2)),
+      width: Math.min(maskRegionW, cropW),
+      height: Math.min(maskRegionH, cropH),
+    })
+    .png()
+    .toBuffer();
+
+  // Create the reference layer at full background size (transparent everywhere except mask region)
+  const refLayer = await sharp({
+    create: { width: bgW, height: bgH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  })
+    .composite([{ input: refResized, left: minX, top: minY }])
+    .png()
+    .toBuffer();
+
+  // Composite: background + reference clipped to mask
+  // 1. Use the mask as alpha for the reference layer
+  const refWithMask = await sharp(refLayer)
+    .joinChannel(maskResized) // adds mask as alpha
+    .png()
+    .toBuffer();
+
+  // Actually, sharp's joinChannel replaces channels. Let me use composite instead.
+  // Strategy: composite reference onto background using mask as opacity
+  const result = await sharp(bgBuffer)
+    .resize(bgW, bgH)
+    .composite([{
+      input: refLayer,
+      blend: 'over',
+      // We need to mask this — use the mask as the alpha channel
+    }])
+    .png()
+    .toBuffer();
+
+  // Better approach: create ref layer with mask as alpha channel
+  // Step 1: Make ref layer with correct alpha from mask
+  const refRGBA = await sharp(refLayer).ensureAlpha().raw().toBuffer();
+  const maskPixels = await sharp(maskResized).raw().toBuffer();
+
+  // Apply mask as alpha
+  for (let i = 0; i < bgW * bgH; i++) {
+    refRGBA[i * 4 + 3] = maskPixels[i]; // set alpha from mask
+  }
+
+  const maskedRef = await sharp(refRGBA, { raw: { width: bgW, height: bgH, channels: 4 } })
+    .png()
+    .toBuffer();
+
+  // Final composite
+  const finalResult = await sharp(bgBuffer)
+    .resize(bgW, bgH)
+    .composite([{ input: maskedRef, blend: 'over' }])
+    .png()
+    .toBuffer();
+
+  // Upload to S3
+  const ts = Date.now();
+  const uid = uuidv4().slice(0, 8);
+  const s3Key = `scene-studio/${entityId}/composited/${ts}-${uid}.png`;
+
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: s3Key,
+    Body: finalResult,
+    ContentType: 'image/png',
+    CacheControl: 'max-age=31536000',
+  }));
+
+  const compositeUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  console.log(`[Inpainting] Composite stored: ${s3Key}`);
+  return compositeUrl;
+}
+
 // ─── S3 STORAGE ─────────────────────────────────────────────────────────────
 
 async function storeInpaintedImage(imageUrl, entityId) {
@@ -528,7 +677,7 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
  * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
-  const { userId, strength, mode, removalTier, strictRemove = false, maskExpand, maskFeather } = options;
+  const { userId, strength, mode, removalTier, strictRemove = false, maskExpand, maskFeather, referenceImageUrl } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
   if (!rateCheck.allowed) {
@@ -553,7 +702,19 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
 
     let resultUrl;
 
-    if (isRemoval) {
+    // Reference image mode: composite the reference onto the background,
+    // then use SDXL to blend the edges naturally.
+    if (referenceImageUrl) {
+      console.log('[Inpainting] Mode: REFERENCE FILL — compositing + AI edge blend');
+      const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, referenceImageUrl, entityId);
+      // Now inpaint the composited result with a soft edge blend
+      const blendPrompt = prompt || 'Seamless blend, match surrounding lighting, texture, and perspective. Photorealistic.';
+      // Create a dilated mask for edge blending only (expand the mask edges)
+      resultUrl = await runSdxlInpainting(compositedUrl, maskUrl, blendPrompt, {
+        strength: strength || 0.45,
+        guidanceScale: 5.0,
+      });
+    } else if (isRemoval) {
       const tier = (removalTier || (mode === 'remove-premium' ? 'premium' : REMOVAL_TIER_DEFAULT)).toLowerCase();
       console.log(`[Inpainting] Mode: REMOVAL (tier=${tier}, strict=${strictRemove})`);
 
