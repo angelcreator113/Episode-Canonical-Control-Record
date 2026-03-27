@@ -122,6 +122,53 @@ function getInpaintCooldownMs(err) {
     return 8000;
   }
 
+  async function getMaskBoundingBoxFromDataUrl(maskDataUrl) {
+    const maskImg = await loadImage(maskDataUrl);
+    const w = maskImg.naturalWidth || maskImg.width;
+    const h = maskImg.naturalHeight || maskImg.height;
+    if (!w || !h) return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+
+    ctx.drawImage(maskImg, 0, 0, w, h);
+    const { data } = ctx.getImageData(0, 0, w, h);
+
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const r = data[idx] || 0;
+        const g = data[idx + 1] || 0;
+        const b = data[idx + 2] || 0;
+        const a = data[idx + 3] || 0;
+        const lum = (r + g + b) / 3;
+        const on = a > 8 && lum > 8;
+        if (!on) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    if (maxX < minX || maxY < minY) return null;
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1,
+    };
+  }
+
   return 20000;
 }
 
@@ -1015,10 +1062,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, [state, backgroundUrl, maskExpand, maskFeather]);
 
   // ── Replace with Image handler ──
-  // Uses direct reference fill: server composites the replacement into the mask.
+  // Removes masked area from background, then inserts replacement as adjustable object.
   const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
     if (isInpaintingRef.current) return;
-    const { imageDataUrl, removeBg = false } = options;
+    const { imageDataUrl, removeBg = false, assetId = null } = options;
     if (!imageDataUrl || !backgroundUrl) {
       setInpaintError('No background image to replace into');
       return;
@@ -1032,23 +1079,76 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintError('');
-    setInpaintNotice('Replacing with image...');
+    setInpaintNotice('Replacing with adjustable object...');
     try {
-      console.log('[Replace] Direct reference fill', removeBg ? '(with bg removal)' : '');
-      const result = await sceneService.inpaintScene(state.contextId, {
+      const maskBox = await getMaskBoundingBoxFromDataUrl(maskDataUrl);
+      if (!maskBox || maskBox.width < 2 || maskBox.height < 2) {
+        throw new Error('No valid mask area found. Paint over the object first.');
+      }
+
+      // Step 1: erase old object from background only.
+      const clearResult = await sceneService.inpaintScene(state.contextId, {
         imageUrl: backgroundUrl,
         maskDataUrl,
-        referenceImageUrl: imageDataUrl,
-        removeBackground: removeBg,
-        prompt: 'Seamless blend, match surrounding lighting and perspective',
-        mode: 'fill',
-        strength: 0.45,
+        mode: 'remove',
+        strictRemove: true,
         maskExpand,
         maskFeather,
       });
 
-      if (result?.success && result.data?.inpainted_url) {
-        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+      if (clearResult?.success && clearResult.data?.inpainted_url) {
+        state.setSceneData((prev) => prev ? { ...prev, background_url: clearResult.data.inpainted_url } : prev);
+
+        // Step 2: add replacement as a transformable image object at mask bounds.
+        const refImg = await loadImage(imageDataUrl);
+        const refW = refImg.naturalWidth || refImg.width || maskBox.width;
+        const refH = refImg.naturalHeight || refImg.height || maskBox.height;
+        const refAspect = refW / Math.max(1, refH);
+        const boxAspect = maskBox.width / Math.max(1, maskBox.height);
+
+        let targetW = maskBox.width;
+        let targetH = maskBox.height;
+        if (refAspect > boxAspect) {
+          targetH = Math.max(8, Math.round(maskBox.width / refAspect));
+        } else {
+          targetW = Math.max(8, Math.round(maskBox.height * refAspect));
+        }
+
+        const objId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        state.addObject({
+          id: objId,
+          type: 'image',
+          assetId,
+          assetUrl: imageDataUrl,
+          x: Math.round(maskBox.x + (maskBox.width - targetW) / 2),
+          y: Math.round(maskBox.y + (maskBox.height - targetH) / 2),
+          width: targetW,
+          height: targetH,
+          rotation: 0,
+          opacity: 1,
+          label: 'Replacement',
+          usageType: 'overlay',
+        });
+
+        // Optional BG removal only for library assets with an asset id.
+        if (removeBg && assetId) {
+          try {
+            const bgRemoved = await assetService.removeBackground(assetId);
+            const removedUrl = bgRemoved?.data?.url || bgRemoved?.url;
+            if (removedUrl) {
+              state.setObjects((prev) => prev.map((o) =>
+                o.id === objId ? {
+                  ...o,
+                  assetUrl: removedUrl,
+                  _asset: { ...o._asset, s3_url_processed: removedUrl },
+                } : o
+              ));
+            }
+          } catch (bgErr) {
+            console.warn('Object BG removal failed; keeping original object image:', bgErr?.message || bgErr);
+          }
+        }
+
         state.setActiveTool('select');
       }
     } catch (err) {
