@@ -1164,75 +1164,32 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       state.setActiveTool('select');
       state.selectObject(objId);
 
-      // ── Step 3: Auto-merge & blend ──
-      // Give React a tick to render the new object on the Konva stage
-      await new Promise((r) => setTimeout(r, 500));
-
-      setInpaintNotice('Step 3/3: Blending edges...');
-      console.log('[Replace] Step 3: Merge & blend');
+      // ── Step 3: Server-side blend ──
+      // Use the backend's compositeReferenceImage + SDXL to blend the replacement
+      // into the background. No client-side canvas export needed (avoids tainted canvas).
+      setInpaintNotice('Step 3/3: Blending into background...');
+      console.log('[Replace] Step 3: Server-side blend');
 
       try {
-        // Export flattened canvas
-        const stageEl = stageRef.current;
-        const stage = stageEl?.getStage ? stageEl.getStage() : stageEl;
-        if (!stage) throw new Error('Canvas not ready for merge');
+        const blendResult = await sceneService.inpaintScene(state.contextId, {
+          imageUrl: cleanBackgroundUrl,
+          maskDataUrl,
+          referenceImageUrl: replacementUrl,
+          prompt: 'Seamless blend, match surrounding lighting, texture and perspective. Photorealistic.',
+          mode: 'fill',
+          strength: 0.4,
+        });
 
-        const flattenedDataUrl = stage.toDataURL({ pixelRatio: 2 });
-
-        // Tainted canvas returns empty or null
-        if (!flattenedDataUrl || flattenedDataUrl.length < 100) {
-          throw new Error('Canvas is tainted — cannot export for blending');
+        if (blendResult?.success && blendResult.data?.inpainted_url) {
+          // Remove the replacement layer and update background with blended result
+          state.removeObject(objId);
+          state.setSceneData((prev) => prev ? { ...prev, background_url: blendResult.data.inpainted_url } : prev);
+          console.log('[Replace] Complete — blended into background');
         }
-
-      // Create blend mask around the replacement object
-      const margin = 25;
-      const blendMaskCanvas = document.createElement('canvas');
-      blendMaskCanvas.width = canvasWidth;
-      blendMaskCanvas.height = canvasHeight;
-      const bmCtx = blendMaskCanvas.getContext('2d');
-      bmCtx.fillStyle = '#000000';
-      bmCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-      bmCtx.fillStyle = '#ffffff';
-      const bx = Math.max(0, Math.round(maskBox.x + (maskBox.width - targetW) / 2) - margin);
-      const by = Math.max(0, Math.round(maskBox.y + (maskBox.height - targetH) / 2) - margin);
-      const bw = Math.min(canvasWidth - bx, targetW + margin * 2);
-      const bh = Math.min(canvasHeight - by, targetH + margin * 2);
-      bmCtx.beginPath();
-      const rad = Math.min(12, bw / 4, bh / 4);
-      bmCtx.moveTo(bx + rad, by);
-      bmCtx.lineTo(bx + bw - rad, by);
-      bmCtx.quadraticCurveTo(bx + bw, by, bx + bw, by + rad);
-      bmCtx.lineTo(bx + bw, by + bh - rad);
-      bmCtx.quadraticCurveTo(bx + bw, by + bh, bx + bw - rad, by + bh);
-      bmCtx.lineTo(bx + rad, by + bh);
-      bmCtx.quadraticCurveTo(bx, by + bh, bx, by + bh - rad);
-      bmCtx.lineTo(bx, by + rad);
-      bmCtx.quadraticCurveTo(bx, by, bx + rad, by);
-      bmCtx.closePath();
-      bmCtx.fill();
-
-      const blendMaskDataUrl = blendMaskCanvas.toDataURL('image/png');
-
-      const blendResult = await sceneService.inpaintScene(state.contextId, {
-        imageUrl: flattenedDataUrl,
-        maskDataUrl: blendMaskDataUrl,
-        prompt: 'Seamless blend, match surrounding lighting, texture and perspective. Photorealistic.',
-        mode: 'fill',
-        strength: 0.35,
-      });
-
-      if (blendResult?.success && blendResult.data?.inpainted_url) {
-        // Remove the replacement layer and update background with blended result
-        state.removeObject(objId);
-        state.setSceneData((prev) => prev ? { ...prev, background_url: blendResult.data.inpainted_url } : prev);
-        console.log('[Replace] Complete — blended into background');
-      }
       } catch (blendErr) {
-        // Tainted canvas or blend failed — leave the object as a movable layer
-        // User can manually "Merge & Blend" from the action bar later
-        console.warn('[Replace] Auto-blend skipped (tainted canvas or error):', blendErr.message);
-        setInpaintNotice('Replacement placed — use "Merge & Blend" button to blend edges');
-        // Don't throw — Steps 1 & 2 succeeded
+        // Blend failed — leave the object as a movable layer
+        console.warn('[Replace] Auto-blend skipped:', blendErr.message);
+        setInpaintNotice('Replacement placed — use "Merge & Blend" to blend edges');
         await new Promise((r) => setTimeout(r, 2000));
       }
     } catch (err) {
