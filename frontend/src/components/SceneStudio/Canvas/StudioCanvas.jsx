@@ -381,6 +381,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas(props, forwardedRef)
   }, [selectionBox, objects, onSelect]);
 
   const SNAP_THRESHOLD = 8;
+  const GRID_SIZE = 100;
 
   const handleObjectDragMove = useCallback(
     (e) => {
@@ -397,6 +398,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas(props, forwardedRef)
       const canvasCX = canvasWidth / 2;
       const canvasCY = canvasHeight / 2;
 
+      // Snap to canvas center
       if (Math.abs(nodeCX - canvasCX) < SNAP_THRESHOLD) {
         guides.push({ orientation: 'vertical', position: canvasCX });
         node.x(canvasCX - nodeW / 2);
@@ -407,6 +409,7 @@ const StudioCanvas = React.forwardRef(function StudioCanvas(props, forwardedRef)
         node.y(canvasCY - nodeH / 2);
       }
 
+      // Snap to canvas edges
       if (Math.abs(nodeX) < SNAP_THRESHOLD) {
         guides.push({ orientation: 'vertical', position: 0 });
         node.x(0);
@@ -427,9 +430,29 @@ const StudioCanvas = React.forwardRef(function StudioCanvas(props, forwardedRef)
         node.y(canvasHeight - nodeH);
       }
 
+      // Snap to grid lines when grid is visible
+      if (gridVisible) {
+        const updatedX = node.x();
+        const updatedY = node.y();
+
+        // Snap left edge to nearest grid line
+        const nearestGridX = Math.round(updatedX / GRID_SIZE) * GRID_SIZE;
+        if (Math.abs(updatedX - nearestGridX) < SNAP_THRESHOLD) {
+          node.x(nearestGridX);
+          guides.push({ orientation: 'vertical', position: nearestGridX });
+        }
+
+        // Snap top edge to nearest grid line
+        const nearestGridY = Math.round(updatedY / GRID_SIZE) * GRID_SIZE;
+        if (Math.abs(updatedY - nearestGridY) < SNAP_THRESHOLD) {
+          node.y(nearestGridY);
+          guides.push({ orientation: 'horizontal', position: nearestGridY });
+        }
+      }
+
       setLocalDragGuides(guides);
     },
-    [canvasWidth, canvasHeight]
+    [canvasWidth, canvasHeight, gridVisible]
   );
 
   const handleObjectDragEnd = useCallback(
