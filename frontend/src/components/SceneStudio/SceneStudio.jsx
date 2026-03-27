@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
-import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp, Layers, Settings } from 'lucide-react';
+import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp, Layers, Settings, Merge } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
 import EraseBrushCanvas from './EraseBrushCanvas';
@@ -1189,6 +1189,86 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [backgroundUrl, canvasWidth, canvasHeight, state]);
 
+  // ── Merge & Blend — flatten selected object into background with AI edge blending ──
+  const [isMerging, setIsMerging] = useState(false);
+
+  const handleMergeAndBlend = useCallback(async (objectId) => {
+    if (isInpaintingRef.current || isMerging) return;
+    const obj = state.objects.find((o) => o.id === objectId);
+    if (!obj || obj.type !== 'image' || !obj.assetUrl || !backgroundUrl) return;
+
+    setIsMerging(true);
+    setInpaintError('');
+    setInpaintNotice('Merging and blending edges...');
+    try {
+      // Step 1: Flatten the canvas — draw background + object into one image
+      const stageRef2 = stageRef.current;
+      if (!stageRef2) throw new Error('Canvas not ready');
+
+      const stage = stageRef2.getStage ? stageRef2.getStage() : stageRef2;
+      if (!stage) throw new Error('Konva stage not found');
+
+      // Export the full canvas as one flattened image
+      const flattenedDataUrl = stage.toDataURL({ pixelRatio: 2 });
+
+      // Step 2: Create a mask around the object's bounds (where blending needs to happen)
+      // The mask covers the object area + a small margin for edge blending
+      const margin = 20; // pixels of blending margin
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = canvasWidth;
+      maskCanvas.height = canvasHeight;
+      const maskCtx = maskCanvas.getContext('2d');
+
+      // Black background (keep everything)
+      maskCtx.fillStyle = '#000000';
+      maskCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // White rectangle at object position + margin (area to blend)
+      maskCtx.fillStyle = '#ffffff';
+      const bx = Math.max(0, (obj.x || 0) - margin);
+      const by = Math.max(0, (obj.y || 0) - margin);
+      const bw = Math.min(canvasWidth - bx, (obj.width || 100) + margin * 2);
+      const bh = Math.min(canvasHeight - by, (obj.height || 100) + margin * 2);
+      // Round corners for smoother blend
+      const radius = Math.min(15, bw / 4, bh / 4);
+      maskCtx.beginPath();
+      maskCtx.moveTo(bx + radius, by);
+      maskCtx.lineTo(bx + bw - radius, by);
+      maskCtx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius);
+      maskCtx.lineTo(bx + bw, by + bh - radius);
+      maskCtx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius, by + bh);
+      maskCtx.lineTo(bx + radius, by + bh);
+      maskCtx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius);
+      maskCtx.lineTo(bx, by + radius);
+      maskCtx.quadraticCurveTo(bx, by, bx + radius, by);
+      maskCtx.closePath();
+      maskCtx.fill();
+
+      const maskDataUrl = maskCanvas.toDataURL('image/png');
+
+      // Step 3: Send to inpaint API with low strength to blend edges
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: flattenedDataUrl,
+        maskDataUrl,
+        prompt: 'Seamless blend, match surrounding lighting, texture and perspective. Photorealistic continuity.',
+        mode: 'fill',
+        strength: 0.35,
+      });
+
+      if (result?.success && result.data?.inpainted_url) {
+        // Remove the object layer and update background with blended result
+        state.removeObject(objectId);
+        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+      }
+    } catch (err) {
+      console.error('Merge and blend error:', err);
+      setInpaintError(err?.response?.data?.error || err.message || 'Merge failed');
+    } finally {
+      setIsMerging(false);
+      setInpaintNotice(null);
+    }
+  }, [state, backgroundUrl, canvasWidth, canvasHeight, isMerging]);
+
   // ── Remove Background from selected object ──
 
   const handleRemoveBackground = useCallback(async (objectId, assetId) => {
@@ -1604,6 +1684,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   >
                     <Scissors size={14} />
                     <span>{isRemovingBg ? 'Removing...' : 'Remove BG'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="scene-studio-action-btn"
+                    onClick={() => {
+                      if (selObj) handleMergeAndBlend(selObj.id);
+                    }}
+                    disabled={!selObj || isMerging || isInpainting}
+                    title={selObj ? 'Merge selected object into background with AI edge blending' : 'Select an image object to merge'}
+                  >
+                    <Merge size={14} />
+                    <span>{isMerging ? 'Blending...' : 'Merge & Blend'}</span>
                   </button>
                   <button
                     type="button"
