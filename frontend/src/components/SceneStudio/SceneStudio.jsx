@@ -1089,14 +1089,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setInpaintError('');
 
     try {
-      // ── Debug: log mask info ──
       const maskBox = await getMaskBoundingBoxFromDataUrl(maskDataUrl);
-      console.log('[Replace] Mask bounding box:', maskBox);
-      console.log('[Replace] Canvas size:', canvasWidth, 'x', canvasHeight);
-      console.log('[Replace] Background URL:', backgroundUrl?.slice(0, 80));
-      console.log('[Replace] Mask data URL length:', maskDataUrl?.length);
 
-      // ── Step 1: Remove old object from background ──
+      // ── Step 1: Remove old object from background (LaMa) ──
       setInpaintNotice('Step 1/3: Removing old object...');
       console.log('[Replace] Step 1: Inpaint remove');
 
@@ -1112,11 +1107,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       let cleanBackgroundUrl = backgroundUrl;
       if (clearResult?.success && clearResult.data?.inpainted_url) {
         cleanBackgroundUrl = clearResult.data.inpainted_url;
-        console.log('[Replace] Step 1 result — new background:', cleanBackgroundUrl.slice(0, 80));
-        console.log('[Replace] Step 1 — old vs new same?', cleanBackgroundUrl === backgroundUrl);
         state.setSceneData((prev) => prev ? { ...prev, background_url: cleanBackgroundUrl } : prev);
-      } else {
-        console.warn('[Replace] Step 1 — inpaint remove returned no result:', clearResult);
       }
 
       // ── Step 2: Get mask bounding box and place replacement ──
@@ -1337,35 +1328,21 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setInpaintError('');
     setInpaintNotice('Merging and blending edges...');
     try {
-      // Step 1: Flatten the canvas — draw background + object into one image
-      const stageRef2 = stageRef.current;
-      if (!stageRef2) throw new Error('Canvas not ready');
-
-      const stage = stageRef2.getStage ? stageRef2.getStage() : stageRef2;
-      if (!stage) throw new Error('Konva stage not found');
-
-      // Export the full canvas as one flattened image
-      const flattenedDataUrl = stage.toDataURL({ pixelRatio: 2 });
-
-      // Step 2: Create a mask around the object's bounds (where blending needs to happen)
-      // The mask covers the object area + a small margin for edge blending
-      const margin = 20; // pixels of blending margin
+      // Create a mask around the object's position for server-side compositing
+      const margin = 20;
       const maskCanvas = document.createElement('canvas');
       maskCanvas.width = canvasWidth;
       maskCanvas.height = canvasHeight;
       const maskCtx = maskCanvas.getContext('2d');
 
-      // Black background (keep everything)
       maskCtx.fillStyle = '#000000';
       maskCtx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-      // White rectangle at object position + margin (area to blend)
       maskCtx.fillStyle = '#ffffff';
       const bx = Math.max(0, (obj.x || 0) - margin);
       const by = Math.max(0, (obj.y || 0) - margin);
       const bw = Math.min(canvasWidth - bx, (obj.width || 100) + margin * 2);
       const bh = Math.min(canvasHeight - by, (obj.height || 100) + margin * 2);
-      // Round corners for smoother blend
       const radius = Math.min(15, bw / 4, bh / 4);
       maskCtx.beginPath();
       maskCtx.moveTo(bx + radius, by);
@@ -1382,17 +1359,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       const maskDataUrl = maskCanvas.toDataURL('image/png');
 
-      // Step 3: Send to inpaint API with low strength to blend edges
+      // Use server-side compositing + SDXL blend (no toDataURL needed)
       const result = await sceneService.inpaintScene(state.contextId, {
-        imageUrl: flattenedDataUrl,
+        imageUrl: backgroundUrl,
         maskDataUrl,
+        referenceImageUrl: obj.assetUrl,
         prompt: 'Seamless blend, match surrounding lighting, texture and perspective. Photorealistic continuity.',
         mode: 'fill',
         strength: 0.35,
       });
 
       if (result?.success && result.data?.inpainted_url) {
-        // Remove the object layer and update background with blended result
         state.removeObject(objectId);
         state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
       }

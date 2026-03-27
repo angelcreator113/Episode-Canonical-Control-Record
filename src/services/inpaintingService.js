@@ -843,20 +843,17 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
         try {
           resultUrl = await runFluxFillProRemoval(imageUrl, maskUrl);
         } catch (fluxError) {
-          console.warn('[Inpainting] FLUX premium removal failed; falling back to SDXL:', fluxError.message);
-          try {
-            resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
-          } catch (sdxlError) {
-            console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
-            resultUrl = await runLamaRemoval(imageUrl, maskUrl);
-          }
+          console.warn('[Inpainting] FLUX premium removal failed; falling back to LaMa:', fluxError.message);
+          resultUrl = await runLamaRemoval(imageUrl, maskUrl);
         }
       } else {
+        // Standard tier: LaMa first (deterministic, actually removes objects)
+        // SDXL is too "creative" — regenerates similar objects instead of removing.
         try {
-          resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
-        } catch (sdxlError) {
-          console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
           resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+        } catch (lamaError) {
+          console.warn('[Inpainting] LaMa removal failed; falling back to SDXL:', lamaError.message);
+          resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
         }
       }
     } else {
