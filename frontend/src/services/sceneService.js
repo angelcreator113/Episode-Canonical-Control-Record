@@ -418,7 +418,6 @@ const sceneService = {
       mask_feather: maskFeather,
       remove_reference_bg: removeReferenceBg,
       reference_image_url: referenceImageUrl,
-      remove_background: removeBackground,
     });
     return data;
   },
