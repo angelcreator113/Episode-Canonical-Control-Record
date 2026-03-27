@@ -1089,6 +1089,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setInpaintError('');
 
     try {
+      // ── Debug: log mask info ──
+      const maskBox = await getMaskBoundingBoxFromDataUrl(maskDataUrl);
+      console.log('[Replace] Mask bounding box:', maskBox);
+      console.log('[Replace] Canvas size:', canvasWidth, 'x', canvasHeight);
+      console.log('[Replace] Background URL:', backgroundUrl?.slice(0, 80));
+      console.log('[Replace] Mask data URL length:', maskDataUrl?.length);
+
       // ── Step 1: Remove old object from background ──
       setInpaintNotice('Step 1/3: Removing old object...');
       console.log('[Replace] Step 1: Inpaint remove');
@@ -1105,14 +1112,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       let cleanBackgroundUrl = backgroundUrl;
       if (clearResult?.success && clearResult.data?.inpainted_url) {
         cleanBackgroundUrl = clearResult.data.inpainted_url;
+        console.log('[Replace] Step 1 result — new background:', cleanBackgroundUrl.slice(0, 80));
+        console.log('[Replace] Step 1 — old vs new same?', cleanBackgroundUrl === backgroundUrl);
         state.setSceneData((prev) => prev ? { ...prev, background_url: cleanBackgroundUrl } : prev);
+      } else {
+        console.warn('[Replace] Step 1 — inpaint remove returned no result:', clearResult);
       }
 
       // ── Step 2: Get mask bounding box and place replacement ──
       setInpaintNotice('Step 2/3: Placing replacement...');
       console.log('[Replace] Step 2: Place replacement layer');
 
-      const maskBox = await getMaskBoundingBoxFromDataUrl(maskDataUrl);
       if (!maskBox || maskBox.width < 2 || maskBox.height < 2) {
         throw new Error('Could not determine mask area');
       }
