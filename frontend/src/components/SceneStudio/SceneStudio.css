@@ -18,12 +18,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 48px;
-  padding: 0 12px;
+  height: 44px;
+  padding: 0 4px;
   background: #FAF7F0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
-  gap: 8px;
+  gap: 2px;
 }
 
 .scene-studio-toolbar-left,
@@ -31,7 +31,7 @@
 .scene-studio-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -48,10 +48,10 @@
 }
 
 .scene-studio-toolbar-title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   color: #2C2C2C;
-  max-width: 200px;
+  max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -97,9 +97,9 @@
 }
 
 .scene-studio-zoom-label {
-  font-size: 12px;
+  font-size: 10px;
   color: #666;
-  min-width: 44px;
+  min-width: 30px;
   text-align: center;
 }
 
@@ -180,15 +180,29 @@
 
 /* ── Left Panel ── */
 
+/* Mobile: panels are slide-out drawers */
 .scene-studio-left-panel {
+  position: fixed;
+  top: 44px;
+  bottom: 0;
+  left: 0;
   width: 280px;
-  max-width: 25vw;
+  max-width: 85vw;
+  z-index: 100;
   background: #FAF7F0;
   border-right: 1px solid rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+  transform: translateX(-100%);
+  transition: transform 200ms ease;
   flex-shrink: 0;
+}
+
+.scene-studio-left-panel.mobile-open {
+  transform: translateX(0);
 }
 
 /* ── Canvas Container ── */
@@ -202,13 +216,36 @@
 
 /* ── Right Panel ── */
 
+/* Mobile: slide-out from right */
 .scene-studio-right-panel {
+  position: fixed;
+  top: 44px;
+  bottom: 0;
+  right: 0;
+  left: auto;
   width: 260px;
-  max-width: 22vw;
+  max-width: 85vw;
+  z-index: 100;
   background: #FAF7F0;
   border-left: 1px solid rgba(0, 0, 0, 0.1);
   overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+  transform: translateX(100%);
+  transition: transform 200ms ease;
   flex-shrink: 0;
+}
+
+.scene-studio-right-panel.mobile-open {
+  transform: translateX(0);
+}
+
+/* Mobile panel backdrop */
+.scene-studio-mobile-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 99;
 }
 
 /* ── Panel Header ── */
@@ -1525,7 +1562,9 @@
   border: 1px solid rgba(184, 150, 46, 0.3);
 }
 
+/* Hidden by default on mobile, shown at 1280px+ */
 .scene-studio-tool-label {
+  display: none;
   font-size: 8px;
   font-family: 'DM Mono', monospace;
   line-height: 1;
@@ -1732,38 +1771,6 @@
   color: #8B7220;
 }
 
-/* ── Responsive ── */
-
-@media (max-width: 1280px) {
-  .scene-studio-tool-label {
-    display: none;
-  }
-  .scene-studio-tool-btn-labeled {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    padding: 0;
-  }
-}
-
-@media (max-width: 1024px) {
-  .scene-studio-left-panel {
-    width: 200px;
-  }
-  .scene-studio-right-panel {
-    width: 200px;
-  }
-  .scene-studio-toolbar {
-    padding: 0 8px;
-    gap: 4px;
-  }
-  .scene-studio-toolbar-left,
-  .scene-studio-toolbar-center,
-  .scene-studio-toolbar-right {
-    gap: 4px;
-  }
-}
-
 /* ── Depth Estimation Controls ── */
 
 .scene-studio-depth-btn {
@@ -1855,13 +1862,6 @@
 
 .scene-studio-depth-regen:hover {
   background: rgba(0, 0, 0, 0.8);
-}
-
-@media (max-width: 768px) {
-  .scene-studio-left-panel,
-  .scene-studio-right-panel {
-    display: none;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2393,22 +2393,6 @@
   padding: 6px 10px;
 }
 
-@media (max-width: 1100px) {
-  .scene-studio-erase-controls {
-    width: min(95vw, 760px);
-    font-size: 10px;
-  }
-
-  .scene-studio-erase-controls input[type="range"] {
-    width: clamp(100px, 18vw, 150px);
-  }
-
-  .scene-studio-erase-actions {
-    margin-left: 0;
-    width: 100%;
-  }
-}
-
 .scene-studio-erase-prompt {
   padding: 4px 8px;
   border: 1px solid #d6d0c4;
@@ -2430,16 +2414,19 @@
    BOTTOM ACTION BAR
    ═══════════════════════════════════════════════════════════════ */
 
+/* Mobile-first: compact, icons-only, scrollable */
 .scene-studio-action-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
+  gap: 4px;
+  padding: 5px 8px;
   background: #f5f1ea;
   border-top: 1px solid #d6d0c4;
   flex-shrink: 0;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .scene-studio-action-bar-group {
@@ -2448,7 +2435,9 @@
   gap: 4px;
 }
 
+/* Hidden on mobile, shown on tablet+ */
 .scene-studio-action-bar-divider {
+  display: none;
   width: 1px;
   height: 22px;
   background: #d6d0c4;
@@ -2459,7 +2448,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 12px;
+  padding: 6px 8px;
+  min-height: 36px;
   border: 1px solid #d6d0c4;
   border-radius: 6px;
   background: #fff;
@@ -2469,6 +2459,11 @@
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+}
+
+/* Labels hidden on mobile — icons only */
+.scene-studio-action-btn span {
+  display: none;
 }
 
 .scene-studio-action-btn:hover:not(:disabled) {
@@ -2532,22 +2527,6 @@
   background: #f0ece4;
 }
 
-@media (max-width: 768px) {
-  .scene-studio-action-bar {
-    padding: 5px 10px;
-    gap: 4px;
-    overflow-x: auto;
-  }
-
-  .scene-studio-action-btn span {
-    display: none;
-  }
-
-  .scene-studio-action-btn {
-    padding: 5px 8px;
-  }
-}
-
 /* ═══════════════════════════════════════════════════════════════
    ERASE BRUSH CANVAS — Bottom-docked toolbar
    ═══════════════════════════════════════════════════════════════ */
@@ -2586,6 +2565,7 @@
 
 /* ── Bottom-docked toolbar ── */
 
+/* Mobile-first: compact erase toolbar */
 .erase-toolbar {
   position: absolute;
   bottom: 0;
@@ -2594,10 +2574,10 @@
   background: #FAF7F0;
   border-top: 1px solid #d6d0c4;
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
-  padding: 8px 12px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
   color: #2C2C2C;
@@ -2607,6 +2587,7 @@
 
 .erase-toolbar-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap;
@@ -2620,8 +2601,9 @@
   flex-shrink: 0;
 }
 
+/* Hidden on mobile, shown on desktop */
 .erase-toolbar-spacer {
-  flex: 1;
+  display: none;
 }
 
 .erase-toolbar-actions {
@@ -2653,7 +2635,7 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border: none;
   border-radius: 5px;
   background: transparent;
@@ -3190,25 +3172,7 @@
   animation: erase-spin 1s linear infinite;
 }
 
-/* ── Responsive ── */
-
-@media (max-width: 900px) {
-  .erase-toolbar-row {
-    flex-wrap: wrap;
-  }
-
-  .erase-toolbar-spacer {
-    display: none;
-  }
-
-  .erase-btn-label {
-    display: none;
-  }
-
-  .erase-brush-size-row input[type="range"] {
-    width: 60px;
-  }
-}
+/* Responsive rules moved to min-width blocks at end of file */
 
 /* ═══════════════════════════════════════════════════════════════
    ANIMATION PANEL
@@ -3501,65 +3465,29 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════
-   MOBILE & TABLET RESPONSIVE OVERRIDES
-   Covers: 375px phones, 768px tablets, 1024px small laptops
+   MOBILE-FIRST RESPONSIVE SCALING
+   Base styles target 375px. Scale up with min-width breakpoints.
    ═══════════════════════════════════════════════════════════════ */
 
-/* Mobile panel toggle buttons — hidden on desktop */
+/* Mobile base: panel toggles visible, labels hidden, icons only */
 .scene-studio-mobile-toggles {
-  display: none;
+  display: flex;
+  margin-left: auto;
 }
+.scene-studio-toolbar-actions .scene-studio-btn span { display: none; }
+.erase-mode-btn span { display: none; }
+.erase-btn-label { display: none; }
+.erase-remove-bg-toggle { display: none !important; }
+.scene-studio-guided-flow { display: none; }
+.scene-studio-first-hint { bottom: 52px; }
 
 /* ── Tablet Portrait (768px and below) ── */
 
-@media (max-width: 768px) {
-  /* Panels become slide-out drawers instead of disappearing */
-  .scene-studio-left-panel,
-  .scene-studio-right-panel {
-    position: fixed !important;
-    top: 48px;
-    bottom: 0;
-    width: 280px;
-    max-width: 85vw;
-    z-index: 100;
-    background: #FAF7F0;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-    overflow-y: auto;
-    overflow-x: hidden;
-    transition: transform 200ms ease;
-  }
+/* ── Tablet (768px+) — panels become static, show labels ── */
 
-  .scene-studio-left-panel {
-    left: 0;
-    transform: translateX(-100%);
-  }
-
-  .scene-studio-right-panel {
-    right: 0;
-    left: auto;
-    transform: translateX(100%);
-  }
-
-  .scene-studio-left-panel.mobile-open {
-    transform: translateX(0);
-  }
-
-  .scene-studio-right-panel.mobile-open {
-    transform: translateX(0);
-  }
-
-  /* Mobile panel backdrop */
-  .scene-studio-mobile-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.3);
-    z-index: 99;
-  }
-
-  /* Toolbar compacts */
+@media (min-width: 768px) {
   .scene-studio-toolbar {
     padding: 0 8px;
-    height: 44px;
     gap: 4px;
   }
 
@@ -3568,158 +3496,196 @@
     font-size: 12px;
   }
 
-  .scene-studio-toolbar-actions {
-    gap: 4px;
-  }
-
-  .scene-studio-toolbar-actions .scene-studio-btn span {
-    display: none;
-  }
-
-  /* Action bar compacts */
-  .scene-studio-action-bar {
-    padding: 5px 8px;
-    gap: 4px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .scene-studio-action-btn {
-    min-height: 40px;
-    padding: 6px 10px;
-    font-size: 10px;
-  }
-
-  /* Show mobile panel toggles */
-  .scene-studio-mobile-toggles {
-    display: flex;
-    margin-left: auto;
-  }
-
-  /* Context menu stays in viewport */
-  .scene-studio-context-menu {
-    max-width: calc(100vw - 16px);
-  }
-
-  /* Export dialog responsive */
-  .scene-studio-export-panel {
-    min-width: auto;
-    width: 90vw;
-    max-width: 320px;
-    padding: 16px;
-  }
-
-  /* Erase toolbar compacts */
-  .erase-toolbar {
-    padding: 6px 8px;
-    gap: 4px;
-  }
-
-  .erase-toolbar-row {
-    gap: 4px;
-  }
-
-  .erase-brush-size-row input[type="range"] {
-    width: 60px;
-  }
-
-  /* Image picker menu responsive */
-  .erase-image-menu {
-    max-width: calc(100vw - 24px);
-    right: -40px;
-  }
-}
-
-/* ── Phone (480px and below) ── */
-
-@media (max-width: 480px) {
-  /* Toolbar goes minimal */
-  .scene-studio-toolbar {
-    padding: 0 4px;
-    gap: 2px;
-  }
-
-  .scene-studio-toolbar-title {
-    max-width: 80px;
-    font-size: 11px;
-  }
-
-  .scene-studio-tool-btn {
-    width: 32px;
-    height: 32px;
+  .scene-studio-toolbar-left,
+  .scene-studio-toolbar-center,
+  .scene-studio-toolbar-right {
+    gap: 6px;
   }
 
   .scene-studio-zoom-label {
-    font-size: 10px;
-    min-width: 30px;
+    font-size: 11px;
+    min-width: 38px;
   }
 
-  /* Action bar icons only */
-  .scene-studio-action-btn span {
+  /* Panels become static sidebars */
+  .scene-studio-left-panel {
+    position: static;
+    top: auto;
+    bottom: auto;
+    transform: none;
+    z-index: auto;
+    box-shadow: none;
+    max-width: 25vw;
+    width: 200px;
+    transition: none;
+  }
+
+  .scene-studio-right-panel {
+    position: static;
+    top: auto;
+    bottom: auto;
+    right: auto;
+    left: auto;
+    transform: none;
+    z-index: auto;
+    box-shadow: none;
+    max-width: 22vw;
+    width: 200px;
+    transition: none;
+  }
+
+  /* Hide mobile panel toggles */
+  .scene-studio-mobile-toggles {
     display: none;
+  }
+
+  /* Show action bar labels and dividers */
+  .scene-studio-action-bar {
+    padding: 5px 12px;
+    gap: 6px;
+    overflow-x: visible;
   }
 
   .scene-studio-action-btn {
-    padding: 6px 8px;
-    min-height: 36px;
+    padding: 5px 10px;
+    min-height: 38px;
+  }
+
+  .scene-studio-action-btn span {
+    display: inline;
   }
 
   .scene-studio-action-bar-divider {
-    display: none;
+    display: block;
   }
 
-  /* Action bar popup stays in viewport */
-  .scene-studio-action-bar-popup {
-    left: 0;
-    right: auto;
-    max-width: calc(100vw - 16px);
+  .scene-studio-toolbar-actions .scene-studio-btn span {
+    display: inline;
   }
 
-  /* Guided flow hides on mobile */
-  .scene-studio-guided-flow {
-    display: none;
-  }
+  /* Show erase labels */
+  .erase-mode-btn span { display: inline; }
+  .erase-btn-label { display: inline; }
+  .erase-remove-bg-toggle { display: flex !important; }
+  .erase-mode-btn { padding: 4px 10px; }
 
-  /* Save error banner compacts */
+  /* Show guided flow */
+  .scene-studio-guided-flow { display: flex; }
+
+  /* First hint at normal position */
+  .scene-studio-first-hint { bottom: 60px; }
+
+  /* Save error banner full size */
   .scene-studio-save-error-banner {
-    padding: 4px 8px;
-    font-size: 10px;
+    padding: 6px 12px;
+    font-size: 11px;
   }
 
-  /* Erase toolbar goes icon-only */
-  .erase-mode-btn span {
-    display: none;
+  /* Erase toolbar expands */
+  .erase-toolbar {
+    padding: 7px 10px;
+    gap: 5px;
   }
 
-  .erase-mode-btn {
-    padding: 4px 8px;
+  .erase-toolbar-row {
+    gap: 6px;
   }
 
-  .erase-btn-label {
-    display: none;
+  .erase-brush-size-row input[type="range"] {
+    width: 70px;
   }
 
-  .erase-brush-btn {
-    padding: 5px 8px;
-    font-size: 10px;
+  /* Export dialog expands */
+  .scene-studio-export-panel {
+    min-width: 320px;
+    width: auto;
+    max-width: none;
+    padding: 24px;
+  }
+}
+
+/* ── Desktop (1024px+) — full toolbar, erase unwraps ── */
+
+@media (min-width: 1024px) {
+  .scene-studio-toolbar {
+    padding: 0 8px;
+    gap: 6px;
   }
 
-  .erase-toolbar-fill {
-    min-width: 0;
+  .scene-studio-toolbar-left,
+  .scene-studio-toolbar-center,
+  .scene-studio-toolbar-right {
+    gap: 8px;
   }
 
-  .erase-prompt-input {
-    font-size: 10px;
-    min-width: 80px;
+  .scene-studio-toolbar-title {
+    max-width: 180px;
+    font-size: 13px;
   }
 
-  .erase-remove-bg-toggle {
-    display: none;
+  .scene-studio-action-bar {
+    padding: 6px 16px;
+    gap: 6px;
   }
 
-  /* First hint above action bar */
-  .scene-studio-first-hint {
-    bottom: 52px;
+  .scene-studio-action-btn {
+    padding: 5px 12px;
+  }
+
+  /* Erase toolbar full layout */
+  .erase-toolbar {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .erase-toolbar-row {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .erase-toolbar-spacer {
+    display: block;
+    flex: 1;
+  }
+
+  .erase-brush-size-row input[type="range"] {
+    width: 80px;
+  }
+}
+
+/* ── Wide Desktop (1280px+) — full panels, show tool labels ── */
+
+@media (min-width: 1280px) {
+  .scene-studio-toolbar {
+    height: 48px;
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .scene-studio-toolbar-title {
+    max-width: 200px;
+  }
+
+  .scene-studio-zoom-label {
+    font-size: 12px;
+    min-width: 44px;
+  }
+
+  .scene-studio-left-panel {
+    width: 280px;
+  }
+
+  .scene-studio-right-panel {
+    width: 260px;
+  }
+
+  .scene-studio-tool-btn-labeled {
+    width: 40px;
+    height: 38px;
+  }
+
+  .scene-studio-tool-label {
+    display: block;
   }
 }
 
