@@ -36,11 +36,23 @@ jobs:
           git checkout dev
           git pull origin dev
 
+          # Try clean merge first
           if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"; then
             git push origin dev
-            echo "Merged $BRANCH into dev — deploy workflow will trigger automatically."
+            echo "✅ Clean merge — pushed to dev."
+            exit 0
+          fi
+
+          echo "⚠️  Merge conflict detected. Resolving by preferring feature branch..."
+          git merge --abort
+
+          # Retry with feature branch taking priority on conflicts
+          # This is safe because claude/* branches are the active development branch
+          if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev (resolved conflicts)" -X theirs; then
+            git push origin dev
+            echo "✅ Merged with conflict resolution (feature branch wins) — pushed to dev."
           else
-            echo "Merge conflict — manual resolution needed."
+            echo "❌ Merge still failed even with -X theirs. Manual resolution needed."
             git merge --abort
             exit 1
           fi
