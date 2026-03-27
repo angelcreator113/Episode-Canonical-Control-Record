@@ -352,6 +352,51 @@ async function runFluxFillProRemoval(imageUrl, maskUrl) {
   throw new Error('FLUX Fill Pro removal timed out');
 }
 
+async function removeBackgroundFromReference(referenceUrl, entityId) {
+  const removeBgApiKey = process.env.REMOVEBG_API_KEY;
+  if (!removeBgApiKey) {
+    console.log('[Inpainting] REMOVEBG_API_KEY not configured, skipping reference BG removal');
+    return referenceUrl;
+  }
+
+  try {
+    console.log('[Inpainting] Removing background from reference image via remove.bg');
+    const response = await axios.post(
+      'https://api.remove.bg/v1.0/removebg',
+      {
+        image_url: referenceUrl,
+        size: 'auto',
+        format: 'png',
+      },
+      {
+        headers: {
+          'X-Api-Key': removeBgApiKey,
+        },
+        responseType: 'arraybuffer',
+        timeout: 45000,
+      }
+    );
+
+    const ts = Date.now();
+    const uid = uuidv4().slice(0, 8);
+    const s3Key = `scene-studio/${entityId}/reference-bg-removed/${ts}-${uid}.png`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: Buffer.from(response.data),
+      ContentType: 'image/png',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    console.log(`[Inpainting] Reference BG removed and stored: ${s3Key}`);
+    return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  } catch (error) {
+    console.warn('[Inpainting] Reference BG removal failed, using original image:', error.message);
+    return referenceUrl;
+  }
+}
+
 /**
  * Run SDXL inpainting for creative fills (prompt-driven).
  * Uses explicit version hash for Replicate predictions API compatibility.
@@ -489,19 +534,32 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
   const bgW = bgMeta.width;
   const bgH = bgMeta.height;
 
-  // Resize mask to match background (greyscale, single channel)
-  const maskResized = await sharp(maskBuffer)
+  // Build an alpha-aware binary mask so transparent areas do not count toward bbox.
+  const { data: maskRgba, info: maskInfo } = await sharp(maskBuffer)
     .resize(bgW, bgH, { fit: 'fill' })
-    .greyscale()
-    .png()
-    .toBuffer();
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
 
-  // Find the bounding box of the white area in the mask
-  const maskRaw = await sharp(maskResized).raw().toBuffer();
-  let minX = bgW, minY = bgH, maxX = 0, maxY = 0;
+  const channels = maskInfo.channels;
+  const maskBinary = Buffer.alloc(bgW * bgH);
+  let minX = bgW;
+  let minY = bgH;
+  let maxX = -1;
+  let maxY = -1;
+
   for (let y = 0; y < bgH; y++) {
     for (let x = 0; x < bgW; x++) {
-      if (maskRaw[y * bgW + x] > 200) {
+      const idx = (y * bgW + x) * channels;
+      const r = maskRgba[idx] || 0;
+      const g = maskRgba[idx + 1] || r;
+      const b = maskRgba[idx + 2] || r;
+      const a = channels >= 4 ? (maskRgba[idx + 3] || 0) : 255;
+      const luminance = Math.round((r + g + b) / 3);
+      const on = a > 16 && luminance > 16;
+
+      if (on) {
+        maskBinary[y * bgW + x] = 255;
         if (x < minX) minX = x;
         if (y < minY) minY = y;
         if (x > maxX) maxX = x;
@@ -510,8 +568,8 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
     }
   }
 
-  const maskRegionW = maxX - minX + 1;
-  const maskRegionH = maxY - minY + 1;
+  const maskRegionW = maxX >= minX ? (maxX - minX + 1) : 0;
+  const maskRegionH = maxY >= minY ? (maxY - minY + 1) : 0;
 
   if (maskRegionW <= 0 || maskRegionH <= 0) {
     console.warn('[Inpainting] Empty mask — returning background as-is');
@@ -519,6 +577,12 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
   }
 
   console.log(`[Inpainting] Mask bounding box: (${minX},${minY}) ${maskRegionW}x${maskRegionH}`);
+
+  const maskPng = await sharp(maskBinary, {
+    raw: { width: bgW, height: bgH, channels: 1 },
+  })
+    .png()
+    .toBuffer();
 
   // Resize reference to cover-fit the mask bounding box
   const refMeta = await sharp(refBuffer).metadata();
@@ -547,6 +611,29 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
     .png()
     .toBuffer();
 
+  // Crop the same mask region and soften edges for a natural blend.
+  const maskCrop = await sharp(maskPng)
+    .extract({
+      left: minX,
+      top: minY,
+      width: maskRegionW,
+      height: maskRegionH,
+    })
+    .toBuffer();
+
+  const featherPx = Math.max(2, Math.min(24, Math.round(Math.min(maskRegionW, maskRegionH) * 0.03)));
+  const softMaskCrop = await sharp(maskCrop)
+    .blur(Math.max(0.8, featherPx / 3))
+    .toBuffer();
+
+  console.log(`[Inpainting] Soft edge feather: ${featherPx}px`);
+
+  const refMasked = await sharp(refCropped)
+    .ensureAlpha()
+    .joinChannel(softMaskCrop)
+    .png()
+    .toBuffer();
+
   // Simple approach: composite the reference onto background at the mask position,
   // then use the mask to blend. Sharp composite with 'over' blend handles this.
   // We just need to place the cropped reference at the right position.
@@ -555,7 +642,7 @@ async function compositeReferenceImage(backgroundUrl, maskUrl, referenceUrl, ent
     .ensureAlpha()
     .composite([
       // Place the reference image at the mask bounding box position
-      { input: refCropped, left: minX, top: minY, blend: 'over' },
+      { input: refMasked, left: minX, top: minY, blend: 'over' },
     ])
     .png()
     .toBuffer();
@@ -716,8 +803,8 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
 
     let resultUrl;
 
-    // Reference image mode: composite the reference onto the background,
-    // then use SDXL to blend the edges naturally.
+    // Reference image mode: composite the reference onto the background
+    // and return directly without SDXL blending.
     if (referenceImageUrl) {
       console.log(`[Inpainting] Mode: REFERENCE FILL — compositing + AI edge blend (removeBg=${!!removeReferenceBg})`);
       // Optionally remove background from reference image first
