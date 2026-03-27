@@ -668,16 +668,14 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
 
     let resultUrl;
 
-    // Reference image mode: composite the reference onto the background,
-    // then use SDXL to blend the edges naturally.
-    if (referenceImageUrl) {
-      console.log('[Inpainting] Mode: REFERENCE FILL — compositing + AI edge blend');
-      const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, referenceImageUrl, entityId);
-      // Now inpaint the composited result with a soft edge blend
-      const blendPrompt = prompt || 'Seamless blend, match surrounding lighting, texture, and perspective. Photorealistic.';
-      // Create a dilated mask for edge blending only (expand the mask edges)
-      resultUrl = await runSdxlInpainting(compositedUrl, maskUrl, blendPrompt, {
-        strength: strength || 0.45,
+      // Reference image mode: composite the reference onto the background
+      if (referenceImageUrl) {
+        console.log('[Inpainting] Mode: REFERENCE FILL — direct compositing (no AI blend)');
+        const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, referenceImageUrl, entityId);
+        console.log('[Replace] Frontend compositing — no AI call');
+        // For library image replacement, return composited result directly without SDXL blending
+        // This avoids tensor dimension mismatches and unnecessary AI processing
+        resultUrl = compositedUrl;
         guidanceScale: 5.0,
       });
     } else if (isRemoval) {
