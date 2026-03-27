@@ -796,7 +796,7 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     maskExpand,
     maskFeather,
     referenceImageUrl,
-    removeBackground = false,
+    removeReferenceBg = false,
   } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
@@ -826,7 +826,7 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     // and return directly without SDXL blending.
     if (referenceImageUrl) {
       console.log('[Inpainting] Mode: REFERENCE FILL - direct compositing (no AI blend)');
-      const preparedReferenceUrl = removeBackground
+      const preparedReferenceUrl = removeReferenceBg
         ? await removeBackgroundFromReference(referenceImageUrl, entityId)
         : referenceImageUrl;
       const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, preparedReferenceUrl, entityId);
