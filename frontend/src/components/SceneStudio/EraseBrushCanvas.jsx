@@ -707,6 +707,7 @@ export default function EraseBrushCanvas({
 
     onReplaceWithImage?.(maskDataUrl, {
       imageDataUrl: assetUrl,
+      assetId: asset?.id || null,
       removeBg,
       assetId: asset?.id || null,
     });

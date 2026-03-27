@@ -80,6 +80,32 @@ function loadImage(src) {
   });
 }
 
+async function getMaskBoundingBoxFromDataUrl(maskDataUrl) {
+  const img = await loadImage(maskDataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+  let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      // White pixel in mask = selected area
+      if (data[(y * canvas.width + x) * 4] > 128) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX <= minX || maxY <= minY) return null;
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
 function getInpaintCooldownMs(err) {
   if (err?.response?.status !== 429) return 0;
 
@@ -1066,11 +1092,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, backgroundUrl, maskExpand, maskFeather]);
 
-  // ── Replace with Image handler ──
-  // Removes masked area from background, then inserts replacement as adjustable object.
+  // ── Replace with Image — single-click streamlined flow ──
+  // 1. Remove old object from background (AI inpaint)
+  // 2. Place replacement as a layer (with optional bg removal)
+  // 3. Auto-merge & blend edges into background
+  // All happens in one click after picking the image.
   const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
     if (isInpaintingRef.current) return;
-    const { imageDataUrl, removeBg = false, assetId = null } = options;
+    const { imageDataUrl, removeBg: shouldRemoveBg, assetId } = options;
     if (!imageDataUrl || !backgroundUrl) {
       setInpaintError('No background image to replace into');
       return;
@@ -1084,77 +1113,139 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintError('');
-    setInpaintNotice('Replacing with adjustable object...');
-    try {
-      const maskBox = await getMaskBoundingBoxFromDataUrl(maskDataUrl);
-      if (!maskBox || maskBox.width < 2 || maskBox.height < 2) {
-        throw new Error('No valid mask area found. Paint over the object first.');
-      }
 
-      // Step 1: erase old object from background only.
+    try {
+      // ── Step 1: Remove old object from background ──
+      setInpaintNotice('Step 1/3: Removing old object...');
+      console.log('[Replace] Step 1: Inpaint remove');
+
       const clearResult = await sceneService.inpaintScene(state.contextId, {
         imageUrl: backgroundUrl,
         maskDataUrl,
         mode: 'remove',
-        strictRemove: true,
+        strictRemove: false,
         maskExpand,
         maskFeather,
       });
 
+      let cleanBackgroundUrl = backgroundUrl;
       if (clearResult?.success && clearResult.data?.inpainted_url) {
-        state.setSceneData((prev) => prev ? { ...prev, background_url: clearResult.data.inpainted_url } : prev);
+        cleanBackgroundUrl = clearResult.data.inpainted_url;
+        state.setSceneData((prev) => prev ? { ...prev, background_url: cleanBackgroundUrl } : prev);
+      }
 
-        // Step 2: add replacement as a transformable image object at mask bounds.
-        const refImg = await loadImage(imageDataUrl);
-        const refW = refImg.naturalWidth || refImg.width || maskBox.width;
-        const refH = refImg.naturalHeight || refImg.height || maskBox.height;
-        const refAspect = refW / Math.max(1, refH);
-        const boxAspect = maskBox.width / Math.max(1, maskBox.height);
+      // ── Step 2: Get mask bounding box and place replacement ──
+      setInpaintNotice('Step 2/3: Placing replacement...');
+      console.log('[Replace] Step 2: Place replacement layer');
 
-        let targetW = maskBox.width;
-        let targetH = maskBox.height;
-        if (refAspect > boxAspect) {
-          targetH = Math.max(8, Math.round(maskBox.width / refAspect));
-        } else {
-          targetW = Math.max(8, Math.round(maskBox.height * refAspect));
+      const maskBox = await getMaskBoundingBoxFromDataUrl(maskDataUrl);
+      if (!maskBox || maskBox.width < 2 || maskBox.height < 2) {
+        throw new Error('Could not determine mask area');
+      }
+
+      // Determine replacement URL — optionally remove bg
+      let replacementUrl = imageDataUrl;
+      if (shouldRemoveBg && assetId) {
+        try {
+          setInpaintNotice('Step 2/3: Removing background from replacement...');
+          const bgResult = await assetService.removeBackground(assetId);
+          const removedUrl = bgResult?.data?.url || bgResult?.url;
+          if (removedUrl) replacementUrl = removedUrl;
+        } catch (bgErr) {
+          console.warn('BG removal failed, using original:', bgErr.message);
         }
+      }
 
-        const objId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        state.addObject({
-          id: objId,
-          type: 'image',
-          assetId,
-          assetUrl: imageDataUrl,
-          x: Math.round(maskBox.x + (maskBox.width - targetW) / 2),
-          y: Math.round(maskBox.y + (maskBox.height - targetH) / 2),
-          width: targetW,
-          height: targetH,
-          rotation: 0,
-          opacity: 1,
-          label: 'Replacement',
-          usageType: 'overlay',
-        });
+      // Scale replacement to fit mask bounds
+      const refImg = await loadImage(replacementUrl);
+      const refW = refImg.naturalWidth || refImg.width || maskBox.width;
+      const refH = refImg.naturalHeight || refImg.height || maskBox.height;
+      const refAspect = refW / Math.max(1, refH);
+      const boxAspect = maskBox.width / Math.max(1, maskBox.height);
 
-        // Optional BG removal only for library assets with an asset id.
-        if (removeBg && assetId) {
-          try {
-            const bgRemoved = await assetService.removeBackground(assetId);
-            const removedUrl = bgRemoved?.data?.url || bgRemoved?.url;
-            if (removedUrl) {
-              state.setObjects((prev) => prev.map((o) =>
-                o.id === objId ? {
-                  ...o,
-                  assetUrl: removedUrl,
-                  _asset: { ...o._asset, s3_url_processed: removedUrl },
-                } : o
-              ));
-            }
-          } catch (bgErr) {
-            console.warn('Object BG removal failed; keeping original object image:', bgErr?.message || bgErr);
-          }
-        }
+      let targetW = maskBox.width;
+      let targetH = maskBox.height;
+      if (refAspect > boxAspect) {
+        targetH = Math.max(8, Math.round(maskBox.width / refAspect));
+      } else {
+        targetW = Math.max(8, Math.round(maskBox.height * refAspect));
+      }
 
-        state.setActiveTool('select');
+      const objId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      state.addObject({
+        id: objId,
+        type: 'image',
+        assetId: assetId || undefined,
+        assetUrl: replacementUrl,
+        x: Math.round(maskBox.x + (maskBox.width - targetW) / 2),
+        y: Math.round(maskBox.y + (maskBox.height - targetH) / 2),
+        width: targetW,
+        height: targetH,
+        rotation: 0,
+        opacity: 1,
+        label: 'Replacement',
+      });
+
+      // Exit erase mode so the user can see the result
+      state.setActiveTool('select');
+      state.selectObject(objId);
+
+      // ── Step 3: Auto-merge & blend ──
+      // Give React a tick to render the new object on the Konva stage
+      await new Promise((r) => setTimeout(r, 500));
+
+      setInpaintNotice('Step 3/3: Blending edges...');
+      console.log('[Replace] Step 3: Merge & blend');
+
+      // Export flattened canvas
+      const stageEl = stageRef.current;
+      const stage = stageEl?.getStage ? stageEl.getStage() : stageEl;
+      if (!stage) throw new Error('Canvas not ready for merge');
+
+      const flattenedDataUrl = stage.toDataURL({ pixelRatio: 2 });
+
+      // Create blend mask around the replacement object
+      const margin = 25;
+      const blendMaskCanvas = document.createElement('canvas');
+      blendMaskCanvas.width = canvasWidth;
+      blendMaskCanvas.height = canvasHeight;
+      const bmCtx = blendMaskCanvas.getContext('2d');
+      bmCtx.fillStyle = '#000000';
+      bmCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+      bmCtx.fillStyle = '#ffffff';
+      const bx = Math.max(0, Math.round(maskBox.x + (maskBox.width - targetW) / 2) - margin);
+      const by = Math.max(0, Math.round(maskBox.y + (maskBox.height - targetH) / 2) - margin);
+      const bw = Math.min(canvasWidth - bx, targetW + margin * 2);
+      const bh = Math.min(canvasHeight - by, targetH + margin * 2);
+      bmCtx.beginPath();
+      const rad = Math.min(12, bw / 4, bh / 4);
+      bmCtx.moveTo(bx + rad, by);
+      bmCtx.lineTo(bx + bw - rad, by);
+      bmCtx.quadraticCurveTo(bx + bw, by, bx + bw, by + rad);
+      bmCtx.lineTo(bx + bw, by + bh - rad);
+      bmCtx.quadraticCurveTo(bx + bw, by + bh, bx + bw - rad, by + bh);
+      bmCtx.lineTo(bx + rad, by + bh);
+      bmCtx.quadraticCurveTo(bx, by + bh, bx, by + bh - rad);
+      bmCtx.lineTo(bx, by + rad);
+      bmCtx.quadraticCurveTo(bx, by, bx + rad, by);
+      bmCtx.closePath();
+      bmCtx.fill();
+
+      const blendMaskDataUrl = blendMaskCanvas.toDataURL('image/png');
+
+      const blendResult = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: flattenedDataUrl,
+        maskDataUrl: blendMaskDataUrl,
+        prompt: 'Seamless blend, match surrounding lighting, texture and perspective. Photorealistic.',
+        mode: 'fill',
+        strength: 0.35,
+      });
+
+      if (blendResult?.success && blendResult.data?.inpainted_url) {
+        // Remove the replacement layer and update background with blended result
+        state.removeObject(objId);
+        state.setSceneData((prev) => prev ? { ...prev, background_url: blendResult.data.inpainted_url } : prev);
+        console.log('[Replace] Complete — blended into background');
       }
     } catch (err) {
       if (err?.response?.status === 429) {
@@ -1175,7 +1266,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       setIsInpainting(false);
       setInpaintNotice(null);
     }
-  }, [state, backgroundUrl, maskExpand, maskFeather]);
+  }, [state, backgroundUrl, maskExpand, maskFeather, canvasWidth, canvasHeight]);
 
   // ── Smart Select (SAM segmentation) ──
   const handleSegment = useCallback(async (normalizedX, normalizedY) => {
