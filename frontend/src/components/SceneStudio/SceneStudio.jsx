@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
-import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp } from 'lucide-react';
+import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp, Layers, Settings } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
 import EraseBrushCanvas from './EraseBrushCanvas';
@@ -214,6 +214,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [showFirstHint, setShowFirstHint] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [backgroundSelected, setBackgroundSelected] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState(null); // null | 'left' | 'right'
   const prevObjectCountRef = useRef(0);
 
   useEffect(() => {
@@ -570,7 +571,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     const target = e.target;
     const studioObj = target.closest?.('.scene-studio-object-row');
     if (studioObj) return; // Let ObjectsPanel handle its own context
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    // Clamp to viewport so menu doesn't go off-screen
+    const menuW = 180;
+    const menuH = 220;
+    const clampedX = Math.min(e.clientX, window.innerWidth - menuW - 8);
+    const clampedY = Math.min(e.clientY, window.innerHeight - menuH - 8);
+    setContextMenu({ x: Math.max(8, clampedX), y: Math.max(8, clampedY) });
   }, []);
 
   // Close context menu on any click
@@ -1277,9 +1283,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       />
 
       <div className="scene-studio-body">
+        {/* Mobile panel backdrop */}
+        {mobilePanel && (
+          <div className="scene-studio-mobile-backdrop" onClick={() => setMobilePanel(null)} />
+        )}
+
         {/* Left Panel */}
         {isCreationPanelOpen && (
-          <div className="scene-studio-left-panel">
+          <div className={`scene-studio-left-panel ${mobilePanel === 'left' ? 'mobile-open' : ''}`}>
             <CreationPanel
               showId={showId}
               episodeId={episodeId}
@@ -1419,7 +1430,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         </div>
 
         {/* Right Panel */}
-        <div className="scene-studio-right-panel">
+        <div className={`scene-studio-right-panel ${mobilePanel === 'right' ? 'mobile-open' : ''}`}>
           <InspectorPanel
             objects={state.objects}
             selectedIds={state.selectedIds}
@@ -1553,6 +1564,26 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             >
               <Undo2 size={14} />
               <span>Undo</span>
+            </button>
+          </div>
+
+          {/* Mobile panel toggles — visible on small screens via CSS */}
+          <div className="scene-studio-action-bar-group scene-studio-mobile-toggles">
+            <button
+              type="button"
+              className="scene-studio-action-btn"
+              onClick={() => setMobilePanel(mobilePanel === 'left' ? null : 'left')}
+              title="Objects & Library"
+            >
+              <Layers size={14} />
+            </button>
+            <button
+              type="button"
+              className="scene-studio-action-btn"
+              onClick={() => setMobilePanel(mobilePanel === 'right' ? null : 'right')}
+              title="Inspector"
+            >
+              <Settings size={14} />
             </button>
           </div>
         </div>

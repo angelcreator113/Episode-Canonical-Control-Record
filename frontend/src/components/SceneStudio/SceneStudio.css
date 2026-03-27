@@ -3499,3 +3499,279 @@
 /* ═══════════════════════════════════════════════════════════════
    DRAG SELECTION BOX (already in Layer, just documenting)
    ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE & TABLET RESPONSIVE OVERRIDES
+   Covers: 375px phones, 768px tablets, 1024px small laptops
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Mobile panel toggle buttons — hidden on desktop */
+.scene-studio-mobile-toggles {
+  display: none;
+}
+
+/* ── Tablet Portrait (768px and below) ── */
+
+@media (max-width: 768px) {
+  /* Panels become slide-out drawers instead of disappearing */
+  .scene-studio-left-panel,
+  .scene-studio-right-panel {
+    position: fixed !important;
+    top: 48px;
+    bottom: 0;
+    width: 280px;
+    max-width: 85vw;
+    z-index: 100;
+    background: #FAF7F0;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: transform 200ms ease;
+  }
+
+  .scene-studio-left-panel {
+    left: 0;
+    transform: translateX(-100%);
+  }
+
+  .scene-studio-right-panel {
+    right: 0;
+    left: auto;
+    transform: translateX(100%);
+  }
+
+  .scene-studio-left-panel.mobile-open {
+    transform: translateX(0);
+  }
+
+  .scene-studio-right-panel.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* Mobile panel backdrop */
+  .scene-studio-mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 99;
+  }
+
+  /* Toolbar compacts */
+  .scene-studio-toolbar {
+    padding: 0 8px;
+    height: 44px;
+    gap: 4px;
+  }
+
+  .scene-studio-toolbar-title {
+    max-width: 120px;
+    font-size: 12px;
+  }
+
+  .scene-studio-toolbar-actions {
+    gap: 4px;
+  }
+
+  .scene-studio-toolbar-actions .scene-studio-btn span {
+    display: none;
+  }
+
+  /* Action bar compacts */
+  .scene-studio-action-bar {
+    padding: 5px 8px;
+    gap: 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scene-studio-action-btn {
+    min-height: 40px;
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+
+  /* Show mobile panel toggles */
+  .scene-studio-mobile-toggles {
+    display: flex;
+    margin-left: auto;
+  }
+
+  /* Context menu stays in viewport */
+  .scene-studio-context-menu {
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Export dialog responsive */
+  .scene-studio-export-panel {
+    min-width: auto;
+    width: 90vw;
+    max-width: 320px;
+    padding: 16px;
+  }
+
+  /* Erase toolbar compacts */
+  .erase-toolbar {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .erase-toolbar-row {
+    gap: 4px;
+  }
+
+  .erase-brush-size-row input[type="range"] {
+    width: 60px;
+  }
+
+  /* Image picker menu responsive */
+  .erase-image-menu {
+    max-width: calc(100vw - 24px);
+    right: -40px;
+  }
+}
+
+/* ── Phone (480px and below) ── */
+
+@media (max-width: 480px) {
+  /* Toolbar goes minimal */
+  .scene-studio-toolbar {
+    padding: 0 4px;
+    gap: 2px;
+  }
+
+  .scene-studio-toolbar-title {
+    max-width: 80px;
+    font-size: 11px;
+  }
+
+  .scene-studio-tool-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .scene-studio-zoom-label {
+    font-size: 10px;
+    min-width: 30px;
+  }
+
+  /* Action bar icons only */
+  .scene-studio-action-btn span {
+    display: none;
+  }
+
+  .scene-studio-action-btn {
+    padding: 6px 8px;
+    min-height: 36px;
+  }
+
+  .scene-studio-action-bar-divider {
+    display: none;
+  }
+
+  /* Action bar popup stays in viewport */
+  .scene-studio-action-bar-popup {
+    left: 0;
+    right: auto;
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Guided flow hides on mobile */
+  .scene-studio-guided-flow {
+    display: none;
+  }
+
+  /* Save error banner compacts */
+  .scene-studio-save-error-banner {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  /* Erase toolbar goes icon-only */
+  .erase-mode-btn span {
+    display: none;
+  }
+
+  .erase-mode-btn {
+    padding: 4px 8px;
+  }
+
+  .erase-btn-label {
+    display: none;
+  }
+
+  .erase-brush-btn {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+
+  .erase-toolbar-fill {
+    min-width: 0;
+  }
+
+  .erase-prompt-input {
+    font-size: 10px;
+    min-width: 80px;
+  }
+
+  .erase-remove-bg-toggle {
+    display: none;
+  }
+
+  /* First hint above action bar */
+  .scene-studio-first-hint {
+    bottom: 52px;
+  }
+}
+
+/* ── Landscape phones (short height) ── */
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .scene-studio-toolbar {
+    height: 36px;
+  }
+
+  .scene-studio-action-bar {
+    padding: 3px 6px;
+    min-height: 32px;
+  }
+
+  .erase-toolbar {
+    padding: 4px 6px;
+    gap: 3px;
+  }
+
+  .erase-toolbar-fill-row {
+    display: none;
+  }
+}
+
+/* ── Touch-friendly sizing ── */
+
+@media (pointer: coarse) {
+  .scene-studio-action-btn {
+    min-height: 44px;
+  }
+
+  .scene-studio-tool-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .erase-mode-btn {
+    min-height: 36px;
+  }
+
+  .erase-brush-btn {
+    min-height: 40px;
+  }
+
+  .erase-brush-action-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .erase-brush-size-btn {
+    width: 32px;
+    height: 32px;
+  }
+}
