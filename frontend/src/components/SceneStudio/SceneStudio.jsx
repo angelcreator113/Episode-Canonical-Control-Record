@@ -1150,12 +1150,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       setInpaintNotice('Step 3/3: Blending edges...');
       console.log('[Replace] Step 3: Merge & blend');
 
-      // Export flattened canvas
-      const stageEl = stageRef.current;
-      const stage = stageEl?.getStage ? stageEl.getStage() : stageEl;
-      if (!stage) throw new Error('Canvas not ready for merge');
+      try {
+        // Export flattened canvas
+        const stageEl = stageRef.current;
+        const stage = stageEl?.getStage ? stageEl.getStage() : stageEl;
+        if (!stage) throw new Error('Canvas not ready for merge');
 
-      const flattenedDataUrl = stage.toDataURL({ pixelRatio: 2 });
+        const flattenedDataUrl = stage.toDataURL({ pixelRatio: 2 });
+
+        // Tainted canvas returns empty or null
+        if (!flattenedDataUrl || flattenedDataUrl.length < 100) {
+          throw new Error('Canvas is tainted — cannot export for blending');
+        }
 
       // Create blend mask around the replacement object
       const margin = 25;
@@ -1199,6 +1205,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         state.removeObject(objId);
         state.setSceneData((prev) => prev ? { ...prev, background_url: blendResult.data.inpainted_url } : prev);
         console.log('[Replace] Complete — blended into background');
+      }
+      } catch (blendErr) {
+        // Tainted canvas or blend failed — leave the object as a movable layer
+        // User can manually "Merge & Blend" from the action bar later
+        console.warn('[Replace] Auto-blend skipped (tainted canvas or error):', blendErr.message);
+        setInpaintNotice('Replacement placed — use "Merge & Blend" button to blend edges');
+        // Don't throw — Steps 1 & 2 succeeded
+        await new Promise((r) => setTimeout(r, 2000));
       }
     } catch (err) {
       if (err?.response?.status === 429) {
