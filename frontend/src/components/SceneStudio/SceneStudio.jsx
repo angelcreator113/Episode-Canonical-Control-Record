@@ -4,7 +4,6 @@ import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
 import EraseBrushCanvas from './EraseBrushCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
-import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
 import SmartSuggestions from './panels/SmartSuggestions';
@@ -1373,14 +1372,6 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         </div>
       )}
       {/* Guided Flow Stepper */}
-      <GuidedFlow
-        hasBackground={!!backgroundUrl}
-        objectCount={state.objects.length}
-        hasEffects={state.objects.some((o) => o.styleData?.shadow?.enabled || o.styleData?.blur > 0)}
-        dismissed={state.canvasSettings.guidedFlowDismissed}
-        onDismiss={() => state.updateCanvasSettings({ guidedFlowDismissed: true })}
-      />
-
       <div className="scene-studio-body">
         {/* Mobile panel backdrop */}
         {mobilePanel && (
