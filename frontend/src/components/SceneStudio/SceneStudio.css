@@ -3116,6 +3116,15 @@
   padding: 2px 0;
 }
 
+/* Smart Select: loading indicator at click point */
+.erase-segment-loading {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #667eea;
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px rgba(102, 126, 234, 0.5));
+}
+
 .erase-brush-shortcuts {
   font-size: 9px;
   color: #bbb;
