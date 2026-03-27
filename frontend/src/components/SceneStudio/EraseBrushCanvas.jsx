@@ -4,7 +4,7 @@ import {
   Eraser, Check, X, Loader, Minus, Plus,
   Undo2, Redo2, Circle, Hexagon, Eye, EyeOff,
   Sliders, Sparkles, History, ChevronDown, ChevronUp,
-  ImagePlus, Upload, MousePointer
+  ImagePlus, Upload, MousePointer, FlipHorizontal, Scissors
 } from 'lucide-react';
 
 /**
@@ -36,6 +36,7 @@ export default function EraseBrushCanvas({
   sceneId,
   showId,
   episodeId,
+  onExtractSelection,
   // New props for enhanced features
   variations = [],
   onSelectVariation,
@@ -74,6 +75,8 @@ export default function EraseBrushCanvas({
   const [hasStrokes, setHasStrokes] = useState(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
   const [isSegmenting, setIsSegmenting] = useState(false);
+  const [segmentClickPos, setSegmentClickPos] = useState(null); // { x, y } for loading indicator
+  const [samPreviewUrl, setSamPreviewUrl] = useState(null); // preview before commit
 
   // Enhanced features state
   const [customPrompt, setCustomPrompt] = useState('');
@@ -264,6 +267,19 @@ export default function EraseBrushCanvas({
       ctx.putImageData(strokeHistory[historyIndex], 0, 0);
     }
 
+    // Live fill preview — show semi-transparent red inside the polygon
+    if (lassoPoints.length >= 2) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(220, 53, 53, 0.15)';
+      ctx.beginPath();
+      ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+      lassoPoints.forEach((pt) => ctx.lineTo(pt.x, pt.y));
+      if (cursorPos) ctx.lineTo(cursorPos.x, cursorPos.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
     // Draw lasso path with double-stroke for visibility (white outline + colored inner)
     // Outer white stroke for contrast
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
@@ -316,17 +332,26 @@ export default function EraseBrushCanvas({
       }
     });
 
-    // Show "closing hint" when near first point
+    // Show "closing hint" when near first point — pulsing green ring
     if (lassoPoints.length >= 3 && cursorPos) {
       const first = lassoPoints[0];
       const dist = Math.hypot(cursorPos.x - first.x, cursorPos.y - first.y);
-      if (dist < 20) {
-        ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth = 3;
+      if (dist < 30) {
+        const proximity = 1 - (dist / 30); // 0 = far, 1 = on top
+        const radius = 12 + proximity * 8; // grows from 12 to 20
+        ctx.save();
+        ctx.strokeStyle = `rgba(34, 197, 94, ${0.4 + proximity * 0.6})`;
+        ctx.lineWidth = 2 + proximity * 2;
         ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.arc(first.x, first.y, 15, 0, Math.PI * 2);
+        ctx.arc(first.x, first.y, radius, 0, Math.PI * 2);
         ctx.stroke();
+        // Fill when very close
+        if (dist < 15) {
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
+          ctx.fill();
+        }
+        ctx.restore();
       }
     }
   }, [lassoPoints, historyIndex, strokeHistory, cursorPos, lassoOffset]);
@@ -365,26 +390,75 @@ export default function EraseBrushCanvas({
 
     if (drawMode === 'smart') {
       // Smart Select: send click to SAM, get mask back
+      // Alt-click = subtract from selection, normal click = add
+      const isSubtract = e.altKey;
       const normalizedX = x / canvasWidth;
       const normalizedY = y / canvasHeight;
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
+      // Show loading indicator at click point
+      setSegmentClickPos({ x, y });
       setIsSegmenting(true);
       onSegment?.(normalizedX, normalizedY)
         .then((maskImageUrl) => {
           if (!maskImageUrl) return;
-          // Draw the SAM mask onto our canvas
+          // Draw the SAM mask onto our canvas (additive or subtractive)
           const img = new window.Image();
           img.crossOrigin = 'anonymous';
           img.onload = () => {
             const canvas = canvasRef.current;
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
-            // Draw mask as white on our canvas (SAM masks are white-on-black)
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            if (isSubtract) {
+              // Subtract: erase the SAM mask area from our canvas
+              // Create a temp canvas with the SAM mask
+              const tempCanvas = document.createElement('canvas');
+              tempCanvas.width = canvas.width;
+              tempCanvas.height = canvas.height;
+              const tempCtx = tempCanvas.getContext('2d');
+              tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+              const canvasData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+              // Where SAM mask is white, clear our canvas pixels
+              for (let i = 0; i < maskData.data.length; i += 4) {
+                if (maskData.data[i] > 128) { // white in SAM mask
+                  canvasData.data[i + 3] = 0; // set alpha to 0 (clear)
+                }
+              }
+              ctx.putImageData(canvasData, 0, 0);
+            } else {
+              // Add: draw SAM mask as red overlay (additive)
+              // Convert SAM white-on-black to our red display color
+              const tempCanvas = document.createElement('canvas');
+              tempCanvas.width = canvas.width;
+              tempCanvas.height = canvas.height;
+              const tempCtx = tempCanvas.getContext('2d');
+              tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+              // Convert white pixels to red semi-transparent
+              for (let i = 0; i < maskData.data.length; i += 4) {
+                if (maskData.data[i] > 128) { // white in SAM mask
+                  maskData.data[i] = 220;     // R
+                  maskData.data[i + 1] = 53;  // G
+                  maskData.data[i + 2] = 53;  // B
+                  maskData.data[i + 3] = 128;  // A (semi-transparent)
+                } else {
+                  maskData.data[i + 3] = 0;   // transparent
+                }
+              }
+              tempCtx.putImageData(maskData, 0, 0);
+              ctx.globalCompositeOperation = 'source-over';
+              ctx.drawImage(tempCanvas, 0, 0);
+            }
+
             setHasStrokes(true);
             saveToHistory();
+          };
+          img.onerror = () => {
+            console.error('Failed to load SAM mask image');
           };
           img.src = maskImageUrl;
         })
@@ -393,6 +467,7 @@ export default function EraseBrushCanvas({
         })
         .finally(() => {
           setIsSegmenting(false);
+          setSegmentClickPos(null);
         });
       return;
     }
@@ -402,7 +477,7 @@ export default function EraseBrushCanvas({
       if (lassoPoints.length >= 3) {
         const first = lassoPoints[0];
         const dist = Math.hypot(x - first.x, y - first.y);
-        if (dist < 20) {
+        if (dist < 15) {
           fillLasso();
           return;
         }
@@ -521,6 +596,36 @@ export default function EraseBrushCanvas({
     setHistoryIndex(-1);
     saveToHistory();
   }, [canvasWidth, canvasHeight, saveToHistory]);
+
+  // Invert the selection — painted becomes unpainted and vice versa
+  const handleInvertSelection = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 10) {
+        // Was painted → make transparent
+        data[i] = 0;
+        data[i + 1] = 0;
+        data[i + 2] = 0;
+        data[i + 3] = 0;
+      } else {
+        // Was empty → make red (painted)
+        data[i] = 220;     // R
+        data[i + 1] = 53;  // G
+        data[i + 2] = 53;  // B
+        data[i + 3] = 128; // A
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    setHasStrokes(true);
+    saveToHistory();
+  }, [saveToHistory]);
 
   // Export a proper white-on-black mask from the display canvas.
   // Display canvas uses visible red strokes; export converts any
@@ -643,9 +748,14 @@ export default function EraseBrushCanvas({
         setBrushSize((prev) => Math.max(5, prev - 10));
       } else if (e.key === ']') {
         setBrushSize((prev) => Math.min(200, prev + 10));
+      } else if (e.key === 'Backspace' && drawMode === 'lasso' && lassoPoints.length > 0) {
+        e.preventDefault();
+        setLassoPoints((prev) => prev.slice(0, -1));
       } else if (e.key === 'Escape') {
         if (lassoPoints.length > 0) {
           setLassoPoints([]);
+        } else if (samPreviewUrl) {
+          setSamPreviewUrl(null);
         } else {
           onCancel();
         }
@@ -723,6 +833,19 @@ export default function EraseBrushCanvas({
                   : `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize}" height="${brushSize}" viewBox="0 0 ${brushSize} ${brushSize}"><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 1}" fill="${brushMode === 'soft' ? 'rgba(255,255,255,0.3)' : 'none'}" stroke="%23667eea" stroke-width="2"/></svg>') ${brushSize/2} ${brushSize/2}, crosshair`,
           }}
         />
+
+        {/* Smart Select: loading indicator at click point */}
+        {isSegmenting && segmentClickPos && (
+          <div
+            className="erase-segment-loading"
+            style={{
+              left: segmentClickPos.x,
+              top: segmentClickPos.y,
+            }}
+          >
+            <Loader size={20} className="erase-brush-spinner" />
+          </div>
+        )}
       </div>
 
       {/* Variation picker overlay (when variations exist) */}
@@ -826,6 +949,34 @@ export default function EraseBrushCanvas({
               </button>
               {historyIndex > 0 && <span className="erase-brush-undo-count">{historyIndex}</span>}
             </div>
+
+            {/* Invert selection */}
+            <button
+              type="button"
+              className="erase-brush-action-btn"
+              onClick={handleInvertSelection}
+              disabled={!hasStrokes || isProcessing}
+              title="Invert selection (select everything except painted area)"
+            >
+              <FlipHorizontal size={14} />
+            </button>
+
+            {/* Extract selection as movable object */}
+            {onExtractSelection && (
+              <button
+                type="button"
+                className="erase-brush-action-btn"
+                onClick={() => {
+                  if (!hasStrokes || isProcessing) return;
+                  const maskDataUrl = exportMaskDataUrl();
+                  if (maskDataUrl) onExtractSelection(maskDataUrl);
+                }}
+                disabled={!hasStrokes || isProcessing}
+                title="Extract selected area as a movable object"
+              >
+                <Scissors size={14} />
+              </button>
+            )}
           </div>
 
           <div className="erase-toolbar-group">
@@ -993,10 +1144,10 @@ export default function EraseBrushCanvas({
         {/* Keyboard shortcuts hint */}
         <div className="erase-brush-shortcuts">
           {drawMode === 'smart'
-            ? 'Click on any object to auto-select it • S smart • B brush • L lasso'
+            ? 'Click to select • Alt+click to deselect • S smart • B brush • L lasso'
             : drawMode === 'brush'
-              ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • S smart • Esc cancel'
-              : 'Click to add points • Enter to close • Esc cancel'}
+              ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • S smart'
+              : 'Click to add points • Backspace undo point • Enter close • Esc cancel'}
         </div>
       </div>
     </div>

@@ -1211,6 +1211,83 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, backgroundUrl]);
 
+  // ── Extract selection as movable object ──
+  // Cuts the masked area from the background and adds it as a canvas object
+  const handleExtractSelection = useCallback(async (maskDataUrl) => {
+    if (!backgroundUrl) return;
+    try {
+      const [bgImg, maskImg] = await Promise.all([
+        loadImage(backgroundUrl),
+        loadImage(maskDataUrl),
+      ]);
+
+      // Create canvas with just the masked area
+      const canvas = document.createElement('canvas');
+      canvas.width = bgImg.width;
+      canvas.height = bgImg.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      // Draw background
+      ctx.drawImage(bgImg, 0, 0);
+
+      // Apply mask: keep only where mask is white
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
+
+      // Find bounding box of non-transparent pixels
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          if (imageData.data[(y * canvas.width + x) * 4 + 3] > 10) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (maxX <= minX || maxY <= minY) return;
+
+      const cropW = maxX - minX + 1;
+      const cropH = maxY - minY + 1;
+
+      // Crop to bounding box
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = cropW;
+      croppedCanvas.height = cropH;
+      const cropCtx = croppedCanvas.getContext('2d');
+      cropCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+
+      const extractedDataUrl = croppedCanvas.toDataURL('image/png');
+
+      // Scale to canvas coordinates
+      const scaleX = canvasWidth / bgImg.width;
+      const scaleY = canvasHeight / bgImg.height;
+
+      // Add as object
+      const objId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      state.addObject({
+        id: objId,
+        type: 'image',
+        assetUrl: extractedDataUrl,
+        x: Math.round(minX * scaleX),
+        y: Math.round(minY * scaleY),
+        width: Math.round(cropW * scaleX),
+        height: Math.round(cropH * scaleY),
+        rotation: 0,
+        opacity: 1,
+        label: 'Extracted',
+        usageType: 'overlay',
+      });
+
+      state.setActiveTool('select');
+    } catch (err) {
+      console.error('Extract selection error:', err);
+    }
+  }, [backgroundUrl, canvasWidth, canvasHeight, state]);
+
   // ── Remove Background from selected object ──
 
   const handleRemoveBackground = useCallback(async (objectId, assetId) => {
@@ -1479,6 +1556,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onApply={handleEraseApply}
               onReplaceWithImage={handleReplaceWithImage}
               onSegment={handleSegment}
+              onExtractSelection={handleExtractSelection}
               onCancel={() => state.setActiveTool('select')}
               isProcessing={isInpainting}
               sceneId={sceneId || sceneSetId}
