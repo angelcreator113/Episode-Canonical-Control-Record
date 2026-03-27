@@ -1019,7 +1019,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // server-side, then runs SDXL to blend edges naturally.
   const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
     if (isInpaintingRef.current) return;
-    const { imageDataUrl } = options;
+    const { imageDataUrl, removeBg = false } = options;
     if (!imageDataUrl || !backgroundUrl) {
       setInpaintError('No background image to replace into');
       return;
@@ -1040,6 +1040,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         imageUrl: backgroundUrl,
         maskDataUrl,
         referenceImageUrl: imageDataUrl,
+        removeBackground: removeBg,
         prompt: 'Seamless blend, match surrounding lighting and perspective',
         mode: 'fill',
         strength: 0.45,

@@ -405,6 +405,7 @@ const sceneService = {
     maskExpand,
     maskFeather,
     referenceImageUrl,
+    removeBackground,
   } = {}) => {
     const { data } = await api.post(`/api/v1/scenes/${sceneId}/inpaint`, {
       image_url: imageUrl,
@@ -416,6 +417,7 @@ const sceneService = {
       mask_expand: maskExpand,
       mask_feather: maskFeather,
       reference_image_url: referenceImageUrl,
+      remove_background: removeBackground,
     });
     return data;
   },

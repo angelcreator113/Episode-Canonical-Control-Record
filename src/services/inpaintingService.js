@@ -352,6 +352,51 @@ async function runFluxFillProRemoval(imageUrl, maskUrl) {
   throw new Error('FLUX Fill Pro removal timed out');
 }
 
+async function removeBackgroundFromReference(referenceUrl, entityId) {
+  const removeBgApiKey = process.env.REMOVEBG_API_KEY;
+  if (!removeBgApiKey) {
+    console.log('[Inpainting] REMOVEBG_API_KEY not configured, skipping reference BG removal');
+    return referenceUrl;
+  }
+
+  try {
+    console.log('[Inpainting] Removing background from reference image via remove.bg');
+    const response = await axios.post(
+      'https://api.remove.bg/v1.0/removebg',
+      {
+        image_url: referenceUrl,
+        size: 'auto',
+        format: 'png',
+      },
+      {
+        headers: {
+          'X-Api-Key': removeBgApiKey,
+        },
+        responseType: 'arraybuffer',
+        timeout: 45000,
+      }
+    );
+
+    const ts = Date.now();
+    const uid = uuidv4().slice(0, 8);
+    const s3Key = `scene-studio/${entityId}/reference-bg-removed/${ts}-${uid}.png`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: Buffer.from(response.data),
+      ContentType: 'image/png',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    console.log(`[Inpainting] Reference BG removed and stored: ${s3Key}`);
+    return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  } catch (error) {
+    console.warn('[Inpainting] Reference BG removal failed, using original image:', error.message);
+    return referenceUrl;
+  }
+}
+
 /**
  * Run SDXL inpainting for creative fills (prompt-driven).
  * Uses explicit version hash for Replicate predictions API compatibility.
@@ -685,7 +730,17 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
  * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
-  const { userId, strength, mode, removalTier, strictRemove = false, maskExpand, maskFeather, referenceImageUrl } = options;
+  const {
+    userId,
+    strength,
+    mode,
+    removalTier,
+    strictRemove = false,
+    maskExpand,
+    maskFeather,
+    referenceImageUrl,
+    removeBackground = false,
+  } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
   if (!rateCheck.allowed) {
@@ -714,7 +769,10 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     // and return directly without SDXL blending.
     if (referenceImageUrl) {
       console.log('[Inpainting] Mode: REFERENCE FILL - direct compositing (no AI blend)');
-      const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, referenceImageUrl, entityId);
+      const preparedReferenceUrl = removeBackground
+        ? await removeBackgroundFromReference(referenceImageUrl, entityId)
+        : referenceImageUrl;
+      const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, preparedReferenceUrl, entityId);
       console.log('[Replace] Frontend compositing - no AI call');
       resultUrl = compositedUrl;
     } else if (isRemoval) {
