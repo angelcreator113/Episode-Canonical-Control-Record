@@ -2108,46 +2108,6 @@
    GUIDED FLOW STEPPER (Phase 7)
    ═══════════════════════════════════════════════════════════════ */
 
-.scene-studio-guided-flow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: 3px 12px;
-  background: #f0ede6;
-  border-bottom: 1px solid #e8e4dc;
-}
-
-.scene-studio-flow-step {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 12px;
-  font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  color: #bbb5a8;
-  border: none;
-  background: none;
-  cursor: default;
-  transition: color 150ms ease;
-}
-
-.scene-studio-flow-step.active {
-  color: #B8962E;
-  font-weight: 600;
-}
-
-.scene-studio-flow-step.done {
-  color: #27ae60;
-}
-
-.scene-studio-flow-arrow {
-  color: #d6d0c4;
-  font-size: 10px;
-  padding: 0 2px;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    SCENE STATES TAB
    ═══════════════════════════════════════════════════════════════ */
@@ -3478,7 +3438,6 @@
 .erase-mode-btn span { display: none; }
 .erase-btn-label { display: none; }
 .erase-remove-bg-toggle { display: none !important; }
-.scene-studio-guided-flow { display: none; }
 .scene-studio-first-hint { bottom: 52px; }
 
 /* ── Tablet Portrait (768px and below) ── */
@@ -3570,7 +3529,6 @@
   .erase-mode-btn { padding: 4px 10px; }
 
   /* Show guided flow */
-  .scene-studio-guided-flow { display: flex; }
 
   /* First hint at normal position */
   .scene-studio-first-hint { bottom: 60px; }
