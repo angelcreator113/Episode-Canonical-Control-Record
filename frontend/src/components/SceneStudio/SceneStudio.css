@@ -2702,6 +2702,61 @@
   cursor: not-allowed;
 }
 
+/* ── Smart Find ── */
+
+.erase-smart-find-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.erase-smart-find-icon {
+  color: #999;
+  flex-shrink: 0;
+}
+
+.erase-smart-find-input {
+  padding: 4px 8px;
+  border: 1px solid #d6d0c4;
+  border-radius: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  background: #fff;
+  color: #2C2C2C;
+  width: 180px;
+}
+
+.erase-smart-find-input:focus {
+  outline: none;
+  border-color: #B8962E;
+}
+
+.erase-smart-find-input:disabled {
+  opacity: 0.5;
+}
+
+.erase-smart-find-btn {
+  padding: 4px 10px;
+  border: 1px solid #B8962E;
+  border-radius: 5px;
+  background: #B8962E;
+  color: #fff;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.erase-smart-find-btn:hover:not(:disabled) {
+  background: #a07e24;
+}
+
+.erase-smart-find-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Undo / Redo ── */
 
 .erase-brush-undo-redo {

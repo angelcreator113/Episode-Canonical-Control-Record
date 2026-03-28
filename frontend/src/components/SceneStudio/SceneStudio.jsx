@@ -1184,6 +1184,37 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, backgroundUrl]);
 
+  // Smart Find — text-based object detection via Grounded SAM
+  const handleTextSegment = useCallback(async (textPrompt) => {
+    const contextId = state.contextId;
+    if (!contextId || !textPrompt?.trim()) return null;
+
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    try {
+      const result = await sceneService.segmentObject(contextId, {
+        imageUrl: targetUrl,
+        textPrompt: textPrompt.trim(),
+      });
+      if (result?.success && result.data?.maskUrl) {
+        return result.data.maskUrl;
+      }
+      return null;
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        setInpaintError(err?.response?.data?.error || 'Too many requests. Wait a few seconds and try again.');
+      } else {
+        setInpaintError(err?.response?.data?.error || 'Could not find that object. Try a different description.');
+      }
+      return null;
+    }
+  }, [state, backgroundUrl]);
+
   // ── Extract selection as movable object ──
   // Cuts the masked area from the background and adds it as a canvas object
   const handleExtractSelection = useCallback(async (maskDataUrl) => {
@@ -1595,6 +1626,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onApply={handleEraseApply}
               onReplaceWithImage={handleReplaceWithImage}
               onSegment={handleSegment}
+              onTextSegment={handleTextSegment}
               onExtractSelection={handleExtractSelection}
               onCancel={() => state.setActiveTool('select')}
               isProcessing={isInpainting}

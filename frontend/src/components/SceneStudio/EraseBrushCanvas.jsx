@@ -4,7 +4,8 @@ import {
   Eraser, Check, X, Loader, Minus, Plus,
   Undo2, Redo2, Circle, Hexagon, Eye, EyeOff,
   Sliders, Sparkles, History, ChevronDown, ChevronUp,
-  ImagePlus, Upload, MousePointer, FlipHorizontal, Scissors
+  ImagePlus, Upload, MousePointer, FlipHorizontal, Scissors,
+  Search
 } from 'lucide-react';
 
 /**
@@ -31,6 +32,7 @@ export default function EraseBrushCanvas({
   onApply,
   onReplaceWithImage,
   onSegment,
+  onTextSegment,
   onCancel,
   isProcessing,
   sceneId,
@@ -77,6 +79,8 @@ export default function EraseBrushCanvas({
   const [isSegmenting, setIsSegmenting] = useState(false);
   const [segmentClickPos, setSegmentClickPos] = useState(null); // { x, y } for loading indicator
   const [samPreviewUrl, setSamPreviewUrl] = useState(null); // preview before commit
+  const [smartFindQuery, setSmartFindQuery] = useState('');
+  const [isSmartFinding, setIsSmartFinding] = useState(false);
 
   // Enhanced features state
   const [customPrompt, setCustomPrompt] = useState('');
@@ -597,6 +601,54 @@ export default function EraseBrushCanvas({
     saveToHistory();
   }, [canvasWidth, canvasHeight, saveToHistory]);
 
+  // Smart Find — text-based object detection
+  const handleSmartFind = useCallback(async () => {
+    if (!smartFindQuery.trim() || isSmartFinding || !onTextSegment) return;
+
+    setIsSmartFinding(true);
+    try {
+      const maskImageUrl = await onTextSegment(smartFindQuery.trim());
+      if (!maskImageUrl) return;
+
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        // Convert SAM white-on-black mask to our red display color
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < maskData.data.length; i += 4) {
+          if (maskData.data[i] > 128) {
+            maskData.data[i] = 220;
+            maskData.data[i + 1] = 53;
+            maskData.data[i + 2] = 53;
+            maskData.data[i + 3] = 128;
+          } else {
+            maskData.data[i + 3] = 0;
+          }
+        }
+        tempCtx.putImageData(maskData, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tempCanvas, 0, 0);
+
+        setHasStrokes(true);
+        saveToHistory();
+      };
+      img.onerror = () => console.error('Failed to load text segment mask');
+      img.src = maskImageUrl;
+    } finally {
+      setIsSmartFinding(false);
+    }
+  }, [smartFindQuery, isSmartFinding, onTextSegment, saveToHistory]);
+
   // Invert the selection — painted becomes unpainted and vice versa
   const handleInvertSelection = useCallback(() => {
     const canvas = canvasRef.current;
@@ -920,6 +972,31 @@ export default function EraseBrushCanvas({
               </button>
             </div>
           </div>
+
+          {drawMode === 'smart' && (
+            <div className="erase-toolbar-group erase-smart-find">
+              <div className="erase-smart-find-row">
+                <Search size={12} className="erase-smart-find-icon" />
+                <input
+                  type="text"
+                  value={smartFindQuery}
+                  onChange={(e) => setSmartFindQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSmartFind(); }}
+                  placeholder="Find object... (e.g. lamp, rug, chair)"
+                  className="erase-smart-find-input"
+                  disabled={isProcessing || isSmartFinding}
+                />
+                <button
+                  type="button"
+                  className="erase-smart-find-btn"
+                  onClick={handleSmartFind}
+                  disabled={!smartFindQuery.trim() || isProcessing || isSmartFinding}
+                >
+                  {isSmartFinding ? <Loader size={12} className="erase-brush-spinner" /> : 'Find'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {drawMode === 'brush' && (
             <div className="erase-toolbar-group">

@@ -252,4 +252,73 @@ async function storeMaskToS3(maskUrl, entityId) {
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
-module.exports = { segmentAtPoint };
+/**
+ * Segment an object by text description using Grounded SAM.
+ *
+ * @param {string} imageUrl - URL of the image
+ * @param {string} textPrompt - Description of the object to find (e.g. "the lamp", "pink rug")
+ * @param {string} entityId - Scene/entity ID
+ * @returns {Promise<{maskUrl: string}>}
+ */
+async function segmentByText(imageUrl, textPrompt, entityId) {
+  if (!REPLICATE_API_TOKEN) {
+    throw new Error('REPLICATE_API_TOKEN not configured');
+  }
+
+  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  console.log(`[Segmentation] Text-based segment: "${textPrompt}" using ${SAM_MODEL}`);
+
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [2000, 4000, 8000];
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const delay = RETRY_DELAYS[attempt - 1] || 8000;
+      console.log(`[Segmentation] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+
+    try {
+      const output = await replicate.run(SAM_MODEL, {
+        input: {
+          image: imageUrl,
+          text_prompt: textPrompt,
+        },
+      });
+
+      console.log('[Segmentation] Text SAM raw output type:', typeof output,
+        Array.isArray(output) ? `array[${output.length}]` : '');
+
+      const maskUrl = extractOutputUrl(output);
+      if (!maskUrl) {
+        console.error('[Segmentation] Text SAM returned no output. Output:', JSON.stringify(output).slice(0, 500));
+        throw new Error('Could not find that object in the image. Try a different description.');
+      }
+
+      console.log('[Segmentation] Text-based mask generated successfully');
+      const s3Url = await storeMaskToS3(maskUrl, entityId);
+      return { maskUrl: s3Url };
+    } catch (err) {
+      const status = err.response?.status || err.status;
+      const detail = err.response?.data?.detail || err.message;
+
+      const isRateLimit = status === 429 || /rate[-\s]?limit|throttled/i.test(String(detail));
+      if (isRateLimit && attempt < MAX_RETRIES) {
+        console.warn(`[Segmentation] Rate-limited (attempt ${attempt + 1}), will retry...`);
+        continue;
+      }
+
+      if (isRateLimit) {
+        const limitError = new Error('Segmentation provider is rate-limited. Please try again in a few seconds.');
+        limitError.status = 429;
+        limitError.retryAfter = 8;
+        throw limitError;
+      }
+
+      console.error(`[Segmentation] Text SAM error (${status}):`, detail);
+      throw new Error(`Smart find failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    }
+  }
+}
+
+module.exports = { segmentAtPoint, segmentByText };
