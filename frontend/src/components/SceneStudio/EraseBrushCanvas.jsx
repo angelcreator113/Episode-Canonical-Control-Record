@@ -190,17 +190,14 @@ export default function EraseBrushCanvas({
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = useCallback((screenX, screenY) => {
-    // Use the canvas element's own rect — getBoundingClientRect accounts
-    // for CSS transforms (translate + scale) so we just need to map from
-    // the displayed rect back to the canvas internal resolution.
-    const canvas = canvasRef.current;
-    const rect = canvas?.getBoundingClientRect() || overlayRef.current?.getBoundingClientRect();
+    const rect = overlayRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
 
-    const x = ((screenX - rect.left) / rect.width) * canvasWidth;
-    const y = ((screenY - rect.top) / rect.height) * canvasHeight;
+    const safeZoom = zoom || 1;
+    const x = (screenX - rect.left - (panX || 0)) / safeZoom;
+    const y = (screenY - rect.top - (panY || 0)) / safeZoom;
     return { x, y };
-  }, [canvasWidth, canvasHeight]);
+  }, [zoom, panX, panY]);
 
   // Visible mask color for display (red semi-transparent)
   const MASK_COLOR = 'rgba(220, 53, 53, 0.5)';
