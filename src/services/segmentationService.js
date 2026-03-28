@@ -185,7 +185,6 @@ async function segmentWithPoints(imageUrl, points, entityId) {
       const isRateLimit = status === 429 || /rate[-\s]?limit|throttled/i.test(String(detail));
       if (isRateLimit && attempt < MAX_RETRIES) {
         console.warn(`[Segmentation] Rate-limited (attempt ${attempt + 1}), will retry...`);
-        lastError = err;
         continue;
       }
 
@@ -203,10 +202,11 @@ async function segmentWithPoints(imageUrl, points, entityId) {
       if (SAM_MODEL !== GROUNDED_SAM_MODEL) {
         console.warn(`[Segmentation] Falling back to ${GROUNDED_SAM_MODEL}`);
         try {
+          const firstPositive = pixelPoints.find((p) => p.label === 1) || pixelPoints[0];
           const fallbackOutput = await replicate.run(GROUNDED_SAM_MODEL, {
             input: {
               image: imageUrl,
-              input_point: `[${pixelX}, ${pixelY}]`,
+              input_point: `[${firstPositive.x}, ${firstPositive.y}]`,
               input_label: '[1]',
             },
           });
@@ -222,7 +222,7 @@ async function segmentWithPoints(imageUrl, points, entityId) {
       }
 
       console.warn('[Segmentation] All SAM models failed, using fallback click mask');
-      const fallbackUrl = await createFallbackClickMask(pixelX, pixelY, imgWidth, imgHeight, entityId);
+      const fallbackUrl = await createFallbackClickMask(pixelPoints, imgWidth, imgHeight, entityId);
       return { maskUrl: fallbackUrl, fallback: true };
     }
   } // end retry loop
