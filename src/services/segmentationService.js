@@ -82,22 +82,26 @@ async function getImageDimensions(imageUrl) {
  * @param {string} entityId - Scene/entity ID for rate limiting context
  * @returns {Promise<{maskUrl: string}>} - URL of the generated mask (white = selected, black = background)
  */
-async function segmentWithPoints(imageUrl, points, entityId) {
+async function segmentAtPoint(imageUrl, pointX, pointY, entityId, knownDims) {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
-  // Get image dimensions to convert normalized coords to pixel coords
-  let imgWidth = 1024;
-  let imgHeight = 1024;
-  try {
-    const dims = await getImageDimensions(imageUrl);
-    imgWidth = dims.width;
-    imgHeight = dims.height;
-  } catch (dimErr) {
-    console.warn('[Segmentation] Could not get image dimensions, using defaults:', dimErr.message);
+  // Get image dimensions to convert normalized coords to pixel coords.
+  // Prefer frontend-provided dimensions (always available from backgroundLayout)
+  // over fetching the image (which can fail and default to wrong 1024x1024).
+  let imgWidth = knownDims?.width || 1920;
+  let imgHeight = knownDims?.height || 1080;
+  if (!knownDims) {
+    try {
+      const dims = await getImageDimensions(imageUrl);
+      imgWidth = dims.width;
+      imgHeight = dims.height;
+    } catch (dimErr) {
+      console.warn('[Segmentation] Could not get image dimensions, using canvas defaults:', dimErr.message);
+    }
   }
 
   const normalizedPoints = Array.isArray(points) ? points : [];
@@ -310,21 +314,23 @@ async function storeMaskToS3(maskUrl, entityId) {
  * @param {Array<number>} labels - 1 = include, 0 = exclude
  * @param {string} entityId - Scene/entity ID
  */
-async function segmentMultiPoint(imageUrl, points, labels, entityId) {
+async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
 
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
 
-  let imgWidth = 1024;
-  let imgHeight = 1024;
-  try {
-    const dims = await getImageDimensions(imageUrl);
-    imgWidth = dims.width;
-    imgHeight = dims.height;
-  } catch (dimErr) {
-    console.warn('[Segmentation] Could not get image dimensions, using defaults:', dimErr.message);
+  let imgWidth = knownDims?.width || 1920;
+  let imgHeight = knownDims?.height || 1080;
+  if (!knownDims) {
+    try {
+      const dims = await getImageDimensions(imageUrl);
+      imgWidth = dims.width;
+      imgHeight = dims.height;
+    } catch (dimErr) {
+      console.warn('[Segmentation] Could not get image dimensions, using canvas defaults:', dimErr.message);
+    }
   }
 
   // Convert normalized coords to pixel coords

@@ -1233,7 +1233,8 @@ exports.inpaint = async (req, res) => {
 exports.segmentObject = async (req, res) => {
   try {
     const { id } = req.params;
-    const { image_url, point_x, point_y, point_label, text_prompt, points, labels } = req.body;
+    const { image_url, point_x, point_y, text_prompt, points, labels, image_width, image_height } = req.body;
+    const knownDims = (image_width > 0 && image_height > 0) ? { width: Number(image_width), height: Number(image_height) } : null;
 
     const normalizedPoints = Array.isArray(points)
       ? points
@@ -1275,10 +1276,16 @@ exports.segmentObject = async (req, res) => {
 
     const segmentationService = require('../services/segmentationService');
     let result;
-    if (hasTextPrompt) {
-      result = await segmentationService.segmentByText(sourceUrl, String(text_prompt).trim(), id);
+    if (text_prompt) {
+      result = await segmentationService.segmentByText(sourceUrl, text_prompt.trim(), id);
+    } else if (hasMultiPoint) {
+      result = await segmentationService.segmentMultiPoint(
+        sourceUrl, points, labels || points.map(() => 1), id, knownDims
+      );
     } else {
-      result = await segmentationService.segmentWithPoints(sourceUrl, effectivePoints, id);
+      result = await segmentationService.segmentAtPoint(
+        sourceUrl, Number(point_x), Number(point_y), id, knownDims
+      );
     }
 
     res.json({ success: true, data: result });
