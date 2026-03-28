@@ -71,15 +71,14 @@ async function getImageDimensions(imageUrl) {
 }
 
 /**
- * Segment an object in an image using SAM, given a click point.
+ * Segment an object in an image using SAM, given one or more points.
  *
  * @param {string} imageUrl - URL of the image to segment
- * @param {number} pointX - X coordinate of the click (0-1 normalized)
- * @param {number} pointY - Y coordinate of the click (0-1 normalized)
+ * @param {Array<{x:number,y:number,label?:number}>} points - Normalized points (0-1), label 1=include, 0=exclude
  * @param {string} entityId - Scene/entity ID for rate limiting context
  * @returns {Promise<{maskUrl: string}>} - URL of the generated mask (white = selected, black = background)
  */
-async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
+async function segmentWithPoints(imageUrl, points, entityId) {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
@@ -97,13 +96,30 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
     console.warn('[Segmentation] Could not get image dimensions, using defaults:', dimErr.message);
   }
 
-  const pixelX = Math.round(pointX * imgWidth);
-  const pixelY = Math.round(pointY * imgHeight);
-  console.log(`[Segmentation] SAM segment at pixel (${pixelX}, ${pixelY}) of ${imgWidth}x${imgHeight} using ${SAM_MODEL}`);
+  const normalizedPoints = Array.isArray(points) ? points : [];
+  const pixelPoints = normalizedPoints
+    .map((p) => {
+      const nx = Number(p?.x);
+      const ny = Number(p?.y);
+      if (!Number.isFinite(nx) || !Number.isFinite(ny)) return null;
+      const clampedX = Math.max(0, Math.min(1, nx));
+      const clampedY = Math.max(0, Math.min(1, ny));
+      return {
+        x: Math.round(clampedX * imgWidth),
+        y: Math.round(clampedY * imgHeight),
+        label: Number.isFinite(Number(p?.label)) ? (Number(p.label) === 0 ? 0 : 1) : 1,
+      };
+    })
+    .filter(Boolean);
 
+  if (!pixelPoints.length) {
+    throw new Error('No valid segmentation points provided');
+  }
+
+  const pointSummary = pixelPoints.map((p) => `${p.label ? '+' : '-'}(${p.x},${p.y})`).join(', ');
+  console.log(`[Segmentation] SAM segment with ${pixelPoints.length} point(s): ${pointSummary} on ${imgWidth}x${imgHeight} using ${SAM_MODEL}`);
   const MAX_RETRIES = 3;
   const RETRY_DELAYS = [2000, 4000, 8000];
-  let lastError;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
@@ -116,33 +132,34 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
       // Try multiple input formats depending on the model
       let output;
       const modelLower = SAM_MODEL.toLowerCase();
+    const firstPositive = pixelPoints.find((p) => p.label === 1) || pixelPoints[0];
 
     if (modelLower.includes('grounded_sam') || modelLower.includes('grounded-sam')) {
-      // grounded_sam expects point_coords as pixel values
+      // grounded_sam doesn't reliably support multi-point labels. Use the latest positive point.
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          input_point: `[${pixelX}, ${pixelY}]`,
+          input_point: `[${firstPositive.x}, ${firstPositive.y}]`,
           input_label: '[1]',
         },
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-      // sam-2 models — use point_coords format
+      // SAM 2 supports true multi-point refinement with positive/negative labels.
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          point_coords: [[pixelX, pixelY]],
-          point_labels: [1],
+          point_coords: pixelPoints.map((p) => [p.x, p.y]),
+          point_labels: pixelPoints.map((p) => p.label),
           multimask_output: false,
         },
       });
     } else {
-      // Default format for facebook/sam and similar
+      // Default format for facebook/sam and similar models.
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          point_coords: `${pixelX},${pixelY}`,
-          point_labels: '1',
+          point_coords: pixelPoints.map((p) => `${p.x},${p.y}`).join(';'),
+          point_labels: pixelPoints.map((p) => p.label).join(','),
         },
       });
     }
@@ -166,10 +183,10 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
       const detail = err.response?.data?.detail || err.message;
 
       // If the configured SAM model is missing/unavailable, fall back to a
-      // deterministic circular click mask instead of failing the tool.
+      // deterministic click mask instead of failing the tool.
       if (status === 404 || /requested resource could not be found|not found/i.test(String(detail))) {
         console.warn('[Segmentation] SAM model unavailable, using fallback click mask');
-        const fallbackUrl = await createFallbackClickMask(pixelX, pixelY, imgWidth, imgHeight, entityId);
+        const fallbackUrl = await createFallbackClickMask(pixelPoints, imgWidth, imgHeight, entityId);
         return { maskUrl: fallbackUrl, fallback: true };
       }
 
@@ -194,19 +211,25 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
   } // end retry loop
 }
 
-async function createFallbackClickMask(pixelX, pixelY, width, height, entityId) {
+async function createFallbackClickMask(pixelPoints, width, height, entityId) {
   const sharp = require('sharp');
 
   const safeW = Math.max(64, Number(width) || 1024);
   const safeH = Math.max(64, Number(height) || 1024);
   const radius = Math.max(24, Math.round(Math.min(safeW, safeH) * 0.08));
-  const cx = Math.max(0, Math.min(safeW - 1, Number(pixelX) || Math.round(safeW / 2)));
-  const cy = Math.max(0, Math.min(safeH - 1, Number(pixelY) || Math.round(safeH / 2)));
+  const fallbackPoints = Array.isArray(pixelPoints) ? pixelPoints : [];
+
+  const circles = fallbackPoints.map((pt) => {
+    const cx = Math.max(0, Math.min(safeW - 1, Number(pt?.x) || Math.round(safeW / 2)));
+    const cy = Math.max(0, Math.min(safeH - 1, Number(pt?.y) || Math.round(safeH / 2)));
+    const fill = Number(pt?.label) === 0 ? 'black' : 'white';
+    return `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${fill}"/>`;
+  }).join('');
 
   const svg = `
     <svg width="${safeW}" height="${safeH}" xmlns="http://www.w3.org/2000/svg">
       <rect width="100%" height="100%" fill="black"/>
-      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="white"/>
+      ${circles || `<circle cx="${Math.round(safeW / 2)}" cy="${Math.round(safeH / 2)}" r="${radius}" fill="white"/>`}
     </svg>
   `;
 
@@ -228,6 +251,10 @@ async function createFallbackClickMask(pixelX, pixelY, width, height, entityId) 
   }));
 
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+}
+
+async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
+  return segmentWithPoints(imageUrl, [{ x: pointX, y: pointY, label: 1 }], entityId);
 }
 
 /**
@@ -254,9 +281,7 @@ async function storeMaskToS3(maskUrl, entityId) {
 }
 
 /**
- * Segment with multiple positive/negative points in a single SAM call.
- * Much more accurate than single-point — SAM uses all points together
- * to understand what to include and exclude.
+ * Backward-compatible wrapper for multi-point segmentation.
  *
  * @param {string} imageUrl - URL of the image
  * @param {Array<{x: number, y: number}>} points - Normalized coords (0-1)
@@ -264,122 +289,14 @@ async function storeMaskToS3(maskUrl, entityId) {
  * @param {string} entityId - Scene/entity ID
  */
 async function segmentMultiPoint(imageUrl, points, labels, entityId) {
-  if (!REPLICATE_API_TOKEN) {
-    throw new Error('REPLICATE_API_TOKEN not configured');
-  }
-
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
-
-  let imgWidth = 1024;
-  let imgHeight = 1024;
-  try {
-    const dims = await getImageDimensions(imageUrl);
-    imgWidth = dims.width;
-    imgHeight = dims.height;
-  } catch (dimErr) {
-    console.warn('[Segmentation] Could not get image dimensions, using defaults:', dimErr.message);
-  }
-
-  // Convert normalized coords to pixel coords
-  const pixelPoints = points.map((p) => [
-    Math.round(p.x * imgWidth),
-    Math.round(p.y * imgHeight),
-  ]);
-
-  console.log(`[Segmentation] Multi-point SAM: ${points.length} points (labels: ${labels.join(',')}) using ${SAM_MODEL}`);
-
-  const MAX_RETRIES = 3;
-  const RETRY_DELAYS = [2000, 4000, 8000];
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      const delay = RETRY_DELAYS[attempt - 1] || 8000;
-      console.log(`[Segmentation] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms...`);
-      await new Promise((r) => setTimeout(r, delay));
-    }
-
-    try {
-      let output;
-      const modelLower = SAM_MODEL.toLowerCase();
-
-      if (modelLower.includes('grounded_sam') || modelLower.includes('grounded-sam')) {
-        // grounded_sam may not support multi-point natively.
-        // Try multi-point format first, fall back to last include point.
-        try {
-          output = await replicate.run(SAM_MODEL, {
-            input: {
-              image: imageUrl,
-              input_point: JSON.stringify(pixelPoints),
-              input_label: JSON.stringify(labels),
-            },
-          });
-        } catch (multiErr) {
-          console.warn('[Segmentation] Multi-point failed for grounded_sam, falling back to last include point:', multiErr.message);
-          // Find the last include point (label=1)
-          let lastIncludeIdx = -1;
-          for (let i = labels.length - 1; i >= 0; i--) {
-            if (labels[i] === 1) { lastIncludeIdx = i; break; }
-          }
-          if (lastIncludeIdx === -1) throw new Error('No include points provided');
-          const pt = pixelPoints[lastIncludeIdx];
-          output = await replicate.run(SAM_MODEL, {
-            input: {
-              image: imageUrl,
-              input_point: `[${pt[0]}, ${pt[1]}]`,
-              input_label: '[1]',
-            },
-          });
-        }
-      } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-        output = await replicate.run(SAM_MODEL, {
-          input: {
-            image: imageUrl,
-            point_coords: pixelPoints,
-            point_labels: labels,
-            multimask_output: false,
-          },
-        });
-      } else {
-        // Flatten for models expecting comma-separated format
-        output = await replicate.run(SAM_MODEL, {
-          input: {
-            image: imageUrl,
-            point_coords: pixelPoints.map((p) => p.join(',')).join(';'),
-            point_labels: labels.join(','),
-          },
-        });
-      }
-
-      const maskUrl = extractOutputUrl(output);
-      if (!maskUrl) {
-        console.error('[Segmentation] Multi-point SAM returned no output. Output:', JSON.stringify(output).slice(0, 500));
-        throw new Error('SAM returned no mask output');
-      }
-
-      console.log('[Segmentation] Multi-point mask generated successfully');
-      const s3Url = await storeMaskToS3(maskUrl, entityId);
-      return { maskUrl: s3Url };
-    } catch (err) {
-      const status = err.response?.status || err.status;
-      const detail = err.response?.data?.detail || err.message;
-
-      const isRateLimit = status === 429 || /rate[-\s]?limit|throttled/i.test(String(detail));
-      if (isRateLimit && attempt < MAX_RETRIES) {
-        console.warn(`[Segmentation] Rate-limited (attempt ${attempt + 1}), will retry...`);
-        continue;
-      }
-
-      if (isRateLimit) {
-        const limitError = new Error('Segmentation provider is rate-limited. Please try again in a few seconds.');
-        limitError.status = 429;
-        limitError.retryAfter = 8;
-        throw limitError;
-      }
-
-      console.error(`[Segmentation] Multi-point SAM error (${status}):`, detail);
-      throw new Error(`SAM segmentation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
-    }
-  }
+  const safePoints = Array.isArray(points) ? points : [];
+  const safeLabels = Array.isArray(labels) ? labels : [];
+  const normalized = safePoints.map((p, idx) => ({
+    x: Number(p?.x),
+    y: Number(p?.y),
+    label: Number.isFinite(Number(safeLabels[idx])) ? Number(safeLabels[idx]) : 1,
+  }));
+  return segmentWithPoints(imageUrl, normalized, entityId);
 }
 
 /**
@@ -453,4 +370,9 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
   }
 }
 
-module.exports = { segmentAtPoint, segmentMultiPoint, segmentByText };
+module.exports = {
+  segmentAtPoint,
+  segmentWithPoints,
+  segmentMultiPoint,
+  segmentByText,
+};

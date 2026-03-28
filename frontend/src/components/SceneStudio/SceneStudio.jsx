@@ -1151,9 +1151,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, [state, canvasWidth, canvasHeight]);
 
   // ── Smart Select (SAM segmentation) ──
-  const handleSegment = useCallback(async (normalizedX, normalizedY) => {
+  const handleSegment = useCallback(async (segmentInput) => {
     const contextId = state.contextId;
     if (!contextId) return null;
+
+    const normalizedX = Number(segmentInput?.pointX);
+    const normalizedY = Number(segmentInput?.pointY);
+    const pointLabel = Number.isFinite(Number(segmentInput?.label)) ? Number(segmentInput.label) : 1;
+    const points = Array.isArray(segmentInput?.points) ? segmentInput.points : [];
 
     const selectedObj = state.selectedIds.size === 1
       ? state.objects.find((o) => state.selectedIds.has(o.id))
@@ -1167,6 +1172,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         imageUrl: targetUrl,
         pointX: normalizedX,
         pointY: normalizedY,
+        pointLabel,
+        points,
       });
       if (result?.success && result.data?.maskUrl) {
         return result.data.maskUrl;

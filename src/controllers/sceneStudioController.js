@@ -1233,15 +1233,34 @@ exports.inpaint = async (req, res) => {
 exports.segmentObject = async (req, res) => {
   try {
     const { id } = req.params;
-    const { image_url, point_x, point_y, text_prompt, points, labels } = req.body;
+    const { image_url, point_x, point_y, point_label, text_prompt, points, labels } = req.body;
 
-    // Support both single point (legacy) and multi-point
-    const hasMultiPoint = Array.isArray(points) && points.length > 0;
-    const hasSinglePoint = point_x != null && point_y != null;
+    const normalizedPoints = Array.isArray(points)
+      ? points
+          .map((p, idx) => ({
+            x: Number(p?.x),
+            y: Number(p?.y),
+            label: Number.isFinite(Number(p?.label))
+              ? Number(p.label)
+              : (Array.isArray(labels) && Number.isFinite(Number(labels[idx])) ? Number(labels[idx]) : 1),
+          }))
+          .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+      : [];
 
-    if (!text_prompt && !hasMultiPoint && !hasSinglePoint) {
-      return res.status(400).json({ success: false, error: 'Either text_prompt, points[], or point_x/point_y are required' });
+    const fallbackPointX = Number(point_x);
+    const fallbackPointY = Number(point_y);
+    const fallbackLabel = Number.isFinite(Number(point_label)) ? Number(point_label) : 1;
+
+    const hasTextPrompt = Boolean(text_prompt && String(text_prompt).trim());
+    if (!hasTextPrompt && !normalizedPoints.length && (!Number.isFinite(fallbackPointX) || !Number.isFinite(fallbackPointY))) {
+      return res.status(400).json({ success: false, error: 'Provide text_prompt, points[], or point_x/point_y (0-1 normalized coordinates)' });
     }
+
+    const effectivePoints = normalizedPoints.length
+      ? normalizedPoints
+      : (Number.isFinite(fallbackPointX) && Number.isFinite(fallbackPointY)
+          ? [{ x: fallbackPointX, y: fallbackPointY, label: fallbackLabel }]
+          : []);
 
     const Scene = require('../models').Scene;
     const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url'] });
@@ -1256,16 +1275,10 @@ exports.segmentObject = async (req, res) => {
 
     const segmentationService = require('../services/segmentationService');
     let result;
-    if (text_prompt) {
-      result = await segmentationService.segmentByText(sourceUrl, text_prompt.trim(), id);
-    } else if (hasMultiPoint) {
-      result = await segmentationService.segmentMultiPoint(
-        sourceUrl, points, labels || points.map(() => 1), id
-      );
+    if (hasTextPrompt) {
+      result = await segmentationService.segmentByText(sourceUrl, String(text_prompt).trim(), id);
     } else {
-      result = await segmentationService.segmentAtPoint(
-        sourceUrl, Number(point_x), Number(point_y), id
-      );
+      result = await segmentationService.segmentWithPoints(sourceUrl, effectivePoints, id);
     }
 
     res.json({ success: true, data: result });
