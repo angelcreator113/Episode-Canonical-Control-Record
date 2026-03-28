@@ -721,11 +721,12 @@ async function refineRemovalMask(maskBuffer, options = {}) {
   const expandPx = Math.max(0, Math.min(20, Math.round(options.expandPx ?? 10)));
   const featherPx = Math.max(0, Math.min(5, Number(options.featherPx ?? 2)));
 
-  // Slight dilation + feathering helps LaMa remove edge halos and leftover fragments.
+  // Expand mask and feather edges so LaMa removes edge halos and leftover fragments.
+  // Note: sharp's .erode() expands white regions on a mask (opposite of typical naming).
   return sharp(maskBuffer)
     .greyscale()
     .threshold(16)
-    .dilate(expandPx)
+    .erode(expandPx)
     .blur(featherPx)
     .png()
     .toBuffer();
