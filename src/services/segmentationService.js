@@ -306,14 +306,148 @@ async function storeMaskToS3(maskUrl, entityId) {
  * @param {string} entityId - Scene/entity ID
  */
 async function segmentMultiPoint(imageUrl, points, labels, entityId) {
-  const safePoints = Array.isArray(points) ? points : [];
-  const safeLabels = Array.isArray(labels) ? labels : [];
-  const normalized = safePoints.map((p, idx) => ({
-    x: Number(p?.x),
-    y: Number(p?.y),
-    label: Number.isFinite(Number(safeLabels[idx])) ? Number(safeLabels[idx]) : 1,
-  }));
-  return segmentWithPoints(imageUrl, normalized, entityId);
+  if (!REPLICATE_API_TOKEN) {
+    throw new Error('REPLICATE_API_TOKEN not configured');
+  }
+
+  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+
+  let imgWidth = 1024;
+  let imgHeight = 1024;
+  try {
+    const dims = await getImageDimensions(imageUrl);
+    imgWidth = dims.width;
+    imgHeight = dims.height;
+  } catch (dimErr) {
+    console.warn('[Segmentation] Could not get image dimensions, using defaults:', dimErr.message);
+  }
+
+  // Convert normalized coords to pixel coords
+  const pixelPoints = points.map((p) => [
+    Math.round(p.x * imgWidth),
+    Math.round(p.y * imgHeight),
+  ]);
+
+  console.log(`[Segmentation] Multi-point SAM: ${points.length} points (labels: ${labels.join(',')}) using ${SAM_MODEL}`);
+
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [2000, 4000, 8000];
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const delay = RETRY_DELAYS[attempt - 1] || 8000;
+      console.log(`[Segmentation] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+
+    try {
+      let output;
+      const modelLower = SAM_MODEL.toLowerCase();
+
+      if (modelLower.includes('grounded_sam') || modelLower.includes('grounded-sam')) {
+        // grounded_sam may not support multi-point natively.
+        // Try multi-point format first, fall back to last include point.
+        try {
+          output = await replicate.run(SAM_MODEL, {
+            input: {
+              image: imageUrl,
+              input_point: JSON.stringify(pixelPoints),
+              input_label: JSON.stringify(labels),
+            },
+          });
+        } catch (multiErr) {
+          console.warn('[Segmentation] Multi-point failed for grounded_sam, falling back to last include point:', multiErr.message);
+          // Find the last include point (label=1)
+          let lastIncludeIdx = -1;
+          for (let i = labels.length - 1; i >= 0; i--) {
+            if (labels[i] === 1) { lastIncludeIdx = i; break; }
+          }
+          if (lastIncludeIdx === -1) throw new Error('No include points provided');
+          const pt = pixelPoints[lastIncludeIdx];
+          output = await replicate.run(SAM_MODEL, {
+            input: {
+              image: imageUrl,
+              input_point: `[${pt[0]}, ${pt[1]}]`,
+              input_label: '[1]',
+            },
+          });
+        }
+      } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
+        output = await replicate.run(SAM_MODEL, {
+          input: {
+            image: imageUrl,
+            point_coords: pixelPoints,
+            point_labels: labels,
+            multimask_output: false,
+          },
+        });
+      } else {
+        // Flatten for models expecting comma-separated format
+        output = await replicate.run(SAM_MODEL, {
+          input: {
+            image: imageUrl,
+            point_coords: pixelPoints.map((p) => p.join(',')).join(';'),
+            point_labels: labels.join(','),
+          },
+        });
+      }
+
+      const maskUrl = extractOutputUrl(output);
+      if (!maskUrl) {
+        console.error('[Segmentation] Multi-point SAM returned no output. Output:', JSON.stringify(output).slice(0, 500));
+        throw new Error('SAM returned no mask output');
+      }
+
+      console.log('[Segmentation] Multi-point mask generated successfully');
+      const s3Url = await storeMaskToS3(maskUrl, entityId);
+      return { maskUrl: s3Url };
+    } catch (err) {
+      const status = err.response?.status || err.status;
+      const detail = err.response?.data?.detail || err.message;
+
+      const isRateLimit = status === 429 || /rate[-\s]?limit|throttled/i.test(String(detail));
+      if (isRateLimit && attempt < MAX_RETRIES) {
+        console.warn(`[Segmentation] Rate-limited (attempt ${attempt + 1}), will retry...`);
+        continue;
+      }
+
+      if (isRateLimit) {
+        const limitError = new Error('Segmentation provider is rate-limited. Please try again in a few seconds.');
+        limitError.status = 429;
+        limitError.retryAfter = 8;
+        throw limitError;
+      }
+
+      // For any other error, fall back to grounded_sam with last include point
+      console.error(`[Segmentation] Multi-point SAM error (${status || 'unknown'}):`, detail);
+      let lastIncludeIdx = -1;
+      for (let i = labels.length - 1; i >= 0; i--) {
+        if (labels[i] === 1) { lastIncludeIdx = i; break; }
+      }
+      if (lastIncludeIdx >= 0) {
+        const pt = pixelPoints[lastIncludeIdx];
+        try {
+          console.warn(`[Segmentation] Falling back to ${GROUNDED_SAM_MODEL} with single point`);
+          const fallbackOutput = await replicate.run(GROUNDED_SAM_MODEL, {
+            input: {
+              image: imageUrl,
+              input_point: `[${pt[0]}, ${pt[1]}]`,
+              input_label: '[1]',
+            },
+          });
+          const fallbackMaskUrl = extractOutputUrl(fallbackOutput);
+          if (fallbackMaskUrl) {
+            console.log('[Segmentation] Grounded SAM fallback succeeded');
+            const s3Url = await storeMaskToS3(fallbackMaskUrl, entityId);
+            return { maskUrl: s3Url };
+          }
+        } catch (fallbackErr) {
+          console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
+        }
+      }
+      throw new Error(`SAM segmentation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    }
+  }
 }
 
 /**

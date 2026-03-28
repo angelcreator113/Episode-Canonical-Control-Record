@@ -1283,7 +1283,7 @@ exports.segmentObject = async (req, res) => {
 
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error('Scene Studio segment error:', error);
+    console.error('Scene Studio segment error:', error?.message || error, error?.stack?.split('\n').slice(0, 3).join('\n'));
     const status = Number.isFinite(Number(error?.status)) ? Number(error.status) : 500;
     const retryAfter = Number.parseInt(String(error?.retryAfter || ''), 10);
     if (status === 429 && retryAfter > 0) {
