@@ -461,12 +461,17 @@ export default function EraseBrushCanvas({
               ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
 
-            // Draw SAM mask as red overlay
+            // Draw SAM mask aligned to where the background image sits on the canvas
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = canvas.width;
             tempCanvas.height = canvas.height;
             const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            // SAM mask covers the source image — draw it at the background's position
+            const dx = backgroundLayout?.drawX || 0;
+            const dy = backgroundLayout?.drawY || 0;
+            const dw = backgroundLayout?.drawWidth || canvas.width;
+            const dh = backgroundLayout?.drawHeight || canvas.height;
+            tempCtx.drawImage(img, dx, dy, dw, dh);
             const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
 
             for (let i = 0; i < maskData.data.length; i += 4) {
@@ -646,7 +651,11 @@ export default function EraseBrushCanvas({
         tempCanvas.width = canvas.width;
         tempCanvas.height = canvas.height;
         const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dx = backgroundLayout?.drawX || 0;
+        const dy = backgroundLayout?.drawY || 0;
+        const dw = backgroundLayout?.drawWidth || canvas.width;
+        const dh = backgroundLayout?.drawHeight || canvas.height;
+        tempCtx.drawImage(img, dx, dy, dw, dh);
         const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
 
         for (let i = 0; i < maskData.data.length; i += 4) {
