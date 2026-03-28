@@ -302,13 +302,33 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId) {
       const modelLower = SAM_MODEL.toLowerCase();
 
       if (modelLower.includes('grounded_sam') || modelLower.includes('grounded-sam')) {
-        output = await replicate.run(SAM_MODEL, {
-          input: {
-            image: imageUrl,
-            input_point: JSON.stringify(pixelPoints),
-            input_label: JSON.stringify(labels),
-          },
-        });
+        // grounded_sam may not support multi-point natively.
+        // Try multi-point format first, fall back to last include point.
+        try {
+          output = await replicate.run(SAM_MODEL, {
+            input: {
+              image: imageUrl,
+              input_point: JSON.stringify(pixelPoints),
+              input_label: JSON.stringify(labels),
+            },
+          });
+        } catch (multiErr) {
+          console.warn('[Segmentation] Multi-point failed for grounded_sam, falling back to last include point:', multiErr.message);
+          // Find the last include point (label=1)
+          let lastIncludeIdx = -1;
+          for (let i = labels.length - 1; i >= 0; i--) {
+            if (labels[i] === 1) { lastIncludeIdx = i; break; }
+          }
+          if (lastIncludeIdx === -1) throw new Error('No include points provided');
+          const pt = pixelPoints[lastIncludeIdx];
+          output = await replicate.run(SAM_MODEL, {
+            input: {
+              image: imageUrl,
+              input_point: `[${pt[0]}, ${pt[1]}]`,
+              input_label: '[1]',
+            },
+          });
+        }
       } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
         output = await replicate.run(SAM_MODEL, {
           input: {
