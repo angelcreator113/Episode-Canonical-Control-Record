@@ -393,7 +393,33 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId) {
         throw limitError;
       }
 
-      console.error(`[Segmentation] Multi-point SAM error (${status}):`, detail);
+      // For any other error, fall back to grounded_sam with last include point
+      console.error(`[Segmentation] Multi-point SAM error (${status || 'unknown'}):`, detail);
+      let lastIncludeIdx = -1;
+      for (let i = labels.length - 1; i >= 0; i--) {
+        if (labels[i] === 1) { lastIncludeIdx = i; break; }
+      }
+      if (lastIncludeIdx >= 0) {
+        const pt = pixelPoints[lastIncludeIdx];
+        try {
+          console.warn(`[Segmentation] Falling back to ${GROUNDED_SAM_MODEL} with single point`);
+          const fallbackOutput = await replicate.run(GROUNDED_SAM_MODEL, {
+            input: {
+              image: imageUrl,
+              input_point: `[${pt[0]}, ${pt[1]}]`,
+              input_label: '[1]',
+            },
+          });
+          const fallbackMaskUrl = extractOutputUrl(fallbackOutput);
+          if (fallbackMaskUrl) {
+            console.log('[Segmentation] Grounded SAM fallback succeeded');
+            const s3Url = await storeMaskToS3(fallbackMaskUrl, entityId);
+            return { maskUrl: s3Url };
+          }
+        } catch (fallbackErr) {
+          console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
+        }
+      }
       throw new Error(`SAM segmentation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
     }
   }
