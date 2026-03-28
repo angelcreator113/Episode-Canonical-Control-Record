@@ -2757,6 +2757,45 @@
   cursor: not-allowed;
 }
 
+.erase-smart-adjust-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.erase-smart-adjust-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 8px;
+  border: 1px solid #d6d0c4;
+  border-radius: 4px;
+  background: #fff;
+  color: #666;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.erase-smart-adjust-btn:hover:not(:disabled) {
+  border-color: #B8962E;
+  color: #2C2C2C;
+}
+
+.erase-smart-adjust-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.erase-smart-adjust-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #999;
+  margin-left: 4px;
+}
+
 /* ── Undo / Redo ── */
 
 .erase-brush-undo-redo {

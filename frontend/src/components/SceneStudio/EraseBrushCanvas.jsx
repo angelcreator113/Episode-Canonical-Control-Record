@@ -679,6 +679,70 @@ export default function EraseBrushCanvas({
     saveToHistory();
   }, [saveToHistory]);
 
+  // Grow/shrink the current mask selection by expanding or contracting painted pixels
+  const adjustSelection = useCallback((direction) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const w = canvas.width;
+    const h = canvas.height;
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const src = imageData.data;
+
+    // Create a copy to read from while writing to original
+    const copy = new Uint8ClampedArray(src);
+    const radius = 3; // pixels to grow/shrink by
+
+    if (direction === 'grow') {
+      // For each empty pixel, check if any neighbor within radius is painted
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          if (copy[idx + 3] > 10) continue; // already painted
+          let found = false;
+          for (let dy = -radius; dy <= radius && !found; dy++) {
+            for (let dx = -radius; dx <= radius && !found; dx++) {
+              if (dx * dx + dy * dy > radius * radius) continue;
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+              if (copy[(ny * w + nx) * 4 + 3] > 10) found = true;
+            }
+          }
+          if (found) {
+            src[idx] = 220;
+            src[idx + 1] = 53;
+            src[idx + 2] = 53;
+            src[idx + 3] = 128;
+          }
+        }
+      }
+    } else {
+      // Shrink: for each painted pixel, check if any neighbor within radius is empty
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          if (copy[idx + 3] <= 10) continue; // already empty
+          let foundEmpty = false;
+          for (let dy = -radius; dy <= radius && !foundEmpty; dy++) {
+            for (let dx = -radius; dx <= radius && !foundEmpty; dx++) {
+              if (dx * dx + dy * dy > radius * radius) continue;
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || nx >= w || ny < 0 || ny >= h) { foundEmpty = true; continue; }
+              if (copy[(ny * w + nx) * 4 + 3] <= 10) foundEmpty = true;
+            }
+          }
+          if (foundEmpty) {
+            src[idx + 3] = 0;
+          }
+        }
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    saveToHistory();
+  }, [saveToHistory]);
+
   // Export a proper white-on-black mask from the display canvas.
   // Display canvas uses visible red strokes; export converts any
   // painted pixel (alpha > 0) to white on a black background.
@@ -995,6 +1059,29 @@ export default function EraseBrushCanvas({
                   {isSmartFinding ? <Loader size={12} className="erase-brush-spinner" /> : 'Find'}
                 </button>
               </div>
+              {hasStrokes && (
+                <div className="erase-smart-adjust-row">
+                  <button
+                    type="button"
+                    className="erase-smart-adjust-btn"
+                    onClick={() => adjustSelection('shrink')}
+                    disabled={isProcessing || isSegmenting}
+                    title="Shrink selection edges inward"
+                  >
+                    <Minus size={10} /> Shrink
+                  </button>
+                  <button
+                    type="button"
+                    className="erase-smart-adjust-btn"
+                    onClick={() => adjustSelection('grow')}
+                    disabled={isProcessing || isSegmenting}
+                    title="Grow selection edges outward"
+                  >
+                    <Plus size={10} /> Grow
+                  </button>
+                  <span className="erase-smart-adjust-hint">or switch to Brush to paint</span>
+                </div>
+              )}
             </div>
           )}
 
