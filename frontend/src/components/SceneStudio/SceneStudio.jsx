@@ -1066,84 +1066,71 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, backgroundUrl, maskExpand, maskFeather]);
 
-  // ── Replace with Image — single-click streamlined flow ──
-  // 1. Remove old object from background (AI inpaint)
-  // 2. Place replacement as a layer (with optional bg removal)
-  // 3. Auto-merge & blend edges into background
-  // All happens in one click after picking the image.
+  // ── Use Image — just add as a layer with optional bg removal ──
+  // No erasing, no blending. User does those separately:
+  //   Apply = erase (LaMa removes the object)
+  //   Use Image = add replacement layer (with bg removed)
+  //   Merge & Blend = flatten layer into background (when happy with position)
   const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
     if (isInpaintingRef.current) return;
     const { imageDataUrl, removeBg: shouldRemoveBg, assetId } = options;
-    if (!imageDataUrl || !backgroundUrl) {
-      setInpaintError('No background image to replace into');
-      return;
-    }
-    if (inpaintCooldownRef.current > Date.now()) {
-      const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
-      setInpaintError(`Too many requests. Please wait ${seconds}s and try again.`);
+    if (!imageDataUrl) {
+      setInpaintError('No image selected');
       return;
     }
 
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintError('');
+    setInpaintNotice(shouldRemoveBg ? 'Removing background and placing image...' : 'Placing image...');
 
     try {
+      // Get mask bounds to know where to place the image
       const maskBox = await getMaskBoundingBoxFromDataUrl(maskDataUrl);
 
-      // ── Step 1: Remove old object from background (LaMa) ──
-      setInpaintNotice('Step 1/3: Removing old object...');
-      console.log('[Replace] Step 1: Inpaint remove');
+      // Determine placement area — use mask bounds if available, otherwise center of canvas
+      const placeX = maskBox ? maskBox.x : canvasWidth / 4;
+      const placeY = maskBox ? maskBox.y : canvasHeight / 4;
+      const placeW = maskBox ? maskBox.width : canvasWidth / 2;
+      const placeH = maskBox ? maskBox.height : canvasHeight / 2;
 
-      const clearResult = await sceneService.inpaintScene(state.contextId, {
-        imageUrl: backgroundUrl,
-        maskDataUrl,
-        mode: 'remove',
-        strictRemove: false,
-        maskExpand,
-        maskFeather,
-      });
-
-      let cleanBackgroundUrl = backgroundUrl;
-      if (clearResult?.success && clearResult.data?.inpainted_url) {
-        cleanBackgroundUrl = clearResult.data.inpainted_url;
-        state.setSceneData((prev) => prev ? { ...prev, background_url: cleanBackgroundUrl } : prev);
+      // Optionally remove background via backend rembg
+      let finalImageUrl = imageDataUrl;
+      if (shouldRemoveBg && assetId) {
+        try {
+          setInpaintNotice('Removing background from image...');
+          const bgResult = await assetService.removeBackground(assetId);
+          const removedUrl = bgResult?.data?.url || bgResult?.url;
+          if (removedUrl) finalImageUrl = removedUrl;
+        } catch (bgErr) {
+          console.warn('BG removal failed, using original:', bgErr.message);
+        }
       }
 
-      // ── Step 2: Get mask bounding box and place replacement ──
-      setInpaintNotice('Step 2/3: Placing replacement...');
-      console.log('[Replace] Step 2: Place replacement layer');
-
-      if (!maskBox || maskBox.width < 2 || maskBox.height < 2) {
-        throw new Error('Could not determine mask area');
-      }
-
-      // Determine replacement URL — bg removal happens server-side in Step 3
-      const replacementUrl = imageDataUrl;
-
-      // Scale replacement to fit mask bounds
-      const refImg = await loadImage(replacementUrl);
-      const refW = refImg.naturalWidth || refImg.width || maskBox.width;
-      const refH = refImg.naturalHeight || refImg.height || maskBox.height;
+      // Scale to fit placement area
+      const refImg = await loadImage(finalImageUrl);
+      const refW = refImg.naturalWidth || refImg.width || placeW;
+      const refH = refImg.naturalHeight || refImg.height || placeH;
       const refAspect = refW / Math.max(1, refH);
-      const boxAspect = maskBox.width / Math.max(1, maskBox.height);
+      const boxAspect = placeW / Math.max(1, placeH);
 
-      let targetW = maskBox.width;
-      let targetH = maskBox.height;
+      let targetW = placeW;
+      let targetH = placeH;
       if (refAspect > boxAspect) {
-        targetH = Math.max(8, Math.round(maskBox.width / refAspect));
+        targetH = Math.max(8, Math.round(placeW / refAspect));
       } else {
-        targetW = Math.max(8, Math.round(maskBox.height * refAspect));
+        targetW = Math.max(8, Math.round(placeH * refAspect));
       }
 
+      // Add as movable layer
       const objId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       state.addObject({
         id: objId,
         type: 'image',
         assetId: assetId || undefined,
-        assetUrl: replacementUrl,
-        x: Math.round(maskBox.x + (maskBox.width - targetW) / 2),
-        y: Math.round(maskBox.y + (maskBox.height - targetH) / 2),
+        assetUrl: finalImageUrl,
+        x: Math.round(placeX + (placeW - targetW) / 2),
+        y: Math.round(placeY + (placeH - targetH) / 2),
         width: targetW,
         height: targetH,
         rotation: 0,
@@ -1151,59 +1138,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         label: 'Replacement',
       });
 
-      // Exit erase mode so the user can see the result
       state.setActiveTool('select');
       state.selectObject(objId);
-
-      // ── Step 3: Server-side blend ──
-      // Use the backend's compositeReferenceImage + SDXL to blend the replacement
-      // into the background. No client-side canvas export needed (avoids tainted canvas).
-      setInpaintNotice('Step 3/3: Blending into background...');
-      console.log('[Replace] Step 3: Server-side blend');
-
-      try {
-        const blendResult = await sceneService.inpaintScene(state.contextId, {
-          imageUrl: cleanBackgroundUrl,
-          maskDataUrl,
-          referenceImageUrl: replacementUrl,
-          removeReferenceBg: shouldRemoveBg || false,
-          prompt: 'Seamless blend, match surrounding lighting, texture and perspective. Photorealistic.',
-          mode: 'fill',
-          strength: 0.4,
-        });
-
-        if (blendResult?.success && blendResult.data?.inpainted_url) {
-          // Remove the replacement layer and update background with blended result
-          state.removeObject(objId);
-          state.setSceneData((prev) => prev ? { ...prev, background_url: blendResult.data.inpainted_url } : prev);
-          console.log('[Replace] Complete — blended into background');
-        }
-      } catch (blendErr) {
-        // Blend failed — leave the object as a movable layer
-        console.warn('[Replace] Auto-blend skipped:', blendErr.message);
-        setInpaintNotice('Replacement placed — use "Merge & Blend" to blend edges');
-        await new Promise((r) => setTimeout(r, 2000));
-      }
     } catch (err) {
-      if (err?.response?.status === 429) {
-        console.warn('Replace rate-limited (429):', err?.response?.data?.error || err.message);
-        const cooldownMs = getInpaintCooldownMs(err);
-        if (cooldownMs > 0) {
-          const cooldownUntil = Date.now() + cooldownMs;
-          inpaintCooldownRef.current = cooldownUntil;
-          setInpaintCooldownUntil(cooldownUntil);
-        }
-        setInpaintError(err?.response?.data?.error || 'Too many requests. Please wait and try again.');
-      } else {
-        console.error('Replace with image error:', err);
-        setInpaintError(err?.response?.data?.error || err.message || 'Failed to replace with image');
-      }
+      console.error('Use Image error:', err);
+      setInpaintError(err.message || 'Failed to add image');
     } finally {
       isInpaintingRef.current = false;
       setIsInpainting(false);
       setInpaintNotice(null);
     }
-  }, [state, backgroundUrl, maskExpand, maskFeather, canvasWidth, canvasHeight]);
+  }, [state, canvasWidth, canvasHeight]);
 
   // ── Smart Select (SAM segmentation) ──
   const handleSegment = useCallback(async (normalizedX, normalizedY) => {
