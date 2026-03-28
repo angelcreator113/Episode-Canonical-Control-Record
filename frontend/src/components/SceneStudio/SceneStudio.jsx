@@ -1662,6 +1662,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               panX={state.canvasSettings.panX}
               panY={state.canvasSettings.panY}
               backgroundUrl={backgroundUrl}
+              backgroundLayout={backgroundLayout}
               onApply={handleEraseApply}
               onReplaceWithImage={handleReplaceWithImage}
               onSegment={handleSegment}

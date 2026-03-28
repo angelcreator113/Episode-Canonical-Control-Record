@@ -29,6 +29,7 @@ export default function EraseBrushCanvas({
   panX,
   panY,
   backgroundUrl,
+  backgroundLayout,
   onApply,
   onReplaceWithImage,
   onSegment,
@@ -408,8 +409,16 @@ export default function EraseBrushCanvas({
       // Smart Select: accumulate points and send to SAM together
       // Normal click = include (label 1), Alt+click = exclude (label 0)
       const label = e.altKey ? 0 : 1;
-      const normalizedX = x / canvasWidth;
-      const normalizedY = y / canvasHeight;
+      // Map canvas coords to source image coords (0-1 normalized).
+      // Background uses cover-fit layout so may be offset/scaled within the canvas.
+      let normalizedX, normalizedY;
+      if (backgroundLayout?.drawWidth && backgroundLayout?.drawHeight) {
+        normalizedX = (x - (backgroundLayout.drawX || 0)) / backgroundLayout.drawWidth;
+        normalizedY = (y - (backgroundLayout.drawY || 0)) / backgroundLayout.drawHeight;
+      } else {
+        normalizedX = x / canvasWidth;
+        normalizedY = y / canvasHeight;
+      }
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
       const newPoint = { x: normalizedX, y: normalizedY, label, canvasX: x, canvasY: y };
