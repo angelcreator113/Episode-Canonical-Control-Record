@@ -1167,6 +1167,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         imageUrl: targetUrl,
         pointX: normalizedX,
         pointY: normalizedY,
+        imageWidth: backgroundLayout?.sourceWidth,
+        imageHeight: backgroundLayout?.sourceHeight,
       });
       if (result?.success && result.data?.maskUrl) {
         return result.data.maskUrl;
@@ -1201,6 +1203,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         imageUrl: targetUrl,
         points,
         labels,
+        imageWidth: backgroundLayout?.sourceWidth,
+        imageHeight: backgroundLayout?.sourceHeight,
       });
       if (result?.success && result.data?.maskUrl) {
         return result.data.maskUrl;

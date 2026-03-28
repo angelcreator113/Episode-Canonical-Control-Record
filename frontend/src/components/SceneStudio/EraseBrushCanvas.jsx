@@ -412,9 +412,6 @@ export default function EraseBrushCanvas({
         normalizedX = x / canvasWidth;
         normalizedY = y / canvasHeight;
       }
-      console.log('[SmartSelect] click canvas=', { x: Math.round(x), y: Math.round(y) },
-        'normalized=', { x: normalizedX?.toFixed(3), y: normalizedY?.toFixed(3) },
-        'layout=', backgroundLayout ? { drawX: backgroundLayout.drawX, drawY: backgroundLayout.drawY, drawW: backgroundLayout.drawWidth, drawH: backgroundLayout.drawHeight } : 'NONE');
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
       const newPoint = { x: normalizedX, y: normalizedY, label, canvasX: x, canvasY: y };
@@ -459,17 +456,12 @@ export default function EraseBrushCanvas({
               ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
 
-            // Draw SAM mask aligned to where the background image sits on the canvas
+            // Draw SAM mask — covers the full canvas (source image fills canvas via cover-fit)
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = canvas.width;
             tempCanvas.height = canvas.height;
             const tempCtx = tempCanvas.getContext('2d');
-            // SAM mask covers the source image — draw it at the background's position
-            const dx = backgroundLayout?.drawX || 0;
-            const dy = backgroundLayout?.drawY || 0;
-            const dw = backgroundLayout?.drawWidth || canvas.width;
-            const dh = backgroundLayout?.drawHeight || canvas.height;
-            tempCtx.drawImage(img, dx, dy, dw, dh);
+            tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
             const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
 
             for (let i = 0; i < maskData.data.length; i += 4) {
@@ -648,11 +640,7 @@ export default function EraseBrushCanvas({
         tempCanvas.width = canvas.width;
         tempCanvas.height = canvas.height;
         const tempCtx = tempCanvas.getContext('2d');
-        const dx = backgroundLayout?.drawX || 0;
-        const dy = backgroundLayout?.drawY || 0;
-        const dw = backgroundLayout?.drawWidth || canvas.width;
-        const dh = backgroundLayout?.drawHeight || canvas.height;
-        tempCtx.drawImage(img, dx, dy, dw, dh);
+        tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
         const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
 
         for (let i = 0; i < maskData.data.length; i += 4) {
