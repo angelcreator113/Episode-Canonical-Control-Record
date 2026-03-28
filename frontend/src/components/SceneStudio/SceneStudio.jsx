@@ -221,8 +221,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [hasMask, setHasMask] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
   const [maskMode, setMaskMode] = useState('add');
-  const [maskExpand, setMaskExpand] = useState(3);
-  const [maskFeather, setMaskFeather] = useState(1.1);
+  const [maskExpand, setMaskExpand] = useState(10);
+  const [maskFeather, setMaskFeather] = useState(2);
   const [isInpainting, setIsInpainting] = useState(false);
   const isInpaintingRef = useRef(false);
   const [inpaintPrompt, setInpaintPrompt] = useState('');

@@ -29,7 +29,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 90;
-const STRICT_REMOVE_PASSES = Math.max(1, Math.min(3, parseInt(process.env.STRICT_REMOVE_PASSES || '1', 10)));
+const STRICT_REMOVE_PASSES = Math.max(1, Math.min(3, parseInt(process.env.STRICT_REMOVE_PASSES || '2', 10)));
 
 // ─── MODEL CONFIG ───────────────────────────────────────────────────────────
 
@@ -711,8 +711,8 @@ async function getRemoteImageDimensions(imageUrl) {
 }
 
 async function refineRemovalMask(maskBuffer, options = {}) {
-  const expandPx = Math.max(0, Math.min(20, Math.round(options.expandPx ?? 2)));
-  const featherPx = Math.max(0, Math.min(5, Number(options.featherPx ?? 0.8)));
+  const expandPx = Math.max(0, Math.min(20, Math.round(options.expandPx ?? 10)));
+  const featherPx = Math.max(0, Math.min(5, Number(options.featherPx ?? 2)));
 
   // Slight dilation + feathering helps LaMa remove edge halos and leftover fragments.
   return sharp(maskBuffer)
