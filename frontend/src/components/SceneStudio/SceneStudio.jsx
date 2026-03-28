@@ -1189,7 +1189,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
       return null;
     }
-  }, [state, backgroundUrl]);
+  }, [state, backgroundUrl, backgroundLayout]);
 
   // Multi-point segment — sends all accumulated points to SAM in one call
   const handleMultiPointSegment = useCallback(async (points, labels) => {
@@ -1223,7 +1223,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
       return null;
     }
-  }, [state, backgroundUrl]);
+  }, [state, backgroundUrl, backgroundLayout]);
 
   // Smart Find — text-based object detection via Grounded SAM
   const handleTextSegment = useCallback(async (textPrompt) => {
