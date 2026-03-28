@@ -152,7 +152,8 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
     }
 
     console.log('[Segmentation] SAM raw output type:', typeof output,
-      Array.isArray(output) ? `array[${output.length}]` : '');
+      Array.isArray(output) ? `array[${output.length}]` : '',
+      output && typeof output === 'object' && !Array.isArray(output) ? `keys=${Object.keys(output).join(',')}` : '');
 
       const maskUrl = extractOutputUrl(output);
       if (!maskUrl) {
