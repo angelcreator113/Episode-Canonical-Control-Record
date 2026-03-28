@@ -426,16 +426,16 @@ const sceneService = {
    * Smart Select — SAM click-to-segment
    * POST /api/v1/scenes/:id/segment
    */
-  segmentObject: async (sceneId, { imageUrl, pointX, pointY, textPrompt, points, labels, imageWidth, imageHeight } = {}) => {
+  segmentObject: async (sceneId, opts = {}) => {
     const { data } = await api.post(`/api/v1/scenes/${sceneId}/segment`, {
-      image_url: imageUrl,
-      point_x: pointX,
-      point_y: pointY,
-      text_prompt: textPrompt || undefined,
-      points: points || undefined,
-      labels: labels || undefined,
-      image_width: imageWidth || undefined,
-      image_height: imageHeight || undefined,
+      image_url: opts.imageUrl,
+      point_x: opts.pointX,
+      point_y: opts.pointY,
+      text_prompt: opts.textPrompt || undefined,
+      points: opts.points || undefined,
+      labels: opts.labels || undefined,
+      image_width: opts.imageWidth || undefined,
+      image_height: opts.imageHeight || undefined,
     });
     return data;
   },
