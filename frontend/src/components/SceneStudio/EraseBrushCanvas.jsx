@@ -82,6 +82,7 @@ export default function EraseBrushCanvas({
   const [samPreviewUrl, setSamPreviewUrl] = useState(null); // preview before commit
   // Multi-point accumulation for smart select
   const [smartPoints, setSmartPoints] = useState([]); // [{x, y, label, canvasX, canvasY}]
+  const [preSmartHistoryIndex, setPreSmartHistoryIndex] = useState(-1); // canvas state before first smart click
   const [smartFindQuery, setSmartFindQuery] = useState('');
   const [isSmartFinding, setIsSmartFinding] = useState(false);
 
@@ -98,6 +99,7 @@ export default function EraseBrushCanvas({
     setLassoPoints([]);
     setCursorPos(null);
     setSmartPoints([]);
+    setPreSmartHistoryIndex(-1);
     setDrawModeRaw(mode);
   }, []);
   const [variationCount, setVariationCount] = useState(1);
@@ -405,8 +407,16 @@ export default function EraseBrushCanvas({
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
       const newPoint = { x: normalizedX, y: normalizedY, label, canvasX: x, canvasY: y };
+      const isFirstSmartClick = smartPoints.length === 0;
       const updatedPoints = [...smartPoints, newPoint];
       setSmartPoints(updatedPoints);
+
+      // Remember canvas state before first smart click so we can restore on each refinement
+      if (isFirstSmartClick) {
+        setPreSmartHistoryIndex(historyIndex);
+      }
+      // Capture the baseline index to use in the async callback
+      const baselineIndex = isFirstSmartClick ? historyIndex : preSmartHistoryIndex;
 
       // Auto-fire SAM with all accumulated points
       setSegmentClickPos({ x, y });
@@ -429,9 +439,10 @@ export default function EraseBrushCanvas({
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
 
-            // Restore to state before any SAM mask was drawn
-            if (historyIndex >= 0 && strokeHistory[historyIndex]) {
-              ctx.putImageData(strokeHistory[historyIndex], 0, 0);
+            // Always restore to the pre-SAM state (before first smart click)
+            // This replaces the previous SAM mask instead of stacking
+            if (baselineIndex >= 0 && strokeHistory[baselineIndex]) {
+              ctx.putImageData(strokeHistory[baselineIndex], 0, 0);
             } else {
               ctx.clearRect(0, 0, canvas.width, canvas.height);
             }

@@ -21,9 +21,10 @@ const s3 = new S3Client({ region: AWS_REGION });
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
-// SAM model for click-to-segment
-// Default: schananas/grounded_sam — supports point-based image segmentation
-const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'schananas/grounded_sam';
+// SAM model for click-to-segment (supports multi-point)
+const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'meta/sam-2.1-base';
+// Grounded SAM for text-based object detection (text_prompt support)
+const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'schananas/grounded_sam';
 
 /**
  * Extract output URL from Replicate output (handles various formats).
@@ -395,7 +396,9 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
   }
 
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
-  console.log(`[Segmentation] Text-based segment: "${textPrompt}" using ${SAM_MODEL}`);
+  // Text-based detection requires Grounded SAM (SAM 2 base doesn't support text_prompt)
+  const textModel = GROUNDED_SAM_MODEL;
+  console.log(`[Segmentation] Text-based segment: "${textPrompt}" using ${textModel}`);
 
   const MAX_RETRIES = 3;
   const RETRY_DELAYS = [2000, 4000, 8000];
@@ -408,7 +411,7 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
     }
 
     try {
-      const output = await replicate.run(SAM_MODEL, {
+      const output = await replicate.run(textModel, {
         input: {
           image: imageUrl,
           text_prompt: textPrompt,
