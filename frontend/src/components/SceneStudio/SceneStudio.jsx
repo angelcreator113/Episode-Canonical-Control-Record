@@ -944,7 +944,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         maskDataUrl: preciseMaskDataUrl,
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
-        strictRemove: false,
+        strictRemove: !trimmedPrompt,
         maskExpand,
         maskFeather,
       });
@@ -1029,7 +1029,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
         strength: options.strength,
-        strictRemove: false,
+        strictRemove: !trimmedPrompt,
         maskExpand,
         maskFeather,
       });
