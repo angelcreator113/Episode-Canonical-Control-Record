@@ -1,10 +1,9 @@
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
-import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp } from 'lucide-react';
+import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp, Layers, Settings, Merge } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
 import EraseBrushCanvas from './EraseBrushCanvas';
 import Toolbar, { PLATFORM_PRESETS } from './Toolbar';
-import GuidedFlow from './GuidedFlow';
 import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
 import SmartSuggestions from './panels/SmartSuggestions';
@@ -125,6 +124,53 @@ function getInpaintCooldownMs(err) {
   return 20000;
 }
 
+async function getMaskBoundingBoxFromDataUrl(maskDataUrl) {
+  const maskImg = await loadImage(maskDataUrl);
+  const w = maskImg.naturalWidth || maskImg.width;
+  const h = maskImg.naturalHeight || maskImg.height;
+  if (!w || !h) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.drawImage(maskImg, 0, 0, w, h);
+  const { data } = ctx.getImageData(0, 0, w, h);
+
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      const r = data[idx] || 0;
+      const g = data[idx + 1] || 0;
+      const b = data[idx + 2] || 0;
+      const a = data[idx + 3] || 0;
+      const lum = (r + g + b) / 3;
+      const on = a > 8 && lum > 8;
+      if (!on) continue;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return null;
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX + 1,
+    height: maxY - minY + 1,
+  };
+}
+
 const QUICK_ADD_OPTIONS = [
   { key: 'generate', label: 'Generate', icon: Sparkles },
   { key: 'upload', label: 'Upload', icon: Upload },
@@ -175,8 +221,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [hasMask, setHasMask] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
   const [maskMode, setMaskMode] = useState('add');
-  const [maskExpand, setMaskExpand] = useState(3);
-  const [maskFeather, setMaskFeather] = useState(1.1);
+  const [maskExpand, setMaskExpand] = useState(10);
+  const [maskFeather, setMaskFeather] = useState(2);
   const [isInpainting, setIsInpainting] = useState(false);
   const isInpaintingRef = useRef(false);
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -214,6 +260,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [showFirstHint, setShowFirstHint] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [backgroundSelected, setBackgroundSelected] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState(null); // null | 'left' | 'right'
   const prevObjectCountRef = useRef(0);
 
   useEffect(() => {
@@ -570,7 +617,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     const target = e.target;
     const studioObj = target.closest?.('.scene-studio-object-row');
     if (studioObj) return; // Let ObjectsPanel handle its own context
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    // Clamp to viewport so menu doesn't go off-screen
+    const menuW = 180;
+    const menuH = 220;
+    const clampedX = Math.min(e.clientX, window.innerWidth - menuW - 8);
+    const clampedY = Math.min(e.clientY, window.innerHeight - menuH - 8);
+    setContextMenu({ x: Math.max(8, clampedX), y: Math.max(8, clampedY) });
   }, []);
 
   // Close context menu on any click
@@ -892,7 +944,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         maskDataUrl: preciseMaskDataUrl,
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
-        strictRemove: false,
+        strictRemove: !trimmedPrompt,
         maskExpand,
         maskFeather,
       });
@@ -977,7 +1029,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
         strength: options.strength,
-        strictRemove: false,
+        strictRemove: !trimmedPrompt,
         maskExpand,
         maskFeather,
       });
@@ -1014,64 +1066,89 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, backgroundUrl, maskExpand, maskFeather]);
 
-  // ── Replace with Image handler ──
-  // Uses AI-guided reference fill: composites the reference onto the background
-  // server-side, then runs SDXL to blend edges naturally.
+  // ── Use Image — just add as a layer with optional bg removal ──
+  // No erasing, no blending. User does those separately:
+  //   Apply = erase (LaMa removes the object)
+  //   Use Image = add replacement layer (with bg removed)
+  //   Merge & Blend = flatten layer into background (when happy with position)
   const handleReplaceWithImage = useCallback(async (maskDataUrl, options = {}) => {
     if (isInpaintingRef.current) return;
-    const { imageDataUrl, removeBg: shouldRemoveBg } = options;
-    if (!imageDataUrl || !backgroundUrl) {
-      setInpaintError('No background image to replace into');
-      return;
-    }
-    if (inpaintCooldownRef.current > Date.now()) {
-      const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
-      setInpaintError(`Too many requests. Please wait ${seconds}s and try again.`);
+    const { imageDataUrl, removeBg: shouldRemoveBg, assetId } = options;
+    if (!imageDataUrl) {
+      setInpaintError('No image selected');
       return;
     }
 
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintError('');
-    setInpaintNotice('Replacing with image and blending edges...');
+    setInpaintNotice(shouldRemoveBg ? 'Removing background and placing image...' : 'Placing image...');
+
     try {
-      console.log('[Replace] AI-guided reference fill', shouldRemoveBg ? '(with bg removal)' : '');
-      const result = await sceneService.inpaintScene(state.contextId, {
-        imageUrl: backgroundUrl,
-        maskDataUrl,
-        referenceImageUrl: imageDataUrl,
-        removeReferenceBg: shouldRemoveBg || false,
-        prompt: 'Seamless blend, match surrounding lighting and perspective',
-        mode: 'fill',
-        strength: 0.45,
-        maskExpand,
-        maskFeather,
+      // Get mask bounds to know where to place the image
+      const maskBox = await getMaskBoundingBoxFromDataUrl(maskDataUrl);
+
+      // Determine placement area — use mask bounds if available, otherwise center of canvas
+      const placeX = maskBox ? maskBox.x : canvasWidth / 4;
+      const placeY = maskBox ? maskBox.y : canvasHeight / 4;
+      const placeW = maskBox ? maskBox.width : canvasWidth / 2;
+      const placeH = maskBox ? maskBox.height : canvasHeight / 2;
+
+      // Optionally remove background via backend rembg
+      let finalImageUrl = imageDataUrl;
+      if (shouldRemoveBg && assetId) {
+        try {
+          setInpaintNotice('Removing background from image...');
+          const bgResult = await assetService.removeBackground(assetId);
+          const removedUrl = bgResult?.data?.url || bgResult?.url;
+          if (removedUrl) finalImageUrl = removedUrl;
+        } catch (bgErr) {
+          console.warn('BG removal failed, using original:', bgErr.message);
+        }
+      }
+
+      // Scale to fit placement area
+      const refImg = await loadImage(finalImageUrl);
+      const refW = refImg.naturalWidth || refImg.width || placeW;
+      const refH = refImg.naturalHeight || refImg.height || placeH;
+      const refAspect = refW / Math.max(1, refH);
+      const boxAspect = placeW / Math.max(1, placeH);
+
+      let targetW = placeW;
+      let targetH = placeH;
+      if (refAspect > boxAspect) {
+        targetH = Math.max(8, Math.round(placeW / refAspect));
+      } else {
+        targetW = Math.max(8, Math.round(placeH * refAspect));
+      }
+
+      // Add as movable layer
+      const objId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      state.addObject({
+        id: objId,
+        type: 'image',
+        assetId: assetId || undefined,
+        assetUrl: finalImageUrl,
+        x: Math.round(placeX + (placeW - targetW) / 2),
+        y: Math.round(placeY + (placeH - targetH) / 2),
+        width: targetW,
+        height: targetH,
+        rotation: 0,
+        opacity: 1,
+        label: 'Replacement',
       });
 
-      if (result?.success && result.data?.inpainted_url) {
-        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
-        state.setActiveTool('select');
-      }
+      state.setActiveTool('select');
+      state.selectObject(objId);
     } catch (err) {
-      if (err?.response?.status === 429) {
-        console.warn('Replace rate-limited (429):', err?.response?.data?.error || err.message);
-        const cooldownMs = getInpaintCooldownMs(err);
-        if (cooldownMs > 0) {
-          const cooldownUntil = Date.now() + cooldownMs;
-          inpaintCooldownRef.current = cooldownUntil;
-          setInpaintCooldownUntil(cooldownUntil);
-        }
-        setInpaintError(err?.response?.data?.error || 'Too many requests. Please wait and try again.');
-      } else {
-        console.error('Replace with image error:', err);
-        setInpaintError(err?.response?.data?.error || err.message || 'Failed to replace with image');
-      }
+      console.error('Use Image error:', err);
+      setInpaintError(err.message || 'Failed to add image');
     } finally {
       isInpaintingRef.current = false;
       setIsInpainting(false);
       setInpaintNotice(null);
     }
-  }, [state, backgroundUrl, maskExpand, maskFeather]);
+  }, [state, canvasWidth, canvasHeight]);
 
   // ── Smart Select (SAM segmentation) ──
   const handleSegment = useCallback(async (normalizedX, normalizedY) => {
@@ -1090,6 +1167,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         imageUrl: targetUrl,
         pointX: normalizedX,
         pointY: normalizedY,
+        imageWidth: backgroundLayout?.sourceWidth,
+        imageHeight: backgroundLayout?.sourceHeight,
       });
       if (result?.success && result.data?.maskUrl) {
         return result.data.maskUrl;
@@ -1105,7 +1184,215 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
       return null;
     }
+  }, [state, backgroundUrl, backgroundLayout]);
+
+  // Multi-point segment — sends all accumulated points to SAM in one call
+  const handleMultiPointSegment = useCallback(async (points, labels) => {
+    const contextId = state.contextId;
+    if (!contextId || !points?.length) return null;
+
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    try {
+      const result = await sceneService.segmentObject(contextId, {
+        imageUrl: targetUrl,
+        points,
+        labels,
+        imageWidth: backgroundLayout?.sourceWidth,
+        imageHeight: backgroundLayout?.sourceHeight,
+      });
+      if (result?.success && result.data?.maskUrl) {
+        return result.data.maskUrl;
+      }
+      return null;
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        setInpaintError(err?.response?.data?.error || 'Too many requests. Wait a few seconds and try again.');
+      } else {
+        setInpaintError(err?.response?.data?.error || 'Smart select failed. Try brush or lasso instead.');
+      }
+      return null;
+    }
+  }, [state, backgroundUrl, backgroundLayout]);
+
+  // Smart Find — text-based object detection via Grounded SAM
+  const handleTextSegment = useCallback(async (textPrompt) => {
+    const contextId = state.contextId;
+    if (!contextId || !textPrompt?.trim()) return null;
+
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    try {
+      const result = await sceneService.segmentObject(contextId, {
+        imageUrl: targetUrl,
+        textPrompt: textPrompt.trim(),
+      });
+      if (result?.success && result.data?.maskUrl) {
+        return result.data.maskUrl;
+      }
+      return null;
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        setInpaintError(err?.response?.data?.error || 'Too many requests. Wait a few seconds and try again.');
+      } else {
+        setInpaintError(err?.response?.data?.error || 'Could not find that object. Try a different description.');
+      }
+      return null;
+    }
   }, [state, backgroundUrl]);
+
+  // ── Extract selection as movable object ──
+  // Cuts the masked area from the background and adds it as a canvas object
+  const handleExtractSelection = useCallback(async (maskDataUrl) => {
+    if (!backgroundUrl) return;
+    try {
+      const [bgImg, maskImg] = await Promise.all([
+        loadImage(backgroundUrl),
+        loadImage(maskDataUrl),
+      ]);
+
+      // Create canvas with just the masked area
+      const canvas = document.createElement('canvas');
+      canvas.width = bgImg.width;
+      canvas.height = bgImg.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      // Draw background
+      ctx.drawImage(bgImg, 0, 0);
+
+      // Apply mask: keep only where mask is white
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
+
+      // Find bounding box of non-transparent pixels
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          if (imageData.data[(y * canvas.width + x) * 4 + 3] > 10) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (maxX <= minX || maxY <= minY) return;
+
+      const cropW = maxX - minX + 1;
+      const cropH = maxY - minY + 1;
+
+      // Crop to bounding box
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = cropW;
+      croppedCanvas.height = cropH;
+      const cropCtx = croppedCanvas.getContext('2d');
+      cropCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+
+      const extractedDataUrl = croppedCanvas.toDataURL('image/png');
+
+      // Scale to canvas coordinates
+      const scaleX = canvasWidth / bgImg.width;
+      const scaleY = canvasHeight / bgImg.height;
+
+      // Add as object
+      const objId = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      state.addObject({
+        id: objId,
+        type: 'image',
+        assetUrl: extractedDataUrl,
+        x: Math.round(minX * scaleX),
+        y: Math.round(minY * scaleY),
+        width: Math.round(cropW * scaleX),
+        height: Math.round(cropH * scaleY),
+        rotation: 0,
+        opacity: 1,
+        label: 'Extracted',
+        usageType: 'overlay',
+      });
+
+      state.setActiveTool('select');
+    } catch (err) {
+      console.error('Extract selection error:', err);
+    }
+  }, [backgroundUrl, canvasWidth, canvasHeight, state]);
+
+  // ── Merge & Blend — flatten selected object into background with AI edge blending ──
+  const [isMerging, setIsMerging] = useState(false);
+
+  const handleMergeAndBlend = useCallback(async (objectId) => {
+    if (isInpaintingRef.current || isMerging) return;
+    const obj = state.objects.find((o) => o.id === objectId);
+    if (!obj || obj.type !== 'image' || !obj.assetUrl || !backgroundUrl) return;
+
+    setIsMerging(true);
+    setInpaintError('');
+    setInpaintNotice('Merging and blending edges...');
+    try {
+      // Create a mask around the object's position for server-side compositing
+      const margin = 20;
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = canvasWidth;
+      maskCanvas.height = canvasHeight;
+      const maskCtx = maskCanvas.getContext('2d');
+
+      maskCtx.fillStyle = '#000000';
+      maskCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      maskCtx.fillStyle = '#ffffff';
+      const bx = Math.max(0, (obj.x || 0) - margin);
+      const by = Math.max(0, (obj.y || 0) - margin);
+      const bw = Math.min(canvasWidth - bx, (obj.width || 100) + margin * 2);
+      const bh = Math.min(canvasHeight - by, (obj.height || 100) + margin * 2);
+      const radius = Math.min(15, bw / 4, bh / 4);
+      maskCtx.beginPath();
+      maskCtx.moveTo(bx + radius, by);
+      maskCtx.lineTo(bx + bw - radius, by);
+      maskCtx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius);
+      maskCtx.lineTo(bx + bw, by + bh - radius);
+      maskCtx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius, by + bh);
+      maskCtx.lineTo(bx + radius, by + bh);
+      maskCtx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius);
+      maskCtx.lineTo(bx, by + radius);
+      maskCtx.quadraticCurveTo(bx, by, bx + radius, by);
+      maskCtx.closePath();
+      maskCtx.fill();
+
+      const maskDataUrl = maskCanvas.toDataURL('image/png');
+
+      // Use server-side compositing + SDXL blend (no toDataURL needed)
+      const result = await sceneService.inpaintScene(state.contextId, {
+        imageUrl: backgroundUrl,
+        maskDataUrl,
+        referenceImageUrl: obj.assetUrl,
+        prompt: 'Seamless blend, match surrounding lighting, texture and perspective. Photorealistic continuity.',
+        mode: 'fill',
+        strength: 0.35,
+      });
+
+      if (result?.success && result.data?.inpainted_url) {
+        state.removeObject(objectId);
+        state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+      }
+    } catch (err) {
+      console.error('Merge and blend error:', err);
+      setInpaintError(err?.response?.data?.error || err.message || 'Merge failed');
+    } finally {
+      setIsMerging(false);
+      setInpaintNotice(null);
+    }
+  }, [state, backgroundUrl, canvasWidth, canvasHeight, isMerging]);
 
   // ── Remove Background from selected object ──
 
@@ -1268,18 +1555,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         </div>
       )}
       {/* Guided Flow Stepper */}
-      <GuidedFlow
-        hasBackground={!!backgroundUrl}
-        objectCount={state.objects.length}
-        hasEffects={state.objects.some((o) => o.styleData?.shadow?.enabled || o.styleData?.blur > 0)}
-        dismissed={state.canvasSettings.guidedFlowDismissed}
-        onDismiss={() => state.updateCanvasSettings({ guidedFlowDismissed: true })}
-      />
-
       <div className="scene-studio-body">
+        {/* Mobile panel backdrop */}
+        {mobilePanel && (
+          <div className="scene-studio-mobile-backdrop" onClick={() => setMobilePanel(null)} />
+        )}
+
         {/* Left Panel */}
         {isCreationPanelOpen && (
-          <div className="scene-studio-left-panel">
+          <div className={`scene-studio-left-panel ${mobilePanel === 'left' ? 'mobile-open' : ''}`}>
             <CreationPanel
               showId={showId}
               episodeId={episodeId}
@@ -1375,9 +1659,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               panX={state.canvasSettings.panX}
               panY={state.canvasSettings.panY}
               backgroundUrl={backgroundUrl}
+              backgroundLayout={backgroundLayout}
               onApply={handleEraseApply}
               onReplaceWithImage={handleReplaceWithImage}
               onSegment={handleSegment}
+              onMultiPointSegment={handleMultiPointSegment}
+              onTextSegment={handleTextSegment}
+              onExtractSelection={handleExtractSelection}
               onCancel={() => state.setActiveTool('select')}
               isProcessing={isInpainting}
               sceneId={sceneId || sceneSetId}
@@ -1419,7 +1707,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         </div>
 
         {/* Right Panel */}
-        <div className="scene-studio-right-panel">
+        <div className={`scene-studio-right-panel ${mobilePanel === 'right' ? 'mobile-open' : ''}`}>
           <InspectorPanel
             objects={state.objects}
             selectedIds={state.selectedIds}
@@ -1528,6 +1816,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   <button
                     type="button"
                     className="scene-studio-action-btn"
+                    onClick={() => {
+                      if (selObj) handleMergeAndBlend(selObj.id);
+                    }}
+                    disabled={!selObj || isMerging || isInpainting}
+                    title={selObj ? 'Merge selected object into background with AI edge blending' : 'Select an image object to merge'}
+                  >
+                    <Merge size={14} />
+                    <span>{isMerging ? 'Blending...' : 'Merge & Blend'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="scene-studio-action-btn"
                     onClick={() => state.setActiveTool('erase')}
                     disabled={!backgroundUrl && state.objects.length === 0}
                     title="Erase areas and fill with AI or an image"
@@ -1553,6 +1853,26 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             >
               <Undo2 size={14} />
               <span>Undo</span>
+            </button>
+          </div>
+
+          {/* Mobile panel toggles — visible on small screens via CSS */}
+          <div className="scene-studio-action-bar-group scene-studio-mobile-toggles">
+            <button
+              type="button"
+              className="scene-studio-action-btn"
+              onClick={() => setMobilePanel(mobilePanel === 'left' ? null : 'left')}
+              title="Objects & Library"
+            >
+              <Layers size={14} />
+            </button>
+            <button
+              type="button"
+              className="scene-studio-action-btn"
+              onClick={() => setMobilePanel(mobilePanel === 'right' ? null : 'right')}
+              title="Inspector"
+            >
+              <Settings size={14} />
             </button>
           </div>
         </div>

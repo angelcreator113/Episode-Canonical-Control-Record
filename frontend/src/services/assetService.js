@@ -67,12 +67,7 @@ export const assetService = {
    * Remove background from asset (for composer)
    */
   removeBackground: async (assetId) => {
-    const res = await fetch(`/api/v1/assets/${assetId}/remove-background`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" }
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "Background removal failed");
+    const { data } = await api.post(`/api/v1/assets/${assetId}/remove-background`);
     return data;
   },
 

@@ -18,12 +18,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 48px;
-  padding: 0 12px;
+  height: 44px;
+  padding: 0 4px;
   background: #FAF7F0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
-  gap: 8px;
+  gap: 2px;
 }
 
 .scene-studio-toolbar-left,
@@ -31,7 +31,7 @@
 .scene-studio-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -48,10 +48,10 @@
 }
 
 .scene-studio-toolbar-title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   color: #2C2C2C;
-  max-width: 200px;
+  max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -97,9 +97,9 @@
 }
 
 .scene-studio-zoom-label {
-  font-size: 12px;
+  font-size: 10px;
   color: #666;
-  min-width: 44px;
+  min-width: 30px;
   text-align: center;
 }
 
@@ -180,15 +180,29 @@
 
 /* ── Left Panel ── */
 
+/* Mobile: panels are slide-out drawers */
 .scene-studio-left-panel {
+  position: fixed;
+  top: 44px;
+  bottom: 0;
+  left: 0;
   width: 280px;
-  max-width: 25vw;
+  max-width: 85vw;
+  z-index: 100;
   background: #FAF7F0;
   border-right: 1px solid rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+  transform: translateX(-100%);
+  transition: transform 200ms ease;
   flex-shrink: 0;
+}
+
+.scene-studio-left-panel.mobile-open {
+  transform: translateX(0);
 }
 
 /* ── Canvas Container ── */
@@ -202,13 +216,36 @@
 
 /* ── Right Panel ── */
 
+/* Mobile: slide-out from right */
 .scene-studio-right-panel {
+  position: fixed;
+  top: 44px;
+  bottom: 0;
+  right: 0;
+  left: auto;
   width: 260px;
-  max-width: 22vw;
+  max-width: 85vw;
+  z-index: 100;
   background: #FAF7F0;
   border-left: 1px solid rgba(0, 0, 0, 0.1);
   overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+  transform: translateX(100%);
+  transition: transform 200ms ease;
   flex-shrink: 0;
+}
+
+.scene-studio-right-panel.mobile-open {
+  transform: translateX(0);
+}
+
+/* Mobile panel backdrop */
+.scene-studio-mobile-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 99;
 }
 
 /* ── Panel Header ── */
@@ -1525,7 +1562,9 @@
   border: 1px solid rgba(184, 150, 46, 0.3);
 }
 
+/* Hidden by default on mobile, shown at 1280px+ */
 .scene-studio-tool-label {
+  display: none;
   font-size: 8px;
   font-family: 'DM Mono', monospace;
   line-height: 1;
@@ -1732,38 +1771,6 @@
   color: #8B7220;
 }
 
-/* ── Responsive ── */
-
-@media (max-width: 1280px) {
-  .scene-studio-tool-label {
-    display: none;
-  }
-  .scene-studio-tool-btn-labeled {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    padding: 0;
-  }
-}
-
-@media (max-width: 1024px) {
-  .scene-studio-left-panel {
-    width: 200px;
-  }
-  .scene-studio-right-panel {
-    width: 200px;
-  }
-  .scene-studio-toolbar {
-    padding: 0 8px;
-    gap: 4px;
-  }
-  .scene-studio-toolbar-left,
-  .scene-studio-toolbar-center,
-  .scene-studio-toolbar-right {
-    gap: 4px;
-  }
-}
-
 /* ── Depth Estimation Controls ── */
 
 .scene-studio-depth-btn {
@@ -1855,13 +1862,6 @@
 
 .scene-studio-depth-regen:hover {
   background: rgba(0, 0, 0, 0.8);
-}
-
-@media (max-width: 768px) {
-  .scene-studio-left-panel,
-  .scene-studio-right-panel {
-    display: none;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2108,46 +2108,6 @@
    GUIDED FLOW STEPPER (Phase 7)
    ═══════════════════════════════════════════════════════════════ */
 
-.scene-studio-guided-flow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: 3px 12px;
-  background: #f0ede6;
-  border-bottom: 1px solid #e8e4dc;
-}
-
-.scene-studio-flow-step {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 12px;
-  font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  color: #bbb5a8;
-  border: none;
-  background: none;
-  cursor: default;
-  transition: color 150ms ease;
-}
-
-.scene-studio-flow-step.active {
-  color: #B8962E;
-  font-weight: 600;
-}
-
-.scene-studio-flow-step.done {
-  color: #27ae60;
-}
-
-.scene-studio-flow-arrow {
-  color: #d6d0c4;
-  font-size: 10px;
-  padding: 0 2px;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    SCENE STATES TAB
    ═══════════════════════════════════════════════════════════════ */
@@ -2393,22 +2353,6 @@
   padding: 6px 10px;
 }
 
-@media (max-width: 1100px) {
-  .scene-studio-erase-controls {
-    width: min(95vw, 760px);
-    font-size: 10px;
-  }
-
-  .scene-studio-erase-controls input[type="range"] {
-    width: clamp(100px, 18vw, 150px);
-  }
-
-  .scene-studio-erase-actions {
-    margin-left: 0;
-    width: 100%;
-  }
-}
-
 .scene-studio-erase-prompt {
   padding: 4px 8px;
   border: 1px solid #d6d0c4;
@@ -2430,16 +2374,19 @@
    BOTTOM ACTION BAR
    ═══════════════════════════════════════════════════════════════ */
 
+/* Mobile-first: compact, icons-only, scrollable */
 .scene-studio-action-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
+  gap: 4px;
+  padding: 5px 8px;
   background: #f5f1ea;
   border-top: 1px solid #d6d0c4;
   flex-shrink: 0;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .scene-studio-action-bar-group {
@@ -2448,7 +2395,9 @@
   gap: 4px;
 }
 
+/* Hidden on mobile, shown on tablet+ */
 .scene-studio-action-bar-divider {
+  display: none;
   width: 1px;
   height: 22px;
   background: #d6d0c4;
@@ -2459,7 +2408,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 12px;
+  padding: 6px 8px;
+  min-height: 36px;
   border: 1px solid #d6d0c4;
   border-radius: 6px;
   background: #fff;
@@ -2469,6 +2419,11 @@
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+}
+
+/* Labels hidden on mobile — icons only */
+.scene-studio-action-btn span {
+  display: none;
 }
 
 .scene-studio-action-btn:hover:not(:disabled) {
@@ -2532,22 +2487,6 @@
   background: #f0ece4;
 }
 
-@media (max-width: 768px) {
-  .scene-studio-action-bar {
-    padding: 5px 10px;
-    gap: 4px;
-    overflow-x: auto;
-  }
-
-  .scene-studio-action-btn span {
-    display: none;
-  }
-
-  .scene-studio-action-btn {
-    padding: 5px 8px;
-  }
-}
-
 /* ═══════════════════════════════════════════════════════════════
    ERASE BRUSH CANVAS — Bottom-docked toolbar
    ═══════════════════════════════════════════════════════════════ */
@@ -2586,6 +2525,7 @@
 
 /* ── Bottom-docked toolbar ── */
 
+/* Mobile-first: compact erase toolbar */
 .erase-toolbar {
   position: absolute;
   bottom: 0;
@@ -2594,10 +2534,10 @@
   background: #FAF7F0;
   border-top: 1px solid #d6d0c4;
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
-  padding: 8px 12px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   font-family: 'DM Mono', monospace;
   font-size: 11px;
   color: #2C2C2C;
@@ -2607,6 +2547,7 @@
 
 .erase-toolbar-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap;
@@ -2620,8 +2561,9 @@
   flex-shrink: 0;
 }
 
+/* Hidden on mobile, shown on desktop */
 .erase-toolbar-spacer {
-  flex: 1;
+  display: none;
 }
 
 .erase-toolbar-actions {
@@ -2653,7 +2595,7 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border: none;
   border-radius: 5px;
   background: transparent;
@@ -2758,6 +2700,130 @@
 .erase-brush-type-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ── Smart Find ── */
+
+.erase-smart-find-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.erase-smart-find-icon {
+  color: #999;
+  flex-shrink: 0;
+}
+
+.erase-smart-find-input {
+  padding: 4px 8px;
+  border: 1px solid #d6d0c4;
+  border-radius: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  background: #fff;
+  color: #2C2C2C;
+  width: 180px;
+}
+
+.erase-smart-find-input:focus {
+  outline: none;
+  border-color: #B8962E;
+}
+
+.erase-smart-find-input:disabled {
+  opacity: 0.5;
+}
+
+.erase-smart-find-btn {
+  padding: 4px 10px;
+  border: 1px solid #B8962E;
+  border-radius: 5px;
+  background: #B8962E;
+  color: #fff;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.erase-smart-find-btn:hover:not(:disabled) {
+  background: #a07e24;
+}
+
+.erase-smart-find-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.erase-smart-adjust-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.erase-smart-adjust-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 8px;
+  border: 1px solid #d6d0c4;
+  border-radius: 4px;
+  background: #fff;
+  color: #666;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.erase-smart-adjust-btn:hover:not(:disabled) {
+  border-color: #B8962E;
+  color: #2C2C2C;
+}
+
+.erase-smart-adjust-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.erase-smart-adjust-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #999;
+  margin-left: 4px;
+}
+
+/* ── Smart Point Markers ── */
+
+.erase-smart-point {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 5;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.erase-smart-point.include {
+  background: rgba(34, 197, 94, 0.85);
+  color: #fff;
+}
+
+.erase-smart-point.exclude {
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
 }
 
 /* ── Undo / Redo ── */
@@ -3010,6 +3076,17 @@
   margin: 4px 0;
 }
 
+.erase-image-menu-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #B8962E;
+  background: rgba(184, 150, 46, 0.08);
+  padding: 5px 8px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  line-height: 1.3;
+}
+
 .erase-image-menu-label {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
@@ -3174,6 +3251,15 @@
   padding: 2px 0;
 }
 
+/* Smart Select: loading indicator at click point */
+.erase-segment-loading {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #667eea;
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px rgba(102, 126, 234, 0.5));
+}
+
 .erase-brush-shortcuts {
   font-size: 9px;
   color: #bbb;
@@ -3190,25 +3276,7 @@
   animation: erase-spin 1s linear infinite;
 }
 
-/* ── Responsive ── */
-
-@media (max-width: 900px) {
-  .erase-toolbar-row {
-    flex-wrap: wrap;
-  }
-
-  .erase-toolbar-spacer {
-    display: none;
-  }
-
-  .erase-btn-label {
-    display: none;
-  }
-
-  .erase-brush-size-row input[type="range"] {
-    width: 60px;
-  }
-}
+/* Responsive rules moved to min-width blocks at end of file */
 
 /* ═══════════════════════════════════════════════════════════════
    ANIMATION PANEL
@@ -3499,3 +3567,279 @@
 /* ═══════════════════════════════════════════════════════════════
    DRAG SELECTION BOX (already in Layer, just documenting)
    ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE-FIRST RESPONSIVE SCALING
+   Base styles target 375px. Scale up with min-width breakpoints.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Mobile base: panel toggles visible, labels hidden, icons only */
+.scene-studio-mobile-toggles {
+  display: flex;
+  margin-left: auto;
+}
+.scene-studio-toolbar-actions .scene-studio-btn span { display: none; }
+.erase-mode-btn span { display: none; }
+.erase-btn-label { display: none; }
+.erase-remove-bg-toggle { display: none !important; }
+.scene-studio-first-hint { bottom: 52px; }
+
+/* ── Tablet Portrait (768px and below) ── */
+
+/* ── Tablet (768px+) — panels become static, show labels ── */
+
+@media (min-width: 768px) {
+  .scene-studio-toolbar {
+    padding: 0 8px;
+    gap: 4px;
+  }
+
+  .scene-studio-toolbar-title {
+    max-width: 120px;
+    font-size: 12px;
+  }
+
+  .scene-studio-toolbar-left,
+  .scene-studio-toolbar-center,
+  .scene-studio-toolbar-right {
+    gap: 6px;
+  }
+
+  .scene-studio-zoom-label {
+    font-size: 11px;
+    min-width: 38px;
+  }
+
+  /* Panels become static sidebars */
+  .scene-studio-left-panel {
+    position: static;
+    top: auto;
+    bottom: auto;
+    transform: none;
+    z-index: auto;
+    box-shadow: none;
+    max-width: 25vw;
+    width: 200px;
+    transition: none;
+  }
+
+  .scene-studio-right-panel {
+    position: static;
+    top: auto;
+    bottom: auto;
+    right: auto;
+    left: auto;
+    transform: none;
+    z-index: auto;
+    box-shadow: none;
+    max-width: 22vw;
+    width: 200px;
+    transition: none;
+  }
+
+  /* Hide mobile panel toggles */
+  .scene-studio-mobile-toggles {
+    display: none;
+  }
+
+  /* Show action bar labels and dividers */
+  .scene-studio-action-bar {
+    padding: 5px 12px;
+    gap: 6px;
+    overflow-x: visible;
+  }
+
+  .scene-studio-action-btn {
+    padding: 5px 10px;
+    min-height: 38px;
+  }
+
+  .scene-studio-action-btn span {
+    display: inline;
+  }
+
+  .scene-studio-action-bar-divider {
+    display: block;
+  }
+
+  .scene-studio-toolbar-actions .scene-studio-btn span {
+    display: inline;
+  }
+
+  /* Show erase labels */
+  .erase-mode-btn span { display: inline; }
+  .erase-btn-label { display: inline; }
+  .erase-remove-bg-toggle { display: flex !important; }
+  .erase-mode-btn { padding: 4px 10px; }
+
+  /* Show guided flow */
+
+  /* First hint at normal position */
+  .scene-studio-first-hint { bottom: 60px; }
+
+  /* Save error banner full size */
+  .scene-studio-save-error-banner {
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+
+  /* Erase toolbar expands */
+  .erase-toolbar {
+    padding: 7px 10px;
+    gap: 5px;
+  }
+
+  .erase-toolbar-row {
+    gap: 6px;
+  }
+
+  .erase-brush-size-row input[type="range"] {
+    width: 70px;
+  }
+
+  /* Export dialog expands */
+  .scene-studio-export-panel {
+    min-width: 320px;
+    width: auto;
+    max-width: none;
+    padding: 24px;
+  }
+}
+
+/* ── Desktop (1024px+) — full toolbar, erase unwraps ── */
+
+@media (min-width: 1024px) {
+  .scene-studio-toolbar {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .scene-studio-toolbar-left,
+  .scene-studio-toolbar-center,
+  .scene-studio-toolbar-right {
+    gap: 8px;
+  }
+
+  .scene-studio-toolbar-title {
+    max-width: 180px;
+    font-size: 13px;
+  }
+
+  .scene-studio-action-bar {
+    padding: 6px 16px;
+    gap: 6px;
+  }
+
+  .scene-studio-action-btn {
+    padding: 5px 12px;
+  }
+
+  /* Erase toolbar full layout */
+  .erase-toolbar {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .erase-toolbar-row {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .erase-toolbar-spacer {
+    display: block;
+    flex: 1;
+  }
+
+  .erase-brush-size-row input[type="range"] {
+    width: 80px;
+  }
+}
+
+/* ── Wide Desktop (1280px+) — full panels, show tool labels ── */
+
+@media (min-width: 1280px) {
+  .scene-studio-toolbar {
+    height: 48px;
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .scene-studio-toolbar-title {
+    max-width: 200px;
+  }
+
+  .scene-studio-zoom-label {
+    font-size: 12px;
+    min-width: 44px;
+  }
+
+  .scene-studio-left-panel {
+    width: 280px;
+  }
+
+  .scene-studio-right-panel {
+    width: 260px;
+  }
+
+  .scene-studio-tool-btn-labeled {
+    width: 40px;
+    height: 38px;
+  }
+
+  .scene-studio-tool-label {
+    display: block;
+  }
+}
+
+/* ── Landscape phones (short height) ── */
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .scene-studio-toolbar {
+    height: 36px;
+  }
+
+  .scene-studio-action-bar {
+    padding: 3px 6px;
+    min-height: 32px;
+  }
+
+  .erase-toolbar {
+    padding: 4px 6px;
+    gap: 3px;
+  }
+
+  .erase-toolbar-fill-row {
+    display: none;
+  }
+}
+
+/* ── Touch-friendly sizing ── */
+
+@media (pointer: coarse) {
+  .scene-studio-action-btn {
+    min-height: 44px;
+  }
+
+  .scene-studio-tool-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .erase-mode-btn {
+    min-height: 36px;
+  }
+
+  .erase-brush-btn {
+    min-height: 40px;
+  }
+
+  .erase-brush-action-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .erase-brush-size-btn {
+    width: 32px;
+    height: 32px;
+  }
+}

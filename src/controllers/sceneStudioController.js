@@ -1233,10 +1233,15 @@ exports.inpaint = async (req, res) => {
 exports.segmentObject = async (req, res) => {
   try {
     const { id } = req.params;
-    const { image_url, point_x, point_y } = req.body;
+    const { image_url, point_x, point_y, text_prompt, points, labels, image_width, image_height } = req.body;
+    const knownDims = (image_width > 0 && image_height > 0) ? { width: Number(image_width), height: Number(image_height) } : null;
 
-    if (point_x == null || point_y == null) {
-      return res.status(400).json({ success: false, error: 'point_x and point_y are required (0-1 normalized coordinates)' });
+    // Support both single point (legacy) and multi-point
+    const hasMultiPoint = Array.isArray(points) && points.length > 0;
+    const hasSinglePoint = point_x != null && point_y != null;
+
+    if (!text_prompt && !hasMultiPoint && !hasSinglePoint) {
+      return res.status(400).json({ success: false, error: 'Either text_prompt, points[], or point_x/point_y are required' });
     }
 
     const Scene = require('../models').Scene;
@@ -1251,16 +1256,22 @@ exports.segmentObject = async (req, res) => {
     }
 
     const segmentationService = require('../services/segmentationService');
-    const result = await segmentationService.segmentAtPoint(
-      sourceUrl,
-      Number(point_x),
-      Number(point_y),
-      id
-    );
+    let result;
+    if (text_prompt) {
+      result = await segmentationService.segmentByText(sourceUrl, text_prompt.trim(), id);
+    } else if (hasMultiPoint) {
+      result = await segmentationService.segmentMultiPoint(
+        sourceUrl, points, labels || points.map(() => 1), id, knownDims
+      );
+    } else {
+      result = await segmentationService.segmentAtPoint(
+        sourceUrl, Number(point_x), Number(point_y), id, knownDims
+      );
+    }
 
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error('Scene Studio segment error:', error);
+    console.error('Scene Studio segment error:', error?.message || error, error?.stack?.split('\n').slice(0, 3).join('\n'));
     const status = Number.isFinite(Number(error?.status)) ? Number(error.status) : 500;
     const retryAfter = Number.parseInt(String(error?.retryAfter || ''), 10);
     if (status === 429 && retryAfter > 0) {

@@ -257,13 +257,20 @@ async function runSdxlRemoval(imageUrl, maskUrl) {
 /**
  * Strict deterministic removal path for erase tool.
  * Runs LaMa for one or more passes and avoids generative models entirely.
+ * If a subsequent pass fails (e.g. rate limit), returns the best result so far.
  */
 async function runStrictLamaRemoval(imageUrl, maskUrl) {
   let currentUrl = imageUrl;
 
   for (let pass = 1; pass <= STRICT_REMOVE_PASSES; pass++) {
     console.log(`[Inpainting] Strict LaMa pass ${pass}/${STRICT_REMOVE_PASSES}`);
-    currentUrl = await runLamaRemoval(currentUrl, maskUrl);
+    try {
+      currentUrl = await runLamaRemoval(currentUrl, maskUrl);
+    } catch (err) {
+      if (pass === 1) throw err; // First pass must succeed
+      console.warn(`[Inpainting] LaMa pass ${pass} failed, using pass ${pass - 1} result:`, err.message);
+      break;
+    }
   }
 
   return currentUrl;
@@ -355,19 +362,28 @@ async function runFluxFillProRemoval(imageUrl, maskUrl) {
 async function removeBackgroundFromReference(referenceUrl, entityId) {
   const removeBgApiKey = process.env.REMOVEBG_API_KEY;
   if (!removeBgApiKey) {
-    console.log('[Inpainting] REMOVEBG_API_KEY not configured, skipping reference BG removal');
-    return referenceUrl;
+    console.log('[Inpainting] REMOVEBG_API_KEY not configured, falling back to Replicate background removal');
+    return removeImageBackground(referenceUrl, entityId);
   }
 
   try {
-    console.log('[Inpainting] Removing background from reference image via remove.bg');
-    const response = await axios.post(
-      'https://api.remove.bg/v1.0/removebg',
-      {
+    const isDataUrl = typeof referenceUrl === 'string' && /^data:image\//i.test(referenceUrl);
+    console.log(`[Inpainting] Removing background from reference image via remove.bg${isDataUrl ? ' (data URL)' : ''}`);
+    const requestBody = isDataUrl
+      ? {
+        image_file_b64: referenceUrl.replace(/^data:image\/\w+;base64,/, ''),
+        size: 'auto',
+        format: 'png',
+      }
+      : {
         image_url: referenceUrl,
         size: 'auto',
         format: 'png',
-      },
+      };
+
+    const response = await axios.post(
+      'https://api.remove.bg/v1.0/removebg',
+      requestBody,
       {
         headers: {
           'X-Api-Key': removeBgApiKey,
@@ -702,14 +718,15 @@ async function getRemoteImageDimensions(imageUrl) {
 }
 
 async function refineRemovalMask(maskBuffer, options = {}) {
-  const expandPx = Math.max(0, Math.min(20, Math.round(options.expandPx ?? 2)));
-  const featherPx = Math.max(0, Math.min(5, Number(options.featherPx ?? 0.8)));
+  const expandPx = Math.max(0, Math.min(20, Math.round(options.expandPx ?? 10)));
+  const featherPx = Math.max(0, Math.min(5, Number(options.featherPx ?? 2)));
 
-  // Slight dilation + feathering helps LaMa remove edge halos and leftover fragments.
+  // Expand mask and feather edges so LaMa removes edge halos and leftover fragments.
+  // Note: sharp's .erode() expands white regions on a mask (opposite of typical naming).
   return sharp(maskBuffer)
     .greyscale()
     .threshold(16)
-    .dilate(expandPx)
+    .erode(expandPx)
     .blur(featherPx)
     .png()
     .toBuffer();
@@ -778,7 +795,17 @@ async function storeMask(maskDataUrl, entityId, sourceImageUrl, options = {}) {
  * When mode is 'fill' (or a prompt is provided), uses SDXL inpainting.
  */
 async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {}) {
-  const { userId, strength, mode, removalTier, strictRemove = false, maskExpand, maskFeather, referenceImageUrl, removeReferenceBg } = options;
+  const {
+    userId,
+    strength,
+    mode,
+    removalTier,
+    strictRemove = false,
+    maskExpand,
+    maskFeather,
+    referenceImageUrl,
+    removeReferenceBg = false,
+  } = options;
 
   const rateCheck = checkRateLimit(userId, entityId);
   if (!rateCheck.allowed) {
@@ -806,20 +833,13 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
     // Reference image mode: composite the reference onto the background
     // and return directly without SDXL blending.
     if (referenceImageUrl) {
-      console.log(`[Inpainting] Mode: REFERENCE FILL — compositing + AI edge blend (removeBg=${!!removeReferenceBg})`);
-      // Optionally remove background from reference image first
-      let processedRefUrl = referenceImageUrl;
-      if (removeReferenceBg) {
-        processedRefUrl = await removeImageBackground(referenceImageUrl, entityId);
-      }
-      const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, processedRefUrl, entityId);
-      // Now inpaint the composited result with a soft edge blend
-      const blendPrompt = prompt || 'Seamless blend, match surrounding lighting, texture, and perspective. Photorealistic.';
-      // Create a dilated mask for edge blending only (expand the mask edges)
-      resultUrl = await runSdxlInpainting(compositedUrl, maskUrl, blendPrompt, {
-        strength: strength || 0.45,
-        guidanceScale: 5.0,
-      });
+      console.log('[Inpainting] Mode: REFERENCE FILL - direct compositing (no AI blend)');
+      const preparedReferenceUrl = removeReferenceBg
+        ? await removeBackgroundFromReference(referenceImageUrl, entityId)
+        : referenceImageUrl;
+      const compositedUrl = await compositeReferenceImage(imageUrl, maskUrl, preparedReferenceUrl, entityId);
+      console.log('[Replace] Frontend compositing - no AI call');
+      resultUrl = compositedUrl;
     } else if (isRemoval) {
       const tier = (removalTier || (mode === 'remove-premium' ? 'premium' : REMOVAL_TIER_DEFAULT)).toLowerCase();
       console.log(`[Inpainting] Mode: REMOVAL (tier=${tier}, strict=${strictRemove})`);
@@ -831,20 +851,17 @@ async function inpaintImage(imageUrl, maskDataUrl, prompt, entityId, options = {
         try {
           resultUrl = await runFluxFillProRemoval(imageUrl, maskUrl);
         } catch (fluxError) {
-          console.warn('[Inpainting] FLUX premium removal failed; falling back to SDXL:', fluxError.message);
-          try {
-            resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
-          } catch (sdxlError) {
-            console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
-            resultUrl = await runLamaRemoval(imageUrl, maskUrl);
-          }
+          console.warn('[Inpainting] FLUX premium removal failed; falling back to LaMa:', fluxError.message);
+          resultUrl = await runLamaRemoval(imageUrl, maskUrl);
         }
       } else {
+        // Standard tier: LaMa first (deterministic, actually removes objects)
+        // SDXL is too "creative" — regenerates similar objects instead of removing.
         try {
-          resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
-        } catch (sdxlError) {
-          console.warn('[Inpainting] SDXL removal failed; falling back to LaMa:', sdxlError.message);
           resultUrl = await runLamaRemoval(imageUrl, maskUrl);
+        } catch (lamaError) {
+          console.warn('[Inpainting] LaMa removal failed; falling back to SDXL:', lamaError.message);
+          resultUrl = await runSdxlRemoval(imageUrl, maskUrl);
         }
       }
     } else {
