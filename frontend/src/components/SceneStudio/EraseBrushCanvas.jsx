@@ -406,8 +406,6 @@ export default function EraseBrushCanvas({
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
 
     if (drawMode === 'smart') {
-      // Smart Select: accumulate points and send to SAM together
-      // Normal click = include (label 1), Alt+click = exclude (label 0)
       const label = e.altKey ? 0 : 1;
       // Map canvas coords to source image coords (0-1 normalized).
       // Background uses cover-fit layout so may be offset/scaled within the canvas.
@@ -419,6 +417,9 @@ export default function EraseBrushCanvas({
         normalizedX = x / canvasWidth;
         normalizedY = y / canvasHeight;
       }
+      console.log('[SmartSelect] click canvas=', { x: Math.round(x), y: Math.round(y) },
+        'normalized=', { x: normalizedX?.toFixed(3), y: normalizedY?.toFixed(3) },
+        'layout=', backgroundLayout ? { drawX: backgroundLayout.drawX, drawY: backgroundLayout.drawY, drawW: backgroundLayout.drawWidth, drawH: backgroundLayout.drawHeight } : 'NONE');
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
       const newPoint = { x: normalizedX, y: normalizedY, label, canvasX: x, canvasY: y };
