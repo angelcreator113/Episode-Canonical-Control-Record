@@ -101,6 +101,7 @@ export default function EraseBrushCanvas({
     setCursorPos(null);
     setSmartPoints([]);
     setPreSmartHistoryIndex(-1);
+    setIsSegmenting(false);
     setDrawModeRaw(mode);
   }, []);
   const [variationCount, setVariationCount] = useState(1);
@@ -439,7 +440,8 @@ export default function EraseBrushCanvas({
           )
         : () => onSegment?.(normalizedX, normalizedY);
 
-      segmentFn()
+      // Ensure we always get a promise (segmentFn might return undefined)
+      Promise.resolve(segmentFn())
         .then((maskImageUrl) => {
           if (!maskImageUrl) return;
           const img = new window.Image();
