@@ -257,13 +257,20 @@ async function runSdxlRemoval(imageUrl, maskUrl) {
 /**
  * Strict deterministic removal path for erase tool.
  * Runs LaMa for one or more passes and avoids generative models entirely.
+ * If a subsequent pass fails (e.g. rate limit), returns the best result so far.
  */
 async function runStrictLamaRemoval(imageUrl, maskUrl) {
   let currentUrl = imageUrl;
 
   for (let pass = 1; pass <= STRICT_REMOVE_PASSES; pass++) {
     console.log(`[Inpainting] Strict LaMa pass ${pass}/${STRICT_REMOVE_PASSES}`);
-    currentUrl = await runLamaRemoval(currentUrl, maskUrl);
+    try {
+      currentUrl = await runLamaRemoval(currentUrl, maskUrl);
+    } catch (err) {
+      if (pass === 1) throw err; // First pass must succeed
+      console.warn(`[Inpainting] LaMa pass ${pass} failed, using pass ${pass - 1} result:`, err.message);
+      break;
+    }
   }
 
   return currentUrl;
