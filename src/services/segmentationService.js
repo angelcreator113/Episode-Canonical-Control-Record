@@ -21,8 +21,10 @@ const s3 = new S3Client({ region: AWS_REGION });
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
-// SAM model for click-to-segment (supports multi-point)
-const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'meta/sam-2-large';
+// SAM model for click-to-segment
+// Default: schananas/grounded_sam — proven working. Override with REPLICATE_SAM_MODEL
+// for SAM 2 multi-point support (e.g. 'meta/sam-2-large')
+const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'schananas/grounded_sam';
 // Grounded SAM for text-based object detection (text_prompt support)
 const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'schananas/grounded_sam';
 
