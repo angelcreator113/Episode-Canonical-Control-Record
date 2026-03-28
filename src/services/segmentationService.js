@@ -100,10 +100,21 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
   const pixelY = Math.round(pointY * imgHeight);
   console.log(`[Segmentation] SAM segment at pixel (${pixelX}, ${pixelY}) of ${imgWidth}x${imgHeight} using ${SAM_MODEL}`);
 
-  try {
-    // Try multiple input formats depending on the model
-    let output;
-    const modelLower = SAM_MODEL.toLowerCase();
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [2000, 4000, 8000];
+  let lastError;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const delay = RETRY_DELAYS[attempt - 1] || 8000;
+      console.log(`[Segmentation] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+
+    try {
+      // Try multiple input formats depending on the model
+      let output;
+      const modelLower = SAM_MODEL.toLowerCase();
 
     if (modelLower.includes('grounded_sam') || modelLower.includes('grounded-sam')) {
       // grounded_sam expects point_coords as pixel values
@@ -138,39 +149,48 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
     console.log('[Segmentation] SAM raw output type:', typeof output,
       Array.isArray(output) ? `array[${output.length}]` : '');
 
-    const maskUrl = extractOutputUrl(output);
-    if (!maskUrl) {
-      console.error('[Segmentation] SAM returned no output URL. Output:', JSON.stringify(output).slice(0, 500));
-      throw new Error('SAM returned no mask output — the model may not support point-based segmentation');
+      const maskUrl = extractOutputUrl(output);
+      if (!maskUrl) {
+        console.error('[Segmentation] SAM returned no output URL. Output:', JSON.stringify(output).slice(0, 500));
+        throw new Error('SAM returned no mask output — the model may not support point-based segmentation');
+      }
+
+      console.log('[Segmentation] SAM mask generated successfully');
+
+      // Store mask to S3 for persistence
+      const s3Url = await storeMaskToS3(maskUrl, entityId);
+      return { maskUrl: s3Url };
+    } catch (err) {
+      const status = err.response?.status || err.status;
+      const detail = err.response?.data?.detail || err.message;
+
+      // If the configured SAM model is missing/unavailable, fall back to a
+      // deterministic circular click mask instead of failing the tool.
+      if (status === 404 || /requested resource could not be found|not found/i.test(String(detail))) {
+        console.warn('[Segmentation] SAM model unavailable, using fallback click mask');
+        const fallbackUrl = await createFallbackClickMask(pixelX, pixelY, imgWidth, imgHeight, entityId);
+        return { maskUrl: fallbackUrl, fallback: true };
+      }
+
+      const isRateLimit = status === 429 || /rate[-\s]?limit|throttled/i.test(String(detail));
+      if (isRateLimit && attempt < MAX_RETRIES) {
+        console.warn(`[Segmentation] Rate-limited (attempt ${attempt + 1}), will retry...`);
+        lastError = err;
+        continue;
+      }
+
+      if (isRateLimit) {
+        console.error(`[Segmentation] Rate-limited after ${MAX_RETRIES} retries`);
+        const limitError = new Error('Segmentation provider is rate-limited. Please try again in a few seconds.');
+        limitError.status = 429;
+        limitError.retryAfter = 8;
+        throw limitError;
+      }
+
+      console.error(`[Segmentation] SAM error (${status}):`, detail);
+      throw new Error(`SAM segmentation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
     }
-
-    console.log('[Segmentation] SAM mask generated successfully');
-
-    // Store mask to S3 for persistence
-    const s3Url = await storeMaskToS3(maskUrl, entityId);
-    return { maskUrl: s3Url };
-  } catch (err) {
-    const status = err.response?.status || err.status;
-    const detail = err.response?.data?.detail || err.message;
-    console.error(`[Segmentation] SAM error (${status}):`, detail);
-
-    // If the configured SAM model is missing/unavailable, fall back to a
-    // deterministic circular click mask instead of failing the tool.
-    if (status === 404 || /requested resource could not be found|not found/i.test(String(detail))) {
-      console.warn('[Segmentation] SAM model unavailable, using fallback click mask');
-      const fallbackUrl = await createFallbackClickMask(pixelX, pixelY, imgWidth, imgHeight, entityId);
-      return { maskUrl: fallbackUrl, fallback: true };
-    }
-
-    if (status === 429 || /rate[-\s]?limit|throttled/i.test(String(detail))) {
-      const limitError = new Error('Segmentation provider is rate-limited. Please try again in a few seconds.');
-      limitError.status = 429;
-      limitError.retryAfter = 8;
-      throw limitError;
-    }
-
-    throw new Error(`SAM segmentation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
-  }
+  } // end retry loop
 }
 
 async function createFallbackClickMask(pixelX, pixelY, width, height, entityId) {
