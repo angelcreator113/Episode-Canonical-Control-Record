@@ -121,9 +121,9 @@ export default function EraseBrushCanvas({
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    
+
     // Save initial empty state directly (avoid callback reference during init)
     const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
     setStrokeHistory([imageData]);
