@@ -98,6 +98,9 @@ export default function EraseBrushCanvas({
   // Switching modes clears any in-progress state
   const setDrawMode = useCallback((mode) => {
     setLassoPoints([]);
+    if (mode !== 'smart') {
+      setSmartPoints([]);
+    }
     setCursorPos(null);
     setSmartPoints([]);
     setPreSmartHistoryIndex(-1);
@@ -526,7 +529,7 @@ export default function EraseBrushCanvas({
       ctx.fill();
       setHasStrokes(true);
     }
-  }, [screenToCanvas, brushSize, brushMode, isProcessing, drawMode, applySoftBrush, lassoPoints, fillLasso]);
+  }, [screenToCanvas, brushSize, brushMode, isProcessing, isSegmenting, drawMode, applySoftBrush, lassoPoints, smartPoints, fillLasso, onSegment, canvasWidth, canvasHeight, saveToHistory]);
 
   const handleMouseMove = useCallback((e) => {
     if (isProcessing) return;
@@ -613,6 +616,7 @@ export default function EraseBrushCanvas({
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
     setHasStrokes(false);
     setLassoPoints([]);
+    setSmartPoints([]);
     setCursorPos(null);
     setStrokeHistory([]);
     setHistoryIndex(-1);
@@ -843,7 +847,6 @@ export default function EraseBrushCanvas({
       imageDataUrl: assetUrl,
       assetId: asset?.id || null,
       removeBg,
-      assetId: asset?.id || null,
     });
     setShowImageMenu(false);
   }, [hasStrokes, isProcessing, onReplaceWithImage, removeBg, exportMaskDataUrl]);
@@ -891,6 +894,8 @@ export default function EraseBrushCanvas({
           setLassoPoints([]);
         } else if (samPreviewUrl) {
           setSamPreviewUrl(null);
+        } else if (samPreviewUrl) {
+          setSamPreviewUrl(null);
         } else {
           onCancel();
         }
@@ -917,7 +922,7 @@ export default function EraseBrushCanvas({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel, hasStrokes, isProcessing, handleApply, handleUndo, handleRedo, lassoPoints, drawMode, fillLasso]);
+  }, [onCancel, hasStrokes, isProcessing, handleApply, handleUndo, handleRedo, lassoPoints, smartPoints.length, drawMode, fillLasso, handleClear]);
 
   // Update lasso preview on points change
   useEffect(() => {
