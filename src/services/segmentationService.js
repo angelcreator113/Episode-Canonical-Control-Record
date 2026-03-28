@@ -28,6 +28,8 @@ const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'schananas/grounded_sam';
 // Grounded SAM for text-based object detection (text_prompt support)
 const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'schananas/grounded_sam';
 
+console.log(`[Segmentation] Loaded — SAM_MODEL=${SAM_MODEL}, GROUNDED_SAM=${GROUNDED_SAM_MODEL}, TOKEN=${REPLICATE_API_TOKEN ? 'set' : 'MISSING'}`);
+
 /**
  * Extract output URL from Replicate output (handles various formats).
  */
