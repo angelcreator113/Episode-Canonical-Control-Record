@@ -22,7 +22,7 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
 // SAM model for click-to-segment (supports multi-point)
-const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'meta/sam-2.1-base';
+const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'meta/sam-2-large';
 // Grounded SAM for text-based object detection (text_prompt support)
 const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'schananas/grounded_sam';
 
@@ -165,10 +165,31 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
 
-      // If the configured SAM model is missing/unavailable, fall back to a
-      // deterministic circular click mask instead of failing the tool.
-      if (status === 404 || /requested resource could not be found|not found/i.test(String(detail))) {
-        console.warn('[Segmentation] SAM model unavailable, using fallback click mask');
+      // If the configured SAM model is missing/unavailable or returns a server error,
+      // fall back to grounded_sam for single-point, or fallback click mask as last resort.
+      if (status === 404 || status === 500 || /requested resource could not be found|not found/i.test(String(detail))) {
+        // Try grounded_sam before giving up
+        if (SAM_MODEL !== GROUNDED_SAM_MODEL) {
+          console.warn(`[Segmentation] ${SAM_MODEL} failed (${status}), falling back to ${GROUNDED_SAM_MODEL}`);
+          try {
+            const fallbackOutput = await replicate.run(GROUNDED_SAM_MODEL, {
+              input: {
+                image: imageUrl,
+                input_point: `[${pixelX}, ${pixelY}]`,
+                input_label: '[1]',
+              },
+            });
+            const fallbackMaskUrl = extractOutputUrl(fallbackOutput);
+            if (fallbackMaskUrl) {
+              console.log('[Segmentation] Grounded SAM fallback succeeded');
+              const s3Url = await storeMaskToS3(fallbackMaskUrl, entityId);
+              return { maskUrl: s3Url };
+            }
+          } catch (fallbackErr) {
+            console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
+          }
+        }
+        console.warn('[Segmentation] All SAM models failed, using fallback click mask');
         const fallbackUrl = await createFallbackClickMask(pixelX, pixelY, imgWidth, imgHeight, entityId);
         return { maskUrl: fallbackUrl, fallback: true };
       }
