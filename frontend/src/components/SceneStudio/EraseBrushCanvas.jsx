@@ -32,6 +32,7 @@ export default function EraseBrushCanvas({
   onApply,
   onReplaceWithImage,
   onSegment,
+  onMultiPointSegment,
   onTextSegment,
   onCancel,
   isProcessing,
@@ -79,6 +80,8 @@ export default function EraseBrushCanvas({
   const [isSegmenting, setIsSegmenting] = useState(false);
   const [segmentClickPos, setSegmentClickPos] = useState(null); // { x, y } for loading indicator
   const [samPreviewUrl, setSamPreviewUrl] = useState(null); // preview before commit
+  // Multi-point accumulation for smart select
+  const [smartPoints, setSmartPoints] = useState([]); // [{x, y, label, canvasX, canvasY}]
   const [smartFindQuery, setSmartFindQuery] = useState('');
   const [isSmartFinding, setIsSmartFinding] = useState(false);
 
@@ -90,10 +93,11 @@ export default function EraseBrushCanvas({
   const [drawMode, setDrawModeRaw] = useState('brush'); // 'brush' | 'lasso' | 'smart'
   const [lassoPoints, setLassoPoints] = useState([]);
 
-  // Switching modes clears any in-progress lasso
+  // Switching modes clears any in-progress state
   const setDrawMode = useCallback((mode) => {
     setLassoPoints([]);
     setCursorPos(null);
+    setSmartPoints([]);
     setDrawModeRaw(mode);
   }, []);
   const [variationCount, setVariationCount] = useState(1);
@@ -393,20 +397,31 @@ export default function EraseBrushCanvas({
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
 
     if (drawMode === 'smart') {
-      // Smart Select: send click to SAM, get mask back
-      // Alt-click = subtract from selection, normal click = add
-      const isSubtract = e.altKey;
+      // Smart Select: accumulate points and send to SAM together
+      // Normal click = include (label 1), Alt+click = exclude (label 0)
+      const label = e.altKey ? 0 : 1;
       const normalizedX = x / canvasWidth;
       const normalizedY = y / canvasHeight;
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
-      // Show loading indicator at click point
+      const newPoint = { x: normalizedX, y: normalizedY, label, canvasX: x, canvasY: y };
+      const updatedPoints = [...smartPoints, newPoint];
+      setSmartPoints(updatedPoints);
+
+      // Auto-fire SAM with all accumulated points
       setSegmentClickPos({ x, y });
       setIsSegmenting(true);
-      onSegment?.(normalizedX, normalizedY)
+
+      const segmentFn = updatedPoints.length > 1 && onMultiPointSegment
+        ? () => onMultiPointSegment(
+            updatedPoints.map((p) => ({ x: p.x, y: p.y })),
+            updatedPoints.map((p) => p.label)
+          )
+        : () => onSegment?.(normalizedX, normalizedY);
+
+      segmentFn()
         .then((maskImageUrl) => {
           if (!maskImageUrl) return;
-          // Draw the SAM mask onto our canvas (additive or subtractive)
           const img = new window.Image();
           img.crossOrigin = 'anonymous';
           img.onload = () => {
@@ -414,56 +429,39 @@ export default function EraseBrushCanvas({
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
 
-            if (isSubtract) {
-              // Subtract: erase the SAM mask area from our canvas
-              // Create a temp canvas with the SAM mask
-              const tempCanvas = document.createElement('canvas');
-              tempCanvas.width = canvas.width;
-              tempCanvas.height = canvas.height;
-              const tempCtx = tempCanvas.getContext('2d');
-              tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
-              const canvasData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-              // Where SAM mask is white, clear our canvas pixels
-              for (let i = 0; i < maskData.data.length; i += 4) {
-                if (maskData.data[i] > 128) { // white in SAM mask
-                  canvasData.data[i + 3] = 0; // set alpha to 0 (clear)
-                }
-              }
-              ctx.putImageData(canvasData, 0, 0);
+            // Restore to state before any SAM mask was drawn
+            if (historyIndex >= 0 && strokeHistory[historyIndex]) {
+              ctx.putImageData(strokeHistory[historyIndex], 0, 0);
             } else {
-              // Add: draw SAM mask as red overlay (additive)
-              // Convert SAM white-on-black to our red display color
-              const tempCanvas = document.createElement('canvas');
-              tempCanvas.width = canvas.width;
-              tempCanvas.height = canvas.height;
-              const tempCtx = tempCanvas.getContext('2d');
-              tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
-
-              // Convert white pixels to red semi-transparent
-              for (let i = 0; i < maskData.data.length; i += 4) {
-                if (maskData.data[i] > 128) { // white in SAM mask
-                  maskData.data[i] = 220;     // R
-                  maskData.data[i + 1] = 53;  // G
-                  maskData.data[i + 2] = 53;  // B
-                  maskData.data[i + 3] = 128;  // A (semi-transparent)
-                } else {
-                  maskData.data[i + 3] = 0;   // transparent
-                }
-              }
-              tempCtx.putImageData(maskData, 0, 0);
-              ctx.globalCompositeOperation = 'source-over';
-              ctx.drawImage(tempCanvas, 0, 0);
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
+
+            // Draw SAM mask as red overlay
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < maskData.data.length; i += 4) {
+              if (maskData.data[i] > 128) {
+                maskData.data[i] = 220;
+                maskData.data[i + 1] = 53;
+                maskData.data[i + 2] = 53;
+                maskData.data[i + 3] = 128;
+              } else {
+                maskData.data[i + 3] = 0;
+              }
+            }
+            tempCtx.putImageData(maskData, 0, 0);
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(tempCanvas, 0, 0);
 
             setHasStrokes(true);
             saveToHistory();
           };
-          img.onerror = () => {
-            console.error('Failed to load SAM mask image');
-          };
+          img.onerror = () => console.error('Failed to load SAM mask image');
           img.src = maskImageUrl;
         })
         .catch((err) => {
@@ -963,6 +961,18 @@ export default function EraseBrushCanvas({
             <Loader size={20} className="erase-brush-spinner" />
           </div>
         )}
+
+        {/* Smart Select: accumulated point indicators */}
+        {drawMode === 'smart' && smartPoints.map((pt, i) => (
+          <div
+            key={i}
+            className={`erase-smart-point ${pt.label === 1 ? 'include' : 'exclude'}`}
+            style={{ left: pt.canvasX, top: pt.canvasY }}
+            title={pt.label === 1 ? 'Include point' : 'Exclude point'}
+          >
+            {pt.label === 1 ? '+' : '−'}
+          </div>
+        ))}
       </div>
 
       {/* Variation picker overlay (when variations exist) */}
@@ -1081,6 +1091,17 @@ export default function EraseBrushCanvas({
                   </button>
                   <span className="erase-smart-adjust-hint">or switch to Brush to paint</span>
                 </div>
+              )}
+              {smartPoints.length > 0 && (
+                <button
+                  type="button"
+                  className="erase-smart-adjust-btn"
+                  onClick={() => setSmartPoints([])}
+                  disabled={isProcessing || isSegmenting}
+                  title="Clear all guide points"
+                >
+                  <X size={10} /> Clear points
+                </button>
               )}
             </div>
           )}
@@ -1310,7 +1331,7 @@ export default function EraseBrushCanvas({
         {/* Keyboard shortcuts hint */}
         <div className="erase-brush-shortcuts">
           {drawMode === 'smart'
-            ? 'Click to select • Alt+click to deselect • S smart • B brush • L lasso'
+            ? 'Click to include • Alt+click to exclude • Each click refines • B brush • L lasso'
             : drawMode === 'brush'
               ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • S smart'
               : 'Click to add points • Backspace undo point • Enter close • Esc cancel'}

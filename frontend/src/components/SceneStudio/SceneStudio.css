@@ -2796,6 +2796,36 @@
   margin-left: 4px;
 }
 
+/* ── Smart Point Markers ── */
+
+.erase-smart-point {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 5;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.erase-smart-point.include {
+  background: rgba(34, 197, 94, 0.85);
+  color: #fff;
+}
+
+.erase-smart-point.exclude {
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
+}
+
 /* ── Undo / Redo ── */
 
 .erase-brush-undo-redo {

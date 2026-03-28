@@ -1184,6 +1184,38 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
   }, [state, backgroundUrl]);
 
+  // Multi-point segment — sends all accumulated points to SAM in one call
+  const handleMultiPointSegment = useCallback(async (points, labels) => {
+    const contextId = state.contextId;
+    if (!contextId || !points?.length) return null;
+
+    const selectedObj = state.selectedIds.size === 1
+      ? state.objects.find((o) => state.selectedIds.has(o.id))
+      : null;
+    const targetUrl = (selectedObj?.type === 'image' && selectedObj?.assetUrl)
+      ? selectedObj.assetUrl
+      : backgroundUrl;
+
+    try {
+      const result = await sceneService.segmentObject(contextId, {
+        imageUrl: targetUrl,
+        points,
+        labels,
+      });
+      if (result?.success && result.data?.maskUrl) {
+        return result.data.maskUrl;
+      }
+      return null;
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        setInpaintError(err?.response?.data?.error || 'Too many requests. Wait a few seconds and try again.');
+      } else {
+        setInpaintError(err?.response?.data?.error || 'Smart select failed. Try brush or lasso instead.');
+      }
+      return null;
+    }
+  }, [state, backgroundUrl]);
+
   // Smart Find — text-based object detection via Grounded SAM
   const handleTextSegment = useCallback(async (textPrompt) => {
     const contextId = state.contextId;
@@ -1626,6 +1658,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               onApply={handleEraseApply}
               onReplaceWithImage={handleReplaceWithImage}
               onSegment={handleSegment}
+              onMultiPointSegment={handleMultiPointSegment}
               onTextSegment={handleTextSegment}
               onExtractSelection={handleExtractSelection}
               onCancel={() => state.setActiveTool('select')}

@@ -1233,10 +1233,14 @@ exports.inpaint = async (req, res) => {
 exports.segmentObject = async (req, res) => {
   try {
     const { id } = req.params;
-    const { image_url, point_x, point_y, text_prompt } = req.body;
+    const { image_url, point_x, point_y, text_prompt, points, labels } = req.body;
 
-    if (!text_prompt && (point_x == null || point_y == null)) {
-      return res.status(400).json({ success: false, error: 'Either text_prompt or point_x/point_y are required' });
+    // Support both single point (legacy) and multi-point
+    const hasMultiPoint = Array.isArray(points) && points.length > 0;
+    const hasSinglePoint = point_x != null && point_y != null;
+
+    if (!text_prompt && !hasMultiPoint && !hasSinglePoint) {
+      return res.status(400).json({ success: false, error: 'Either text_prompt, points[], or point_x/point_y are required' });
     }
 
     const Scene = require('../models').Scene;
@@ -1251,14 +1255,18 @@ exports.segmentObject = async (req, res) => {
     }
 
     const segmentationService = require('../services/segmentationService');
-    const result = text_prompt
-      ? await segmentationService.segmentByText(sourceUrl, text_prompt.trim(), id)
-      : await segmentationService.segmentAtPoint(
-          sourceUrl,
-          Number(point_x),
-          Number(point_y),
-          id
-        );
+    let result;
+    if (text_prompt) {
+      result = await segmentationService.segmentByText(sourceUrl, text_prompt.trim(), id);
+    } else if (hasMultiPoint) {
+      result = await segmentationService.segmentMultiPoint(
+        sourceUrl, points, labels || points.map(() => 1), id
+      );
+    } else {
+      result = await segmentationService.segmentAtPoint(
+        sourceUrl, Number(point_x), Number(point_y), id
+      );
+    }
 
     res.json({ success: true, data: result });
   } catch (error) {
