@@ -230,9 +230,10 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
         }
       }
 
-      console.warn('[Segmentation] All SAM models failed, using fallback click mask');
+      const fallbackReason = `${SAM_MODEL} failed: ${String(detail).slice(0, 200)}`;
+      console.warn('[Segmentation] All SAM models failed, using fallback click mask.', fallbackReason);
       const fallbackUrl = await createFallbackClickMask(pixelPoints, imgWidth, imgHeight, entityId);
-      return { maskUrl: fallbackUrl, fallback: true };
+      return { maskUrl: fallbackUrl, fallback: true, fallback_reason: fallbackReason };
     }
   } // end retry loop
 }
