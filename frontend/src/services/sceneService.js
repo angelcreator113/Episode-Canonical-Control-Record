@@ -437,6 +437,8 @@ const sceneService = {
       labels: opts.labels || undefined,
       image_width: opts.imageWidth || undefined,
       image_height: opts.imageHeight || undefined,
+    }, {
+      timeout: 180000, // 3 min — SAM cold starts on Replicate can take 1-2 min
     });
     return data;
   },
