@@ -415,6 +415,7 @@ export default function EraseBrushCanvas({
         normalizedX = x / canvasWidth;
         normalizedY = y / canvasHeight;
       }
+      console.log(`[SmartSelect] canvas=(${x.toFixed(0)},${y.toFixed(0)}) normalized=(${normalizedX.toFixed(4)},${normalizedY.toFixed(4)}) bgLayout=`, backgroundLayout ? { drawX: backgroundLayout.drawX, drawY: backgroundLayout.drawY, drawW: backgroundLayout.drawWidth, drawH: backgroundLayout.drawHeight, srcW: backgroundLayout.sourceWidth, srcH: backgroundLayout.sourceHeight } : 'none');
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
       const newPoint = { x: normalizedX, y: normalizedY, label, canvasX: x, canvasY: y };

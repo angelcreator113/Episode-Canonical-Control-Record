@@ -1263,6 +1263,11 @@ exports.segmentObject = async (req, res) => {
           ? [{ x: fallbackPointX, y: fallbackPointY, label: fallbackLabel }]
           : []);
 
+    console.log('[Segment] Coords received:', JSON.stringify({
+      point_x, point_y, points: points?.length, image_width, image_height,
+      effectivePoints: effectivePoints.map(p => ({ x: p.x?.toFixed?.(4), y: p.y?.toFixed?.(4) })),
+    }));
+
     const Scene = require('../models').Scene;
     const scene = await Scene.findByPk(id, { attributes: ['id', 'background_url'] });
     if (!scene) {
