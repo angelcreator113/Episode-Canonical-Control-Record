@@ -163,23 +163,28 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
       // meta/sam-2 interactive version (fe97b453)
-      // Send BOTH parameter name formats (input_point/input_label AND point_coords/point_labels)
-      // so the model uses whichever it recognises — Replicate ignores unknown params.
+      // Send ALL known parameter name formats — the model uses whichever it recognises,
+      // Replicate silently ignores unknown params.
       const coords = pixelPoints.map((p) => [p.x, p.y]);
       const labs = pixelPoints.map((p) => p.label);
-      console.log(`[Segmentation] SAM-2 interactive input: coords=${JSON.stringify(coords)} labels=${JSON.stringify(labs)}`);
+      // Format C — spoonwep/sam2-cog style objects with coordinate/type
+      const pointObjects = pixelPoints.map((p) => ({ coordinate: [p.x, p.y], type: p.label }));
+      console.log(`[Segmentation] SAM-2 interactive input: coords=${JSON.stringify(coords)} labels=${JSON.stringify(labs)} img=${imgWidth}x${imgHeight}`);
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          // Format A — used by many SAM-2 cog wrappers
+          // Format A — input_point / input_label
           input_point: JSON.stringify(coords),
           input_label: JSON.stringify(labs),
-          // Format B — alternative parameter names
+          // Format B — point_coords / point_labels
           point_coords: JSON.stringify(coords),
           point_labels: JSON.stringify(labs),
+          // Format C — points as objects with coordinate/type
+          points: JSON.stringify(pointObjects),
           multimask_output: true,
         },
       });
+      console.log(`[Segmentation] SAM-2 raw output type: ${typeof output}, isArray: ${Array.isArray(output)}, preview: ${JSON.stringify(output).slice(0, 300)}`);
     } else {
       // Default format for facebook/sam and similar models.
       output = await replicate.run(SAM_MODEL, {
@@ -445,6 +450,7 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
           });
         }
       } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
+        const pointObjects = pixelPoints.map((p, i) => ({ coordinate: p, type: labels[i] }));
         output = await replicate.run(SAM_MODEL, {
           input: {
             image: imageUrl,
@@ -452,9 +458,11 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
             input_label: JSON.stringify(labels),
             point_coords: JSON.stringify(pixelPoints),
             point_labels: JSON.stringify(labels),
+            points: JSON.stringify(pointObjects),
             multimask_output: true,
           },
         });
+        console.log(`[Segmentation] Multi-point SAM-2 raw output type: ${typeof output}, preview: ${JSON.stringify(output).slice(0, 300)}`);
       } else {
         // Flatten for models expecting comma-separated format
         output = await replicate.run(SAM_MODEL, {
