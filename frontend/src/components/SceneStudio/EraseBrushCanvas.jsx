@@ -415,6 +415,7 @@ export default function EraseBrushCanvas({
         normalizedX = x / canvasWidth;
         normalizedY = y / canvasHeight;
       }
+      console.log(`[SmartSelect] canvas=(${x.toFixed(0)},${y.toFixed(0)}) normalized=(${normalizedX.toFixed(4)},${normalizedY.toFixed(4)}) bgLayout=`, backgroundLayout ? { drawX: backgroundLayout.drawX, drawY: backgroundLayout.drawY, drawW: backgroundLayout.drawWidth, drawH: backgroundLayout.drawHeight, srcW: backgroundLayout.sourceWidth, srcH: backgroundLayout.sourceHeight } : 'none');
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
       const newPoint = { x: normalizedX, y: normalizedY, label, canvasX: x, canvasY: y };
@@ -442,7 +443,11 @@ export default function EraseBrushCanvas({
 
       // Ensure we always get a promise (segmentFn might return undefined)
       Promise.resolve(segmentFn())
-        .then((maskImageUrl) => {
+        .then((maskResult) => {
+          if (!maskResult) return;
+          // Support both string (legacy) and { maskUrl, inverted } object
+          const maskImageUrl = typeof maskResult === 'string' ? maskResult : maskResult.maskUrl;
+          const isInverted = typeof maskResult === 'object' && maskResult.inverted;
           if (!maskImageUrl) return;
           const img = new window.Image();
           img.crossOrigin = 'anonymous';
@@ -467,15 +472,42 @@ export default function EraseBrushCanvas({
             tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
             const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
 
+            // Debug: sample mask pixel values to understand format
+            let sampleWhite = 0, sampleBlack = 0, sampleMid = 0, sampleTransparent = 0;
+            const totalPx = maskData.data.length / 4;
             for (let i = 0; i < maskData.data.length; i += 4) {
-              if (maskData.data[i] > 128) {
+              const r = maskData.data[i], a = maskData.data[i + 3];
+              if (a === 0) sampleTransparent++;
+              else if (r > 200) sampleWhite++;
+              else if (r < 50) sampleBlack++;
+              else sampleMid++;
+            }
+            console.log(`[SAM mask] ${canvas.width}x${canvas.height}, inverted=${isInverted}, white=${sampleWhite} black=${sampleBlack} mid=${sampleMid} transparent=${sampleTransparent} total=${totalPx}`);
+
+            // Color the object pixels red. Check both R channel AND alpha to handle different mask formats.
+            let colored = 0;
+            for (let i = 0; i < maskData.data.length; i += 4) {
+              const r = maskData.data[i];
+              const a = maskData.data[i + 3];
+              // Determine if this pixel is "selected":
+              // Normal: bright opaque pixels are selected
+              // Inverted: dark opaque pixels are selected (SAM-2 returns white=bg, black=object)
+              const isOpaque = a > 10;
+              const isBright = r > 128;
+              const isSelected = isInverted ? (isOpaque && !isBright) : (isBright || (isOpaque && r > 128));
+              if (isSelected) {
                 maskData.data[i] = 220;
                 maskData.data[i + 1] = 53;
                 maskData.data[i + 2] = 53;
                 maskData.data[i + 3] = 128;
+                colored++;
               } else {
                 maskData.data[i + 3] = 0;
               }
+            }
+            console.log(`[SAM mask] Colored ${colored}/${totalPx} pixels (${Math.round(colored/totalPx*100)}%)`);
+            if (colored === 0) {
+              console.warn('[SAM mask] No pixels colored! Mask may be empty or in unexpected format.');
             }
             tempCtx.putImageData(maskData, 0, 0);
             ctx.globalCompositeOperation = 'source-over';

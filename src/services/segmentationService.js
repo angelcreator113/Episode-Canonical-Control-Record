@@ -22,11 +22,21 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
 // SAM model for click-to-segment
-// Default: schananas/grounded_sam — proven working. Override with REPLICATE_SAM_MODEL
-// for SAM 2 multi-point support (e.g. 'meta/sam-2-large')
-const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'schananas/grounded_sam';
-// Grounded SAM for text-based object detection (text_prompt support)
-const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'schananas/grounded_sam';
+// meta/sam-2 has multiple versions:
+//   cbd95fb7 = automatic mask generator (ignores point prompts)
+//   fe97b453 = interactive version with point_coords/box support
+// meta/sam-2-video = video-only (requires input_video)
+const SAM2_INTERACTIVE_VERSION = 'fe97b453a6455861e3bac769b441ca1f1086110da7466dbb65cf1eecfd60dc83';
+const SAM2_DEFAULT = `meta/sam-2:${SAM2_INTERACTIVE_VERSION}`;
+let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || SAM2_DEFAULT;
+const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_DEFAULT;
+
+// If the configured SAM model is a known non-interactive model, fall back
+const DEAD_MODELS = ['meta/sam-2-large', 'schananas/grounded_sam'];
+if (DEAD_MODELS.some((m) => SAM_MODEL === m || SAM_MODEL.startsWith(m + ':'))) {
+  console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" doesn't support point-click. Using ${SAM2_DEFAULT}`);
+  SAM_MODEL = SAM2_DEFAULT;
+}
 
 console.log(`[Segmentation] Loaded — SAM_MODEL=${SAM_MODEL}, GROUNDED_SAM=${GROUNDED_SAM_MODEL}, TOKEN=${REPLICATE_API_TOKEN ? 'set' : 'MISSING'}`);
 
@@ -152,12 +162,15 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
         },
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-      // SAM 2 supports true multi-point refinement with positive/negative labels.
+      // meta/sam-2 interactive version (fe97b453) — accepts point_coords and point_labels
+      const coords = pixelPoints.map((p) => [p.x, p.y]);
+      const labs = pixelPoints.map((p) => p.label);
+      console.log(`[Segmentation] SAM-2 interactive input: point_coords=${JSON.stringify(coords)} point_labels=${JSON.stringify(labs)}`);
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          point_coords: pixelPoints.map((p) => [p.x, p.y]),
-          point_labels: pixelPoints.map((p) => p.label),
+          point_coords: JSON.stringify(coords),
+          point_labels: JSON.stringify(labs),
           multimask_output: false,
         },
       });
@@ -172,21 +185,43 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
       });
     }
 
-    console.log('[Segmentation] SAM raw output type:', typeof output,
-      Array.isArray(output) ? `array[${output.length}]` : '',
-      output && typeof output === 'object' && !Array.isArray(output) ? `keys=${Object.keys(output).join(',')}` : '');
+    // SAM-2 returns { combined_mask, individual_masks[] }.
+      // Prefer individual_masks[0] (the clicked object) over combined_mask (which can have inverted polarity).
+      let maskUrl;
+      if (output && typeof output === 'object' && !Array.isArray(output)) {
+        const keys = [];
+        for (const k of Object.keys(output)) { keys.push(k); }
+        console.log('[Segmentation] SAM output keys:', keys.join(', '));
 
-      const maskUrl = extractOutputUrl(output);
+        // Try individual_masks first — this is the per-object mask with correct polarity
+        if (output.individual_masks) {
+          const masks = output.individual_masks;
+          const firstMask = Array.isArray(masks) ? masks[0] : masks;
+          maskUrl = extractOutputUrl(firstMask);
+          if (maskUrl) console.log('[Segmentation] Using individual_masks[0]');
+        }
+        // Fall back to combined_mask
+        if (!maskUrl && output.combined_mask) {
+          maskUrl = extractOutputUrl(output.combined_mask);
+          if (maskUrl) console.log('[Segmentation] Using combined_mask');
+        }
+      }
+      // Generic fallback for other model output formats
       if (!maskUrl) {
-        console.error('[Segmentation] SAM returned no output URL. Output:', JSON.stringify(output).slice(0, 500));
+        maskUrl = extractOutputUrl(output);
+      }
+
+      if (!maskUrl) {
+        console.error('[Segmentation] SAM returned no output URL. Raw:', typeof output, JSON.stringify(output).slice(0, 500));
         throw new Error('SAM returned no mask output — the model may not support point-based segmentation');
       }
 
-      console.log('[Segmentation] SAM mask generated successfully');
+      console.log('[Segmentation] SAM mask URL obtained:', maskUrl.slice(0, 100));
 
       // Store mask to S3 for persistence
-      const s3Url = await storeMaskToS3(maskUrl, entityId);
-      return { maskUrl: s3Url };
+      const { s3Url, inverted } = await storeMaskToS3(maskUrl, entityId);
+      console.log('[Segmentation] Mask stored to S3, inverted:', inverted);
+      return { maskUrl: s3Url, inverted };
     } catch (err) {
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
@@ -222,8 +257,8 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
           const fallbackMaskUrl = extractOutputUrl(fallbackOutput);
           if (fallbackMaskUrl) {
             console.log('[Segmentation] Grounded SAM fallback succeeded');
-            const s3Url = await storeMaskToS3(fallbackMaskUrl, entityId);
-            return { maskUrl: s3Url };
+            const { s3Url, inverted } = await storeMaskToS3(fallbackMaskUrl, entityId);
+            return { maskUrl: s3Url, inverted };
           }
         } catch (fallbackErr) {
           console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
@@ -286,11 +321,30 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId, knownDims) {
 
 /**
  * Store a mask image from a URL to S3.
+ * Returns { s3Url, inverted } — inverted=true when mask has opposite polarity (white=background).
  */
 async function storeMaskToS3(maskUrl, entityId) {
+  const sharp = require('sharp');
   const axios = require('axios');
   const response = await axios.get(maskUrl, { responseType: 'arraybuffer', timeout: 30000 });
   const buffer = Buffer.from(response.data);
+
+  // Check if mask polarity is inverted (more white than black = background selected)
+  let inverted = false;
+  try {
+    const { data, info } = await sharp(buffer).grayscale().raw().toBuffer({ resolveWithObject: true });
+    let whiteCount = 0;
+    const totalPixels = info.width * info.height;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] > 128) whiteCount++;
+    }
+    inverted = whiteCount > totalPixels * 0.5;
+    if (inverted) {
+      console.log(`[Segmentation] Mask is inverted (${Math.round(whiteCount / totalPixels * 100)}% white), flagging for frontend`);
+    }
+  } catch (checkErr) {
+    console.warn('[Segmentation] Could not check mask polarity:', checkErr.message);
+  }
 
   const ts = Date.now();
   const uid = uuidv4().slice(0, 8);
@@ -304,7 +358,7 @@ async function storeMaskToS3(maskUrl, entityId) {
     CacheControl: 'max-age=86400',
   }));
 
-  return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  return { s3Url: `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`, inverted };
 }
 
 /**
@@ -388,8 +442,8 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
         output = await replicate.run(SAM_MODEL, {
           input: {
             image: imageUrl,
-            point_coords: pixelPoints,
-            point_labels: labels,
+            point_coords: JSON.stringify(pixelPoints),
+            point_labels: JSON.stringify(labels),
             multimask_output: false,
           },
         });
@@ -411,8 +465,8 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
       }
 
       console.log('[Segmentation] Multi-point mask generated successfully');
-      const s3Url = await storeMaskToS3(maskUrl, entityId);
-      return { maskUrl: s3Url };
+      const { s3Url, inverted } = await storeMaskToS3(maskUrl, entityId);
+      return { maskUrl: s3Url, inverted };
     } catch (err) {
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
@@ -450,8 +504,8 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
           const fallbackMaskUrl = extractOutputUrl(fallbackOutput);
           if (fallbackMaskUrl) {
             console.log('[Segmentation] Grounded SAM fallback succeeded');
-            const s3Url = await storeMaskToS3(fallbackMaskUrl, entityId);
-            return { maskUrl: s3Url };
+            const { s3Url, inverted } = await storeMaskToS3(fallbackMaskUrl, entityId);
+            return { maskUrl: s3Url, inverted };
           }
         } catch (fallbackErr) {
           console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
@@ -476,8 +530,13 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
   }
 
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
-  // Text-based detection requires Grounded SAM (SAM 2 base doesn't support text_prompt)
+  // Text-based detection requires a Grounded SAM model that supports text_prompt.
+  // meta/sam-2 does NOT support text prompts — only point-based segmentation.
   const textModel = GROUNDED_SAM_MODEL;
+  const modelLower = textModel.toLowerCase();
+  if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
+    throw new Error('Text-based "Find" requires a Grounded SAM model (set REPLICATE_GROUNDED_SAM_MODEL). The current model only supports click-to-select.');
+  }
   console.log(`[Segmentation] Text-based segment: "${textPrompt}" using ${textModel}`);
 
   const MAX_RETRIES = 3;
@@ -508,8 +567,8 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
       }
 
       console.log('[Segmentation] Text-based mask generated successfully');
-      const s3Url = await storeMaskToS3(maskUrl, entityId);
-      return { maskUrl: s3Url };
+      const { s3Url, inverted } = await storeMaskToS3(maskUrl, entityId);
+      return { maskUrl: s3Url, inverted };
     } catch (err) {
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
