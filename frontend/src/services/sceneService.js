@@ -431,6 +431,7 @@ const sceneService = {
       image_url: opts.imageUrl,
       point_x: opts.pointX,
       point_y: opts.pointY,
+      point_label: opts.pointLabel,
       text_prompt: opts.textPrompt || undefined,
       points: opts.points || undefined,
       labels: opts.labels || undefined,

@@ -438,7 +438,7 @@ export default function EraseBrushCanvas({
             updatedPoints.map((p) => ({ x: p.x, y: p.y })),
             updatedPoints.map((p) => p.label)
           )
-        : () => onSegment?.(normalizedX, normalizedY);
+        : () => onSegment?.({ pointX: normalizedX, pointY: normalizedY, label });
 
       // Ensure we always get a promise (segmentFn might return undefined)
       Promise.resolve(segmentFn())

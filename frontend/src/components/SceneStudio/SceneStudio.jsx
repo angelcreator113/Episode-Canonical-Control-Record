@@ -1172,6 +1172,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         imageUrl: targetUrl,
         pointX: normalizedX,
         pointY: normalizedY,
+        pointLabel,
         imageWidth: backgroundLayout?.sourceWidth,
         imageHeight: backgroundLayout?.sourceHeight,
       });
