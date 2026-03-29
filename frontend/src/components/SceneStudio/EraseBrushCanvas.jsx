@@ -442,7 +442,11 @@ export default function EraseBrushCanvas({
 
       // Ensure we always get a promise (segmentFn might return undefined)
       Promise.resolve(segmentFn())
-        .then((maskImageUrl) => {
+        .then((maskResult) => {
+          if (!maskResult) return;
+          // Support both string (legacy) and { maskUrl, inverted } object
+          const maskImageUrl = typeof maskResult === 'string' ? maskResult : maskResult.maskUrl;
+          const isInverted = typeof maskResult === 'object' && maskResult.inverted;
           if (!maskImageUrl) return;
           const img = new window.Image();
           img.crossOrigin = 'anonymous';
@@ -467,8 +471,10 @@ export default function EraseBrushCanvas({
             tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
             const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
 
+            // When inverted, dark pixels are the object (SAM-2 polarity)
+            const threshold = isInverted ? (v) => v <= 128 : (v) => v > 128;
             for (let i = 0; i < maskData.data.length; i += 4) {
-              if (maskData.data[i] > 128) {
+              if (threshold(maskData.data[i])) {
                 maskData.data[i] = 220;
                 maskData.data[i + 1] = 53;
                 maskData.data[i + 2] = 53;

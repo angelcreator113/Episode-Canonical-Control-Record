@@ -194,8 +194,8 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
       console.log('[Segmentation] SAM mask generated successfully');
 
       // Store mask to S3 for persistence
-      const s3Url = await storeMaskToS3(maskUrl, entityId);
-      return { maskUrl: s3Url };
+      const { s3Url, inverted } = await storeMaskToS3(maskUrl, entityId);
+      return { maskUrl: s3Url, inverted };
     } catch (err) {
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
@@ -231,8 +231,8 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
           const fallbackMaskUrl = extractOutputUrl(fallbackOutput);
           if (fallbackMaskUrl) {
             console.log('[Segmentation] Grounded SAM fallback succeeded');
-            const s3Url = await storeMaskToS3(fallbackMaskUrl, entityId);
-            return { maskUrl: s3Url };
+            const { s3Url, inverted } = await storeMaskToS3(fallbackMaskUrl, entityId);
+            return { maskUrl: s3Url, inverted };
           }
         } catch (fallbackErr) {
           console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
@@ -295,32 +295,29 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId, knownDims) {
 
 /**
  * Store a mask image from a URL to S3.
- * Auto-inverts if the mask has more white than black (background selected instead of object).
+ * Returns { s3Url, inverted } — inverted=true when mask has opposite polarity (white=background).
  */
 async function storeMaskToS3(maskUrl, entityId) {
   const sharp = require('sharp');
   const axios = require('axios');
   const response = await axios.get(maskUrl, { responseType: 'arraybuffer', timeout: 30000 });
-  let buffer = Buffer.from(response.data);
+  const buffer = Buffer.from(response.data);
 
-  // Check if mask is inverted (more white than black = background selected).
-  // A point-click mask should highlight the object (minority of pixels).
+  // Check if mask polarity is inverted (more white than black = background selected)
+  let inverted = false;
   try {
-    const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { data, info } = await sharp(buffer).grayscale().raw().toBuffer({ resolveWithObject: true });
     let whiteCount = 0;
-    let blackCount = 0;
     const totalPixels = info.width * info.height;
-    const channels = info.channels;
-    for (let i = 0; i < data.length; i += channels) {
+    for (let i = 0; i < data.length; i++) {
       if (data[i] > 128) whiteCount++;
-      else blackCount++;
     }
-    if (whiteCount > totalPixels * 0.5) {
-      console.log(`[Segmentation] Mask appears inverted (${Math.round(whiteCount / totalPixels * 100)}% white), inverting`);
-      buffer = await sharp(buffer).negate({ alpha: false }).png().toBuffer();
+    inverted = whiteCount > totalPixels * 0.5;
+    if (inverted) {
+      console.log(`[Segmentation] Mask is inverted (${Math.round(whiteCount / totalPixels * 100)}% white), flagging for frontend`);
     }
-  } catch (invertErr) {
-    console.warn('[Segmentation] Could not check/invert mask:', invertErr.message);
+  } catch (checkErr) {
+    console.warn('[Segmentation] Could not check mask polarity:', checkErr.message);
   }
 
   const ts = Date.now();
@@ -335,7 +332,7 @@ async function storeMaskToS3(maskUrl, entityId) {
     CacheControl: 'max-age=86400',
   }));
 
-  return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  return { s3Url: `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`, inverted };
 }
 
 /**
@@ -442,8 +439,8 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
       }
 
       console.log('[Segmentation] Multi-point mask generated successfully');
-      const s3Url = await storeMaskToS3(maskUrl, entityId);
-      return { maskUrl: s3Url };
+      const { s3Url, inverted } = await storeMaskToS3(maskUrl, entityId);
+      return { maskUrl: s3Url, inverted };
     } catch (err) {
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;
@@ -481,8 +478,8 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
           const fallbackMaskUrl = extractOutputUrl(fallbackOutput);
           if (fallbackMaskUrl) {
             console.log('[Segmentation] Grounded SAM fallback succeeded');
-            const s3Url = await storeMaskToS3(fallbackMaskUrl, entityId);
-            return { maskUrl: s3Url };
+            const { s3Url, inverted } = await storeMaskToS3(fallbackMaskUrl, entityId);
+            return { maskUrl: s3Url, inverted };
           }
         } catch (fallbackErr) {
           console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
@@ -544,8 +541,8 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
       }
 
       console.log('[Segmentation] Text-based mask generated successfully');
-      const s3Url = await storeMaskToS3(maskUrl, entityId);
-      return { maskUrl: s3Url };
+      const { s3Url, inverted } = await storeMaskToS3(maskUrl, entityId);
+      return { maskUrl: s3Url, inverted };
     } catch (err) {
       const status = err.response?.status || err.status;
       const detail = err.response?.data?.detail || err.message;

@@ -1181,7 +1181,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           console.warn('[SmartSelect] SAM unavailable, using approximate selection:', result.data.fallback_reason || 'unknown');
           setInpaintError('Smart select is using approximate selection — SAM segmentation service may be unavailable. Try the text "Find" option or brush/lasso instead.');
         }
-        return result.data.maskUrl;
+        return { maskUrl: result.data.maskUrl, inverted: result.data.inverted || false };
       }
       return null;
     } catch (err) {
@@ -1221,7 +1221,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           console.warn('[SmartSelect] SAM unavailable, using approximate selection:', result.data.fallback_reason || 'unknown');
           setInpaintError('Smart select is using approximate selection — SAM segmentation service may be unavailable. Try the text "Find" option or brush/lasso instead.');
         }
-        return result.data.maskUrl;
+        return { maskUrl: result.data.maskUrl, inverted: result.data.inverted || false };
       }
       return null;
     } catch (err) {
