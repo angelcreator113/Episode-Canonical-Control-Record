@@ -22,17 +22,18 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
 // SAM model for click-to-segment
-// Default: schananas/grounded_sam — proven working, supports both point + text segmentation.
-// NOTE: meta/sam-2-large was removed from Replicate (404). Do not use it.
-let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'schananas/grounded_sam';
+// Default: meta/sam-2 — official Meta model, supports point_coords/point_labels.
+// NOTE: meta/sam-2-large and schananas/grounded_sam return 404 as of 2026-03.
+let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'meta/sam-2';
 // Grounded SAM for text-based object detection (text_prompt support)
-const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'schananas/grounded_sam';
+// Falls back to SAM_MODEL for point-based if grounded model is unavailable.
+const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'meta/sam-2';
 
-// If the configured SAM model is a known-dead model, fall back to default
-const DEAD_MODELS = ['meta/sam-2-large', 'meta/sam-2'];
-if (DEAD_MODELS.some((m) => SAM_MODEL.startsWith(m))) {
-  console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" is deprecated/removed. Falling back to ${GROUNDED_SAM_MODEL}`);
-  SAM_MODEL = GROUNDED_SAM_MODEL;
+// If the configured SAM model is a known-dead model, fall back to meta/sam-2
+const DEAD_MODELS = ['meta/sam-2-large', 'schananas/grounded_sam'];
+if (DEAD_MODELS.some((m) => SAM_MODEL === m)) {
+  console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" is deprecated/removed. Falling back to meta/sam-2`);
+  SAM_MODEL = 'meta/sam-2';
 }
 
 console.log(`[Segmentation] Loaded — SAM_MODEL=${SAM_MODEL}, GROUNDED_SAM=${GROUNDED_SAM_MODEL}, TOKEN=${REPLICATE_API_TOKEN ? 'set' : 'MISSING'}`);
@@ -483,8 +484,13 @@ async function segmentByText(imageUrl, textPrompt, entityId) {
   }
 
   const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
-  // Text-based detection requires Grounded SAM (SAM 2 base doesn't support text_prompt)
+  // Text-based detection requires a Grounded SAM model that supports text_prompt.
+  // meta/sam-2 does NOT support text prompts — only point-based segmentation.
   const textModel = GROUNDED_SAM_MODEL;
+  const modelLower = textModel.toLowerCase();
+  if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
+    throw new Error('Text-based "Find" requires a Grounded SAM model (set REPLICATE_GROUNDED_SAM_MODEL). The current model only supports click-to-select.');
+  }
   console.log(`[Segmentation] Text-based segment: "${textPrompt}" using ${textModel}`);
 
   const MAX_RETRIES = 3;
