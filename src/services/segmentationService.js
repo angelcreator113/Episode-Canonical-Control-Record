@@ -181,20 +181,42 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
       });
     }
 
-    console.log('[Segmentation] SAM raw output type:', typeof output,
-      Array.isArray(output) ? `array[${output.length}]` : '',
-      output && typeof output === 'object' && !Array.isArray(output) ? `keys=${Object.keys(output).join(',')}` : '');
+    // SAM-2 returns { combined_mask, individual_masks[] }.
+      // Prefer individual_masks[0] (the clicked object) over combined_mask (which can have inverted polarity).
+      let maskUrl;
+      if (output && typeof output === 'object' && !Array.isArray(output)) {
+        const keys = [];
+        for (const k of Object.keys(output)) { keys.push(k); }
+        console.log('[Segmentation] SAM output keys:', keys.join(', '));
 
-      const maskUrl = extractOutputUrl(output);
+        // Try individual_masks first — this is the per-object mask with correct polarity
+        if (output.individual_masks) {
+          const masks = output.individual_masks;
+          const firstMask = Array.isArray(masks) ? masks[0] : masks;
+          maskUrl = extractOutputUrl(firstMask);
+          if (maskUrl) console.log('[Segmentation] Using individual_masks[0]');
+        }
+        // Fall back to combined_mask
+        if (!maskUrl && output.combined_mask) {
+          maskUrl = extractOutputUrl(output.combined_mask);
+          if (maskUrl) console.log('[Segmentation] Using combined_mask');
+        }
+      }
+      // Generic fallback for other model output formats
       if (!maskUrl) {
-        console.error('[Segmentation] SAM returned no output URL. Output:', JSON.stringify(output).slice(0, 500));
+        maskUrl = extractOutputUrl(output);
+      }
+
+      if (!maskUrl) {
+        console.error('[Segmentation] SAM returned no output URL. Raw:', typeof output, JSON.stringify(output).slice(0, 500));
         throw new Error('SAM returned no mask output — the model may not support point-based segmentation');
       }
 
-      console.log('[Segmentation] SAM mask generated successfully');
+      console.log('[Segmentation] SAM mask URL obtained:', maskUrl.slice(0, 100));
 
       // Store mask to S3 for persistence
       const { s3Url, inverted } = await storeMaskToS3(maskUrl, entityId);
+      console.log('[Segmentation] Mask stored to S3, inverted:', inverted);
       return { maskUrl: s3Url, inverted };
     } catch (err) {
       const status = err.response?.status || err.status;
