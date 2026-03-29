@@ -82,7 +82,7 @@ async function getImageDimensions(imageUrl) {
  * @param {string} entityId - Scene/entity ID for rate limiting context
  * @returns {Promise<{maskUrl: string}>} - URL of the generated mask (white = selected, black = background)
  */
-async function segmentAtPoint(imageUrl, pointX, pointY, entityId, knownDims) {
+async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
   if (!REPLICATE_API_TOKEN) {
     throw new Error('REPLICATE_API_TOKEN not configured');
   }
@@ -230,9 +230,10 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId, knownDims) {
         }
       }
 
-      console.warn('[Segmentation] All SAM models failed, using fallback click mask');
+      const fallbackReason = `${SAM_MODEL} failed: ${String(detail).slice(0, 200)}`;
+      console.warn('[Segmentation] All SAM models failed, using fallback click mask.', fallbackReason);
       const fallbackUrl = await createFallbackClickMask(pixelPoints, imgWidth, imgHeight, entityId);
-      return { maskUrl: fallbackUrl, fallback: true };
+      return { maskUrl: fallbackUrl, fallback: true, fallback_reason: fallbackReason };
     }
   } // end retry loop
 }
@@ -279,8 +280,8 @@ async function createFallbackClickMask(pixelPoints, width, height, entityId) {
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
-async function segmentAtPoint(imageUrl, pointX, pointY, entityId) {
-  return segmentWithPoints(imageUrl, [{ x: pointX, y: pointY, label: 1 }], entityId);
+async function segmentAtPoint(imageUrl, pointX, pointY, entityId, knownDims) {
+  return segmentWithPoints(imageUrl, [{ x: pointX, y: pointY, label: 1 }], entityId, knownDims);
 }
 
 /**
