@@ -161,12 +161,16 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
         },
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-      // SAM 2 — point_coords as nested array [[x,y]], point_labels as array [1]
+      // SAM 2 on Replicate — cog models accept complex inputs as JSON strings.
+      // Format: point_coords as "[x,y],[x,y]" string, point_labels as "1,0" string.
+      const coordsStr = pixelPoints.map((p) => `[${p.x},${p.y}]`).join(',');
+      const labelsStr = pixelPoints.map((p) => p.label).join(',');
+      console.log(`[Segmentation] SAM-2 input: point_coords="${coordsStr}" point_labels="${labelsStr}"`);
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          point_coords: pixelPoints.map((p) => [p.x, p.y]),
-          point_labels: pixelPoints.map((p) => p.label),
+          point_coords: coordsStr,
+          point_labels: labelsStr,
           multimask_output: false,
         },
       });
@@ -435,11 +439,13 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
           });
         }
       } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
+        const coordsStr = pixelPoints.map((p) => `[${p[0]},${p[1]}]`).join(',');
+        const labelsStr = labels.join(',');
         output = await replicate.run(SAM_MODEL, {
           input: {
             image: imageUrl,
-            point_coords: pixelPoints,
-            point_labels: labels,
+            point_coords: coordsStr,
+            point_labels: labelsStr,
             multimask_output: false,
           },
         });
