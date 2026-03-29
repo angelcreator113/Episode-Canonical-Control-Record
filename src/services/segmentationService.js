@@ -22,15 +22,17 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
 // SAM model for click-to-segment
-// meta/sam-2 is automatic-only (ignores point_coords).
-// meta/sam-2-video supports interactive click-based segmentation on images AND video.
-const SAM2_VIDEO_VERSION = 'ae84885e7b0fc595cd4b130bbf109fe3e9807e1438c18fca9e7b90336a4e6018';
-const SAM2_DEFAULT = `meta/sam-2-video:${SAM2_VIDEO_VERSION}`;
+// meta/sam-2 has multiple versions:
+//   cbd95fb7 = automatic mask generator (ignores point prompts)
+//   fe97b453 = interactive version with point_coords/box support
+// meta/sam-2-video = video-only (requires input_video)
+const SAM2_INTERACTIVE_VERSION = 'fe97b453a6455861e3bac769b441ca1f1086110da7466dbb65cf1eecfd60dc83';
+const SAM2_DEFAULT = `meta/sam-2:${SAM2_INTERACTIVE_VERSION}`;
 let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || SAM2_DEFAULT;
 const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_DEFAULT;
 
 // If the configured SAM model is a known non-interactive model, fall back
-const DEAD_MODELS = ['meta/sam-2-large', 'schananas/grounded_sam', 'meta/sam-2'];
+const DEAD_MODELS = ['meta/sam-2-large', 'schananas/grounded_sam'];
 if (DEAD_MODELS.some((m) => SAM_MODEL === m || SAM_MODEL.startsWith(m + ':'))) {
   console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" doesn't support point-click. Using ${SAM2_DEFAULT}`);
   SAM_MODEL = SAM2_DEFAULT;
@@ -160,16 +162,16 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
         },
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-      // meta/sam-2-video supports interactive point segmentation on images.
-      // Uses click_coordinates "[x,y]" and click_labels "1" as comma-separated strings.
-      const coordsStr = pixelPoints.map((p) => `[${p.x},${p.y}]`).join(',');
-      const labelsStr = pixelPoints.map((p) => p.label).join(',');
-      console.log(`[Segmentation] SAM-2-video input: click_coordinates="${coordsStr}" click_labels="${labelsStr}"`);
+      // meta/sam-2 interactive version (fe97b453) — accepts point_coords and point_labels
+      const coords = pixelPoints.map((p) => [p.x, p.y]);
+      const labs = pixelPoints.map((p) => p.label);
+      console.log(`[Segmentation] SAM-2 interactive input: point_coords=${JSON.stringify(coords)} point_labels=${JSON.stringify(labs)}`);
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          click_coordinates: coordsStr,
-          click_labels: labelsStr,
+          point_coords: JSON.stringify(coords),
+          point_labels: JSON.stringify(labs),
+          multimask_output: false,
         },
       });
     } else {
@@ -437,13 +439,12 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
           });
         }
       } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-        const coordsStr = pixelPoints.map((p) => `[${p[0]},${p[1]}]`).join(',');
-        const labelsStr = labels.join(',');
         output = await replicate.run(SAM_MODEL, {
           input: {
             image: imageUrl,
-            click_coordinates: coordsStr,
-            click_labels: labelsStr,
+            point_coords: JSON.stringify(pixelPoints),
+            point_labels: JSON.stringify(labels),
+            multimask_output: false,
           },
         });
       } else {
