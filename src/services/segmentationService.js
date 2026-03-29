@@ -295,11 +295,33 @@ async function segmentAtPoint(imageUrl, pointX, pointY, entityId, knownDims) {
 
 /**
  * Store a mask image from a URL to S3.
+ * Auto-inverts if the mask has more white than black (background selected instead of object).
  */
 async function storeMaskToS3(maskUrl, entityId) {
+  const sharp = require('sharp');
   const axios = require('axios');
   const response = await axios.get(maskUrl, { responseType: 'arraybuffer', timeout: 30000 });
-  const buffer = Buffer.from(response.data);
+  let buffer = Buffer.from(response.data);
+
+  // Check if mask is inverted (more white than black = background selected).
+  // A point-click mask should highlight the object (minority of pixels).
+  try {
+    const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let whiteCount = 0;
+    let blackCount = 0;
+    const totalPixels = info.width * info.height;
+    const channels = info.channels;
+    for (let i = 0; i < data.length; i += channels) {
+      if (data[i] > 128) whiteCount++;
+      else blackCount++;
+    }
+    if (whiteCount > totalPixels * 0.5) {
+      console.log(`[Segmentation] Mask appears inverted (${Math.round(whiteCount / totalPixels * 100)}% white), inverting`);
+      buffer = await sharp(buffer).negate({ alpha: false }).png().toBuffer();
+    }
+  } catch (invertErr) {
+    console.warn('[Segmentation] Could not check/invert mask:', invertErr.message);
+  }
 
   const ts = Date.now();
   const uid = uuidv4().slice(0, 8);
