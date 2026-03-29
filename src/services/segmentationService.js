@@ -22,18 +22,19 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
 // SAM model for click-to-segment
-// Default: meta/sam-2 — official Meta model, supports point_coords/point_labels.
-// NOTE: meta/sam-2-large and schananas/grounded_sam return 404 as of 2026-03.
-let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'meta/sam-2';
+// Use version-pinned identifier so the SDK hits /v1/predictions (with version)
+// instead of /v1/models/.../predictions (which 404s for many models).
+const SAM2_VERSION = 'cbd95fb76192174268b6b303aeeb7a736e8dab0cbc38177f09db79b2299da30b';
+const SAM2_DEFAULT = `meta/sam-2:${SAM2_VERSION}`;
+let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || SAM2_DEFAULT;
 // Grounded SAM for text-based object detection (text_prompt support)
-// Falls back to SAM_MODEL for point-based if grounded model is unavailable.
-const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'meta/sam-2';
+const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_DEFAULT;
 
-// If the configured SAM model is a known-dead model, fall back to meta/sam-2
+// If the configured SAM model is a known-dead model, fall back to pinned sam-2
 const DEAD_MODELS = ['meta/sam-2-large', 'schananas/grounded_sam'];
-if (DEAD_MODELS.some((m) => SAM_MODEL === m)) {
-  console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" is deprecated/removed. Falling back to meta/sam-2`);
-  SAM_MODEL = 'meta/sam-2';
+if (DEAD_MODELS.some((m) => SAM_MODEL === m || SAM_MODEL.startsWith(m + ':'))) {
+  console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" is deprecated. Falling back to ${SAM2_DEFAULT}`);
+  SAM_MODEL = SAM2_DEFAULT;
 }
 
 console.log(`[Segmentation] Loaded — SAM_MODEL=${SAM_MODEL}, GROUNDED_SAM=${GROUNDED_SAM_MODEL}, TOKEN=${REPLICATE_API_TOKEN ? 'set' : 'MISSING'}`);
@@ -160,12 +161,12 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
         },
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-      // SAM 2 supports true multi-point refinement with positive/negative labels.
+      // SAM 2 — point_coords and point_labels are semicolon/comma-separated strings.
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          point_coords: pixelPoints.map((p) => [p.x, p.y]),
-          point_labels: pixelPoints.map((p) => p.label),
+          point_coords: pixelPoints.map((p) => `${p.x},${p.y}`).join(';'),
+          point_labels: pixelPoints.map((p) => p.label).join(','),
           multimask_output: false,
         },
       });
@@ -396,8 +397,8 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
         output = await replicate.run(SAM_MODEL, {
           input: {
             image: imageUrl,
-            point_coords: pixelPoints,
-            point_labels: labels,
+            point_coords: pixelPoints.map((p) => p.join(',')).join(';'),
+            point_labels: labels.join(','),
             multimask_output: false,
           },
         });
