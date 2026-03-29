@@ -180,7 +180,7 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
           image: imageUrl,
           point_coords: JSON.stringify(coords),
           point_labels: JSON.stringify(labs),
-          multimask_output: true,
+          multimask_output: false,
         },
       });
       console.log(`[Segmentation] SAM-2 raw output type: ${typeof output}, isArray: ${Array.isArray(output)}, preview: ${JSON.stringify(output).slice(0, 300)}`);
@@ -251,27 +251,37 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
       }
 
       // For any other error (model unavailable, invalid input, prediction failed),
-      // fall back to grounded_sam, then to a simple click mask as last resort.
+      // fall back to alternative model, then to a simple click mask as last resort.
       console.error(`[Segmentation] SAM error (${status || 'unknown'}):`, detail);
-      if (SAM_MODEL !== GROUNDED_SAM_MODEL) {
-        console.warn(`[Segmentation] Falling back to ${GROUNDED_SAM_MODEL}`);
+
+      // Try a fallback model — either the configured GROUNDED_SAM or the unversioned meta/sam-2
+      const fallbackModels = [];
+      if (SAM_MODEL !== GROUNDED_SAM_MODEL) fallbackModels.push(GROUNDED_SAM_MODEL);
+      // If the pinned version failed, also try the unversioned model (auto-segmentation
+      // is better than nothing). Skip if it's the same model we already tried.
+      if (SAM_MODEL !== 'meta/sam-2' && !fallbackModels.includes('meta/sam-2')) {
+        fallbackModels.push('meta/sam-2');
+      }
+
+      for (const fallbackModel of fallbackModels) {
         try {
+          console.warn(`[Segmentation] Trying fallback model: ${fallbackModel}`);
           const firstPositive = pixelPoints.find((p) => p.label === 1) || pixelPoints[0];
-          const fallbackOutput = await replicate.run(GROUNDED_SAM_MODEL, {
+          const fallbackOutput = await replicate.run(fallbackModel, {
             input: {
               image: imageUrl,
-              input_point: `[${firstPositive.x}, ${firstPositive.y}]`,
-              input_label: '[1]',
+              point_coords: JSON.stringify([[firstPositive.x, firstPositive.y]]),
+              point_labels: JSON.stringify([firstPositive.label]),
             },
           });
           const fallbackMaskUrl = extractOutputUrl(fallbackOutput);
           if (fallbackMaskUrl) {
-            console.log('[Segmentation] Grounded SAM fallback succeeded');
+            console.log(`[Segmentation] Fallback model ${fallbackModel} succeeded`);
             const { s3Url, inverted } = await storeMaskToS3(fallbackMaskUrl, entityId);
             return { maskUrl: s3Url, inverted };
           }
         } catch (fallbackErr) {
-          console.warn('[Segmentation] Grounded SAM fallback also failed:', fallbackErr.message);
+          console.warn(`[Segmentation] Fallback ${fallbackModel} also failed:`, fallbackErr.message);
         }
       }
 
@@ -455,7 +465,7 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
             image: imageUrl,
             point_coords: JSON.stringify(pixelPoints),
             point_labels: JSON.stringify(labels),
-            multimask_output: true,
+            multimask_output: false,
           },
         });
         console.log(`[Segmentation] Multi-point SAM-2 raw output: ${JSON.stringify(output).slice(0, 300)}`);
