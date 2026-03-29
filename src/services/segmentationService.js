@@ -31,10 +31,18 @@ const SAM2_DEFAULT = `meta/sam-2:${SAM2_INTERACTIVE_VERSION}`;
 let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || SAM2_DEFAULT;
 const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_DEFAULT;
 
-// If the configured SAM model is a known non-interactive model, fall back
+// If the configured SAM model is a known non-interactive model, fall back.
+// IMPORTANT: "meta/sam-2" without a version hash resolves to the LATEST version
+// which is cbd95fb7 (automatic mask generator) — it silently ignores point prompts!
 const DEAD_MODELS = ['meta/sam-2-large', 'schananas/grounded_sam'];
 if (DEAD_MODELS.some((m) => SAM_MODEL === m || SAM_MODEL.startsWith(m + ':'))) {
   console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" doesn't support point-click. Using ${SAM2_DEFAULT}`);
+  SAM_MODEL = SAM2_DEFAULT;
+}
+// Ensure "meta/sam-2" (without version) always pins to the interactive version.
+// The latest/default version (cbd95fb7) is automatic-only and ignores point_coords.
+if (SAM_MODEL === 'meta/sam-2') {
+  console.warn(`[Segmentation] SAM_MODEL "meta/sam-2" has no version pin — latest is automatic-only. Pinning to interactive version ${SAM2_INTERACTIVE_VERSION.slice(0, 8)}`);
   SAM_MODEL = SAM2_DEFAULT;
 }
 
@@ -162,25 +170,16 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
         },
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-      // meta/sam-2 interactive version (fe97b453)
-      // Send ALL known parameter name formats — the model uses whichever it recognises,
-      // Replicate silently ignores unknown params.
+      // meta/sam-2 interactive version (fe97b453) — uses point_coords/point_labels
+      // MUST be the fe97b453 version; the default/latest (cbd95fb7) is automatic-only.
       const coords = pixelPoints.map((p) => [p.x, p.y]);
       const labs = pixelPoints.map((p) => p.label);
-      // Format C — spoonwep/sam2-cog style objects with coordinate/type
-      const pointObjects = pixelPoints.map((p) => ({ coordinate: [p.x, p.y], type: p.label }));
-      console.log(`[Segmentation] SAM-2 interactive input: coords=${JSON.stringify(coords)} labels=${JSON.stringify(labs)} img=${imgWidth}x${imgHeight}`);
+      console.log(`[Segmentation] SAM-2 interactive input: model=${SAM_MODEL} coords=${JSON.stringify(coords)} labels=${JSON.stringify(labs)} img=${imgWidth}x${imgHeight}`);
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          // Format A — input_point / input_label
-          input_point: JSON.stringify(coords),
-          input_label: JSON.stringify(labs),
-          // Format B — point_coords / point_labels
           point_coords: JSON.stringify(coords),
           point_labels: JSON.stringify(labs),
-          // Format C — points as objects with coordinate/type
-          points: JSON.stringify(pointObjects),
           multimask_output: true,
         },
       });
@@ -450,19 +449,16 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
           });
         }
       } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-        const pointObjects = pixelPoints.map((p, i) => ({ coordinate: p, type: labels[i] }));
+        console.log(`[Segmentation] Multi-point SAM-2: model=${SAM_MODEL} coords=${JSON.stringify(pixelPoints)} labels=${JSON.stringify(labels)}`);
         output = await replicate.run(SAM_MODEL, {
           input: {
             image: imageUrl,
-            input_point: JSON.stringify(pixelPoints),
-            input_label: JSON.stringify(labels),
             point_coords: JSON.stringify(pixelPoints),
             point_labels: JSON.stringify(labels),
-            points: JSON.stringify(pointObjects),
             multimask_output: true,
           },
         });
-        console.log(`[Segmentation] Multi-point SAM-2 raw output type: ${typeof output}, preview: ${JSON.stringify(output).slice(0, 300)}`);
+        console.log(`[Segmentation] Multi-point SAM-2 raw output: ${JSON.stringify(output).slice(0, 300)}`);
       } else {
         // Flatten for models expecting comma-separated format
         output = await replicate.run(SAM_MODEL, {
