@@ -162,16 +162,22 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
         },
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-      // meta/sam-2 interactive version (fe97b453) — accepts point_coords and point_labels
+      // meta/sam-2 interactive version (fe97b453)
+      // Send BOTH parameter name formats (input_point/input_label AND point_coords/point_labels)
+      // so the model uses whichever it recognises — Replicate ignores unknown params.
       const coords = pixelPoints.map((p) => [p.x, p.y]);
       const labs = pixelPoints.map((p) => p.label);
-      console.log(`[Segmentation] SAM-2 interactive input: point_coords=${JSON.stringify(coords)} point_labels=${JSON.stringify(labs)}`);
+      console.log(`[Segmentation] SAM-2 interactive input: coords=${JSON.stringify(coords)} labels=${JSON.stringify(labs)}`);
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
+          // Format A — used by many SAM-2 cog wrappers
+          input_point: JSON.stringify(coords),
+          input_label: JSON.stringify(labs),
+          // Format B — alternative parameter names
           point_coords: JSON.stringify(coords),
           point_labels: JSON.stringify(labs),
-          multimask_output: false,
+          multimask_output: true,
         },
       });
     } else {
@@ -442,9 +448,11 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
         output = await replicate.run(SAM_MODEL, {
           input: {
             image: imageUrl,
+            input_point: JSON.stringify(pixelPoints),
+            input_label: JSON.stringify(labels),
             point_coords: JSON.stringify(pixelPoints),
             point_labels: JSON.stringify(labels),
-            multimask_output: false,
+            multimask_output: true,
           },
         });
       } else {
