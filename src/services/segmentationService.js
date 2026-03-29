@@ -22,11 +22,18 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
 // SAM model for click-to-segment
-// Default: schananas/grounded_sam — proven working. Override with REPLICATE_SAM_MODEL
-// for SAM 2 multi-point support (e.g. 'meta/sam-2-large')
-const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'schananas/grounded_sam';
+// Default: schananas/grounded_sam — proven working, supports both point + text segmentation.
+// NOTE: meta/sam-2-large was removed from Replicate (404). Do not use it.
+let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'schananas/grounded_sam';
 // Grounded SAM for text-based object detection (text_prompt support)
 const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || 'schananas/grounded_sam';
+
+// If the configured SAM model is a known-dead model, fall back to default
+const DEAD_MODELS = ['meta/sam-2-large', 'meta/sam-2'];
+if (DEAD_MODELS.some((m) => SAM_MODEL.startsWith(m))) {
+  console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" is deprecated/removed. Falling back to ${GROUNDED_SAM_MODEL}`);
+  SAM_MODEL = GROUNDED_SAM_MODEL;
+}
 
 console.log(`[Segmentation] Loaded — SAM_MODEL=${SAM_MODEL}, GROUNDED_SAM=${GROUNDED_SAM_MODEL}, TOKEN=${REPLICATE_API_TOKEN ? 'set' : 'MISSING'}`);
 
