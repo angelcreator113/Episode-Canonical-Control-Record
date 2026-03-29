@@ -161,12 +161,12 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
         },
       });
     } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
-      // SAM 2 — point_coords and point_labels are semicolon/comma-separated strings.
+      // SAM 2 — point_coords as nested array [[x,y]], point_labels as array [1]
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          point_coords: pixelPoints.map((p) => `${p.x},${p.y}`).join(';'),
-          point_labels: pixelPoints.map((p) => p.label).join(','),
+          point_coords: pixelPoints.map((p) => [p.x, p.y]),
+          point_labels: pixelPoints.map((p) => p.label),
           multimask_output: false,
         },
       });
@@ -438,8 +438,8 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
         output = await replicate.run(SAM_MODEL, {
           input: {
             image: imageUrl,
-            point_coords: pixelPoints.map((p) => p.join(',')).join(';'),
-            point_labels: labels.join(','),
+            point_coords: pixelPoints,
+            point_labels: labels,
             multimask_output: false,
           },
         });
