@@ -464,12 +464,16 @@ export default function EraseBrushCanvas({
               ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
 
-            // Draw SAM mask — covers the full canvas (source image fills canvas via cover-fit)
+            // Draw SAM mask aligned to the background image's cover-fit layout
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = canvas.width;
             tempCanvas.height = canvas.height;
             const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const maskDrawX = backgroundLayout?.drawX || 0;
+            const maskDrawY = backgroundLayout?.drawY || 0;
+            const maskDrawW = backgroundLayout?.drawWidth || canvas.width;
+            const maskDrawH = backgroundLayout?.drawHeight || canvas.height;
+            tempCtx.drawImage(img, maskDrawX, maskDrawY, maskDrawW, maskDrawH);
             const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
 
             // Debug: sample mask pixel values to understand format
@@ -561,7 +565,7 @@ export default function EraseBrushCanvas({
       ctx.fill();
       setHasStrokes(true);
     }
-  }, [screenToCanvas, brushSize, brushMode, isProcessing, isSegmenting, drawMode, applySoftBrush, lassoPoints, smartPoints, fillLasso, onSegment, canvasWidth, canvasHeight, saveToHistory]);
+  }, [screenToCanvas, brushSize, brushMode, isProcessing, isSegmenting, drawMode, applySoftBrush, lassoPoints, smartPoints, fillLasso, onSegment, onMultiPointSegment, canvasWidth, canvasHeight, backgroundLayout, strokeHistory, historyIndex, preSmartHistoryIndex, saveToHistory]);
 
   const handleMouseMove = useCallback((e) => {
     if (isProcessing) return;
