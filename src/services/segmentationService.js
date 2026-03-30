@@ -28,6 +28,13 @@ const SAM2_MODEL = 'meta/sam-2';
 let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || SAM2_MODEL;
 const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_MODEL;
 
+// Override known-dead or non-existent models
+const DEAD_MODELS = ['meta/sam-2-large', 'schananas/grounded_sam', 'meta/sam-2-video'];
+if (DEAD_MODELS.some((m) => SAM_MODEL === m || SAM_MODEL.startsWith(m + ':'))) {
+  console.warn(`[Segmentation] REPLICATE_SAM_MODEL="${SAM_MODEL}" does not exist on Replicate. Using ${SAM2_MODEL}`);
+  SAM_MODEL = SAM2_MODEL;
+}
+
 console.log(`[Segmentation] Loaded — SAM_MODEL=${SAM_MODEL}, GROUNDED_SAM=${GROUNDED_SAM_MODEL}, TOKEN=${REPLICATE_API_TOKEN ? 'set' : 'MISSING'}`);
 
 /**
