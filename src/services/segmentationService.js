@@ -22,20 +22,11 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
 // SAM model for click-to-segment
-// meta/sam-2 (image) = automatic mask generator ONLY — ignores point prompts entirely.
-// meta/sam-2-video = interactive version with click_coordinates support (requires video input).
-// We use meta/sam-2-video with a single-frame GIF for point-based segmentation.
-const SAM2_VIDEO_MODEL = 'meta/sam-2-video';
-const SAM2_IMAGE_MODEL = 'meta/sam-2'; // automatic-only fallback
-let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || SAM2_VIDEO_MODEL;
-const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_IMAGE_MODEL;
-
-// Warn if configured model is known to not support point prompts
-const AUTO_ONLY_MODELS = ['meta/sam-2', 'meta/sam-2-large', 'lucataco/segment-anything-2'];
-if (AUTO_ONLY_MODELS.some((m) => SAM_MODEL === m || SAM_MODEL.startsWith(m + ':'))) {
-  console.warn(`[Segmentation] Configured SAM_MODEL "${SAM_MODEL}" is automatic-only (ignores click coords). Switching to ${SAM2_VIDEO_MODEL}`);
-  SAM_MODEL = SAM2_VIDEO_MODEL;
-}
+// meta/sam-2 is automatic-only (generates masks for ALL objects, ignores point prompts).
+// Strategy: run automatic segmentation, then pick the mask containing the clicked pixel.
+const SAM2_MODEL = 'meta/sam-2';
+let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || SAM2_MODEL;
+const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_MODEL;
 
 console.log(`[Segmentation] Loaded — SAM_MODEL=${SAM_MODEL}, GROUNDED_SAM=${GROUNDED_SAM_MODEL}, TOKEN=${REPLICATE_API_TOKEN ? 'set' : 'MISSING'}`);
 
@@ -84,32 +75,61 @@ async function getImageDimensions(imageUrl) {
 }
 
 /**
- * Convert a static image to a single-frame GIF and upload to S3.
- * Required because meta/sam-2-video only accepts video input.
+ * From an array of mask URLs, pick the smallest mask that contains the clicked pixel.
+ * Downloads each mask, checks the pixel at (x,y), and returns the best match.
  */
-async function imageToVideoUrl(imageUrl, entityId) {
+async function pickMaskAtPoint(maskUrls, clickX, clickY, imgWidth, imgHeight) {
   const sharp = require('sharp');
   const axios = require('axios');
-  const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
-  const imgBuffer = Buffer.from(response.data);
 
-  // Convert to single-frame GIF (meta/sam-2-video accepts GIF as video input)
-  const gifBuffer = await sharp(imgBuffer)
-    .gif()
-    .toBuffer();
+  let bestMask = null;
+  let bestSize = Infinity;
 
-  const ts = Date.now();
-  const uid = uuidv4().slice(0, 8);
-  const s3Key = `scene-studio/${entityId}/tmp/${ts}-${uid}-frame.gif`;
-  await s3.send(new PutObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: s3Key,
-    Body: gifBuffer,
-    ContentType: 'image/gif',
-    CacheControl: 'max-age=300', // short TTL — temporary file
-  }));
+  for (const url of maskUrls) {
+    try {
+      const maskUrl = typeof url === 'string' ? url
+        : (url instanceof URL ? url.toString() : extractOutputUrl(url));
+      if (!maskUrl) continue;
 
-  return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+      const resp = await axios.get(maskUrl, { responseType: 'arraybuffer', timeout: 15000 });
+      const { data, info } = await sharp(Buffer.from(resp.data))
+        .grayscale()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      // Map click coords to mask pixel (mask may be different resolution)
+      const mx = Math.round(clickX * info.width / imgWidth);
+      const my = Math.round(clickY * info.height / imgHeight);
+      const idx = my * info.width + mx;
+
+      if (idx < 0 || idx >= data.length) continue;
+
+      const pixelValue = data[idx];
+      const isClickInMask = pixelValue > 128;
+
+      if (!isClickInMask) continue;
+
+      // Count mask size (white pixels)
+      let maskPixels = 0;
+      for (let i = 0; i < data.length; i++) {
+        if (data[i] > 128) maskPixels++;
+      }
+
+      // Pick the smallest mask containing the click (most specific object)
+      if (maskPixels < bestSize) {
+        bestSize = maskPixels;
+        bestMask = maskUrl;
+      }
+      console.log(`[Segmentation] Mask candidate: ${maskPixels} px (${Math.round(maskPixels / data.length * 100)}%), click pixel=${pixelValue}`);
+    } catch (err) {
+      console.warn('[Segmentation] Failed to check mask:', err.message);
+    }
+  }
+
+  if (bestMask) {
+    console.log(`[Segmentation] Best mask: ${bestSize} px`);
+  }
+  return bestMask;
 }
 
 /**
@@ -181,7 +201,6 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
     const firstPositive = pixelPoints.find((p) => p.label === 1) || pixelPoints[0];
 
     if (modelLower.includes('grounded_sam') || modelLower.includes('grounded-sam')) {
-      // grounded_sam doesn't reliably support multi-point labels. Use the latest positive point.
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
@@ -189,37 +208,30 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
           input_label: '[1]',
         },
       });
-    } else if (modelLower.includes('sam-2-video') || modelLower.includes('sam2-video')) {
-      // meta/sam-2-video — the only SAM-2 model that supports interactive point-click.
-      // Requires video input, so we convert the image to a single-frame GIF first.
-      const clickCoords = pixelPoints.map((p) => `[${p.x},${p.y}]`).join(',');
-      const clickLabels = pixelPoints.map((p) => p.label).join(',');
-      console.log(`[Segmentation] SAM-2-video input: model=${SAM_MODEL} click_coordinates=${clickCoords} click_labels=${clickLabels} img=${imgWidth}x${imgHeight}`);
-
-      const videoUrl = await imageToVideoUrl(imageUrl, entityId);
-      console.log(`[Segmentation] Converted image to GIF: ${videoUrl.slice(0, 80)}`);
-
-      output = await replicate.run(SAM_MODEL, {
-        input: {
-          input_video: videoUrl,
-          click_coordinates: clickCoords,
-          click_labels: clickLabels,
-          click_frames: pixelPoints.map(() => '0').join(','),
-          mask_type: 'binary',
-          output_video: false,
-          output_format: 'png',
-        },
-      });
-      console.log(`[Segmentation] SAM-2-video raw output type: ${typeof output}, isArray: ${Array.isArray(output)}, preview: ${JSON.stringify(output).slice(0, 300)}`);
     } else {
-      // Default format for facebook/sam and similar models.
+      // meta/sam-2 automatic mode: generate all masks, then pick the one at the click point.
+      console.log(`[Segmentation] SAM-2 automatic mode: model=${SAM_MODEL}, click=(${firstPositive.x},${firstPositive.y}) on ${imgWidth}x${imgHeight}`);
       output = await replicate.run(SAM_MODEL, {
         input: {
           image: imageUrl,
-          point_coords: pixelPoints.map((p) => `${p.x},${p.y}`).join(';'),
-          point_labels: pixelPoints.map((p) => p.label).join(','),
+          use_m2m: true,
+          multimask_output: true,
         },
       });
+      console.log(`[Segmentation] SAM-2 output type: ${typeof output}, keys: ${output && typeof output === 'object' ? Object.keys(output).join(',') : 'N/A'}`);
+
+      // Extract individual masks and pick the one containing the click point
+      if (output && typeof output === 'object' && output.individual_masks) {
+        const masks = Array.isArray(output.individual_masks) ? output.individual_masks : [output.individual_masks];
+        console.log(`[Segmentation] SAM-2 returned ${masks.length} individual masks, checking click point...`);
+        const bestMaskUrl = await pickMaskAtPoint(masks, firstPositive.x, firstPositive.y, imgWidth, imgHeight);
+        if (bestMaskUrl) {
+          const { s3Url, inverted } = await storeMaskToS3(bestMaskUrl, entityId);
+          console.log('[Segmentation] Selected mask at click point, inverted:', inverted);
+          return { maskUrl: s3Url, inverted };
+        }
+        console.warn('[Segmentation] No mask contains the click point, falling through to combined_mask');
+      }
     }
 
     // SAM-2 returns { combined_mask, individual_masks[] }.
@@ -477,24 +489,22 @@ async function segmentMultiPoint(imageUrl, points, labels, entityId, knownDims) 
             },
           });
         }
-      } else if (modelLower.includes('sam-2-video') || modelLower.includes('sam2-video')) {
-        const clickCoords = pixelPoints.map((p) => `[${p[0]},${p[1]}]`).join(',');
-        const clickLabels = labels.join(',');
-        console.log(`[Segmentation] Multi-point SAM-2-video: model=${SAM_MODEL} click_coordinates=${clickCoords} click_labels=${clickLabels}`);
-
-        const videoUrl = await imageToVideoUrl(imageUrl, entityId);
+      } else if (modelLower.includes('sam-2') || modelLower.includes('sam2')) {
+        // SAM-2 automatic mode with click-point mask selection
+        const firstInclude = pixelPoints.find((_, i) => labels[i] === 1) || pixelPoints[0];
+        const firstIncludeIdx = pixelPoints.indexOf(firstInclude);
+        console.log(`[Segmentation] Multi-point SAM-2 auto: picking mask at (${firstInclude[0]},${firstInclude[1]})`);
         output = await replicate.run(SAM_MODEL, {
-          input: {
-            input_video: videoUrl,
-            click_coordinates: clickCoords,
-            click_labels: clickLabels,
-            click_frames: labels.map(() => '0').join(','),
-            mask_type: 'binary',
-            output_video: false,
-            output_format: 'png',
-          },
+          input: { image: imageUrl, use_m2m: true, multimask_output: true },
         });
-        console.log(`[Segmentation] Multi-point SAM-2-video raw output: ${JSON.stringify(output).slice(0, 300)}`);
+        if (output && typeof output === 'object' && output.individual_masks) {
+          const masks = Array.isArray(output.individual_masks) ? output.individual_masks : [output.individual_masks];
+          const bestMaskUrl = await pickMaskAtPoint(masks, firstInclude[0], firstInclude[1], imgWidth, imgHeight);
+          if (bestMaskUrl) {
+            const { s3Url, inverted } = await storeMaskToS3(bestMaskUrl, entityId);
+            return { maskUrl: s3Url, inverted };
+          }
+        }
       } else {
         // Flatten for models expecting comma-separated format
         output = await replicate.run(SAM_MODEL, {
