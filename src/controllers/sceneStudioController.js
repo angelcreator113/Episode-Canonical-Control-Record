@@ -74,10 +74,13 @@ exports.getCanvas = async (req, res) => {
       if (!variantErr.message.includes('does not exist')) throw variantErr;
     }
 
+    const sceneJSON = scene.toJSON();
+    console.log('Scene Studio getCanvas: canvas_settings is', sceneJSON.canvas_settings ? 'SET (' + Object.keys(sceneJSON.canvas_settings).join(', ') + ')' : 'NULL', 'for scene:', id);
+
     res.json({
       success: true,
       data: {
-        scene: scene.toJSON(),
+        scene: sceneJSON,
         objects: objects.map((o) => o.toJSON()),
         variantGroups: variantGroups.map((vg) => vg.toJSON()),
       },
@@ -105,9 +108,17 @@ exports.saveCanvas = async (req, res) => {
     }
 
     // Merge canvas settings (preserve server-set fields like depth_map_url)
+    // Use static update to bypass Sequelize's JSONB deep-equality check which
+    // can silently skip writes when the merged object deep-equals the old one.
     if (canvas_settings !== undefined) {
       const merged = { ...(scene.canvas_settings || {}), ...canvas_settings };
-      await scene.update({ canvas_settings: merged }, { transaction });
+      const settingsKeys = Object.keys(merged);
+      console.log('Scene Studio saveCanvas: writing canvas_settings with keys:', settingsKeys, 'for scene:', id);
+      const [affectedRows] = await Scene.update(
+        { canvas_settings: merged },
+        { where: { id }, transaction }
+      );
+      console.log('Scene Studio saveCanvas: canvas_settings update affected', affectedRows, 'rows');
     }
 
     if (objects !== undefined && !Array.isArray(objects)) {
@@ -769,7 +780,10 @@ exports.saveSceneSetCanvas = async (req, res) => {
     // Merge canvas settings (preserve server-set fields like depth_map_url)
     if (canvas_settings !== undefined) {
       const merged = { ...(sceneSet.canvas_settings || {}), ...canvas_settings };
-      await sceneSet.update({ canvas_settings: merged }, { transaction });
+      await SceneSet.update(
+        { canvas_settings: merged },
+        { where: { id }, transaction }
+      );
     }
 
     if (objects !== undefined && !Array.isArray(objects)) {
