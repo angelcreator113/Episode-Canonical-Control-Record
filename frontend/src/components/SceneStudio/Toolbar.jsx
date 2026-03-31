@@ -201,7 +201,20 @@ export default function Toolbar({
             isDirty ? 'primary' : 'ghost'
           }`}
           style={isDirty ? { fontWeight: 600 } : undefined}
-          onClick={onSave}
+          onClick={(e) => {
+            console.log('Save button clicked', { saveStatus, isDirty, hasSaveHandler: !!onSave });
+            e.preventDefault();
+            e.stopPropagation();
+            if (onSave) {
+              try {
+                onSave();
+              } catch (err) {
+                console.error('Error calling onSave:', err);
+              }
+            } else {
+              console.error('No onSave handler provided to Toolbar');
+            }
+          }}
           disabled={saveStatus === 'saving'}
           title={saveStatus === 'error' ? 'Save failed — click to retry' : 'Save (Ctrl+S)'}
         >
