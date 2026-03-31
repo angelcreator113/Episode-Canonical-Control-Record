@@ -372,10 +372,12 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     // their erase work when they click Save instead of Apply.
     if (state.activeTool === 'erase' && eraseBrushRef.current?.hasStrokes) {
       console.log('Scene Studio save: auto-applying pending erase mask before save');
-      eraseBrushRef.current.apply();
-      // Give the inpaint request time to start before proceeding with canvas save.
-      // The inpaint endpoint saves background_url independently.
-      await new Promise((r) => setTimeout(r, 500));
+      try {
+        await eraseBrushRef.current.applyAsync();
+        console.log('Scene Studio save: erase mask applied successfully');
+      } catch (eraseErr) {
+        console.error('Scene Studio save: erase apply failed:', eraseErr);
+      }
     }
     isSavingRef.current = true;
     setBannerErrorKind('save');
