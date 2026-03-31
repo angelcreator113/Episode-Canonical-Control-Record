@@ -1204,9 +1204,13 @@ exports.inpaint = async (req, res) => {
       }
     );
 
-    // Only update scene background when we inpainted the background image itself.
-    const updatesBackground = !image_url || image_url === scene.background_url;
-    if (result.inpainted_url && updatesBackground) {
+    // Update scene background_url when we inpainted the background image.
+    // The source might be scene.background_url OR a fallback (sceneAngle/sceneSet still).
+    // In all cases where the user inpaints the displayed background, persist the result.
+    const isBackgroundInpaint = !image_url
+      || image_url === scene.background_url
+      || !scene.background_url; // background_url is null → source was a fallback still
+    if (result.inpainted_url && isBackgroundInpaint) {
       await scene.update({ background_url: result.inpainted_url });
     }
 
