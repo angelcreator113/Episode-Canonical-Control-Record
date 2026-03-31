@@ -1246,6 +1246,7 @@ exports.inpaint = async (req, res) => {
     const { id } = req.params;
     const {
       image_url,
+      is_background: isBackground,
       mask_data_url,
       prompt,
       strength,
@@ -1294,15 +1295,11 @@ exports.inpaint = async (req, res) => {
       }
     );
 
-    // Update scene background_url when we inpainted the background image.
-    // The source might be scene.background_url OR a fallback (sceneAngle/sceneSet still).
-    // In all cases where the user inpaints the displayed background, persist the result.
-    const isBackgroundInpaint = !image_url
-      || image_url === scene.background_url
-      || !scene.background_url; // background_url is null → source was a fallback still
-    if (result.inpainted_url && isBackgroundInpaint) {
-      // Use raw SQL to guarantee the write — Sequelize instance.update() can
-      // silently skip JSONB/string writes due to deep-equality detection.
+    // Persist the inpaint result as background_url when the user inpainted the
+    // background (not a selected overlay object). The frontend sends is_background
+    // to distinguish — the old URL-matching logic failed when the displayed URL
+    // was a fallback (sceneAngle/sceneSet) that didn't match scene.background_url.
+    if (result.inpainted_url && isBackground !== false) {
       await sequelize.query(
         `UPDATE scenes SET background_url = :url, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
         { replacements: { url: result.inpainted_url, id } }
