@@ -220,6 +220,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
   // Erase / inpaint state
   const [hasMask, setHasMask] = useState(false);
+  const pendingMaskRef = useRef(null); // Stores mask data URL when erase tool has strokes
   const [brushSize, setBrushSize] = useState(30);
   const [maskMode, setMaskMode] = useState('add');
   const [maskExpand, setMaskExpand] = useState(10);
@@ -370,15 +371,20 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
     // Auto-apply pending erase mask before saving so the user doesn't lose
     // their erase work when they click Save instead of Apply.
+    // The mask data is stored in pendingMaskRef by EraseBrushCanvas's
+    // onMaskDataChange callback, so it survives even if the erase tool
+    // is closed before Save runs.
+    const pendingMask = pendingMaskRef.current;
     console.log('Scene Studio save: erase check', {
       activeTool: state.activeTool,
+      hasPendingMask: !!pendingMask,
       hasRef: !!eraseBrushRef.current,
-      hasStrokes: eraseBrushRef.current?.hasStrokes,
     });
-    if (state.activeTool === 'erase' && eraseBrushRef.current?.hasStrokes) {
+    if (pendingMask) {
       console.log('Scene Studio save: auto-applying pending erase mask before save');
       try {
-        await eraseBrushRef.current.applyAsync();
+        await handleEraseApply(pendingMask, {});
+        pendingMaskRef.current = null;
         console.log('Scene Studio save: erase mask applied successfully');
       } catch (eraseErr) {
         console.error('Scene Studio save: erase apply failed:', eraseErr);
@@ -490,7 +496,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         }
       }
     }
-  }, [state, platform, mood, timeOfDay]);
+  }, [state, platform, mood, timeOfDay, handleEraseApply]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -1721,6 +1727,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           {state.activeTool === 'erase' && (
             <EraseBrushCanvas
               ref={eraseBrushRef}
+              onMaskDataChange={(data) => { pendingMaskRef.current = data; }}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
               zoom={state.canvasSettings.zoom}
