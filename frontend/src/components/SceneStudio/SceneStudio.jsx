@@ -980,9 +980,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         return;
       }
 
+      const isBackgroundTarget = !(selectedObj?.type === 'image' && selectedObj?.assetUrl);
       const trimmedPrompt = inpaintPrompt.trim();
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
+        isBackground: isBackgroundTarget,
         maskDataUrl: preciseMaskDataUrl,
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
@@ -1059,6 +1061,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       return;
     }
 
+    const isBackgroundTarget = !(selectedObj?.type === 'image' && selectedObj?.assetUrl);
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintNotice(null);
@@ -1067,6 +1070,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       const trimmedPrompt = (options.prompt || '').trim();
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
+        isBackground: isBackgroundTarget,
         maskDataUrl,
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
