@@ -1300,11 +1300,20 @@ exports.inpaint = async (req, res) => {
     // to distinguish — the old URL-matching logic failed when the displayed URL
     // was a fallback (sceneAngle/sceneSet) that didn't match scene.background_url.
     if (result.inpainted_url && isBackground !== false) {
-      await sequelize.query(
-        `UPDATE scenes SET background_url = :url, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
-        { replacements: { url: result.inpainted_url, id } }
+      console.log('Scene Studio inpaint: saving background_url for scene:', id, '→', result.inpainted_url.substring(0, 80));
+      const [affected] = await Scene.update(
+        { background_url: result.inpainted_url },
+        { where: { id } }
       );
-      console.log('Scene Studio inpaint: saved background_url for scene:', id);
+      console.log('Scene Studio inpaint: background_url update affected', affected, 'rows');
+      // Verify the write actually persisted
+      const [verify] = await sequelize.query(
+        'SELECT background_url FROM scenes WHERE id = :id AND deleted_at IS NULL',
+        { replacements: { id }, type: sequelize.QueryTypes.SELECT }
+      );
+      console.log('Scene Studio inpaint: DB verification - background_url is:', verify?.background_url ? verify.background_url.substring(0, 80) + '...' : 'NULL');
+    } else {
+      console.log('Scene Studio inpaint: skipping background_url save (inpainted_url:', !!result.inpainted_url, ', isBackground:', isBackground, ')');
     }
 
     res.json({ success: true, data: result });
