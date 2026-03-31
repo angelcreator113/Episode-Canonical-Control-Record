@@ -1131,12 +1131,17 @@ exports.regenerateBackground = async (req, res) => {
       userId: req.user?.id || null,
     });
 
-    // Update scene mood + background_url
-    const updates = {};
-    if (mood) updates.mood = mood;
-    if (result.restyled_url) updates.background_url = result.restyled_url;
-    if (Object.keys(updates).length > 0) {
-      await scene.update(updates);
+    // Update scene mood + background_url using raw SQL to guarantee persistence.
+    const setClauses = [];
+    const replacements = { id };
+    if (mood) { setClauses.push('mood = :mood'); replacements.mood = mood; }
+    if (result.restyled_url) { setClauses.push('background_url = :url'); replacements.url = result.restyled_url; }
+    if (setClauses.length > 0) {
+      setClauses.push('updated_at = NOW()');
+      await sequelize.query(
+        `UPDATE scenes SET ${setClauses.join(', ')} WHERE id = :id AND deleted_at IS NULL`,
+        { replacements }
+      );
     }
 
     res.json({
@@ -1294,7 +1299,13 @@ exports.inpaint = async (req, res) => {
       || image_url === scene.background_url
       || !scene.background_url; // background_url is null → source was a fallback still
     if (result.inpainted_url && isBackgroundInpaint) {
-      await scene.update({ background_url: result.inpainted_url });
+      // Use raw SQL to guarantee the write — Sequelize instance.update() can
+      // silently skip JSONB/string writes due to deep-equality detection.
+      await sequelize.query(
+        `UPDATE scenes SET background_url = :url, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
+        { replacements: { url: result.inpainted_url, id } }
+      );
+      console.log('Scene Studio inpaint: saved background_url for scene:', id);
     }
 
     res.json({ success: true, data: result });
