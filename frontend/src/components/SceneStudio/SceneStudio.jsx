@@ -387,6 +387,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         result = await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
       console.log('Scene Studio save result:', result);
+      // Sync client-generated IDs with server-assigned UUIDs so subsequent
+      // saves can match by primary key instead of falling through to the
+      // composite-key fallback (which can't handle text/shape objects).
+      const idMap = result?.idMap;
+      if (idMap && Object.keys(idMap).length > 0) {
+        state.setObjects((prev) =>
+          prev.map((o) => (idMap[o.id] ? { ...o, id: idMap[o.id] } : o))
+        );
+      }
       state.markClean(savedVersion);
       // Ensure "Saving..." shows for at least 600ms so it doesn't flicker
       const elapsed = Date.now() - startTime;
@@ -765,8 +774,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     try {
       const result = await sceneService.regenerateBackground(state.contextId, {
         mood: effectiveMood,
-        timeOfDay: effectiveTime,
-        currentBackgroundUrl: backgroundUrl,
+        time_of_day: effectiveTime,
+        current_background_url: backgroundUrl,
       });
       if (result?.success && result.data?.restyled_url) {
         const newBgUrl = result.data.restyled_url;

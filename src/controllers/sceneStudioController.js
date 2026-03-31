@@ -19,23 +19,12 @@ exports.getCanvas = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Detect whether Scene Studio migration has been applied
-    const sceneAssetCols = await sequelize.getQueryInterface().describeTable('scene_assets');
-    const studioMigrated = !!sceneAssetCols.rotation;
-
-    // Base scene attributes — add canvas_settings only if migration applied
-    const sceneAttributes = [
-      'id', 'title', 'episode_id', 'scene_number', 'description',
-      'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
-      'scene_set_id', 'scene_angle_id',
-    ];
-    if (studioMigrated) {
-      const sceneCols = await sequelize.getQueryInterface().describeTable('scenes');
-      if (sceneCols.canvas_settings) sceneAttributes.push('canvas_settings');
-    }
-
     const scene = await Scene.findByPk(id, {
-      attributes: sceneAttributes,
+      attributes: [
+        'id', 'title', 'episode_id', 'scene_number', 'description',
+        'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
+        'scene_set_id', 'scene_angle_id', 'canvas_settings',
+      ],
       include: [
         {
           model: SceneAngle,
@@ -56,27 +45,8 @@ exports.getCanvas = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Scene not found' });
     }
 
-    // Base SceneAsset attributes that exist before the Studio migration
-    const baseObjectAttrs = [
-      'id', 'scene_id', 'scene_set_id', 'scene_angle_id', 'asset_id',
-      'usage_type', 'start_timecode', 'end_timecode', 'layer_order',
-      'opacity', 'position', 'metadata', 'asset_role', 'character_name',
-      'position_x', 'position_y', 'scale', 'z_index',
-      'created_at', 'updated_at', 'deleted_at',
-    ];
-    // Add Studio columns only if migration has been applied
-    if (studioMigrated) {
-      baseObjectAttrs.push(
-        'rotation', 'width', 'height', 'is_visible', 'is_locked',
-        'object_type', 'object_label', 'flip_x', 'flip_y',
-        'crop_data', 'style_data', 'group_id',
-        'variant_group_id', 'variant_label', 'is_active_variant'
-      );
-    }
-
     const objects = await SceneAsset.findAll({
       where: { scene_id: id },
-      attributes: baseObjectAttrs,
       include: [{
         model: Asset,
         as: 'asset',
@@ -89,22 +59,19 @@ exports.getCanvas = async (req, res) => {
       order: [['layer_order', 'ASC']],
     });
 
-    // scene_object_variants table only exists after Studio migration
     let variantGroups = [];
-    if (studioMigrated) {
-      try {
-        variantGroups = await SceneObjectVariant.findAll({
-          where: { scene_id: id },
-          include: [{
-            model: SceneAsset,
-            as: 'activeVariant',
-            attributes: ['id', 'object_label', 'variant_label'],
-          }],
-          order: [['created_at', 'ASC']],
-        });
-      } catch (variantErr) {
-        if (!variantErr.message.includes('does not exist')) throw variantErr;
-      }
+    try {
+      variantGroups = await SceneObjectVariant.findAll({
+        where: { scene_id: id },
+        include: [{
+          model: SceneAsset,
+          as: 'activeVariant',
+          attributes: ['id', 'object_label', 'variant_label'],
+        }],
+        order: [['created_at', 'ASC']],
+      });
+    } catch (variantErr) {
+      if (!variantErr.message.includes('does not exist')) throw variantErr;
     }
 
     res.json({
@@ -129,6 +96,7 @@ exports.saveCanvas = async (req, res) => {
   try {
     const { id } = req.params;
     const { objects, canvas_settings } = req.body;
+    let idMap = {};
 
     const scene = await Scene.findByPk(id, { transaction });
     if (!scene) {
@@ -234,10 +202,19 @@ exports.saveCanvas = async (req, res) => {
             transaction,
           });
           keptExistingIds.add(match.id);
+          // Map client ID → server ID so frontend can update stale references
+          if (obj.id && obj.id !== match.id) {
+            idMap[obj.id] = match.id;
+          }
         } else {
           // Create new
-          data.id = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
+          const serverId = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
+          data.id = serverId;
           await SceneAsset.create(data, { transaction });
+          // Map client ID → server ID so frontend can update stale references
+          if (obj.id && obj.id !== serverId) {
+            idMap[obj.id] = serverId;
+          }
         }
       }
 
@@ -257,7 +234,7 @@ exports.saveCanvas = async (req, res) => {
 
     await transaction.commit();
 
-    res.json({ success: true, message: 'Canvas saved' });
+    res.json({ success: true, message: 'Canvas saved', idMap });
   } catch (error) {
     await transaction.rollback();
     console.error('Scene Studio saveCanvas error:', error);
@@ -781,6 +758,7 @@ exports.saveSceneSetCanvas = async (req, res) => {
   try {
     const { id } = req.params;
     const { objects, canvas_settings } = req.body;
+    let idMap = {};
 
     const sceneSet = await SceneSet.findByPk(id, { transaction });
     if (!sceneSet) {
@@ -877,9 +855,16 @@ exports.saveSceneSetCanvas = async (req, res) => {
             transaction,
           });
           keptExistingIds.add(match.id);
+          if (obj.id && obj.id !== match.id) {
+            idMap[obj.id] = match.id;
+          }
         } else {
-          data.id = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
+          const serverId = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
+          data.id = serverId;
           await SceneAsset.create(data, { transaction });
+          if (obj.id && obj.id !== serverId) {
+            idMap[obj.id] = serverId;
+          }
         }
       }
 
@@ -894,7 +879,7 @@ exports.saveSceneSetCanvas = async (req, res) => {
     }
 
     await transaction.commit();
-    res.json({ success: true, message: 'Scene set canvas saved' });
+    res.json({ success: true, message: 'Scene set canvas saved', idMap });
   } catch (error) {
     await transaction.rollback();
     console.error('Scene Studio saveSceneSetCanvas error:', error);
