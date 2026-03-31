@@ -497,7 +497,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         }
       }
     }
-  }, [state, platform, mood, timeOfDay, handleEraseApply]);
+  }, [state, platform, mood, timeOfDay]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
