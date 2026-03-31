@@ -46,6 +46,7 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
   onSelectVariation,
   inpaintHistory = [],
   onRevert,
+  onMaskDataChange,
 }, ref) {
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
@@ -851,11 +852,32 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
     });
   }, [hasStrokes, isProcessing, onApply, customPrompt, strength, variationCount, exportMaskDataUrl]);
 
+  // Notify parent of mask data whenever strokes change, so it survives tool closure
+  useEffect(() => {
+    if (onMaskDataChange) {
+      if (hasStrokes) {
+        const data = exportMaskDataUrl();
+        onMaskDataChange(data);
+      } else {
+        onMaskDataChange(null);
+      }
+    }
+  }, [hasStrokes, onMaskDataChange, exportMaskDataUrl]);
+
   // Expose apply to parent via ref so Save can auto-apply pending erase masks
   useImperativeHandle(ref, () => ({
     hasStrokes,
-    apply: handleApply,
-  }), [hasStrokes, handleApply]);
+    applyAsync: async () => {
+      if (!hasStrokes || isProcessing) return;
+      const maskDataUrl = exportMaskDataUrl();
+      if (!maskDataUrl) return;
+      await onApply(maskDataUrl, {
+        prompt: customPrompt || undefined,
+        strength,
+        variationCount,
+      });
+    },
+  }), [hasStrokes, isProcessing, onApply, customPrompt, strength, variationCount, exportMaskDataUrl]);
 
   // Replace with image handler
   const handleFileSelect = useCallback((e) => {
