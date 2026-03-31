@@ -369,6 +369,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     const startTime = Date.now();
     try {
       const payload = state.serializeForSave();
+      // Capture the change version at serialization time so we only
+      // clear the dirty flag if no new edits arrived while saving.
+      const savedVersion = payload._changeVersion;
+      delete payload._changeVersion;
       // Include platform in canvas_settings for persistence
       if (payload.canvas_settings) {
         payload.canvas_settings.platform = platform;
@@ -383,7 +387,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         result = await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
       console.log('Scene Studio save result:', result);
-      state.markClean();
+      state.markClean(savedVersion);
       // Ensure "Saving..." shows for at least 600ms so it doesn't flicker
       const elapsed = Date.now() - startTime;
       const remaining = Math.max(0, 600 - elapsed);
