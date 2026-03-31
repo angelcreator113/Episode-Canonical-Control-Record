@@ -229,6 +229,9 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
           image: imageUrl,
           use_m2m: true,
           multimask_output: true,
+          points_per_side: 64,            // more sampling points for finer segmentation
+          pred_iou_thresh: 0.7,           // lower threshold to capture more objects
+          stability_score_thresh: 0.85,   // slightly lower for more mask candidates
         },
       });
       console.log(`[Segmentation] SAM-2 output type: ${typeof output}, keys: ${output && typeof output === 'object' ? Object.keys(output).join(',') : 'N/A'}`);
@@ -243,38 +246,32 @@ async function segmentWithPoints(imageUrl, points, entityId, knownDims) {
           console.log('[Segmentation] Selected mask at click point, inverted:', inverted);
           return { maskUrl: s3Url, inverted };
         }
-        console.warn('[Segmentation] No mask contains the click point, falling through to combined_mask');
+        console.warn('[Segmentation] No individual mask contains the click point — using circle fallback');
+        const fallbackUrl = await createFallbackClickMask(pixelPoints, imgWidth, imgHeight, entityId);
+        return { maskUrl: fallbackUrl, fallback: true, fallback_reason: 'No SAM mask at click point' };
       }
     }
 
-    // SAM-2 returns { combined_mask, individual_masks[] }.
-      // Prefer individual_masks[0] (the clicked object) over combined_mask (which can have inverted polarity).
-      let maskUrl;
-      if (output && typeof output === 'object' && !Array.isArray(output)) {
-        const keys = [];
-        for (const k of Object.keys(output)) { keys.push(k); }
-        console.log('[Segmentation] SAM output keys:', keys.join(', '));
-
-        // Try individual_masks first — this is the per-object mask with correct polarity
-        if (output.individual_masks) {
-          const masks = output.individual_masks;
-          const firstMask = Array.isArray(masks) ? masks[0] : masks;
-          maskUrl = extractOutputUrl(firstMask);
-          if (maskUrl) console.log('[Segmentation] Using individual_masks[0]');
-        }
-        // Fall back to combined_mask
-        if (!maskUrl && output.combined_mask) {
-          maskUrl = extractOutputUrl(output.combined_mask);
-          if (maskUrl) console.log('[Segmentation] Using combined_mask');
-        }
+    // For non-SAM-2 models: extract mask URL from output
+    let maskUrl;
+    if (output && typeof output === 'object' && !Array.isArray(output)) {
+      const keys = Object.keys(output);
+      console.log('[Segmentation] SAM output keys:', keys.join(', '));
+      if (output.individual_masks) {
+        const masks = output.individual_masks;
+        const firstMask = Array.isArray(masks) ? masks[0] : masks;
+        maskUrl = extractOutputUrl(firstMask);
       }
-      // Generic fallback for other model output formats
-      if (!maskUrl) {
-        maskUrl = extractOutputUrl(output);
+      if (!maskUrl && output.combined_mask) {
+        maskUrl = extractOutputUrl(output.combined_mask);
       }
+    }
+    if (!maskUrl) {
+      maskUrl = extractOutputUrl(output);
+    }
 
-      if (!maskUrl) {
-        console.error('[Segmentation] SAM returned no output URL. Raw:', typeof output, JSON.stringify(output).slice(0, 500));
+    if (!maskUrl) {
+      console.error('[Segmentation] SAM returned no output URL. Raw:', typeof output, JSON.stringify(output).slice(0, 500));
         throw new Error('SAM returned no mask output — the model may not support point-based segmentation');
       }
 
