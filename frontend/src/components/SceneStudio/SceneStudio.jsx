@@ -221,6 +221,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // Erase / inpaint state
   const [hasMask, setHasMask] = useState(false);
   const pendingMaskRef = useRef(null); // Stores mask data URL when erase tool has strokes
+  const handleEraseApplyRef = useRef(null); // Ref to handleEraseApply for use in save()
   const [brushSize, setBrushSize] = useState(30);
   const [maskMode, setMaskMode] = useState('add');
   const [maskExpand, setMaskExpand] = useState(10);
@@ -380,10 +381,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       hasPendingMask: !!pendingMask,
       hasRef: !!eraseBrushRef.current,
     });
-    if (pendingMask) {
+    if (pendingMask && handleEraseApplyRef.current) {
       console.log('Scene Studio save: auto-applying pending erase mask before save');
       try {
-        await handleEraseApply(pendingMask, {});
+        await handleEraseApplyRef.current(pendingMask, {});
         pendingMaskRef.current = null;
         console.log('Scene Studio save: erase mask applied successfully');
       } catch (eraseErr) {
@@ -496,7 +497,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         }
       }
     }
-  }, [state, platform, mood, timeOfDay, handleEraseApply]);
+  }, [state, platform, mood, timeOfDay]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -1124,6 +1125,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       setIsInpainting(false);
     }
   }, [state, backgroundUrl, maskExpand, maskFeather]);
+
+  // Keep ref in sync so save() can call handleEraseApply without circular deps
+  useEffect(() => { handleEraseApplyRef.current = handleEraseApply; }, [handleEraseApply]);
 
   // ── Use Image — just add as a layer with optional bg removal ──
   // No erasing, no blending. User does those separately:
