@@ -46,32 +46,44 @@ exports.getCanvas = async (req, res) => {
     const { id } = req.params;
 
     const studioMigrated = await isStudioMigrated();
-    const hasCanvasCol = await hasCanvasSettingsColumn();
 
-    const sceneAttributes = [
+    // Always try to include canvas_settings — use try/catch fallback instead
+    // of describeTable, which can return stale results with connection pooling.
+    const sceneInclude = [
+      {
+        model: SceneAngle,
+        as: 'sceneAngle',
+        attributes: ['id', 'still_image_url', 'video_clip_url', 'thumbnail_url', 'enhanced_still_url'],
+        required: false,
+      },
+      {
+        model: SceneSet,
+        as: 'sceneSet',
+        attributes: ['id', 'name', 'base_still_url', 'cover_angle_id'],
+        required: false,
+      },
+    ];
+    const baseSceneAttrs = [
       'id', 'title', 'episode_id', 'scene_number', 'description',
       'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
       'scene_set_id', 'scene_angle_id',
     ];
-    if (hasCanvasCol) sceneAttributes.push('canvas_settings');
 
-    const scene = await Scene.findByPk(id, {
-      attributes: sceneAttributes,
-      include: [
-        {
-          model: SceneAngle,
-          as: 'sceneAngle',
-          attributes: ['id', 'still_image_url', 'video_clip_url', 'thumbnail_url', 'enhanced_still_url'],
-          required: false,
-        },
-        {
-          model: SceneSet,
-          as: 'sceneSet',
-          attributes: ['id', 'name', 'base_still_url', 'cover_angle_id'],
-          required: false,
-        },
-      ],
-    });
+    let scene;
+    try {
+      // Try with canvas_settings first
+      scene = await Scene.findByPk(id, {
+        attributes: [...baseSceneAttrs, 'canvas_settings'],
+        include: sceneInclude,
+      });
+    } catch (colErr) {
+      // canvas_settings column may not exist yet — retry without it
+      console.log('Scene Studio getCanvas: canvas_settings column not available, falling back');
+      scene = await Scene.findByPk(id, {
+        attributes: baseSceneAttrs,
+        include: sceneInclude,
+      });
+    }
 
     if (!scene) {
       return res.status(404).json({ success: false, error: 'Scene not found' });
@@ -160,17 +172,24 @@ exports.saveCanvas = async (req, res) => {
     }
 
     // Merge canvas settings (preserve server-set fields like depth_map_url)
-    // Use static update to bypass Sequelize's JSONB deep-equality check which
-    // can silently skip writes when the merged object deep-equals the old one.
+    // Use raw SQL to guarantee the write — bypasses Sequelize's JSONB
+    // deep-equality check AND avoids column-existence issues with the ORM.
     if (canvas_settings !== undefined) {
       const merged = { ...(scene.canvas_settings || {}), ...canvas_settings };
-      const settingsKeys = Object.keys(merged);
-      console.log('Scene Studio saveCanvas: writing canvas_settings with keys:', settingsKeys, 'for scene:', id);
-      const [affectedRows] = await Scene.update(
-        { canvas_settings: merged },
-        { where: { id }, transaction }
-      );
-      console.log('Scene Studio saveCanvas: canvas_settings update affected', affectedRows, 'rows');
+      console.log('Scene Studio saveCanvas: writing canvas_settings keys:', Object.keys(merged), 'for scene:', id);
+      try {
+        const [, meta] = await sequelize.query(
+          `UPDATE scenes SET canvas_settings = :settings, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
+          {
+            replacements: { settings: JSON.stringify(merged), id },
+            transaction,
+          }
+        );
+        console.log('Scene Studio saveCanvas: canvas_settings update affected', meta?.rowCount ?? 'unknown', 'rows');
+      } catch (settingsErr) {
+        // canvas_settings column may not exist — log and continue (objects still save)
+        console.warn('Scene Studio saveCanvas: canvas_settings write failed:', settingsErr.message);
+      }
     }
 
     if (objects !== undefined && !Array.isArray(objects)) {
