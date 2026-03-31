@@ -370,6 +370,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     }
     // Auto-apply pending erase mask before saving so the user doesn't lose
     // their erase work when they click Save instead of Apply.
+    console.log('Scene Studio save: erase check', {
+      activeTool: state.activeTool,
+      hasRef: !!eraseBrushRef.current,
+      hasStrokes: eraseBrushRef.current?.hasStrokes,
+    });
     if (state.activeTool === 'erase' && eraseBrushRef.current?.hasStrokes) {
       console.log('Scene Studio save: auto-applying pending erase mask before save');
       try {
