@@ -122,20 +122,18 @@ exports.getCanvas = async (req, res) => {
     });
 
     let variantGroups = [];
-    if (studioMigrated) {
-      try {
-        variantGroups = await SceneObjectVariant.findAll({
-          where: { scene_id: id },
-          include: [{
-            model: SceneAsset,
-            as: 'activeVariant',
-            attributes: ['id', 'object_label', 'variant_label'],
-          }],
-          order: [['created_at', 'ASC']],
-        });
-      } catch (variantErr) {
-        if (!variantErr.message.includes('does not exist')) throw variantErr;
-      }
+    try {
+      variantGroups = await SceneObjectVariant.findAll({
+        where: { scene_id: id },
+        include: [{
+          model: SceneAsset,
+          as: 'activeVariant',
+          attributes: ['id', 'object_label', 'variant_label'],
+        }],
+        order: [['created_at', 'ASC']],
+      });
+    } catch (variantErr) {
+      if (!variantErr.message.includes('does not exist')) throw variantErr;
     }
 
     const sceneJSON = scene.toJSON();
