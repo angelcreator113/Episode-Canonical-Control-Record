@@ -351,7 +351,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, []);
 
   const save = useCallback(async () => {
+    console.log('Save button clicked', { 
+      isSaving: isSavingRef.current, 
+      contextId: state.contextId,
+      contextType: state.contextType,
+      isDirty: state.isDirty
+    });
+    
     if (isSavingRef.current) {
+      console.log('Already saving, queueing...');
       pendingSaveRef.current = true;
       return;
     }
@@ -391,22 +399,26 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setSaveStatus('saving');
     const startTime = Date.now();
     try {
+      console.log('Creating save payload...');
       const payload = state.serializeForSave();
       // Capture the change version at serialization time so we only
       // clear the dirty flag if no new edits arrived while saving.
       const savedVersion = payload._changeVersion;
       delete payload._changeVersion;
+      console.log('Payload created:', { objectCount: payload.objects?.length, hasCanvasSettings: !!payload.canvas_settings });
       // Include platform in canvas_settings for persistence
       if (payload.canvas_settings) {
         payload.canvas_settings.platform = platform;
         if (mood) payload.canvas_settings.mood = mood;
         if (timeOfDay) payload.canvas_settings.timeOfDay = timeOfDay;
       }
-      console.log('Scene Studio saving:', { contextType: state.contextType, contextId: state.contextId, objectCount: payload.objects?.length });
+      console.log('Calling API with:', { contextType: state.contextType, contextId: state.contextId, payloadSize: JSON.stringify(payload).length });
       let result;
       if (state.contextType === 'scene') {
+        console.log('Saving scene canvas...');
         result = await sceneService.saveCanvas(state.contextId, payload);
       } else {
+        console.log('Saving scene set canvas...');
         result = await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
       console.log('Scene Studio save result:', result);
@@ -425,13 +437,20 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       const remaining = Math.max(0, 600 - elapsed);
       await new Promise((r) => setTimeout(r, remaining));
       if (!mountedRef.current) return;
+      console.log('Save completed successfully');
       setSaveStatus('saved');
       // Show "Saved" confirmation for 2s then go back to idle
       saveStatusTimerRef.current = setTimeout(() => {
         if (mountedRef.current) setSaveStatus('idle');
       }, 2000);
     } catch (err) {
-      console.error('Scene Studio save error:', err);
+      console.error('Scene Studio save error caught:', err);
+      console.error('Error details:', { 
+        message: err.message, 
+        status: err?.response?.status,
+        responseData: err?.response?.data,
+        stack: err.stack 
+      });
       const details = Array.isArray(err?.response?.data?.details) ? err.response.data.details : [];
       const detailText = details.length ? ` (${details.join('; ')})` : '';
       const msg = (err.response?.data?.error || err.message || 'Save failed') + detailText;
