@@ -867,8 +867,6 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
   // Expose apply to parent via ref so Save can auto-apply pending erase masks
   useImperativeHandle(ref, () => ({
     hasStrokes,
-    // applyAsync awaits the onApply callback (handleEraseApply) so the
-    // Save function can wait for the inpaint to complete before proceeding.
     applyAsync: async () => {
       if (!hasStrokes || isProcessing) return;
       const maskDataUrl = exportMaskDataUrl();
