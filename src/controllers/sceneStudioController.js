@@ -814,22 +814,18 @@ exports.saveSceneSetCanvas = async (req, res) => {
 
       const existing = await SceneAsset.findAll({
         where: { scene_set_id: id },
-        attributes: ['id'],
+        attributes: ['id', 'asset_id', 'usage_type'],
         transaction,
       });
       const existingIds = new Set(existing.map((e) => e.id));
-      const incomingIds = new Set(objects.filter((o) => o.id).map((o) => o.id));
+      const existingByComposite = new Map(
+        existing
+          .filter((e) => e.asset_id)
+          .map((e) => [`${e.asset_id}::${e.usage_type}`, e])
+      );
+      const keptExistingIds = new Set();
 
-      // Delete removed objects
-      const toDelete = [...existingIds].filter((eid) => !incomingIds.has(eid));
-      if (toDelete.length > 0) {
-        await SceneAsset.destroy({
-          where: { id: toDelete, scene_set_id: id },
-          transaction,
-        });
-      }
-
-      // Upsert each object
+      // Upsert each object (before deleting, to avoid losing data on ID mismatches)
       for (const obj of objects) {
         const data = {
           scene_id: null,
@@ -867,14 +863,33 @@ exports.saveSceneSetCanvas = async (req, res) => {
         };
 
         if (obj.id && existingIds.has(obj.id)) {
+          // Match by primary key
           await SceneAsset.update(data, {
             where: { id: obj.id, scene_set_id: id },
             transaction,
           });
+          keptExistingIds.add(obj.id);
+        } else if (obj.asset_id && existingByComposite.has(`${obj.asset_id}::${data.usage_type}`)) {
+          // Fallback: match by asset_id + usage_type for client-generated IDs
+          const match = existingByComposite.get(`${obj.asset_id}::${data.usage_type}`);
+          await SceneAsset.update(data, {
+            where: { id: match.id, scene_set_id: id },
+            transaction,
+          });
+          keptExistingIds.add(match.id);
         } else {
           data.id = (obj.id && uuidValidate(obj.id)) ? obj.id : uuidv4();
           await SceneAsset.create(data, { transaction });
         }
+      }
+
+      // Delete objects removed from canvas (after upsert to avoid losing data)
+      const toDelete = [...existingIds].filter((eid) => !keptExistingIds.has(eid));
+      if (toDelete.length > 0) {
+        await SceneAsset.destroy({
+          where: { id: toDelete, scene_set_id: id },
+          transaction,
+        });
       }
     }
 

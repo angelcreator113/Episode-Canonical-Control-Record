@@ -132,8 +132,17 @@ export default function useSceneStudioState() {
     blurIntensity: 0,
   });
 
-  // Dirty flag
+  // Dirty flag + version counter to prevent stale markClean.
+  // Each mutation increments changeVersionRef. markClean only clears the
+  // dirty flag when the version matches, preventing a late-returning save
+  // from wiping out changes made while the request was in flight.
   const [isDirty, setIsDirty] = useState(false);
+  const changeVersionRef = useRef(0);
+
+  const markDirty = useCallback(() => {
+    changeVersionRef.current += 1;
+    setIsDirty(true);
+  }, []);
 
   // Undo/Redo
   const undoStack = useRef([]);
@@ -152,7 +161,7 @@ export default function useSceneStudioState() {
     redoStack.current = [];
     setUndoCount(undoStack.current.length);
     setRedoCount(0);
-    setIsDirty(true);
+    markDirty();
   }, []);
 
   const undo = useCallback(() => {
@@ -162,7 +171,7 @@ export default function useSceneStudioState() {
     setObjects(prev);
     setUndoCount(undoStack.current.length);
     setRedoCount(redoStack.current.length);
-    setIsDirty(true);
+    markDirty();
   }, [objects]);
 
   const redo = useCallback(() => {
@@ -172,7 +181,7 @@ export default function useSceneStudioState() {
     setObjects(next);
     setUndoCount(undoStack.current.length);
     setRedoCount(redoStack.current.length);
-    setIsDirty(true);
+    markDirty();
   }, [objects]);
 
   // ── Load from API response ──
@@ -213,9 +222,10 @@ export default function useSceneStudioState() {
       }
     }
 
-    // Reset history
+    // Reset history and dirty tracking
     undoStack.current = [];
     redoStack.current = [];
+    changeVersionRef.current = 0;
     setUndoCount(0);
     setRedoCount(0);
     setIsDirty(false);
@@ -232,6 +242,7 @@ export default function useSceneStudioState() {
         depth_map_url: depthMapUrl,
         depth_effects: depthEffects,
       },
+      _changeVersion: changeVersionRef.current,
     };
   }, [objects, canvasSettings, depthMapUrl, depthEffects]);
 
@@ -249,7 +260,7 @@ export default function useSceneStudioState() {
     };
     setObjects((prev) => [...prev, obj]);
     setSelectedIds(new Set([obj.id]));
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   const removeObject = useCallback((id) => {
@@ -260,14 +271,14 @@ export default function useSceneStudioState() {
       next.delete(id);
       return next;
     });
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   const updateObject = useCallback((id, changes) => {
     setObjects((prev) =>
       prev.map((o) => (o.id === id ? { ...o, ...changes } : o))
     );
-    setIsDirty(true);
+    markDirty();
   }, []);
 
   const updateObjectWithHistory = useCallback((id, changes) => {
@@ -281,7 +292,7 @@ export default function useSceneStudioState() {
     setObjects((prev) =>
       prev.map((o) => (o.id === id ? { ...o, ...changes } : o))
     );
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   const duplicateObject = useCallback((id) => {
@@ -302,7 +313,7 @@ export default function useSceneStudioState() {
     };
     setObjects((prev) => [...prev, copy]);
     setSelectedIds(new Set([copy.id]));
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   // ── Selection ──
@@ -344,7 +355,7 @@ export default function useSceneStudioState() {
 
       return sorted.map((o, i) => ({ ...o, layerOrder: i }));
     });
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   // ── Visibility / Lock ──
@@ -391,7 +402,7 @@ export default function useSceneStudioState() {
 
     setObjects((prev) => [...prev, ...pasted]);
     setSelectedIds(newIds);
-    setIsDirty(true);
+    markDirty();
   }, [clipboard, objects, pushHistory]);
 
   // ── Zoom / Pan ──
@@ -427,7 +438,7 @@ export default function useSceneStudioState() {
         return { ...o, isActiveVariant: o.id === variantId };
       })
     );
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   // ── Canvas settings ──
@@ -439,21 +450,25 @@ export default function useSceneStudioState() {
     setCanvasSettings((prev) => ({ ...prev, ...changes }));
     // Only mark dirty if a data-relevant setting changed (not viewport preferences)
     const hasDataChange = Object.keys(changes).some((k) => !VIEW_ONLY_KEYS.has(k));
-    if (hasDataChange) setIsDirty(true);
-  }, []);
+    if (hasDataChange) markDirty();
+  }, [markDirty]);
 
-  const markClean = useCallback(() => {
-    setIsDirty(false);
+  const markClean = useCallback((savedVersion) => {
+    // Only clear dirty flag if no new changes happened since the save started.
+    // If savedVersion is omitted (legacy callers), always clear.
+    if (savedVersion == null || savedVersion === changeVersionRef.current) {
+      setIsDirty(false);
+    }
   }, []);
 
   const updateDepthMapUrl = useCallback((url) => {
     setDepthMapUrl(url);
-    setIsDirty(true);
+    markDirty();
   }, []);
 
   const updateDepthEffects = useCallback((updater) => {
     setDepthEffects(updater);
-    setIsDirty(true);
+    markDirty();
   }, []);
 
   // ── Scene States ──
@@ -470,7 +485,7 @@ export default function useSceneStudioState() {
       }];
       return { ...prev, sceneStates: states, activeSceneState: stateId };
     });
-    setIsDirty(true);
+    markDirty();
   }, [objects]);
 
   const activateSceneState = useCallback((stateId) => {
@@ -494,7 +509,7 @@ export default function useSceneStudioState() {
     // Restore the target state's objects
     pushHistory(JSON.parse(JSON.stringify(objects)));
     setObjects(target.snapshot.map((o) => ({ ...o })));
-    setIsDirty(true);
+    markDirty();
   }, [canvasSettings, objects, pushHistory]);
 
   const deleteSceneState = useCallback((stateId) => {
@@ -503,7 +518,7 @@ export default function useSceneStudioState() {
       const active = prev.activeSceneState === stateId ? (states[0]?.id || null) : prev.activeSceneState;
       return { ...prev, sceneStates: states, activeSceneState: active };
     });
-    setIsDirty(true);
+    markDirty();
   }, []);
 
   const renameSceneState = useCallback((stateId, newName) => {
@@ -513,7 +528,7 @@ export default function useSceneStudioState() {
       );
       return { ...prev, sceneStates: states };
     });
-    setIsDirty(true);
+    markDirty();
   }, []);
 
   // ── Grouping ──
@@ -523,14 +538,14 @@ export default function useSceneStudioState() {
     pushHistory(JSON.parse(JSON.stringify(objects)));
     const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
     setObjects((prev) => prev.map((o) => ids.includes(o.id) ? { ...o, groupId } : o));
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   const ungroupObjects = useCallback((groupId) => {
     if (!groupId) return;
     pushHistory(JSON.parse(JSON.stringify(objects)));
     setObjects((prev) => prev.map((o) => o.groupId === groupId ? { ...o, groupId: null } : o));
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   // ── Replace Asset ──
@@ -540,7 +555,7 @@ export default function useSceneStudioState() {
     setObjects((prev) => prev.map((o) =>
       o.id === objectId ? { ...o, assetId: newAssetId, assetUrl: newAssetUrl, _asset: newAsset || o._asset } : o
     ));
-    setIsDirty(true);
+    markDirty();
   }, [objects, pushHistory]);
 
   return {
