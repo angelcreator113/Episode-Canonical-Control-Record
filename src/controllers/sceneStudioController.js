@@ -13,40 +13,102 @@ const depthEstimationService = require('../services/depthEstimationService');
 const imageRestyleService = require('../services/imageRestyleService');
 const inpaintingService = require('../services/inpaintingService');
 
+// ── Migration check (cached per process) ──
+// Detects once whether Scene Studio columns exist, avoiding per-request describeTable calls.
+let _studioMigrated = null;
+async function isStudioMigrated() {
+  if (_studioMigrated !== null) return _studioMigrated;
+  try {
+    const cols = await sequelize.getQueryInterface().describeTable('scene_assets');
+    _studioMigrated = !!cols.rotation;
+  } catch {
+    _studioMigrated = false;
+  }
+  return _studioMigrated;
+}
+
+let _hasCanvasSettings = null;
+async function hasCanvasSettingsColumn() {
+  if (_hasCanvasSettings !== null) return _hasCanvasSettings;
+  try {
+    const cols = await sequelize.getQueryInterface().describeTable('scenes');
+    _hasCanvasSettings = !!cols.canvas_settings;
+  } catch {
+    _hasCanvasSettings = false;
+  }
+  return _hasCanvasSettings;
+}
+
 // ── Canvas Load ──
 
 exports.getCanvas = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const scene = await Scene.findByPk(id, {
-      attributes: [
-        'id', 'title', 'episode_id', 'scene_number', 'description',
-        'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
-        'scene_set_id', 'scene_angle_id', 'canvas_settings',
-      ],
-      include: [
-        {
-          model: SceneAngle,
-          as: 'sceneAngle',
-          attributes: ['id', 'still_image_url', 'video_clip_url', 'thumbnail_url', 'enhanced_still_url'],
-          required: false,
-        },
-        {
-          model: SceneSet,
-          as: 'sceneSet',
-          attributes: ['id', 'name', 'base_still_url', 'cover_angle_id'],
-          required: false,
-        },
-      ],
-    });
+    const studioMigrated = await isStudioMigrated();
+
+    // Always try to include canvas_settings — use try/catch fallback instead
+    // of describeTable, which can return stale results with connection pooling.
+    const sceneInclude = [
+      {
+        model: SceneAngle,
+        as: 'sceneAngle',
+        attributes: ['id', 'still_image_url', 'video_clip_url', 'thumbnail_url', 'enhanced_still_url'],
+        required: false,
+      },
+      {
+        model: SceneSet,
+        as: 'sceneSet',
+        attributes: ['id', 'name', 'base_still_url', 'cover_angle_id'],
+        required: false,
+      },
+    ];
+    const baseSceneAttrs = [
+      'id', 'title', 'episode_id', 'scene_number', 'description',
+      'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
+      'scene_set_id', 'scene_angle_id',
+    ];
+
+    let scene;
+    try {
+      // Try with canvas_settings first
+      scene = await Scene.findByPk(id, {
+        attributes: [...baseSceneAttrs, 'canvas_settings'],
+        include: sceneInclude,
+      });
+    } catch (colErr) {
+      // canvas_settings column may not exist yet — retry without it
+      console.log('Scene Studio getCanvas: canvas_settings column not available, falling back');
+      scene = await Scene.findByPk(id, {
+        attributes: baseSceneAttrs,
+        include: sceneInclude,
+      });
+    }
 
     if (!scene) {
       return res.status(404).json({ success: false, error: 'Scene not found' });
     }
 
+    // Base SceneAsset attributes
+    const objectAttrs = [
+      'id', 'scene_id', 'scene_set_id', 'scene_angle_id', 'asset_id',
+      'usage_type', 'start_timecode', 'end_timecode', 'layer_order',
+      'opacity', 'position', 'metadata', 'asset_role', 'character_name',
+      'position_x', 'position_y', 'scale', 'z_index',
+      'created_at', 'updated_at', 'deleted_at',
+    ];
+    if (studioMigrated) {
+      objectAttrs.push(
+        'rotation', 'width', 'height', 'is_visible', 'is_locked',
+        'object_type', 'object_label', 'flip_x', 'flip_y',
+        'crop_data', 'style_data', 'group_id',
+        'variant_group_id', 'variant_label', 'is_active_variant'
+      );
+    }
+
     const objects = await SceneAsset.findAll({
       where: { scene_id: id },
+      attributes: objectAttrs,
       include: [{
         model: Asset,
         as: 'asset',
@@ -74,10 +136,13 @@ exports.getCanvas = async (req, res) => {
       if (!variantErr.message.includes('does not exist')) throw variantErr;
     }
 
+    const sceneJSON = scene.toJSON();
+    console.log('Scene Studio getCanvas: canvas_settings is', sceneJSON.canvas_settings ? 'SET (' + Object.keys(sceneJSON.canvas_settings).join(', ') + ')' : 'NULL/not loaded', 'for scene:', id);
+
     res.json({
       success: true,
       data: {
-        scene: scene.toJSON(),
+        scene: sceneJSON,
         objects: objects.map((o) => o.toJSON()),
         variantGroups: variantGroups.map((vg) => vg.toJSON()),
       },
@@ -105,9 +170,24 @@ exports.saveCanvas = async (req, res) => {
     }
 
     // Merge canvas settings (preserve server-set fields like depth_map_url)
+    // Use raw SQL to guarantee the write — bypasses Sequelize's JSONB
+    // deep-equality check AND avoids column-existence issues with the ORM.
     if (canvas_settings !== undefined) {
       const merged = { ...(scene.canvas_settings || {}), ...canvas_settings };
-      await scene.update({ canvas_settings: merged }, { transaction });
+      console.log('Scene Studio saveCanvas: writing canvas_settings keys:', Object.keys(merged), 'for scene:', id);
+      try {
+        const [, meta] = await sequelize.query(
+          `UPDATE scenes SET canvas_settings = :settings, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
+          {
+            replacements: { settings: JSON.stringify(merged), id },
+            transaction,
+          }
+        );
+        console.log('Scene Studio saveCanvas: canvas_settings update affected', meta?.rowCount ?? 'unknown', 'rows');
+      } catch (settingsErr) {
+        // canvas_settings column may not exist — log and continue (objects still save)
+        console.warn('Scene Studio saveCanvas: canvas_settings write failed:', settingsErr.message);
+      }
     }
 
     if (objects !== undefined && !Array.isArray(objects)) {
@@ -769,7 +849,10 @@ exports.saveSceneSetCanvas = async (req, res) => {
     // Merge canvas settings (preserve server-set fields like depth_map_url)
     if (canvas_settings !== undefined) {
       const merged = { ...(sceneSet.canvas_settings || {}), ...canvas_settings };
-      await sceneSet.update({ canvas_settings: merged }, { transaction });
+      await SceneSet.update(
+        { canvas_settings: merged },
+        { where: { id }, transaction }
+      );
     }
 
     if (objects !== undefined && !Array.isArray(objects)) {
