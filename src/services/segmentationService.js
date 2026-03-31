@@ -24,7 +24,9 @@ const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 // SAM model for click-to-segment
 // meta/sam-2 is automatic-only (generates masks for ALL objects, ignores point prompts).
 // Strategy: run automatic segmentation, then pick the mask containing the clicked pixel.
-const SAM2_MODEL = 'meta/sam-2';
+// Note: Replicate SDK v1.4.0 requires full version hash for some models.
+const SAM2_VERSION = 'cbd95fb76192174268b6b303aeeb7a736e8dab0cbc38177f09db79b2299da30b';
+const SAM2_MODEL = `meta/sam-2:${SAM2_VERSION}`;
 let SAM_MODEL = process.env.REPLICATE_SAM_MODEL || SAM2_MODEL;
 const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_MODEL;
 
@@ -32,6 +34,10 @@ const GROUNDED_SAM_MODEL = process.env.REPLICATE_GROUNDED_SAM_MODEL || SAM2_MODE
 const DEAD_MODELS = ['meta/sam-2-large', 'schananas/grounded_sam', 'meta/sam-2-video'];
 if (DEAD_MODELS.some((m) => SAM_MODEL === m || SAM_MODEL.startsWith(m + ':'))) {
   console.warn(`[Segmentation] REPLICATE_SAM_MODEL="${SAM_MODEL}" does not exist on Replicate. Using ${SAM2_MODEL}`);
+  SAM_MODEL = SAM2_MODEL;
+}
+// If env var is "meta/sam-2" without version hash, pin to the known working version
+if (SAM_MODEL === 'meta/sam-2') {
   SAM_MODEL = SAM2_MODEL;
 }
 
