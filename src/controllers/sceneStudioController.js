@@ -13,18 +13,50 @@ const depthEstimationService = require('../services/depthEstimationService');
 const imageRestyleService = require('../services/imageRestyleService');
 const inpaintingService = require('../services/inpaintingService');
 
+// ── Migration check (cached per process) ──
+// Detects once whether Scene Studio columns exist, avoiding per-request describeTable calls.
+let _studioMigrated = null;
+async function isStudioMigrated() {
+  if (_studioMigrated !== null) return _studioMigrated;
+  try {
+    const cols = await sequelize.getQueryInterface().describeTable('scene_assets');
+    _studioMigrated = !!cols.rotation;
+  } catch {
+    _studioMigrated = false;
+  }
+  return _studioMigrated;
+}
+
+let _hasCanvasSettings = null;
+async function hasCanvasSettingsColumn() {
+  if (_hasCanvasSettings !== null) return _hasCanvasSettings;
+  try {
+    const cols = await sequelize.getQueryInterface().describeTable('scenes');
+    _hasCanvasSettings = !!cols.canvas_settings;
+  } catch {
+    _hasCanvasSettings = false;
+  }
+  return _hasCanvasSettings;
+}
+
 // ── Canvas Load ──
 
 exports.getCanvas = async (req, res) => {
   try {
     const { id } = req.params;
 
+    const studioMigrated = await isStudioMigrated();
+    const hasCanvasCol = await hasCanvasSettingsColumn();
+
+    const sceneAttributes = [
+      'id', 'title', 'episode_id', 'scene_number', 'description',
+      'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
+      'scene_set_id', 'scene_angle_id',
+    ];
+    if (hasCanvasCol) sceneAttributes.push('canvas_settings');
+
     const scene = await Scene.findByPk(id, {
-      attributes: [
-        'id', 'title', 'episode_id', 'scene_number', 'description',
-        'duration_seconds', 'background_url', 'layout', 'scene_type', 'production_status',
-        'scene_set_id', 'scene_angle_id', 'canvas_settings',
-      ],
+      attributes: sceneAttributes,
       include: [
         {
           model: SceneAngle,
@@ -45,8 +77,26 @@ exports.getCanvas = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Scene not found' });
     }
 
+    // Base SceneAsset attributes
+    const objectAttrs = [
+      'id', 'scene_id', 'scene_set_id', 'scene_angle_id', 'asset_id',
+      'usage_type', 'start_timecode', 'end_timecode', 'layer_order',
+      'opacity', 'position', 'metadata', 'asset_role', 'character_name',
+      'position_x', 'position_y', 'scale', 'z_index',
+      'created_at', 'updated_at', 'deleted_at',
+    ];
+    if (studioMigrated) {
+      objectAttrs.push(
+        'rotation', 'width', 'height', 'is_visible', 'is_locked',
+        'object_type', 'object_label', 'flip_x', 'flip_y',
+        'crop_data', 'style_data', 'group_id',
+        'variant_group_id', 'variant_label', 'is_active_variant'
+      );
+    }
+
     const objects = await SceneAsset.findAll({
       where: { scene_id: id },
+      attributes: objectAttrs,
       include: [{
         model: Asset,
         as: 'asset',
@@ -60,22 +110,24 @@ exports.getCanvas = async (req, res) => {
     });
 
     let variantGroups = [];
-    try {
-      variantGroups = await SceneObjectVariant.findAll({
-        where: { scene_id: id },
-        include: [{
-          model: SceneAsset,
-          as: 'activeVariant',
-          attributes: ['id', 'object_label', 'variant_label'],
-        }],
-        order: [['created_at', 'ASC']],
-      });
-    } catch (variantErr) {
-      if (!variantErr.message.includes('does not exist')) throw variantErr;
+    if (studioMigrated) {
+      try {
+        variantGroups = await SceneObjectVariant.findAll({
+          where: { scene_id: id },
+          include: [{
+            model: SceneAsset,
+            as: 'activeVariant',
+            attributes: ['id', 'object_label', 'variant_label'],
+          }],
+          order: [['created_at', 'ASC']],
+        });
+      } catch (variantErr) {
+        if (!variantErr.message.includes('does not exist')) throw variantErr;
+      }
     }
 
     const sceneJSON = scene.toJSON();
-    console.log('Scene Studio getCanvas: canvas_settings is', sceneJSON.canvas_settings ? 'SET (' + Object.keys(sceneJSON.canvas_settings).join(', ') + ')' : 'NULL', 'for scene:', id);
+    console.log('Scene Studio getCanvas: canvas_settings is', sceneJSON.canvas_settings ? 'SET (' + Object.keys(sceneJSON.canvas_settings).join(', ') + ')' : 'NULL/not loaded', 'for scene:', id);
 
     res.json({
       success: true,
