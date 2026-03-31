@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import api from '../../services/api';
 import {
   Eraser, Check, X, Loader, Minus, Plus,
@@ -22,7 +22,7 @@ import {
  * - Inpaint history with revert capability
  */
 
-export default function EraseBrushCanvas({
+const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
   canvasWidth,
   canvasHeight,
   zoom,
@@ -46,7 +46,7 @@ export default function EraseBrushCanvas({
   onSelectVariation,
   inpaintHistory = [],
   onRevert,
-}) {
+}, ref) {
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -851,6 +851,12 @@ export default function EraseBrushCanvas({
     });
   }, [hasStrokes, isProcessing, onApply, customPrompt, strength, variationCount, exportMaskDataUrl]);
 
+  // Expose apply to parent via ref so Save can auto-apply pending erase masks
+  useImperativeHandle(ref, () => ({
+    hasStrokes,
+    apply: handleApply,
+  }), [hasStrokes, handleApply]);
+
   // Replace with image handler
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -1400,4 +1406,6 @@ export default function EraseBrushCanvas({
       </div>
     </div>
   );
-}
+});
+
+export default EraseBrushCanvas;

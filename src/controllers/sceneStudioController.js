@@ -1131,12 +1131,17 @@ exports.regenerateBackground = async (req, res) => {
       userId: req.user?.id || null,
     });
 
-    // Update scene mood + background_url
-    const updates = {};
-    if (mood) updates.mood = mood;
-    if (result.restyled_url) updates.background_url = result.restyled_url;
-    if (Object.keys(updates).length > 0) {
-      await scene.update(updates);
+    // Update scene mood + background_url using raw SQL to guarantee persistence.
+    const setClauses = [];
+    const replacements = { id };
+    if (mood) { setClauses.push('mood = :mood'); replacements.mood = mood; }
+    if (result.restyled_url) { setClauses.push('background_url = :url'); replacements.url = result.restyled_url; }
+    if (setClauses.length > 0) {
+      setClauses.push('updated_at = NOW()');
+      await sequelize.query(
+        `UPDATE scenes SET ${setClauses.join(', ')} WHERE id = :id AND deleted_at IS NULL`,
+        { replacements }
+      );
     }
 
     res.json({
@@ -1239,6 +1244,7 @@ exports.inpaint = async (req, res) => {
     const { id } = req.params;
     const {
       image_url,
+      is_background: isBackground,
       mask_data_url,
       prompt,
       strength,
@@ -1287,14 +1293,16 @@ exports.inpaint = async (req, res) => {
       }
     );
 
-    // Update scene background_url when we inpainted the background image.
-    // The source might be scene.background_url OR a fallback (sceneAngle/sceneSet still).
-    // In all cases where the user inpaints the displayed background, persist the result.
-    const isBackgroundInpaint = !image_url
-      || image_url === scene.background_url
-      || !scene.background_url; // background_url is null → source was a fallback still
-    if (result.inpainted_url && isBackgroundInpaint) {
-      await scene.update({ background_url: result.inpainted_url });
+    // Persist the inpaint result as background_url when the user inpainted the
+    // background (not a selected overlay object). The frontend sends is_background
+    // to distinguish — the old URL-matching logic failed when the displayed URL
+    // was a fallback (sceneAngle/sceneSet) that didn't match scene.background_url.
+    if (result.inpainted_url && isBackground !== false) {
+      await sequelize.query(
+        `UPDATE scenes SET background_url = :url, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
+        { replacements: { url: result.inpainted_url, id } }
+      );
+      console.log('Scene Studio inpaint: saved background_url for scene:', id);
     }
 
     res.json({ success: true, data: result });

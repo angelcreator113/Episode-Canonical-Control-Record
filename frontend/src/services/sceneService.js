@@ -397,6 +397,7 @@ const sceneService = {
    */
   inpaintScene: async (sceneId, {
     imageUrl,
+    isBackground,
     maskDataUrl,
     prompt,
     strength,
@@ -409,6 +410,7 @@ const sceneService = {
   } = {}) => {
     const { data } = await api.post(`/api/v1/scenes/${sceneId}/inpaint`, {
       image_url: imageUrl,
+      is_background: isBackground !== false,
       mask_data_url: maskDataUrl,
       prompt,
       strength,

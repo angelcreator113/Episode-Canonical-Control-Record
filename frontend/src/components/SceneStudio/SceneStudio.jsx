@@ -185,6 +185,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const stageRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  const eraseBrushRef = useRef(null);
   const isSavingRef = useRef(false);
   const saveStatusTimerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -366,6 +367,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       setSaveStatus('error');
       setSaveErrorMsg('Scene not loaded — try refreshing');
       return;
+    }
+    // Auto-apply pending erase mask before saving so the user doesn't lose
+    // their erase work when they click Save instead of Apply.
+    if (state.activeTool === 'erase' && eraseBrushRef.current?.hasStrokes) {
+      console.log('Scene Studio save: auto-applying pending erase mask before save');
+      eraseBrushRef.current.apply();
+      // Give the inpaint request time to start before proceeding with canvas save.
+      // The inpaint endpoint saves background_url independently.
+      await new Promise((r) => setTimeout(r, 500));
     }
     isSavingRef.current = true;
     setBannerErrorKind('save');
@@ -970,9 +980,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         return;
       }
 
+      const isBackgroundTarget = !(selectedObj?.type === 'image' && selectedObj?.assetUrl);
       const trimmedPrompt = inpaintPrompt.trim();
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
+        isBackground: isBackgroundTarget,
         maskDataUrl: preciseMaskDataUrl,
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
@@ -1049,6 +1061,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       return;
     }
 
+    const isBackgroundTarget = !(selectedObj?.type === 'image' && selectedObj?.assetUrl);
     isInpaintingRef.current = true;
     setIsInpainting(true);
     setInpaintNotice(null);
@@ -1057,6 +1070,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       const trimmedPrompt = (options.prompt || '').trim();
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
+        isBackground: isBackgroundTarget,
         maskDataUrl,
         prompt: trimmedPrompt || undefined,
         mode: trimmedPrompt ? 'fill' : 'remove',
@@ -1699,6 +1713,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           {/* Advanced erase tool overlay */}
           {state.activeTool === 'erase' && (
             <EraseBrushCanvas
+              ref={eraseBrushRef}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
               zoom={state.canvasSettings.zoom}
