@@ -266,6 +266,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [mobilePanel, setMobilePanel] = useState(null); // null | 'left' | 'right'
   const prevObjectCountRef = useRef(0);
 
+  // Clear mobile drawer state when viewport crosses tablet breakpoint
+  useEffect(() => {
+    const TABLET_BREAKPOINT = 768;
+    const handleResize = () => {
+      if (window.innerWidth >= TABLET_BREAKPOINT && mobilePanel) {
+        setMobilePanel(null);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [mobilePanel]);
+
   useEffect(() => {
     if (!inpaintCooldownUntil || inpaintCooldownUntil <= Date.now()) {
       setInpaintCooldownSeconds(0);
@@ -1663,23 +1675,33 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }, [state, canvasWidth, canvasHeight]);
 
   // Fit on first load — use ResizeObserver so we fit once the container
-  // has its final dimensions (after panels finish rendering)
+  // has its final dimensions (after panels finish rendering).
+  // Also re-fit on significant container resize (orientation change, window resize).
   const hasFittedRef = useRef(false);
+  const lastContainerSizeRef = useRef({ w: 0, h: 0 });
   useEffect(() => {
-    if (isLoading || hasFittedRef.current) return;
+    if (isLoading) return;
     const el = canvasContainerRef.current;
     if (!el) return;
 
     const observer = new ResizeObserver(() => {
-      if (el.clientWidth > 0 && el.clientHeight > 0 && !hasFittedRef.current) {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w <= 0 || h <= 0) return;
+
+      const prev = lastContainerSizeRef.current;
+      const widthChanged = Math.abs(w - prev.w) > 40;
+      const heightChanged = Math.abs(h - prev.h) > 40;
+
+      if (!hasFittedRef.current || widthChanged || heightChanged) {
         hasFittedRef.current = true;
+        lastContainerSizeRef.current = { w, h };
         handleFitToScreen();
-        observer.disconnect();
       }
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoading, handleFitToScreen]);
 
   if (isLoading) {
     return (

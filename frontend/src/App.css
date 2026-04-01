@@ -399,5 +399,10 @@ body.page-story-engine .app-content {
     height: 100%;
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Scene Studio manages its own scrolling/panning — prevent app-content scrollbar */
+  .app-main-wrapper.full-screen .app-content:has(> .scene-studio) {
+    overflow: hidden;
+  }
 }
 

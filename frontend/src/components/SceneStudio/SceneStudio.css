@@ -5,11 +5,18 @@
 .scene-studio {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
+  height: 100vh; /* fallback for older browsers */
   background: #f0ede6;
   color: #2C2C2C;
   font-family: 'DM Mono', 'SF Mono', monospace;
   overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+  .scene-studio {
+    height: 100dvh;
+  }
 }
 
 /* ── Toolbar ── */
@@ -44,7 +51,14 @@
   justify-content: center;
   flex-shrink: 1;
   min-width: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.scene-studio-toolbar-center::-webkit-scrollbar {
+  display: none;
 }
 
 .scene-studio-toolbar-title {
@@ -111,6 +125,7 @@
 }
 
 .scene-studio-platform-select {
+  display: none;
   background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.12);
   color: #2C2C2C;
@@ -779,7 +794,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  height: 100dvh;
   background: #FAF7F0;
   color: #666;
   gap: 16px;
@@ -1617,7 +1632,9 @@
 .scene-studio-canvas-overlay-inner {
   text-align: center;
   pointer-events: auto;
-  padding: 28px 36px;
+  padding: 20px 16px;
+  margin: 0 12px;
+  max-width: 90vw;
   background: rgba(44, 44, 44, 0.55);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -1643,13 +1660,13 @@
 .scene-studio-overlay-cta {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 5px;
+  padding: 8px 14px;
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 20px;
   color: rgba(255, 255, 255, 0.9);
-  font-size: 12px;
+  font-size: 11px;
   font-family: 'DM Mono', monospace;
   cursor: pointer;
   transition: all 150ms ease;
@@ -2547,11 +2564,17 @@
 
 .erase-toolbar-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
   flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
   min-height: 32px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.erase-toolbar-row::-webkit-scrollbar {
+  display: none;
 }
 
 .erase-toolbar-group {
@@ -3302,8 +3325,9 @@
 .scene-studio-export-panel {
   background: #FAF7F0;
   border-radius: 12px;
-  padding: 24px;
-  min-width: 320px;
+  padding: 16px;
+  width: 90vw;
+  max-width: 380px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
@@ -3584,6 +3608,18 @@
 .erase-remove-bg-toggle { display: none !important; }
 .scene-studio-first-hint { bottom: 52px; }
 
+/* Hide toolbar extras (export, timeline, etc.) on mobile */
+.scene-studio-toolbar-extra {
+  display: none;
+}
+
+/* Ensure mobile backdrop doesn't appear on tablet+ */
+@media (min-width: 768px) {
+  .scene-studio-mobile-backdrop {
+    display: none;
+  }
+}
+
 /* ── Tablet Portrait (768px and below) ── */
 
 /* ── Tablet (768px+) — panels become static, show labels ── */
@@ -3610,11 +3646,27 @@
     min-width: 38px;
   }
 
+  /* Show platform select on tablet+ */
+  .scene-studio-platform-select {
+    display: block;
+  }
+
+  /* Show toolbar extras on tablet+ */
+  .scene-studio-toolbar-extra {
+    display: inline-flex;
+  }
+
+  /* Toolbar center reverts to hidden overflow (enough space) */
+  .scene-studio-toolbar-center {
+    overflow: hidden;
+  }
+
   /* Panels become static sidebars */
   .scene-studio-left-panel {
     position: static;
     top: auto;
     bottom: auto;
+    left: auto;
     transform: none;
     z-index: auto;
     box-shadow: none;
@@ -3699,9 +3751,9 @@
 
   /* Export dialog expands */
   .scene-studio-export-panel {
-    min-width: 320px;
     width: auto;
-    max-width: none;
+    min-width: 320px;
+    max-width: 440px;
     padding: 24px;
   }
 }
