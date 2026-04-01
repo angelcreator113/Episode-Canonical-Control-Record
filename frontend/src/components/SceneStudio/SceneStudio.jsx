@@ -386,9 +386,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       try {
         await handleEraseApplyRef.current(pendingMask, {});
         pendingMaskRef.current = null;
-        console.log('Scene Studio save: erase mask applied successfully');
+        console.log('Scene Studio save: erase mask applied and saved');
       } catch (eraseErr) {
-        console.error('Scene Studio save: erase apply failed:', eraseErr);
+        console.error('Scene Studio save: erase apply failed:', eraseErr?.message || eraseErr);
+        // Don't clear pendingMaskRef — keep the mask so the user can retry
+        setSaveStatus('error');
+        setSaveErrorMsg('Erase failed — ' + (eraseErr?.response?.data?.error || eraseErr?.message || 'try again'));
+        isSavingRef.current = false;
+        return; // Don't proceed with canvas save if erase failed
       }
     }
     isSavingRef.current = true;
@@ -497,7 +502,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         }
       }
     }
-  }, [state, platform, mood, timeOfDay, handleEraseApply]);
+  }, [state, platform, mood, timeOfDay]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -1120,6 +1125,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         console.error('Inpaint error:', err);
         setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
       }
+      // Re-throw so callers (like auto-apply in save) know the inpaint failed
+      throw err;
     } finally {
       isInpaintingRef.current = false;
       setIsInpainting(false);
