@@ -295,6 +295,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         if (sceneId) {
           const result = await sceneService.getCanvas(sceneId);
           if (result.success) {
+            console.log('Scene Studio LOAD:', {
+              background_url: result.data.scene?.background_url?.substring(0, 80) || 'NULL',
+              canvas_settings_keys: result.data.scene?.canvas_settings ? Object.keys(result.data.scene.canvas_settings) : 'NULL',
+              object_count: result.data.objects?.length ?? 0,
+            });
             state.loadFromApi(result.data, 'scene');
             const cs = result.data.scene?.canvas_settings;
             if (cs?.platform && PLATFORM_PRESETS[cs.platform]) setPlatform(cs.platform);
@@ -447,6 +452,20 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         result = await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
       console.log('Scene Studio save result:', result);
+      // Verify the save actually persisted by re-fetching
+      try {
+        const verify = state.contextType === 'scene'
+          ? await sceneService.getCanvas(state.contextId)
+          : await sceneService.getSceneSetCanvas(state.contextId);
+        const verifyScene = verify?.data?.scene || verify?.data?.sceneSet;
+        console.log('Scene Studio save VERIFY:', {
+          background_url: verifyScene?.background_url?.substring(0, 80) || 'NULL',
+          canvas_settings_keys: verifyScene?.canvas_settings ? Object.keys(verifyScene.canvas_settings) : 'NULL',
+          object_count: verify?.data?.objects?.length ?? 'N/A',
+        });
+      } catch (verifyErr) {
+        console.warn('Scene Studio save verify failed:', verifyErr.message);
+      }
       // Sync client-generated IDs with server-assigned UUIDs so subsequent
       // saves can match by primary key instead of falling through to the
       // composite-key fallback (which can't handle text/shape objects).
