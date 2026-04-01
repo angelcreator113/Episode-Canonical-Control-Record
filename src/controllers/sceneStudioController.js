@@ -137,6 +137,20 @@ exports.getCanvas = async (req, res) => {
     }
 
     const sceneJSON = scene.toJSON();
+    // Force canonical snake_case keys in API payload even when model serialization
+    // omits null properties or exposes camelCase aliases.
+    sceneJSON.background_url =
+      sceneJSON.background_url ??
+      sceneJSON.backgroundUrl ??
+      scene.get('background_url') ??
+      scene.get('backgroundUrl') ??
+      null;
+    sceneJSON.canvas_settings =
+      sceneJSON.canvas_settings ??
+      sceneJSON.canvasSettings ??
+      scene.get('canvas_settings') ??
+      scene.get('canvasSettings') ??
+      null;
     console.log('Scene Studio getCanvas: canvas_settings is', sceneJSON.canvas_settings ? 'SET (' + Object.keys(sceneJSON.canvas_settings).join(', ') + ')' : 'NULL/not loaded', 'for scene:', id);
 
     res.json({
