@@ -12,7 +12,7 @@ const MAX_HISTORY = 50;
 // Normalize API object → frontend object shape
 function normalizeObject(raw) {
   const asset = raw.asset || {};
-  const assetUrl = asset.s3_url_processed || asset.s3_url_raw || '';
+  const assetUrl = raw.metadata?.renderUrl || asset.s3_url_processed || asset.s3_url_raw || '';
   const contentType = asset.content_type || '';
 
   // Determine type from object_type or content_type
@@ -62,6 +62,14 @@ function normalizeObject(raw) {
 
 // Convert frontend object back to API shape for saving
 function serializeObject(obj) {
+  const mergedMetadata = {
+    ...(obj.metadata || {}),
+    depthLayer: obj.depthLayer || 'midground',
+  };
+  if (obj.assetUrl) {
+    mergedMetadata.renderUrl = obj.assetUrl;
+  }
+
   return {
     id: obj.id,
     asset_id: obj.assetId,
@@ -93,7 +101,7 @@ function serializeObject(obj) {
     start_timecode: obj.startTimecode,
     end_timecode: obj.endTimecode,
     position: null,
-    metadata: { ...obj.metadata, depthLayer: obj.depthLayer || 'midground' },
+    metadata: mergedMetadata,
   };
 }
 

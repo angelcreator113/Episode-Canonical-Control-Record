@@ -1014,10 +1014,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       if (result?.success && result.data?.inpainted_url) {
         if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
-          // Update the selected object's image
-          state.setObjects((prev) => prev.map((o) =>
-            o.id === selectedObj.id ? { ...o, assetUrl: result.data.inpainted_url } : o
-          ));
+          // Persist the rendered URL in metadata so reload keeps the edit.
+          state.updateObject(selectedObj.id, {
+            assetUrl: result.data.inpainted_url,
+            metadata: {
+              ...(selectedObj.metadata || {}),
+              renderUrl: result.data.inpainted_url,
+            },
+          });
         } else {
           // Update the scene background
           state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
@@ -1101,9 +1105,13 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       if (result?.success && result.data?.inpainted_url) {
         if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
-          state.setObjects((prev) => prev.map((o) =>
-            o.id === selectedObj.id ? { ...o, assetUrl: result.data.inpainted_url } : o
-          ));
+          state.updateObject(selectedObj.id, {
+            assetUrl: result.data.inpainted_url,
+            metadata: {
+              ...(selectedObj.metadata || {}),
+              renderUrl: result.data.inpainted_url,
+            },
+          });
         } else {
           state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
         }
