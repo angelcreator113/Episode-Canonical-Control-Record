@@ -381,13 +381,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       hasPendingMask: !!pendingMask,
       hasRef: !!eraseBrushRef.current,
     });
+    // Track inpainted URL from auto-apply so we can include it in
+    // the save payload — React state won't have propagated yet.
+    let autoApplyBgUrl = null;
     if (pendingMask && handleEraseApplyRef.current) {
       console.log('Scene Studio save: auto-applying pending erase mask before save');
       try {
         const eraseResult = await handleEraseApplyRef.current(pendingMask, {});
         if (eraseResult?.applied) {
           pendingMaskRef.current = null;
-          console.log('Scene Studio save: erase mask applied and saved');
+          autoApplyBgUrl = eraseResult.inpaintedUrl || null;
+          console.log('Scene Studio save: erase mask applied and saved, bgUrl:', autoApplyBgUrl?.substring(0, 80));
         } else {
           console.warn('Scene Studio save: erase was skipped —', eraseResult?.reason || 'unknown reason');
           // Don't clear pendingMaskRef — keep the mask so next save can retry
@@ -416,7 +420,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       // clear the dirty flag if no new edits arrived while saving.
       const savedVersion = payload._changeVersion;
       delete payload._changeVersion;
-      console.log('Payload created:', { objectCount: payload.objects?.length, hasCanvasSettings: !!payload.canvas_settings });
+      // Include current background_url in the payload so the backend can
+      // persist it as part of the canvas save. This ensures background
+      // changes (from inpainting, regeneration, etc.) survive even if
+      // the original API call's write was silently lost.
+      // Use autoApplyBgUrl (from the erase auto-apply above) if available,
+      // since React state won't have propagated the setSceneData update yet.
+      const currentBgUrl = autoApplyBgUrl || state.sceneData?.background_url || null;
+      if (currentBgUrl && state.contextType === 'scene') {
+        payload.background_url = currentBgUrl;
+      }
+      console.log('Payload created:', { objectCount: payload.objects?.length, hasCanvasSettings: !!payload.canvas_settings, hasBackgroundUrl: !!payload.background_url });
       // Include platform in canvas_settings for persistence
       if (payload.canvas_settings) {
         payload.canvas_settings.platform = platform;
@@ -1132,7 +1146,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         }
         // Exit erase mode on success
         state.setActiveTool('select');
-        return { applied: true };
+        console.log('Scene Studio handleEraseApply: success, inpainted_url:', result.data.inpainted_url?.substring(0, 80));
+        return { applied: true, inpaintedUrl: result.data.inpainted_url };
       }
       console.warn('Scene Studio handleEraseApply: inpaint returned no URL', result);
       return { applied: false, reason: 'no_inpainted_url' };

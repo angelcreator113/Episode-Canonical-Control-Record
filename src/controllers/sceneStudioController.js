@@ -160,13 +160,28 @@ exports.saveCanvas = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { objects, canvas_settings } = req.body;
+    const { objects, canvas_settings, background_url } = req.body;
     let idMap = {};
 
     const scene = await Scene.findByPk(id, { transaction });
     if (!scene) {
       await transaction.rollback();
       return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+
+    // Persist background_url when the frontend sends it.  This acts as a
+    // safety net — the primary write happens in the inpaint endpoint, but
+    // if that write was silently lost the canvas save catches it here.
+    if (background_url && typeof background_url === 'string') {
+      try {
+        await sequelize.query(
+          `UPDATE scenes SET background_url = :bgUrl, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
+          { replacements: { bgUrl: background_url, id }, transaction }
+        );
+        console.log('Scene Studio saveCanvas: background_url persisted for scene:', id, '→', background_url.substring(0, 80));
+      } catch (bgErr) {
+        console.warn('Scene Studio saveCanvas: background_url write failed:', bgErr.message);
+      }
     }
 
     // Merge canvas settings (preserve server-set fields like depth_map_url)
