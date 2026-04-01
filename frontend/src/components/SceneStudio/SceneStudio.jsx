@@ -915,16 +915,28 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     const effectiveTime = overrides.timeOfDay !== undefined ? overrides.timeOfDay : timeOfDay;
     setIsRegeneratingBg(true);
     try {
-      const result = await sceneService.regenerateBackground(state.contextId, {
-        mood: effectiveMood,
-        time_of_day: effectiveTime,
-        current_background_url: backgroundUrl,
-      });
+      const result = state.contextType === 'sceneSet'
+        ? await sceneService.regenerateSceneSetBackground(state.contextId, {
+            mood: effectiveMood,
+            timeOfDay: effectiveTime,
+            currentBackgroundUrl: backgroundUrl,
+            angleId: state.activeAngleId,
+          })
+        : await sceneService.regenerateBackground(state.contextId, {
+            mood: effectiveMood,
+            timeOfDay: effectiveTime,
+            currentBackgroundUrl: backgroundUrl,
+          });
       if (result?.success && result.data?.restyled_url) {
         const newBgUrl = result.data.restyled_url;
         // Backend already updates background_url, just update frontend state
         if (state.contextType === 'scene') {
           state.setSceneData((prev) => prev ? { ...prev, background_url: newBgUrl } : prev);
+        } else if (state.contextType === 'sceneSet') {
+          const refreshed = await sceneService.getSceneSetCanvas(state.contextId, state.activeAngleId || undefined);
+          if (refreshed?.success) {
+            state.loadFromApi(refreshed.data, 'sceneSet');
+          }
         }
       }
     } catch (err) {

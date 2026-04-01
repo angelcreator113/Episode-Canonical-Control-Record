@@ -383,6 +383,20 @@ const sceneService = {
   },
 
   /**
+   * Regenerate background variation for a scene set
+   * POST /api/v1/scene-sets/:id/regenerate-background
+   */
+  regenerateSceneSetBackground: async (sceneSetId, { mood, timeOfDay, currentBackgroundUrl, angleId } = {}) => {
+    const { data } = await api.post(`/api/v1/scene-sets/${sceneSetId}/regenerate-background`, {
+      mood,
+      time_of_day: timeOfDay,
+      current_background_url: currentBackgroundUrl,
+      angle_id: angleId,
+    });
+    return data;
+  },
+
+  /**
    * Get smart object suggestions for a scene
    * POST /api/v1/scenes/:id/suggest-objects
    */

@@ -1089,6 +1089,9 @@ router.put('/:id/canvas', validateUUIDParam('id'), optionalAuth, asyncHandler(sc
 // POST /api/v1/scene-sets/:id/generate-object - AI object generation (DALL-E 3) for scene sets
 router.post('/:id/generate-object', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.generateSceneSetObject));
 
+// POST /api/v1/scene-sets/:id/regenerate-background - AI background variation for scene sets
+router.post('/:id/regenerate-background', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.regenerateSceneSetBackground));
+
 // POST /api/v1/scene-sets/:id/angles/:angleId/generate-depth - Depth map estimation for angle
 router.post('/:id/angles/:angleId/generate-depth', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.generateAngleDepth));
 
