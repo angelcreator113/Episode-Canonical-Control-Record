@@ -76,22 +76,19 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
     if (!showLibraryPicker || libraryFetchedRef.current) return;
     libraryFetchedRef.current = true;
     setLibraryLoading(true);
-    const params = new URLSearchParams({ limit: '60' });
-    if (showId) params.set('show_id', showId);
-    if (episodeId) params.set('episode_id', episodeId);
-    api.get(`/api/v1/assets?${params}`)
+    const params = { limit: 60 };
+    if (showId) params.show_id = showId;
+    if (episodeId) params.episode_id = episodeId;
+    api.get('/api/v1/assets', { params })
       .then(({ data }) => {
-        // Handle various response shapes
-        const raw = data?.data?.assets || data?.data || data?.assets || [];
+        const raw = data?.data || data?.assets || [];
         const list = Array.isArray(raw) ? raw : [];
-        const images = list.filter(
-          (a) => {
-            const hasUrl = a.s3_url_processed || a.s3_url_raw || a.url || a.thumbnail_url;
-            const isImage = !a.type || a.type === 'image' || a.asset_type === 'image' ||
-              /\.(jpe?g|png|webp|gif|bmp|svg)/i.test(a.s3_url_raw || a.s3_url_processed || a.url || '');
-            return hasUrl && isImage;
-          }
-        );
+        const images = list.filter((a) => {
+          const url = a.s3_url_processed || a.s3_url_raw || a.url || a.thumbnail_url;
+          if (!url) return false;
+          if (a.type === 'video' || a.asset_type === 'video') return false;
+          return true;
+        });
         setLibraryAssets(images);
       })
       .catch((err) => console.error('Failed to load library:', err))
@@ -528,6 +525,8 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
             )}
           </div>
 
+          {/* Everything below hidden while library picker is open */}
+          {!showLibraryPicker && (<>
           {/* Transform presets */}
           <div className="scene-studio-section-label" style={{ marginTop: 8 }}>Transformation</div>
           <div className="scene-studio-transform-presets">
@@ -661,6 +660,8 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
               </div>
             </div>
           )}
+
+          </>)}
 
           {/* Empty guidance */}
           {!isGenerating && results.length === 0 && !error && !sourceImageUrl && !showLibraryPicker && (
