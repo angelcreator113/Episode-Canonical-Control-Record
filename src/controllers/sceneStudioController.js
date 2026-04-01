@@ -1111,6 +1111,81 @@ exports.generateObject = async (req, res) => {
   }
 };
 
+// ── AI Image Transform (img2img + optional BG removal) ──
+
+exports.transformObject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url, prompt, strength, remove_background } = req.body;
+
+    if (!image_url || typeof image_url !== 'string') {
+      return res.status(400).json({ success: false, error: 'image_url is required' });
+    }
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'prompt is required' });
+    }
+
+    const imageRestyleService = require('../services/imageRestyleService');
+
+    // Use img2img to transform the source image
+    const result = await imageRestyleService.restyleBackground(image_url, id, {
+      customPrompt: prompt.trim(),
+      strength: typeof strength === 'number' ? Math.min(Math.max(strength, 0.1), 1.0) : 0.65,
+      userId: req.user?.id || null,
+    });
+
+    let finalUrl = result.restyled_url;
+    let bgRemoved = false;
+
+    // Optionally remove background for transparent PNG
+    if (remove_background) {
+      try {
+        const noBgUrl = await objectGenerationService.removeBackground(finalUrl, id);
+        if (noBgUrl) {
+          finalUrl = noBgUrl;
+          bgRemoved = true;
+        }
+      } catch (err) {
+        console.warn('[TransformObject] Background removal failed, returning with background:', err.message);
+      }
+    }
+
+    // Save as asset
+    let assetId = null;
+    try {
+      const asset = await Asset.create({
+        show_id: null,
+        type: 'image',
+        label: `Transform: ${prompt.trim().slice(0, 50)}`,
+        s3_url_raw: result.restyled_url,
+        s3_url_processed: finalUrl,
+        metadata: { transform_prompt: prompt.trim(), source_url: image_url, background_removed: bgRemoved },
+        usage_type: 'overlay',
+      });
+      assetId = asset.id;
+    } catch (err) {
+      console.warn('[TransformObject] Asset save failed:', err.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        options: [{
+          asset_id: assetId,
+          url: finalUrl,
+          width: 1024,
+          height: 1024,
+          background_removed: bgRemoved,
+        }],
+      },
+    });
+  } catch (error) {
+    console.error('Scene Studio transformObject error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
 // ── AI Object Generation (Scene Sets) ──
 
 exports.generateSceneSetObject = async (req, res) => {

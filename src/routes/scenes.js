@@ -230,6 +230,14 @@ router.post(
   asyncHandler(sceneStudioController.generateObject)
 );
 
+// POST /api/v1/scenes/:id/transform-object - AI image transform (img2img)
+router.post(
+  '/:id/transform-object',
+  validateUUIDParam('id'),
+  optionalAuth,
+  asyncHandler(sceneStudioController.transformObject)
+);
+
 // POST /api/v1/scenes/:id/regenerate-background - AI background variation
 router.post(
   '/:id/regenerate-background',
