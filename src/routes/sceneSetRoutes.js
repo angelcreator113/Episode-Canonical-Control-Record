@@ -36,6 +36,11 @@ const upload = multer({
   },
 });
 
+const uploadSceneSetImages = upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'images', maxCount: 20 },
+]);
+
 // Ensure generation_jobs table exists (safe to call multiple times)
 let generationJobsSynced = false;
 async function ensureGenerationJobsTable() {
@@ -219,17 +224,40 @@ router.delete('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) =>
 
 // ─── POST /:id/upload-base  — upload a custom base image ─────────────────────
 
-router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, upload.single('image'), async (req, res) => {
+router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, uploadSceneSetImages, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    if (!req.file) return res.status(400).json({ success: false, error: 'No image file provided' });
+    const uploaded = [
+      ...(req.files?.images || []),
+      ...(req.files?.image || []),
+    ].filter(Boolean);
+    if (uploaded.length === 0) return res.status(400).json({ success: false, error: 'No image file provided' });
 
-    const ext = req.file.mimetype === 'image/png' ? 'png'
-              : req.file.mimetype === 'image/webp' ? 'webp'
-              : 'jpg';
-    const ts = Date.now();
-    const s3Key = `scene-sets/${set.id}/angles/base/still-${ts}.${ext}`;
+    const uploadedUrls = [];
+    for (let i = 0; i < uploaded.length; i += 1) {
+      const file = uploaded[i];
+      const ext = file.mimetype === 'image/png' ? 'png'
+                : file.mimetype === 'image/webp' ? 'webp'
+                : 'jpg';
+      const ts = Date.now();
+      const s3Key = `scene-sets/${set.id}/angles/base/still-${ts}-${i}.${ext}`;
+
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: s3Key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+        CacheControl: 'max-age=31536000',
+      }));
+
+      uploadedUrls.push({
+        url: `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`,
+        originalName: file.originalname || `Upload ${i + 1}`,
+      });
+    }
+
+    const primaryUrl = uploadedUrls[0].url;
 
     // Clean up old base image from S3
     if (set.base_still_url) {
@@ -243,29 +271,57 @@ router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, upload.si
       } catch (_) { /* best-effort cleanup */ }
     }
 
-    await s3.send(new PutObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: s3Key,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-      CacheControl: 'max-age=31536000',
-    }));
-
-    const stillUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
-
     await set.update({
-      base_still_url: stillUrl,
+      base_still_url: primaryUrl,
       base_runway_seed: `uploaded-${Date.now()}`,
       generation_status: 'complete',
     });
 
-    // Clear stale angle thumbnails — they were generated from the old base image
-    await SceneAngle.update(
-      { still_image_url: null, video_clip_url: null, generation_status: 'pending' },
-      { where: { scene_set_id: set.id } }
-    );
+    // When multiple images are uploaded, create ready-to-use angle entries.
+    let createdAngles = [];
+    if (uploadedUrls.length > 1) {
+      const existingCount = await SceneAngle.count({ where: { scene_set_id: set.id } });
+      createdAngles = await SceneAngle.bulkCreate(
+        uploadedUrls.map((img, idx) => {
+          const baseName = String(img.originalName || `Upload ${idx + 1}`)
+            .replace(/\.[^.]+$/, '')
+            .replace(/[_-]+/g, ' ')
+            .trim()
+            .slice(0, 100);
+          return {
+            scene_set_id: set.id,
+            angle_label: 'OTHER',
+            angle_name: baseName || `Uploaded Angle ${idx + 1}`,
+            angle_description: 'Uploaded reference angle',
+            camera_direction: 'Uploaded still reference for this room angle.',
+            generation_status: 'complete',
+            still_image_url: img.url,
+            sort_order: existingCount + idx,
+          };
+        }),
+        { returning: true }
+      );
 
-    res.json({ success: true, data: { stillUrl, seed: set.base_runway_seed } });
+      if (!set.cover_angle_id && createdAngles[0]?.id) {
+        await set.update({ cover_angle_id: createdAngles[0].id });
+      }
+    } else {
+      // Single-image upload keeps current behavior: reset angle thumbnails to regenerate from new base.
+      await SceneAngle.update(
+        { still_image_url: null, video_clip_url: null, generation_status: 'pending' },
+        { where: { scene_set_id: set.id } }
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        stillUrl: primaryUrl,
+        seed: set.base_runway_seed,
+        uploadedCount: uploadedUrls.length,
+        angleCountCreated: createdAngles.length,
+      },
+    });
   } catch (err) {
     console.error('Scene Sets POST /:id/upload-base error:', err);
     res.status(500).json({ success: false, error: err.message });

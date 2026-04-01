@@ -741,10 +741,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}>
                   {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate Base</>}
                 </button>
-                <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className={`scene-sets-btn-upload${isGenerating ? ' disabled' : ''}`} title="Upload your own base image">
+                <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className={`scene-sets-btn-upload${isGenerating ? ' disabled' : ''}`} title="Upload one or multiple room images">
                   <Upload size={12} /> Upload
                 </button>
-                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={(e) => { const file = e.target.files?.[0]; if (file) onUploadBase(set, file); e.target.value = ''; }} />
+                <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length > 0) onUploadBase(set, files); e.target.value = ''; }} />
               </>
             )}
 
@@ -1189,11 +1189,13 @@ export default function SceneSetsTab() {
     }
   };
 
-  const handleUploadBase = async (set, file) => {
+  const handleUploadBase = async (set, files) => {
     setGeneratingId(set.id);
     try {
       const formData = new FormData();
-      formData.append('image', file);
+      const fileList = Array.isArray(files) ? files : [files].filter(Boolean);
+      if (fileList.length === 0) throw new Error('No image file selected');
+      fileList.forEach((file) => formData.append('images', file));
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/upload-base`, {
         method: 'POST',
         body: formData,
@@ -1202,7 +1204,11 @@ export default function SceneSetsTab() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Upload failed');
       }
-      showToast(`Base image uploaded for "${set.name}"`);
+      const json = await res.json().catch(() => ({}));
+      const uploadedCount = json?.data?.uploadedCount || fileList.length;
+      showToast(uploadedCount > 1
+        ? `${uploadedCount} images uploaded for "${set.name}"`
+        : `Base image uploaded for "${set.name}"`);
       fetchSets();
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
