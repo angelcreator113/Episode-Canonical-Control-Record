@@ -1146,6 +1146,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         }
         // Exit erase mode on success
         state.setActiveTool('select');
+        // Clear pending mask so Save doesn't re-apply the same mask
+        pendingMaskRef.current = null;
         console.log('Scene Studio handleEraseApply: success, inpainted_url:', result.data.inpainted_url?.substring(0, 80));
         return { applied: true, inpaintedUrl: result.data.inpainted_url };
       }
