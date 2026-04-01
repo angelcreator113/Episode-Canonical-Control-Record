@@ -231,7 +231,7 @@ export default function Toolbar({
 
         {onUseInTimeline && (
           <button
-            className={`scene-studio-btn ${productionStatus === 'ready' ? 'success' : 'primary'}`}
+            className={`scene-studio-btn scene-studio-toolbar-extra ${productionStatus === 'ready' ? 'success' : 'primary'}`}
             onClick={onUseInTimeline}
             title={productionStatus === 'ready' ? 'Already ready for timeline' : 'Mark as ready and add to timeline'}
           >
@@ -240,7 +240,7 @@ export default function Toolbar({
         )}
 
         {onExport && (
-          <button className="scene-studio-btn ghost" onClick={onExport}>
+          <button className="scene-studio-btn scene-studio-toolbar-extra ghost" onClick={onExport}>
             <Download size={14} /> Export
           </button>
         )}
