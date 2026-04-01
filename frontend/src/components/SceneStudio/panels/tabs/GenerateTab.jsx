@@ -96,7 +96,7 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
   }, [showLibraryPicker, showId, episodeId]);
 
   const getAssetUrl = (asset) => asset.s3_url_processed || asset.s3_url_raw || asset.url || null;
-  const getAssetThumb = (asset) => asset.thumbnail_url || asset.metadata?.thumbnail_url || getAssetUrl(asset);
+  const getAssetThumb = (asset) => asset.s3_url_processed || asset.s3_url_raw || asset.url || null;
 
   const handleSelectLibraryAsset = useCallback((asset) => {
     const url = getAssetUrl(asset);
