@@ -76,7 +76,7 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
     if (!showLibraryPicker || libraryFetchedRef.current) return;
     libraryFetchedRef.current = true;
     setLibraryLoading(true);
-    const params = { limit: 60 };
+    const params = { limit: 200 };
     if (showId) params.show_id = showId;
     if (episodeId) params.episode_id = episodeId;
     api.get('/api/v1/assets', { params })
@@ -84,10 +84,10 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
         const raw = data?.data || data?.assets || [];
         const list = Array.isArray(raw) ? raw : [];
         const images = list.filter((a) => {
-          const url = a.s3_url_processed || a.s3_url_raw || a.url || a.thumbnail_url;
-          if (!url) return false;
           if (a.type === 'video' || a.asset_type === 'video') return false;
-          return true;
+          // Must have at least one usable URL
+          const url = a.s3_url_processed || a.s3_url_raw || a.url || a.thumbnail_url;
+          return !!url;
         });
         setLibraryAssets(images);
       })
@@ -511,7 +511,16 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
                           <img
                             src={thumbSrc}
                             alt={asset.label || 'Asset'}
-                            onError={(e) => { e.target.style.display = 'none'; }}
+                            loading="lazy"
+                            onError={(e) => {
+                              // Try fallback URL before hiding
+                              const fallback = asset.s3_url_raw || asset.s3_url_processed || asset.url;
+                              if (fallback && e.target.src !== fallback) {
+                                e.target.src = fallback;
+                              } else {
+                                e.target.parentElement.style.display = 'none';
+                              }
+                            }}
                           />
                           <span className="scene-studio-transform-library-label">
                             {asset.label || asset.usage_type || 'Asset'}
