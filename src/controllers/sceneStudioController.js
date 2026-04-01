@@ -137,6 +137,20 @@ exports.getCanvas = async (req, res) => {
     }
 
     const sceneJSON = scene.toJSON();
+    // Force canonical snake_case keys in API payload even when model serialization
+    // omits null properties or exposes camelCase aliases.
+    sceneJSON.background_url =
+      sceneJSON.background_url ??
+      sceneJSON.backgroundUrl ??
+      scene.get('background_url') ??
+      scene.get('backgroundUrl') ??
+      null;
+    sceneJSON.canvas_settings =
+      sceneJSON.canvas_settings ??
+      sceneJSON.canvasSettings ??
+      scene.get('canvas_settings') ??
+      scene.get('canvasSettings') ??
+      null;
     console.log('Scene Studio getCanvas: canvas_settings is', sceneJSON.canvas_settings ? 'SET (' + Object.keys(sceneJSON.canvas_settings).join(', ') + ')' : 'NULL/not loaded', 'for scene:', id);
 
     res.json({
@@ -174,23 +188,29 @@ exports.saveCanvas = async (req, res) => {
     // if that write was silently lost the canvas save catches it here.
     if (background_url && typeof background_url === 'string') {
       try {
+        await sequelize.query('SAVEPOINT bg_url_write', { transaction });
         await sequelize.query(
           `UPDATE scenes SET background_url = :bgUrl, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
           { replacements: { bgUrl: background_url, id }, transaction }
         );
+        await sequelize.query('RELEASE SAVEPOINT bg_url_write', { transaction });
         console.log('Scene Studio saveCanvas: background_url persisted for scene:', id, '→', background_url.substring(0, 80));
       } catch (bgErr) {
         console.warn('Scene Studio saveCanvas: background_url write failed:', bgErr.message);
+        try { await sequelize.query('ROLLBACK TO SAVEPOINT bg_url_write', { transaction }); } catch (_) {}
       }
     }
 
     // Merge canvas settings (preserve server-set fields like depth_map_url)
     // Use raw SQL to guarantee the write — bypasses Sequelize's JSONB
     // deep-equality check AND avoids column-existence issues with the ORM.
+    // Wrapped in SAVEPOINT so a failure (e.g. column not yet added) does NOT
+    // abort the whole PostgreSQL transaction and silently kill the rest of the save.
     if (canvas_settings !== undefined) {
       const merged = { ...(scene.canvas_settings || {}), ...canvas_settings };
       console.log('Scene Studio saveCanvas: writing canvas_settings keys:', Object.keys(merged), 'for scene:', id);
       try {
+        await sequelize.query('SAVEPOINT canvas_settings_write', { transaction });
         const [, meta] = await sequelize.query(
           `UPDATE scenes SET canvas_settings = :settings, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
           {
@@ -198,10 +218,17 @@ exports.saveCanvas = async (req, res) => {
             transaction,
           }
         );
+        await sequelize.query('RELEASE SAVEPOINT canvas_settings_write', { transaction });
         console.log('Scene Studio saveCanvas: canvas_settings update affected', meta?.rowCount ?? 'unknown', 'rows');
       } catch (settingsErr) {
-        // canvas_settings column may not exist — log and continue (objects still save)
+        // canvas_settings column may not exist — rollback to savepoint so
+        // the transaction stays alive for the remaining object writes.
         console.warn('Scene Studio saveCanvas: canvas_settings write failed:', settingsErr.message);
+        try {
+          await sequelize.query('ROLLBACK TO SAVEPOINT canvas_settings_write', { transaction });
+        } catch (spErr) {
+          console.warn('Scene Studio saveCanvas: savepoint rollback failed:', spErr.message);
+        }
       }
     }
 
