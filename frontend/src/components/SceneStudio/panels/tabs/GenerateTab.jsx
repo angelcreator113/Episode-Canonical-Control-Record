@@ -69,28 +69,42 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
   const [libraryAssets, setLibraryAssets] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
+  const libraryFetchedRef = useRef(false);
 
   // Fetch library assets when picker is opened
   useEffect(() => {
-    if (!showLibraryPicker || libraryAssets.length > 0) return;
+    if (!showLibraryPicker || libraryFetchedRef.current) return;
+    libraryFetchedRef.current = true;
     setLibraryLoading(true);
-    const params = new URLSearchParams({ limit: '40', asset_type: 'image' });
+    const params = new URLSearchParams({ limit: '60' });
     if (showId) params.set('show_id', showId);
     if (episodeId) params.set('episode_id', episodeId);
     api.get(`/api/v1/assets?${params}`)
       .then(({ data }) => {
-        const assets = (data?.data || data?.assets || []).filter(
-          (a) => a.s3_url_processed || a.s3_url_raw
+        // Handle various response shapes
+        const raw = data?.data?.assets || data?.data || data?.assets || [];
+        const list = Array.isArray(raw) ? raw : [];
+        const images = list.filter(
+          (a) => {
+            const hasUrl = a.s3_url_processed || a.s3_url_raw || a.url || a.thumbnail_url;
+            const isImage = !a.type || a.type === 'image' || a.asset_type === 'image' ||
+              /\.(jpe?g|png|webp|gif|bmp|svg)/i.test(a.s3_url_raw || a.s3_url_processed || a.url || '');
+            return hasUrl && isImage;
+          }
         );
-        setLibraryAssets(assets);
+        setLibraryAssets(images);
       })
       .catch((err) => console.error('Failed to load library:', err))
       .finally(() => setLibraryLoading(false));
-  }, [showLibraryPicker, showId, episodeId, libraryAssets.length]);
+  }, [showLibraryPicker, showId, episodeId]);
+
+  const getAssetUrl = (asset) => asset.s3_url_processed || asset.s3_url_raw || asset.url || null;
+  const getAssetThumb = (asset) => asset.thumbnail_url || asset.metadata?.thumbnail_url || getAssetUrl(asset);
 
   const handleSelectLibraryAsset = useCallback((asset) => {
-    const url = asset.s3_url_processed || asset.s3_url_raw;
-    const thumb = asset.thumbnail_url || asset.s3_url_processed || asset.s3_url_raw;
+    const url = getAssetUrl(asset);
+    const thumb = getAssetThumb(asset);
+    if (!url) return;
     setSourceImageUrl(url);
     setSourceImageThumb(thumb);
     setShowLibraryPicker(false);
@@ -486,23 +500,28 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
                   <div className="scene-studio-transform-library-loading">No images found</div>
                 ) : (
                   <div className="scene-studio-transform-library-grid">
-                    {libraryAssets.map((asset) => (
-                      <button
-                        key={asset.id}
-                        type="button"
-                        className="scene-studio-transform-library-thumb"
-                        onClick={() => handleSelectLibraryAsset(asset)}
-                        title={asset.label || asset.name || 'Asset'}
-                      >
-                        <img
-                          src={asset.thumbnail_url || asset.s3_url_processed || asset.s3_url_raw}
-                          alt={asset.label || 'Asset'}
-                        />
-                        <span className="scene-studio-transform-library-label">
-                          {asset.label || asset.usage_type || 'Asset'}
-                        </span>
-                      </button>
-                    ))}
+                    {libraryAssets.map((asset) => {
+                      const thumbSrc = getAssetThumb(asset);
+                      if (!thumbSrc) return null;
+                      return (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          className="scene-studio-transform-library-thumb"
+                          onClick={() => handleSelectLibraryAsset(asset)}
+                          title={asset.label || asset.name || 'Asset'}
+                        >
+                          <img
+                            src={thumbSrc}
+                            alt={asset.label || 'Asset'}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                          <span className="scene-studio-transform-library-label">
+                            {asset.label || asset.usage_type || 'Asset'}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -644,7 +663,7 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
           )}
 
           {/* Empty guidance */}
-          {!isGenerating && results.length === 0 && !error && !sourceImageUrl && (
+          {!isGenerating && results.length === 0 && !error && !sourceImageUrl && !showLibraryPicker && (
             <div className="scene-studio-gen-empty-state">
               <div className="scene-studio-gen-empty-icon"><RefreshCw size={20} /></div>
               <div className="scene-studio-gen-empty-title">Transform Images</div>
