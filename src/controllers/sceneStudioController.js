@@ -1281,6 +1281,77 @@ exports.regenerateBackground = async (req, res) => {
   }
 };
 
+exports.regenerateSceneSetBackground = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mood, time_of_day, current_background_url, angle_id } = req.body;
+
+    const sceneSet = await SceneSet.findByPk(id, {
+      attributes: ['id', 'base_still_url', 'cover_angle_id'],
+    });
+    if (!sceneSet) {
+      return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+
+    let targetAngle = null;
+    const preferredAngleId = angle_id || sceneSet.cover_angle_id || null;
+    if (preferredAngleId) {
+      targetAngle = await SceneAngle.findOne({
+        where: { id: preferredAngleId, scene_set_id: id },
+        attributes: ['id', 'still_image_url'],
+      });
+    }
+    if (!targetAngle) {
+      targetAngle = await SceneAngle.findOne({
+        where: { scene_set_id: id },
+        order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
+        attributes: ['id', 'still_image_url'],
+      });
+    }
+
+    const baseUrl = targetAngle?.still_image_url || sceneSet.base_still_url;
+    const bgUrl = current_background_url || baseUrl;
+    if (!bgUrl) {
+      return res.status(400).json({ success: false, error: 'No background to restyle' });
+    }
+
+    const result = await imageRestyleService.restyleBackground(bgUrl, id, {
+      timeOfDay: time_of_day || null,
+      mood: mood || null,
+      strength: 0.45,
+      userId: req.user?.id || null,
+    });
+
+    if (result.restyled_url) {
+      await SceneSet.update(
+        { base_still_url: result.restyled_url },
+        { where: { id } }
+      );
+
+      if (targetAngle?.id) {
+        await SceneAngle.update(
+          { still_image_url: result.restyled_url },
+          { where: { id: targetAngle.id, scene_set_id: id } }
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        restyled_url: result.restyled_url,
+        mood,
+        time_of_day,
+        angle_id: targetAngle?.id || null,
+      },
+    });
+  } catch (error) {
+    console.error('Scene Studio regenerateSceneSetBackground error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
 // ── Smart Suggestions ──
 
 exports.suggestObjects = async (req, res) => {
