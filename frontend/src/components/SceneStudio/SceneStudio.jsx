@@ -288,12 +288,51 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── Load canvas data ──
 
   useEffect(() => {
+    const isTransientLoadError = (err) => {
+      const status = err?.response?.status;
+      const code = err?.code;
+      const msg = String(err?.message || '');
+      return (
+        status === 502 ||
+        status === 503 ||
+        status === 504 ||
+        code === 'ERR_NETWORK' ||
+        msg.includes('Network Error') ||
+        msg.includes('ERR_NETWORK_CHANGED')
+      );
+    };
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function withLoadRetry(requestFn, label) {
+      let lastErr;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          return await requestFn();
+        } catch (err) {
+          lastErr = err;
+          if (!isTransientLoadError(err) || attempt === 3) {
+            throw err;
+          }
+          const backoffMs = attempt * 500;
+          console.warn(`Scene Studio load retry ${attempt}/3 for ${label} after transient error`, {
+            status: err?.response?.status,
+            code: err?.code,
+            message: err?.message,
+            backoffMs,
+          });
+          await sleep(backoffMs);
+        }
+      }
+      throw lastErr;
+    }
+
     async function load() {
       setIsLoading(true);
       setError(null);
       try {
         if (sceneId) {
-          const result = await sceneService.getCanvas(sceneId);
+          const result = await withLoadRetry(() => sceneService.getCanvas(sceneId), `scene:${sceneId}`);
           if (result.success) {
             console.log('Scene Studio LOAD:', {
               background_url: result.data.scene?.background_url?.substring(0, 80) || 'NULL',
@@ -307,7 +346,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             if (cs?.timeOfDay) setTimeOfDay(cs.timeOfDay);
           }
         } else if (sceneSetId) {
-          const result = await sceneService.getSceneSetCanvas(sceneSetId);
+          const result = await withLoadRetry(() => sceneService.getSceneSetCanvas(sceneSetId), `sceneSet:${sceneSetId}`);
           if (result.success) {
             state.loadFromApi(result.data, 'sceneSet');
             const savedPlatform = result.data.sceneSet?.canvas_settings?.platform;
