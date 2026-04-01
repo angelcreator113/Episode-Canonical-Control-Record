@@ -266,6 +266,18 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [mobilePanel, setMobilePanel] = useState(null); // null | 'left' | 'right'
   const prevObjectCountRef = useRef(0);
 
+  // Clear mobile drawer state when viewport crosses tablet breakpoint
+  useEffect(() => {
+    const TABLET_BREAKPOINT = 768;
+    const handleResize = () => {
+      if (window.innerWidth >= TABLET_BREAKPOINT && mobilePanel) {
+        setMobilePanel(null);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [mobilePanel]);
+
   useEffect(() => {
     if (!inpaintCooldownUntil || inpaintCooldownUntil <= Date.now()) {
       setInpaintCooldownSeconds(0);
