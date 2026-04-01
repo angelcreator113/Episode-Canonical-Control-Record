@@ -1142,7 +1142,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           });
         } else {
           state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
-          state.markDirty();
+          if (typeof state.markDirty === 'function') state.markDirty();
         }
         // Exit erase mode on success
         state.setActiveTool('select');
@@ -1544,7 +1544,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             _asset: { ...o._asset, s3_url_processed: newUrl },
           } : o
         ));
-        state.markDirty?.() || (() => {})(); // trigger auto-save
+        if (typeof state.markDirty === 'function') state.markDirty(); // trigger auto-save
       } else {
         setSaveErrorMsg('Background removal returned no URL');
       }
