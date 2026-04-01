@@ -44,7 +44,7 @@ const TRANSFORM_PRESETS = [
   { key: 'matting', icon: Layers, label: 'Add Matting', prompt: 'Professional photo matting and mounting, shadow box presentation, museum-quality display, transparent background', strength: 0.65 },
 ];
 
-export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasHeight, onAddAsset, focusTarget, onClearFocus }) {
+export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasHeight, onAddAsset, focusTarget, onClearFocus, showId, episodeId }) {
   const [mode, setMode] = useState('generate'); // 'generate' | 'transform'
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -66,6 +66,35 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
   const [activePreset, setActivePreset] = useState(null);
   const [transformStrength, setTransformStrength] = useState(0.65);
   const transformFileRef = useRef(null);
+  const [showLibraryPicker, setShowLibraryPicker] = useState(false);
+  const [libraryAssets, setLibraryAssets] = useState([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+
+  // Fetch library assets when picker is opened
+  useEffect(() => {
+    if (!showLibraryPicker || libraryAssets.length > 0) return;
+    setLibraryLoading(true);
+    const params = new URLSearchParams({ limit: '40', asset_type: 'image' });
+    if (showId) params.set('show_id', showId);
+    if (episodeId) params.set('episode_id', episodeId);
+    api.get(`/api/v1/assets?${params}`)
+      .then(({ data }) => {
+        const assets = (data?.data || data?.assets || []).filter(
+          (a) => a.s3_url_processed || a.s3_url_raw
+        );
+        setLibraryAssets(assets);
+      })
+      .catch((err) => console.error('Failed to load library:', err))
+      .finally(() => setLibraryLoading(false));
+  }, [showLibraryPicker, showId, episodeId, libraryAssets.length]);
+
+  const handleSelectLibraryAsset = useCallback((asset) => {
+    const url = asset.s3_url_processed || asset.s3_url_raw;
+    const thumb = asset.thumbnail_url || asset.s3_url_processed || asset.s3_url_raw;
+    setSourceImageUrl(url);
+    setSourceImageThumb(thumb);
+    setShowLibraryPicker(false);
+  }, []);
 
   // Focus prompt textarea when requested, or pre-fill from smart suggestion
   useEffect(() => {
@@ -396,24 +425,87 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
             {sourceImageThumb ? (
               <div className="scene-studio-transform-preview">
                 <img src={sourceImageThumb} alt="Source" />
-                <button
-                  type="button"
-                  className="scene-studio-transform-change-btn"
-                  onClick={() => transformFileRef.current?.click()}
-                >
-                  Change
-                </button>
+                <div className="scene-studio-transform-preview-actions">
+                  <button
+                    type="button"
+                    className="scene-studio-transform-change-btn"
+                    onClick={() => transformFileRef.current?.click()}
+                  >
+                    <Upload size={10} /> Upload New
+                  </button>
+                  <button
+                    type="button"
+                    className="scene-studio-transform-change-btn"
+                    onClick={() => setShowLibraryPicker(true)}
+                  >
+                    <Image size={10} /> Library
+                  </button>
+                </div>
               </div>
             ) : (
-              <button
-                type="button"
-                className="scene-studio-transform-upload"
-                onClick={() => transformFileRef.current?.click()}
-              >
-                <Upload size={20} />
-                <span>Upload source image</span>
-                <span className="scene-studio-transform-hint">JPG, PNG up to 10MB</span>
-              </button>
+              <div className="scene-studio-transform-source-options">
+                <button
+                  type="button"
+                  className="scene-studio-transform-upload"
+                  onClick={() => transformFileRef.current?.click()}
+                >
+                  <Upload size={18} />
+                  <span>Upload</span>
+                  <span className="scene-studio-transform-hint">JPG, PNG</span>
+                </button>
+                <button
+                  type="button"
+                  className="scene-studio-transform-upload"
+                  onClick={() => setShowLibraryPicker(true)}
+                >
+                  <Image size={18} />
+                  <span>From Library</span>
+                  <span className="scene-studio-transform-hint">Your assets</span>
+                </button>
+              </div>
+            )}
+
+            {/* Library asset picker grid */}
+            {showLibraryPicker && (
+              <div className="scene-studio-transform-library">
+                <div className="scene-studio-transform-library-header">
+                  <span>Choose from Library</span>
+                  <button
+                    type="button"
+                    className="scene-studio-icon-btn"
+                    onClick={() => setShowLibraryPicker(false)}
+                  >
+                    ×
+                  </button>
+                </div>
+                {libraryLoading ? (
+                  <div className="scene-studio-transform-library-loading">
+                    <Loader size={14} className="scene-studio-spin-icon" /> Loading...
+                  </div>
+                ) : libraryAssets.length === 0 ? (
+                  <div className="scene-studio-transform-library-loading">No images found</div>
+                ) : (
+                  <div className="scene-studio-transform-library-grid">
+                    {libraryAssets.map((asset) => (
+                      <button
+                        key={asset.id}
+                        type="button"
+                        className="scene-studio-transform-library-thumb"
+                        onClick={() => handleSelectLibraryAsset(asset)}
+                        title={asset.label || asset.name || 'Asset'}
+                      >
+                        <img
+                          src={asset.thumbnail_url || asset.s3_url_processed || asset.s3_url_raw}
+                          alt={asset.label || 'Asset'}
+                        />
+                        <span className="scene-studio-transform-library-label">
+                          {asset.label || asset.usage_type || 'Asset'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

@@ -118,6 +118,8 @@ export default function CreationPanel({
             onAddAsset={onAddAsset}
             focusTarget={focusTarget}
             onClearFocus={onClearFocus}
+            showId={showId}
+            episodeId={episodeId}
           />
         );
       case 'shapes':

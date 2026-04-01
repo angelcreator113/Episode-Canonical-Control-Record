@@ -1098,6 +1098,12 @@
   color: #bbb;
 }
 
+.scene-studio-transform-source-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
 .scene-studio-transform-preview {
   position: relative;
   border-radius: 8px;
@@ -1112,10 +1118,18 @@
   object-fit: cover;
 }
 
-.scene-studio-transform-change-btn {
+.scene-studio-transform-preview-actions {
   position: absolute;
   bottom: 4px;
   right: 4px;
+  display: flex;
+  gap: 3px;
+}
+
+.scene-studio-transform-change-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 3px 8px;
   border: none;
   border-radius: 4px;
@@ -1125,10 +1139,93 @@
   font-size: 9px;
   cursor: pointer;
   transition: background 0.15s ease;
+  backdrop-filter: blur(4px);
 }
 
 .scene-studio-transform-change-btn:hover {
   background: rgba(0, 0, 0, 0.8);
+}
+
+/* ── Library picker for Transform ── */
+
+.scene-studio-transform-library {
+  margin-top: 6px;
+  border: 1px solid rgba(184, 150, 46, 0.15);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.scene-studio-transform-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.scene-studio-transform-library-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #999;
+}
+
+.scene-studio-transform-library-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  padding: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.scene-studio-transform-library-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.03);
+  border: 2px solid transparent;
+  transition: border-color 0.12s ease;
+  padding: 0;
+}
+
+.scene-studio-transform-library-thumb:hover {
+  border-color: #B8962E;
+}
+
+.scene-studio-transform-library-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.scene-studio-transform-library-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 7px;
+  padding: 2px 3px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #2C2C2C;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scene-studio-transform-presets {
