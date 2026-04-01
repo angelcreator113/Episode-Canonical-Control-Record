@@ -491,19 +491,25 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         result = await sceneService.saveSceneSetCanvas(state.contextId, payload);
       }
       console.log('Scene Studio save result:', result);
-      // Verify the save actually persisted by re-fetching
-      try {
-        const verify = state.contextType === 'scene'
-          ? await sceneService.getCanvas(state.contextId)
-          : await sceneService.getSceneSetCanvas(state.contextId);
-        const verifyScene = verify?.data?.scene || verify?.data?.sceneSet;
-        console.log('Scene Studio save VERIFY:', {
-          background_url: verifyScene?.background_url?.substring(0, 80) || 'NULL',
-          canvas_settings_keys: verifyScene?.canvas_settings ? Object.keys(verifyScene.canvas_settings) : 'NULL',
-          object_count: verify?.data?.objects?.length ?? 'N/A',
-        });
-      } catch (verifyErr) {
-        console.warn('Scene Studio save verify failed:', verifyErr.message);
+      // Optional debug-only verification fetch. In production this extra request
+      // can emit noisy transient 503/network errors even when save succeeded.
+      const shouldVerifySave =
+        (typeof import.meta !== 'undefined' && import.meta.env?.DEV) ||
+        window?.localStorage?.getItem('sceneStudioVerifySave') === '1';
+      if (shouldVerifySave) {
+        try {
+          const verify = state.contextType === 'scene'
+            ? await sceneService.getCanvas(state.contextId)
+            : await sceneService.getSceneSetCanvas(state.contextId);
+          const verifyScene = verify?.data?.scene || verify?.data?.sceneSet;
+          console.log('Scene Studio save VERIFY:', {
+            background_url: verifyScene?.background_url?.substring(0, 80) || 'NULL',
+            canvas_settings_keys: verifyScene?.canvas_settings ? Object.keys(verifyScene.canvas_settings) : 'NULL',
+            object_count: verify?.data?.objects?.length ?? 'N/A',
+          });
+        } catch (verifyErr) {
+          console.warn('Scene Studio save verify failed:', verifyErr.message);
+        }
       }
       // Sync client-generated IDs with server-assigned UUIDs so subsequent
       // saves can match by primary key instead of falling through to the
