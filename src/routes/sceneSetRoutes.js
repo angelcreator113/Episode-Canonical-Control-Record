@@ -311,6 +311,51 @@ router.post('/:id/generate-base', validateUUIDParam('id'), optionalAuth, async (
 
 const VALID_ANGLE_LABELS = ['WIDE', 'CLOSET', 'VANITY', 'WINDOW', 'DOORWAY', 'ESTABLISHING', 'ACTION', 'CLOSE', 'OVERHEAD', 'OTHER'];
 
+function buildFallbackAngleSuggestions(set, existingLabels = []) {
+  const candidates = [
+    {
+      angle_label: 'ESTABLISHING',
+      angle_name: `${set.name || 'Location'} Overview`,
+      camera_direction: 'Wide establishing view from the room edge, framing key architectural landmarks and entrances.',
+      description: 'Introduces layout, status cues, and immediate spatial context for scene transitions.',
+      beat_affinity: [1, 2],
+    },
+    {
+      angle_label: 'WIDE',
+      angle_name: 'Primary Wide',
+      camera_direction: 'Three-quarter wide shot covering the main action zone with headroom for movement.',
+      description: 'Best for dialogue movement and scene geography while preserving room identity.',
+      beat_affinity: [2, 3, 4],
+    },
+    {
+      angle_label: 'DOORWAY',
+      angle_name: 'Entrance Frame',
+      camera_direction: 'Camera placed near the doorway to capture arrivals and exits with depth into the room.',
+      description: 'Supports reveals, interruptions, and social power shifts through threshold staging.',
+      beat_affinity: [1, 4],
+    },
+    {
+      angle_label: 'WINDOW',
+      angle_name: 'Window Side',
+      camera_direction: 'Side angle near windows to use natural backlight and contour faces against the interior.',
+      description: 'Useful for reflective beats and visual contrast between interior and exterior mood.',
+      beat_affinity: [3, 5],
+    },
+    {
+      angle_label: 'CLOSE',
+      angle_name: 'Detail Close',
+      camera_direction: 'Tight framing on a key decor plane or character position to emphasize texture and stakes.',
+      description: 'Highlights emotional pressure and luxury detail without losing scene continuity.',
+      beat_affinity: [4, 5],
+    },
+  ];
+
+  const existingSet = new Set(existingLabels || []);
+  return candidates
+    .filter((c) => !existingSet.has(c.angle_label))
+    .slice(0, 5);
+}
+
 router.post('/:id/suggest-angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id, {
@@ -354,23 +399,36 @@ Return ONLY a JSON array with objects containing:
 
 Return raw JSON only, no markdown or explanation.`;
 
-    const client = getAnthropicClient();
-    const message = await client.messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: 1500,
-      temperature: 0.7,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = message.content[0].text.trim();
     let suggestions;
     try {
-      suggestions = JSON.parse(text);
-    } catch {
-      // Try to extract JSON array from response
-      const match = text.match(/\[[\s\S]*\]/);
-      if (match) suggestions = JSON.parse(match[0]);
-      else throw new Error('Could not parse AI suggestions');
+      const client = getAnthropicClient();
+      const message = await client.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 1500,
+        temperature: 0.7,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const text = message.content[0].text.trim();
+      try {
+        suggestions = JSON.parse(text);
+      } catch {
+        // Try to extract JSON array from response
+        const match = text.match(/\[[\s\S]*\]/);
+        if (match) suggestions = JSON.parse(match[0]);
+        else throw new Error('Could not parse AI suggestions');
+      }
+    } catch (aiErr) {
+      console.warn('Scene Sets suggest-angles AI unavailable, using fallback suggestions:', aiErr?.message || aiErr);
+      suggestions = buildFallbackAngleSuggestions(set, existingLabels);
+      return res.json({
+        success: true,
+        data: suggestions,
+        meta: {
+          source: 'fallback',
+          warning: 'AI suggestions unavailable; returned default cinematic angle set.',
+        },
+      });
     }
 
     // Validate and sanitize
