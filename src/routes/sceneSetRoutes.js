@@ -317,18 +317,26 @@ router.post('/:id/suggest-angles', validateUUIDParam('id'), optionalAuth, async 
       include: [{ model: SceneAngle, as: 'angles' }],
     });
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    if (!set.canonical_description) {
-      return res.status(400).json({ success: false, error: 'Scene set needs a canonical description first' });
-    }
 
     const existingLabels = (set.angles || []).map(a => a.angle_label);
     const sceneType = set.scene_type || 'OTHER';
+    const descriptionContext = [
+      set.canonical_description,
+      set.script_context,
+      set.base_runway_prompt,
+      set.name ? `Location name: ${set.name}` : null,
+      set.scene_type ? `Location type: ${set.scene_type}` : null,
+    ].filter(Boolean).join('\n');
+
+    if (!descriptionContext) {
+      return res.status(400).json({ success: false, error: 'Add a scene set name or description first' });
+    }
 
     const prompt = `You are a cinematic director planning camera angles and room coverage for a scene location.
 
 Scene name: ${set.name}
 Scene type: ${sceneType}
-Description: ${set.canonical_description}
+Description: ${descriptionContext}
 ${set.mood_tags?.length ? `Mood: ${set.mood_tags.join(', ')}` : ''}
 ${set.aesthetic_tags?.length ? `Aesthetic: ${set.aesthetic_tags.join(', ')}` : ''}
 ${existingLabels.length ? `Already created angles: ${existingLabels.join(', ')} — do NOT suggest duplicates of these.` : ''}
