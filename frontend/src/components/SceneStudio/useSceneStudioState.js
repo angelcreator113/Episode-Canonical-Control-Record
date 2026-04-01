@@ -613,6 +613,7 @@ export default function useSceneStudioState() {
     activateVariant,
     updateCanvasSettings,
     setSnapGuides,
+    markDirty,
     markClean,
     setObjects,
     setSceneData,
