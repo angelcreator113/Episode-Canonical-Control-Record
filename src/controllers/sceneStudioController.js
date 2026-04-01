@@ -1125,7 +1125,12 @@ exports.transformObject = async (req, res) => {
       return res.status(400).json({ success: false, error: 'prompt is required' });
     }
 
-    const imageRestyleService = require('../services/imageRestyleService');
+    if (!process.env.REPLICATE_API_TOKEN) {
+      return res.status(503).json({
+        success: false,
+        error: 'Image Transform requires REPLICATE_API_TOKEN to be configured on the server.',
+      });
+    }
 
     // Use img2img to transform the source image
     const result = await imageRestyleService.restyleBackground(image_url, id, {
