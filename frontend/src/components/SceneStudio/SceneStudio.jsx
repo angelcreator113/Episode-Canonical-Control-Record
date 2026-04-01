@@ -381,12 +381,21 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       hasPendingMask: !!pendingMask,
       hasRef: !!eraseBrushRef.current,
     });
+    // Track inpainted URL from auto-apply so we can include it in
+    // the save payload — React state won't have propagated yet.
+    let autoApplyBgUrl = null;
     if (pendingMask && handleEraseApplyRef.current) {
       console.log('Scene Studio save: auto-applying pending erase mask before save');
       try {
-        await handleEraseApplyRef.current(pendingMask, {});
-        pendingMaskRef.current = null;
-        console.log('Scene Studio save: erase mask applied and saved');
+        const eraseResult = await handleEraseApplyRef.current(pendingMask, {});
+        if (eraseResult?.applied) {
+          pendingMaskRef.current = null;
+          autoApplyBgUrl = eraseResult.inpaintedUrl || null;
+          console.log('Scene Studio save: erase mask applied and saved, bgUrl:', autoApplyBgUrl?.substring(0, 80));
+        } else {
+          console.warn('Scene Studio save: erase was skipped —', eraseResult?.reason || 'unknown reason');
+          // Don't clear pendingMaskRef — keep the mask so next save can retry
+        }
       } catch (eraseErr) {
         console.error('Scene Studio save: erase apply failed:', eraseErr?.message || eraseErr);
         // Don't clear pendingMaskRef — keep the mask so the user can retry
@@ -411,7 +420,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       // clear the dirty flag if no new edits arrived while saving.
       const savedVersion = payload._changeVersion;
       delete payload._changeVersion;
-      console.log('Payload created:', { objectCount: payload.objects?.length, hasCanvasSettings: !!payload.canvas_settings });
+      // Include current background_url in the payload so the backend can
+      // persist it as part of the canvas save. This ensures background
+      // changes (from inpainting, regeneration, etc.) survive even if
+      // the original API call's write was silently lost.
+      // Use autoApplyBgUrl (from the erase auto-apply above) if available,
+      // since React state won't have propagated the setSceneData update yet.
+      const currentBgUrl = autoApplyBgUrl || state.sceneData?.background_url || null;
+      if (currentBgUrl && state.contextType === 'scene') {
+        payload.background_url = currentBgUrl;
+      }
+      console.log('Payload created:', { objectCount: payload.objects?.length, hasCanvasSettings: !!payload.canvas_settings, hasBackgroundUrl: !!payload.background_url });
       // Include platform in canvas_settings for persistence
       if (payload.canvas_settings) {
         payload.canvas_settings.platform = platform;
@@ -1014,10 +1033,14 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       if (result?.success && result.data?.inpainted_url) {
         if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
-          // Update the selected object's image
-          state.setObjects((prev) => prev.map((o) =>
-            o.id === selectedObj.id ? { ...o, assetUrl: result.data.inpainted_url } : o
-          ));
+          // Persist the rendered URL in metadata so reload keeps the edit.
+          state.updateObject(selectedObj.id, {
+            assetUrl: result.data.inpainted_url,
+            metadata: {
+              ...(selectedObj.metadata || {}),
+              renderUrl: result.data.inpainted_url,
+            },
+          });
         } else {
           // Update the scene background
           state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
@@ -1060,12 +1083,19 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── EraseBrushCanvas apply handler ──
   // Bridges from EraseBrushCanvas's onApply(maskDataUrl, { prompt, strength }) to the API.
   const handleEraseApply = useCallback(async (maskDataUrl, options = {}) => {
-    if (isInpaintingRef.current) return;
-    if (!state.contextId) return;
+    if (isInpaintingRef.current) {
+      console.warn('Scene Studio handleEraseApply: skipped — already inpainting');
+      return { applied: false, reason: 'already_inpainting' };
+    }
+    if (!state.contextId) {
+      console.warn('Scene Studio handleEraseApply: skipped — no contextId');
+      return { applied: false, reason: 'no_context' };
+    }
     if (inpaintCooldownRef.current > Date.now()) {
       const seconds = Math.ceil((inpaintCooldownRef.current - Date.now()) / 1000);
+      console.warn('Scene Studio handleEraseApply: skipped — cooldown active, ', seconds, 's remaining');
       setInpaintError(`Too many requests. Please wait ${seconds}s and try again.`);
-      return;
+      return { applied: false, reason: 'cooldown' };
     }
 
     const selectedObj = state.selectedIds.size === 1
@@ -1076,8 +1106,9 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       : backgroundUrl;
 
     if (!targetUrl) {
+      console.warn('Scene Studio handleEraseApply: skipped — no target URL');
       setInpaintError('No image to erase from — select an image object or ensure background is set');
-      return;
+      return { applied: false, reason: 'no_target_url' };
     }
 
     const isBackgroundTarget = !(selectedObj?.type === 'image' && selectedObj?.assetUrl);
@@ -1087,6 +1118,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     setInpaintError('');
     try {
       const trimmedPrompt = (options.prompt || '').trim();
+      console.log('Scene Studio handleEraseApply: calling inpaint API', { isBackground: isBackgroundTarget, mode: trimmedPrompt ? 'fill' : 'remove' });
       const result = await sceneService.inpaintScene(state.contextId, {
         imageUrl: targetUrl,
         isBackground: isBackgroundTarget,
@@ -1101,15 +1133,24 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
       if (result?.success && result.data?.inpainted_url) {
         if (selectedObj?.type === 'image' && selectedObj?.assetUrl) {
-          state.setObjects((prev) => prev.map((o) =>
-            o.id === selectedObj.id ? { ...o, assetUrl: result.data.inpainted_url } : o
-          ));
+          state.updateObject(selectedObj.id, {
+            assetUrl: result.data.inpainted_url,
+            metadata: {
+              ...(selectedObj.metadata || {}),
+              renderUrl: result.data.inpainted_url,
+            },
+          });
         } else {
           state.setSceneData((prev) => prev ? { ...prev, background_url: result.data.inpainted_url } : prev);
+          if (typeof state.markDirty === 'function') state.markDirty();
         }
         // Exit erase mode on success
         state.setActiveTool('select');
+        console.log('Scene Studio handleEraseApply: success, inpainted_url:', result.data.inpainted_url?.substring(0, 80));
+        return { applied: true, inpaintedUrl: result.data.inpainted_url };
       }
+      console.warn('Scene Studio handleEraseApply: inpaint returned no URL', result);
+      return { applied: false, reason: 'no_inpainted_url' };
     } catch (err) {
       if (err?.response?.status === 429) {
         console.warn('Inpaint rate-limited (429):', err?.response?.data?.error || err.message);
@@ -1503,7 +1544,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             _asset: { ...o._asset, s3_url_processed: newUrl },
           } : o
         ));
-        state.markDirty?.() || (() => {})(); // trigger auto-save
+        if (typeof state.markDirty === 'function') state.markDirty(); // trigger auto-save
       } else {
         setSaveErrorMsg('Background removal returned no URL');
       }
