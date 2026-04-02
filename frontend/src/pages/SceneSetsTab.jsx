@@ -361,12 +361,12 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, generatingId, generationProgress, allShows, allEpisodes, onLoadEpisodes, onToast }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, allShows, allEpisodes, onLoadEpisodes, onToast }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
-  const isGenerating = generatingId === set.id;
-  const progress = generatingId === set.id ? generationProgress : null;
+  const isGenerating = isGeneratingProp;
+  const progress = isGeneratingProp ? generationProgress : null;
   // Cache-bust using set.updated_at — survives page refresh unlike local counters
   const cacheBust = set.updated_at ? new Date(set.updated_at).getTime() : '';
   const bustUrl = (url) => {
@@ -1063,7 +1063,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   );
 }, (prev, next) => {
   // Only re-render when meaningful rendering data changes, not on every poll
-  if (prev.generatingId !== next.generatingId) return false;
+  if (prev.isGeneratingProp !== next.isGeneratingProp) return false;
   if (prev.set.updated_at !== next.set.updated_at) return false;
   if (prev.generationProgress !== next.generationProgress) return false;
   const ps = prev.set, ns = next.set;
@@ -1095,8 +1095,24 @@ export default function SceneSetsTab() {
   const [sets, setSets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [generatingId, setGeneratingId] = useState(null);
-  const [generationProgress, setGenerationProgress] = useState(null);
+  const [generatingIds, setGeneratingIds] = useState(new Set());
+  const [generationProgressMap, setGenerationProgressMap] = useState({});
+
+  // Helpers to manage multi-set generation tracking
+  const startGenerating = useCallback((id) => {
+    setGeneratingIds(prev => { const next = new Set(prev); next.add(id); return next; });
+  }, []);
+  const stopGenerating = useCallback((id) => {
+    setGeneratingIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+    setGenerationProgressMap(prev => { const next = { ...prev }; delete next[id]; return next; });
+  }, []);
+  const setProgress = useCallback((id, progressOrFn) => {
+    setGenerationProgressMap(prev => ({
+      ...prev,
+      [id]: typeof progressOrFn === 'function' ? progressOrFn(prev[id]) : progressOrFn,
+    }));
+  }, []);
+
   const [toast, setToast] = useState(null);
   const [filterType, setFilterType] = useState('ALL');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -1176,7 +1192,7 @@ export default function SceneSetsTab() {
   }, []);
 
   const handleGenerateBase = async (set) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
         method: 'POST',
@@ -1199,12 +1215,12 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err.message || 'Generation failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
   const handleRegenerateBase = async (set) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
         method: 'POST',
@@ -1228,7 +1244,7 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err.message || 'Regeneration failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
@@ -1248,7 +1264,7 @@ export default function SceneSetsTab() {
   };
 
   const handleUploadBase = async (set, files) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const formData = new FormData();
       const fileList = Array.isArray(files) ? files : [files].filter(Boolean);
@@ -1271,12 +1287,12 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
   const handleGenerateAngle = async (set, angle) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
       if (!res.ok) {
@@ -1296,7 +1312,7 @@ export default function SceneSetsTab() {
     } catch {
       showToast('Angle generation failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
@@ -1305,17 +1321,17 @@ export default function SceneSetsTab() {
       ? set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || []
       : set.angles?.filter(a => a.generation_status === 'pending') || [];
     if (targets.length === 0) return;
-    setGeneratingId(set.id);
+    startGenerating(set.id);
 
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
-    setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     try {
       // Fire all generation requests and collect job IDs
       const jobMap = [];
       for (let i = 0; i < targets.length; i++) {
         progressAngles[i].status = 'generating';
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
+        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], currentIndex: i }));
         try {
           const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
           if (!res.ok) throw new Error('Failed');
@@ -1323,7 +1339,7 @@ export default function SceneSetsTab() {
           jobMap.push({ index: i, jobId: json.data.jobId });
         } catch {
           progressAngles[i].status = 'failed';
-          setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
         }
       }
 
@@ -1340,7 +1356,7 @@ export default function SceneSetsTab() {
           progressAngles[index].status = 'failed';
           failed++;
         }
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
       });
 
       await Promise.all(pollPromises);
@@ -1354,18 +1370,18 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err?.message || 'Generation failed', 'error');
     } finally {
-      setTimeout(() => setGenerationProgress(null), 3000);
-      setGeneratingId(null);
+      setTimeout(() => stopGenerating(set.id), 3000);
+      stopGenerating(set.id);
     }
   };
 
   const handleRetryFailed = async (set) => {
     const targets = set.angles?.filter(a => a.generation_status === 'failed') || [];
     if (targets.length === 0) return;
-    setGeneratingId(set.id);
+    startGenerating(set.id);
 
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
-    setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     try {
       // Fire all retry requests to get job IDs
@@ -1380,7 +1396,7 @@ export default function SceneSetsTab() {
         } catch {
           progressAngles[i].status = 'failed';
         }
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
       }
 
       // Poll all jobs in parallel
@@ -1396,7 +1412,7 @@ export default function SceneSetsTab() {
           progressAngles[index].status = 'failed';
           failed++;
         }
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
       });
 
       await Promise.all(pollPromises);
@@ -1410,8 +1426,8 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err?.message || 'Retry failed', 'error');
     } finally {
-      setTimeout(() => setGenerationProgress(null), 3000);
-      setGeneratingId(null);
+      setTimeout(() => stopGenerating(set.id), 3000);
+      stopGenerating(set.id);
     }
   };
 
@@ -1442,7 +1458,7 @@ export default function SceneSetsTab() {
       // If a generation job was auto-queued, poll it and update when done
       if (json.jobId) {
         showToast(`Created "${setName}" — generating base image...`);
-        if (json.data?.id) setGeneratingId(json.data.id);
+        if (json.data?.id) startGenerating(json.data.id);
         const job = await pollJob(json.jobId);
         if (job.status === 'completed') {
           showToast(`Base image generated for "${setName}"`);
@@ -1450,7 +1466,7 @@ export default function SceneSetsTab() {
           showToast(job.error || 'Base generation failed', 'error');
         }
         await fetchSets();
-        setGeneratingId(null);
+        if (json.data?.id) stopGenerating(json.data.id);
       } else {
         showToast(`Created "${setName}"`);
       }
@@ -1611,7 +1627,7 @@ export default function SceneSetsTab() {
   };
 
   const handleCascadeRegenerate = async (set, description) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/cascade-regenerate`, {
         method: 'POST',
@@ -1635,7 +1651,7 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err.message || 'Cascade regeneration failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
@@ -1859,8 +1875,8 @@ export default function SceneSetsTab() {
               onLinkEpisodes={handleLinkEpisodes}
               onUnlinkEpisode={handleUnlinkEpisode}
               onDeleteSingleAngle={handleDeleteSingleAngle}
-              generatingId={generatingId}
-              generationProgress={generationProgress}
+              isGeneratingProp={generatingIds.has(set.id)}
+              generationProgress={generationProgressMap[set.id] || null}
               allShows={allShows}
               allEpisodes={allEpisodes}
               onLoadEpisodes={loadEpisodesForShow}
