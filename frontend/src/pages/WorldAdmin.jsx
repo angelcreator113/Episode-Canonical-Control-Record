@@ -16,7 +16,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import './WorldAdmin.css';
 
@@ -53,6 +53,7 @@ const TABS = [
 
 function WorldAdmin() {
   const { id: showId } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
 
@@ -647,12 +648,17 @@ function WorldAdmin() {
                 {episodes.map(ep => {
                   const hasEvent = worldEvents.some(ev => ev.used_in_episode_id === ep.id || (ev.status === 'used' && ep.script_content?.includes(ev.name)));
                   return (
-                    <div key={ep.id} style={{
+                    <div key={ep.id} onClick={() => navigate(`/episodes/${ep.id}`)} style={{
                       padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
                       background: hasEvent ? '#f0fdf4' : '#fef3c7',
                       color: hasEvent ? '#16a34a' : '#b45309',
                       border: `1px solid ${hasEvent ? '#bbf7d0' : '#fde68a'}`,
-                    }}>
+                      cursor: 'pointer', transition: 'transform 0.1s ease',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    title={`Go to ${ep.title || 'episode'}`}
+                    >
                       {ep.episode_number || '?'}. {ep.title?.slice(0, 15) || 'Untitled'}{ep.title?.length > 15 ? '…' : ''}
                       {hasEvent ? ' ✓' : ' ○'}
                     </div>
