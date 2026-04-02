@@ -1056,15 +1056,29 @@ function WorldAdmin() {
                             {s.action && <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', background: '#eef2ff', color: '#4338ca', borderRadius: 4, fontWeight: 700 }}>{s.action.replace(/_/g, ' ')}</span>}
                           </div>
                           <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{s.suggestion}</div>
-                          {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2 }}>→ {typeof s.new_value === 'object' ? JSON.stringify(s.new_value) : s.new_value}</div>}
+                          {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2, wordBreak: 'break-word' }}>→ {typeof s.new_value === 'object' ? s.new_value.name || JSON.stringify(s.new_value) : s.new_value}</div>}
                         </div>
-                        {s.action !== 'manual' && s.event_name && s.new_value && (
-                          <button onClick={() => applyAiFix(s)} style={{
-                            padding: '4px 12px', background: '#6366f1', color: '#fff',
-                            border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
-                            cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
-                          }}>Apply</button>
-                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                          {s.action === 'create' && s.new_value && (
+                            <button onClick={() => {
+                              const data = typeof s.new_value === 'object' ? s.new_value : {};
+                              setEventForm({ ...EMPTY_EVENT, ...data });
+                              setEditingEvent('new');
+                              setAiFixSuggestions(prev => prev.filter(x => x !== s));
+                            }} style={{
+                              padding: '4px 12px', background: '#16a34a', color: '#fff',
+                              border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}>+ Create</button>
+                          )}
+                          {s.action !== 'manual' && s.action !== 'create' && s.event_name && s.new_value && (
+                            <button onClick={() => applyAiFix(s)} style={{
+                              padding: '4px 12px', background: '#6366f1', color: '#fff',
+                              border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}>Apply</button>
+                          )}
+                        </div>
                       </div>
                     ))}
                     <button onClick={() => setAiFixSuggestions(null)} style={{ ...S.smBtn, marginTop: 4, fontSize: 10 }}>Dismiss</button>
