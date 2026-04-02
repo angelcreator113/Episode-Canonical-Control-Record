@@ -430,7 +430,24 @@ function WorldAdmin() {
     setAiFixLoading(true);
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
-        warnings: [{ msg: `CREATE: Suggest a new event for Episode ${ep.episode_number} "${ep.title}". Consider what events are already used and create something different. Return the suggestion with action "create" and new_value as a JSON object with name, event_type, prestige, cost_coins, strictness, dress_code, narrative_stakes.` }],
+        warnings: [{ msg: `CREATE: Suggest a complete new event for Episode ${ep.episode_number} "${ep.title}". Consider what events are already used and create something completely different. Return the suggestion with action "create" and new_value as a JSON object with ALL of these fields filled out (no empty strings):
+- name: full event name
+- event_type: invite|upgrade|guest|fail_test|deliverable|brand_deal
+- host: who is hosting this event (a person, brand, or organization)
+- host_brand: the brand or venue name
+- prestige: 1-10
+- cost_coins: number
+- strictness: 1-10
+- deadline_type: none|low|medium|high|tonight|urgent
+- dress_code: specific dress code description
+- dress_code_keywords: array of 4-6 style keywords
+- narrative_stakes: 2-3 sentences about what this means for Lala's story
+- career_milestone: what career achievement this event represents
+- career_tier: 1-5
+- description: full paragraph describing the event atmosphere and setting
+- fail_consequence: what happens narratively if Lala fails
+- success_unlock: what new opportunity opens if she succeeds
+- location_hint: physical setting description` }],
         events: worldEvents,
         episodes,
       });
