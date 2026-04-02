@@ -233,8 +233,14 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
           if (tierMap[normalizedTier] !== undefined) {
             val = tierMap[normalizedTier];
           } else {
+            if (normalizedTier.includes('emerg')) val = 1;
+            else if (normalizedTier.includes('rising')) val = 2;
+            else if (normalizedTier.includes('establish')) val = 3;
+            else if (normalizedTier.includes('influ')) val = 4;
+            else if (normalizedTier.includes('elite') || normalizedTier.includes('icon')) val = 5;
+
             const leadingTierMatch = normalizedTier.match(/^(\d+)/);
-            if (leadingTierMatch) {
+            if (leadingTierMatch && typeof val === 'string') {
               val = Number(leadingTierMatch[1]);
             }
           }
