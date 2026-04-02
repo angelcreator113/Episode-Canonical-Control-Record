@@ -491,9 +491,6 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
   }
 });
 
-
-module.exports = router;
-
 // ─── AI EVENT DIVERSIFIER ────────────────────────────────────────────────────
 // POST /api/v1/world/:showId/events/ai-fix
 // Takes warnings + events + episodes, returns suggestions to diversify
@@ -567,3 +564,6 @@ Guidelines:
     res.status(500).json({ error: err.message });
   }
 });
+
+
+module.exports = router;
