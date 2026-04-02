@@ -240,37 +240,205 @@ function WorldAdmin() {
     const episodeEvents = episodes.map(ep => ({
       ep,
       event: worldEvents.find(ev => ev.used_in_episode_id === ep.id),
-    })).filter(e => e.event);
+    }));
+    const linked = episodeEvents.filter(e => e.event);
+    const sorted = [...linked].sort((a, b) => (a.ep.episode_number || 0) - (b.ep.episode_number || 0));
 
-    // Check prestige order — high prestige too early
-    for (let i = 0; i < episodeEvents.length; i++) {
-      const { ep, event } = episodeEvents[i];
+    // 1. High prestige too early
+    for (const { ep, event } of sorted) {
       if ((ep.episode_number || 99) <= 3 && (event.prestige || 0) >= 8) {
-        warnings.push({ type: 'prestige', eventName: event.name, msg: `⚠️ "${event.name}" (prestige ${event.prestige}) in early Ep ${ep.episode_number} — high prestige events work better later in the arc` });
+        warnings.push({ type: 'prestige', eventName: event.name, fixType: 'swap',
+          msg: `⚠️ "${event.name}" (prestige ${event.prestige}) in early Ep ${ep.episode_number} — high prestige events work better later` });
       }
     }
 
-    // Check duplicate event types back-to-back
-    for (let i = 1; i < episodeEvents.length; i++) {
-      const prev = episodeEvents[i - 1];
-      const curr = episodeEvents[i];
+    // 2. Back-to-back same event type
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1], curr = sorted[i];
       if (prev.event.event_type === curr.event.event_type &&
           Math.abs((curr.ep.episode_number || 0) - (prev.ep.episode_number || 0)) <= 1) {
-        warnings.push({ type: 'duplicate', eventName: curr.event.name, msg: `⚠️ Back-to-back ${curr.event.event_type} events: "${prev.event.name}" (Ep ${prev.ep.episode_number}) and "${curr.event.name}" (Ep ${curr.ep.episode_number})` });
+        warnings.push({ type: 'duplicate_type', eventName: curr.event.name, pairName: prev.event.name, fixType: 'swap_episodes',
+          epA: prev.ep, epB: curr.ep, evA: prev.event, evB: curr.event,
+          msg: `⚠️ Back-to-back ${curr.event.event_type}: "${prev.event.name}" (Ep ${prev.ep.episode_number}) and "${curr.event.name}" (Ep ${curr.ep.episode_number})` });
       }
     }
 
-    // Check similar names (potential duplicates)
+    // 3. Duplicate event names
     const names = worldEvents.map(ev => ev.name?.toLowerCase().trim());
     for (let i = 0; i < names.length; i++) {
       for (let j = i + 1; j < names.length; j++) {
         if (names[i] && names[j] && names[i] === names[j]) {
-          warnings.push({ type: 'name', eventName: worldEvents[i].name, msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
+          warnings.push({ type: 'name', eventName: worldEvents[i].name, fixType: 'merge',
+            dupA: worldEvents[i], dupB: worldEvents[j],
+            msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
         }
       }
     }
 
+    // 4. Cost curve — expensive event before Lala can afford it
+    for (const { ep, event } of sorted) {
+      const tier = event.career_tier || 1;
+      const epNum = ep.episode_number || 1;
+      if (tier >= 3 && epNum <= 4 && (event.cost_coins || 0) >= 150) {
+        warnings.push({ type: 'cost', eventName: event.name, fixType: 'edit',
+          msg: `💰 "${event.name}" costs ${event.cost_coins} coins at Tier ${tier} in Ep ${epNum} — Lala may not afford this yet` });
+      }
+    }
+
+    // 5. Dress code variety — 3+ same dress code in a row
+    for (let i = 2; i < sorted.length; i++) {
+      const a = sorted[i-2]?.event?.dress_code?.toLowerCase();
+      const b = sorted[i-1]?.event?.dress_code?.toLowerCase();
+      const c = sorted[i]?.event?.dress_code?.toLowerCase();
+      if (a && b && c && a === b && b === c) {
+        warnings.push({ type: 'dress', eventName: sorted[i].event.name, fixType: 'edit',
+          msg: `👗 Same dress code "${c}" for 3 episodes in a row (Ep ${sorted[i-2].ep.episode_number}-${sorted[i].ep.episode_number}) — add variety` });
+      }
+    }
+
+    // 6. Missing event types — check season has variety
+    const usedTypes = new Set(worldEvents.filter(ev => ev.status === 'used').map(ev => ev.event_type));
+    const essentialTypes = ['invite', 'deliverable', 'brand_deal'];
+    for (const t of essentialTypes) {
+      if (worldEvents.length >= 6 && !usedTypes.has(t)) {
+        warnings.push({ type: 'missing_type', fixType: 'create',
+          msg: `📋 No "${t.replace(/_/g, ' ')}" events linked — balanced arcs need variety in event types` });
+      }
+    }
+
+    // 7. Location repetition — same scene set back-to-back
+    for (let i = 1; i < sorted.length; i++) {
+      const prevScene = sorted[i-1]?.event?.scene_set_id;
+      const currScene = sorted[i]?.event?.scene_set_id;
+      if (prevScene && currScene && prevScene === currScene) {
+        warnings.push({ type: 'location', eventName: sorted[i].event.name, fixType: 'edit',
+          msg: `📍 Same location for "${sorted[i-1].event.name}" and "${sorted[i].event.name}" back-to-back — change one venue` });
+      }
+    }
+
+    // 8. Difficulty spike — jump from Easy to Extreme
+    for (let i = 1; i < sorted.length; i++) {
+      const prevDiff = calcDifficulty(sorted[i-1].event);
+      const currDiff = calcDifficulty(sorted[i].event);
+      if (currDiff - prevDiff >= 4) {
+        warnings.push({ type: 'spike', eventName: sorted[i].event.name, fixType: 'edit',
+          msg: `🎯 Difficulty spike: "${sorted[i-1].event.name}" (${prevDiff.toFixed(1)}) → "${sorted[i].event.name}" (${currDiff.toFixed(1)}) — add a medium event between` });
+      }
+    }
+
+    // 9. Unlinked episodes
+    const unlinkedEps = episodeEvents.filter(e => !e.event);
+    if (unlinkedEps.length > 0 && unlinkedEps.length <= 3) {
+      for (const { ep } of unlinkedEps) {
+        warnings.push({ type: 'gap', fixType: 'fill', ep,
+          msg: `○ Ep ${ep.episode_number}: "${ep.title}" has no event — assign or create one` });
+      }
+    }
+
     return warnings;
+  };
+
+  // ── One-click fix handlers ──
+
+  // Swap two events' episode assignments
+  const handleSwapEpisodes = async (evA, evB, epA, epB) => {
+    try {
+      await Promise.all([
+        api.post(`/api/v1/world/${showId}/events/${evA.id}/inject`, { episode_id: epB.id }),
+        api.post(`/api/v1/world/${showId}/events/${evB.id}/inject`, { episode_id: epA.id }),
+      ]);
+      setWorldEvents(prev => prev.map(ev => {
+        if (ev.id === evA.id) return { ...ev, used_in_episode_id: epB.id, status: 'used' };
+        if (ev.id === evB.id) return { ...ev, used_in_episode_id: epA.id, status: 'used' };
+        return ev;
+      }));
+      setToast('✅ Swapped episode assignments');
+      setTimeout(() => setToast(null), 3000);
+    } catch { setToast('Failed to swap'); setTimeout(() => setToast(null), 3000); }
+  };
+
+  // Auto-reorder all events by prestige ascending
+  const handleAutoReorder = async () => {
+    const linked = worldEvents.filter(ev => ev.used_in_episode_id);
+    const sortedByPrestige = [...linked].sort((a, b) => (a.prestige || 0) - (b.prestige || 0));
+    const sortedEps = [...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
+
+    if (sortedByPrestige.length === 0) return;
+    if (!window.confirm(`Reorder ${sortedByPrestige.length} events by prestige (low → high) across episodes? This changes all assignments.`)) return;
+
+    try {
+      for (let i = 0; i < sortedByPrestige.length && i < sortedEps.length; i++) {
+        await api.post(`/api/v1/world/${showId}/events/${sortedByPrestige[i].id}/inject`, { episode_id: sortedEps[i].id });
+      }
+      setToast('✅ Events reordered by prestige');
+      setTimeout(() => setToast(null), 3000);
+      loadData();
+    } catch { setToast('Reorder failed'); setTimeout(() => setToast(null), 3000); }
+  };
+
+  // Merge duplicate events — keep first, delete second
+  const handleMergeDuplicates = async (keepEvent, removeEvent) => {
+    if (!window.confirm(`Keep "${keepEvent.name}" and delete the duplicate? The duplicate's episode link will transfer.`)) return;
+    try {
+      // If the duplicate was linked to an episode, relink the keeper
+      if (removeEvent.used_in_episode_id && !keepEvent.used_in_episode_id) {
+        await api.post(`/api/v1/world/${showId}/events/${keepEvent.id}/inject`, { episode_id: removeEvent.used_in_episode_id });
+      }
+      await api.delete(`/api/v1/world/${showId}/events/${removeEvent.id}`);
+      setWorldEvents(prev => prev.filter(ev => ev.id !== removeEvent.id));
+      setToast('✅ Merged — duplicate removed');
+      setTimeout(() => setToast(null), 3000);
+    } catch { setToast('Merge failed'); setTimeout(() => setToast(null), 3000); }
+  };
+
+  // Fill gap — suggest best unlinked event for an episode
+  const handleFillGap = (ep) => {
+    const unlinked = worldEvents.filter(ev => !ev.used_in_episode_id && ev.status !== 'used');
+    if (unlinked.length === 0) {
+      setToast('No unlinked events available — create a new one');
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    // Pick the best match: prefer matching career_tier to episode position
+    const epPos = ep.episode_number || 1;
+    const scored = unlinked.map(ev => ({
+      ev,
+      score: Math.abs((ev.prestige || 5) - (epPos * 0.7 + 2)) // rough fit
+    })).sort((a, b) => a.score - b.score);
+    setEventDetailModal(scored[0].ev);
+  };
+
+  // AI Rebalance — Amber reassigns all events optimally
+  const handleAiRebalance = async () => {
+    if (!window.confirm('Let Amber reassign all events across episodes for optimal variety? This will change all assignments.')) return;
+    setAiFixLoading(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+        warnings: [{ msg: 'REBALANCE: Reassign all events across episodes for maximum variety in type, prestige, dress code, and difficulty. Build a rising arc.' }],
+        events: worldEvents,
+        episodes,
+      });
+      setAiFixSuggestions(res.data?.data || []);
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Rebalance failed');
+      setTimeout(() => setToast(null), 3000);
+    } finally { setAiFixLoading(false); }
+  };
+
+  // AI Generate events to fill gaps
+  const handleAiGenerateForGap = async (ep) => {
+    setAiFixLoading(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+        warnings: [{ msg: `CREATE: Suggest a new event for Episode ${ep.episode_number} "${ep.title}". Consider what events are already used and create something different. Return the suggestion with action "create" and new_value as a JSON object with name, event_type, prestige, cost_coins, strictness, dress_code, narrative_stakes.` }],
+        events: worldEvents,
+        episodes,
+      });
+      setAiFixSuggestions(res.data?.data || []);
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Generation failed');
+      setTimeout(() => setToast(null), 3000);
+    } finally { setAiFixLoading(false); }
   };
 
   // AI Fix — send warnings to Claude for diversification suggestions
@@ -822,23 +990,57 @@ function WorldAdmin() {
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Story Logic Warnings ({warnings.length})</div>
-                  <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
-                    padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-                    color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
-                    fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
-                  }}>
-                    {aiFixLoading ? '⏳ Amber is thinking...' : '✨ Ask Amber to Fix'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={handleAutoReorder} style={{ padding: '5px 12px', background: '#fff', border: '1px solid #fde68a', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#b45309', cursor: 'pointer' }}>
+                      📊 Auto-Reorder
+                    </button>
+                    <button onClick={() => handleAiRebalance()} disabled={aiFixLoading} style={{ padding: '5px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#7c3aed', cursor: 'pointer' }}>
+                      🔄 Rebalance
+                    </button>
+                    <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
+                      padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                      color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                      fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
+                    }}>
+                      {aiFixLoading ? '⏳ Thinking...' : '✨ Amber Fix'}
+                    </button>
+                  </div>
                 </div>
                 {warnings.map((w, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
                     <span style={{ flex: 1 }}>{w.msg}</span>
-                    {w.eventName && (
-                      <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
-                        style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        ✏️ Fix
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {w.fixType === 'swap_episodes' && w.evA && w.evB && (
+                        <button onClick={() => handleSwapEpisodes(w.evA, w.evB, w.epA, w.epB)}
+                          style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          🔄 Swap
+                        </button>
+                      )}
+                      {w.fixType === 'merge' && w.dupA && w.dupB && (
+                        <button onClick={() => handleMergeDuplicates(w.dupA, w.dupB)}
+                          style={{ padding: '2px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          🔗 Merge
+                        </button>
+                      )}
+                      {w.fixType === 'fill' && w.ep && (
+                        <>
+                          <button onClick={() => handleFillGap(w.ep)}
+                            style={{ padding: '2px 8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            📋 Suggest
+                          </button>
+                          <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
+                            style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            ✨ AI Create
+                          </button>
+                        </>
+                      )}
+                      {w.eventName && (
+                        <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
+                          style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          ✏️ Edit
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
 
