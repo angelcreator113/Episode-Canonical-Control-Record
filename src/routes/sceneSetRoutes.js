@@ -712,6 +712,32 @@ router.post('/:id/angles/:angleId/upload', validateUUIDParam('id'), optionalAuth
   }
 });
 
+// ─── PATCH /:id/angles/:angleId  — rename / update angle fields ──────────────
+
+router.patch('/:id/angles/:angleId', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: req.params.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
+    const allowed = ['angle_label', 'angle_name', 'angle_description', 'camera_direction', 'beat_affinity'];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, error: 'No updatable fields provided' });
+    }
+
+    await angle.update(updates);
+    res.json({ success: true, data: angle });
+  } catch (err) {
+    console.error('Scene Sets PATCH /:id/angles/:angleId error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── DELETE /:id/angles  — delete all angles for a scene set ─────────────────
 
 router.delete('/:id/angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {

@@ -20,7 +20,7 @@ module.exports = (sequelize) => {
     scene_set_id: { type: DataTypes.UUID, allowNull: false },
     angle_name: { type: DataTypes.STRING, allowNull: false },
     angle_label: {
-      type: DataTypes.ENUM('WIDE', 'CLOSET', 'VANITY', 'WINDOW', 'DOORWAY', 'ESTABLISHING', 'ACTION', 'CLOSE', 'OVERHEAD', 'OTHER'),
+      type: DataTypes.STRING(50),
       allowNull: false,
     },
     angle_description: { type: DataTypes.TEXT, allowNull: true },

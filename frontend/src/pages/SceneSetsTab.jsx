@@ -399,6 +399,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const heroImage = useMemo(() => heroImageRaw ? bustUrl(heroImageRaw) : null, [heroImageRaw, bustUrl]);
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [editingAngleId, setEditingAngleId] = useState(null);
+  const [editingAngleLabel, setEditingAngleLabel] = useState('');
   const [activeModalTab, setActiveModalTab] = useState('details'); // 'details' | 'prompt' | 'add-angle'
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
@@ -474,6 +476,22 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     setAngleUploadPreview(null);
     setShowAddAngle(false);
     setAddingAngle(false);
+  };
+
+  const handleRenameAngle = async (angleId, newLabel) => {
+    const trimmed = newLabel.trim().toUpperCase();
+    if (!trimmed) { setEditingAngleId(null); return; }
+    try {
+      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angleId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ angle_label: trimmed }),
+      });
+      if (onToast) onToast(`Renamed to "${trimmed}"`);
+    } catch {
+      if (onToast) onToast('Rename failed', 'error');
+    }
+    setEditingAngleId(null);
   };
 
   const handleSuggestAngles = async () => {
@@ -733,7 +751,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <Sparkles size={14} className={isPending && !isGenerating ? 'scene-sets-clickable-icon' : ''} />
                 )}
                 {isCover && <Heart size={10} className="scene-sets-cover-badge" />}
-                <span className="scene-sets-filmstrip-label">{angle.angle_label}</span>
+                {editingAngleId === angle.id ? (
+                  <input
+                    className="scene-sets-filmstrip-label-input"
+                    value={editingAngleLabel}
+                    onChange={e => setEditingAngleLabel(e.target.value)}
+                    onBlur={() => handleRenameAngle(angle.id, editingAngleLabel)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRenameAngle(angle.id, editingAngleLabel); if (e.key === 'Escape') setEditingAngleId(null); }}
+                    onClick={e => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="scene-sets-filmstrip-label"
+                    onDoubleClick={(e) => { e.stopPropagation(); setEditingAngleId(angle.id); setEditingAngleLabel(angle.angle_label); }}
+                    title="Double-click to rename"
+                  >{angle.angle_label}</span>
+                )}
                 {angle.video_clip_url && <span className="scene-sets-filmstrip-video"><Play size={8} /></span>}
               </button>
             );
@@ -964,7 +998,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {showAddAngle && (
                   <div className="scene-sets-modal-section">
                     <div className="scene-sets-add-angle-row">
-                      <div className="scene-sets-create-field"><label>Label</label><select value={newAngle.angle_label} onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))} autoFocus><option value="">Select...</option><option value="WIDE">WIDE</option><option value="CLOSE">CLOSE</option><option value="ESTABLISHING">ESTABLISHING</option><option value="WINDOW">WINDOW</option><option value="DOORWAY">DOORWAY</option><option value="OVERHEAD">OVERHEAD</option><option value="ACTION">ACTION</option><option value="VANITY">VANITY</option><option value="CLOSET">CLOSET</option><option value="OTHER">OTHER</option></select></div>
+                      <div className="scene-sets-create-field"><label>Label</label><input type="text" list="angle-label-suggestions" placeholder="e.g. WIDE or custom" value={newAngle.angle_label} onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))} autoFocus /><datalist id="angle-label-suggestions"><option value="WIDE" /><option value="CLOSE" /><option value="ESTABLISHING" /><option value="WINDOW" /><option value="DOORWAY" /><option value="OVERHEAD" /><option value="ACTION" /><option value="VANITY" /><option value="CLOSET" /><option value="OTHER" /></datalist></div>
                       <div className="scene-sets-create-field"><label>Name</label><input type="text" placeholder="e.g. Wide Morning" value={newAngle.angle_name} onChange={e => setNewAngle(a => ({ ...a, angle_name: e.target.value }))} /></div>
                       <div className="scene-sets-create-field"><label>Beats <span className="scene-sets-optional">(comma-sep)</span></label><input type="text" placeholder="1,2,3" value={newAngle.beat_affinity} onChange={e => setNewAngle(a => ({ ...a, beat_affinity: e.target.value }))} /></div>
                     </div>
