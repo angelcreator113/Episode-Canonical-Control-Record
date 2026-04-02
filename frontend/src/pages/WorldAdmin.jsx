@@ -16,7 +16,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import './WorldAdmin.css';
 
@@ -38,8 +38,25 @@ const EMPTY_EVENT = {
   narrative_stakes: '', browse_pool_bias: 'balanced', browse_pool_size: 8,
   is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
-  requirements: {},
+  requirements: {}, scene_set_id: null,
 };
+
+// ─── DIFFICULTY SCORING ───
+function calcDifficulty(ev) {
+  const p = ev.prestige || 5;
+  const s = ev.strictness || 5;
+  const dressComplexity = (ev.dress_code_keywords?.length || 0) * 0.5;
+  const deadlineWeight = { none: 0, low: 1, medium: 2, high: 3, tonight: 4, urgent: 5 }[ev.deadline_type] || 2;
+  const raw = (p * 0.35) + (s * 0.3) + (deadlineWeight * 0.2) + (dressComplexity * 0.15);
+  return Math.min(10, Math.max(1, Math.round(raw * 10) / 10));
+}
+
+function difficultyLabel(score) {
+  if (score <= 3) return { text: 'Easy', color: '#16a34a', bg: '#f0fdf4' };
+  if (score <= 5) return { text: 'Medium', color: '#b45309', bg: '#fef3c7' };
+  if (score <= 7) return { text: 'Hard', color: '#dc2626', bg: '#fef2f2' };
+  return { text: 'Extreme', color: '#7c3aed', bg: '#faf5ff' };
+}
 
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
@@ -53,6 +70,7 @@ const TABS = [
 
 function WorldAdmin() {
   const { id: showId } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
 
@@ -62,6 +80,7 @@ function WorldAdmin() {
   const [stateHistory, setStateHistory] = useState([]);
   const [decisions, setDecisions] = useState([]);
   const [worldEvents, setWorldEvents] = useState([]);
+  const [sceneSets, setSceneSets] = useState([]);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
   const [wardrobeFilter, setWardrobeFilter] = useState('all');       // all | owned | locked
@@ -91,7 +110,9 @@ function WorldAdmin() {
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
   const [bulkMode, setBulkMode] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false); // event object for modal
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [aiFixLoading, setAiFixLoading] = useState(false);
+  const [aiFixSuggestions, setAiFixSuggestions] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
@@ -134,6 +155,7 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/history`).then(r => setStateHistory(r.data?.history || [])).catch(() => setStateHistory([])),
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(() => setDecisions([])),
         api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(() => setWorldEvents([])),
+        api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
         api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
       ]);
@@ -211,6 +233,88 @@ function WorldAdmin() {
     { name: 'Fitting Session', event_type: 'upgrade', prestige: 3, cost_coins: 0, strictness: 2, deadline_type: 'low', dress_code: 'casual', dress_code_keywords: ['casual', 'comfortable'] },
     { name: 'Brand Showcase', event_type: 'deliverable', prestige: 6, cost_coins: 80, strictness: 5, deadline_type: 'medium', dress_code: 'brand aligned', dress_code_keywords: ['trendy', 'on-brand'] },
   ];
+
+  // Sequence validation — story logic warnings
+  const getSequenceWarnings = () => {
+    const warnings = [];
+    const episodeEvents = episodes.map(ep => ({
+      ep,
+      event: worldEvents.find(ev => ev.used_in_episode_id === ep.id),
+    })).filter(e => e.event);
+
+    // Check prestige order — high prestige too early
+    for (let i = 0; i < episodeEvents.length; i++) {
+      const { ep, event } = episodeEvents[i];
+      if ((ep.episode_number || 99) <= 3 && (event.prestige || 0) >= 8) {
+        warnings.push({ type: 'prestige', eventName: event.name, msg: `⚠️ "${event.name}" (prestige ${event.prestige}) in early Ep ${ep.episode_number} — high prestige events work better later in the arc` });
+      }
+    }
+
+    // Check duplicate event types back-to-back
+    for (let i = 1; i < episodeEvents.length; i++) {
+      const prev = episodeEvents[i - 1];
+      const curr = episodeEvents[i];
+      if (prev.event.event_type === curr.event.event_type &&
+          Math.abs((curr.ep.episode_number || 0) - (prev.ep.episode_number || 0)) <= 1) {
+        warnings.push({ type: 'duplicate', eventName: curr.event.name, msg: `⚠️ Back-to-back ${curr.event.event_type} events: "${prev.event.name}" (Ep ${prev.ep.episode_number}) and "${curr.event.name}" (Ep ${curr.ep.episode_number})` });
+      }
+    }
+
+    // Check similar names (potential duplicates)
+    const names = worldEvents.map(ev => ev.name?.toLowerCase().trim());
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        if (names[i] && names[j] && names[i] === names[j]) {
+          warnings.push({ type: 'name', eventName: worldEvents[i].name, msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
+        }
+      }
+    }
+
+    return warnings;
+  };
+
+  // AI Fix — send warnings to Claude for diversification suggestions
+  const handleAiFix = async (warnings) => {
+    setAiFixLoading(true);
+    setAiFixSuggestions(null);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+        warnings,
+        events: worldEvents,
+        episodes,
+      });
+      setAiFixSuggestions(res.data?.data || []);
+    } catch (err) {
+      setAiFixSuggestions([{ warning: 'Error', suggestion: err.response?.data?.error || err.message, action: 'manual', event_name: '', new_value: '' }]);
+    } finally {
+      setAiFixLoading(false);
+    }
+  };
+
+  const applyAiFix = async (suggestion) => {
+    const ev = worldEvents.find(e => e.name === suggestion.event_name);
+    if (!ev) return;
+
+    const updates = {};
+    if (suggestion.action === 'swap_type' && suggestion.new_value) updates.event_type = suggestion.new_value;
+    if (suggestion.action === 'rename' && suggestion.new_value) updates.name = suggestion.new_value;
+    if (suggestion.action === 'change_prestige' && suggestion.new_value) updates.prestige = parseInt(suggestion.new_value) || ev.prestige;
+
+    if (Object.keys(updates).length === 0) return;
+
+    try {
+      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { ...ev, ...updates });
+      if (res.data.success) {
+        setWorldEvents(prev => prev.map(e => e.id === ev.id ? res.data.event : e));
+        setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
+        setToast(`Applied: ${suggestion.suggestion.slice(0, 60)}`);
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err) {
+      setToast(`Failed: ${err.message}`);
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
 
   // Duplicate detection
   const findSimilarEvents = (name) => {
@@ -639,28 +743,134 @@ function WorldAdmin() {
             </div>
           )}
 
-          {/* Episode coverage bar */}
+          {/* Episode ↔ Event coverage map */}
           {episodes.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Episode Coverage</div>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Episode → Event Map</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {episodes.map(ep => {
-                  const hasEvent = worldEvents.some(ev => ev.used_in_episode_id === ep.id || (ev.status === 'used' && ep.script_content?.includes(ev.name)));
+                  const linkedEvent = worldEvents.find(ev => ev.used_in_episode_id === ep.id);
+                  const scriptEvent = !linkedEvent ? worldEvents.find(ev => ev.status === 'used' && ep.script_content?.includes(ev.name)) : null;
+                  const event = linkedEvent || scriptEvent;
                   return (
                     <div key={ep.id} style={{
-                      padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
-                      background: hasEvent ? '#f0fdf4' : '#fef3c7',
-                      color: hasEvent ? '#16a34a' : '#b45309',
-                      border: `1px solid ${hasEvent ? '#bbf7d0' : '#fde68a'}`,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '6px 10px', borderRadius: 8,
+                      background: event ? '#f8fdf8' : '#fffbeb',
+                      border: `1px solid ${event ? '#d1fae5' : '#fde68a'}`,
                     }}>
-                      {ep.episode_number || '?'}. {ep.title?.slice(0, 15) || 'Untitled'}{ep.title?.length > 15 ? '…' : ''}
-                      {hasEvent ? ' ✓' : ' ○'}
+                      <div onClick={() => navigate(`/episodes/${ep.id}`)} style={{
+                        minWidth: 140, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#1a1a2e',
+                      }} title={`Go to ${ep.title}`}>
+                        <span style={{ color: '#94a3b8', marginRight: 4 }}>{ep.episode_number || '?'}.</span>
+                        {ep.title?.slice(0, 20) || 'Untitled'}{ep.title?.length > 20 ? '…' : ''}
+                      </div>
+                      <span style={{ color: '#cbd5e1', fontSize: 12 }}>→</span>
+                      {event ? (
+                        <div onClick={() => setEventDetailModal(event)} style={{
+                          flex: 1, display: 'flex', alignItems: 'center', gap: 6,
+                          cursor: 'pointer', minWidth: 0,
+                        }} title="Click to see event details">
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{EVENT_TYPE_ICONS[event.event_type] || '📌'}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {event.name}
+                          </span>
+                          <span style={{ fontSize: 9, padding: '1px 6px', background: '#e0f2fe', color: '#0284c7', borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>⭐{event.prestige}</span>
+                          {event.dress_code && <span style={{ fontSize: 9, padding: '1px 6px', background: '#faf5ff', color: '#7c3aed', borderRadius: 4, flexShrink: 0 }}>👗 {event.dress_code}</span>}
+                        </div>
+                      ) : (
+                        <span style={{ flex: 1, fontSize: 11, color: '#b45309', fontStyle: 'italic' }}>No event assigned</span>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
+
+          {/* Budget tracker */}
+          {episodes.length > 0 && worldEvents.length > 0 && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Total Event Budget</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
+                  🪙 {worldEvents.filter(ev => ev.status === 'used').reduce((sum, ev) => sum + (ev.cost_coins || 0), 0).toLocaleString()}
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> / {worldEvents.reduce((sum, ev) => sum + (ev.cost_coins || 0), 0).toLocaleString()} total</span>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Avg Difficulty</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
+                  {worldEvents.length > 0 ? (worldEvents.reduce((sum, ev) => sum + calcDifficulty(ev), 0) / worldEvents.length).toFixed(1) : '—'}
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> / 10</span>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Coverage</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
+                  {episodes.filter(ep => worldEvents.some(ev => ev.used_in_episode_id === ep.id)).length}/{episodes.length}
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> episodes linked</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sequence validation warnings + AI Fix */}
+          {(() => {
+            const warnings = getSequenceWarnings();
+            return warnings.length > 0 ? (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Story Logic Warnings ({warnings.length})</div>
+                  <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
+                    padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                    color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                    fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
+                  }}>
+                    {aiFixLoading ? '⏳ Amber is thinking...' : '✨ Ask Amber to Fix'}
+                  </button>
+                </div>
+                {warnings.map((w, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
+                    <span style={{ flex: 1 }}>{w.msg}</span>
+                    {w.eventName && (
+                      <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
+                        style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        ✏️ Fix
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {/* AI Fix suggestions */}
+                {aiFixSuggestions && aiFixSuggestions.length > 0 && (
+                  <div style={{ marginTop: 12, borderTop: '1px solid #fde68a', paddingTop: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', marginBottom: 8 }}>✨ Amber's Suggestions</div>
+                    {aiFixSuggestions.map((s, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', background: '#fff', border: '1px solid #e0e7ff', borderRadius: 8, marginBottom: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 2 }}>
+                            {s.event_name && <span style={{ color: '#6366f1' }}>"{s.event_name}"</span>}
+                            {s.action && <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', background: '#eef2ff', color: '#4338ca', borderRadius: 4, fontWeight: 700 }}>{s.action.replace(/_/g, ' ')}</span>}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{s.suggestion}</div>
+                          {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2 }}>→ {s.new_value}</div>}
+                        </div>
+                        {s.action !== 'manual' && s.event_name && s.new_value && (
+                          <button onClick={() => applyAiFix(s)} style={{
+                            padding: '4px 12px', background: '#6366f1', color: '#fff',
+                            border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                            cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+                          }}>Apply</button>
+                        )}
+                      </div>
+                    ))}
+                    <button onClick={() => setAiFixSuggestions(null)} style={{ ...S.smBtn, marginTop: 4, fontSize: 10 }}>Dismiss</button>
+                  </div>
+                )}
+              </div>
+            ) : null;
+          })()}
 
           {/* Bulk action bar */}
           {bulkMode && selectedEvents.size > 0 && (
@@ -713,6 +923,31 @@ function WorldAdmin() {
                   ⚠️ Similar events exist: {findSimilarEvents(eventForm.name).map(e => e.name).join(', ')}
                 </div>
               )}
+
+              {/* Location picker — prominent position */}
+              <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Location (Scene Set)</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select value={eventForm.scene_set_id || ''} onChange={e => setEventForm(p => ({ ...p, scene_set_id: e.target.value || null }))} style={{ ...S.sel, flex: 1, minWidth: 200 }}>
+                    <option value="">— No location linked —</option>
+                    {sceneSets.map(ss => (
+                      <option key={ss.id} value={ss.id}>📍 {ss.name} ({ss.scene_type?.replace(/_/g, ' ')})</option>
+                    ))}
+                  </select>
+                  {eventForm.scene_set_id && (() => {
+                    const ss = sceneSets.find(s => s.id === eventForm.scene_set_id);
+                    return ss ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />}
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>✓ {ss.name}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                  {!eventForm.scene_set_id && sceneSets.length === 0 && (
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>No scene sets found — create them in Scene Sets first</span>
+                  )}
+                </div>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
                 <FG label="Event Name *" value={eventForm.name} onChange={v => setEventForm(p => ({ ...p, name: v }))} placeholder="Velour Society Garden Soirée" />
                 <div>
@@ -819,9 +1054,21 @@ function WorldAdmin() {
               return (a.name || '').localeCompare(b.name || '');
             }).map(ev => {
               const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
+              const linkedScene = ev.scene_set_id ? sceneSets.find(ss => ss.id === ev.scene_set_id) : null;
               const isSelected = selectedEvents.has(ev.id);
+              const difficulty = calcDifficulty(ev);
+              const diff = difficultyLabel(difficulty);
               return (
-              <div key={ev.id} style={{ ...S.evCard, cursor: 'pointer', border: isSelected ? '2px solid #6366f1' : undefined }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : setEventDetailModal(ev)}>
+              <div key={ev.id} style={{ ...S.evCard, cursor: 'pointer', border: isSelected ? '2px solid #6366f1' : undefined, overflow: 'hidden' }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : setEventDetailModal(ev)}>
+                {/* Scene set thumbnail banner */}
+                {linkedScene?.base_still_url && (
+                  <div style={{ height: 60, marginTop: -12, marginLeft: -12, marginRight: -12, marginBottom: 8, overflow: 'hidden', position: 'relative' }}>
+                    <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
+                    <div style={{ position: 'absolute', bottom: 4, left: 8, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.5)', padding: '1px 6px', borderRadius: 4 }}>
+                      📍 {linkedScene.name}
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   {bulkMode && (
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
@@ -836,6 +1083,7 @@ function WorldAdmin() {
                   <span style={S.eTag}>🪙 {ev.cost_coins}</span>
                   <span style={S.eTag}>⏰ {ev.deadline_type}</span>
                   {ev.dress_code && <span style={S.eTag}>👗 {ev.dress_code}</span>}
+                  <span style={{ padding: '2px 8px', background: diff.bg, color: diff.color, borderRadius: 6, fontSize: 10, fontWeight: 700 }}>🎯 {difficulty} {diff.text}</span>
                 </div>
                 {linkedEpisode ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#f0fdf4', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
@@ -897,7 +1145,19 @@ function WorldAdmin() {
                     <span style={S.eTag}>⏰ {eventDetailModal.deadline_type}</span>
                     {eventDetailModal.dress_code && <span style={S.eTag}>👗 {eventDetailModal.dress_code}</span>}
                     {eventDetailModal.career_tier && <span style={{ padding: '3px 10px', background: '#eef2ff', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#4338ca' }}>Tier {eventDetailModal.career_tier}</span>}
+                    {(() => { const d = calcDifficulty(eventDetailModal); const dl = difficultyLabel(d); return <span style={{ padding: '3px 10px', background: dl.bg, color: dl.color, borderRadius: 6, fontSize: 11, fontWeight: 700 }}>🎯 {d} {dl.text}</span>; })()}
                   </div>
+
+                  {/* Linked location */}
+                  {eventDetailModal.scene_set_id && (() => {
+                    const ss = sceneSets.find(s => s.id === eventDetailModal.scene_set_id);
+                    return ss ? (
+                      <div style={{ marginBottom: 12, borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                        {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: '100%', height: 120, objectFit: 'cover' }} />}
+                        <div style={{ padding: '6px 10px', background: '#f8fafc', fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>📍 {ss.name} <span style={{ fontWeight: 400, color: '#94a3b8' }}>({ss.scene_type?.replace(/_/g, ' ')})</span></div>
+                      </div>
+                    ) : null;
+                  })()}
 
                   {/* Dress code keywords */}
                   {Array.isArray(eventDetailModal.dress_code_keywords) && eventDetailModal.dress_code_keywords.length > 0 && (
