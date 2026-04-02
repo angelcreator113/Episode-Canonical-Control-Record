@@ -17,6 +17,7 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+const REPLICATE_CONFIG_ERROR = 'Image Transform requires REPLICATE_API_TOKEN to be configured on the server.';
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -93,7 +94,7 @@ const MOOD_PROMPTS = {
  */
 async function runImgToImg(imageUrl, options = {}) {
   if (!REPLICATE_API_TOKEN) {
-    throw new Error('REPLICATE_API_TOKEN not configured');
+    throw new Error(REPLICATE_CONFIG_ERROR);
   }
 
   const { timeOfDay, mood, customPrompt, strength = 0.45 } = options;
