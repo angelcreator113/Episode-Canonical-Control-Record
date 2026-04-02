@@ -96,6 +96,7 @@ function buildNav(shows) {
   ];
 }
 
+
 /* ─── Shows hook (uses showService with auth) ───────────────── */
 function useShows() {
   const [shows, setShows] = useState([]);
