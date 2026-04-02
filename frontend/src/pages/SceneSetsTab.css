@@ -2705,9 +2705,9 @@
 .scene-sets-modal-title {
   margin: 0;
   font-family: 'Lora', serif;
-  font-size: 16px;
-  font-weight: 600;
-  color: #2C2C2C;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2715,8 +2715,8 @@
 
 .scene-sets-modal-subtitle {
   font-family: 'DM Mono', monospace;
-  font-size: 10px;
-  color: #999;
+  font-size: 11px;
+  color: #777;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -2728,9 +2728,9 @@
   width: 32px;
   height: 32px;
   border: none;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.06);
   border-radius: 8px;
-  color: #999;
+  color: #666;
   cursor: pointer;
   flex-shrink: 0;
   transition: all 0.12s ease;
@@ -2755,13 +2755,13 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 10px 14px;
+  padding: 10px 16px;
   border: none;
   background: transparent;
-  color: #888;
+  color: #777;
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
@@ -2775,7 +2775,7 @@
 .scene-sets-modal-tab.active {
   color: #B8962E;
   border-bottom-color: #B8962E;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* ── Modal body ── */
@@ -2799,18 +2799,18 @@
   align-items: center;
   gap: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: 9px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #999;
+  color: #666;
   margin-bottom: 6px;
 }
 
 .scene-sets-modal-field > p {
   margin: 0;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: 13px;
   color: #2C2C2C;
   line-height: 1.6;
 }
@@ -2839,8 +2839,8 @@
   align-items: center;
   gap: 8px;
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  color: #555;
+  font-size: 12px;
+  color: #2C2C2C;
 }
 
 .scene-sets-modal-ep-badge {
@@ -2888,10 +2888,11 @@
 
 .scene-sets-modal-angle-card span {
   font-family: 'DM Mono', monospace;
-  font-size: 8px;
-  color: #999;
+  font-size: 9px;
+  color: #555;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 /* ── Textarea ── */
