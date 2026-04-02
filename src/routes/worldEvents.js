@@ -221,29 +221,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
         let val = normalizeNullLike(updates[field]);
 
         if (field === 'career_tier' && typeof val === 'string') {
-          const normalizedTier = val.trim().toLowerCase();
-          const tierMap = {
-            emerging: 1,
-            rising: 2,
-            established: 3,
-            influential: 4,
-            elite: 5,
-            icon: 5,
-          };
-
-          if (tierMap[normalizedTier] !== undefined) {
-            val = tierMap[normalizedTier];
-          } else {
-            if (normalizedTier.includes('emerg')) val = 1;
-            else if (normalizedTier.includes('rising')) val = 2;
-            else if (normalizedTier.includes('establish')) val = 3;
-            else if (normalizedTier.includes('influ')) val = 4;
-            else if (normalizedTier.includes('elite') || normalizedTier.includes('icon')) val = 5;
-
-            const leadingTierMatch = normalizedTier.match(/^(\d+)/);
-            if (leadingTierMatch && typeof val === 'string') {
-              val = Number(leadingTierMatch[1]);
-            }
+          const tierMap = { emerging: 1, rising: 2, established: 3, elite: 4, icon: 5 };
+          if (tierMap[val.toLowerCase()] !== undefined) {
+            val = tierMap[val.toLowerCase()];
           }
         }
 
@@ -260,13 +240,6 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
         if (jsonFields.has(field)) {
           val = val === null ? null : JSON.stringify(val);
-        }
-
-        if (requiredStringFields.has(field) && val === null) {
-          return res.status(400).json({
-            error: `Invalid value for ${field}`,
-            message: `${field} cannot be null or empty`,
-          });
         }
 
         setClauses.push(`${field} = :${field}`);
