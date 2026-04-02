@@ -637,6 +637,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
                     <Eye size={12} /> Preview Prompt
                   </button>
+                  <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }} disabled={isGenerating}>
+                    <Upload size={12} /> Upload Images
+                  </button>
                   {hasBase && (
                     <button onClick={() => { setShowMenu(false); onCascadeRegenerate(set); }} disabled={isGenerating}>
                       <RotateCcw size={12} /> Regenerate All
@@ -863,7 +866,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className={`scene-sets-btn-upload${isGenerating ? ' disabled' : ''}`} title="Upload one or multiple room images">
                   <Upload size={12} /> Upload
                 </button>
-                <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length > 0) onUploadBase(set, files); e.target.value = ''; }} />
               </>
             )}
 
@@ -880,6 +882,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               </button>
             )}
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length > 0) onUploadBase(set, files);
+              e.target.value = '';
+            }}
+          />
         </div>
 
         {isGenerating && !progress && (
