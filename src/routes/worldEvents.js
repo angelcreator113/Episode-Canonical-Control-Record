@@ -263,7 +263,15 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     return res.json({ success: true, event: updated[0] });
   } catch (error) {
-    console.error('Update event error:', error);
+    console.error('Update event error:', error.message);
+    // If a column doesn't exist, retry without it
+    if (error.message?.includes('column') && error.message?.includes('does not exist')) {
+      const badCol = error.message.match(/"([^"]+)" of relation/)?.[1] || error.message.match(/column "([^"]+)"/)?.[1];
+      if (badCol) {
+        console.warn(`[WorldEvents] Column "${badCol}" missing — skipping. Run migrations to fix.`);
+        return res.status(500).json({ error: `Column "${badCol}" not in database. Run: npx sequelize-cli db:migrate` });
+      }
+    }
     return res.status(500).json({ error: 'Failed to update event', message: error.message });
   }
 });

@@ -1412,9 +1412,8 @@ The revised event should feel like a completely different experience from the si
                 )}
                 {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.narrative_stakes}</div>}
                 <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4 }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => openEditEvent(ev)} style={S.smBtn}>✏️ Edit</button>
+                  <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>✏️ Edit</button>
                   <button onClick={() => copyEvent(ev)} style={S.smBtn}>📋 Copy</button>
-                  <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>🔍 Details</button>
                   <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>🗑️</button>
                 </div>
               </div>
