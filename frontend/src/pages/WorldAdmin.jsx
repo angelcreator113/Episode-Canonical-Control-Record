@@ -1566,16 +1566,30 @@ The revised event should feel like a completely different experience from the si
                         if (!(md.dress_code_keywords?.length > 0)) emptyFields.push('dress_code_keywords');
 
                         const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
-                          warnings: [{ msg: `ENHANCE: Fill in missing fields and enrich existing ones for this event. The event "${md.name}" is a ${md.event_type} with prestige ${md.prestige}, dress code "${md.dress_code || 'not set'}".
+                          warnings: [{ msg: `ENHANCE: Fill in ALL missing fields for this event.
 
-Current filled fields: name="${md.name}", type=${md.event_type}, prestige=${md.prestige}, cost=${md.cost_coins}, strictness=${md.strictness}, dress_code="${md.dress_code || ''}", host="${md.host || ''}", brand="${md.host_brand || ''}", narrative_stakes="${md.narrative_stakes || ''}", career_milestone="${md.career_milestone || ''}", description="${md.description || ''}".
+Event: "${md.name}" (${md.event_type}, prestige ${md.prestige})
+Brand: "${md.host_brand || 'not set'}"
+Host: "${md.host || 'EMPTY — MUST FILL THIS'}"
 
-Empty fields that MUST be filled: ${emptyFields.join(', ') || 'none — improve existing fields instead'}.
+IMPORTANT: The "host" field is the person or organization hosting this event. It MUST be filled. Example: "Velour Society Events Team", "Maison Belle Creative Director", "Fashion Week Committee". This is NOT the brand — it's WHO is hosting.
 
-${md.narrative_stakes ? `Keep and expand the narrative stakes: "${md.narrative_stakes}"` : 'Write compelling narrative stakes.'}
+Current values:
+- host="${md.host || ''}" ${!md.host ? '← EMPTY, MUST FILL' : ''}
+- host_brand="${md.host_brand || ''}"
+- dress_code="${md.dress_code || ''}"
+- narrative_stakes="${md.narrative_stakes || ''}"
+- career_milestone="${md.career_milestone || ''}"
+- description="${md.description || ''}"
+- fail_consequence="${md.fail_consequence || ''}"
+- success_unlock="${md.success_unlock || ''}"
+- location_hint="${md.location_hint || ''}"
 
-Return action "enhance" with new_value as a JSON object containing ONLY the fields to add/improve. Do NOT include fields that already have good content. Include: ${emptyFields.length > 0 ? emptyFields.join(', ') : 'improved narrative_stakes, description, fail_consequence, success_unlock'}.
-Also include host (who specifically hosts this), dress_code_keywords (array of 5-6 keywords), location_hint, career_milestone if empty.` }],
+Empty fields to fill: ${emptyFields.join(', ') || 'none'}.
+
+${md.narrative_stakes ? `Keep and expand: "${md.narrative_stakes}"` : 'Write compelling narrative stakes.'}
+
+Return action "enhance" with new_value as a JSON object. MUST include "host" field with a specific person or organization name.` }],
                           events: worldEvents.slice(0, 10),
                           episodes,
                         });
@@ -1597,8 +1611,13 @@ Also include host (who specifically hosts this), dress_code_keywords (array of 5
                             // Always update these if AI provided richer versions
                             if (data.description && (!md.description || data.description.length > md.description.length)) merged.description = data.description;
                             if (data.narrative_stakes && (!md.narrative_stakes || data.narrative_stakes.length > md.narrative_stakes.length)) merged.narrative_stakes = data.narrative_stakes;
-                            // Fallback: if host is still empty but brand exists, use brand
-                            if (!merged.host && merged.host_brand) merged.host = merged.host_brand;
+                            // Fallback chain for host
+                            if (!merged.host) {
+                              if (data.hosted_by) merged.host = data.hosted_by;
+                              else if (data.host_name) merged.host = data.host_name;
+                              else if (merged.host_brand) merged.host = `${merged.host_brand} Events`;
+                              else if (merged.name) merged.host = merged.name.split('—')[0].trim();
+                            }
 
                             setEventDetailModal(merged);
                             // Save only AI-provided fields that actually changed
