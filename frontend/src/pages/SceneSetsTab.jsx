@@ -653,7 +653,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   {hasBase && sortedAngles.some(a => a.still_image_url) && (
                     <button onClick={async () => {
                       setShowMenu(false);
-                      // Use selected angle if it has an image, otherwise use the currently displayed hero
                       const targetAngle = selectedAngle?.still_image_url
                         ? selectedAngle
                         : sortedAngles.find(a => a.still_image_url);
@@ -892,7 +891,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
         {progress && <GenerationProgress progress={progress} />}
 
-        {/* Details panel (toggled from kebab menu) */}
         {/* ── Unified Popup Modal for Details / Prompt / Add Angle ── */}
         {(showDetails || showPromptEditor || showAddAngle) && createPortal(
           <div className="scene-sets-modal-backdrop" onClick={() => { setShowDetails(false); setShowPromptEditor(false); setShowAddAngle(false); setAngleUploadFile(null); setAngleUploadPreview(null); }}>
