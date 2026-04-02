@@ -493,3 +493,77 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
 
 
 module.exports = router;
+
+// ─── AI EVENT DIVERSIFIER ────────────────────────────────────────────────────
+// POST /api/v1/world/:showId/events/ai-fix
+// Takes warnings + events + episodes, returns suggestions to diversify
+
+router.post('/:showId/events/ai-fix', optionalAuth, async (req, res) => {
+  try {
+    const { warnings, events, episodes } = req.body;
+    if (!warnings || !events) {
+      return res.status(400).json({ error: 'warnings and events are required' });
+    }
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const eventList = events.map(ev => {
+      const ep = episodes?.find(e => e.id === ev.used_in_episode_id);
+      return `- "${ev.name}" (type: ${ev.event_type}, prestige: ${ev.prestige}, dress: ${ev.dress_code || 'none'})${ep ? ` → Ep ${ep.episode_number}: ${ep.title}` : ' → unlinked'}`;
+    }).join('\n');
+
+    const warningList = warnings.map(w => `- ${w.msg}`).join('\n');
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      system: `You are a TV show producer for "Before Lala", a memoir-style fashion reality show. You help diversify events across episodes to create compelling variety and narrative tension.
+
+Return ONLY valid JSON — an array of suggestion objects.`,
+      messages: [{
+        role: 'user',
+        content: `Here are the current story logic warnings for my events:
+
+${warningList}
+
+Here are all my events and their episode assignments:
+${eventList}
+
+For each warning, suggest a specific fix. Return a JSON array:
+\`\`\`json
+[
+  {
+    "warning": "the warning text",
+    "suggestion": "what to change",
+    "action": "swap_type" | "rename" | "change_prestige" | "reassign" | "merge_duplicates",
+    "event_name": "which event to change",
+    "new_value": "the suggested new value (new type, new name, new prestige number, etc.)"
+  }
+]
+\`\`\`
+
+Guidelines:
+- For back-to-back same types: suggest changing one to a different event_type
+- For duplicates: suggest renaming to be distinct or merging them
+- For high prestige too early: suggest lowering prestige or swapping with a later episode
+- Make events feel varied: mix intimate vs grand, casual vs formal, professional vs social
+- Each suggestion should be specific and actionable`,
+      }],
+    });
+
+    const text = response.content?.[0]?.text || '';
+    let suggestions;
+    try {
+      const match = text.match(/\[[\s\S]*\]/);
+      suggestions = match ? JSON.parse(match[0]) : [];
+    } catch {
+      suggestions = [{ warning: 'Parse error', suggestion: text.slice(0, 500), action: 'manual', event_name: '', new_value: '' }];
+    }
+
+    res.json({ success: true, data: suggestions });
+  } catch (err) {
+    console.error('[WorldEvents] AI fix error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
