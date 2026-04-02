@@ -110,7 +110,9 @@ function WorldAdmin() {
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
   const [bulkMode, setBulkMode] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false); // event object for modal
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [aiFixLoading, setAiFixLoading] = useState(false);
+  const [aiFixSuggestions, setAiFixSuggestions] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
@@ -269,6 +271,49 @@ function WorldAdmin() {
     }
 
     return warnings;
+  };
+
+  // AI Fix — send warnings to Claude for diversification suggestions
+  const handleAiFix = async (warnings) => {
+    setAiFixLoading(true);
+    setAiFixSuggestions(null);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+        warnings,
+        events: worldEvents,
+        episodes,
+      });
+      setAiFixSuggestions(res.data?.data || []);
+    } catch (err) {
+      setAiFixSuggestions([{ warning: 'Error', suggestion: err.response?.data?.error || err.message, action: 'manual', event_name: '', new_value: '' }]);
+    } finally {
+      setAiFixLoading(false);
+    }
+  };
+
+  const applyAiFix = async (suggestion) => {
+    const ev = worldEvents.find(e => e.name === suggestion.event_name);
+    if (!ev) return;
+
+    const updates = {};
+    if (suggestion.action === 'swap_type' && suggestion.new_value) updates.event_type = suggestion.new_value;
+    if (suggestion.action === 'rename' && suggestion.new_value) updates.name = suggestion.new_value;
+    if (suggestion.action === 'change_prestige' && suggestion.new_value) updates.prestige = parseInt(suggestion.new_value) || ev.prestige;
+
+    if (Object.keys(updates).length === 0) return;
+
+    try {
+      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { ...ev, ...updates });
+      if (res.data.success) {
+        setWorldEvents(prev => prev.map(e => e.id === ev.id ? res.data.event : e));
+        setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
+        setToast(`Applied: ${suggestion.suggestion.slice(0, 60)}`);
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err) {
+      setToast(`Failed: ${err.message}`);
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
   // Duplicate detection
@@ -770,15 +815,51 @@ function WorldAdmin() {
             </div>
           )}
 
-          {/* Sequence validation warnings */}
+          {/* Sequence validation warnings + AI Fix */}
           {(() => {
             const warnings = getSequenceWarnings();
             return warnings.length > 0 ? (
-              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase', marginBottom: 6 }}>Story Logic Warnings</div>
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Story Logic Warnings ({warnings.length})</div>
+                  <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
+                    padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                    color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                    fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
+                  }}>
+                    {aiFixLoading ? '⏳ Amber is thinking...' : '✨ Ask Amber to Fix'}
+                  </button>
+                </div>
                 {warnings.map((w, i) => (
                   <div key={i} style={{ fontSize: 12, color: '#92400e', marginBottom: 3, lineHeight: 1.4 }}>{w.msg}</div>
                 ))}
+
+                {/* AI Fix suggestions */}
+                {aiFixSuggestions && aiFixSuggestions.length > 0 && (
+                  <div style={{ marginTop: 12, borderTop: '1px solid #fde68a', paddingTop: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', marginBottom: 8 }}>✨ Amber's Suggestions</div>
+                    {aiFixSuggestions.map((s, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', background: '#fff', border: '1px solid #e0e7ff', borderRadius: 8, marginBottom: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 2 }}>
+                            {s.event_name && <span style={{ color: '#6366f1' }}>"{s.event_name}"</span>}
+                            {s.action && <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', background: '#eef2ff', color: '#4338ca', borderRadius: 4, fontWeight: 700 }}>{s.action.replace(/_/g, ' ')}</span>}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{s.suggestion}</div>
+                          {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2 }}>→ {s.new_value}</div>}
+                        </div>
+                        {s.action !== 'manual' && s.event_name && s.new_value && (
+                          <button onClick={() => applyAiFix(s)} style={{
+                            padding: '4px 12px', background: '#6366f1', color: '#fff',
+                            border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                            cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+                          }}>Apply</button>
+                        )}
+                      </div>
+                    ))}
+                    <button onClick={() => setAiFixSuggestions(null)} style={{ ...S.smBtn, marginTop: 4, fontSize: 10 }}>Dismiss</button>
+                  </div>
+                )}
               </div>
             ) : null;
           })()}
