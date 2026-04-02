@@ -1601,10 +1601,11 @@ Also include host (who specifically hosts this), dress_code_keywords (array of 5
                             if (!merged.host && merged.host_brand) merged.host = merged.host_brand;
 
                             setEventDetailModal(merged);
-                            // Save all fields that changed
-                            for (const [key, val] of Object.entries(merged)) {
-                              if (val !== md[key] && val !== null && val !== undefined) {
-                                updateField(key, val);
+                            // Save only AI-provided fields that actually changed
+                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id'];
+                            for (const key of saveable) {
+                              if (merged[key] !== undefined && merged[key] !== md[key]) {
+                                updateField(key, merged[key]);
                               }
                             }
                             setToast('✨ Enhanced — review the filled fields');
