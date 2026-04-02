@@ -392,6 +392,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
   const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+  const angleUploadRef = useRef(null);
+  const [angleUploadFile, setAngleUploadFile] = useState(null);
+  const [angleUploadPreview, setAngleUploadPreview] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [editDesc, setEditDesc] = useState(set.canonical_description || '');
@@ -453,8 +456,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       angle_description: newAngle.angle_description.trim() || null,
       camera_direction: newAngle.camera_direction.trim() || null,
       beat_affinity: beatArr,
+      _imageFile: angleUploadFile || null,
     });
     setNewAngle({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+    setAngleUploadFile(null);
+    setAngleUploadPreview(null);
     setShowAddAngle(false);
     setAddingAngle(false);
   };
@@ -863,11 +869,46 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 </button>
               )}
             </div>
+            {/* Upload image for this angle */}
+            <div className="scene-sets-angle-upload-row">
+              <input
+                ref={angleUploadRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setAngleUploadFile(file);
+                  const reader = new FileReader();
+                  reader.onload = () => setAngleUploadPreview(reader.result);
+                  reader.readAsDataURL(file);
+                  e.target.value = '';
+                }}
+              />
+              {angleUploadPreview ? (
+                <div className="scene-sets-angle-upload-preview">
+                  <img src={angleUploadPreview} alt="Upload preview" />
+                  <button type="button" onClick={() => { setAngleUploadFile(null); setAngleUploadPreview(null); }} className="scene-sets-angle-upload-remove">
+                    <X size={10} />
+                  </button>
+                  <span className="scene-sets-angle-upload-name">{angleUploadFile?.name}</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="scene-sets-angle-upload-btn"
+                  onClick={() => angleUploadRef.current?.click()}
+                >
+                  <Upload size={12} /> Upload Image <span className="scene-sets-optional">(optional — or AI generates)</span>
+                </button>
+              )}
+            </div>
             <div className="scene-sets-add-angle-actions">
               <button className="scene-sets-btn-generate" onClick={handleSubmitAngle} disabled={addingAngle || !newAngle.angle_label.trim() || !newAngle.angle_name.trim()}>
                 {addingAngle ? <><Loader size={12} className="spin" /> Adding...</> : <><Plus size={12} /> Add</>}
               </button>
-              <button className="scene-sets-btn-delete" onClick={() => setShowAddAngle(false)}>Cancel</button>
+              <button className="scene-sets-btn-delete" onClick={() => { setShowAddAngle(false); setAngleUploadFile(null); setAngleUploadPreview(null); }}>Cancel</button>
             </div>
           </div>
         )}
@@ -1517,21 +1558,38 @@ export default function SceneSetsTab() {
 
   const handleAddAngle = async (set, angleData) => {
     try {
+      const { _imageFile, ...apiData } = angleData;
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(angleData),
+        body: JSON.stringify(apiData),
       });
       if (!res.ok) throw new Error('Failed');
       const json = await res.json();
       const newAngle = json.data;
-      showToast(`Added angle "${angleData.angle_label}"`);
-      await fetchSets();
 
-      // Auto-generate the angle image if the scene set has a base image
-      if (newAngle?.id && set.base_image_url) {
-        handleGenerateAngle(set, newAngle);
+      if (_imageFile && newAngle?.id) {
+        // Upload the user's image to this angle
+        const formData = new FormData();
+        formData.append('images', _imageFile);
+        const uploadRes = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${newAngle.id}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (uploadRes.ok) {
+          showToast(`Added angle "${angleData.angle_label}" with uploaded image`);
+        } else {
+          showToast('Angle created but image upload failed', 'error');
+        }
+      } else {
+        showToast(`Added angle "${angleData.angle_label}"`);
+        // Auto-generate the angle image if the scene set has a base image
+        if (newAngle?.id && set.base_image_url) {
+          handleGenerateAngle(set, newAngle);
+        }
       }
+
+      await fetchSets();
     } catch {
       showToast('Failed to add angle', 'error');
     }
