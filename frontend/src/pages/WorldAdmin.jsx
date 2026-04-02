@@ -1059,9 +1059,24 @@ function WorldAdmin() {
                           {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2, wordBreak: 'break-word' }}>→ {typeof s.new_value === 'object' ? s.new_value.name || JSON.stringify(s.new_value) : s.new_value}</div>}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-                          {s.action === 'create' && s.new_value && (
+                          {s.action === 'create' && (s.new_value || s.suggestion) && (
                             <button onClick={() => {
-                              const data = typeof s.new_value === 'object' ? s.new_value : {};
+                              let data = {};
+                              // Try new_value first (object or JSON string)
+                              if (s.new_value) {
+                                if (typeof s.new_value === 'object') data = s.new_value;
+                                else try { data = JSON.parse(s.new_value); } catch { data = { description: s.new_value }; }
+                              }
+                              // If new_value didn't have a name, try parsing from suggestion
+                              if (!data.name && s.suggestion) {
+                                try {
+                                  const match = s.suggestion.match(/\{[\s\S]*"name"[\s\S]*\}/);
+                                  if (match) data = { ...data, ...JSON.parse(match[0]) };
+                                } catch {}
+                              }
+                              // Map any non-standard field names
+                              if (data.dress_code_style && !data.dress_code) data.dress_code = data.dress_code_style;
+                              if (data.type && !data.event_type) data.event_type = data.type;
                               setEventForm({ ...EMPTY_EVENT, ...data });
                               setEditingEvent('new');
                               setAiFixSuggestions(prev => prev.filter(x => x !== s));
