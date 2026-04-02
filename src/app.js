@@ -1353,6 +1353,15 @@ try {
   console.error('✗ Failed to load Luxury Filter routes:', e.message);
 }
 
+// Episode Brief + Scene Planner
+try {
+  const episodeBriefRoutes = require('./routes/episodeBriefRoutes');
+  app.use('/api/v1/episode-brief', episodeBriefRoutes);
+  console.log('✓ Episode Brief loaded at /api/v1/episode-brief');
+} catch (e) {
+  console.error('✗ Failed to load Episode Brief routes:', e.message);
+}
+
 // Scene Sets — generative scene pipeline (RunwayML)
 try {
   const sceneSetRoutes = require('./routes/sceneSetRoutes');

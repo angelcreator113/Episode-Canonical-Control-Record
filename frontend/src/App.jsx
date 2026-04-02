@@ -47,6 +47,7 @@ const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
 const WorldStudio = lazy(() => import('./pages/WorldStudio'));
 const SceneStudio = lazy(() => import('./pages/SceneStudio'));
 const SceneStudioPage = lazy(() => import('./pages/SceneStudioPage'));
+const ScenePlannerPage = lazy(() => import('./pages/ScenePlannerPage'));
 const ShowSettings = lazy(() => import('./pages/ShowSettings'));
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
@@ -334,6 +335,7 @@ function AppContent() {
           
           {/* Scene Library */}
           <Route path="/scene-library" element={<SceneLibrary />} />
+          <Route path="/episodes/:episodeId/plan" element={<ScenePlannerPage />} />
           <Route path="/scene-library/:sceneId" element={<SceneDetail />} />
           
           {/* ===== ANIMATIC SYSTEM ROUTES ===== */}
