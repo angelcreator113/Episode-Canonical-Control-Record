@@ -220,9 +220,23 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
         let val = normalizeNullLike(updates[field]);
 
         if (field === 'career_tier' && typeof val === 'string') {
-          const tierMap = { emerging: 1, rising: 2, established: 3, elite: 4, icon: 5 };
-          if (tierMap[val.toLowerCase()] !== undefined) {
-            val = tierMap[val.toLowerCase()];
+          const normalizedTier = val.trim().toLowerCase();
+          const tierMap = {
+            emerging: 1,
+            rising: 2,
+            established: 3,
+            influential: 4,
+            elite: 5,
+            icon: 5,
+          };
+
+          if (tierMap[normalizedTier] !== undefined) {
+            val = tierMap[normalizedTier];
+          } else {
+            const leadingTierMatch = normalizedTier.match(/^(\d+)/);
+            if (leadingTierMatch) {
+              val = Number(leadingTierMatch[1]);
+            }
           }
         }
 
