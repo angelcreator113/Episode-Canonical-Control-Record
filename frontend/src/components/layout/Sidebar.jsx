@@ -25,7 +25,7 @@ function buildNav(shows) {
       ],
     },
     {
-      zone: showName.length > 20 ? showName.slice(0, 20) + '…' : showName,
+      zone: 'CREATE SHOW',
       items: [
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
         { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
