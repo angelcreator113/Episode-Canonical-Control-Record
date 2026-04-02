@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Crown, Tv, Film } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -670,7 +670,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         {/* Hero label showing which angle is displayed */}
         {selectedAngle && (
           <div className="scene-sets-card-hero-label">
+            {isCoverAngle(selectedAngle.id) && <Heart size={10} fill="currentColor" />}
             {selectedAngle.angle_label}
+          </div>
+        )}
+        {/* Base heart indicator when viewing the cover angle or base */}
+        {((!selectedAngleId && set.base_still_url) || (selectedAngle && isCoverAngle(selectedAngle.id))) && (
+          <div className="scene-sets-card-base-heart">
+            <Heart size={14} fill="currentColor" />
           </div>
         )}
       </div>
@@ -725,7 +732,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 ) : (
                   <Sparkles size={14} className={isPending && !isGenerating ? 'scene-sets-clickable-icon' : ''} />
                 )}
-                {isCover && <Crown size={10} className="scene-sets-cover-badge" />}
+                {isCover && <Heart size={10} className="scene-sets-cover-badge" />}
                 <span className="scene-sets-filmstrip-label">{angle.angle_label}</span>
                 {angle.video_clip_url && <span className="scene-sets-filmstrip-video"><Play size={8} /></span>}
               </button>
