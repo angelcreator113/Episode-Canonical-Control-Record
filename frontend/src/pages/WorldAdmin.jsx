@@ -1433,6 +1433,7 @@ The revised event should feel like a completely different experience from the si
           {eventDetailModal && (() => {
             const md = eventDetailModal;
             const updateField = async (field, value) => {
+              if (value === md[field]) return; // skip if unchanged
               try {
                 const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [field]: value });
                 if (res.data.success) {
@@ -1440,7 +1441,26 @@ The revised event should feel like a completely different experience from the si
                   setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
                   setEventDetailModal(updated);
                 }
-              } catch {}
+              } catch (err) {
+                console.warn(`[Event] Failed to save ${field}:`, err.response?.data?.error || err.message);
+              }
+            };
+            const updateMultipleFields = async (fields) => {
+              const changed = {};
+              for (const [k, v] of Object.entries(fields)) {
+                if (v !== md[k]) changed[k] = v;
+              }
+              if (Object.keys(changed).length === 0) return;
+              try {
+                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, changed);
+                if (res.data.success) {
+                  const updated = res.data.event;
+                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
+                  setEventDetailModal(updated);
+                }
+              } catch (err) {
+                console.warn('[Event] Batch save failed:', err.response?.data?.error || err.message);
+              }
             };
             const linkedScene = md.scene_set_id ? sceneSets.find(s => s.id === md.scene_set_id) : null;
             const diff = calcDifficulty(md);
@@ -1484,7 +1504,47 @@ The revised event should feel like a completely different experience from the si
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
                     <div><label style={S.fLabel}>Career Tier</label><input type="number" min={1} max={5} value={md.career_tier || 1} onChange={e => { setEventDetailModal({ ...md, career_tier: parseInt(e.target.value) || 1 }); }} onBlur={e => updateField('career_tier', parseInt(e.target.value) || 1)} style={S.sel} /></div>
-                    <div><label style={S.fLabel}>📍 Location</label><select value={md.scene_set_id || ''} onChange={e => updateField('scene_set_id', e.target.value || null)} style={S.sel}><option value="">None</option>{sceneSets.map(ss => <option key={ss.id} value={ss.id}>{ss.name}</option>)}</select></div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={S.fLabel}>📍 Location (Scene Set)</label>
+                      {md.scene_set_id && (() => {
+                        const ss = sceneSets.find(s => s.id === md.scene_set_id);
+                        return ss ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6 }}>
+                            {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {ss.name}</div>
+                              <div style={{ fontSize: 10, color: '#64748b' }}>{ss.scene_type?.replace(/_/g, ' ')}</div>
+                            </div>
+                            <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
+                          </div>
+                        ) : null;
+                      })()}
+                      {!md.scene_set_id && sceneSets.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6 }}>
+                          {sceneSets.map(ss => (
+                            <button key={ss.id} onClick={() => updateField('scene_set_id', ss.id)} style={{
+                              padding: 0, border: '2px solid #e2e8f0', borderRadius: 8, background: '#fff',
+                              cursor: 'pointer', overflow: 'hidden', textAlign: 'left', transition: 'border-color 0.12s',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                              {ss.base_still_url ? (
+                                <img src={ss.base_still_url} alt={ss.name} style={{ width: '100%', height: 60, objectFit: 'cover' }} />
+                              ) : (
+                                <div style={{ width: '100%', height: 60, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>📍</div>
+                              )}
+                              <div style={{ padding: '4px 6px' }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: '#1a1a2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ss.name}</div>
+                                <div style={{ fontSize: 8, color: '#94a3b8', textTransform: 'uppercase' }}>{ss.scene_type?.replace(/_/g, ' ')}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {!md.scene_set_id && sceneSets.length === 0 && (
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No scene sets — create them in Scene Sets first</div>
+                      )}
+                    </div>
                     <div>
                       <label style={S.fLabel}>Payment</label>
                       <select value={md.is_free ? 'free' : md.is_paid ? 'paid' : 'costs'} onChange={e => {
@@ -1509,9 +1569,101 @@ The revised event should feel like a completely different experience from the si
                     </div>
                   )}
 
-                  {/* Difficulty badge */}
-                  <div style={{ marginBottom: 12 }}>
+                  {/* Difficulty badge + AI Enhance */}
+                  <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ padding: '3px 10px', background: dl.bg, color: dl.color, borderRadius: 6, fontSize: 11, fontWeight: 700 }}>🎯 Difficulty: {diff} {dl.text}</span>
+                    <button onClick={async () => {
+                      setAiRevising(true);
+                      try {
+                        const emptyFields = [];
+                        if (!md.host) emptyFields.push('host');
+                        if (!md.description) emptyFields.push('description');
+                        if (!md.narrative_stakes) emptyFields.push('narrative_stakes');
+                        if (!md.career_milestone) emptyFields.push('career_milestone');
+                        if (!md.fail_consequence) emptyFields.push('fail_consequence');
+                        if (!md.success_unlock) emptyFields.push('success_unlock');
+                        if (!md.location_hint) emptyFields.push('location_hint');
+                        if (!(md.dress_code_keywords?.length > 0)) emptyFields.push('dress_code_keywords');
+
+                        const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+                          warnings: [{ msg: `ENHANCE: Fill in ALL missing fields for this event.
+
+Event: "${md.name}" (${md.event_type}, prestige ${md.prestige})
+Brand: "${md.host_brand || 'not set'}"
+Host: "${md.host || 'EMPTY — MUST FILL THIS'}"
+
+IMPORTANT: The "host" field is the person or organization hosting this event. It MUST be filled. Example: "Velour Society Events Team", "Maison Belle Creative Director", "Fashion Week Committee". This is NOT the brand — it's WHO is hosting.
+
+Current values:
+- host="${md.host || ''}" ${!md.host ? '← EMPTY, MUST FILL' : ''}
+- host_brand="${md.host_brand || ''}"
+- dress_code="${md.dress_code || ''}"
+- narrative_stakes="${md.narrative_stakes || ''}"
+- career_milestone="${md.career_milestone || ''}"
+- description="${md.description || ''}"
+- fail_consequence="${md.fail_consequence || ''}"
+- success_unlock="${md.success_unlock || ''}"
+- location_hint="${md.location_hint || ''}"
+
+Empty fields to fill: ${emptyFields.join(', ') || 'none'}.
+
+${md.narrative_stakes ? `Keep and expand: "${md.narrative_stakes}"` : 'Write compelling narrative stakes.'}
+
+Return action "enhance" with new_value as a JSON object. MUST include "host" field with a specific person or organization name.` }],
+                          events: worldEvents.slice(0, 10),
+                          episodes,
+                        });
+
+                        const suggestions = res.data?.data || [];
+                        if (suggestions.length > 0 && suggestions[0].new_value) {
+                          let data = suggestions[0].new_value;
+                          if (typeof data === 'string') try { data = JSON.parse(data); } catch { data = {}; }
+                          if (typeof data === 'object') {
+                            const merged = { ...md };
+                            for (const [key, val] of Object.entries(data)) {
+                              // Fill any empty/null/undefined field
+                              const current = md[key];
+                              const isEmpty = current === null || current === undefined || current === '' || (Array.isArray(current) && current.length === 0);
+                              if (val && isEmpty) {
+                                merged[key] = val;
+                              }
+                            }
+                            // Always update these if AI provided richer versions
+                            if (data.description && (!md.description || data.description.length > md.description.length)) merged.description = data.description;
+                            if (data.narrative_stakes && (!md.narrative_stakes || data.narrative_stakes.length > md.narrative_stakes.length)) merged.narrative_stakes = data.narrative_stakes;
+                            // Fallback chain for host
+                            if (!merged.host) {
+                              if (data.hosted_by) merged.host = data.hosted_by;
+                              else if (data.host_name) merged.host = data.host_name;
+                              else if (merged.host_brand) merged.host = `${merged.host_brand} Events`;
+                              else if (merged.name) merged.host = merged.name.split('—')[0].trim();
+                            }
+
+                            setEventDetailModal(merged);
+                            // Batch save all changed fields in one PUT
+                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias'];
+                            const toSave = {};
+                            for (const key of saveable) {
+                              if (merged[key] !== undefined && merged[key] !== md[key]) {
+                                toSave[key] = merged[key];
+                              }
+                            }
+                            if (Object.keys(toSave).length > 0) updateMultipleFields(toSave);
+                            setToast('✨ Enhanced — review the filled fields');
+                            setTimeout(() => setToast(null), 3000);
+                          }
+                        }
+                      } catch (err) {
+                        setToast(err.response?.data?.error || 'Enhance failed');
+                        setTimeout(() => setToast(null), 3000);
+                      } finally { setAiRevising(false); }
+                    }} disabled={aiRevising} style={{
+                      padding: '4px 14px', background: aiRevising ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                      color: aiRevising ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                      fontSize: 11, fontWeight: 700, cursor: aiRevising ? 'wait' : 'pointer',
+                    }}>
+                      {aiRevising ? '⏳ Enhancing...' : '✨ AI Enhance'}
+                    </button>
                   </div>
 
                   {/* Keywords */}
