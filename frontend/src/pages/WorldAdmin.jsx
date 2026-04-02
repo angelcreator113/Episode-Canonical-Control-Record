@@ -113,6 +113,7 @@ function WorldAdmin() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [aiFixLoading, setAiFixLoading] = useState(false);
   const [aiFixSuggestions, setAiFixSuggestions] = useState(null);
+  const [aiRevising, setAiRevising] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
@@ -499,6 +500,45 @@ function WorldAdmin() {
       setToast(`Failed: ${err.message}`);
       setTimeout(() => setToast(null), 3000);
     }
+  };
+
+  // AI Revise — make an event more distinct from similar ones
+  const handleAiRevise = async () => {
+    const similars = findSimilarEvents(eventForm.name);
+    if (similars.length === 0) return;
+    setAiRevising(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+        warnings: [{ msg: `REVISE: The event "${eventForm.name}" is too similar to these existing events: ${similars.map(e => `"${e.name}" (type: ${e.event_type}, prestige: ${e.prestige}, dress: ${e.dress_code})`).join(', ')}.
+
+Revise this event to make it COMPLETELY DIFFERENT while keeping the same general purpose. Change the name, adjust the type if needed, give it a distinct dress code, different prestige level, unique narrative stakes, and a fresh host/venue.
+
+Return a single suggestion with action "revise" and new_value as a JSON object with ALL fields:
+name, event_type, host, host_brand, prestige, cost_coins, strictness, deadline_type, dress_code, dress_code_keywords (array), narrative_stakes, career_milestone, career_tier, description, fail_consequence, success_unlock, location_hint.
+
+The revised event should feel like a completely different experience from the similar events listed above.` }],
+        events: worldEvents,
+        episodes,
+      });
+      const suggestions = res.data?.data || [];
+      if (suggestions.length > 0 && suggestions[0].new_value) {
+        let data = suggestions[0].new_value;
+        if (typeof data === 'string') try { data = JSON.parse(data); } catch { data = {}; }
+        if (typeof data === 'object' && data.name) {
+          // Keep the original ID but update all fields
+          setEventForm(prev => ({
+            ...prev,
+            ...data,
+            dress_code_keywords: Array.isArray(data.dress_code_keywords) ? data.dress_code_keywords : prev.dress_code_keywords,
+          }));
+          setToast('✨ Event revised — review and save');
+          setTimeout(() => setToast(null), 3000);
+        }
+      }
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Revision failed');
+      setTimeout(() => setToast(null), 3000);
+    } finally { setAiRevising(false); }
   };
 
   // Duplicate detection
@@ -1165,10 +1205,19 @@ function WorldAdmin() {
           {editingEvent && (
             <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
-              {/* Duplicate detection warning */}
+              {/* Duplicate detection warning + AI Revise */}
               {eventForm.name && findSimilarEvents(eventForm.name).length > 0 && (
-                <div style={{ padding: '8px 12px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 10, fontSize: 12, color: '#b45309' }}>
-                  ⚠️ Similar events exist: {findSimilarEvents(eventForm.name).map(e => e.name).join(', ')}
+                <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1, fontSize: 12, color: '#b45309' }}>
+                    ⚠️ Similar events: {findSimilarEvents(eventForm.name).map(e => e.name).join(', ')}
+                  </div>
+                  <button onClick={handleAiRevise} disabled={aiRevising} style={{
+                    padding: '5px 14px', background: aiRevising ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                    color: aiRevising ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                    fontSize: 11, fontWeight: 700, cursor: aiRevising ? 'wait' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}>
+                    {aiRevising ? '⏳ Revising...' : '✨ AI Revise'}
+                  </button>
                 </div>
               )}
 
