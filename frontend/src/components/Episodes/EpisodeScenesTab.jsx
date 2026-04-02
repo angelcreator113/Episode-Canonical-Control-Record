@@ -374,9 +374,9 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
           <div className="est-section-actions">
             <button
               className="est-btn est-btn-outline"
-              onClick={() => navigate(`/episodes/${episodeId}/scene-composer`)}
+              onClick={() => navigate(`/episodes/${episodeId}/plan`)}
             >
-              <Film size={14} /> Scene Composer
+              <Film size={14} /> Scene Planner
             </button>
             <button
               className="est-btn est-btn-outline"
