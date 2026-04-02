@@ -399,6 +399,22 @@
   max-width: 48px;
 }
 
+.scene-sets-filmstrip-label-input {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  width: 48px;
+  border: 1px solid #B8962E;
+  border-radius: 2px;
+  background: #fff;
+  color: #2C2C2C;
+  text-align: center;
+  padding: 1px 2px;
+  outline: none;
+}
+
 .scene-sets-filmstrip-thumb.active .scene-sets-filmstrip-label {
   color: #B8962E;
 }
