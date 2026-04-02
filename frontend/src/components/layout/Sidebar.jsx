@@ -90,9 +90,7 @@ const NAV = [
         icon: '🎬', label: 'Shows', route: '/shows',
         expandable: true,
       },
-      { icon: '🎞️', label: 'Scene Library',   route: '/scene-library' },
-      { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
-      { icon: '🖼️', label: 'Template Studio', route: '/template-studio' },
+      { icon: '🎞️', label: 'Scene Sets',       route: '/scene-library' },
     ],
   },
   {
