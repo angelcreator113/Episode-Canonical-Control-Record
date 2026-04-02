@@ -1587,18 +1587,25 @@ Also include host (who specifically hosts this), dress_code_keywords (array of 5
                           if (typeof data === 'object') {
                             const merged = { ...md };
                             for (const [key, val] of Object.entries(data)) {
-                              if (val && (!md[key] || md[key] === '' || (Array.isArray(md[key]) && md[key].length === 0))) {
+                              // Fill any empty/null/undefined field
+                              const current = md[key];
+                              const isEmpty = current === null || current === undefined || current === '' || (Array.isArray(current) && current.length === 0);
+                              if (val && isEmpty) {
                                 merged[key] = val;
                               }
                             }
-                            // Always update these if AI provided them and they're richer
+                            // Always update these if AI provided richer versions
                             if (data.description && (!md.description || data.description.length > md.description.length)) merged.description = data.description;
                             if (data.narrative_stakes && (!md.narrative_stakes || data.narrative_stakes.length > md.narrative_stakes.length)) merged.narrative_stakes = data.narrative_stakes;
+                            // Fallback: if host is still empty but brand exists, use brand
+                            if (!merged.host && merged.host_brand) merged.host = merged.host_brand;
 
                             setEventDetailModal(merged);
-                            // Save all enhanced fields
-                            for (const [key, val] of Object.entries(data)) {
-                              if (merged[key] === val) updateField(key, val);
+                            // Save all fields that changed
+                            for (const [key, val] of Object.entries(merged)) {
+                              if (val !== md[key] && val !== null && val !== undefined) {
+                                updateField(key, val);
+                              }
                             }
                             setToast('✨ Enhanced — review the filled fields');
                             setTimeout(() => setToast(null), 3000);
