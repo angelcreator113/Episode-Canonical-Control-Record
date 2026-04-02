@@ -246,7 +246,7 @@ function WorldAdmin() {
     for (let i = 0; i < episodeEvents.length; i++) {
       const { ep, event } = episodeEvents[i];
       if ((ep.episode_number || 99) <= 3 && (event.prestige || 0) >= 8) {
-        warnings.push({ type: 'prestige', msg: `⚠️ "${event.name}" (prestige ${event.prestige}) in early Ep ${ep.episode_number} — high prestige events work better later in the arc` });
+        warnings.push({ type: 'prestige', eventName: event.name, msg: `⚠️ "${event.name}" (prestige ${event.prestige}) in early Ep ${ep.episode_number} — high prestige events work better later in the arc` });
       }
     }
 
@@ -256,7 +256,7 @@ function WorldAdmin() {
       const curr = episodeEvents[i];
       if (prev.event.event_type === curr.event.event_type &&
           Math.abs((curr.ep.episode_number || 0) - (prev.ep.episode_number || 0)) <= 1) {
-        warnings.push({ type: 'duplicate', msg: `⚠️ Back-to-back ${curr.event.event_type} events: "${prev.event.name}" (Ep ${prev.ep.episode_number}) and "${curr.event.name}" (Ep ${curr.ep.episode_number})` });
+        warnings.push({ type: 'duplicate', eventName: curr.event.name, msg: `⚠️ Back-to-back ${curr.event.event_type} events: "${prev.event.name}" (Ep ${prev.ep.episode_number}) and "${curr.event.name}" (Ep ${curr.ep.episode_number})` });
       }
     }
 
@@ -265,7 +265,7 @@ function WorldAdmin() {
     for (let i = 0; i < names.length; i++) {
       for (let j = i + 1; j < names.length; j++) {
         if (names[i] && names[j] && names[i] === names[j]) {
-          warnings.push({ type: 'name', msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
+          warnings.push({ type: 'name', eventName: worldEvents[i].name, msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
         }
       }
     }
@@ -831,7 +831,15 @@ function WorldAdmin() {
                   </button>
                 </div>
                 {warnings.map((w, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#92400e', marginBottom: 3, lineHeight: 1.4 }}>{w.msg}</div>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
+                    <span style={{ flex: 1 }}>{w.msg}</span>
+                    {w.eventName && (
+                      <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
+                        style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        ✏️ Fix
+                      </button>
+                    )}
+                  </div>
                 ))}
 
                 {/* AI Fix suggestions */}
@@ -915,6 +923,31 @@ function WorldAdmin() {
                   ⚠️ Similar events exist: {findSimilarEvents(eventForm.name).map(e => e.name).join(', ')}
                 </div>
               )}
+
+              {/* Location picker — prominent position */}
+              <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Location (Scene Set)</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select value={eventForm.scene_set_id || ''} onChange={e => setEventForm(p => ({ ...p, scene_set_id: e.target.value || null }))} style={{ ...S.sel, flex: 1, minWidth: 200 }}>
+                    <option value="">— No location linked —</option>
+                    {sceneSets.map(ss => (
+                      <option key={ss.id} value={ss.id}>📍 {ss.name} ({ss.scene_type?.replace(/_/g, ' ')})</option>
+                    ))}
+                  </select>
+                  {eventForm.scene_set_id && (() => {
+                    const ss = sceneSets.find(s => s.id === eventForm.scene_set_id);
+                    return ss ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />}
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>✓ {ss.name}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                  {!eventForm.scene_set_id && sceneSets.length === 0 && (
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>No scene sets found — create them in Scene Sets first</span>
+                  )}
+                </div>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
                 <FG label="Event Name *" value={eventForm.name} onChange={v => setEventForm(p => ({ ...p, name: v }))} placeholder="Velour Society Garden Soirée" />
                 <div>
@@ -991,24 +1024,6 @@ function WorldAdmin() {
                 <FG label="Payment (if paid)" value={eventForm.payment_amount} onChange={v => setEventForm(p => ({ ...p, payment_amount: parseInt(v) || 0 }))} type="number" min={0} />
               </div>
 
-              {/* Scene Set (Location) picker */}
-              <div style={{ gridColumn: '1 / -1', marginBottom: 4 }}>
-                <label style={S.fLabel}>📍 Location (Scene Set)</label>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <select value={eventForm.scene_set_id || ''} onChange={e => setEventForm(p => ({ ...p, scene_set_id: e.target.value || null }))} style={{ ...S.sel, flex: 1, minWidth: 200 }}>
-                    <option value="">No location linked</option>
-                    {sceneSets.map(ss => (
-                      <option key={ss.id} value={ss.id}>{ss.name} ({ss.scene_type?.replace(/_/g, ' ')})</option>
-                    ))}
-                  </select>
-                  {eventForm.scene_set_id && (() => {
-                    const ss = sceneSets.find(s => s.id === eventForm.scene_set_id);
-                    return ss?.base_still_url ? (
-                      <img src={ss.base_still_url} alt={ss.name} style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0' }} />
-                    ) : null;
-                  })()}
-                </div>
-              </div>
               <FG label="Location Hint" value={eventForm.location_hint} onChange={v => setEventForm(p => ({ ...p, location_hint: v }))} placeholder="Parisian rooftop garden, golden hour, marble tables" full />
               <FG label="Narrative Stakes" value={eventForm.narrative_stakes} onChange={v => setEventForm(p => ({ ...p, narrative_stakes: v }))} placeholder="What this event means for Lala's arc..." textarea full />
               <FG label="Career Milestone" value={eventForm.career_milestone} onChange={v => setEventForm(p => ({ ...p, career_milestone: v }))} placeholder="First brand collaboration, first paid gig, etc." full />
