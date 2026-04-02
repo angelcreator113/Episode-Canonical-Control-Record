@@ -852,7 +852,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         {showAddAngle && (
           <div className="scene-sets-add-angle-form">
             <div className="scene-sets-add-angle-row">
-              <div className="scene-sets-create-field"><label>Label</label><input type="text" placeholder="e.g. WIDE" value={newAngle.angle_label} onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))} autoFocus /></div>
+              <div className="scene-sets-create-field"><label>Label</label><select value={newAngle.angle_label} onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))} autoFocus><option value="">Select...</option><option value="WIDE">WIDE</option><option value="CLOSE">CLOSE</option><option value="ESTABLISHING">ESTABLISHING</option><option value="WINDOW">WINDOW</option><option value="DOORWAY">DOORWAY</option><option value="OVERHEAD">OVERHEAD</option><option value="ACTION">ACTION</option><option value="VANITY">VANITY</option><option value="CLOSET">CLOSET</option><option value="OTHER">OTHER</option></select></div>
               <div className="scene-sets-create-field"><label>Name</label><input type="text" placeholder="e.g. Wide Morning" value={newAngle.angle_name} onChange={e => setNewAngle(a => ({ ...a, angle_name: e.target.value }))} /></div>
               <div className="scene-sets-create-field"><label>Beats <span className="scene-sets-optional">(comma-sep)</span></label><input type="text" placeholder="1,2,3" value={newAngle.beat_affinity} onChange={e => setNewAngle(a => ({ ...a, beat_affinity: e.target.value }))} /></div>
             </div>
@@ -1564,7 +1564,10 @@ export default function SceneSetsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(apiData),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Server error (${res.status})`);
+      }
       const json = await res.json();
       const newAngle = json.data;
 
