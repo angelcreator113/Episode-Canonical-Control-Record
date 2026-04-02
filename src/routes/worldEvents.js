@@ -7,6 +7,7 @@
  * DELETE /api/v1/world/:showId/events/:eventId  — Delete event
  * POST   /api/v1/world/:showId/events/:eventId/inject — Inject event into episode script
  * POST   /api/v1/world/:showId/events/:eventId/generate-script — Generate full script skeleton
+ * POST   /api/v1/world/:showId/events/ai-fix — AI suggestions to diversify event plan
  * 
  * Location: src/routes/worldEvents.js
  */
@@ -491,28 +492,41 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
   }
 });
 
-// ─── AI EVENT DIVERSIFIER ────────────────────────────────────────────────────
-// POST /api/v1/world/:showId/events/ai-fix
-// Takes warnings + events + episodes, returns suggestions to diversify
-
-router.post('/:showId/events/ai-fix', optionalAuth, async (req, res) => {
+// AI event diversification suggestions
+router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), optionalAuth, async (req, res) => {
   try {
-    const { warnings, events, episodes } = req.body;
-    if (!warnings || !events) {
-      return res.status(400).json({ error: 'warnings and events are required' });
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({
+        error: 'Invalid request body',
+        message: 'Request body must be valid JSON with warnings/events arrays',
+        code: 'INVALID_JSON_BODY',
+      });
+    }
+
+    const { warnings, events, episodes = [] } = req.body;
+    if (!Array.isArray(warnings) || !Array.isArray(events)) {
+      return res.status(400).json({
+        error: 'warnings and events are required',
+        message: 'warnings and events must both be arrays',
+        code: 'INVALID_PAYLOAD',
+      });
     }
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+      return res.status(503).json({
+        error: 'AI service unavailable',
+        message: 'ANTHROPIC_API_KEY not configured',
+        code: 'ANTHROPIC_API_KEY_MISSING',
+      });
     }
 
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const limitedEvents = events.slice(0, 30);
 
-    // Limit data sent to Claude to avoid token overflow
-    const eventList = (events || []).slice(0, 30).map(ev => {
-      const ep = (episodes || []).find(e => e.id === ev.used_in_episode_id);
-      return `- "${ev.name}" (type: ${ev.event_type}, prestige: ${ev.prestige}, dress: ${ev.dress_code || 'none'})${ep ? ` → Ep ${ep.episode_number}: ${ep.title}` : ' → unlinked'}`;
+    const eventList = limitedEvents.map(ev => {
+      const ep = episodes?.find(e => e.id === ev.used_in_episode_id);
+      return `- "${ev.name}" (type: ${ev.event_type}, prestige: ${ev.prestige}, dress: ${ev.dress_code || 'none'})${ep ? ` -> Ep ${ep.episode_number}: ${ep.title}` : ' -> unlinked'}`;
     }).join('\n');
 
     const warningList = (warnings || []).slice(0, 10).map(w => `- ${w.msg || w}`).join('\n');
@@ -522,7 +536,7 @@ router.post('/:showId/events/ai-fix', optionalAuth, async (req, res) => {
       max_tokens: 2000,
       system: `You are a TV show producer for "Before Lala", a memoir-style fashion reality show. You help diversify events across episodes to create compelling variety and narrative tension.
 
-Return ONLY valid JSON — an array of suggestion objects.`,
+Return ONLY valid JSON - an array of suggestion objects.`,
       messages: [{
         role: 'user',
         content: `Here are the current story logic warnings for my events:
@@ -563,12 +577,32 @@ Guidelines:
       suggestions = [{ warning: 'Parse error', suggestion: text.slice(0, 500), action: 'manual', event_name: '', new_value: '' }];
     }
 
-    res.json({ success: true, data: suggestions });
+    return res.json({ success: true, data: suggestions });
   } catch (err) {
-    console.error('[WorldEvents] AI fix error:', err.message, err.status || '');
-    const msg = err.message || 'AI fix failed';
-    const status = err.status === 401 ? 503 : 500;
-    res.status(status).json({ error: msg });
+    console.error('[WorldEvents] AI fix error:', err);
+    const message = err?.error?.message || err?.message || 'Unknown AI service error';
+    let status = 500;
+    let code = 'AI_FIX_ERROR';
+
+    if (/credit balance is too low/i.test(message)) {
+      status = 402;
+      code = 'ANTHROPIC_CREDITS_EXHAUSTED';
+    } else if (/invalid api key|authentication/i.test(message)) {
+      status = 503;
+      code = 'ANTHROPIC_AUTH_FAILED';
+    } else if (err?.status === 429 || /rate limit/i.test(message)) {
+      status = 429;
+      code = 'ANTHROPIC_RATE_LIMIT';
+    } else if (err?.status && Number.isInteger(err.status)) {
+      status = err.status;
+      code = 'ANTHROPIC_REQUEST_FAILED';
+    }
+
+    return res.status(status).json({
+      error: 'AI fix failed',
+      message,
+      code,
+    });
   }
 });
 
