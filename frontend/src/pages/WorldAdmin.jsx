@@ -1316,6 +1316,21 @@ function WorldAdmin() {
                   {ev.dress_code && <span style={S.eTag}>👗 {ev.dress_code}</span>}
                   <span style={{ padding: '2px 8px', background: diff.bg, color: diff.color, borderRadius: 6, fontSize: 10, fontWeight: 700 }}>🎯 {difficulty} {diff.text}</span>
                 </div>
+                {/* Host & payment */}
+                {(ev.host || ev.host_brand) && (
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>🏛️ {ev.host}{ev.host_brand ? ` — ${ev.host_brand}` : ''}</div>
+                )}
+                {(ev.is_paid || ev.is_free || ev.cost_coins > 0) && (
+                  <div style={{ display: 'flex', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
+                    {ev.is_paid && <span style={{ padding: '1px 6px', background: '#f0fdf4', borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#16a34a' }}>💰 Paid{ev.payment_amount ? ` (${ev.payment_amount})` : ''}</span>}
+                    {ev.is_free && <span style={{ padding: '1px 6px', background: '#f0f9ff', borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#0284c7' }}>🎟️ Free</span>}
+                    {!ev.is_paid && !ev.is_free && ev.cost_coins > 0 && <span style={{ padding: '1px 6px', background: '#fef2f2', borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#dc2626' }}>Costs {ev.cost_coins} coins</span>}
+                  </div>
+                )}
+                {/* Description preview */}
+                {ev.description && (
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.description}</div>
+                )}
                 {linkedEpisode ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#f0fdf4', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
                     ✓ Ep {linkedEpisode.episode_number}: {linkedEpisode.title}
@@ -1403,10 +1418,32 @@ function WorldAdmin() {
                     <div><label style={S.fLabel}>Deadline</label><select value={md.deadline_type} onChange={e => updateField('deadline_type', e.target.value)} style={S.sel}>{['none','low','medium','high','tonight','urgent'].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
                     <div><label style={S.fLabel}>Career Tier</label><input type="number" min={1} max={5} value={md.career_tier || 1} onChange={e => { setEventDetailModal({ ...md, career_tier: parseInt(e.target.value) || 1 }); }} onBlur={e => updateField('career_tier', parseInt(e.target.value) || 1)} style={S.sel} /></div>
                     <div><label style={S.fLabel}>📍 Location</label><select value={md.scene_set_id || ''} onChange={e => updateField('scene_set_id', e.target.value || null)} style={S.sel}><option value="">None</option>{sceneSets.map(ss => <option key={ss.id} value={ss.id}>{ss.name}</option>)}</select></div>
+                    <div>
+                      <label style={S.fLabel}>Payment</label>
+                      <select value={md.is_free ? 'free' : md.is_paid ? 'paid' : 'costs'} onChange={e => {
+                        const v = e.target.value;
+                        const updates = { is_paid: v === 'paid', is_free: v === 'free' };
+                        if (v === 'free') updates.cost_coins = 0;
+                        setEventDetailModal({ ...md, ...updates });
+                        updateField('is_paid', updates.is_paid);
+                        updateField('is_free', updates.is_free);
+                        if (v === 'free') updateField('cost_coins', 0);
+                      }} style={S.sel}>
+                        <option value="costs">Costs coins</option>
+                        <option value="paid">💰 Lala gets paid</option>
+                        <option value="free">🎟️ Free entry</option>
+                      </select>
+                    </div>
                   </div>
+                  {md.is_paid && (
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={S.fLabel}>Payment Amount (coins)</label>
+                      <input type="number" min={0} value={md.payment_amount || 0} onChange={e => setEventDetailModal({ ...md, payment_amount: parseInt(e.target.value) || 0 })} onBlur={e => updateField('payment_amount', parseInt(e.target.value) || 0)} style={{ ...S.sel, width: 120 }} />
+                    </div>
+                  )}
 
                   {/* Difficulty badge */}
                   <div style={{ marginBottom: 12 }}>
