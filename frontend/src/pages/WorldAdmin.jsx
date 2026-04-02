@@ -240,37 +240,205 @@ function WorldAdmin() {
     const episodeEvents = episodes.map(ep => ({
       ep,
       event: worldEvents.find(ev => ev.used_in_episode_id === ep.id),
-    })).filter(e => e.event);
+    }));
+    const linked = episodeEvents.filter(e => e.event);
+    const sorted = [...linked].sort((a, b) => (a.ep.episode_number || 0) - (b.ep.episode_number || 0));
 
-    // Check prestige order — high prestige too early
-    for (let i = 0; i < episodeEvents.length; i++) {
-      const { ep, event } = episodeEvents[i];
+    // 1. High prestige too early
+    for (const { ep, event } of sorted) {
       if ((ep.episode_number || 99) <= 3 && (event.prestige || 0) >= 8) {
-        warnings.push({ type: 'prestige', eventName: event.name, msg: `⚠️ "${event.name}" (prestige ${event.prestige}) in early Ep ${ep.episode_number} — high prestige events work better later in the arc` });
+        warnings.push({ type: 'prestige', eventName: event.name, fixType: 'swap',
+          msg: `⚠️ "${event.name}" (prestige ${event.prestige}) in early Ep ${ep.episode_number} — high prestige events work better later` });
       }
     }
 
-    // Check duplicate event types back-to-back
-    for (let i = 1; i < episodeEvents.length; i++) {
-      const prev = episodeEvents[i - 1];
-      const curr = episodeEvents[i];
+    // 2. Back-to-back same event type
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1], curr = sorted[i];
       if (prev.event.event_type === curr.event.event_type &&
           Math.abs((curr.ep.episode_number || 0) - (prev.ep.episode_number || 0)) <= 1) {
-        warnings.push({ type: 'duplicate', eventName: curr.event.name, msg: `⚠️ Back-to-back ${curr.event.event_type} events: "${prev.event.name}" (Ep ${prev.ep.episode_number}) and "${curr.event.name}" (Ep ${curr.ep.episode_number})` });
+        warnings.push({ type: 'duplicate_type', eventName: curr.event.name, pairName: prev.event.name, fixType: 'swap_episodes',
+          epA: prev.ep, epB: curr.ep, evA: prev.event, evB: curr.event,
+          msg: `⚠️ Back-to-back ${curr.event.event_type}: "${prev.event.name}" (Ep ${prev.ep.episode_number}) and "${curr.event.name}" (Ep ${curr.ep.episode_number})` });
       }
     }
 
-    // Check similar names (potential duplicates)
+    // 3. Duplicate event names
     const names = worldEvents.map(ev => ev.name?.toLowerCase().trim());
     for (let i = 0; i < names.length; i++) {
       for (let j = i + 1; j < names.length; j++) {
         if (names[i] && names[j] && names[i] === names[j]) {
-          warnings.push({ type: 'name', eventName: worldEvents[i].name, msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
+          warnings.push({ type: 'name', eventName: worldEvents[i].name, fixType: 'merge',
+            dupA: worldEvents[i], dupB: worldEvents[j],
+            msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
         }
       }
     }
 
+    // 4. Cost curve — expensive event before Lala can afford it
+    for (const { ep, event } of sorted) {
+      const tier = event.career_tier || 1;
+      const epNum = ep.episode_number || 1;
+      if (tier >= 3 && epNum <= 4 && (event.cost_coins || 0) >= 150) {
+        warnings.push({ type: 'cost', eventName: event.name, fixType: 'edit',
+          msg: `💰 "${event.name}" costs ${event.cost_coins} coins at Tier ${tier} in Ep ${epNum} — Lala may not afford this yet` });
+      }
+    }
+
+    // 5. Dress code variety — 3+ same dress code in a row
+    for (let i = 2; i < sorted.length; i++) {
+      const a = sorted[i-2]?.event?.dress_code?.toLowerCase();
+      const b = sorted[i-1]?.event?.dress_code?.toLowerCase();
+      const c = sorted[i]?.event?.dress_code?.toLowerCase();
+      if (a && b && c && a === b && b === c) {
+        warnings.push({ type: 'dress', eventName: sorted[i].event.name, fixType: 'edit',
+          msg: `👗 Same dress code "${c}" for 3 episodes in a row (Ep ${sorted[i-2].ep.episode_number}-${sorted[i].ep.episode_number}) — add variety` });
+      }
+    }
+
+    // 6. Missing event types — check season has variety
+    const usedTypes = new Set(worldEvents.filter(ev => ev.status === 'used').map(ev => ev.event_type));
+    const essentialTypes = ['invite', 'deliverable', 'brand_deal'];
+    for (const t of essentialTypes) {
+      if (worldEvents.length >= 6 && !usedTypes.has(t)) {
+        warnings.push({ type: 'missing_type', fixType: 'create',
+          msg: `📋 No "${t.replace(/_/g, ' ')}" events linked — balanced arcs need variety in event types` });
+      }
+    }
+
+    // 7. Location repetition — same scene set back-to-back
+    for (let i = 1; i < sorted.length; i++) {
+      const prevScene = sorted[i-1]?.event?.scene_set_id;
+      const currScene = sorted[i]?.event?.scene_set_id;
+      if (prevScene && currScene && prevScene === currScene) {
+        warnings.push({ type: 'location', eventName: sorted[i].event.name, fixType: 'edit',
+          msg: `📍 Same location for "${sorted[i-1].event.name}" and "${sorted[i].event.name}" back-to-back — change one venue` });
+      }
+    }
+
+    // 8. Difficulty spike — jump from Easy to Extreme
+    for (let i = 1; i < sorted.length; i++) {
+      const prevDiff = calcDifficulty(sorted[i-1].event);
+      const currDiff = calcDifficulty(sorted[i].event);
+      if (currDiff - prevDiff >= 4) {
+        warnings.push({ type: 'spike', eventName: sorted[i].event.name, fixType: 'edit',
+          msg: `🎯 Difficulty spike: "${sorted[i-1].event.name}" (${prevDiff.toFixed(1)}) → "${sorted[i].event.name}" (${currDiff.toFixed(1)}) — add a medium event between` });
+      }
+    }
+
+    // 9. Unlinked episodes
+    const unlinkedEps = episodeEvents.filter(e => !e.event);
+    if (unlinkedEps.length > 0 && unlinkedEps.length <= 3) {
+      for (const { ep } of unlinkedEps) {
+        warnings.push({ type: 'gap', fixType: 'fill', ep,
+          msg: `○ Ep ${ep.episode_number}: "${ep.title}" has no event — assign or create one` });
+      }
+    }
+
     return warnings;
+  };
+
+  // ── One-click fix handlers ──
+
+  // Swap two events' episode assignments
+  const handleSwapEpisodes = async (evA, evB, epA, epB) => {
+    try {
+      await Promise.all([
+        api.post(`/api/v1/world/${showId}/events/${evA.id}/inject`, { episode_id: epB.id }),
+        api.post(`/api/v1/world/${showId}/events/${evB.id}/inject`, { episode_id: epA.id }),
+      ]);
+      setWorldEvents(prev => prev.map(ev => {
+        if (ev.id === evA.id) return { ...ev, used_in_episode_id: epB.id, status: 'used' };
+        if (ev.id === evB.id) return { ...ev, used_in_episode_id: epA.id, status: 'used' };
+        return ev;
+      }));
+      setToast('✅ Swapped episode assignments');
+      setTimeout(() => setToast(null), 3000);
+    } catch { setToast('Failed to swap'); setTimeout(() => setToast(null), 3000); }
+  };
+
+  // Auto-reorder all events by prestige ascending
+  const handleAutoReorder = async () => {
+    const linked = worldEvents.filter(ev => ev.used_in_episode_id);
+    const sortedByPrestige = [...linked].sort((a, b) => (a.prestige || 0) - (b.prestige || 0));
+    const sortedEps = [...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
+
+    if (sortedByPrestige.length === 0) return;
+    if (!window.confirm(`Reorder ${sortedByPrestige.length} events by prestige (low → high) across episodes? This changes all assignments.`)) return;
+
+    try {
+      for (let i = 0; i < sortedByPrestige.length && i < sortedEps.length; i++) {
+        await api.post(`/api/v1/world/${showId}/events/${sortedByPrestige[i].id}/inject`, { episode_id: sortedEps[i].id });
+      }
+      setToast('✅ Events reordered by prestige');
+      setTimeout(() => setToast(null), 3000);
+      loadData();
+    } catch { setToast('Reorder failed'); setTimeout(() => setToast(null), 3000); }
+  };
+
+  // Merge duplicate events — keep first, delete second
+  const handleMergeDuplicates = async (keepEvent, removeEvent) => {
+    if (!window.confirm(`Keep "${keepEvent.name}" and delete the duplicate? The duplicate's episode link will transfer.`)) return;
+    try {
+      // If the duplicate was linked to an episode, relink the keeper
+      if (removeEvent.used_in_episode_id && !keepEvent.used_in_episode_id) {
+        await api.post(`/api/v1/world/${showId}/events/${keepEvent.id}/inject`, { episode_id: removeEvent.used_in_episode_id });
+      }
+      await api.delete(`/api/v1/world/${showId}/events/${removeEvent.id}`);
+      setWorldEvents(prev => prev.filter(ev => ev.id !== removeEvent.id));
+      setToast('✅ Merged — duplicate removed');
+      setTimeout(() => setToast(null), 3000);
+    } catch { setToast('Merge failed'); setTimeout(() => setToast(null), 3000); }
+  };
+
+  // Fill gap — suggest best unlinked event for an episode
+  const handleFillGap = (ep) => {
+    const unlinked = worldEvents.filter(ev => !ev.used_in_episode_id && ev.status !== 'used');
+    if (unlinked.length === 0) {
+      setToast('No unlinked events available — create a new one');
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    // Pick the best match: prefer matching career_tier to episode position
+    const epPos = ep.episode_number || 1;
+    const scored = unlinked.map(ev => ({
+      ev,
+      score: Math.abs((ev.prestige || 5) - (epPos * 0.7 + 2)) // rough fit
+    })).sort((a, b) => a.score - b.score);
+    setEventDetailModal(scored[0].ev);
+  };
+
+  // AI Rebalance — Amber reassigns all events optimally
+  const handleAiRebalance = async () => {
+    if (!window.confirm('Let Amber reassign all events across episodes for optimal variety? This will change all assignments.')) return;
+    setAiFixLoading(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+        warnings: [{ msg: 'REBALANCE: Reassign all events across episodes for maximum variety in type, prestige, dress code, and difficulty. Build a rising arc.' }],
+        events: worldEvents,
+        episodes,
+      });
+      setAiFixSuggestions(res.data?.data || []);
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Rebalance failed');
+      setTimeout(() => setToast(null), 3000);
+    } finally { setAiFixLoading(false); }
+  };
+
+  // AI Generate events to fill gaps
+  const handleAiGenerateForGap = async (ep) => {
+    setAiFixLoading(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+        warnings: [{ msg: `CREATE: Suggest a new event for Episode ${ep.episode_number} "${ep.title}". Consider what events are already used and create something different. Return the suggestion with action "create" and new_value as a JSON object with name, event_type, prestige, cost_coins, strictness, dress_code, narrative_stakes.` }],
+        events: worldEvents,
+        episodes,
+      });
+      setAiFixSuggestions(res.data?.data || []);
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Generation failed');
+      setTimeout(() => setToast(null), 3000);
+    } finally { setAiFixLoading(false); }
   };
 
   // AI Fix — send warnings to Claude for diversification suggestions
@@ -822,23 +990,57 @@ function WorldAdmin() {
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Story Logic Warnings ({warnings.length})</div>
-                  <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
-                    padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-                    color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
-                    fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
-                  }}>
-                    {aiFixLoading ? '⏳ Amber is thinking...' : '✨ Ask Amber to Fix'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={handleAutoReorder} style={{ padding: '5px 12px', background: '#fff', border: '1px solid #fde68a', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#b45309', cursor: 'pointer' }}>
+                      📊 Auto-Reorder
+                    </button>
+                    <button onClick={() => handleAiRebalance()} disabled={aiFixLoading} style={{ padding: '5px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#7c3aed', cursor: 'pointer' }}>
+                      🔄 Rebalance
+                    </button>
+                    <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
+                      padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                      color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                      fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
+                    }}>
+                      {aiFixLoading ? '⏳ Thinking...' : '✨ Amber Fix'}
+                    </button>
+                  </div>
                 </div>
                 {warnings.map((w, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
                     <span style={{ flex: 1 }}>{w.msg}</span>
-                    {w.eventName && (
-                      <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
-                        style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        ✏️ Fix
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {w.fixType === 'swap_episodes' && w.evA && w.evB && (
+                        <button onClick={() => handleSwapEpisodes(w.evA, w.evB, w.epA, w.epB)}
+                          style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          🔄 Swap
+                        </button>
+                      )}
+                      {w.fixType === 'merge' && w.dupA && w.dupB && (
+                        <button onClick={() => handleMergeDuplicates(w.dupA, w.dupB)}
+                          style={{ padding: '2px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          🔗 Merge
+                        </button>
+                      )}
+                      {w.fixType === 'fill' && w.ep && (
+                        <>
+                          <button onClick={() => handleFillGap(w.ep)}
+                            style={{ padding: '2px 8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            📋 Suggest
+                          </button>
+                          <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
+                            style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            ✨ AI Create
+                          </button>
+                        </>
+                      )}
+                      {w.eventName && (
+                        <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
+                          style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          ✏️ Edit
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
 
@@ -1118,133 +1320,139 @@ function WorldAdmin() {
             )}
           </div>
 
-          {/* ── Event Detail / Inject Modal ── */}
-          {eventDetailModal && (
+          {/* ── Event Detail / Edit Modal ── */}
+          {eventDetailModal && (() => {
+            const md = eventDetailModal;
+            const updateField = async (field, value) => {
+              const updates = { ...md, [field]: value };
+              try {
+                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, updates);
+                if (res.data.success) {
+                  const updated = res.data.event;
+                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
+                  setEventDetailModal(updated);
+                }
+              } catch {}
+            };
+            const linkedScene = md.scene_set_id ? sceneSets.find(s => s.id === md.scene_set_id) : null;
+            const diff = calcDifficulty(md);
+            const dl = difficultyLabel(diff);
+            return (
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setEventDetailModal(null)}>
-              <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 600, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-                {/* Modal header */}
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>{EVENT_TYPE_ICONS[eventDetailModal.event_type] || '📌'}</span>
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{eventDetailModal.name}</h3>
-                    {(eventDetailModal.host || eventDetailModal.host_brand) && (
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>🏛️ {eventDetailModal.host}{eventDetailModal.host_brand ? ` — ${eventDetailModal.host_brand}` : ''}</div>
-                    )}
+              <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 640, maxHeight: '90vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                {/* Location banner */}
+                {linkedScene?.base_still_url && (
+                  <div style={{ height: 140, overflow: 'hidden', position: 'relative', borderRadius: '16px 16px 0 0' }}>
+                    <img src={linkedScene.base_still_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', bottom: 8, left: 12, fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '3px 10px', borderRadius: 6 }}>📍 {linkedScene.name}</div>
                   </div>
-                  <span style={S.statusPill(eventDetailModal.status)}>{eventDetailModal.status}</span>
+                )}
+
+                {/* Header — editable name */}
+                <div style={{ padding: '16px 24px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <select value={md.event_type} onChange={e => updateField('event_type', e.target.value)} style={{ fontSize: 20, border: 'none', background: 'none', cursor: 'pointer' }}>
+                    {Object.entries(EVENT_TYPE_ICONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                  <input value={md.name} onChange={e => setEventDetailModal({ ...md, name: e.target.value })} onBlur={e => updateField('name', e.target.value)}
+                    style={{ flex: 1, fontSize: 18, fontWeight: 700, color: '#1a1a2e', border: 'none', borderBottom: '1px dashed #e2e8f0', outline: 'none', padding: '2px 0' }} />
+                  <span style={S.statusPill(md.status)}>{md.status}</span>
                   <button onClick={() => setEventDetailModal(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 14 }}>✕</button>
                 </div>
 
-                {/* Modal body */}
-                <div style={{ padding: '16px 24px' }}>
-                  {/* Tags */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-                    <span style={S.eTag}>⭐ Prestige {eventDetailModal.prestige}</span>
-                    <span style={S.eTag}>🪙 {eventDetailModal.cost_coins} coins</span>
-                    <span style={S.eTag}>📏 Strictness {eventDetailModal.strictness}</span>
-                    <span style={S.eTag}>⏰ {eventDetailModal.deadline_type}</span>
-                    {eventDetailModal.dress_code && <span style={S.eTag}>👗 {eventDetailModal.dress_code}</span>}
-                    {eventDetailModal.career_tier && <span style={{ padding: '3px 10px', background: '#eef2ff', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#4338ca' }}>Tier {eventDetailModal.career_tier}</span>}
-                    {(() => { const d = calcDifficulty(eventDetailModal); const dl = difficultyLabel(d); return <span style={{ padding: '3px 10px', background: dl.bg, color: dl.color, borderRadius: 6, fontSize: 11, fontWeight: 700 }}>🎯 {d} {dl.text}</span>; })()}
+                {/* Editable fields grid */}
+                <div style={{ padding: '8px 24px 16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+                    <div><label style={S.fLabel}>Host</label><input value={md.host || ''} onChange={e => setEventDetailModal({ ...md, host: e.target.value })} onBlur={e => updateField('host', e.target.value)} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Brand</label><input value={md.host_brand || ''} onChange={e => setEventDetailModal({ ...md, host_brand: e.target.value })} onBlur={e => updateField('host_brand', e.target.value)} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Dress Code</label><input value={md.dress_code || ''} onChange={e => setEventDetailModal({ ...md, dress_code: e.target.value })} onBlur={e => updateField('dress_code', e.target.value)} style={S.sel} /></div>
                   </div>
 
-                  {/* Linked location */}
-                  {eventDetailModal.scene_set_id && (() => {
-                    const ss = sceneSets.find(s => s.id === eventDetailModal.scene_set_id);
-                    return ss ? (
-                      <div style={{ marginBottom: 12, borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                        {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: '100%', height: 120, objectFit: 'cover' }} />}
-                        <div style={{ padding: '6px 10px', background: '#f8fafc', fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>📍 {ss.name} <span style={{ fontWeight: 400, color: '#94a3b8' }}>({ss.scene_type?.replace(/_/g, ' ')})</span></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
+                    <div><label style={S.fLabel}>Prestige</label><input type="number" min={1} max={10} value={md.prestige} onChange={e => { setEventDetailModal({ ...md, prestige: parseInt(e.target.value) || 5 }); }} onBlur={e => updateField('prestige', parseInt(e.target.value) || 5)} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Cost 🪙</label><input type="number" min={0} value={md.cost_coins} onChange={e => { setEventDetailModal({ ...md, cost_coins: parseInt(e.target.value) || 0 }); }} onBlur={e => updateField('cost_coins', parseInt(e.target.value) || 0)} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Strictness</label><input type="number" min={1} max={10} value={md.strictness} onChange={e => { setEventDetailModal({ ...md, strictness: parseInt(e.target.value) || 5 }); }} onBlur={e => updateField('strictness', parseInt(e.target.value) || 5)} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Deadline</label><select value={md.deadline_type} onChange={e => updateField('deadline_type', e.target.value)} style={S.sel}>{['none','low','medium','high','tonight','urgent'].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                    <div><label style={S.fLabel}>Career Tier</label><input type="number" min={1} max={5} value={md.career_tier || 1} onChange={e => { setEventDetailModal({ ...md, career_tier: parseInt(e.target.value) || 1 }); }} onBlur={e => updateField('career_tier', parseInt(e.target.value) || 1)} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>📍 Location</label><select value={md.scene_set_id || ''} onChange={e => updateField('scene_set_id', e.target.value || null)} style={S.sel}><option value="">None</option>{sceneSets.map(ss => <option key={ss.id} value={ss.id}>{ss.name}</option>)}</select></div>
+                  </div>
+
+                  {/* Difficulty badge */}
+                  <div style={{ marginBottom: 12 }}>
+                    <span style={{ padding: '3px 10px', background: dl.bg, color: dl.color, borderRadius: 6, fontSize: 11, fontWeight: 700 }}>🎯 Difficulty: {diff} {dl.text}</span>
+                  </div>
+
+                  {/* Keywords */}
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={S.fLabel}>Dress Code Keywords</label>
+                    <input value={(md.dress_code_keywords || []).join(', ')} onChange={e => setEventDetailModal({ ...md, dress_code_keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })}
+                      onBlur={e => updateField('dress_code_keywords', e.target.value.split(',').map(k => k.trim()).filter(Boolean))} placeholder="romantic, garden, floral" style={S.sel} />
+                    {(md.dress_code_keywords || []).length > 0 && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                        {md.dress_code_keywords.map((kw, i) => <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 10, color: '#4338ca', fontWeight: 600 }}>{kw}</span>)}
                       </div>
-                    ) : null;
-                  })()}
-
-                  {/* Dress code keywords */}
-                  {Array.isArray(eventDetailModal.dress_code_keywords) && eventDetailModal.dress_code_keywords.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Dress Code Keywords</div>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {eventDetailModal.dress_code_keywords.map((kw, i) => (
-                          <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 11, color: '#4338ca', fontWeight: 600 }}>{kw}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Narrative stakes */}
-                  {eventDetailModal.narrative_stakes && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Narrative Stakes</div>
-                      <div style={{ fontSize: 13, color: '#475569', fontStyle: 'italic', lineHeight: 1.5 }}>{eventDetailModal.narrative_stakes}</div>
-                    </div>
-                  )}
-
-                  {eventDetailModal.career_milestone && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Career Milestone</div>
-                      <div style={{ fontSize: 13, color: '#6366f1', fontWeight: 600 }}>🎯 {eventDetailModal.career_milestone}</div>
-                    </div>
-                  )}
-
-                  {eventDetailModal.location_hint && (
-                    <div style={{ marginBottom: 12, fontSize: 12, color: '#64748b' }}>📍 {eventDetailModal.location_hint}</div>
-                  )}
-
-                  {/* Episode linking section */}
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginTop: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>💉 Inject into Episode</div>
-                    {injectSuccess?.eventId === eventDetailModal.id ? (
-                      <div style={{ padding: 12, background: '#f0fdf4', borderRadius: 8, border: '2px solid #22c55e', textAlign: 'center', fontSize: 14, color: '#16a34a', fontWeight: 700 }}>{injectSuccess.message}</div>
-                    ) : (
-                      <>
-                        {injecting && <div style={{ fontSize: 12, color: '#6366f1', padding: '6px 0', fontWeight: 600 }}>⏳ Injecting...</div>}
-                        {injectError && <div style={{ fontSize: 12, color: '#dc2626', padding: '6px 10px', background: '#fef2f2', borderRadius: 6, marginBottom: 6, border: '1px solid #fecaca' }}>❌ {injectError}</div>}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                          {!injecting && episodes.map(ep => {
-                            const isLinked = ep.id === eventDetailModal.used_in_episode_id;
-                            return (
-                              <button key={ep.id} onClick={() => injectEvent(eventDetailModal.id, ep.id)} disabled={injecting} style={{
-                                textAlign: 'left', padding: '8px 12px',
-                                background: isLinked ? '#f0fdf4' : '#fff',
-                                border: isLinked ? '2px solid #22c55e' : '1px solid #e2e8f0',
-                                borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#1a1a2e',
-                              }}>
-                                <div style={{ fontWeight: 600 }}>{ep.episode_number || '?'}. {ep.title || 'Untitled'}</div>
-                                {isLinked && <div style={{ fontSize: 10, color: '#16a34a', marginTop: 2 }}>✓ Currently linked</div>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {!injecting && episodes.length === 0 && <span style={S.muted}>No episodes yet</span>}
-                      </>
                     )}
                   </div>
 
-                  {/* Generate section */}
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginTop: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>📝 Generate Script</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                      {episodes.map(ep => (
-                        <button key={ep.id} onClick={() => generateScript(eventDetailModal.id, ep.id)} disabled={generating} style={{
-                          textAlign: 'left', padding: '8px 12px',
-                          background: '#fff', border: '1px solid #e2e8f0',
-                          borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#1a1a2e',
-                        }}>
-                          {generating ? '⏳...' : `${ep.episode_number || '?'}. ${ep.title || 'Untitled'}`}
-                        </button>
-                      ))}
-                    </div>
+                  {/* Narrative fields */}
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={S.fLabel}>Narrative Stakes</label>
+                    <textarea value={md.narrative_stakes || ''} onChange={e => setEventDetailModal({ ...md, narrative_stakes: e.target.value })} onBlur={e => updateField('narrative_stakes', e.target.value)} rows={2} placeholder="What this event means for Lala's arc..." style={{ ...S.sel, resize: 'vertical', fontFamily: 'inherit' }} />
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={S.fLabel}>Career Milestone</label>
+                    <input value={md.career_milestone || ''} onChange={e => setEventDetailModal({ ...md, career_milestone: e.target.value })} onBlur={e => updateField('career_milestone', e.target.value)} placeholder="First brand collaboration..." style={S.sel} />
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={S.fLabel}>Location Hint</label>
+                    <input value={md.location_hint || ''} onChange={e => setEventDetailModal({ ...md, location_hint: e.target.value })} onBlur={e => updateField('location_hint', e.target.value)} placeholder="Parisian rooftop, golden hour..." style={S.sel} />
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={S.fLabel}>Description</label>
+                    <textarea value={md.description || ''} onChange={e => setEventDetailModal({ ...md, description: e.target.value })} onBlur={e => updateField('description', e.target.value)} rows={2} placeholder="Full event description..." style={{ ...S.sel, resize: 'vertical', fontFamily: 'inherit' }} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                    <div><label style={S.fLabel}>Fail Consequence</label><input value={md.fail_consequence || ''} onChange={e => setEventDetailModal({ ...md, fail_consequence: e.target.value })} onBlur={e => updateField('fail_consequence', e.target.value)} placeholder="Reputation drops..." style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Success Unlock</label><input value={md.success_unlock || ''} onChange={e => setEventDetailModal({ ...md, success_unlock: e.target.value })} onBlur={e => updateField('success_unlock', e.target.value)} placeholder="Unlocks VIP access..." style={S.sel} /></div>
+                  </div>
+
+                  {/* Episode linking */}
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>💉 Link to Episode</div>
+                    {injectSuccess?.eventId === md.id ? (
+                      <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 8, border: '2px solid #22c55e', textAlign: 'center', fontSize: 13, color: '#16a34a', fontWeight: 700 }}>{injectSuccess.message}</div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
+                        {episodes.map(ep => {
+                          const isLinked = ep.id === md.used_in_episode_id;
+                          return (
+                            <button key={ep.id} onClick={() => injectEvent(md.id, ep.id)} disabled={injecting} style={{
+                              textAlign: 'left', padding: '5px 8px',
+                              background: isLinked ? '#f0fdf4' : '#fff',
+                              border: isLinked ? '2px solid #22c55e' : '1px solid #e2e8f0',
+                              borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#1a1a2e',
+                            }}>
+                              <div style={{ fontWeight: 600 }}>{ep.episode_number || '?'}. {(ep.title || '').slice(0, 14)}</div>
+                              {isLinked && <div style={{ fontSize: 9, color: '#16a34a' }}>✓ Linked</div>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Modal footer */}
-                <div style={{ padding: '12px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button onClick={() => { openEditEvent(eventDetailModal); setEventDetailModal(null); }} style={S.smBtn}>✏️ Edit Event</button>
+                {/* Footer */}
+                <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>🗑️ Delete</button>
                   <button onClick={() => setEventDetailModal(null)} style={{ ...S.smBtn, background: '#f1f5f9' }}>Close</button>
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
