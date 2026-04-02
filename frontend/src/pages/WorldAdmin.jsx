@@ -1509,9 +1509,72 @@ The revised event should feel like a completely different experience from the si
                     </div>
                   )}
 
-                  {/* Difficulty badge */}
-                  <div style={{ marginBottom: 12 }}>
+                  {/* Difficulty badge + AI Enhance */}
+                  <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ padding: '3px 10px', background: dl.bg, color: dl.color, borderRadius: 6, fontSize: 11, fontWeight: 700 }}>🎯 Difficulty: {diff} {dl.text}</span>
+                    <button onClick={async () => {
+                      setAiRevising(true);
+                      try {
+                        const emptyFields = [];
+                        if (!md.host) emptyFields.push('host');
+                        if (!md.description) emptyFields.push('description');
+                        if (!md.narrative_stakes) emptyFields.push('narrative_stakes');
+                        if (!md.career_milestone) emptyFields.push('career_milestone');
+                        if (!md.fail_consequence) emptyFields.push('fail_consequence');
+                        if (!md.success_unlock) emptyFields.push('success_unlock');
+                        if (!md.location_hint) emptyFields.push('location_hint');
+                        if (!(md.dress_code_keywords?.length > 0)) emptyFields.push('dress_code_keywords');
+
+                        const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+                          warnings: [{ msg: `ENHANCE: Fill in missing fields and enrich existing ones for this event. The event "${md.name}" is a ${md.event_type} with prestige ${md.prestige}, dress code "${md.dress_code || 'not set'}".
+
+Current filled fields: name="${md.name}", type=${md.event_type}, prestige=${md.prestige}, cost=${md.cost_coins}, strictness=${md.strictness}, dress_code="${md.dress_code || ''}", host="${md.host || ''}", brand="${md.host_brand || ''}", narrative_stakes="${md.narrative_stakes || ''}", career_milestone="${md.career_milestone || ''}", description="${md.description || ''}".
+
+Empty fields that MUST be filled: ${emptyFields.join(', ') || 'none — improve existing fields instead'}.
+
+${md.narrative_stakes ? `Keep and expand the narrative stakes: "${md.narrative_stakes}"` : 'Write compelling narrative stakes.'}
+
+Return action "enhance" with new_value as a JSON object containing ONLY the fields to add/improve. Do NOT include fields that already have good content. Include: ${emptyFields.length > 0 ? emptyFields.join(', ') : 'improved narrative_stakes, description, fail_consequence, success_unlock'}.
+Also include host (who specifically hosts this), dress_code_keywords (array of 5-6 keywords), location_hint, career_milestone if empty.` }],
+                          events: worldEvents.slice(0, 10),
+                          episodes,
+                        });
+
+                        const suggestions = res.data?.data || [];
+                        if (suggestions.length > 0 && suggestions[0].new_value) {
+                          let data = suggestions[0].new_value;
+                          if (typeof data === 'string') try { data = JSON.parse(data); } catch { data = {}; }
+                          if (typeof data === 'object') {
+                            const merged = { ...md };
+                            for (const [key, val] of Object.entries(data)) {
+                              if (val && (!md[key] || md[key] === '' || (Array.isArray(md[key]) && md[key].length === 0))) {
+                                merged[key] = val;
+                              }
+                            }
+                            // Always update these if AI provided them and they're richer
+                            if (data.description && (!md.description || data.description.length > md.description.length)) merged.description = data.description;
+                            if (data.narrative_stakes && (!md.narrative_stakes || data.narrative_stakes.length > md.narrative_stakes.length)) merged.narrative_stakes = data.narrative_stakes;
+
+                            setEventDetailModal(merged);
+                            // Save all enhanced fields
+                            for (const [key, val] of Object.entries(data)) {
+                              if (merged[key] === val) updateField(key, val);
+                            }
+                            setToast('✨ Enhanced — review the filled fields');
+                            setTimeout(() => setToast(null), 3000);
+                          }
+                        }
+                      } catch (err) {
+                        setToast(err.response?.data?.error || 'Enhance failed');
+                        setTimeout(() => setToast(null), 3000);
+                      } finally { setAiRevising(false); }
+                    }} disabled={aiRevising} style={{
+                      padding: '4px 14px', background: aiRevising ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                      color: aiRevising ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                      fontSize: 11, fontWeight: 700, cursor: aiRevising ? 'wait' : 'pointer',
+                    }}>
+                      {aiRevising ? '⏳ Enhancing...' : '✨ AI Enhance'}
+                    </button>
                   </div>
 
                   {/* Keywords */}
