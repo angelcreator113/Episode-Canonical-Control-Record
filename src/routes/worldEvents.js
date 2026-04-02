@@ -7,6 +7,7 @@
  * DELETE /api/v1/world/:showId/events/:eventId  — Delete event
  * POST   /api/v1/world/:showId/events/:eventId/inject — Inject event into episode script
  * POST   /api/v1/world/:showId/events/:eventId/generate-script — Generate full script skeleton
+ * POST   /api/v1/world/:showId/events/ai-fix — AI suggestions to diversify event plan
  * 
  * Location: src/routes/worldEvents.js
  */
@@ -491,11 +492,8 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
   }
 });
 
-// ─── AI EVENT DIVERSIFIER ────────────────────────────────────────────────────
-// POST /api/v1/world/:showId/events/ai-fix
-// Takes warnings + events + episodes, returns suggestions to diversify
-
-router.post('/:showId/events/ai-fix', optionalAuth, async (req, res) => {
+// AI event diversification suggestions
+router.post('/world/:showId/events/ai-fix', optionalAuth, async (req, res) => {
   try {
     const { warnings, events, episodes } = req.body;
     if (!warnings || !events) {
@@ -507,7 +505,7 @@ router.post('/:showId/events/ai-fix', optionalAuth, async (req, res) => {
 
     const eventList = events.map(ev => {
       const ep = episodes?.find(e => e.id === ev.used_in_episode_id);
-      return `- "${ev.name}" (type: ${ev.event_type}, prestige: ${ev.prestige}, dress: ${ev.dress_code || 'none'})${ep ? ` → Ep ${ep.episode_number}: ${ep.title}` : ' → unlinked'}`;
+      return `- "${ev.name}" (type: ${ev.event_type}, prestige: ${ev.prestige}, dress: ${ev.dress_code || 'none'})${ep ? ` -> Ep ${ep.episode_number}: ${ep.title}` : ' -> unlinked'}`;
     }).join('\n');
 
     const warningList = warnings.map(w => `- ${w.msg}`).join('\n');
@@ -517,7 +515,7 @@ router.post('/:showId/events/ai-fix', optionalAuth, async (req, res) => {
       max_tokens: 2000,
       system: `You are a TV show producer for "Before Lala", a memoir-style fashion reality show. You help diversify events across episodes to create compelling variety and narrative tension.
 
-Return ONLY valid JSON — an array of suggestion objects.`,
+Return ONLY valid JSON - an array of suggestion objects.`,
       messages: [{
         role: 'user',
         content: `Here are the current story logic warnings for my events:
@@ -558,10 +556,10 @@ Guidelines:
       suggestions = [{ warning: 'Parse error', suggestion: text.slice(0, 500), action: 'manual', event_name: '', new_value: '' }];
     }
 
-    res.json({ success: true, data: suggestions });
+    return res.json({ success: true, data: suggestions });
   } catch (err) {
     console.error('[WorldEvents] AI fix error:', err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
