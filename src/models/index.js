@@ -139,6 +139,8 @@ let SceneObjectVariant; // Scene Studio: variant groups for scene objects
 let SceneSet; // Scene Sets: canonical LalaVerse locations for generative scene pipeline
 let SceneAngle; // Scene Angles: camera angles within a scene set
 let SceneSetEpisode; // Join table: many-to-many between scene sets and episodes
+let EpisodeBrief; // Episode planning briefs
+let ScenePlan; // Beat-by-beat scene plan
 let GenerationJob; // Async job queue for scene generation
 
 try {
@@ -384,6 +386,10 @@ try {
   SceneAngle = require('./SceneAngle')(sequelize);
   SceneSetEpisode = require('./SceneSetEpisode')(sequelize);
   GenerationJob = require('./GenerationJob')(sequelize);
+
+  // Episode planning
+  EpisodeBrief = require('./EpisodeBrief')(sequelize);
+  ScenePlan = require('./ScenePlan')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -763,6 +769,12 @@ if (SceneSetEpisode && SceneSetEpisode.associate) {
 }
 if (SceneAngle && SceneAngle.associate) {
   SceneAngle.associate(requiredModels);
+}
+if (EpisodeBrief && EpisodeBrief.associate) {
+  EpisodeBrief.associate(requiredModels);
+}
+if (ScenePlan && ScenePlan.associate) {
+  ScenePlan.associate(requiredModels);
 }
 if (GenerationJob && GenerationJob.associate) {
   GenerationJob.associate(requiredModels);
@@ -1989,4 +2001,6 @@ module.exports.SceneObjectVariant = SceneObjectVariant;
 module.exports.SceneSet = SceneSet;
 module.exports.SceneAngle = SceneAngle;
 module.exports.SceneSetEpisode = SceneSetEpisode;
+module.exports.EpisodeBrief = EpisodeBrief;
+module.exports.ScenePlan = ScenePlan;
 module.exports.GenerationJob = GenerationJob;
