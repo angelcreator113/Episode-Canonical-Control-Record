@@ -11,120 +11,90 @@ import SidebarProgress from '../SidebarProgress';
 import './Sidebar.css';
 
 /* ─── Navigation map ────────────────────────────────────────── */
-const NAV = [
-  {
-    zone: 'WORLD',
-    items: [
-      { icon: '◈',  label: 'Universe',             route: '/universe',
-        groups: [
-          { heading: 'Production',
-            children: [
-              { icon: '◧', label: 'Series',             route: '/universe/series' },
-              { icon: '▨', label: 'Production',         route: '/universe/production' },
-              { icon: '△', label: 'Wardrobe',           route: '/universe/wardrobe' },
-              { icon: '□', label: 'Assets',              route: '/universe/assets' },
-            ],
-          },
-          { heading: 'Intelligence',
-            children: [
-              { icon: '🧠', label: 'Show Brain',         route: '/intelligence/show-brain' },
-              { icon: '⬡', label: 'Franchise Brain',    route: '/intelligence/franchise-brain' },
-              { icon: '📜', label: 'World State',        route: '/universe/world-state' },
-              { icon: '📍', label: 'World Locations',    route: '/world-locations' },
-              { icon: '📅', label: 'Cultural Calendar',  route: '/cultural-calendar' },
-              { icon: '📜', label: 'Cultural Memory',    route: '/cultural-memory' },
-              { icon: '🏗️', label: 'Infrastructure',     route: '/world-infrastructure' },
-              { icon: '⭐', label: 'Influencer Systems', route: '/influencer-systems' },
-            ],
-          },
-          { heading: 'Characters',
-            children: [
-              { icon: '▦', label: 'Social Import',      route: '/universe/social-import' },
-              { icon: '📱', label: 'Social Timeline',    route: '/social-timeline' },
-              { icon: '🧠', label: 'Social Personality', route: '/social-personality' },
-              { icon: '🎭', label: 'Life Simulation',    route: '/character-life-simulation' },
-              { icon: '💎', label: 'Depth Engine',       route: '/character-depth-engine' },
-              { icon: '🟠', label: 'Amber',              route: '/amber' },
-            ],
-          },
-          { heading: 'Story Tools',
-            children: [
-              { icon: '✦', label: 'Story Dashboard',    route: '/universe/story-dashboard' },
-              { icon: '◇', label: 'Writing Rhythm',     route: '/universe/writing-rhythm' },
-              { icon: '🔥', label: 'Book Scene Studio',  route: '/scene-studio' },
-            ],
-          },
-        ],
-      },
-      { icon: '✦',  label: 'World Studio',         route: '/world-studio',
-        children: [
-          { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
-          { icon: '🔗', label: 'Relationship Engine', route: '/world-studio?tab=relationships' },
-        ],
-      },
-      { icon: '💭', label: 'Therapy',              route: '/therapy/default' },
-    ],
-  },
-  {
-    zone: 'WRITE',
-    items: [
-      { icon: '⚡', label: 'Short Stories',    route: '/story-engine',
-        children: [
-          { icon: '📖', label: 'Story Engine',        route: '/story-engine' },
-          { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
-          { icon: '⬡', label: 'Assembler',           route: '/assembler' },
-          { icon: '◇', label: 'Continuity',           route: '/continuity' },
-          { icon: '🧠', label: 'Narrative Control',   route: '/narrative-control' },
-        ],
-      },
-      { icon: '✦', label: 'Storyteller',      route: '/storyteller' },
-      { icon: '🔥', label: 'Pressure',        route: '/pressure' },
-      { icon: '▶',  label: 'Novel Session',   route: '/start' },
-      { icon: '📰', label: 'Press',            route: '/press' },
-    ],
-  },
-  {
-    zone: 'STUDIO',
-    items: [
-      {
-        icon: '🎬', label: 'Shows', route: '/shows',
-        expandable: true,
-      },
-      { icon: '🎞️', label: 'Scene Sets',       route: '/scene-library' },
-    ],
-  },
-  {
-    zone: 'PRODUCE',
-    items: [
-      { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
-      { icon: '📂', label: 'Assets',          route: '/assets' },
-      { icon: '👗', label: 'Wardrobe',        route: '/wardrobe' },
-      { icon: '📦', label: 'Compositions',    route: '/library' },
-    ],
-  },
-  {
-    zone: 'MANAGE',
-    items: [
-      { icon: '💵', label: 'CFO Agent',       route: '/cfo',
-        children: [
-          { icon: '📊', label: 'Analytics',     route: '/analytics/decisions' },
-          { icon: '💰', label: 'AI Costs',      route: '/ai-costs' },
-        ],
-      },
-      { icon: '🗺️', label: 'Site Organizer',  route: '/site-organizer' },
-      { icon: '🎨', label: 'Design Agent',    route: '/design-agent' },
-      { icon: '🔍', label: 'Search',          route: '/search' },
-      { icon: '🛡️', label: 'Admin',           route: '/admin',
-        children: [
-          { icon: '📋', label: 'Audit Log',     route: '/audit-log' },
-          { icon: '🩺', label: 'Diagnostics',   route: '/diagnostics' },
-        ],
-      },
-      { icon: '🗑️', label: 'Recycle Bin',     route: '/recycle-bin' },
-      { icon: '⚙️', label: 'Settings',        route: '/settings' },
-    ],
-  },
-];
+function buildNav(shows) {
+  const showId = shows[0]?.id;
+  const showName = shows[0]?.name || 'Show';
+
+  return [
+    {
+      zone: 'FRANCHISE',
+      items: [
+        { icon: '◈', label: 'LalaVerse', route: '/universe' },
+        { icon: '🧠', label: 'Show Brain', route: '/intelligence/show-brain' },
+        { icon: '⬡', label: 'Franchise Brain', route: '/intelligence/franchise-brain' },
+      ],
+    },
+    {
+      zone: showName.length > 20 ? showName.slice(0, 20) + '…' : showName,
+      items: [
+        { icon: '🎬', label: 'Episodes', route: '/shows', expandable: true },
+        { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
+        ...(showId ? [
+          { icon: '📅', label: 'Events Library', route: `/shows/${showId}/world?tab=events` },
+        ] : []),
+        { icon: '👗', label: 'Wardrobe', route: '/wardrobe' },
+        { icon: '🌍', label: 'Characters', route: '/character-registry?view=world' },
+        { icon: '🔗', label: 'Relationships', route: '/world-studio?tab=relationships' },
+        ...(showId ? [
+          { icon: '🎯', label: 'Career Goals', route: `/shows/${showId}/world?tab=goals` },
+        ] : []),
+      ],
+    },
+    {
+      zone: 'WORLD BUILDING',
+      items: [
+        { icon: '📜', label: 'World State', route: '/universe/world-state' },
+        { icon: '📍', label: 'World Locations', route: '/world-locations' },
+        { icon: '📅', label: 'Cultural Calendar', route: '/cultural-calendar' },
+        { icon: '📜', label: 'Cultural Memory', route: '/cultural-memory' },
+        { icon: '🏗️', label: 'Infrastructure', route: '/world-infrastructure' },
+        { icon: '⭐', label: 'Influencer Systems', route: '/influencer-systems' },
+      ],
+    },
+    {
+      zone: 'WRITE',
+      items: [
+        { icon: '✦', label: 'Storyteller', route: '/storyteller' },
+        { icon: '⚡', label: 'Short Stories', route: '/story-engine' },
+        { icon: '◇', label: 'Continuity', route: '/continuity' },
+        { icon: '🧠', label: 'Narrative Control', route: '/narrative-control' },
+        { icon: '▶', label: 'Novel Session', route: '/start' },
+        { icon: '📰', label: 'Press', route: '/press' },
+      ],
+    },
+    {
+      zone: 'STUDIO',
+      items: [
+        { icon: '🎨', label: 'Scene Studio', route: '/scene-library' },
+        { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
+        { icon: '📂', label: 'Assets', route: '/assets' },
+        { icon: '📦', label: 'Compositions', route: '/library' },
+      ],
+    },
+    {
+      zone: 'MANAGE',
+      items: [
+        { icon: '💵', label: 'CFO Agent', route: '/cfo',
+          children: [
+            { icon: '📊', label: 'Analytics', route: '/analytics/decisions' },
+            { icon: '💰', label: 'AI Costs', route: '/ai-costs' },
+          ],
+        },
+        { icon: '🗺️', label: 'Site Organizer', route: '/site-organizer' },
+        { icon: '🎨', label: 'Design Agent', route: '/design-agent' },
+        { icon: '🔍', label: 'Search', route: '/search' },
+        { icon: '🛡️', label: 'Admin', route: '/admin',
+          children: [
+            { icon: '📋', label: 'Audit Log', route: '/audit-log' },
+            { icon: '🩺', label: 'Diagnostics', route: '/diagnostics' },
+          ],
+        },
+        { icon: '🗑️', label: 'Recycle Bin', route: '/recycle-bin' },
+        { icon: '⚙️', label: 'Settings', route: '/settings' },
+      ],
+    },
+  ];
+}
 
 /* ─── Shows hook (uses showService with auth) ───────────────── */
 function useShows() {
@@ -254,7 +224,7 @@ function Sidebar({ isOpen, onClose }) {
           </NavLink>
 
           {/* Zones */}
-          {NAV.map(({ zone, items }) => {
+          {buildNav(shows).map(({ zone, items }) => {
             const zoneCollapsed = collapsedZones[zone];
             return (
             <div className="ps-zone" key={zone}>
