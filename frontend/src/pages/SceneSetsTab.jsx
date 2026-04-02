@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Crown, Tv, Film } from 'lucide-react';
 import './SceneSetsTab.css';
@@ -367,13 +367,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const menuRef = useRef(null);
   const isGenerating = isGeneratingProp;
   const progress = isGeneratingProp ? generationProgress : null;
-  // Cache-bust using set.updated_at — survives page refresh unlike local counters
-  const cacheBust = set.updated_at ? new Date(set.updated_at).getTime() : '';
-  const bustUrl = (url) => {
+  // Cache-bust using set.updated_at — memoized to avoid recalculating on every render
+  const cacheBust = useMemo(
+    () => set.updated_at ? new Date(set.updated_at).getTime() : '',
+    [set.updated_at]
+  );
+  const bustUrl = useCallback((url) => {
     if (!url || !cacheBust) return url;
     return `${url}${url.includes('?') ? '&' : '?'}v=${cacheBust}`;
-  };
-  const sortedAngles = [...(set.angles || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  }, [cacheBust]);
+
+  const sortedAngles = useMemo(
+    () => [...(set.angles || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [set.angles]
+  );
   const readyAngles = sortedAngles.filter(a => a.generation_status === 'complete').length;
   const totalAngles = sortedAngles.length;
   const pendingAngles = sortedAngles.filter(a => a.generation_status === 'pending');
@@ -384,9 +391,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [selectedAngleId, setSelectedAngleId] = useState(set.cover_angle_id || null);
   const selectedAngle = selectedAngleId ? sortedAngles.find(a => a.id === selectedAngleId) : null;
   const coverAngle = set.cover_angle_id ? sortedAngles.find(a => a.id === set.cover_angle_id) : null;
-  const heroImageRaw = selectedAngle?.still_image_url || coverAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const heroImageRaw = useMemo(
+    () => selectedAngle?.still_image_url || coverAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null,
+    [selectedAngle, coverAngle, sortedAngles, set.base_still_url]
+  );
   const isCoverAngle = (angleId) => set.cover_angle_id === angleId;
-  const heroImage = heroImageRaw ? bustUrl(heroImageRaw) : null;
+  const heroImage = useMemo(() => heroImageRaw ? bustUrl(heroImageRaw) : null, [heroImageRaw, bustUrl]);
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showAddAngle, setShowAddAngle] = useState(false);
@@ -600,6 +610,25 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <button onClick={() => { setShowMenu(false); menuUploadRef.current?.click(); }} disabled={isGenerating}>
                     <Upload size={12} /> Upload Images
                   </button>
+                  {selectedAngle?.still_image_url && selectedAngle.id !== set.cover_angle_id && (
+                    <button onClick={async () => {
+                      setShowMenu(false);
+                      try {
+                        const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ base_still_url: selectedAngle.still_image_url }),
+                        });
+                        if (!res.ok) throw new Error('Failed');
+                        if (onSetCoverAngle) onSetCoverAngle(set, selectedAngle.id);
+                        if (onToast) onToast(`Set "${selectedAngle.angle_label}" as base image`);
+                      } catch {
+                        if (onToast) onToast('Failed to set base image', 'error');
+                      }
+                    }}>
+                      <Camera size={12} /> Set as Base Image
+                    </button>
+                  )}
                   <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
                     <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
                   </button>
