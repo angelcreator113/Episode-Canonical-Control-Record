@@ -502,15 +502,20 @@ router.post('/:showId/events/ai-fix', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'warnings and events are required' });
     }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+    }
+
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const eventList = events.map(ev => {
-      const ep = episodes?.find(e => e.id === ev.used_in_episode_id);
+    // Limit data sent to Claude to avoid token overflow
+    const eventList = (events || []).slice(0, 30).map(ev => {
+      const ep = (episodes || []).find(e => e.id === ev.used_in_episode_id);
       return `- "${ev.name}" (type: ${ev.event_type}, prestige: ${ev.prestige}, dress: ${ev.dress_code || 'none'})${ep ? ` → Ep ${ep.episode_number}: ${ep.title}` : ' → unlinked'}`;
     }).join('\n');
 
-    const warningList = warnings.map(w => `- ${w.msg}`).join('\n');
+    const warningList = (warnings || []).slice(0, 10).map(w => `- ${w.msg || w}`).join('\n');
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -560,8 +565,10 @@ Guidelines:
 
     res.json({ success: true, data: suggestions });
   } catch (err) {
-    console.error('[WorldEvents] AI fix error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('[WorldEvents] AI fix error:', err.message, err.status || '');
+    const msg = err.message || 'AI fix failed';
+    const status = err.status === 401 ? 503 : 500;
+    res.status(status).json({ error: msg });
   }
 });
 
