@@ -188,10 +188,50 @@ router.put('/world/:showId/events/:eventId', optionalAuth, async (req, res) => {
 
     const setClauses = [];
     const replacements = { showId, eventId };
+    const integerFields = new Set([
+      'prestige', 'cost_coins', 'strictness', 'deadline_minutes',
+      'browse_pool_size', 'payment_amount', 'career_tier',
+    ]);
+    const jsonFields = new Set([
+      'dress_code_keywords', 'canon_consequences', 'seeds_future_events',
+      'required_ui_overlays', 'rewards', 'requirements',
+    ]);
+
+    const normalizeNullLike = (value) => {
+      if (value === null) return null;
+      if (typeof value === 'string') {
+        const trimmed = value.trim().toLowerCase();
+        if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return null;
+      }
+      return value;
+    };
 
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
-        const val = typeof updates[field] === 'object' ? JSON.stringify(updates[field]) : updates[field];
+        let val = normalizeNullLike(updates[field]);
+
+        if (field === 'career_tier' && typeof val === 'string') {
+          const tierMap = { emerging: 1, rising: 2, established: 3, elite: 4, icon: 5 };
+          if (tierMap[val.toLowerCase()] !== undefined) {
+            val = tierMap[val.toLowerCase()];
+          }
+        }
+
+        if (val !== null && integerFields.has(field)) {
+          const numeric = Number(val);
+          if (!Number.isFinite(numeric)) {
+            return res.status(400).json({
+              error: `Invalid value for ${field}`,
+              message: `${field} must be a number or null`,
+            });
+          }
+          val = Math.trunc(numeric);
+        }
+
+        if (jsonFields.has(field)) {
+          val = val === null ? null : JSON.stringify(val);
+        }
+
         setClauses.push(`${field} = :${field}`);
         replacements[field] = val;
       }
