@@ -1433,6 +1433,7 @@ The revised event should feel like a completely different experience from the si
           {eventDetailModal && (() => {
             const md = eventDetailModal;
             const updateField = async (field, value) => {
+              if (value === md[field]) return; // skip if unchanged
               try {
                 const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [field]: value });
                 if (res.data.success) {
@@ -1440,7 +1441,26 @@ The revised event should feel like a completely different experience from the si
                   setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
                   setEventDetailModal(updated);
                 }
-              } catch {}
+              } catch (err) {
+                console.warn(`[Event] Failed to save ${field}:`, err.response?.data?.error || err.message);
+              }
+            };
+            const updateMultipleFields = async (fields) => {
+              const changed = {};
+              for (const [k, v] of Object.entries(fields)) {
+                if (v !== md[k]) changed[k] = v;
+              }
+              if (Object.keys(changed).length === 0) return;
+              try {
+                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, changed);
+                if (res.data.success) {
+                  const updated = res.data.event;
+                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
+                  setEventDetailModal(updated);
+                }
+              } catch (err) {
+                console.warn('[Event] Batch save failed:', err.response?.data?.error || err.message);
+              }
             };
             const linkedScene = md.scene_set_id ? sceneSets.find(s => s.id === md.scene_set_id) : null;
             const diff = calcDifficulty(md);
@@ -1620,13 +1640,15 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                             }
 
                             setEventDetailModal(merged);
-                            // Save only AI-provided fields that actually changed
-                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id'];
+                            // Batch save all changed fields in one PUT
+                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias'];
+                            const toSave = {};
                             for (const key of saveable) {
                               if (merged[key] !== undefined && merged[key] !== md[key]) {
-                                updateField(key, merged[key]);
+                                toSave[key] = merged[key];
                               }
                             }
+                            if (Object.keys(toSave).length > 0) updateMultipleFields(toSave);
                             setToast('✨ Enhanced — review the filled fields');
                             setTimeout(() => setToast(null), 3000);
                           }
