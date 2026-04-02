@@ -1434,9 +1434,8 @@ The revised event should feel like a completely different experience from the si
           {eventDetailModal && (() => {
             const md = eventDetailModal;
             const updateField = async (field, value) => {
-              const updates = { ...md, [field]: value };
               try {
-                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, updates);
+                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [field]: value });
                 if (res.data.success) {
                   const updated = res.data.event;
                   setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
