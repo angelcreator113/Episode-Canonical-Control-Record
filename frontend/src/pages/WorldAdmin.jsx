@@ -1484,7 +1484,47 @@ The revised event should feel like a completely different experience from the si
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
                     <div><label style={S.fLabel}>Career Tier</label><input type="number" min={1} max={5} value={md.career_tier || 1} onChange={e => { setEventDetailModal({ ...md, career_tier: parseInt(e.target.value) || 1 }); }} onBlur={e => updateField('career_tier', parseInt(e.target.value) || 1)} style={S.sel} /></div>
-                    <div><label style={S.fLabel}>📍 Location</label><select value={md.scene_set_id || ''} onChange={e => updateField('scene_set_id', e.target.value || null)} style={S.sel}><option value="">None</option>{sceneSets.map(ss => <option key={ss.id} value={ss.id}>{ss.name}</option>)}</select></div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={S.fLabel}>📍 Location (Scene Set)</label>
+                      {md.scene_set_id && (() => {
+                        const ss = sceneSets.find(s => s.id === md.scene_set_id);
+                        return ss ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6 }}>
+                            {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {ss.name}</div>
+                              <div style={{ fontSize: 10, color: '#64748b' }}>{ss.scene_type?.replace(/_/g, ' ')}</div>
+                            </div>
+                            <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
+                          </div>
+                        ) : null;
+                      })()}
+                      {!md.scene_set_id && sceneSets.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6 }}>
+                          {sceneSets.map(ss => (
+                            <button key={ss.id} onClick={() => updateField('scene_set_id', ss.id)} style={{
+                              padding: 0, border: '2px solid #e2e8f0', borderRadius: 8, background: '#fff',
+                              cursor: 'pointer', overflow: 'hidden', textAlign: 'left', transition: 'border-color 0.12s',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                              {ss.base_still_url ? (
+                                <img src={ss.base_still_url} alt={ss.name} style={{ width: '100%', height: 60, objectFit: 'cover' }} />
+                              ) : (
+                                <div style={{ width: '100%', height: 60, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>📍</div>
+                              )}
+                              <div style={{ padding: '4px 6px' }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: '#1a1a2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ss.name}</div>
+                                <div style={{ fontSize: 8, color: '#94a3b8', textTransform: 'uppercase' }}>{ss.scene_type?.replace(/_/g, ' ')}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {!md.scene_set_id && sceneSets.length === 0 && (
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No scene sets — create them in Scene Sets first</div>
+                      )}
+                    </div>
                     <div>
                       <label style={S.fLabel}>Payment</label>
                       <select value={md.is_free ? 'free' : md.is_paid ? 'paid' : 'costs'} onChange={e => {
