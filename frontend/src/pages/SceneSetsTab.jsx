@@ -610,23 +610,28 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <button onClick={() => { setShowMenu(false); menuUploadRef.current?.click(); }} disabled={isGenerating}>
                     <Upload size={12} /> Upload Images
                   </button>
-                  {selectedAngle?.still_image_url && selectedAngle.id !== set.cover_angle_id && (
+                  {hasBase && sortedAngles.some(a => a.still_image_url) && (
                     <button onClick={async () => {
                       setShowMenu(false);
+                      // Use selected angle if it has an image, otherwise use the currently displayed hero
+                      const targetAngle = selectedAngle?.still_image_url
+                        ? selectedAngle
+                        : sortedAngles.find(a => a.still_image_url);
+                      if (!targetAngle) return;
                       try {
                         const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ base_still_url: selectedAngle.still_image_url }),
+                          body: JSON.stringify({ base_still_url: targetAngle.still_image_url }),
                         });
                         if (!res.ok) throw new Error('Failed');
-                        if (onSetCoverAngle) onSetCoverAngle(set, selectedAngle.id);
-                        if (onToast) onToast(`Set "${selectedAngle.angle_label}" as base image`);
+                        if (onSetCoverAngle) onSetCoverAngle(set, targetAngle.id);
+                        if (onToast) onToast(`Set "${targetAngle.angle_label}" as base image`);
                       } catch {
                         if (onToast) onToast('Failed to set base image', 'error');
                       }
                     }}>
-                      <Camera size={12} /> Set as Base Image
+                      <Camera size={12} /> Set {selectedAngle?.angle_label || 'Current'} as Base
                     </button>
                   )}
                   <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
