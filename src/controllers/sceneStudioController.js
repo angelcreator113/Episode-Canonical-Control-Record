@@ -1111,6 +1111,86 @@ exports.generateObject = async (req, res) => {
   }
 };
 
+// ── AI Image Transform (img2img + optional BG removal) ──
+
+exports.transformObject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { image_url, prompt, strength, remove_background } = req.body;
+
+    if (!image_url || typeof image_url !== 'string') {
+      return res.status(400).json({ success: false, error: 'image_url is required' });
+    }
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'prompt is required' });
+    }
+
+    if (!process.env.REPLICATE_API_TOKEN) {
+      return res.status(503).json({
+        success: false,
+        error: 'Image Transform requires REPLICATE_API_TOKEN to be configured on the server.',
+      });
+    }
+
+    // Use img2img to transform the source image
+    const result = await imageRestyleService.restyleBackground(image_url, id, {
+      customPrompt: prompt.trim(),
+      strength: typeof strength === 'number' ? Math.min(Math.max(strength, 0.1), 1.0) : 0.65,
+      userId: req.user?.id || null,
+    });
+
+    let finalUrl = result.restyled_url;
+    let bgRemoved = false;
+
+    // Optionally remove background for transparent PNG
+    if (remove_background) {
+      try {
+        const noBgUrl = await objectGenerationService.removeBackground(finalUrl, id);
+        if (noBgUrl) {
+          finalUrl = noBgUrl;
+          bgRemoved = true;
+        }
+      } catch (err) {
+        console.warn('[TransformObject] Background removal failed, returning with background:', err.message);
+      }
+    }
+
+    // Save as asset
+    let assetId = null;
+    try {
+      const asset = await Asset.create({
+        show_id: null,
+        type: 'image',
+        label: `Transform: ${prompt.trim().slice(0, 50)}`,
+        s3_url_raw: result.restyled_url,
+        s3_url_processed: finalUrl,
+        metadata: { transform_prompt: prompt.trim(), source_url: image_url, background_removed: bgRemoved },
+        usage_type: 'overlay',
+      });
+      assetId = asset.id;
+    } catch (err) {
+      console.warn('[TransformObject] Asset save failed:', err.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        options: [{
+          asset_id: assetId,
+          url: finalUrl,
+          width: 1024,
+          height: 1024,
+          background_removed: bgRemoved,
+        }],
+      },
+    });
+  } catch (error) {
+    console.error('Scene Studio transformObject error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
 // ── AI Object Generation (Scene Sets) ──
 
 exports.generateSceneSetObject = async (req, res) => {
@@ -1196,6 +1276,77 @@ exports.regenerateBackground = async (req, res) => {
     });
   } catch (error) {
     console.error('Scene Studio regenerateBackground error:', error);
+    const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+exports.regenerateSceneSetBackground = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mood, time_of_day, current_background_url, angle_id } = req.body;
+
+    const sceneSet = await SceneSet.findByPk(id, {
+      attributes: ['id', 'base_still_url', 'cover_angle_id'],
+    });
+    if (!sceneSet) {
+      return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
+
+    let targetAngle = null;
+    const preferredAngleId = angle_id || sceneSet.cover_angle_id || null;
+    if (preferredAngleId) {
+      targetAngle = await SceneAngle.findOne({
+        where: { id: preferredAngleId, scene_set_id: id },
+        attributes: ['id', 'still_image_url'],
+      });
+    }
+    if (!targetAngle) {
+      targetAngle = await SceneAngle.findOne({
+        where: { scene_set_id: id },
+        order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
+        attributes: ['id', 'still_image_url'],
+      });
+    }
+
+    const baseUrl = targetAngle?.still_image_url || sceneSet.base_still_url;
+    const bgUrl = current_background_url || baseUrl;
+    if (!bgUrl) {
+      return res.status(400).json({ success: false, error: 'No background to restyle' });
+    }
+
+    const result = await imageRestyleService.restyleBackground(bgUrl, id, {
+      timeOfDay: time_of_day || null,
+      mood: mood || null,
+      strength: 0.45,
+      userId: req.user?.id || null,
+    });
+
+    if (result.restyled_url) {
+      await SceneSet.update(
+        { base_still_url: result.restyled_url },
+        { where: { id } }
+      );
+
+      if (targetAngle?.id) {
+        await SceneAngle.update(
+          { still_image_url: result.restyled_url },
+          { where: { id: targetAngle.id, scene_set_id: id } }
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        restyled_url: result.restyled_url,
+        mood,
+        time_of_day,
+        angle_id: targetAngle?.id || null,
+      },
+    });
+  } catch (error) {
+    console.error('Scene Studio regenerateSceneSetBackground error:', error);
     const status = error.message.includes('limit') || error.message.includes('in progress') ? 429 : 500;
     res.status(status).json({ success: false, error: error.message });
   }

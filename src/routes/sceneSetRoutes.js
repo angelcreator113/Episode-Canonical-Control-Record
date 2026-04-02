@@ -36,6 +36,11 @@ const upload = multer({
   },
 });
 
+const uploadSceneSetImages = upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'images', maxCount: 20 },
+]);
+
 // Ensure generation_jobs table exists (safe to call multiple times)
 let generationJobsSynced = false;
 async function ensureGenerationJobsTable() {
@@ -219,17 +224,40 @@ router.delete('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) =>
 
 // ─── POST /:id/upload-base  — upload a custom base image ─────────────────────
 
-router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, upload.single('image'), async (req, res) => {
+router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, uploadSceneSetImages, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    if (!req.file) return res.status(400).json({ success: false, error: 'No image file provided' });
+    const uploaded = [
+      ...(req.files?.images || []),
+      ...(req.files?.image || []),
+    ].filter(Boolean);
+    if (uploaded.length === 0) return res.status(400).json({ success: false, error: 'No image file provided' });
 
-    const ext = req.file.mimetype === 'image/png' ? 'png'
-              : req.file.mimetype === 'image/webp' ? 'webp'
-              : 'jpg';
-    const ts = Date.now();
-    const s3Key = `scene-sets/${set.id}/angles/base/still-${ts}.${ext}`;
+    const uploadedUrls = [];
+    for (let i = 0; i < uploaded.length; i += 1) {
+      const file = uploaded[i];
+      const ext = file.mimetype === 'image/png' ? 'png'
+                : file.mimetype === 'image/webp' ? 'webp'
+                : 'jpg';
+      const ts = Date.now();
+      const s3Key = `scene-sets/${set.id}/angles/base/still-${ts}-${i}.${ext}`;
+
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: s3Key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+        CacheControl: 'max-age=31536000',
+      }));
+
+      uploadedUrls.push({
+        url: `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`,
+        originalName: file.originalname || `Upload ${i + 1}`,
+      });
+    }
+
+    const primaryUrl = uploadedUrls[0].url;
 
     // Clean up old base image from S3
     if (set.base_still_url) {
@@ -243,29 +271,57 @@ router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, upload.si
       } catch (_) { /* best-effort cleanup */ }
     }
 
-    await s3.send(new PutObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: s3Key,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-      CacheControl: 'max-age=31536000',
-    }));
-
-    const stillUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
-
     await set.update({
-      base_still_url: stillUrl,
+      base_still_url: primaryUrl,
       base_runway_seed: `uploaded-${Date.now()}`,
       generation_status: 'complete',
     });
 
-    // Clear stale angle thumbnails — they were generated from the old base image
-    await SceneAngle.update(
-      { still_image_url: null, video_clip_url: null, generation_status: 'pending' },
-      { where: { scene_set_id: set.id } }
-    );
+    // When multiple images are uploaded, create ready-to-use angle entries.
+    let createdAngles = [];
+    if (uploadedUrls.length > 1) {
+      const existingCount = await SceneAngle.count({ where: { scene_set_id: set.id } });
+      createdAngles = await SceneAngle.bulkCreate(
+        uploadedUrls.map((img, idx) => {
+          const baseName = String(img.originalName || `Upload ${idx + 1}`)
+            .replace(/\.[^.]+$/, '')
+            .replace(/[_-]+/g, ' ')
+            .trim()
+            .slice(0, 100);
+          return {
+            scene_set_id: set.id,
+            angle_label: 'OTHER',
+            angle_name: baseName || `Uploaded Angle ${idx + 1}`,
+            angle_description: 'Uploaded reference angle',
+            camera_direction: 'Uploaded still reference for this room angle.',
+            generation_status: 'complete',
+            still_image_url: img.url,
+            sort_order: existingCount + idx,
+          };
+        }),
+        { returning: true }
+      );
 
-    res.json({ success: true, data: { stillUrl, seed: set.base_runway_seed } });
+      if (!set.cover_angle_id && createdAngles[0]?.id) {
+        await set.update({ cover_angle_id: createdAngles[0].id });
+      }
+    } else {
+      // Single-image upload keeps current behavior: reset angle thumbnails to regenerate from new base.
+      await SceneAngle.update(
+        { still_image_url: null, video_clip_url: null, generation_status: 'pending' },
+        { where: { scene_set_id: set.id } }
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        stillUrl: primaryUrl,
+        seed: set.base_runway_seed,
+        uploadedCount: uploadedUrls.length,
+        angleCountCreated: createdAngles.length,
+      },
+    });
   } catch (err) {
     console.error('Scene Sets POST /:id/upload-base error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -311,24 +367,77 @@ router.post('/:id/generate-base', validateUUIDParam('id'), optionalAuth, async (
 
 const VALID_ANGLE_LABELS = ['WIDE', 'CLOSET', 'VANITY', 'WINDOW', 'DOORWAY', 'ESTABLISHING', 'ACTION', 'CLOSE', 'OVERHEAD', 'OTHER'];
 
+function buildFallbackAngleSuggestions(set, existingLabels = []) {
+  const candidates = [
+    {
+      angle_label: 'ESTABLISHING',
+      angle_name: `${set.name || 'Location'} Overview`,
+      camera_direction: 'Wide establishing view from the room edge, framing key architectural landmarks and entrances.',
+      description: 'Introduces layout, status cues, and immediate spatial context for scene transitions.',
+      beat_affinity: [1, 2],
+    },
+    {
+      angle_label: 'WIDE',
+      angle_name: 'Primary Wide',
+      camera_direction: 'Three-quarter wide shot covering the main action zone with headroom for movement.',
+      description: 'Best for dialogue movement and scene geography while preserving room identity.',
+      beat_affinity: [2, 3, 4],
+    },
+    {
+      angle_label: 'DOORWAY',
+      angle_name: 'Entrance Frame',
+      camera_direction: 'Camera placed near the doorway to capture arrivals and exits with depth into the room.',
+      description: 'Supports reveals, interruptions, and social power shifts through threshold staging.',
+      beat_affinity: [1, 4],
+    },
+    {
+      angle_label: 'WINDOW',
+      angle_name: 'Window Side',
+      camera_direction: 'Side angle near windows to use natural backlight and contour faces against the interior.',
+      description: 'Useful for reflective beats and visual contrast between interior and exterior mood.',
+      beat_affinity: [3, 5],
+    },
+    {
+      angle_label: 'CLOSE',
+      angle_name: 'Detail Close',
+      camera_direction: 'Tight framing on a key decor plane or character position to emphasize texture and stakes.',
+      description: 'Highlights emotional pressure and luxury detail without losing scene continuity.',
+      beat_affinity: [4, 5],
+    },
+  ];
+
+  const existingSet = new Set(existingLabels || []);
+  return candidates
+    .filter((c) => !existingSet.has(c.angle_label))
+    .slice(0, 5);
+}
+
 router.post('/:id/suggest-angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id, {
       include: [{ model: SceneAngle, as: 'angles' }],
     });
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    if (!set.canonical_description) {
-      return res.status(400).json({ success: false, error: 'Scene set needs a canonical description first' });
-    }
 
     const existingLabels = (set.angles || []).map(a => a.angle_label);
     const sceneType = set.scene_type || 'OTHER';
+    const descriptionContext = [
+      set.canonical_description,
+      set.script_context,
+      set.base_runway_prompt,
+      set.name ? `Location name: ${set.name}` : null,
+      set.scene_type ? `Location type: ${set.scene_type}` : null,
+    ].filter(Boolean).join('\n');
+
+    if (!descriptionContext) {
+      return res.status(400).json({ success: false, error: 'Add a scene set name or description first' });
+    }
 
     const prompt = `You are a cinematic director planning camera angles and room coverage for a scene location.
 
 Scene name: ${set.name}
 Scene type: ${sceneType}
-Description: ${set.canonical_description}
+Description: ${descriptionContext}
 ${set.mood_tags?.length ? `Mood: ${set.mood_tags.join(', ')}` : ''}
 ${set.aesthetic_tags?.length ? `Aesthetic: ${set.aesthetic_tags.join(', ')}` : ''}
 ${existingLabels.length ? `Already created angles: ${existingLabels.join(', ')} — do NOT suggest duplicates of these.` : ''}
@@ -346,23 +455,36 @@ Return ONLY a JSON array with objects containing:
 
 Return raw JSON only, no markdown or explanation.`;
 
-    const client = getAnthropicClient();
-    const message = await client.messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: 1500,
-      temperature: 0.7,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = message.content[0].text.trim();
     let suggestions;
     try {
-      suggestions = JSON.parse(text);
-    } catch {
-      // Try to extract JSON array from response
-      const match = text.match(/\[[\s\S]*\]/);
-      if (match) suggestions = JSON.parse(match[0]);
-      else throw new Error('Could not parse AI suggestions');
+      const client = getAnthropicClient();
+      const message = await client.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 1500,
+        temperature: 0.7,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const text = message.content[0].text.trim();
+      try {
+        suggestions = JSON.parse(text);
+      } catch {
+        // Try to extract JSON array from response
+        const match = text.match(/\[[\s\S]*\]/);
+        if (match) suggestions = JSON.parse(match[0]);
+        else throw new Error('Could not parse AI suggestions');
+      }
+    } catch (aiErr) {
+      console.warn('Scene Sets suggest-angles AI unavailable, using fallback suggestions:', aiErr?.message || aiErr);
+      suggestions = buildFallbackAngleSuggestions(set, existingLabels);
+      return res.json({
+        success: true,
+        data: suggestions,
+        meta: {
+          source: 'fallback',
+          warning: 'AI suggestions unavailable; returned default cinematic angle set.',
+        },
+      });
     }
 
     // Validate and sanitize
@@ -1088,6 +1210,9 @@ router.put('/:id/canvas', validateUUIDParam('id'), optionalAuth, asyncHandler(sc
 
 // POST /api/v1/scene-sets/:id/generate-object - AI object generation (DALL-E 3) for scene sets
 router.post('/:id/generate-object', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.generateSceneSetObject));
+
+// POST /api/v1/scene-sets/:id/regenerate-background - AI background variation for scene sets
+router.post('/:id/regenerate-background', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.regenerateSceneSetBackground));
 
 // POST /api/v1/scene-sets/:id/angles/:angleId/generate-depth - Depth map estimation for angle
 router.post('/:id/angles/:angleId/generate-depth', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.generateAngleDepth));

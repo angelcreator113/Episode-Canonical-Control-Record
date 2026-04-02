@@ -5,7 +5,7 @@ import {
   Undo2, Redo2, Circle, Hexagon, Eye, EyeOff,
   Sliders, Sparkles, History, ChevronDown, ChevronUp,
   ImagePlus, Upload, MousePointer, FlipHorizontal, Scissors,
-  Search
+  Search, ChevronRight, SplitSquareHorizontal
 } from 'lucide-react';
 
 /**
@@ -118,6 +118,7 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showPromptSuggestions, setShowPromptSuggestions] = useState(false);
+  const [showBeforeAfter, setShowBeforeAfter] = useState(false);
 
   // Prompt suggestions based on common use cases
   const promptSuggestions = useMemo(() => [
@@ -128,6 +129,25 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
     'Sky with clouds',
     'Greenery and foliage',
   ], []);
+
+  // Quick preset chips for common fill operations
+  const quickPresets = useMemo(() => [
+    { icon: '🧹', label: 'Remove', prompt: '' },
+    { icon: '🪵', label: 'Wood floor', prompt: 'Polished hardwood floor with natural grain' },
+    { icon: '🌿', label: 'Greenery', prompt: 'Lush green foliage and plants' },
+    { icon: '☁️', label: 'Sky', prompt: 'Blue sky with soft clouds' },
+    { icon: '🧱', label: 'Brick wall', prompt: 'Exposed brick wall texture' },
+    { icon: '🏖️', label: 'Sand', prompt: 'Smooth sandy beach surface' },
+    { icon: '💧', label: 'Water', prompt: 'Calm reflective water surface' },
+    { icon: '🔲', label: 'Blur', prompt: 'Soft focused background blur' },
+  ], []);
+
+  // Processing step tracking
+  const processingStep = useMemo(() => {
+    if (isSegmenting) return 'detecting';
+    if (isProcessing) return 'filling';
+    return 'idle';
+  }, [isSegmenting, isProcessing]);
 
   // Initialize the overlay canvas
   useEffect(() => {
@@ -204,9 +224,9 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
     return { x, y };
   }, [zoom, panX, panY]);
 
-  // Visible mask color for display (red semi-transparent)
-  const MASK_COLOR = 'rgba(220, 53, 53, 0.5)';
-  const MASK_COLOR_SOLID = 'rgba(220, 53, 53, 0.8)';
+  // Visible mask color for display (warm coral, easier on the eyes)
+  const MASK_COLOR = 'rgba(230, 126, 86, 0.45)';
+  const MASK_COLOR_SOLID = 'rgba(230, 126, 86, 0.7)';
 
   // Apply soft brush effect (gaussian blur on edges) — visible red for display
   const applySoftBrush = useCallback((ctx, x, y, size) => {
@@ -217,7 +237,7 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
     const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
     gradient.addColorStop(0, MASK_COLOR_SOLID);
     gradient.addColorStop(0.5, MASK_COLOR);
-    gradient.addColorStop(1, 'rgba(220, 53, 53, 0)');
+    gradient.addColorStop(1, 'rgba(230, 126, 86, 0)');
     return gradient;
   }, []);
 
@@ -1008,11 +1028,13 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
           transformOrigin: '0 0',
           width: canvasWidth,
           height: canvasHeight,
+          opacity: showBeforeAfter ? 0 : 1,
+          transition: 'opacity 0.2s ease',
         }}
       >
         {/* Semi-transparent backdrop with adjustable opacity */}
-        <div 
-          className="erase-brush-backdrop" 
+        <div
+          className="erase-brush-backdrop"
           style={{ opacity: maskOpacity }}
         />
         
@@ -1034,7 +1056,7 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
                 ? 'crosshair'
                 : drawMode === 'lasso'
                   ? 'crosshair'
-                  : `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize}" height="${brushSize}" viewBox="0 0 ${brushSize} ${brushSize}"><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 1}" fill="${brushMode === 'soft' ? 'rgba(255,255,255,0.3)' : 'none'}" stroke="%23667eea" stroke-width="2"/></svg>') ${brushSize/2} ${brushSize/2}, crosshair`,
+                  : `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${Math.min(brushSize, 64)}" height="${Math.min(brushSize, 64)}" viewBox="0 0 ${Math.min(brushSize, 64)} ${Math.min(brushSize, 64)}"><circle cx="${Math.min(brushSize, 64)/2}" cy="${Math.min(brushSize, 64)/2}" r="${Math.min(brushSize, 64)/2 - 1}" fill="${brushMode === 'soft' ? 'rgba(230,126,86,0.15)' : 'none'}" stroke="%23B8962E" stroke-width="1.5" stroke-dasharray="${brushMode === 'soft' ? 'none' : '3,2'}"/><circle cx="${Math.min(brushSize, 64)/2}" cy="${Math.min(brushSize, 64)/2}" r="1.5" fill="%23B8962E"/></svg>') ${Math.min(brushSize, 64)/2} ${Math.min(brushSize, 64)/2}, crosshair`,
           }}
         />
 
@@ -1096,6 +1118,11 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
         style={{ display: 'none' }}
         onChange={handleFileSelect}
       />
+
+      {/* Before/After comparison label */}
+      {showBeforeAfter && (
+        <div className="erase-before-after-label">Original</div>
+      )}
 
       {/* Bottom-docked toolbar */}
       <div className="erase-toolbar">
@@ -1255,7 +1282,7 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
           </div>
 
           <div className="erase-toolbar-group">
-            <button type="button" className="erase-brush-advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
+            <button type="button" className="erase-brush-advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)} title="Advanced settings">
               <Sliders size={12} />
               {showAdvanced ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
             </button>
@@ -1266,6 +1293,17 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
             ) : (
               <button type="button" className="erase-brush-opacity-btn" onClick={() => setMaskOpacity(0.6)} title="Show mask overlay">
                 <EyeOff size={14} />
+              </button>
+            )}
+            {backgroundUrl && (
+              <button
+                type="button"
+                className={`erase-before-after-toggle ${showBeforeAfter ? 'active' : ''}`}
+                onClick={() => setShowBeforeAfter(!showBeforeAfter)}
+                title="Toggle before/after view"
+              >
+                <SplitSquareHorizontal size={12} />
+                <span className="erase-btn-label">B/A</span>
               </button>
             )}
           </div>
@@ -1357,14 +1395,14 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
             </label>
             <button
               type="button"
-              className="erase-brush-btn primary"
+              className={`erase-brush-btn primary ${isProcessing ? 'processing' : ''}`}
               onClick={handleApply}
               disabled={!hasStrokes || isProcessing}
             >
               {isProcessing ? (
                 <>
                   <Loader size={14} className="erase-brush-spinner" />
-                  Processing...
+                  <span className="erase-btn-label">Processing...</span>
                 </>
               ) : (
                 <>
@@ -1375,6 +1413,24 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
             </button>
           </div>
         </div>
+
+        {/* Quick preset chips */}
+        {!isProcessing && !isSegmenting && (
+          <div className="erase-quick-presets">
+            {quickPresets.map((preset) => (
+              <button
+                type="button"
+                key={preset.label}
+                className={`erase-quick-preset ${customPrompt === preset.prompt ? 'active' : ''}`}
+                onClick={() => setCustomPrompt(preset.prompt)}
+                title={preset.prompt || 'Auto-remove (no prompt)'}
+              >
+                <span className="erase-quick-preset-icon">{preset.icon}</span>
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Prompt suggestions dropdown */}
         {showPromptSuggestions && (
@@ -1395,7 +1451,7 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
           </div>
         )}
 
-        {/* Advanced options panel (slides up from toolbar) */}
+        {/* Advanced options panel */}
         {showAdvanced && (
           <div className="erase-brush-advanced">
             <div className="erase-brush-slider-group">
@@ -1409,22 +1465,36 @@ const EraseBrushCanvas = forwardRef(function EraseBrushCanvas({
           </div>
         )}
 
-        {/* Processing indicator */}
-        {isSegmenting && (
-          <div className="erase-brush-progress">AI is detecting the object... This may take a few seconds.</div>
-        )}
-        {isProcessing && (
-          <div className="erase-brush-progress">AI is filling the selected area. This may take 10-30 seconds...</div>
+        {/* Processing step indicator */}
+        {(isSegmenting || isProcessing) && (
+          <div className="erase-progress-steps">
+            <div className={`erase-progress-step ${processingStep === 'detecting' ? 'active' : (processingStep === 'filling' ? 'done' : '')}`}>
+              <span className="erase-progress-dot" />
+              Analyzing
+            </div>
+            <ChevronRight size={10} className="erase-progress-arrow" />
+            <div className={`erase-progress-step ${processingStep === 'filling' ? 'active' : ''}`}>
+              <span className="erase-progress-dot" />
+              {customPrompt ? 'Generating' : 'Removing'}
+            </div>
+            <ChevronRight size={10} className="erase-progress-arrow" />
+            <div className="erase-progress-step">
+              <span className="erase-progress-dot" />
+              Done
+            </div>
+          </div>
         )}
 
         {/* Keyboard shortcuts hint */}
-        <div className="erase-brush-shortcuts">
-          {drawMode === 'smart'
-            ? 'Click to include • Alt+click to exclude • Each click refines • B brush • L lasso'
-            : drawMode === 'brush'
-              ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • S smart'
-              : 'Click to add points • Backspace undo point • Enter close • Esc cancel'}
-        </div>
+        {!isProcessing && !isSegmenting && (
+          <div className="erase-brush-shortcuts">
+            {drawMode === 'smart'
+              ? 'Click to include • Alt+click to exclude • Each click refines • B brush • L lasso'
+              : drawMode === 'brush'
+                ? '[ / ] size • Ctrl+Z undo • B brush • L lasso • S smart'
+                : 'Click to add points • Backspace undo point • Enter close • Esc cancel'}
+          </div>
+        )}
       </div>
     </div>
   );
