@@ -493,7 +493,7 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
 });
 
 // AI event diversification suggestions
-router.post('/world/:showId/events/ai-fix', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), optionalAuth, async (req, res) => {
   try {
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({
