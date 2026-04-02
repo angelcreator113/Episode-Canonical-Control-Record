@@ -165,9 +165,17 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
 // PUT /api/v1/world/:showId/events/:eventId
 // ═══════════════════════════════════════════
 
-router.put('/world/:showId/events/:eventId', optionalAuth, async (req, res) => {
+router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), optionalAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({
+        error: 'Invalid request body',
+        message: 'Request body must be valid JSON',
+        code: 'INVALID_JSON_BODY',
+      });
+    }
+
     const updates = req.body;
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
