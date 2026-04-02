@@ -2779,6 +2779,12 @@
   background: #f0ece4;
 }
 
+.scene-studio-action-bar-popup-divider {
+  height: 1px;
+  background: #e8e4dc;
+  margin: 3px 6px;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    ERASE BRUSH CANVAS — Bottom-docked toolbar
    ═══════════════════════════════════════════════════════════════ */

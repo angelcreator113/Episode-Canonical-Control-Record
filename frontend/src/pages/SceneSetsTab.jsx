@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Crown, Tv, Film } from 'lucide-react';
 import './SceneSetsTab.css';
@@ -361,18 +361,26 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, generatingId, generationProgress, allShows, allEpisodes, onLoadEpisodes, onToast }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, allShows, allEpisodes, onLoadEpisodes, onToast }) {
   const fileInputRef = useRef(null);
+  const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
-  const isGenerating = generatingId === set.id;
-  const progress = generatingId === set.id ? generationProgress : null;
-  // Cache-bust using set.updated_at — survives page refresh unlike local counters
-  const cacheBust = set.updated_at ? new Date(set.updated_at).getTime() : '';
-  const bustUrl = (url) => {
+  const isGenerating = isGeneratingProp;
+  const progress = isGeneratingProp ? generationProgress : null;
+  // Cache-bust using set.updated_at — memoized to avoid recalculating on every render
+  const cacheBust = useMemo(
+    () => set.updated_at ? new Date(set.updated_at).getTime() : '',
+    [set.updated_at]
+  );
+  const bustUrl = useCallback((url) => {
     if (!url || !cacheBust) return url;
     return `${url}${url.includes('?') ? '&' : '?'}v=${cacheBust}`;
-  };
-  const sortedAngles = [...(set.angles || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  }, [cacheBust]);
+
+  const sortedAngles = useMemo(
+    () => [...(set.angles || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+    [set.angles]
+  );
   const readyAngles = sortedAngles.filter(a => a.generation_status === 'complete').length;
   const totalAngles = sortedAngles.length;
   const pendingAngles = sortedAngles.filter(a => a.generation_status === 'pending');
@@ -383,14 +391,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [selectedAngleId, setSelectedAngleId] = useState(set.cover_angle_id || null);
   const selectedAngle = selectedAngleId ? sortedAngles.find(a => a.id === selectedAngleId) : null;
   const coverAngle = set.cover_angle_id ? sortedAngles.find(a => a.id === set.cover_angle_id) : null;
-  const heroImageRaw = selectedAngle?.still_image_url || coverAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null;
+  const heroImageRaw = useMemo(
+    () => selectedAngle?.still_image_url || coverAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null,
+    [selectedAngle, coverAngle, sortedAngles, set.base_still_url]
+  );
   const isCoverAngle = (angleId) => set.cover_angle_id === angleId;
-  const heroImage = heroImageRaw ? bustUrl(heroImageRaw) : null;
+  const heroImage = useMemo(() => heroImageRaw ? bustUrl(heroImageRaw) : null, [heroImageRaw, bustUrl]);
   const [showBaseLightbox, setShowBaseLightbox] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
   const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+  const angleUploadRef = useRef(null);
+  const [angleUploadFile, setAngleUploadFile] = useState(null);
+  const [angleUploadPreview, setAngleUploadPreview] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [editDesc, setEditDesc] = useState(set.canonical_description || '');
@@ -452,8 +466,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       angle_description: newAngle.angle_description.trim() || null,
       camera_direction: newAngle.camera_direction.trim() || null,
       beat_affinity: beatArr,
+      _imageFile: angleUploadFile || null,
     });
     setNewAngle({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
+    setAngleUploadFile(null);
+    setAngleUploadPreview(null);
     setShowAddAngle(false);
     setAddingAngle(false);
   };
@@ -590,6 +607,28 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <Sparkles size={12} /> Seed Default Angles
                     </button>
                   )}
+                  <button onClick={() => { setShowMenu(false); menuUploadRef.current?.click(); }} disabled={isGenerating}>
+                    <Upload size={12} /> Upload Images
+                  </button>
+                  {selectedAngle?.still_image_url && selectedAngle.id !== set.cover_angle_id && (
+                    <button onClick={async () => {
+                      setShowMenu(false);
+                      try {
+                        const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ base_still_url: selectedAngle.still_image_url }),
+                        });
+                        if (!res.ok) throw new Error('Failed');
+                        if (onSetCoverAngle) onSetCoverAngle(set, selectedAngle.id);
+                        if (onToast) onToast(`Set "${selectedAngle.angle_label}" as base image`);
+                      } catch {
+                        if (onToast) onToast('Failed to set base image', 'error');
+                      }
+                    }}>
+                      <Camera size={12} /> Set as Base Image
+                    </button>
+                  )}
                   <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
                     <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
                   </button>
@@ -601,6 +640,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               document.body
             )}
           </div>
+          {/* Hidden file input for kebab menu upload */}
+          <input
+            ref={menuUploadRef}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length > 0) onUploadBase(set, files);
+              e.target.value = '';
+            }}
+          />
         </div>
 
         {selectedAngle?.video_clip_url && (
@@ -829,7 +881,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         {showAddAngle && (
           <div className="scene-sets-add-angle-form">
             <div className="scene-sets-add-angle-row">
-              <div className="scene-sets-create-field"><label>Label</label><input type="text" placeholder="e.g. WIDE" value={newAngle.angle_label} onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))} autoFocus /></div>
+              <div className="scene-sets-create-field"><label>Label</label><select value={newAngle.angle_label} onChange={e => setNewAngle(a => ({ ...a, angle_label: e.target.value }))} autoFocus><option value="">Select...</option><option value="WIDE">WIDE</option><option value="CLOSE">CLOSE</option><option value="ESTABLISHING">ESTABLISHING</option><option value="WINDOW">WINDOW</option><option value="DOORWAY">DOORWAY</option><option value="OVERHEAD">OVERHEAD</option><option value="ACTION">ACTION</option><option value="VANITY">VANITY</option><option value="CLOSET">CLOSET</option><option value="OTHER">OTHER</option></select></div>
               <div className="scene-sets-create-field"><label>Name</label><input type="text" placeholder="e.g. Wide Morning" value={newAngle.angle_name} onChange={e => setNewAngle(a => ({ ...a, angle_name: e.target.value }))} /></div>
               <div className="scene-sets-create-field"><label>Beats <span className="scene-sets-optional">(comma-sep)</span></label><input type="text" placeholder="1,2,3" value={newAngle.beat_affinity} onChange={e => setNewAngle(a => ({ ...a, beat_affinity: e.target.value }))} /></div>
             </div>
@@ -846,11 +898,46 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 </button>
               )}
             </div>
+            {/* Upload image for this angle */}
+            <div className="scene-sets-angle-upload-row">
+              <input
+                ref={angleUploadRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setAngleUploadFile(file);
+                  const reader = new FileReader();
+                  reader.onload = () => setAngleUploadPreview(reader.result);
+                  reader.readAsDataURL(file);
+                  e.target.value = '';
+                }}
+              />
+              {angleUploadPreview ? (
+                <div className="scene-sets-angle-upload-preview">
+                  <img src={angleUploadPreview} alt="Upload preview" />
+                  <button type="button" onClick={() => { setAngleUploadFile(null); setAngleUploadPreview(null); }} className="scene-sets-angle-upload-remove">
+                    <X size={10} />
+                  </button>
+                  <span className="scene-sets-angle-upload-name">{angleUploadFile?.name}</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="scene-sets-angle-upload-btn"
+                  onClick={() => angleUploadRef.current?.click()}
+                >
+                  <Upload size={12} /> Upload Image <span className="scene-sets-optional">(optional — or AI generates)</span>
+                </button>
+              )}
+            </div>
             <div className="scene-sets-add-angle-actions">
               <button className="scene-sets-btn-generate" onClick={handleSubmitAngle} disabled={addingAngle || !newAngle.angle_label.trim() || !newAngle.angle_name.trim()}>
                 {addingAngle ? <><Loader size={12} className="spin" /> Adding...</> : <><Plus size={12} /> Add</>}
               </button>
-              <button className="scene-sets-btn-delete" onClick={() => setShowAddAngle(false)}>Cancel</button>
+              <button className="scene-sets-btn-delete" onClick={() => { setShowAddAngle(false); setAngleUploadFile(null); setAngleUploadPreview(null); }}>Cancel</button>
             </div>
           </div>
         )}
@@ -1005,7 +1092,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   );
 }, (prev, next) => {
   // Only re-render when meaningful rendering data changes, not on every poll
-  if (prev.generatingId !== next.generatingId) return false;
+  if (prev.isGeneratingProp !== next.isGeneratingProp) return false;
   if (prev.set.updated_at !== next.set.updated_at) return false;
   if (prev.generationProgress !== next.generationProgress) return false;
   const ps = prev.set, ns = next.set;
@@ -1037,8 +1124,24 @@ export default function SceneSetsTab() {
   const [sets, setSets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [generatingId, setGeneratingId] = useState(null);
-  const [generationProgress, setGenerationProgress] = useState(null);
+  const [generatingIds, setGeneratingIds] = useState(new Set());
+  const [generationProgressMap, setGenerationProgressMap] = useState({});
+
+  // Helpers to manage multi-set generation tracking
+  const startGenerating = useCallback((id) => {
+    setGeneratingIds(prev => { const next = new Set(prev); next.add(id); return next; });
+  }, []);
+  const stopGenerating = useCallback((id) => {
+    setGeneratingIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+    setGenerationProgressMap(prev => { const next = { ...prev }; delete next[id]; return next; });
+  }, []);
+  const setProgress = useCallback((id, progressOrFn) => {
+    setGenerationProgressMap(prev => ({
+      ...prev,
+      [id]: typeof progressOrFn === 'function' ? progressOrFn(prev[id]) : progressOrFn,
+    }));
+  }, []);
+
   const [toast, setToast] = useState(null);
   const [filterType, setFilterType] = useState('ALL');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -1118,7 +1221,7 @@ export default function SceneSetsTab() {
   }, []);
 
   const handleGenerateBase = async (set) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
         method: 'POST',
@@ -1141,12 +1244,12 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err.message || 'Generation failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
   const handleRegenerateBase = async (set) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
         method: 'POST',
@@ -1170,7 +1273,7 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err.message || 'Regeneration failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
@@ -1190,7 +1293,7 @@ export default function SceneSetsTab() {
   };
 
   const handleUploadBase = async (set, files) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const formData = new FormData();
       const fileList = Array.isArray(files) ? files : [files].filter(Boolean);
@@ -1213,12 +1316,12 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
   const handleGenerateAngle = async (set, angle) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
       if (!res.ok) {
@@ -1238,7 +1341,7 @@ export default function SceneSetsTab() {
     } catch {
       showToast('Angle generation failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
@@ -1247,17 +1350,17 @@ export default function SceneSetsTab() {
       ? set.angles?.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed') || []
       : set.angles?.filter(a => a.generation_status === 'pending') || [];
     if (targets.length === 0) return;
-    setGeneratingId(set.id);
+    startGenerating(set.id);
 
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
-    setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     try {
       // Fire all generation requests and collect job IDs
       const jobMap = [];
       for (let i = 0; i < targets.length; i++) {
         progressAngles[i].status = 'generating';
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], currentIndex: i }));
+        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], currentIndex: i }));
         try {
           const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
           if (!res.ok) throw new Error('Failed');
@@ -1265,7 +1368,7 @@ export default function SceneSetsTab() {
           jobMap.push({ index: i, jobId: json.data.jobId });
         } catch {
           progressAngles[i].status = 'failed';
-          setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
         }
       }
 
@@ -1282,7 +1385,7 @@ export default function SceneSetsTab() {
           progressAngles[index].status = 'failed';
           failed++;
         }
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
       });
 
       await Promise.all(pollPromises);
@@ -1296,18 +1399,18 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err?.message || 'Generation failed', 'error');
     } finally {
-      setTimeout(() => setGenerationProgress(null), 3000);
-      setGeneratingId(null);
+      setTimeout(() => stopGenerating(set.id), 3000);
+      stopGenerating(set.id);
     }
   };
 
   const handleRetryFailed = async (set) => {
     const targets = set.angles?.filter(a => a.generation_status === 'failed') || [];
     if (targets.length === 0) return;
-    setGeneratingId(set.id);
+    startGenerating(set.id);
 
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
-    setGenerationProgress({ angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     try {
       // Fire all retry requests to get job IDs
@@ -1322,7 +1425,7 @@ export default function SceneSetsTab() {
         } catch {
           progressAngles[i].status = 'failed';
         }
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles] }));
+        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
       }
 
       // Poll all jobs in parallel
@@ -1338,7 +1441,7 @@ export default function SceneSetsTab() {
           progressAngles[index].status = 'failed';
           failed++;
         }
-        setGenerationProgress(p => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
       });
 
       await Promise.all(pollPromises);
@@ -1352,8 +1455,8 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err?.message || 'Retry failed', 'error');
     } finally {
-      setTimeout(() => setGenerationProgress(null), 3000);
-      setGeneratingId(null);
+      setTimeout(() => stopGenerating(set.id), 3000);
+      stopGenerating(set.id);
     }
   };
 
@@ -1384,7 +1487,7 @@ export default function SceneSetsTab() {
       // If a generation job was auto-queued, poll it and update when done
       if (json.jobId) {
         showToast(`Created "${setName}" — generating base image...`);
-        if (json.data?.id) setGeneratingId(json.data.id);
+        if (json.data?.id) startGenerating(json.data.id);
         const job = await pollJob(json.jobId);
         if (job.status === 'completed') {
           showToast(`Base image generated for "${setName}"`);
@@ -1392,7 +1495,7 @@ export default function SceneSetsTab() {
           showToast(job.error || 'Base generation failed', 'error');
         }
         await fetchSets();
-        setGeneratingId(null);
+        if (json.data?.id) stopGenerating(json.data.id);
       } else {
         showToast(`Created "${setName}"`);
       }
@@ -1500,21 +1603,41 @@ export default function SceneSetsTab() {
 
   const handleAddAngle = async (set, angleData) => {
     try {
+      const { _imageFile, ...apiData } = angleData;
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(angleData),
+        body: JSON.stringify(apiData),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Server error (${res.status})`);
+      }
       const json = await res.json();
       const newAngle = json.data;
-      showToast(`Added angle "${angleData.angle_label}"`);
-      await fetchSets();
 
-      // Auto-generate the angle image if the scene set has a base image
-      if (newAngle?.id && set.base_image_url) {
-        handleGenerateAngle(set, newAngle);
+      if (_imageFile && newAngle?.id) {
+        // Upload the user's image to this angle
+        const formData = new FormData();
+        formData.append('images', _imageFile);
+        const uploadRes = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${newAngle.id}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (uploadRes.ok) {
+          showToast(`Added angle "${angleData.angle_label}" with uploaded image`);
+        } else {
+          showToast('Angle created but image upload failed', 'error');
+        }
+      } else {
+        showToast(`Added angle "${angleData.angle_label}"`);
+        // Auto-generate the angle image if the scene set has a base image
+        if (newAngle?.id && set.base_image_url) {
+          handleGenerateAngle(set, newAngle);
+        }
       }
+
+      await fetchSets();
     } catch {
       showToast('Failed to add angle', 'error');
     }
@@ -1533,7 +1656,7 @@ export default function SceneSetsTab() {
   };
 
   const handleCascadeRegenerate = async (set, description) => {
-    setGeneratingId(set.id);
+    startGenerating(set.id);
     try {
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/cascade-regenerate`, {
         method: 'POST',
@@ -1557,7 +1680,7 @@ export default function SceneSetsTab() {
     } catch (err) {
       showToast(err.message || 'Cascade regeneration failed', 'error');
     } finally {
-      setGeneratingId(null);
+      stopGenerating(set.id);
     }
   };
 
@@ -1781,8 +1904,8 @@ export default function SceneSetsTab() {
               onLinkEpisodes={handleLinkEpisodes}
               onUnlinkEpisode={handleUnlinkEpisode}
               onDeleteSingleAngle={handleDeleteSingleAngle}
-              generatingId={generatingId}
-              generationProgress={generationProgress}
+              isGeneratingProp={generatingIds.has(set.id)}
+              generationProgress={generationProgressMap[set.id] || null}
               allShows={allShows}
               allEpisodes={allEpisodes}
               onLoadEpisodes={loadEpisodesForShow}

@@ -1662,6 +1662,79 @@
   min-width: 0;
 }
 
+/* ── Angle upload row ── */
+
+.scene-sets-angle-upload-row {
+  margin: 6px 0 2px;
+}
+
+.scene-sets-angle-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px dashed rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  background: transparent;
+  color: #777;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scene-sets-angle-upload-btn:hover {
+  border-color: #B8962E;
+  color: #B8962E;
+  background: rgba(184, 150, 46, 0.04);
+}
+
+.scene-sets-angle-upload-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  background: #f9f7f2;
+}
+
+.scene-sets-angle-upload-preview img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.scene-sets-angle-upload-name {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #666;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-sets-angle-upload-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+}
+
+.scene-sets-angle-upload-remove:hover {
+  background: rgba(220, 53, 53, 0.1);
+  color: #dc3535;
+}
+
 .scene-sets-add-angle-actions {
   display: flex;
   gap: 8px;

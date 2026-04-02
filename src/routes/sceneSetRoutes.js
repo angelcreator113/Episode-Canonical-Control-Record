@@ -669,6 +669,49 @@ router.delete('/:id/angles/:angleId', validateUUIDParam('id'), optionalAuth, asy
   }
 });
 
+// ─── POST /:id/angles/:angleId/upload  — upload image for an angle ───────────
+
+router.post('/:id/angles/:angleId/upload', validateUUIDParam('id'), optionalAuth, uploadSceneSetImages, async (req, res) => {
+  try {
+    const angle = await SceneAngle.findOne({
+      where: { id: req.params.angleId, scene_set_id: req.params.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+
+    const uploaded = [
+      ...(req.files?.images || []),
+      ...(req.files?.image || []),
+    ].filter(Boolean);
+    if (uploaded.length === 0) return res.status(400).json({ success: false, error: 'No image file provided' });
+
+    const file = uploaded[0];
+    const ext = file.mimetype === 'image/png' ? 'png'
+              : file.mimetype === 'image/webp' ? 'webp'
+              : 'jpg';
+    const ts = Date.now();
+    const s3Key = `scene-sets/${req.params.id}/angles/${angle.id}/still-${ts}.${ext}`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+      CacheControl: 'max-age=31536000',
+    }));
+
+    const imageUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    await angle.update({
+      still_image_url: imageUrl,
+      generation_status: 'complete',
+    });
+
+    res.json({ success: true, data: angle });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/angles/:angleId/upload error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── DELETE /:id/angles  — delete all angles for a scene set ─────────────────
 
 router.delete('/:id/angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {
