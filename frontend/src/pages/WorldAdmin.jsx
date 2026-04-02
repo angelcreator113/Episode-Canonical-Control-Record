@@ -82,9 +82,12 @@ function WorldAdmin() {
   const [injectTarget, setInjectTarget] = useState(null);
   const [injecting, setInjecting] = useState(false);
   const [injectError, setInjectError] = useState(null);
-  const [injectSuccess, setInjectSuccess] = useState(null); // { eventId, message }
+  const [injectSuccess, setInjectSuccess] = useState(null);
   const [toast, setToast] = useState(null);
   const [generateTarget, setGenerateTarget] = useState(null);
+  const [eventSearch, setEventSearch] = useState('');
+  const [eventStatusFilter, setEventStatusFilter] = useState('all'); // all | used | draft | unlinked
+  const [eventDetailModal, setEventDetailModal] = useState(null); // event object for modal
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
@@ -551,9 +554,43 @@ function WorldAdmin() {
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
       {activeTab === 'events' && (
         <div style={S.content}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>💌 Events Library</h2>
             <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
+          </div>
+
+          {/* Search + filter bar */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={eventSearch}
+              onChange={e => setEventSearch(e.target.value)}
+              placeholder="Search events by name, host, dress code..."
+              style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
+            />
+            <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'used', label: '✓ Linked' },
+                { key: 'draft', label: '○ Draft' },
+                { key: 'unlinked', label: '⚠ Unlinked' },
+              ].map(f => (
+                <button key={f.key} onClick={() => setEventStatusFilter(f.key)} style={{
+                  padding: '5px 12px', border: 'none', borderRadius: 6,
+                  background: eventStatusFilter === f.key ? '#6366f1' : 'transparent',
+                  color: eventStatusFilter === f.key ? '#fff' : '#64748b',
+                  fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                }}>{f.label}</button>
+              ))}
+            </div>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>
+              {worldEvents.filter(ev => {
+                const q = eventSearch.toLowerCase();
+                const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
+                const matchStatus = eventStatusFilter === 'all' || (eventStatusFilter === 'used' && ev.status === 'used') || (eventStatusFilter === 'draft' && ev.status !== 'used') || (eventStatusFilter === 'unlinked' && !ev.used_in_episode_id && ev.status !== 'used');
+                return matchSearch && matchStatus;
+              }).length}/{worldEvents.length} events
+            </span>
           </div>
 
           {/* Event editor */}
@@ -651,10 +688,17 @@ function WorldAdmin() {
             </div>
           )}
 
-          {/* Events grid */}
+          {/* Events grid — filtered */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
-            {worldEvents.map(ev => (
-              <div key={ev.id} style={S.evCard}>
+            {worldEvents.filter(ev => {
+              const q = eventSearch.toLowerCase();
+              const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
+              const matchStatus = eventStatusFilter === 'all' || (eventStatusFilter === 'used' && ev.status === 'used') || (eventStatusFilter === 'draft' && ev.status !== 'used') || (eventStatusFilter === 'unlinked' && !ev.used_in_episode_id && ev.status !== 'used');
+              return matchSearch && matchStatus;
+            }).map(ev => {
+              const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
+              return (
+              <div key={ev.id} style={{ ...S.evCard, cursor: 'pointer' }} onClick={() => setEventDetailModal(ev)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <span style={{ fontSize: 18 }}>{EVENT_TYPE_ICONS[ev.event_type] || '📌'}</span>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1 }}>{ev.name}</h3>
@@ -663,68 +707,32 @@ function WorldAdmin() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
                   <span style={S.eTag}>⭐ {ev.prestige}</span>
                   <span style={S.eTag}>🪙 {ev.cost_coins}</span>
-                  <span style={S.eTag}>📏 {ev.strictness}</span>
                   <span style={S.eTag}>⏰ {ev.deadline_type}</span>
                   {ev.dress_code && <span style={S.eTag}>👗 {ev.dress_code}</span>}
                 </div>
-                {(ev.host || ev.host_brand) && <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>🏛️ {ev.host}{ev.host_brand ? ` — ${ev.host_brand}` : ''}</div>}
-                {(ev.career_tier || ev.is_paid || ev.is_free) && (
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                    {ev.career_tier && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca' }}>Tier {ev.career_tier}</span>}
-                    {ev.is_paid && <span style={{ padding: '2px 8px', background: '#f0fdf4', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a' }}>💰 Paid {ev.payment_amount ? `(${ev.payment_amount} coins)` : ''}</span>}
-                    {ev.is_free && <span style={{ padding: '2px 8px', background: '#f0f9ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#0284c7' }}>🎟️ Free</span>}
-                    {!ev.is_paid && !ev.is_free && ev.cost_coins > 0 && <span style={{ padding: '2px 8px', background: '#fef2f2', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626' }}>Costs {ev.cost_coins} coins</span>}
+                {/* Linked episode indicator */}
+                {linkedEpisode ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#f0fdf4', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
+                    ✓ Ep {linkedEpisode.episode_number}: {linkedEpisode.title}
+                  </div>
+                ) : ev.status === 'used' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#eef2ff', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#6366f1', fontWeight: 600 }}>
+                    ✓ Used {ev.times_used ? `(${ev.times_used}×)` : ''}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#fef3c7', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#b45309', fontWeight: 600 }}>
+                    ○ Not linked to an episode
                   </div>
                 )}
-                {Array.isArray(ev.dress_code_keywords) && ev.dress_code_keywords.length > 0 && (
-                  <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
-                    {ev.dress_code_keywords.map((kw, i) => (
-                      <span key={i} style={{ padding: '1px 6px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, fontSize: 10, color: '#4338ca', fontWeight: 600 }}>{kw}</span>
-                    ))}
-                  </div>
-                )}
-                {ev.career_milestone && <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 4 }}>🎯 {ev.career_milestone}</div>}
-                {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4 }}>{ev.narrative_stakes}</div>}
-                {ev.location_hint && <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>📍 {ev.location_hint}</div>}
-                <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
+                {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.narrative_stakes}</div>}
+                <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4 }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => openEditEvent(ev)} style={S.smBtn}>✏️ Edit</button>
-                  <button onClick={() => setInjectTarget(injectTarget === ev.id ? null : ev.id)} style={S.smBtn}>💉 Inject</button>
-                  <button onClick={() => setGenerateTarget(generateTarget === ev.id ? null : ev.id)} style={S.smBtn}>📝 Generate</button>
+                  <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>📋 Details</button>
                   <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>🗑️</button>
                 </div>
-                {injectTarget === ev.id && (
-                  <div style={{ marginTop: 8, padding: 10, background: injectSuccess?.eventId === ev.id ? '#f0fdf4' : '#f8fafc', borderRadius: 8, border: injectSuccess?.eventId === ev.id ? '2px solid #22c55e' : '1px solid #e2e8f0', transition: 'all 0.3s' }}>
-                    {injectSuccess?.eventId === ev.id ? (
-                      <div style={{ fontSize: 14, color: '#16a34a', fontWeight: 700, padding: '8px 0', textAlign: 'center' }}>{injectSuccess.message}</div>
-                    ) : (
-                      <>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Inject into which episode?</div>
-                        {injecting && <div style={{ fontSize: 12, color: '#6366f1', padding: '6px 0', fontWeight: 600 }}>⏳ Injecting...</div>}
-                        {injectError && <div style={{ fontSize: 12, color: '#dc2626', padding: '6px 10px', background: '#fef2f2', borderRadius: 6, marginBottom: 6, border: '1px solid #fecaca' }}>❌ {injectError}</div>}
-                        {!injecting && episodes.map(ep => (
-                          <button key={ep.id} onClick={() => injectEvent(ev.id, ep.id)} disabled={injecting} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', marginBottom: 4, color: '#1a1a2e' }}>
-                            {ep.episode_number || '?'}. {ep.title || 'Untitled'}
-                          </button>
-                        ))}
-                        {!injecting && episodes.length === 0 && <span style={S.muted}>No episodes yet — create an episode first</span>}
-                      </>
-                    )}
-                  </div>
-                )}
-                {generateTarget === ev.id && (
-                  <div style={{ marginTop: 8, padding: 10, background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 6 }}>📝 Generate script for which episode?</div>
-                    {episodes.map(ep => (
-                      <button key={ep.id} onClick={() => generateScript(ev.id, ep.id)} disabled={generating}
-                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', marginBottom: 4, color: '#1a1a2e' }}>
-                        {generating ? '⏳...' : `${ep.episode_number || '?'}. ${ep.title || 'Untitled'}`}
-                      </button>
-                    ))}
-                    {episodes.length === 0 && <span style={S.muted}>No episodes</span>}
-                  </div>
-                )}
               </div>
-            ))}
+              );
+            })}
             {worldEvents.length === 0 && !editingEvent && (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>💌</div>
@@ -734,6 +742,122 @@ function WorldAdmin() {
               </div>
             )}
           </div>
+
+          {/* ── Event Detail / Inject Modal ── */}
+          {eventDetailModal && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setEventDetailModal(null)}>
+              <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 600, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                {/* Modal header */}
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>{EVENT_TYPE_ICONS[eventDetailModal.event_type] || '📌'}</span>
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{eventDetailModal.name}</h3>
+                    {(eventDetailModal.host || eventDetailModal.host_brand) && (
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>🏛️ {eventDetailModal.host}{eventDetailModal.host_brand ? ` — ${eventDetailModal.host_brand}` : ''}</div>
+                    )}
+                  </div>
+                  <span style={S.statusPill(eventDetailModal.status)}>{eventDetailModal.status}</span>
+                  <button onClick={() => setEventDetailModal(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+
+                {/* Modal body */}
+                <div style={{ padding: '16px 24px' }}>
+                  {/* Tags */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                    <span style={S.eTag}>⭐ Prestige {eventDetailModal.prestige}</span>
+                    <span style={S.eTag}>🪙 {eventDetailModal.cost_coins} coins</span>
+                    <span style={S.eTag}>📏 Strictness {eventDetailModal.strictness}</span>
+                    <span style={S.eTag}>⏰ {eventDetailModal.deadline_type}</span>
+                    {eventDetailModal.dress_code && <span style={S.eTag}>👗 {eventDetailModal.dress_code}</span>}
+                    {eventDetailModal.career_tier && <span style={{ padding: '3px 10px', background: '#eef2ff', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#4338ca' }}>Tier {eventDetailModal.career_tier}</span>}
+                  </div>
+
+                  {/* Dress code keywords */}
+                  {Array.isArray(eventDetailModal.dress_code_keywords) && eventDetailModal.dress_code_keywords.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Dress Code Keywords</div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {eventDetailModal.dress_code_keywords.map((kw, i) => (
+                          <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 11, color: '#4338ca', fontWeight: 600 }}>{kw}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Narrative stakes */}
+                  {eventDetailModal.narrative_stakes && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Narrative Stakes</div>
+                      <div style={{ fontSize: 13, color: '#475569', fontStyle: 'italic', lineHeight: 1.5 }}>{eventDetailModal.narrative_stakes}</div>
+                    </div>
+                  )}
+
+                  {eventDetailModal.career_milestone && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Career Milestone</div>
+                      <div style={{ fontSize: 13, color: '#6366f1', fontWeight: 600 }}>🎯 {eventDetailModal.career_milestone}</div>
+                    </div>
+                  )}
+
+                  {eventDetailModal.location_hint && (
+                    <div style={{ marginBottom: 12, fontSize: 12, color: '#64748b' }}>📍 {eventDetailModal.location_hint}</div>
+                  )}
+
+                  {/* Episode linking section */}
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginTop: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>💉 Inject into Episode</div>
+                    {injectSuccess?.eventId === eventDetailModal.id ? (
+                      <div style={{ padding: 12, background: '#f0fdf4', borderRadius: 8, border: '2px solid #22c55e', textAlign: 'center', fontSize: 14, color: '#16a34a', fontWeight: 700 }}>{injectSuccess.message}</div>
+                    ) : (
+                      <>
+                        {injecting && <div style={{ fontSize: 12, color: '#6366f1', padding: '6px 0', fontWeight: 600 }}>⏳ Injecting...</div>}
+                        {injectError && <div style={{ fontSize: 12, color: '#dc2626', padding: '6px 10px', background: '#fef2f2', borderRadius: 6, marginBottom: 6, border: '1px solid #fecaca' }}>❌ {injectError}</div>}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                          {!injecting && episodes.map(ep => {
+                            const isLinked = ep.id === eventDetailModal.used_in_episode_id;
+                            return (
+                              <button key={ep.id} onClick={() => injectEvent(eventDetailModal.id, ep.id)} disabled={injecting} style={{
+                                textAlign: 'left', padding: '8px 12px',
+                                background: isLinked ? '#f0fdf4' : '#fff',
+                                border: isLinked ? '2px solid #22c55e' : '1px solid #e2e8f0',
+                                borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#1a1a2e',
+                              }}>
+                                <div style={{ fontWeight: 600 }}>{ep.episode_number || '?'}. {ep.title || 'Untitled'}</div>
+                                {isLinked && <div style={{ fontSize: 10, color: '#16a34a', marginTop: 2 }}>✓ Currently linked</div>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {!injecting && episodes.length === 0 && <span style={S.muted}>No episodes yet</span>}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Generate section */}
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 16, marginTop: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>📝 Generate Script</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      {episodes.map(ep => (
+                        <button key={ep.id} onClick={() => generateScript(eventDetailModal.id, ep.id)} disabled={generating} style={{
+                          textAlign: 'left', padding: '8px 12px',
+                          background: '#fff', border: '1px solid #e2e8f0',
+                          borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#1a1a2e',
+                        }}>
+                          {generating ? '⏳...' : `${ep.episode_number || '?'}. ${ep.title || 'Untitled'}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal footer */}
+                <div style={{ padding: '12px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => { openEditEvent(eventDetailModal); setEventDetailModal(null); }} style={S.smBtn}>✏️ Edit Event</button>
+                  <button onClick={() => setEventDetailModal(null)} style={{ ...S.smBtn, background: '#f1f5f9' }}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
