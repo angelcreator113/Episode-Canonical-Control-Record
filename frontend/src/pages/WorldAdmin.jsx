@@ -640,27 +640,44 @@ function WorldAdmin() {
             </div>
           )}
 
-          {/* Episode coverage bar */}
+          {/* Episode ↔ Event coverage map */}
           {episodes.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Episode Coverage</div>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Episode → Event Map</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {episodes.map(ep => {
-                  const hasEvent = worldEvents.some(ev => ev.used_in_episode_id === ep.id || (ev.status === 'used' && ep.script_content?.includes(ev.name)));
+                  const linkedEvent = worldEvents.find(ev => ev.used_in_episode_id === ep.id);
+                  const scriptEvent = !linkedEvent ? worldEvents.find(ev => ev.status === 'used' && ep.script_content?.includes(ev.name)) : null;
+                  const event = linkedEvent || scriptEvent;
                   return (
-                    <div key={ep.id} onClick={() => navigate(`/episodes/${ep.id}`)} style={{
-                      padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
-                      background: hasEvent ? '#f0fdf4' : '#fef3c7',
-                      color: hasEvent ? '#16a34a' : '#b45309',
-                      border: `1px solid ${hasEvent ? '#bbf7d0' : '#fde68a'}`,
-                      cursor: 'pointer', transition: 'transform 0.1s ease',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                    title={`Go to ${ep.title || 'episode'}`}
-                    >
-                      {ep.episode_number || '?'}. {ep.title?.slice(0, 15) || 'Untitled'}{ep.title?.length > 15 ? '…' : ''}
-                      {hasEvent ? ' ✓' : ' ○'}
+                    <div key={ep.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '6px 10px', borderRadius: 8,
+                      background: event ? '#f8fdf8' : '#fffbeb',
+                      border: `1px solid ${event ? '#d1fae5' : '#fde68a'}`,
+                    }}>
+                      <div onClick={() => navigate(`/episodes/${ep.id}`)} style={{
+                        minWidth: 140, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#1a1a2e',
+                      }} title={`Go to ${ep.title}`}>
+                        <span style={{ color: '#94a3b8', marginRight: 4 }}>{ep.episode_number || '?'}.</span>
+                        {ep.title?.slice(0, 20) || 'Untitled'}{ep.title?.length > 20 ? '…' : ''}
+                      </div>
+                      <span style={{ color: '#cbd5e1', fontSize: 12 }}>→</span>
+                      {event ? (
+                        <div onClick={() => setEventDetailModal(event)} style={{
+                          flex: 1, display: 'flex', alignItems: 'center', gap: 6,
+                          cursor: 'pointer', minWidth: 0,
+                        }} title="Click to see event details">
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{EVENT_TYPE_ICONS[event.event_type] || '📌'}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {event.name}
+                          </span>
+                          <span style={{ fontSize: 9, padding: '1px 6px', background: '#e0f2fe', color: '#0284c7', borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>⭐{event.prestige}</span>
+                          {event.dress_code && <span style={{ fontSize: 9, padding: '1px 6px', background: '#faf5ff', color: '#7c3aed', borderRadius: 4, flexShrink: 0 }}>👗 {event.dress_code}</span>}
+                        </div>
+                      ) : (
+                        <span style={{ flex: 1, fontSize: 11, color: '#b45309', fontStyle: 'italic' }}>No event assigned</span>
+                      )}
                     </div>
                   );
                 })}
