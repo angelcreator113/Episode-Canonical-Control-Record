@@ -2708,6 +2708,29 @@
   font-size: 18px;
   font-weight: 700;
   color: #1a1a1a;
+}
+
+.scene-sets-modal-title-editable {
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 0.15s ease;
+}
+
+.scene-sets-modal-title-editable:hover {
+  border-bottom-color: rgba(184, 150, 46, 0.4);
+}
+
+.scene-sets-modal-title-input {
+  font-family: 'Lora', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+  border: none;
+  border-bottom: 2px solid #B8962E;
+  background: transparent;
+  outline: none;
+  padding: 0 0 2px;
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -401,7 +401,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [showDetails, setShowDetails] = useState(false);
   const [editingAngleId, setEditingAngleId] = useState(null);
   const [editingAngleLabel, setEditingAngleLabel] = useState('');
-  const [activeModalTab, setActiveModalTab] = useState('details'); // 'details' | 'prompt' | 'add-angle'
+  const [activeModalTab, setActiveModalTab] = useState('details');
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState('');
+  const [savingName, setSavingName] = useState(false);
   const [showAddAngle, setShowAddAngle] = useState(false);
   const [addingAngle, setAddingAngle] = useState(false);
   const [newAngle, setNewAngle] = useState({ angle_label: '', angle_name: '', angle_description: '', camera_direction: '', beat_affinity: '' });
@@ -476,6 +479,24 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     setAngleUploadPreview(null);
     setShowAddAngle(false);
     setAddingAngle(false);
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = nameValue.trim();
+    if (!trimmed || trimmed === set.name) { setEditingName(false); return; }
+    setSavingName(true);
+    try {
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (res.ok && onToast) onToast(`Renamed to "${trimmed}"`);
+    } catch {
+      if (onToast) onToast('Failed to rename', 'error');
+    }
+    setSavingName(false);
+    setEditingName(false);
   };
 
   const handleRenameAngle = async (angleId, newLabel) => {
@@ -881,7 +902,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <div className="scene-sets-modal-header-info">
                   {heroImage && <img src={heroImage} alt="" className="scene-sets-modal-thumb" />}
                   <div>
-                    <h3 className="scene-sets-modal-title">{set.name}</h3>
+                    {editingName ? (
+                      <input
+                        className="scene-sets-modal-title-input"
+                        value={nameValue}
+                        onChange={e => setNameValue(e.target.value)}
+                        onBlur={handleSaveName}
+                        onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false); }}
+                        disabled={savingName}
+                        autoFocus
+                      />
+                    ) : (
+                      <h3
+                        className="scene-sets-modal-title scene-sets-modal-title-editable"
+                        onClick={() => { setEditingName(true); setNameValue(set.name || ''); }}
+                        title="Click to rename"
+                      >{set.name}</h3>
+                    )}
                     <span className="scene-sets-modal-subtitle">{set.scene_type?.replace(/_/g, ' ')} &middot; {readyAngles}/{totalAngles} angles</span>
                   </div>
                 </div>
