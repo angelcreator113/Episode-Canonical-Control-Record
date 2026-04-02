@@ -91,7 +91,6 @@ const NAV = [
         expandable: true,
       },
       { icon: '🎞️', label: 'Scene Sets',       route: '/scene-library' },
-      { icon: '🖼️', label: 'Template Studio', route: '/template-studio' },
     ],
   },
   {
