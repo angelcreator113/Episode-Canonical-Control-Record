@@ -177,6 +177,7 @@ const QUICK_ADD_OPTIONS = [
   { key: 'library', label: 'Library', icon: ImageIcon },
   { key: 'text', label: 'Text', icon: Type },
   { key: 'shapes', label: 'Shapes', icon: Pentagon },
+  { key: 'upload-direct', label: 'Upload Images', icon: ImagePlus, direct: true },
 ];
 
 export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, onBack }) {
@@ -265,6 +266,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [backgroundSelected, setBackgroundSelected] = useState(false);
   const [mobilePanel, setMobilePanel] = useState(null); // null | 'left' | 'right'
   const prevObjectCountRef = useRef(0);
+  const directUploadRef = useRef(null);
 
   // Clear mobile drawer state when viewport crosses tablet breakpoint
   useEffect(() => {
@@ -646,12 +648,74 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   // ── Quick Add helpers ──
 
   const handleQuickAdd = useCallback((tabKey) => {
+    if (tabKey === 'upload-direct') {
+      // Open native file picker directly
+      setQuickAddOpen(false);
+      directUploadRef.current?.click();
+      return;
+    }
     setCreationPanelOpen(true);
     setActiveCreationTab(tabKey);
     const focusMap = { library: 'library-search', upload: 'upload-zone', generate: 'generate-prompt' };
     if (focusMap[tabKey]) setFocusTarget(focusMap[tabKey]);
     setQuickAddOpen(false);
   }, []);
+
+  // Direct multi-file upload handler
+  const handleDirectUpload = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    e.target.value = '';
+
+    for (const file of files) {
+      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
+      if (file.size > 50 * 1024 * 1024) continue;
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('assetType', file.type.startsWith('video/') ? 'EPISODE_VIDEO' : 'EPISODE_FRAME');
+        formData.append('category', 'prop');
+        if (showId) formData.append('show_id', showId);
+        if (episodeId) formData.append('episode_id', episodeId);
+
+        const { data } = await assetService.uploadAsset(formData);
+        const asset = data.data || data.asset || data;
+        const isVideo = (asset.content_type || file.type || '').startsWith('video/');
+        const objType = isVideo ? 'video' : 'image';
+        const srcW = asset.width || 400;
+        const srcH = asset.height || 400;
+        const cw = canvasWidth || 1920;
+        const ch = canvasHeight || 1080;
+        const aspect = srcW / srcH;
+        let w = cw * 0.25;
+        let h = w / aspect;
+        if (h > ch * 0.35) { h = ch * 0.35; w = h * aspect; }
+
+        state.addObject({
+          id: `obj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: objType,
+          assetId: asset.id,
+          assetUrl: asset.s3_url_processed || asset.s3_url_raw || '',
+          x: Math.round(cw / 2 - w / 2 + (Math.random() * 40 - 20)),
+          y: Math.round(ch / 2 - h / 2 + (Math.random() * 40 - 20)),
+          width: Math.round(w),
+          height: Math.round(h),
+          rotation: 0,
+          opacity: 1,
+          isVisible: true,
+          isLocked: false,
+          label: file.name.replace(/\.[^.]+$/, ''),
+          assetRole: 'prop',
+          usageType: 'overlay',
+          _asset: asset,
+        });
+        setHasInteracted(true);
+      } catch (err) {
+        console.error('Direct upload failed:', file.name, err);
+      }
+    }
+  }, [showId, episodeId, state, canvasWidth, canvasHeight]);
 
   const handleOverlayCta = useCallback((tabKey) => {
     handleQuickAdd(tabKey);
@@ -1999,19 +2063,30 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   {QUICK_ADD_OPTIONS.map((opt) => {
                     const Icon = opt.icon;
                     return (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        className="scene-studio-action-bar-popup-item"
-                        onClick={() => handleQuickAdd(opt.key)}
-                      >
-                        <Icon size={14} />
-                        <span>{opt.label}</span>
-                      </button>
+                      <React.Fragment key={opt.key}>
+                        {opt.direct && <div className="scene-studio-action-bar-popup-divider" />}
+                        <button
+                          type="button"
+                          className="scene-studio-action-bar-popup-item"
+                          onClick={() => handleQuickAdd(opt.key)}
+                        >
+                          <Icon size={14} />
+                          <span>{opt.label}</span>
+                        </button>
+                      </React.Fragment>
                     );
                   })}
                 </div>
               )}
+              {/* Hidden file input for direct multi-upload */}
+              <input
+                ref={directUploadRef}
+                type="file"
+                accept="image/*,video/mp4,video/webm"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleDirectUpload}
+              />
             </div>
           </div>
 
