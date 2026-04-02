@@ -363,6 +363,7 @@ function formatTime(secs) {
 
 const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, generatingId, generationProgress, allShows, allEpisodes, onLoadEpisodes, onToast }) {
   const fileInputRef = useRef(null);
+  const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
   const isGenerating = generatingId === set.id;
   const progress = generatingId === set.id ? generationProgress : null;
@@ -590,6 +591,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <Sparkles size={12} /> Seed Default Angles
                     </button>
                   )}
+                  <button onClick={() => { setShowMenu(false); menuUploadRef.current?.click(); }} disabled={isGenerating}>
+                    <Upload size={12} /> Upload Images
+                  </button>
                   <button onClick={() => { setShowMenu(false); setShowDetails(d => !d); }}>
                     <Eye size={12} /> {showDetails ? 'Hide Details' : 'Show Details'}
                   </button>
@@ -601,6 +605,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               document.body
             )}
           </div>
+          {/* Hidden file input for kebab menu upload */}
+          <input
+            ref={menuUploadRef}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length > 0) onUploadBase(set, files);
+              e.target.value = '';
+            }}
+          />
         </div>
 
         {selectedAngle?.video_clip_url && (
