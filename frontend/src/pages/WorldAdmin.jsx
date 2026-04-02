@@ -86,8 +86,12 @@ function WorldAdmin() {
   const [toast, setToast] = useState(null);
   const [generateTarget, setGenerateTarget] = useState(null);
   const [eventSearch, setEventSearch] = useState('');
-  const [eventStatusFilter, setEventStatusFilter] = useState('all'); // all | used | draft | unlinked
-  const [eventDetailModal, setEventDetailModal] = useState(null); // event object for modal
+  const [eventStatusFilter, setEventStatusFilter] = useState('all');
+  const [eventDetailModal, setEventDetailModal] = useState(null);
+  const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
+  const [selectedEvents, setSelectedEvents] = useState(new Set());
+  const [bulkMode, setBulkMode] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false); // event object for modal
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
@@ -106,6 +110,13 @@ function WorldAdmin() {
   const [successMsg, setSuccessMsg] = useState(null);
 
   useEffect(() => { loadData(); }, [showId]);
+
+  // Escape key closes modals
+  useEffect(() => {
+    const handleEsc = (e) => { if (e.key === 'Escape') { setEventDetailModal(null); setShowTemplates(false); } };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
   useEffect(() => {
     if (successMsg) { const t = setTimeout(() => { setSuccessMsg(null); setLastGeneratedEpisodeId(null); }, 5000); return () => clearTimeout(t); }
   }, [successMsg]);
@@ -167,6 +178,50 @@ function WorldAdmin() {
     if (!window.confirm('Delete this event?')) return;
     try { await api.delete(`/api/v1/world/${showId}/events/${eventId}`); setWorldEvents(p => p.filter(e => e.id !== eventId)); setSuccessMsg('Deleted'); }
     catch (err) { setError(err.response?.data?.error || err.message); }
+  };
+
+  const copyEvent = (ev) => {
+    setEventForm({ ...EMPTY_EVENT, ...ev, name: `${ev.name} (Copy)`, status: 'draft' });
+    setEditingEvent('new');
+  };
+
+  const bulkInject = async (episodeId) => {
+    for (const eventId of selectedEvents) {
+      try { await injectEvent(eventId, episodeId); } catch {}
+    }
+    setSelectedEvents(new Set());
+    setBulkMode(false);
+  };
+
+  const toggleSelectEvent = (eventId) => {
+    setSelectedEvents(prev => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  };
+
+  // Event templates
+  const EVENT_TEMPLATES = [
+    { name: 'Fashion Gala', event_type: 'invite', prestige: 8, cost_coins: 150, strictness: 7, deadline_type: 'high', dress_code: 'black tie couture', dress_code_keywords: ['elegant', 'dramatic', 'couture', 'formal'] },
+    { name: 'Press Day', event_type: 'brand_deal', prestige: 5, cost_coins: 50, strictness: 4, deadline_type: 'medium', dress_code: 'chic professional', dress_code_keywords: ['clean', 'polished', 'modern'] },
+    { name: 'Garden Party', event_type: 'invite', prestige: 6, cost_coins: 100, strictness: 5, deadline_type: 'medium', dress_code: 'garden romantic', dress_code_keywords: ['floral', 'soft', 'romantic', 'feminine'] },
+    { name: 'VIP Cocktail', event_type: 'invite', prestige: 7, cost_coins: 120, strictness: 6, deadline_type: 'high', dress_code: 'cocktail elegant', dress_code_keywords: ['elegant', 'sophisticated', 'chic'] },
+    { name: 'Fitting Session', event_type: 'upgrade', prestige: 3, cost_coins: 0, strictness: 2, deadline_type: 'low', dress_code: 'casual', dress_code_keywords: ['casual', 'comfortable'] },
+    { name: 'Brand Showcase', event_type: 'deliverable', prestige: 6, cost_coins: 80, strictness: 5, deadline_type: 'medium', dress_code: 'brand aligned', dress_code_keywords: ['trendy', 'on-brand'] },
+  ];
+
+  // Duplicate detection
+  const findSimilarEvents = (name) => {
+    if (!name || name.length < 4) return [];
+    const norm = name.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+    return worldEvents.filter(ev => {
+      if (editingEvent && ev.id === editingEvent) return false;
+      const evNorm = (ev.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '');
+      return evNorm.includes(norm) || norm.includes(evNorm) ||
+        norm.split(' ').filter(w => w.length > 3).some(w => evNorm.includes(w));
+    });
   };
 
   const injectEvent = async (eventId, episodeId) => {
@@ -554,49 +609,110 @@ function WorldAdmin() {
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
       {activeTab === 'events' && (
         <div style={S.content}>
+          {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>💌 Events Library</h2>
-            <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S.smBtn, background: '#f0fdf4', color: '#16a34a' }}>📋 Templates</button>
+              {bulkMode ? (
+                <button onClick={() => { setBulkMode(false); setSelectedEvents(new Set()); }} style={{ ...S.smBtn, background: '#fef2f2', color: '#dc2626' }}>✕ Cancel</button>
+              ) : (
+                <button onClick={() => setBulkMode(true)} style={S.smBtn}>☐ Select</button>
+              )}
+              <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
+            </div>
           </div>
 
-          {/* Search + filter bar */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              type="text"
-              value={eventSearch}
-              onChange={e => setEventSearch(e.target.value)}
-              placeholder="Search events by name, host, dress code..."
-              style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
-            />
-            <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
-              {[
-                { key: 'all', label: 'All' },
-                { key: 'used', label: '✓ Linked' },
-                { key: 'draft', label: '○ Draft' },
-                { key: 'unlinked', label: '⚠ Unlinked' },
-              ].map(f => (
-                <button key={f.key} onClick={() => setEventStatusFilter(f.key)} style={{
-                  padding: '5px 12px', border: 'none', borderRadius: 6,
-                  background: eventStatusFilter === f.key ? '#6366f1' : 'transparent',
-                  color: eventStatusFilter === f.key ? '#fff' : '#64748b',
-                  fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                }}>{f.label}</button>
+          {/* Templates panel */}
+          {showTemplates && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#16a34a' }}>📋 Event Templates — click to start from a template</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+                {EVENT_TEMPLATES.map((tpl, i) => (
+                  <button key={i} onClick={() => { setEventForm({ ...EMPTY_EVENT, ...tpl }); setEditingEvent('new'); setShowTemplates(false); }}
+                    style={{ textAlign: 'left', padding: '8px 12px', background: '#fff', border: '1px solid #d1fae5', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
+                    <div style={{ fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{tpl.name}</div>
+                    <div style={{ fontSize: 10, color: '#64748b' }}>⭐{tpl.prestige} 🪙{tpl.cost_coins} 👗{tpl.dress_code}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Episode coverage bar */}
+          {episodes.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Episode Coverage</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {episodes.map(ep => {
+                  const hasEvent = worldEvents.some(ev => ev.used_in_episode_id === ep.id || (ev.status === 'used' && ep.script_content?.includes(ev.name)));
+                  return (
+                    <div key={ep.id} style={{
+                      padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+                      background: hasEvent ? '#f0fdf4' : '#fef3c7',
+                      color: hasEvent ? '#16a34a' : '#b45309',
+                      border: `1px solid ${hasEvent ? '#bbf7d0' : '#fde68a'}`,
+                    }}>
+                      {ep.episode_number || '?'}. {ep.title?.slice(0, 15) || 'Untitled'}{ep.title?.length > 15 ? '…' : ''}
+                      {hasEvent ? ' ✓' : ' ○'}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Bulk action bar */}
+          {bulkMode && selectedEvents.size > 0 && (
+            <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#4338ca' }}>{selectedEvents.size} selected</span>
+              <span style={{ fontSize: 11, color: '#64748b' }}>Link to:</span>
+              {episodes.slice(0, 6).map(ep => (
+                <button key={ep.id} onClick={() => bulkInject(ep.id)} style={{ padding: '3px 10px', background: '#fff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#1a1a2e', fontWeight: 600 }}>
+                  {ep.episode_number}. {ep.title?.slice(0, 12) || 'Untitled'}
+                </button>
               ))}
             </div>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>
-              {worldEvents.filter(ev => {
-                const q = eventSearch.toLowerCase();
-                const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
-                const matchStatus = eventStatusFilter === 'all' || (eventStatusFilter === 'used' && ev.status === 'used') || (eventStatusFilter === 'draft' && ev.status !== 'used') || (eventStatusFilter === 'unlinked' && !ev.used_in_episode_id && ev.status !== 'used');
-                return matchSearch && matchStatus;
-              }).length}/{worldEvents.length} events
-            </span>
+          )}
+
+          {/* Search + filter + sort bar */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input type="text" value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search events..."
+              style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
+            <div style={{ display: 'flex', gap: 3, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+              {[
+                { key: 'all', label: 'All', count: worldEvents.length },
+                { key: 'used', label: 'Linked', count: worldEvents.filter(e => e.status === 'used').length },
+                { key: 'draft', label: 'Draft', count: worldEvents.filter(e => e.status !== 'used').length },
+                { key: 'unlinked', label: 'Unlinked', count: worldEvents.filter(e => !e.used_in_episode_id && e.status !== 'used').length },
+              ].map(f => (
+                <button key={f.key} onClick={() => setEventStatusFilter(f.key)} style={{
+                  padding: '4px 10px', border: 'none', borderRadius: 6,
+                  background: eventStatusFilter === f.key ? '#6366f1' : 'transparent',
+                  color: eventStatusFilter === f.key ? '#fff' : '#64748b',
+                  fontSize: 10, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                }}>{f.label} ({f.count})</button>
+              ))}
+            </div>
+            <select value={eventSort} onChange={e => setEventSort(e.target.value)} style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, background: '#fff', cursor: 'pointer' }}>
+              <option value="name">Sort: Name</option>
+              <option value="prestige">Sort: Prestige ↓</option>
+              <option value="cost">Sort: Cost ↓</option>
+              <option value="status">Sort: Status</option>
+              <option value="created">Sort: Newest</option>
+            </select>
           </div>
 
           {/* Event editor */}
           {editingEvent && (
             <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
+              {/* Duplicate detection warning */}
+              {eventForm.name && findSimilarEvents(eventForm.name).length > 0 && (
+                <div style={{ padding: '8px 12px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 10, fontSize: 12, color: '#b45309' }}>
+                  ⚠️ Similar events exist: {findSimilarEvents(eventForm.name).map(e => e.name).join(', ')}
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
                 <FG label="Event Name *" value={eventForm.name} onChange={v => setEventForm(p => ({ ...p, name: v }))} placeholder="Velour Society Garden Soirée" />
                 <div>
@@ -688,18 +804,29 @@ function WorldAdmin() {
             </div>
           )}
 
-          {/* Events grid — filtered */}
+          {/* Events grid — filtered + sorted */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
             {worldEvents.filter(ev => {
               const q = eventSearch.toLowerCase();
               const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
               const matchStatus = eventStatusFilter === 'all' || (eventStatusFilter === 'used' && ev.status === 'used') || (eventStatusFilter === 'draft' && ev.status !== 'used') || (eventStatusFilter === 'unlinked' && !ev.used_in_episode_id && ev.status !== 'used');
               return matchSearch && matchStatus;
+            }).sort((a, b) => {
+              if (eventSort === 'prestige') return (b.prestige || 0) - (a.prestige || 0);
+              if (eventSort === 'cost') return (b.cost_coins || 0) - (a.cost_coins || 0);
+              if (eventSort === 'status') return (a.status || '').localeCompare(b.status || '');
+              if (eventSort === 'created') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+              return (a.name || '').localeCompare(b.name || '');
             }).map(ev => {
               const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
+              const isSelected = selectedEvents.has(ev.id);
               return (
-              <div key={ev.id} style={{ ...S.evCard, cursor: 'pointer' }} onClick={() => setEventDetailModal(ev)}>
+              <div key={ev.id} style={{ ...S.evCard, cursor: 'pointer', border: isSelected ? '2px solid #6366f1' : undefined }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : setEventDetailModal(ev)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  {bulkMode && (
+                    <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
+                      style={{ width: 16, height: 16, accentColor: '#6366f1', cursor: 'pointer' }} />
+                  )}
                   <span style={{ fontSize: 18 }}>{EVENT_TYPE_ICONS[ev.event_type] || '📌'}</span>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1 }}>{ev.name}</h3>
                   <span style={S.statusPill(ev.status)}>{ev.status}</span>
@@ -710,24 +837,24 @@ function WorldAdmin() {
                   <span style={S.eTag}>⏰ {ev.deadline_type}</span>
                   {ev.dress_code && <span style={S.eTag}>👗 {ev.dress_code}</span>}
                 </div>
-                {/* Linked episode indicator */}
                 {linkedEpisode ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#f0fdf4', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
                     ✓ Ep {linkedEpisode.episode_number}: {linkedEpisode.title}
                   </div>
                 ) : ev.status === 'used' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#eef2ff', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#6366f1', fontWeight: 600 }}>
+                  <div style={{ padding: '4px 8px', background: '#eef2ff', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#6366f1', fontWeight: 600 }}>
                     ✓ Used {ev.times_used ? `(${ev.times_used}×)` : ''}
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#fef3c7', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#b45309', fontWeight: 600 }}>
+                  <div style={{ padding: '4px 8px', background: '#fef3c7', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#b45309', fontWeight: 600 }}>
                     ○ Not linked to an episode
                   </div>
                 )}
                 {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.narrative_stakes}</div>}
                 <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4 }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => openEditEvent(ev)} style={S.smBtn}>✏️ Edit</button>
-                  <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>📋 Details</button>
+                  <button onClick={() => copyEvent(ev)} style={S.smBtn}>📋 Copy</button>
+                  <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>🔍 Details</button>
                   <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>🗑️</button>
                 </div>
               </div>
