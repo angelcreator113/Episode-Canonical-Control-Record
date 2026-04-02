@@ -568,6 +568,16 @@ const EpisodeDetail = () => {
                   <span>Create Thumbnail</span>
                 </button>
                 <button
+                  onClick={() => {
+                    navigate(`/episodes/${episode.id}/plan`);
+                    setShowMoreActions(false);
+                  }}
+                  className="ed-dropdown-item"
+                >
+                  <span>🎬</span>
+                  <span>Scene Planner</span>
+                </button>
+                <button
                   onClick={async () => {
                     if (window.confirm('Delete this episode? This cannot be undone.')) {
                       try {
