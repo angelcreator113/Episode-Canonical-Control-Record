@@ -27,17 +27,12 @@ function buildNav(shows) {
     {
       zone: showName.length > 20 ? showName.slice(0, 20) + '…' : showName,
       items: [
-        { icon: '🎬', label: 'Episodes', route: '/shows', expandable: true },
+        { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
         { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
         ...(showId ? [
-          { icon: '📅', label: 'Events Library', route: `/shows/${showId}/world?tab=events` },
+          { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=events` },
         ] : []),
         { icon: '👗', label: 'Wardrobe', route: '/wardrobe' },
-        { icon: '🌍', label: 'Characters', route: '/character-registry?view=world' },
-        { icon: '🔗', label: 'Relationships', route: '/world-studio?tab=relationships' },
-        ...(showId ? [
-          { icon: '🎯', label: 'Career Goals', route: `/shows/${showId}/world?tab=goals` },
-        ] : []),
       ],
     },
     {
@@ -56,6 +51,8 @@ function buildNav(shows) {
       items: [
         { icon: '✦', label: 'Storyteller', route: '/storyteller' },
         { icon: '⚡', label: 'Short Stories', route: '/story-engine' },
+        { icon: '🌍', label: 'Characters', route: '/character-registry?view=world' },
+        { icon: '🔗', label: 'Relationships', route: '/world-studio?tab=relationships' },
         { icon: '◇', label: 'Continuity', route: '/continuity' },
         { icon: '🧠', label: 'Narrative Control', route: '/narrative-control' },
         { icon: '▶', label: 'Novel Session', route: '/start' },
