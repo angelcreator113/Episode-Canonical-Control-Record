@@ -78,6 +78,12 @@ module.exports = (sequelize) => {
       foreignKey: 'parent_location_id',
       as: 'childLocations',
     });
+    if (models.SceneSet) {
+      WorldLocation.hasMany(models.SceneSet, {
+        foreignKey: 'world_location_id',
+        as: 'sceneSets',
+      });
+    }
   };
 
   return WorldLocation;

@@ -9,7 +9,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
-const { ScenePlan, SceneSet, SceneSetEpisode, SceneAngle } = require('../models');
+const { ScenePlan, SceneSet, SceneSetEpisode, SceneAngle, WorldLocation } = require('../models');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;
@@ -43,27 +43,44 @@ async function loadAvailableSceneSets(showId) {
   const where = { generation_status: 'complete' };
   if (showId) where.show_id = showId;
 
-  const sets = await SceneSet.findAll({
-    where,
-    include: [{
+  const includes = [
+    {
       model: SceneAngle,
       as: 'angles',
       attributes: ['id', 'angle_label', 'angle_name', 'still_image_url', 'generation_status'],
       required: false,
-    }],
+    },
+  ];
+  if (WorldLocation) {
+    includes.push({
+      model: WorldLocation,
+      as: 'worldLocation',
+      attributes: ['id', 'name', 'narrative_role', 'sensory_details', 'location_type'],
+      required: false,
+    });
+  }
+
+  const sets = await SceneSet.findAll({
+    where,
+    include: includes,
     order: [['name', 'ASC']],
   });
 
-  return sets.map(s => ({
-    id: s.id,
-    name: s.name,
-    scene_type: s.scene_type,
-    script_context: s.script_context || s.canonical_description || null,
-    angles: (s.angles || [])
-      .filter(a => a.generation_status === 'complete' && a.still_image_url)
-      .map(a => ({ label: a.angle_label, name: a.angle_name })),
-    has_base_image: !!s.base_still_url,
-  }));
+  return sets.map(s => {
+    const loc = s.worldLocation;
+    return {
+      id: s.id,
+      name: s.name,
+      scene_type: s.scene_type,
+      script_context: s.script_context || s.canonical_description || null,
+      angles: (s.angles || [])
+        .filter(a => a.generation_status === 'complete' && a.still_image_url)
+        .map(a => ({ label: a.angle_label, name: a.angle_name })),
+      has_base_image: !!s.base_still_url,
+      narrative_role: loc?.narrative_role || null,
+      sensory_details: loc?.sensory_details || null,
+    };
+  });
 }
 
 /**
@@ -93,9 +110,16 @@ Your assignments must:
 
 Return ONLY valid JSON — an array of 14 beat objects.`;
 
-  const sceneSetList = sceneSets.map(s =>
-    `- ID: ${s.id}\n  Name: ${s.name}\n  Type: ${s.scene_type}\n  Context: ${(s.script_context || 'No description').slice(0, 300)}\n  Angles: ${s.angles.map(a => a.label).join(', ') || 'BASE only'}`
-  ).join('\n\n');
+  const sceneSetList = sceneSets.map(s => {
+    let entry = `- ID: ${s.id}\n  Name: ${s.name}\n  Type: ${s.scene_type}\n  Context: ${(s.script_context || 'No description').slice(0, 300)}\n  Angles: ${s.angles.map(a => a.label).join(', ') || 'BASE only'}`;
+    if (s.narrative_role) entry += `\n  Narrative role: ${s.narrative_role}`;
+    if (s.sensory_details) {
+      const sd = s.sensory_details;
+      const senses = [sd.atmosphere, sd.sight, sd.sound].filter(Boolean).join('; ');
+      if (senses) entry += `\n  Sensory: ${senses.slice(0, 150)}`;
+    }
+    return entry;
+  }).join('\n\n');
 
   const userPrompt = `## Episode Brief
 - Archetype: ${briefData.episode_archetype || 'Not set'}
@@ -217,12 +241,20 @@ async function getScenePlanForScriptGenerator(episodeId) {
     include: [{
       model: SceneSet,
       as: 'sceneSet',
-      attributes: ['id', 'name', 'scene_type', 'script_context', 'canonical_description'],
+      attributes: ['id', 'name', 'scene_type', 'script_context', 'canonical_description', 'world_location_id'],
       required: false,
+      include: WorldLocation ? [{
+        model: WorldLocation,
+        as: 'worldLocation',
+        attributes: ['narrative_role', 'sensory_details'],
+        required: false,
+      }] : [],
     }],
   });
 
-  return plans.map(p => ({
+  return plans.map(p => {
+    const loc = p.sceneSet?.worldLocation;
+    return {
     beat_number: p.beat_number,
     beat_name: p.beat_name,
     location: p.sceneSet?.name || 'Unknown',
@@ -234,7 +266,10 @@ async function getScenePlanForScriptGenerator(episodeId) {
     scene_context: p.scene_context || p.sceneSet?.script_context || p.sceneSet?.canonical_description || null,
     director_note: p.director_note,
     locked: p.locked,
-  }));
+    narrative_role: loc?.narrative_role || null,
+    atmosphere: loc?.sensory_details?.atmosphere || null,
+  };
+  });
 }
 
 module.exports = { generateScenePlan, getScenePlanForScriptGenerator, BEAT_STRUCTURE };

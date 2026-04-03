@@ -44,22 +44,25 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    let query = `SELECT * FROM world_events WHERE show_id = :showId`;
+    let query = `SELECT e.*, a.s3_url_processed as invitation_url
+      FROM world_events e
+      LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
+      WHERE e.show_id = :showId`;
     const replacements = { showId };
 
     if (status) {
-      query += ` AND status = :status`;
+      query += ` AND e.status = :status`;
       replacements.status = status;
     }
     if (event_type) {
-      query += ` AND event_type = :event_type`;
+      query += ` AND e.event_type = :event_type`;
       replacements.event_type = event_type;
     }
 
     const validSorts = ['created_at', 'name', 'prestige', 'cost_coins', 'status'];
     const sortCol = validSorts.includes(sort) ? sort : 'created_at';
     const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    query += ` ORDER BY ${sortCol} ${sortOrder}`;
+    query += ` ORDER BY e.${sortCol} ${sortOrder}`;
 
     const [events] = await models.sequelize.query(query, { replacements });
 
@@ -715,7 +718,7 @@ router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req
               a.s3_url_processed as invitation_url, a.id as asset_id
        FROM world_events e
        LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
-       WHERE e.id = :eventId AND e.deleted_at IS NULL LIMIT 1`,
+       WHERE e.id = :eventId LIMIT 1`,
       { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
     );
 
@@ -729,6 +732,267 @@ router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req
         eventName: event.name,
       },
     });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── APPROVE INVITATION ─────────────────────────────────────────────────────
+
+router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { assetId } = req.body;
+    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Mark asset as approved
+    await models.sequelize.query(
+      'UPDATE assets SET approval_status = :status, updated_at = NOW() WHERE id = :assetId',
+      { replacements: { status: 'approved', assetId } }
+    );
+
+    // Link to event
+    await models.sequelize.query(
+      'UPDATE world_events SET invitation_asset_id = :assetId, updated_at = NOW() WHERE id = :eventId',
+      { replacements: { assetId, eventId } }
+    );
+
+    return res.json({ success: true, message: 'Invitation approved and linked to event' });
+  } catch (err) {
+    console.error('[InviteGen] Approve error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── REJECT INVITATION ──────────────────────────────────────────────────────
+
+router.post('/world/:showId/events/:eventId/reject-invitation', optionalAuth, async (req, res) => {
+  try {
+    const { assetId } = req.body;
+    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Soft-delete the rejected asset
+    await models.sequelize.query(
+      'UPDATE assets SET approval_status = :status, deleted_at = NOW(), updated_at = NOW() WHERE id = :assetId',
+      { replacements: { status: 'rejected', assetId } }
+    );
+
+    return res.json({ success: true, message: 'Invitation rejected' });
+  } catch (err) {
+    console.error('[InviteGen] Reject error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── INVITATION VERSION HISTORY ───────────────────────────────────────────────
+
+router.get('/world/:showId/events/:eventId/invitation-history', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const versions = await models.sequelize.query(
+      `SELECT id, name, s3_url_processed as image_url, approval_status,
+              metadata->>'version' as version,
+              metadata->>'theme' as theme,
+              metadata->>'theme_source' as theme_source,
+              metadata->>'composited' as composited,
+              created_at
+       FROM assets
+       WHERE metadata->>'event_id' = :eventId
+         AND asset_type = 'INVITATION_LETTER'
+         AND deleted_at IS NULL
+       ORDER BY created_at DESC`,
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+
+    return res.json({ data: versions, count: versions.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── BATCH GENERATE INVITATIONS ───────────────────────────────────────────────
+
+router.post('/world/:showId/events/batch-generate-invitations', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { eventIds } = req.body;
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // If no specific IDs, get all events without invitations
+    let targetIds = eventIds;
+    if (!targetIds || !Array.isArray(targetIds) || targetIds.length === 0) {
+      const events = await models.sequelize.query(
+        `SELECT id FROM world_events WHERE show_id = :showId AND invitation_asset_id IS NULL`,
+        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
+      );
+      targetIds = events.map(e => e.id);
+    }
+
+    if (targetIds.length === 0) {
+      return res.json({ success: true, message: 'No events need invitations', results: [] });
+    }
+
+    // Cap at 10 per batch to avoid runaway costs
+    const capped = targetIds.slice(0, 10);
+
+    console.log(`[InviteGen] Batch generating ${capped.length} invitations for show ${showId}`);
+
+    // Generate sequentially (DALL-E rate limits)
+    const { generateInvitation } = require('../services/invitationGeneratorService');
+    const results = [];
+
+    for (const id of capped) {
+      try {
+        const result = await generateInvitation(id, models, showId);
+        results.push({ eventId: id, success: true, assetId: result.asset.id, imageUrl: result.imageUrl, version: result.version });
+      } catch (err) {
+        console.error(`[InviteGen] Batch failed for ${id}:`, err.message);
+        results.push({ eventId: id, success: false, error: err.message });
+      }
+    }
+
+    const succeeded = results.filter(r => r.success).length;
+    return res.json({
+      success: true,
+      message: `Generated ${succeeded}/${capped.length} invitations`,
+      results,
+      skipped: targetIds.length - capped.length,
+    });
+  } catch (err) {
+    console.error('[InviteGen] Batch error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PDF EXPORT ───────────────────────────────────────────────────────────────
+
+router.get('/world/:showId/events/:eventId/invitation-pdf', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const { exportInvitationPDF } = require('../services/invitationGeneratorService');
+    const pdfBuffer = await exportInvitationPDF(eventId, models);
+
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename="invitation-${eventId}.png"`);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error('[InviteGen] PDF export error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── ANIMATED INVITATION (Runway image_to_video) ─────────────────────────────
+
+router.post('/world/:showId/events/:eventId/animate-invitation', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    if (!process.env.RUNWAY_ML_API_KEY) {
+      return res.status(503).json({ error: 'RUNWAY_ML_API_KEY not configured' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Get the approved invitation image
+    const [event] = await models.sequelize.query(
+      'SELECT invitation_asset_id FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!event?.invitation_asset_id) {
+      return res.status(400).json({ error: 'No approved invitation to animate. Generate and approve one first.' });
+    }
+
+    const [asset] = await models.sequelize.query(
+      'SELECT s3_url_processed FROM assets WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+      { replacements: { id: event.invitation_asset_id }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!asset?.s3_url_processed) {
+      return res.status(404).json({ error: 'Invitation asset not found' });
+    }
+
+    // Use Runway image_to_video (same pattern as sceneGenerationService)
+    const axios = require('axios');
+    const RUNWAY_API_BASE = 'https://api.dev.runwayml.com/v1';
+
+    const videoResponse = await axios.post(
+      `${RUNWAY_API_BASE}/image_to_video`,
+      {
+        model: 'gen3a_turbo',
+        promptText: 'The invitation card materializes with a soft golden shimmer. Subtle light particles drift upward. The card gently floats and settles. Warm ambient glow. No camera movement.',
+        promptImage: asset.s3_url_processed,
+        duration: 5,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.RUNWAY_ML_API_KEY}`,
+          'Content-Type': 'application/json',
+          'X-Runway-Version': '2024-11-06',
+        },
+        timeout: 30000,
+      }
+    );
+
+    const jobId = videoResponse.data.id;
+
+    return res.json({
+      success: true,
+      message: 'Animation job queued — poll for completion',
+      jobId,
+      pollUrl: `/api/v1/world/${req.params.showId}/events/${eventId}/animate-invitation/${jobId}`,
+    });
+  } catch (err) {
+    console.error('[InviteGen] Animation error:', err.response?.data || err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POLL ANIMATION JOB ──────────────────────────────────────────────────────
+
+router.get('/world/:showId/events/:eventId/animate-invitation/:jobId', optionalAuth, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    const axios = require('axios');
+    const response = await axios.get(
+      `https://api.dev.runwayml.com/v1/tasks/${jobId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.RUNWAY_ML_API_KEY}`,
+          'X-Runway-Version': '2024-11-06',
+        },
+        timeout: 15000,
+      }
+    );
+
+    const task = response.data;
+
+    if (task.status === 'SUCCEEDED') {
+      const outputs = Array.isArray(task.output) ? task.output : [task.output];
+      return res.json({ status: 'complete', videoUrl: outputs[0] });
+    }
+    if (task.status === 'FAILED') {
+      return res.json({ status: 'failed', error: task.failure || 'Unknown failure' });
+    }
+    return res.json({ status: task.status });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

@@ -25,6 +25,12 @@ module.exports = (sequelize) => {
           as: 'show',
         });
       }
+      if (models.WorldLocation) {
+        SceneSet.belongsTo(models.WorldLocation, {
+          foreignKey: 'world_location_id',
+          as: 'worldLocation',
+        });
+      }
       if (models.SceneSetEpisode) {
         SceneSet.belongsToMany(models.Episode, {
           through: models.SceneSetEpisode,
@@ -61,6 +67,7 @@ module.exports = (sequelize) => {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     universe_id: { type: DataTypes.UUID, allowNull: true },
     show_id: { type: DataTypes.UUID, allowNull: true },
+    world_location_id: { type: DataTypes.UUID, allowNull: true },
     name: { type: DataTypes.STRING, allowNull: false },
     scene_type: {
       type: DataTypes.ENUM('HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER'),

@@ -1,28 +1,26 @@
 'use strict';
 
 /**
- * Invitation Generator Service
+ * Invitation Generator Service v2
  *
- * Turns a world_events record into a beautiful LalaVerse invitation image.
- * Each event gets its own visual personality based on theme, mood, dress code.
+ * Full pipeline:
+ *   Event record
+ *     -> DALL-E 3 generates luxury background (no text)
+ *     -> Canvas renders invitation text layout
+ *     -> Sharp composites text onto background
+ *     -> Final readable invitation PNG -> S3 -> Asset record
  *
- * Flow:
- *   Event record -> build DALL-E 3 prompt -> generate image -> S3 -> Asset record
+ * The DALL-E prompt explicitly asks for NO TEXT on the background
+ * so the Canvas layer has a clean surface to write on.
  *
- * The generated asset:
- *   category: 'overlay'
- *   asset_type: 'INVITATION_LETTER'
- *   asset_role: 'UI.OVERLAY.INVITATION'
- *   asset_group: 'SHOW'
- *   purpose: 'MAIN'
- *   Linked back to event via world_events.invitation_asset_id
- *
- * Uses raw axios for DALL-E 3 calls (same pattern as objectGenerationService).
+ * Asset starts as pending_review — not linked to event until approved
+ * via the approve-invitation endpoint.
  */
 
 const axios = require('axios');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
+const { compositeInvitation, compositeInvitationPDF, detectTheme, checkFonts } = require('./invitationCompositingService');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
@@ -30,148 +28,112 @@ const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
 
-// ─── THEME MAPPINGS ───────────────────────────────────────────────────────────
+// ─── THEME PRESETS ────────────────────────────────────────────────────────────
 
 const THEME_PRESETS = {
   'honey luxe': {
-    background: 'warm honey cream with golden silk texture, subtle amber glow',
-    border: 'delicate gold foil border with honey-toned ornamental corners',
-    florals: 'soft honey-toned peonies and baby\'s breath, scattered lightly',
-    typography: 'elegant champagne gold script header, warm cream serif body text',
-    glow: 'warm golden light emanating from center, like candlelight',
+    background: 'warm honey cream with golden silk texture, subtle amber glow emanating from center',
+    border: 'delicate ornamental gold foil border with honey-toned curved corners and fine filigree',
+    florals: 'soft honey-toned peonies and cream roses scattered in corners, light and delicate',
+    atmosphere: 'warm candlelight glow, golden hour warmth',
   },
   'avant-garde': {
-    background: 'soft ivory with minimal geometric marble texture',
-    border: 'thin sleek black or deep charcoal border, asymmetric',
-    florals: 'single sculptural black lily or abstract floral silhouette',
-    typography: 'bold modern serif in deep charcoal, editorial spacing',
-    glow: 'cool silver sheen, studio lighting',
+    background: 'ivory with subtle black marble veining, cool and precise',
+    border: 'thin asymmetric black border with single gold corner accent',
+    florals: 'single sculptural black orchid silhouette, minimal',
+    atmosphere: 'crisp studio lighting, high contrast',
   },
   'soft glam': {
-    background: 'blush pink with delicate silk sheen, rose gold undertones',
-    border: 'rose gold foil border with soft curved ornamental edges',
-    florals: 'soft pink roses and peonies, ethereal and romantic',
-    typography: 'flowing rose gold script header, blush pink serif body',
-    glow: 'soft warm pink glow, dreamy and aspirational',
+    background: 'blush pink with delicate silk sheen, rose gold undertones and gentle shimmer',
+    border: 'rose gold foil border with soft curved ornamental edges and small floral details',
+    florals: 'soft pink roses and white peonies, ethereal and romantic, corners and sides',
+    atmosphere: 'soft warm pink glow, dreamy and aspirational',
   },
   'romantic garden': {
     background: 'soft sage green with ivory overlay, garden party elegance',
-    border: 'delicate floral wreath border in blush and green',
-    florals: 'lush garden roses, ranunculus, eucalyptus in full bloom',
-    typography: 'handwritten-style script in forest green, clean ivory serif body',
-    glow: 'dappled sunlight effect, outdoor warmth',
+    border: 'delicate floral wreath border in blush, ivory, and sage green',
+    florals: 'lush garden roses, ranunculus, eucalyptus, full bloom abundance',
+    atmosphere: 'dappled golden sunlight, outdoor warmth',
   },
   'luxury intimate': {
-    background: 'deep champagne with velvet texture suggestion',
-    border: 'thin gold double-line border, understated luxury',
-    florals: 'single camellia or gardenia, centered, minimal',
-    typography: 'refined thin-weight serif in warm champagne gold, generous spacing',
-    glow: 'intimate candlelight glow, evening warmth',
+    background: 'deep champagne with velvet texture suggestion, warm and enveloping',
+    border: 'thin double-line gold border, understated luxury',
+    florals: 'single camellia or gardenia, centered and minimal',
+    atmosphere: 'intimate candlelight glow, evening warmth, soft shadows',
   },
   'formal glamour': {
-    background: 'cream white with subtle pearl sheen',
-    border: 'ornate gold foil border with classical filigree corners',
-    florals: 'white orchids and gold-tipped leaves, architectural',
-    typography: 'classic black or deep navy script header, ivory serif body',
-    glow: 'crisp bright light with gold accents',
+    background: 'cream white with subtle pearl sheen, pristine and elevated',
+    border: 'ornate classical gold filigree border with corner medallions',
+    florals: 'white orchids and gold-tipped leaves, architectural placement',
+    atmosphere: 'crisp bright light with gold accents, formal and polished',
   },
   'chic minimal': {
-    background: 'pure cream with hairline texture, no pattern',
+    background: 'pure cream, hairline texture, clean and breathable',
     border: 'single thin black line border, architectural precision',
-    florals: 'none, or single thin botanical line drawing',
-    typography: 'geometric sans-serif in black, maximum white space',
-    glow: 'clean studio light, no warmth',
+    florals: 'single thin botanical line drawing, one corner only',
+    atmosphere: 'clean studio light, maximum negative space',
   },
   'power fashion': {
-    background: 'ivory with subtle black marble veining',
-    border: 'bold black border with gold corner accents',
+    background: 'ivory with subtle black marble veining, statement material',
+    border: 'bold black border with gold corner accents, commanding',
     florals: 'architectural black florals or none',
-    typography: 'strong bold serif in black, gold accent color',
-    glow: 'high-contrast editorial lighting',
+    atmosphere: 'high-contrast editorial lighting, bold and confident',
   },
 };
 
 const DEFAULT_THEME = {
   background: 'soft cream ivory with subtle silk texture and marble undertone',
-  border: 'elegant gold foil border with ornamental curved edges',
-  florals: 'soft blush roses and ivory peonies, delicately placed',
-  typography: 'elegant champagne gold script header, warm cream serif body text',
-  glow: 'warm golden light from center, luxurious and aspirational',
+  border: 'elegant gold foil border with ornamental curved edges and fine filigree details',
+  florals: 'soft blush roses and ivory peonies, delicately placed in corners',
+  atmosphere: 'warm golden light from center, luxurious and aspirational',
 };
 
-// ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
+// ─── DALL-E PROMPT (background only — no text) ────────────────────────────────
 
-function buildInvitationPrompt(event) {
-  const themeName = (event.theme || '').toLowerCase();
-  const themeConfig = THEME_PRESETS[themeName] || DEFAULT_THEME;
-
-  const floralText = event.floral_style === 'none'
-    ? 'no florals, clean and minimal'
-    : event.floral_style
-      ? `${event.floral_style} in soft tones, delicately placed`
-      : themeConfig.florals;
-
-  const borderText = event.border_style === 'none'
-    ? 'no border, clean edge'
-    : event.border_style === 'gold_foil'
-      ? 'elegant gold foil border with ornamental corners'
-      : event.border_style === 'ornate'
-        ? 'ornate classical filigree gold border'
-        : event.border_style === 'minimal'
-          ? 'single thin gold line border'
-          : themeConfig.border;
-
-  const colorText = event.color_palette?.length > 0
-    ? `Color palette: ${event.color_palette.join(', ')}.`
-    : '';
-
-  const dressKeywords = event.dress_code_keywords?.slice(0, 3).join(', ') || '';
+function buildBackgroundPrompt(event) {
+  const themeName = detectTheme(event);
+  const themeConfig = (themeName && THEME_PRESETS[themeName]) || DEFAULT_THEME;
 
   const prestige = event.prestige || 5;
-  const richnessText = prestige >= 8
+  const richness = prestige >= 8
     ? 'Maximum luxury — gold accents are rich and opulent'
     : prestige >= 5
       ? 'Refined elegance — gold accents are tasteful and considered'
       : 'Understated — minimal decoration, clean and simple';
 
-  return `Create a luxury LalaVerse invitation card as a flat graphic design, portrait orientation (2:3 ratio).
+  const colorText = event.color_palette?.length > 0
+    ? `Color palette emphasis: ${event.color_palette.join(', ')}.`
+    : '';
 
-CRITICAL: This is a FLAT GRAPHIC DESIGN of an invitation card. No hands holding it. No table surface. No 3D rendering. Just the card itself centered on a neutral background, like a product photo of stationery.
+  return `Create a luxury invitation card BACKGROUND as a flat graphic design, portrait orientation.
+
+CRITICAL RULES:
+- NO TEXT anywhere on the image. Zero text. No words. No letters. No numbers.
+- This is a BACKGROUND ONLY — text will be added separately
+- Leave a large clear central area (approximately 60% of card) completely empty for text overlay
+- The design elements (border, florals, texture) should frame the edges only
 
 CARD DESIGN:
-
 Background: ${themeConfig.background}
-Border: ${borderText}
-Florals: ${floralText}
+Border/Frame: ${themeConfig.border}
+Floral elements: ${themeConfig.florals} — EDGES AND CORNERS ONLY, not center
 ${colorText}
-Tone: ${dressKeywords ? `Visual tone reflects: ${dressKeywords}.` : ''}
-Richness: ${richnessText}
+Richness: ${richness}
 
-TYPOGRAPHY LAYOUT (from top to bottom):
-1. Small header at top center: "LalaVerse" in delicate refined lettering
-2. Large center title: "${event.name}" in ${themeConfig.typography.split(',')[0]}
-3. Invitation phrase below title: "You are cordially invited" in thin elegant serif
-4. Details section:
-   ${event.location_hint ? `Location: ${event.location_hint}` : ''}
-   ${event.dress_code ? `Dress Code: ${event.dress_code}` : ''}
-   ${event.cost_coins ? `Investment: ${event.cost_coins} coins` : ''}
-5. Signature at bottom: "Curated by Lala" in flowing script
-
-MOOD: ${event.mood || 'soft, luxurious, feminine, aspirational'}
-${themeConfig.glow ? `LIGHTING EFFECT: ${themeConfig.glow}` : ''}
-
-COMPOSITION RULES:
-- Centered layout with strong visual hierarchy
-- Generous negative space — do not crowd the card
-- The card should look like a premium physical invitation
-- Suitable to float as an overlay on a luxury lifestyle video
-- Card takes up approximately 70% of the image frame
+COMPOSITION:
+- Portrait card format (taller than wide)
+- Decorative elements concentrated at top and bottom edges
+- Large empty cream/ivory center zone — this is where text will appear
+- Soft vignette effect toward center (lighter in middle, slightly darker at edges)
+- ${themeConfig.atmosphere}
+- The card should feel like a premium physical invitation stationery item
 - Soft neutral background behind the card (cream or very light gray)
 
-Style reference: High-end fashion editorial stationery. Think Vogue meets luxury wedding invitation meets fantasy game UI card.`;
+Style: High-end fashion editorial stationery. Think luxury wedding stationery meets fashion house invite.
+Output: Clean background suitable for text overlay compositing.`;
 }
 
-// ─── DALL-E 3 API (axios — matches objectGenerationService pattern) ──────────
+// ─── DALL-E 3 API (raw axios — matches objectGenerationService pattern) ──────
 
 async function callDallE3(prompt) {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured. Add it to your .env file.');
@@ -196,28 +158,23 @@ async function callDallE3(prompt) {
     }
   );
 
-  return response.data.data[0];
+  return response.data.data[0]?.url;
 }
 
-// ─── S3 UPLOAD ────────────────────────────────────────────────────────────────
+// ─── S3 HELPERS ───────────────────────────────────────────────────────────────
 
-async function uploadToS3(imageBuffer, eventId, contentType = 'image/png') {
-  const ext = contentType.includes('png') ? 'png' : 'jpg';
-  const s3Key = `invitations/${eventId}/${uuidv4()}.${ext}`;
-
+async function uploadToS3(buffer, eventId, suffix, contentType = 'image/png') {
+  const s3Key = `invitations/${eventId}/${uuidv4()}-${suffix}.png`;
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET,
     Key: s3Key,
-    Body: imageBuffer,
+    Body: buffer,
     ContentType: contentType,
     CacheControl: 'max-age=31536000',
-    Metadata: { source: 'invitation-generator', event_id: eventId },
+    Metadata: { source: 'invitation-generator-v2', event_id: eventId },
   }));
-
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
-
-// ─── S3 CLEANUP ───────────────────────────────────────────────────────────────
 
 async function deleteOldS3Asset(url) {
   if (!url || !S3_BUCKET) return;
@@ -233,14 +190,45 @@ async function deleteOldS3Asset(url) {
   }
 }
 
+// ─── VERSION COUNTING ─────────────────────────────────────────────────────────
+
+async function getNextVersion(sequelize, eventId) {
+  const [result] = await sequelize.query(
+    `SELECT COUNT(*) as count FROM assets
+     WHERE metadata->>'event_id' = :eventId
+       AND asset_type = 'INVITATION_LETTER'`,
+    { replacements: { eventId }, type: sequelize.QueryTypes.SELECT }
+  );
+  return (parseInt(result?.count || 0, 10)) + 1;
+}
+
+// ─── STYLE REFERENCE (host_brand consistency) ─────────────────────────────────
+
+async function findBrandStyleReference(sequelize, event) {
+  if (!event.host_brand) return null;
+  // Find the most recent approved invitation from the same host_brand
+  const [prev] = await sequelize.query(
+    `SELECT a.s3_url_processed FROM assets a
+     JOIN world_events e ON a.metadata->>'event_id' = e.id::text
+     WHERE e.host_brand = :brand
+       AND e.id != :eventId
+       AND a.asset_type = 'INVITATION_LETTER'
+       AND a.approval_status = 'approved'
+       AND a.deleted_at IS NULL
+     ORDER BY a.created_at DESC LIMIT 1`,
+    { replacements: { brand: event.host_brand, eventId: event.id }, type: sequelize.QueryTypes.SELECT }
+  );
+  return prev?.s3_url_processed || null;
+}
+
 // ─── ASSET RECORD ─────────────────────────────────────────────────────────────
 
-async function createInvitationAsset(models, event, s3Url, prompt, showId) {
+async function createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme) {
   const { Asset } = models;
 
   const asset = await Asset.create({
     id: uuidv4(),
-    name: `${event.name} — Invitation`,
+    name: `${event.name} — Invitation v${version}`,
     asset_type: 'INVITATION_LETTER',
     asset_role: 'UI.OVERLAY.INVITATION',
     asset_group: 'SHOW',
@@ -253,21 +241,24 @@ async function createInvitationAsset(models, event, s3Url, prompt, showId) {
     processing_status: 'none',
     mood_tags: [
       event.mood,
-      event.theme,
+      resolvedTheme,
       ...(event.dress_code_keywords || []).slice(0, 2),
     ].filter(Boolean),
     color_palette: event.color_palette || [],
     show_id: showId || null,
     metadata: {
-      source: 'invitation-generator',
+      source: 'invitation-generator-v2',
       event_id: event.id,
       event_name: event.name,
-      prompt_used: prompt.slice(0, 500),
-      theme: event.theme,
+      theme: resolvedTheme,
+      theme_source: event.theme ? 'manual' : 'auto-detected',
       prestige: event.prestige,
+      version,
+      host_brand: event.host_brand || null,
+      composited: checkFonts(),
       generated_at: new Date().toISOString(),
     },
-    approval_status: 'approved',
+    approval_status: 'pending_review',
   });
 
   return asset;
@@ -278,89 +269,113 @@ async function createInvitationAsset(models, event, s3Url, prompt, showId) {
 /**
  * Generate a LalaVerse invitation letter for an event.
  *
+ * Pipeline: DALL-E background -> Canvas text -> Sharp composite -> S3 -> Asset
+ * Falls back to DALL-E-only if fonts are not installed.
+ * Asset starts as pending_review — not linked to event until approved.
+ * Previous versions are kept (soft-delete only on the event FK, not the assets).
+ *
  * @param {string} eventId
  * @param {object} models - Sequelize models
  * @param {string} showId
- * @returns {{ asset, imageUrl, prompt }}
+ * @returns {{ asset, imageUrl, eventName, theme, version }}
  */
 async function generateInvitation(eventId, models, showId) {
   const { sequelize } = models;
 
-  // Load the event (respect soft deletes)
+  // Load the event (world_events has no deleted_at column)
   const [event] = await sequelize.query(
-    'SELECT * FROM world_events WHERE id = :eventId AND (deleted_at IS NULL) LIMIT 1',
+    'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
     { replacements: { eventId }, type: sequelize.QueryTypes.SELECT }
   );
 
   if (!event) throw new Error(`Event ${eventId} not found`);
 
-  // Build prompt
-  const prompt = buildInvitationPrompt(event);
+  const resolvedTheme = detectTheme(event) || 'default';
+  const version = await getNextVersion(sequelize, eventId);
 
-  console.log(`[InviteGen] Generating invitation for: ${event.name}`);
-  console.log(`[InviteGen] Theme: ${event.theme || 'default'} | Prestige: ${event.prestige}`);
+  console.log(`[InviteGen] Generating v${version} for: ${event.name} | Theme: ${resolvedTheme} | Prestige: ${event.prestige}`);
 
-  // Clean up old invitation asset before generating new one
-  let oldAssetUrl = null;
-  if (event.invitation_asset_id) {
-    try {
-      const [oldAsset] = await sequelize.query(
-        'SELECT s3_url_raw FROM assets WHERE id = :assetId LIMIT 1',
-        { replacements: { assetId: event.invitation_asset_id }, type: sequelize.QueryTypes.SELECT }
-      );
-      oldAssetUrl = oldAsset?.s3_url_raw;
-
-      // Soft-delete the old asset record
-      await sequelize.query(
-        'UPDATE assets SET deleted_at = NOW() WHERE id = :assetId AND deleted_at IS NULL',
-        { replacements: { assetId: event.invitation_asset_id } }
-      );
-    } catch (err) {
-      console.warn('[InviteGen] Old asset cleanup warning:', err.message);
-    }
+  // Find style reference from same host_brand (visual consistency)
+  const brandStyleRef = await findBrandStyleReference(sequelize, event);
+  if (brandStyleRef) {
+    console.log(`[InviteGen] Using style reference from same brand: ${event.host_brand}`);
   }
 
-  // Call DALL-E 3
-  const result = await callDallE3(prompt);
-  const imageUrl = result?.url;
-  const revisedPrompt = result?.revised_prompt;
+  // Step 1: Generate background (no text) via DALL-E 3
+  const bgPrompt = buildBackgroundPrompt(event);
+  console.log('[InviteGen] Calling DALL-E 3 for background...');
+  const bgUrl = await callDallE3(bgPrompt);
 
-  if (!imageUrl) throw new Error('DALL-E 3 did not return an image URL');
+  if (!bgUrl) throw new Error('DALL-E 3 did not return an image URL');
 
-  // Download the image
-  const imageResponse = await axios.get(imageUrl, {
+  // Download background
+  const bgResponse = await axios.get(bgUrl, {
     responseType: 'arraybuffer',
     timeout: 60000,
   });
-  const imageBuffer = Buffer.from(imageResponse.data);
+  const bgBuffer = Buffer.from(bgResponse.data);
 
-  // Upload to S3
-  const s3Url = await uploadToS3(imageBuffer, eventId, 'image/png');
-
-  console.log(`[InviteGen] Stored at: ${s3Url}`);
-
-  // Clean up old S3 object (best-effort, after new one is safely stored)
-  if (oldAssetUrl) {
-    await deleteOldS3Asset(oldAssetUrl);
+  // Step 2: Composite text (or fall back to DALL-E-only image)
+  let finalBuffer;
+  const composited = await compositeInvitation(bgBuffer, event);
+  if (composited) {
+    console.log('[InviteGen] Text composited successfully (v2 pipeline)');
+    finalBuffer = composited;
+  } else {
+    console.warn('[InviteGen] Fonts not available — using DALL-E background as-is (v1 fallback)');
+    finalBuffer = bgBuffer;
   }
 
-  // Create Asset record
-  const asset = await createInvitationAsset(models, event, s3Url, prompt, showId);
+  // Step 3: Upload final to S3
+  const s3Url = await uploadToS3(finalBuffer, eventId, `v${version}`);
+  console.log(`[InviteGen] Invitation v${version} stored: ${s3Url}`);
 
-  // Link back to event
-  await sequelize.query(
-    'UPDATE world_events SET invitation_asset_id = :assetId, updated_at = NOW() WHERE id = :eventId',
-    { replacements: { assetId: asset.id, eventId } }
-  );
+  // Step 4: Create Asset record (pending_review — not linked to event until approved)
+  // Previous versions are NOT deleted — kept for history
+  const asset = await createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme);
 
   return {
     success: true,
     asset,
     imageUrl: s3Url,
-    prompt: revisedPrompt || prompt,
     eventName: event.name,
-    theme: event.theme || 'default',
+    theme: resolvedTheme,
+    version,
+    composited: !!composited,
   };
 }
 
-module.exports = { generateInvitation, buildInvitationPrompt };
+/**
+ * Export an existing invitation as a high-res print-ready PNG.
+ */
+async function exportInvitationPDF(eventId, models) {
+  const { sequelize } = models;
+
+  const [event] = await sequelize.query(
+    'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
+    { replacements: { eventId }, type: sequelize.QueryTypes.SELECT }
+  );
+  if (!event) throw new Error(`Event ${eventId} not found`);
+  if (!event.invitation_asset_id) throw new Error('No approved invitation for this event');
+
+  const [asset] = await sequelize.query(
+    'SELECT s3_url_raw FROM assets WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+    { replacements: { id: event.invitation_asset_id }, type: sequelize.QueryTypes.SELECT }
+  );
+  if (!asset?.s3_url_raw) throw new Error('Invitation asset not found');
+
+  // Download the current invitation background
+  const response = await axios.get(asset.s3_url_raw, {
+    responseType: 'arraybuffer',
+    timeout: 60000,
+  });
+  const bgBuffer = Buffer.from(response.data);
+
+  // Re-composite at full quality for print
+  const pdfBuffer = await compositeInvitationPDF(bgBuffer, event);
+  if (!pdfBuffer) throw new Error('Fonts not available for PDF export');
+
+  return pdfBuffer;
+}
+
+module.exports = { generateInvitation, exportInvitationPDF, buildBackgroundPrompt };
