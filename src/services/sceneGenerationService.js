@@ -37,7 +37,7 @@ const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core f
 
 // ─── NEGATIVE PROMPT (universal) ─────────────────────────────────────────────
 
-const NEGATIVE_PROMPT = `neon lighting, cyberpunk, cluttered decor, ultra-minimal sterile, dark moody lighting, distorted furniture legs, melted objects, blobby shapes, warped reflections, text, watermarks, signatures, extra fingers, malformed hands, blurry, low resolution, oversaturated, chromatic aberration`;
+const NEGATIVE_PROMPT = `person, people, human, figure, silhouette, body, face, hands, legs, shadow of a person, reflection of a person, neon lighting, cyberpunk, cluttered decor, ultra-minimal sterile, dark moody lighting, distorted furniture legs, melted objects, blobby shapes, warped reflections, text, watermarks, signatures, blurry, low resolution, oversaturated, chromatic aberration`;
 
 // ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
 
@@ -98,20 +98,25 @@ const VIDEO_MOVEMENT_MODIFIERS = {
   OTHER:        'Camera moves gently through the space with natural flowing motion. Smooth cinematic drift.',
 };
 
+// ─── ENVIRONMENT-ONLY CONSTRAINT (Scene Rule #1 — frozen Session 21) ────────
+
+const ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human. No figure. No silhouette. No body. No face. No hands. No reflection of a person. Environment only.';
+
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
 function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
   const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
   // Condensed anchor frees ~400 chars for description vs v1.1's ~200
-  const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 400);
+  const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 350);
 
   const parts = [
+    ENVIRONMENT_ONLY_CONSTRAINT,
     LALAVERSE_VISUAL_ANCHOR,
     `LOCATION: ${sceneSet.name}.`,
     descriptionSlice,
     `CAMERA: ${cameraText}`,
-    'Photorealistic cinematic quality. No text overlays. No watermarks. No distorted faces or hands.',
+    'Photorealistic cinematic quality. No text overlays. No watermarks.',
   ];
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
