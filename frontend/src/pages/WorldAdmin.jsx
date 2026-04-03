@@ -58,6 +58,16 @@ function difficultyLabel(score) {
   return { text: 'Extreme', color: '#7c3aed', bg: '#faf5ff' };
 }
 
+// ─── EVENT STATUS PIPELINE ───
+const EVENT_STATUSES = ['draft', 'ready', 'used', 'scripted', 'filmed'];
+const EVENT_STATUS_CONFIG = {
+  draft:    { label: 'Draft', color: '#94a3b8', bg: '#f1f5f9', icon: '○' },
+  ready:    { label: 'Ready', color: '#b45309', bg: '#fef3c7', icon: '◎' },
+  used:     { label: 'Injected', color: '#6366f1', bg: '#eef2ff', icon: '◉' },
+  scripted: { label: 'Scripted', color: '#16a34a', bg: '#f0fdf4', icon: '✓' },
+  filmed:   { label: 'Filmed', color: '#0284c7', bg: '#f0f9ff', icon: '★' },
+};
+
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
   { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
@@ -114,6 +124,7 @@ function WorldAdmin() {
   const [aiFixLoading, setAiFixLoading] = useState(false);
   const [aiFixSuggestions, setAiFixSuggestions] = useState(null);
   const [aiRevising, setAiRevising] = useState(false);
+  const [compareEvents, setCompareEvents] = useState(null); // [eventA, eventB]
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
@@ -553,6 +564,103 @@ The revised event should feel like a completely different experience from the si
     });
   };
 
+  // ── Event status pipeline ──
+  const advanceEventStatus = async (ev) => {
+    const currentIdx = EVENT_STATUSES.indexOf(ev.status || 'draft');
+    const nextStatus = EVENT_STATUSES[Math.min(currentIdx + 1, EVENT_STATUSES.length - 1)];
+    try {
+      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { status: nextStatus });
+      if (res.data.success) {
+        setWorldEvents(prev => prev.map(e => e.id === ev.id ? { ...e, ...res.data.event, status: nextStatus } : e));
+        setToast(`${ev.name} → ${EVENT_STATUS_CONFIG[nextStatus]?.label}`);
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch {}
+  };
+
+  // ── Bulk AI Enhance ──
+  const handleBulkEnhance = async () => {
+    const drafts = worldEvents.filter(ev => !ev.description || !ev.narrative_stakes || !ev.host);
+    if (drafts.length === 0) { setToast('All events already enhanced'); setTimeout(() => setToast(null), 3000); return; }
+    if (!window.confirm(`Enhance ${drafts.length} incomplete events with AI? This may take a minute.`)) return;
+    setAiFixLoading(true);
+    let enhanced = 0;
+    for (const ev of drafts.slice(0, 10)) {
+      try {
+        const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+          warnings: [{ msg: `ENHANCE: Fill empty fields for "${ev.name}" (${ev.event_type}, prestige ${ev.prestige}). Return action "enhance" with new_value JSON including host, description, narrative_stakes, career_milestone, fail_consequence, success_unlock, location_hint, dress_code_keywords.` }],
+          events: [ev], episodes,
+        });
+        const data = res.data?.data?.[0]?.new_value;
+        if (data) {
+          const parsed = typeof data === 'object' ? data : JSON.parse(data);
+          const toSave = {};
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v && !ev[k]) toSave[k] = v;
+          }
+          if (Object.keys(toSave).length > 0) {
+            await api.put(`/api/v1/world/${showId}/events/${ev.id}`, toSave);
+            enhanced++;
+          }
+        }
+      } catch {}
+    }
+    setAiFixLoading(false);
+    setToast(`✨ Enhanced ${enhanced} events`);
+    setTimeout(() => setToast(null), 3000);
+    loadData();
+  };
+
+  // ── Event export CSV ──
+  const handleExportCSV = () => {
+    const headers = ['Name', 'Type', 'Host', 'Brand', 'Prestige', 'Cost', 'Strictness', 'Deadline', 'Dress Code', 'Status', 'Episode', 'Narrative Stakes'];
+    const rows = worldEvents.map(ev => {
+      const ep = episodes.find(e => e.id === ev.used_in_episode_id);
+      return [ev.name, ev.event_type, ev.host || '', ev.host_brand || '', ev.prestige, ev.cost_coins, ev.strictness, ev.deadline_type, ev.dress_code || '', ev.status, ep ? `${ep.episode_number}. ${ep.title}` : '', (ev.narrative_stakes || '').replace(/"/g, '""')].map(v => `"${v}"`).join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `events-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  // ── Wardrobe vs Dress Code conflict detection ──
+  const getDressCodeConflicts = () => {
+    const conflicts = [];
+    for (const ev of worldEvents.filter(e => e.used_in_episode_id && e.dress_code_keywords?.length > 0)) {
+      const ep = episodes.find(e => e.id === ev.used_in_episode_id);
+      if (!ep) continue;
+      const epWardrobe = wardrobeItems.filter(w => w.episode_id === ep.id || w.show_id === showId);
+      if (epWardrobe.length === 0) continue;
+      const wardrobeKeywords = epWardrobe.flatMap(w => [w.style, w.category, w.color, ...(w.tags || [])].filter(Boolean).map(s => s.toLowerCase()));
+      const eventKeywords = ev.dress_code_keywords.map(k => k.toLowerCase());
+      const matches = eventKeywords.filter(k => wardrobeKeywords.some(wk => wk.includes(k) || k.includes(wk)));
+      if (matches.length === 0 && eventKeywords.length >= 3) {
+        conflicts.push({ event: ev, episode: ep, eventKeywords, wardrobeKeywords: wardrobeKeywords.slice(0, 5) });
+      }
+    }
+    return conflicts;
+  };
+
+  // ── Event → Script generation ──
+  const handleGenerateScriptFromEvent = async (eventId, episodeId) => {
+    setGenerating(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-script`, { episode_id: episodeId });
+      if (res.data.success) {
+        setToast('✅ Script generated! Check the episode.');
+        setTimeout(() => setToast(null), 4000);
+        // Advance event status
+        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'scripted' } : ev));
+      }
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Script generation failed');
+      setTimeout(() => setToast(null), 4000);
+    } finally { setGenerating(false); }
+  };
+
   const injectEvent = async (eventId, episodeId) => {
     setInjecting(true); setInjectError(null); setError(null);
     try {
@@ -855,6 +963,50 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     )}
 
+                    {/* ── Scene Set ── */}
+                    {linkedEvent?.scene_set_id && (() => {
+                      const ss = sceneSets.find(s => s.id === linkedEvent.scene_set_id);
+                      return ss ? (
+                        <div style={{ marginTop: 14 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📍 Location</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6 }} />}
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{ss.name}</div>
+                              <div style={{ fontSize: 10, color: '#94a3b8' }}>{ss.scene_type?.replace(/_/g, ' ')} · {ss.angles?.length || 0} angles</div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* ── Wardrobe for this episode ── */}
+                    {(() => {
+                      const epWardrobe = wardrobeItems.filter(w => w.episode_id === ep.id);
+                      return epWardrobe.length > 0 ? (
+                        <div style={{ marginTop: 14 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>👗 Wardrobe ({epWardrobe.length})</div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {epWardrobe.slice(0, 6).map(w => (
+                              <span key={w.id} style={{ padding: '3px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 6, fontSize: 10, color: '#7c3aed', fontWeight: 600 }}>
+                                {w.name || w.category || 'Item'}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* ── Generate Script button ── */}
+                    {linkedEvent && (
+                      <div style={{ marginTop: 14 }}>
+                        <button onClick={() => handleGenerateScriptFromEvent(linkedEvent.id, ep.id)} disabled={generating}
+                          style={{ padding: '6px 16px', background: generating ? '#e5e7eb' : 'linear-gradient(135deg, #16a34a, #22c55e)', color: generating ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: generating ? 'wait' : 'pointer' }}>
+                          {generating ? '⏳ Generating...' : '📝 Generate Script from Event'}
+                        </button>
+                      </div>
+                    )}
+
                     {/* ── Evaluation Details ── */}
                     {ej && (
                       <div style={{ marginTop: 14 }}>
@@ -941,8 +1093,10 @@ The revised event should feel like a completely different experience from the si
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>💌 Events Library</h2>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S.smBtn, background: '#f0fdf4', color: '#16a34a' }}>📋 Templates</button>
+              <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={{ ...S.smBtn, background: '#faf5ff', color: '#7c3aed' }}>{aiFixLoading ? '⏳...' : '✨ Enhance All'}</button>
+              <button onClick={handleExportCSV} style={{ ...S.smBtn, background: '#f0f9ff', color: '#0284c7' }}>📥 Export</button>
               {bulkMode ? (
                 <button onClick={() => { setBulkMode(false); setSelectedEvents(new Set()); }} style={{ ...S.smBtn, background: '#fef2f2', color: '#dc2626' }}>✕ Cancel</button>
               ) : (
@@ -1039,6 +1193,47 @@ The revised event should feel like a completely different experience from the si
               </div>
             </div>
           )}
+
+          {/* Season arc visualization */}
+          {episodes.length > 3 && worldEvents.some(ev => ev.used_in_episode_id) && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Season Arc — Difficulty Curve</div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 60 }}>
+                {[...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0)).map(ep => {
+                  const ev = worldEvents.find(e => e.used_in_episode_id === ep.id);
+                  const diff = ev ? calcDifficulty(ev) : 0;
+                  const dl = ev ? difficultyLabel(diff) : { bg: '#f1f5f9', color: '#cbd5e1' };
+                  const height = ev ? Math.max(8, (diff / 10) * 55) : 4;
+                  return (
+                    <div key={ep.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <div style={{ width: '100%', height, background: ev ? dl.color : '#e2e8f0', borderRadius: '3px 3px 0 0', transition: 'height 0.3s ease', opacity: ev ? 0.7 : 0.3 }}
+                        title={ev ? `Ep ${ep.episode_number}: ${ev.name} (${diff})` : `Ep ${ep.episode_number}: no event`} />
+                      <span style={{ fontSize: 7, color: '#94a3b8' }}>{ep.episode_number}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Easy</span>
+                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Hard</span>
+              </div>
+            </div>
+          )}
+
+          {/* Wardrobe vs Dress Code conflicts */}
+          {(() => {
+            const conflicts = getDressCodeConflicts();
+            return conflicts.length > 0 ? (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', marginBottom: 6 }}>👗 Wardrobe Conflicts</div>
+                {conflicts.map((c, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#991b1b', marginBottom: 3 }}>
+                    Ep {c.episode.episode_number} "{c.event.name}" wants [{c.eventKeywords.join(', ')}] but wardrobe has [{c.wardrobeKeywords.join(', ')}]
+                  </div>
+                ))}
+              </div>
+            ) : null;
+          })()}
 
           {/* Sequence validation warnings + AI Fix */}
           {(() => {
@@ -1164,6 +1359,9 @@ The revised event should feel like a completely different experience from the si
           {bulkMode && selectedEvents.size > 0 && (
             <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#4338ca' }}>{selectedEvents.size} selected</span>
+              {selectedEvents.size === 2 && (
+                <button onClick={() => { const ids = [...selectedEvents]; setCompareEvents(worldEvents.filter(ev => ids.includes(ev.id))); }} style={{ padding: '3px 10px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#7c3aed', fontWeight: 600 }}>🔍 Compare</button>
+              )}
               <span style={{ fontSize: 11, color: '#64748b' }}>Link to:</span>
               {episodes.slice(0, 6).map(ep => (
                 <button key={ep.id} onClick={() => bulkInject(ep.id)} style={{ padding: '3px 10px', background: '#fff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#1a1a2e', fontWeight: 600 }}>
@@ -1366,6 +1564,14 @@ The revised event should feel like a completely different experience from the si
                     </div>
                   </div>
                 )}
+                {/* Mini mood board — scene set angles */}
+                {linkedScene?.angles && linkedScene.angles.length > 1 && (
+                  <div style={{ display: 'flex', gap: 2, marginBottom: 6, marginTop: linkedScene?.base_still_url ? 0 : -4 }}>
+                    {linkedScene.angles.filter(a => a.still_image_url).slice(0, 5).map(a => (
+                      <img key={a.id} src={a.still_image_url} alt={a.angle_label} style={{ width: 36, height: 24, objectFit: 'cover', borderRadius: 3, opacity: 0.8 }} title={a.angle_label} />
+                    ))}
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   {bulkMode && (
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
@@ -1373,7 +1579,7 @@ The revised event should feel like a completely different experience from the si
                   )}
                   <span style={{ fontSize: 18 }}>{EVENT_TYPE_ICONS[ev.event_type] || '📌'}</span>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1 }}>{ev.name}</h3>
-                  <span style={S.statusPill(ev.status)}>{ev.status}</span>
+                  <span onClick={e2 => { e2.stopPropagation(); advanceEventStatus(ev); }} style={{ ...S.statusPill(ev.status), cursor: 'pointer' }} title={`Click to advance → ${EVENT_STATUS_CONFIG[EVENT_STATUSES[Math.min(EVENT_STATUSES.indexOf(ev.status || 'draft') + 1, EVENT_STATUSES.length - 1)]]?.label || ''}`}>{EVENT_STATUS_CONFIG[ev.status]?.icon || '○'} {ev.status}</span>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
                   <span style={S.eTag}>⭐ {ev.prestige}</span>
@@ -1774,6 +1980,37 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
             </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* ── Event Comparison Modal ── */}
+      {compareEvents && compareEvents.length === 2 && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setCompareEvents(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 800, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Compare Events</h3>
+              <button onClick={() => setCompareEvents(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+              {compareEvents.map((ev, idx) => (
+                <div key={ev.id} style={{ padding: 16, borderRight: idx === 0 ? '1px solid #f1f5f9' : 'none' }}>
+                  <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{ev.name}</h4>
+                  {[
+                    ['Type', ev.event_type], ['Host', ev.host || '—'], ['Prestige', ev.prestige],
+                    ['Cost', ev.cost_coins], ['Strictness', ev.strictness], ['Deadline', ev.deadline_type],
+                    ['Dress Code', ev.dress_code || '—'], ['Tier', ev.career_tier], ['Status', ev.status],
+                    ['Difficulty', calcDifficulty(ev).toFixed(1)],
+                  ].map(([label, val]) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, borderBottom: '1px solid #f8fafc' }}>
+                      <span style={{ color: '#64748b' }}>{label}</span>
+                      <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{val}</span>
+                    </div>
+                  ))}
+                  {ev.narrative_stakes && <div style={{ fontSize: 11, color: '#475569', fontStyle: 'italic', marginTop: 8, lineHeight: 1.4 }}>{ev.narrative_stakes}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
