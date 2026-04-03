@@ -38,23 +38,23 @@ const FONT_URLS = {
 
 function downloadFont(url, dest) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    const get = (u) => {
+    const get = (u, redirects = 0) => {
+      if (redirects > 5) { reject(new Error('Too many redirects')); return; }
       https.get(u, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
-          file.close();
-          fs.unlinkSync(dest);
-          return get(res.headers.location);
+          res.resume(); // drain the response
+          return get(res.headers.location, redirects + 1);
         }
         if (res.statusCode !== 200) {
-          file.close();
-          fs.unlinkSync(dest);
-          reject(new Error(`HTTP ${res.statusCode}`));
+          res.resume();
+          reject(new Error(`HTTP ${res.statusCode} for ${u}`));
           return;
         }
+        const file = fs.createWriteStream(dest);
         res.pipe(file);
         file.on('finish', () => { file.close(); resolve(); });
-      }).on('error', (err) => { file.close(); reject(err); });
+        file.on('error', (err) => { file.close(); reject(err); });
+      }).on('error', reject);
     };
     get(url);
   });
