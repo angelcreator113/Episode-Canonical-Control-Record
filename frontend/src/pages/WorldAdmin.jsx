@@ -1648,7 +1648,26 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                                 toSave[key] = merged[key];
                               }
                             }
-                            if (Object.keys(toSave).length > 0) updateMultipleFields(toSave);
+                            if (Object.keys(toSave).length > 0) {
+                              try {
+                                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
+                                if (res.data.success) {
+                                  // Merge server response WITH our local enhanced data (server might not have all columns yet)
+                                  const serverData = res.data.event || {};
+                                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...serverData, ...merged } : ev));
+                                }
+                              } catch (err) {
+                                // If batch fails (e.g. missing column), try saving fields one by one
+                                console.warn('[Event] Batch save failed, trying individual:', err.response?.data?.error);
+                                for (const [key, val] of Object.entries(toSave)) {
+                                  try {
+                                    await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [key]: val });
+                                  } catch (e2) {
+                                    console.warn(`[Event] Skip ${key}:`, e2.response?.data?.error || e2.message);
+                                  }
+                                }
+                              }
+                            }
                             setToast('✨ Enhanced — review the filled fields');
                             setTimeout(() => setToast(null), 3000);
                           }
