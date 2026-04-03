@@ -239,6 +239,59 @@ router.post('/:episodeId/generate-script', optionalAuth, async (req, res) => {
   }
 });
 
+// ── REWRITE SINGLE LINE (with Show Brain voice DNA) ───────────────────────────
+
+router.post('/:episodeId/rewrite-line', optionalAuth, async (req, res) => {
+  try {
+    const { line, speaker, beatName, beatContext, showId } = req.body;
+    if (!line) return res.status(400).json({ error: 'line is required' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    // Load voice DNA from Show Brain
+    const models = require('../models');
+    let voiceLaws = '';
+    try {
+      if (models.FranchiseKnowledge) {
+        const laws = await models.FranchiseKnowledge.findAll({
+          where: { category: 'franchise_law', status: 'active', always_inject: true },
+          attributes: ['title', 'content'], limit: 10,
+        });
+        voiceLaws = laws
+          .filter(l => { const t = (l.title || '').toLowerCase(); return t.includes('voice') || t.includes('lala') || t.includes('jawihp'); })
+          .map(l => { try { const c = JSON.parse(l.content); return `${l.title}: ${c.summary || ''}`; } catch { return l.title; } })
+          .join('\n');
+      }
+    } catch {}
+
+    const isLala = speaker === 'Lala';
+    const isPrime = speaker === 'Prime' || speaker === 'Me';
+
+    const prompt = `You are rewriting a single line of dialogue for "Styling Adventures with Lala."
+
+${voiceLaws ? `SHOW BRAIN VOICE RULES:\n${voiceLaws}\n\n` : ''}
+SPEAKER: ${speaker}
+BEAT: ${beatName || 'Unknown'}
+${beatContext ? `EMOTIONAL CONTEXT: ${beatContext}\n` : ''}
+ORIGINAL LINE: ${line}
+
+${isLala ? 'Rewrite as Lala — confident, short, punchy, calls people "bestie", slightly dramatic, always positive. Max 2 sentences.' : ''}
+${isPrime ? 'Rewrite as JAWIHP (Prime) — warm, direct, addresses "besties", reacts naturally, community-focused.' : ''}
+${!isLala && !isPrime ? `Rewrite naturally for ${speaker}.` : ''}
+
+Return ONLY the rewritten dialogue. No speaker prefix, no quotes, no explanation.`;
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const response = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 200, messages: [{ role: 'user', content: prompt }] });
+    const rewrittenLine = response.content[0]?.text?.trim() || line;
+
+    return res.json({ rewrittenLine, original: line });
+  } catch (err) {
+    console.error('[RewriteLine] Error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── SCRIPT CONTEXT (for script generator) ─────────────────────────────────────
 
 router.get('/:episodeId/script-context', optionalAuth, async (req, res) => {
