@@ -1747,6 +1747,27 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                 {/* Footer */}
                 <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>🗑️ Delete</button>
+                  <button onClick={async () => {
+                    const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id'];
+                    const toSave = {};
+                    for (const key of saveable) {
+                      if (md[key] !== undefined && md[key] !== null) toSave[key] = md[key];
+                    }
+                    try {
+                      const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
+                      if (res.data.success) {
+                        setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event, ...md } : ev));
+                        setToast('✅ Event saved');
+                        setTimeout(() => setToast(null), 3000);
+                      }
+                    } catch (err) {
+                      console.warn('[Event] Save failed:', err.response?.data?.error || err.message);
+                      setToast('Save failed — ' + (err.response?.data?.error || err.message));
+                      setTimeout(() => setToast(null), 4000);
+                    }
+                  }} style={{ ...S.primaryBtn, padding: '6px 20px', fontSize: 13 }}>
+                    💾 Save
+                  </button>
                   <button onClick={() => setEventDetailModal(null)} style={{ ...S.smBtn, background: '#f1f5f9' }}>Close</button>
                 </div>
               </div>
