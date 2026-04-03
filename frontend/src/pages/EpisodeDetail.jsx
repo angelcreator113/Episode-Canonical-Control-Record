@@ -5,7 +5,7 @@ import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
 import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
-import ScriptEditor from '../components/ScriptEditor';
+import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
 import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
@@ -680,13 +680,10 @@ const EpisodeDetail = () => {
 
         {/* Scripts Tab */}
         {activeTab === 'scripts' && (
-          <ScriptEditor 
+          <EpisodeScriptTab
             key={episode.id}
-            episodeId={episode.id}
             episode={episode}
-            onScriptSaved={(newScript) => {
-              setEpisode(prev => ({ ...prev, script_content: newScript }));
-            }}
+            show={episode.show || show}
           />
         )}
 
