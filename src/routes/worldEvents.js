@@ -194,6 +194,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'career_milestone', 'fail_consequence', 'success_unlock',
       'scene_set_id',
     ];
+    const requiredStringFields = new Set(['name', 'event_type', 'status']);
 
     const setClauses = [];
     const replacements = { showId, eventId };
@@ -264,14 +265,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     return res.json({ success: true, event: updated[0] });
   } catch (error) {
-    console.error('Update event error:', error.message);
-    // If a column doesn't exist, retry without it
-    if (error.message?.includes('column') && error.message?.includes('does not exist')) {
-      const badCol = error.message.match(/"([^"]+)" of relation/)?.[1] || error.message.match(/column "([^"]+)"/)?.[1];
-      if (badCol) {
-        console.warn(`[WorldEvents] Column "${badCol}" missing — skipping. Run migrations to fix.`);
-        return res.status(500).json({ error: `Column "${badCol}" not in database. Run: npx sequelize-cli db:migrate` });
-      }
+    console.error('Update event error:', error);
+    if (String(error.message || '').includes('does not exist')) {
+      return res.status(400).json({ error: 'Invalid update field', message: error.message });
     }
     return res.status(500).json({ error: 'Failed to update event', message: error.message });
   }
