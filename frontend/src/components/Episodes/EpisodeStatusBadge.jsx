@@ -15,6 +15,7 @@ import './EpisodeStatusBadge.css';
 function EpisodeStatusBadge({ episode, onStatusChange, showDropdown = true, size = 'medium' }) {
   const [isOpen, setIsOpen] = useState(false);
   const [showSuggestion, setShowSuggestion] = useState(false);
+  const suggestionDismissedRef = useRef(false);
   const dropdownRef = useRef(null);
   
   const currentStatus = episode?.status || EPISODE_STATUSES.DRAFT;
@@ -33,13 +34,13 @@ function EpisodeStatusBadge({ episode, onStatusChange, showDropdown = true, size
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   
-  // Show AI suggestion after component mounts
+  // Show AI suggestion after component mounts (only once, respect dismissal)
   useEffect(() => {
-    if (suggestion && suggestion.shouldSuggest) {
+    if (suggestion && suggestion.shouldSuggest && !suggestionDismissedRef.current) {
       const timer = setTimeout(() => setShowSuggestion(true), 2000);
       return () => clearTimeout(timer);
     }
-  }, [suggestion]);
+  }, [episode?.status]);
   
   const handleStatusClick = (newStatus) => {
     if (onStatusChange && newStatus !== currentStatus) {
@@ -97,7 +98,7 @@ function EpisodeStatusBadge({ episode, onStatusChange, showDropdown = true, size
             </button>
             <button 
               className="btn-suggestion-dismiss"
-              onClick={() => setShowSuggestion(false)}
+              onClick={() => { setShowSuggestion(false); suggestionDismissedRef.current = true; }}
             >
               Not yet
             </button>
