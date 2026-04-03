@@ -1679,6 +1679,7 @@ The revised event should feel like a completely different experience from the si
                 }
               } catch (err) {
                 console.warn(`[Event] Failed to save ${field}:`, err.response?.data?.error || err.message);
+                setError(err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save event field');
               }
             };
             const updateMultipleFields = async (fields) => {
@@ -1696,6 +1697,7 @@ The revised event should feel like a completely different experience from the si
                 }
               } catch (err) {
                 console.warn('[Event] Batch save failed:', err.response?.data?.error || err.message);
+                setError(err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save event field');
               }
             };
             const linkedScene = md.scene_set_id ? sceneSets.find(s => s.id === md.scene_set_id) : null;
