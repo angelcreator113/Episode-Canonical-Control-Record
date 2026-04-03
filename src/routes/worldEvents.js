@@ -7,6 +7,8 @@
  * DELETE /api/v1/world/:showId/events/:eventId  — Delete event
  * POST   /api/v1/world/:showId/events/:eventId/inject — Inject event into episode script
  * POST   /api/v1/world/:showId/events/:eventId/generate-script — Generate full script skeleton
+ * POST   /api/v1/world/:showId/events/:eventId/generate-invitation — Generate invitation card image
+ * GET    /api/v1/world/:showId/events/:eventId/invitation — Check if invitation exists
  * POST   /api/v1/world/:showId/events/ai-fix — AI suggestions to diversify event plan
  * 
  * Location: src/routes/worldEvents.js
@@ -194,6 +196,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'is_paid', 'payment_amount', 'requirements', 'career_tier',
       'career_milestone', 'fail_consequence', 'success_unlock',
       'scene_set_id',
+      'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
     ];
     const requiredStringFields = new Set(['name', 'event_type', 'status']);
 
@@ -205,7 +208,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
     ]);
     const jsonFields = new Set([
       'dress_code_keywords', 'canon_consequences', 'seeds_future_events',
-      'required_ui_overlays', 'rewards', 'requirements',
+      'required_ui_overlays', 'rewards', 'requirements', 'color_palette',
     ]);
 
     const normalizeNullLike = (value) => {
@@ -662,6 +665,74 @@ Guidelines:
   }
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INVITATION GENERATOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/world/:showId/events/:eventId/generate-invitation', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({
+        error: 'OPENAI_API_KEY not configured. Add it to your .env file.',
+      });
+    }
+
+    console.log(`[InviteGen] Request for event: ${eventId}, show: ${showId}`);
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const { generateInvitation } = require('../services/invitationGeneratorService');
+    const result = await generateInvitation(eventId, models, showId);
+
+    return res.json({
+      success: true,
+      message: `Invitation generated for "${result.eventName}"`,
+      data: {
+        assetId: result.asset.id,
+        imageUrl: result.imageUrl,
+        theme: result.theme,
+        eventName: result.eventName,
+      },
+    });
+  } catch (err) {
+    console.error('[InviteGen] Error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const [event] = await models.sequelize.query(
+      `SELECT e.id, e.name, e.invitation_asset_id,
+              a.s3_url_processed as invitation_url, a.id as asset_id
+       FROM world_events e
+       LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
+       WHERE e.id = :eventId AND e.deleted_at IS NULL LIMIT 1`,
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    return res.json({
+      data: {
+        hasInvitation: !!event.invitation_asset_id,
+        assetId: event.asset_id,
+        imageUrl: event.invitation_url,
+        eventName: event.name,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;
 

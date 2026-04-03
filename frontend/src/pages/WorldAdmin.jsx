@@ -18,6 +18,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
 import './WorldAdmin.css';
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
@@ -39,6 +40,7 @@ const EMPTY_EVENT = {
   is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
   requirements: {}, scene_set_id: null,
+  theme: '', color_palette: [], mood: '', floral_style: '', border_style: '',
 };
 
 // ─── DIFFICULTY SCORING ───
@@ -181,6 +183,7 @@ function WorldAdmin() {
       ...EMPTY_EVENT, ...ev,
       is_paid: ev.is_free ? 'free' : ev.is_paid ? 'yes' : 'no',
       dress_code_keywords: Array.isArray(ev.dress_code_keywords) ? ev.dress_code_keywords : [],
+      color_palette: Array.isArray(ev.color_palette) ? ev.color_palette : [],
     });
     setEditingEvent(ev.id);
   };
@@ -1525,6 +1528,9 @@ The revised event should feel like a completely different experience from the si
                 </div>
               </div>
 
+              {/* Invitation Style */}
+              <InvitationStyleFields formData={eventForm} setFormData={setEventForm} />
+
               {/* Career & Payment */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12, padding: 12, background: '#f8fafc', borderRadius: 8 }}>
                 <div>
@@ -1648,10 +1654,11 @@ The revised event should feel like a completely different experience from the si
                   </div>
                 )}
                 {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.narrative_stakes}</div>}
-                <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4 }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>✏️ Edit</button>
-                  <button onClick={() => copyEvent(ev)} style={S.smBtn}>📋 Copy</button>
-                  <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>🗑️</button>
+                <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>Edit</button>
+                  <button onClick={() => copyEvent(ev)} style={S.smBtn}>Copy</button>
+                  <InvitationButton event={ev} showId={showId} onGenerated={() => loadData()} />
+                  <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>Delete</button>
                 </div>
               </div>
               );
@@ -1933,6 +1940,28 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                         {md.dress_code_keywords.map((kw, i) => <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 10, color: '#4338ca', fontWeight: 600 }}>{kw}</span>)}
                       </div>
                     )}
+                  </div>
+
+                  {/* Invitation Style */}
+                  <InvitationStyleFields
+                    formData={md}
+                    setFormData={fn => {
+                      const updated = typeof fn === 'function' ? fn(md) : fn;
+                      setEventDetailModal(updated);
+                      const invFields = {};
+                      for (const k of ['theme', 'mood', 'color_palette', 'floral_style', 'border_style']) {
+                        if (updated[k] !== md[k]) invFields[k] = updated[k];
+                      }
+                      if (Object.keys(invFields).length > 0) updateMultipleFields(invFields);
+                    }}
+                  />
+
+                  {/* Generate invitation button in detail modal */}
+                  <div style={{ marginTop: 8, marginBottom: 12 }}>
+                    <InvitationButton event={md} showId={showId} onGenerated={(url) => {
+                      setEventDetailModal(prev => prev ? { ...prev, invitation_url: url } : prev);
+                      loadData();
+                    }} />
                   </div>
 
                   {/* Narrative fields */}
