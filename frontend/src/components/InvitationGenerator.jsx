@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../services/api';
 
 // ─── THEME OPTIONS ────────────────────────────────────────────────────────────
@@ -38,6 +38,13 @@ export function InvitationButton({ event, showId, onGenerated }) {
   const [pendingAssetId, setPendingAssetId] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [error, setError] = useState(null);
+
+  // Sync imageUrl when parent refreshes event data (e.g. after loadData)
+  useEffect(() => {
+    if (event.invitation_url && !pendingAssetId) {
+      setImageUrl(event.invitation_url);
+    }
+  }, [event.invitation_url]);
 
   const hasInvitation = !!event.invitation_asset_id;
   const isPending = !!pendingAssetId;
