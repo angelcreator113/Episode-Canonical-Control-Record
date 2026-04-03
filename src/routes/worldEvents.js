@@ -247,7 +247,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
     }
 
     if (setClauses.length === 0) {
-      return res.status(400).json({ error: 'No valid fields to update' });
+      console.warn('[WorldEvents] PUT 400 — no valid fields. Received keys:', Object.keys(updates).join(', '));
+      return res.status(400).json({ error: 'No valid fields to update', received: Object.keys(updates) });
     }
 
     setClauses.push('updated_at = NOW()');
