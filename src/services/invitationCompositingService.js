@@ -21,35 +21,75 @@ const { createCanvas, registerFont } = require('canvas');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 
 // ─── FONT MANAGEMENT ──────────────────────────────────────────────────────────
 
 const FONT_DIR = path.join(__dirname, '../assets/fonts/invitation');
 
+const FONT_URLS = {
+  'CormorantGaramond-Regular.ttf': 'https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond-Regular.ttf',
+  'CormorantGaramond-Bold.ttf':    'https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond-Bold.ttf',
+  'CormorantGaramond-Italic.ttf':  'https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond-Italic.ttf',
+  'LibreBaskerville-Regular.ttf':  'https://github.com/google/fonts/raw/main/ofl/librebaskerville/LibreBaskerville-Regular.ttf',
+  'LibreBaskerville-Italic.ttf':   'https://github.com/google/fonts/raw/main/ofl/librebaskerville/LibreBaskerville-Italic.ttf',
+  'LibreBaskerville-Bold.ttf':     'https://github.com/google/fonts/raw/main/ofl/librebaskerville/LibreBaskerville-Bold.ttf',
+};
+
+function downloadFont(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    const get = (u) => {
+      https.get(u, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          file.close();
+          fs.unlinkSync(dest);
+          return get(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          file.close();
+          fs.unlinkSync(dest);
+          reject(new Error(`HTTP ${res.statusCode}`));
+          return;
+        }
+        res.pipe(file);
+        file.on('finish', () => { file.close(); resolve(); });
+      }).on('error', (err) => { file.close(); reject(err); });
+    };
+    get(url);
+  });
+}
+
 let fontsAvailable = false;
 let fontsChecked = false;
 
-function checkFonts() {
-  if (fontsChecked) return fontsAvailable;
-  fontsChecked = true;
-
-  const required = [
-    'CormorantGaramond-Regular.ttf',
-    'CormorantGaramond-Bold.ttf',
-    'CormorantGaramond-Italic.ttf',
-    'LibreBaskerville-Regular.ttf',
-    'LibreBaskerville-Italic.ttf',
-    'LibreBaskerville-Bold.ttf',
-  ];
-
-  const missing = required.filter(f => !fs.existsSync(path.join(FONT_DIR, f)));
-  if (missing.length > 0) {
-    console.warn(`[InviteComposite] Missing fonts (${missing.length}/${required.length}) — compositing disabled`);
-    console.warn(`[InviteComposite] Run: node scripts/install-invitation-fonts.js`);
-    fontsAvailable = false;
-    return false;
+async function autoInstallFonts() {
+  if (!fs.existsSync(FONT_DIR)) {
+    fs.mkdirSync(FONT_DIR, { recursive: true });
   }
 
+  const missing = Object.keys(FONT_URLS).filter(f => {
+    const p = path.join(FONT_DIR, f);
+    return !fs.existsSync(p) || fs.statSync(p).size < 10000;
+  });
+
+  if (missing.length === 0) return true;
+
+  console.log(`[InviteComposite] Auto-installing ${missing.length} fonts...`);
+  for (const name of missing) {
+    try {
+      await downloadFont(FONT_URLS[name], path.join(FONT_DIR, name));
+      console.log(`[InviteComposite]   Downloaded ${name}`);
+    } catch (err) {
+      console.error(`[InviteComposite]   Failed to download ${name}: ${err.message}`);
+      return false;
+    }
+  }
+  console.log('[InviteComposite] All fonts installed');
+  return true;
+}
+
+function registerAllFonts() {
   try {
     registerFont(path.join(FONT_DIR, 'CormorantGaramond-Regular.ttf'), { family: 'CormorantGaramond', weight: 'normal', style: 'normal' });
     registerFont(path.join(FONT_DIR, 'CormorantGaramond-Bold.ttf'),    { family: 'CormorantGaramond', weight: 'bold',   style: 'normal' });
@@ -59,12 +99,27 @@ function checkFonts() {
     registerFont(path.join(FONT_DIR, 'LibreBaskerville-Bold.ttf'),     { family: 'LibreBaskerville',  weight: 'bold',   style: 'normal' });
     fontsAvailable = true;
     console.log('[InviteComposite] Fonts registered successfully');
+    return true;
   } catch (err) {
     console.warn('[InviteComposite] Font registration failed:', err.message);
     fontsAvailable = false;
+    return false;
+  }
+}
+
+async function checkFonts() {
+  if (fontsChecked) return fontsAvailable;
+  fontsChecked = true;
+
+  // Try auto-install if missing
+  const installed = await autoInstallFonts();
+  if (!installed) {
+    console.warn('[InviteComposite] Font auto-install failed — compositing disabled');
+    fontsAvailable = false;
+    return false;
   }
 
-  return fontsAvailable;
+  return registerAllFonts();
 }
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
@@ -428,7 +483,7 @@ function renderTextLayer(content, width = 1024, height = 1792) {
  * Returns null if fonts are not available (caller should fall back to v1).
  */
 async function compositeInvitation(backgroundBuffer, event) {
-  if (!checkFonts()) return null;
+  if (!(await checkFonts())) return null;
 
   const meta = await sharp(backgroundBuffer).metadata();
   const width = meta.width || 1024;
@@ -456,7 +511,7 @@ async function compositeInvitation(backgroundBuffer, event) {
  * additional tooling, so this produces a high-quality print-ready PNG.
  */
 async function compositeInvitationPDF(backgroundBuffer, event) {
-  if (!checkFonts()) return null;
+  if (!(await checkFonts())) return null;
 
   const meta = await sharp(backgroundBuffer).metadata();
   const width = meta.width || 1024;
