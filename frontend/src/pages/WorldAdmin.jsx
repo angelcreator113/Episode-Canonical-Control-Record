@@ -58,6 +58,16 @@ function difficultyLabel(score) {
   return { text: 'Extreme', color: '#7c3aed', bg: '#faf5ff' };
 }
 
+// ─── EVENT STATUS PIPELINE ───
+const EVENT_STATUSES = ['draft', 'ready', 'used', 'scripted', 'filmed'];
+const EVENT_STATUS_CONFIG = {
+  draft:    { label: 'Draft', color: '#94a3b8', bg: '#f1f5f9', icon: '○' },
+  ready:    { label: 'Ready', color: '#b45309', bg: '#fef3c7', icon: '◎' },
+  used:     { label: 'Injected', color: '#6366f1', bg: '#eef2ff', icon: '◉' },
+  scripted: { label: 'Scripted', color: '#16a34a', bg: '#f0fdf4', icon: '✓' },
+  filmed:   { label: 'Filmed', color: '#0284c7', bg: '#f0f9ff', icon: '★' },
+};
+
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
   { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
@@ -114,6 +124,7 @@ function WorldAdmin() {
   const [aiFixLoading, setAiFixLoading] = useState(false);
   const [aiFixSuggestions, setAiFixSuggestions] = useState(null);
   const [aiRevising, setAiRevising] = useState(false);
+  const [compareEvents, setCompareEvents] = useState(null); // [eventA, eventB]
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
@@ -553,6 +564,103 @@ The revised event should feel like a completely different experience from the si
     });
   };
 
+  // ── Event status pipeline ──
+  const advanceEventStatus = async (ev) => {
+    const currentIdx = EVENT_STATUSES.indexOf(ev.status || 'draft');
+    const nextStatus = EVENT_STATUSES[Math.min(currentIdx + 1, EVENT_STATUSES.length - 1)];
+    try {
+      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { status: nextStatus });
+      if (res.data.success) {
+        setWorldEvents(prev => prev.map(e => e.id === ev.id ? { ...e, ...res.data.event, status: nextStatus } : e));
+        setToast(`${ev.name} → ${EVENT_STATUS_CONFIG[nextStatus]?.label}`);
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch {}
+  };
+
+  // ── Bulk AI Enhance ──
+  const handleBulkEnhance = async () => {
+    const drafts = worldEvents.filter(ev => !ev.description || !ev.narrative_stakes || !ev.host);
+    if (drafts.length === 0) { setToast('All events already enhanced'); setTimeout(() => setToast(null), 3000); return; }
+    if (!window.confirm(`Enhance ${drafts.length} incomplete events with AI? This may take a minute.`)) return;
+    setAiFixLoading(true);
+    let enhanced = 0;
+    for (const ev of drafts.slice(0, 10)) {
+      try {
+        const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
+          warnings: [{ msg: `ENHANCE: Fill empty fields for "${ev.name}" (${ev.event_type}, prestige ${ev.prestige}). Return action "enhance" with new_value JSON including host, description, narrative_stakes, career_milestone, fail_consequence, success_unlock, location_hint, dress_code_keywords.` }],
+          events: [ev], episodes,
+        });
+        const data = res.data?.data?.[0]?.new_value;
+        if (data) {
+          const parsed = typeof data === 'object' ? data : JSON.parse(data);
+          const toSave = {};
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v && !ev[k]) toSave[k] = v;
+          }
+          if (Object.keys(toSave).length > 0) {
+            await api.put(`/api/v1/world/${showId}/events/${ev.id}`, toSave);
+            enhanced++;
+          }
+        }
+      } catch {}
+    }
+    setAiFixLoading(false);
+    setToast(`✨ Enhanced ${enhanced} events`);
+    setTimeout(() => setToast(null), 3000);
+    loadData();
+  };
+
+  // ── Event export CSV ──
+  const handleExportCSV = () => {
+    const headers = ['Name', 'Type', 'Host', 'Brand', 'Prestige', 'Cost', 'Strictness', 'Deadline', 'Dress Code', 'Status', 'Episode', 'Narrative Stakes'];
+    const rows = worldEvents.map(ev => {
+      const ep = episodes.find(e => e.id === ev.used_in_episode_id);
+      return [ev.name, ev.event_type, ev.host || '', ev.host_brand || '', ev.prestige, ev.cost_coins, ev.strictness, ev.deadline_type, ev.dress_code || '', ev.status, ep ? `${ep.episode_number}. ${ep.title}` : '', (ev.narrative_stakes || '').replace(/"/g, '""')].map(v => `"${v}"`).join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `events-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  // ── Wardrobe vs Dress Code conflict detection ──
+  const getDressCodeConflicts = () => {
+    const conflicts = [];
+    for (const ev of worldEvents.filter(e => e.used_in_episode_id && e.dress_code_keywords?.length > 0)) {
+      const ep = episodes.find(e => e.id === ev.used_in_episode_id);
+      if (!ep) continue;
+      const epWardrobe = wardrobeItems.filter(w => w.episode_id === ep.id || w.show_id === showId);
+      if (epWardrobe.length === 0) continue;
+      const wardrobeKeywords = epWardrobe.flatMap(w => [w.style, w.category, w.color, ...(w.tags || [])].filter(Boolean).map(s => s.toLowerCase()));
+      const eventKeywords = ev.dress_code_keywords.map(k => k.toLowerCase());
+      const matches = eventKeywords.filter(k => wardrobeKeywords.some(wk => wk.includes(k) || k.includes(wk)));
+      if (matches.length === 0 && eventKeywords.length >= 3) {
+        conflicts.push({ event: ev, episode: ep, eventKeywords, wardrobeKeywords: wardrobeKeywords.slice(0, 5) });
+      }
+    }
+    return conflicts;
+  };
+
+  // ── Event → Script generation ──
+  const handleGenerateScriptFromEvent = async (eventId, episodeId) => {
+    setGenerating(true);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-script`, { episode_id: episodeId });
+      if (res.data.success) {
+        setToast('✅ Script generated! Check the episode.');
+        setTimeout(() => setToast(null), 4000);
+        // Advance event status
+        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'scripted' } : ev));
+      }
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Script generation failed');
+      setTimeout(() => setToast(null), 4000);
+    } finally { setGenerating(false); }
+  };
+
   const injectEvent = async (eventId, episodeId) => {
     setInjecting(true); setInjectError(null); setError(null);
     try {
@@ -650,10 +758,39 @@ The revised event should feel like a completely different experience from the si
   }, {});
   const overrideCount = acceptedEpisodes.filter(ep => (ep.evaluation_json?.overrides || []).length > 0).length;
 
-  if (loading) return <div style={S.page}><div style={S.center}>Loading world data...</div></div>;
+  if (loading) return (
+    <div style={S.page}>
+      <style>{`
+        @keyframes waFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes waShimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+        .wa-skel { background: linear-gradient(90deg, rgba(0,0,0,0.04) 25%, rgba(0,0,0,0.08) 50%, rgba(0,0,0,0.04) 75%); background-size: 800px 100%; animation: waShimmer 1.5s ease infinite; border-radius: 8px; }
+      `}</style>
+      <div style={{ marginBottom: 20 }}>
+        <div className="wa-skel" style={{ width: 200, height: 28, marginBottom: 8 }} />
+        <div className="wa-skel" style={{ width: 300, height: 14 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+        {[1,2,3,4,5].map(i => <div key={i} className="wa-skel" style={{ width: 90, height: 36 }} />)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+        {[1,2,3,4,5,6].map(i => <div key={i} className="wa-skel" style={{ height: 100, borderRadius: 14 }} />)}
+      </div>
+    </div>
+  );
 
   return (
     <div className="wa-page" style={S.page}>
+      <style>{`
+        @keyframes waFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .wa-page .wa-grid { gap: 12px; }
+        @media (max-width: 768px) {
+          .wa-page .wa-grid-3col { grid-template-columns: 1fr !important; }
+          .wa-page .wa-grid-5col { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (max-width: 480px) {
+          .wa-page { padding: 12px 14px !important; }
+        }
+      `}</style>
       {/* Inject keyframes for toast animation */}
       <style>{`
         @keyframes toastPop {
@@ -702,13 +839,15 @@ The revised event should feel like a completely different experience from the si
       {/* ════════════════════════ OVERVIEW ════════════════════════ */}
       {activeTab === 'overview' && (
         <div style={S.content}>
-          <div style={S.card}>
-            <h2 style={S.cardTitle}>👑 Lala's Current State</h2>
+          <div style={{ ...S.card, background: 'linear-gradient(135deg, #fff 0%, #FAF7F0 100%)', borderColor: 'rgba(184,150,46,0.12)' }}>
+            <h2 style={{ ...S.cardTitle, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 24 }}>👑</span> Lala's Current State
+            </h2>
             {charState ? (
               <div style={S.statsRow}>
                 {Object.entries(charState.state || {}).map(([k, v]) => (
-                  <div key={k} style={S.statBox}>
-                    <div style={{ fontSize: 22 }}>{STAT_ICONS[k]}</div>
+                  <div key={k} style={{ ...S.statBox, background: 'linear-gradient(135deg, #fff 0%, #FDFCF9 100%)' }}>
+                    <div style={{ fontSize: 26, marginBottom: 4 }}>{STAT_ICONS[k]}</div>
                     <div style={S.statVal(k, v)}>{v}</div>
                     <div style={S.statLbl}>{k.replace(/_/g, ' ')}</div>
                   </div>
@@ -855,6 +994,50 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     )}
 
+                    {/* ── Scene Set ── */}
+                    {linkedEvent?.scene_set_id && (() => {
+                      const ss = sceneSets.find(s => s.id === linkedEvent.scene_set_id);
+                      return ss ? (
+                        <div style={{ marginTop: 14 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📍 Location</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6 }} />}
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{ss.name}</div>
+                              <div style={{ fontSize: 10, color: '#94a3b8' }}>{ss.scene_type?.replace(/_/g, ' ')} · {ss.angles?.length || 0} angles</div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* ── Wardrobe for this episode ── */}
+                    {(() => {
+                      const epWardrobe = wardrobeItems.filter(w => w.episode_id === ep.id);
+                      return epWardrobe.length > 0 ? (
+                        <div style={{ marginTop: 14 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>👗 Wardrobe ({epWardrobe.length})</div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {epWardrobe.slice(0, 6).map(w => (
+                              <span key={w.id} style={{ padding: '3px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 6, fontSize: 10, color: '#7c3aed', fontWeight: 600 }}>
+                                {w.name || w.category || 'Item'}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* ── Generate Script button ── */}
+                    {linkedEvent && (
+                      <div style={{ marginTop: 14 }}>
+                        <button onClick={() => handleGenerateScriptFromEvent(linkedEvent.id, ep.id)} disabled={generating}
+                          style={{ padding: '6px 16px', background: generating ? '#e5e7eb' : 'linear-gradient(135deg, #16a34a, #22c55e)', color: generating ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: generating ? 'wait' : 'pointer' }}>
+                          {generating ? '⏳ Generating...' : '📝 Generate Script from Event'}
+                        </button>
+                      </div>
+                    )}
+
                     {/* ── Evaluation Details ── */}
                     {ej && (
                       <div style={{ marginTop: 14 }}>
@@ -941,8 +1124,10 @@ The revised event should feel like a completely different experience from the si
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>💌 Events Library</h2>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S.smBtn, background: '#f0fdf4', color: '#16a34a' }}>📋 Templates</button>
+              <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={{ ...S.smBtn, background: '#faf5ff', color: '#7c3aed' }}>{aiFixLoading ? '⏳...' : '✨ Enhance All'}</button>
+              <button onClick={handleExportCSV} style={{ ...S.smBtn, background: '#f0f9ff', color: '#0284c7' }}>📥 Export</button>
               {bulkMode ? (
                 <button onClick={() => { setBulkMode(false); setSelectedEvents(new Set()); }} style={{ ...S.smBtn, background: '#fef2f2', color: '#dc2626' }}>✕ Cancel</button>
               ) : (
@@ -1039,6 +1224,47 @@ The revised event should feel like a completely different experience from the si
               </div>
             </div>
           )}
+
+          {/* Season arc visualization */}
+          {episodes.length > 3 && worldEvents.some(ev => ev.used_in_episode_id) && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Season Arc — Difficulty Curve</div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 60 }}>
+                {[...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0)).map(ep => {
+                  const ev = worldEvents.find(e => e.used_in_episode_id === ep.id);
+                  const diff = ev ? calcDifficulty(ev) : 0;
+                  const dl = ev ? difficultyLabel(diff) : { bg: '#f1f5f9', color: '#cbd5e1' };
+                  const height = ev ? Math.max(8, (diff / 10) * 55) : 4;
+                  return (
+                    <div key={ep.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <div style={{ width: '100%', height, background: ev ? dl.color : '#e2e8f0', borderRadius: '3px 3px 0 0', transition: 'height 0.3s ease', opacity: ev ? 0.7 : 0.3 }}
+                        title={ev ? `Ep ${ep.episode_number}: ${ev.name} (${diff})` : `Ep ${ep.episode_number}: no event`} />
+                      <span style={{ fontSize: 7, color: '#94a3b8' }}>{ep.episode_number}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Easy</span>
+                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Hard</span>
+              </div>
+            </div>
+          )}
+
+          {/* Wardrobe vs Dress Code conflicts */}
+          {(() => {
+            const conflicts = getDressCodeConflicts();
+            return conflicts.length > 0 ? (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', marginBottom: 6 }}>👗 Wardrobe Conflicts</div>
+                {conflicts.map((c, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#991b1b', marginBottom: 3 }}>
+                    Ep {c.episode.episode_number} "{c.event.name}" wants [{c.eventKeywords.join(', ')}] but wardrobe has [{c.wardrobeKeywords.join(', ')}]
+                  </div>
+                ))}
+              </div>
+            ) : null;
+          })()}
 
           {/* Sequence validation warnings + AI Fix */}
           {(() => {
@@ -1164,6 +1390,9 @@ The revised event should feel like a completely different experience from the si
           {bulkMode && selectedEvents.size > 0 && (
             <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#4338ca' }}>{selectedEvents.size} selected</span>
+              {selectedEvents.size === 2 && (
+                <button onClick={() => { const ids = [...selectedEvents]; setCompareEvents(worldEvents.filter(ev => ids.includes(ev.id))); }} style={{ padding: '3px 10px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#7c3aed', fontWeight: 600 }}>🔍 Compare</button>
+              )}
               <span style={{ fontSize: 11, color: '#64748b' }}>Link to:</span>
               {episodes.slice(0, 6).map(ep => (
                 <button key={ep.id} onClick={() => bulkInject(ep.id)} style={{ padding: '3px 10px', background: '#fff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#1a1a2e', fontWeight: 600 }}>
@@ -1366,6 +1595,14 @@ The revised event should feel like a completely different experience from the si
                     </div>
                   </div>
                 )}
+                {/* Mini mood board — scene set angles */}
+                {linkedScene?.angles && linkedScene.angles.length > 1 && (
+                  <div style={{ display: 'flex', gap: 2, marginBottom: 6, marginTop: linkedScene?.base_still_url ? 0 : -4 }}>
+                    {linkedScene.angles.filter(a => a.still_image_url).slice(0, 5).map(a => (
+                      <img key={a.id} src={a.still_image_url} alt={a.angle_label} style={{ width: 36, height: 24, objectFit: 'cover', borderRadius: 3, opacity: 0.8 }} title={a.angle_label} />
+                    ))}
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   {bulkMode && (
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
@@ -1373,7 +1610,7 @@ The revised event should feel like a completely different experience from the si
                   )}
                   <span style={{ fontSize: 18 }}>{EVENT_TYPE_ICONS[ev.event_type] || '📌'}</span>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1 }}>{ev.name}</h3>
-                  <span style={S.statusPill(ev.status)}>{ev.status}</span>
+                  <span onClick={e2 => { e2.stopPropagation(); advanceEventStatus(ev); }} style={{ ...S.statusPill(ev.status), cursor: 'pointer' }} title={`Click to advance → ${EVENT_STATUS_CONFIG[EVENT_STATUSES[Math.min(EVENT_STATUSES.indexOf(ev.status || 'draft') + 1, EVENT_STATUSES.length - 1)]]?.label || ''}`}>{EVENT_STATUS_CONFIG[ev.status]?.icon || '○'} {ev.status}</span>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
                   <span style={S.eTag}>⭐ {ev.prestige}</span>
@@ -1433,13 +1670,12 @@ The revised event should feel like a completely different experience from the si
           {eventDetailModal && (() => {
             const md = eventDetailModal;
             const updateField = async (field, value) => {
-              if (value === md[field]) return; // skip if unchanged
               try {
                 const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [field]: value });
-                if (res.data.success) {
-                  const updated = res.data.event;
-                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
-                  setEventDetailModal(updated);
+                if (res.data.success && res.data.event) {
+                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event } : ev));
+                  // Update modal but preserve any local edits by merging
+                  setEventDetailModal(prev => prev ? { ...prev, [field]: value } : prev);
                 }
               } catch (err) {
                 console.warn(`[Event] Failed to save ${field}:`, err.response?.data?.error || err.message);
@@ -1648,7 +1884,26 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                                 toSave[key] = merged[key];
                               }
                             }
-                            if (Object.keys(toSave).length > 0) updateMultipleFields(toSave);
+                            if (Object.keys(toSave).length > 0) {
+                              try {
+                                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
+                                if (res.data.success) {
+                                  // Merge server response WITH our local enhanced data (server might not have all columns yet)
+                                  const serverData = res.data.event || {};
+                                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...serverData, ...merged } : ev));
+                                }
+                              } catch (err) {
+                                // If batch fails (e.g. missing column), try saving fields one by one
+                                console.warn('[Event] Batch save failed, trying individual:', err.response?.data?.error);
+                                for (const [key, val] of Object.entries(toSave)) {
+                                  try {
+                                    await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [key]: val });
+                                  } catch (e2) {
+                                    console.warn(`[Event] Skip ${key}:`, e2.response?.data?.error || e2.message);
+                                  }
+                                }
+                              }
+                            }
                             setToast('✨ Enhanced — review the filled fields');
                             setTimeout(() => setToast(null), 3000);
                           }
@@ -1729,12 +1984,64 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                 {/* Footer */}
                 <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>🗑️ Delete</button>
+                  <button onClick={async () => {
+                    const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id'];
+                    const toSave = {};
+                    for (const key of saveable) {
+                      if (md[key] !== undefined && md[key] !== null) toSave[key] = md[key];
+                    }
+                    try {
+                      const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
+                      if (res.data.success) {
+                        setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event, ...md } : ev));
+                        setToast('✅ Event saved');
+                        setTimeout(() => setToast(null), 3000);
+                      }
+                    } catch (err) {
+                      console.warn('[Event] Save failed:', err.response?.data?.error || err.message);
+                      setToast('Save failed — ' + (err.response?.data?.error || err.message));
+                      setTimeout(() => setToast(null), 4000);
+                    }
+                  }} style={{ ...S.primaryBtn, padding: '6px 20px', fontSize: 13 }}>
+                    💾 Save
+                  </button>
                   <button onClick={() => setEventDetailModal(null)} style={{ ...S.smBtn, background: '#f1f5f9' }}>Close</button>
                 </div>
               </div>
             </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* ── Event Comparison Modal ── */}
+      {compareEvents && compareEvents.length === 2 && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setCompareEvents(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 800, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Compare Events</h3>
+              <button onClick={() => setCompareEvents(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+              {compareEvents.map((ev, idx) => (
+                <div key={ev.id} style={{ padding: 16, borderRight: idx === 0 ? '1px solid #f1f5f9' : 'none' }}>
+                  <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{ev.name}</h4>
+                  {[
+                    ['Type', ev.event_type], ['Host', ev.host || '—'], ['Prestige', ev.prestige],
+                    ['Cost', ev.cost_coins], ['Strictness', ev.strictness], ['Deadline', ev.deadline_type],
+                    ['Dress Code', ev.dress_code || '—'], ['Tier', ev.career_tier], ['Status', ev.status],
+                    ['Difficulty', calcDifficulty(ev).toFixed(1)],
+                  ].map(([label, val]) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, borderBottom: '1px solid #f8fafc' }}>
+                      <span style={{ color: '#64748b' }}>{label}</span>
+                      <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{val}</span>
+                    </div>
+                  ))}
+                  {ev.narrative_stakes && <div style={{ fontSize: 11, color: '#475569', fontStyle: 'italic', marginTop: 8, lineHeight: 1.4 }}>{ev.narrative_stakes}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -2513,50 +2820,53 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 
 // ─── STYLES ───
 const S = {
-  page: { maxWidth: 1200, margin: '0 auto', padding: '20px 24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
+  page: { maxWidth: 1200, margin: '0 auto', padding: '20px 24px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
   center: { textAlign: 'center', padding: 60, color: '#94a3b8' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  backLink: { color: '#b0922e', fontSize: 13, textDecoration: 'none', fontWeight: 500 },
-  title: { margin: '4px 0 4px', fontSize: 26, fontWeight: 800, color: '#1a1a2e' },
-  subtitle: { margin: 0, color: '#64748b', fontSize: 14 },
-  refreshBtn: { padding: '8px 16px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, color: '#475569', fontSize: 13, cursor: 'pointer' },
-  errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: 13, marginBottom: 12 },
-  successBanner: { padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#16a34a', fontSize: 13, marginBottom: 12, fontWeight: 600 },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  backLink: { color: '#B8962E', fontSize: 13, textDecoration: 'none', fontWeight: 500 },
+  title: { margin: '4px 0 4px', fontSize: 24, fontWeight: 700, color: '#1a1a2e', fontFamily: "'Lora', serif" },
+  subtitle: { margin: 0, color: '#94a3b8', fontSize: 13, fontWeight: 400 },
+  refreshBtn: { padding: '8px 16px', background: '#FAF7F0', border: '1px solid rgba(184,150,46,0.2)', borderRadius: 10, color: '#B8962E', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
+  errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#dc2626', fontSize: 13, marginBottom: 12 },
+  successBanner: { padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#16a34a', fontSize: 13, marginBottom: 12, fontWeight: 600 },
   xBtn: { background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 },
-  tabBar: { display: 'flex', gap: 2, marginBottom: 20, borderBottom: '1px solid #e2e8f0', overflowX: 'auto' },
-  tab: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
-  tabActive: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid #C9A84C', color: '#b0922e', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
-  content: { display: 'flex', flexDirection: 'column', gap: 16 },
-  card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 },
-  cardTitle: { fontSize: 16, fontWeight: 700, color: '#1a1a2e', margin: '0 0 16px' },
+  tabBar: { display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid rgba(0,0,0,0.06)', overflowX: 'auto', position: 'sticky', top: 0, background: '#FAF7F0', zIndex: 50, paddingTop: 4, scrollbarWidth: 'none' },
+  tab: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: '#94a3b8', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.15s' },
+  tabActive: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid #B8962E', color: '#B8962E', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
+  content: { display: 'flex', flexDirection: 'column', gap: 16, animation: 'waFadeIn 0.2s ease' },
+  card: { background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
+  cardTitle: { fontSize: 15, fontWeight: 600, color: '#1a1a2e', margin: '0 0 16px' },
   muted: { color: '#94a3b8', fontSize: 13 },
-  primaryBtn: { padding: '8px 18px', background: 'linear-gradient(135deg, #C9A84C, #b0922e)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  secBtn: { padding: '8px 18px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, color: '#475569', fontSize: 13, cursor: 'pointer' },
-  smBtn: { padding: '4px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#475569' },
-  smBtnDanger: { padding: '4px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#dc2626' },
+  primaryBtn: { padding: '8px 18px', background: 'linear-gradient(135deg, #C9A83A, #B8962E)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(184,150,46,0.2)', transition: 'all 0.15s' },
+  secBtn: { padding: '8px 18px', background: '#FAF7F0', border: '1px solid rgba(184,150,46,0.2)', borderRadius: 8, color: '#B8962E', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' },
+  smBtn: { padding: '5px 12px', background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#475569', fontWeight: 500, transition: 'all 0.12s' },
+  smBtnDanger: { padding: '5px 12px', background: 'rgba(220,53,53,0.05)', border: '1px solid rgba(220,53,53,0.12)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#dc2626', fontWeight: 500, transition: 'all 0.12s' },
   statsRow: { display: 'flex', gap: 12, flexWrap: 'wrap' },
-  statBox: { flex: '1 1 90px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, textAlign: 'center', minWidth: 90 },
-  statVal: (k, v) => ({ fontSize: 26, fontWeight: 800, color: (k === 'stress' && v >= 5) || (k === 'coins' && v < 0) ? '#dc2626' : '#1a1a2e' }),
-  statLbl: { fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 2 },
-  qGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 },
-  qBox: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, textAlign: 'center' },
-  qVal: { fontSize: 22, fontWeight: 800, color: '#1a1a2e' },
-  qLbl: { fontSize: 10, color: '#64748b', textTransform: 'uppercase', marginTop: 2 },
-  tHead: { display: 'flex', gap: 8, padding: '8px 0', borderBottom: '2px solid #e2e8f0', fontWeight: 600, color: '#64748b', fontSize: 11, textTransform: 'uppercase' },
-  tRow: { display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid #f1f5f9', alignItems: 'center', fontSize: 13 },
+  statBox: { flex: '1 1 90px', background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', minWidth: 90, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
+  statVal: (k, v) => ({ fontSize: 24, fontWeight: 700, color: (k === 'stress' && v >= 5) || (k === 'coins' && v < 0) ? '#dc2626' : '#1a1a2e' }),
+  statLbl: { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: 4, fontWeight: 500 },
+  qGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 },
+  qBox: { background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
+  qVal: { fontSize: 22, fontWeight: 700, color: '#1a1a2e' },
+  qLbl: { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', marginTop: 4, fontWeight: 500, letterSpacing: '0.3px' },
+  tHead: { display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.08)', fontWeight: 600, color: '#94a3b8', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.3px' },
+  tRow: { display: 'flex', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', alignItems: 'center', fontSize: 13, transition: 'background 0.1s' },
   tCol: { flex: 1, minWidth: 0 },
-  empty: { padding: 20, textAlign: 'center', color: '#94a3b8' },
-  tierPill: (t) => ({ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: TIER_COLORS[t] + '20', color: TIER_COLORS[t] }),
-  statusPill: (s) => ({ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s === 'accepted' ? '#f0fdf4' : s === 'computed' ? '#eef2ff' : s === 'ready' ? '#f0fdf4' : s === 'used' ? '#eef2ff' : '#f1f5f9', color: s === 'accepted' || s === 'ready' ? '#16a34a' : s === 'computed' || s === 'used' ? '#6366f1' : '#94a3b8' }),
-  sourceBadge: (s) => ({ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s === 'override' ? '#fef3c7' : s === 'manual' ? '#fef2f2' : '#eef2ff', color: s === 'override' ? '#92400e' : s === 'manual' ? '#dc2626' : '#4338ca' }),
-  deltaBadge: (v) => ({ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 11, fontWeight: 600, background: v > 0 ? '#f0fdf4' : '#fef2f2', color: v > 0 ? '#16a34a' : '#dc2626' }),
+  empty: { padding: 40, textAlign: 'center', color: '#aaa', fontSize: 13 },
+  tierPill: (t) => ({ padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: TIER_COLORS[t] + '15', color: TIER_COLORS[t] }),
+  statusPill: (s) => {
+    const cfg = EVENT_STATUS_CONFIG[s] || EVENT_STATUS_CONFIG.draft;
+    return { padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: cfg.bg, color: cfg.color };
+  },
+  sourceBadge: (s) => ({ padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: s === 'override' ? '#fef3c7' : s === 'manual' ? '#fef2f2' : '#eef2ff', color: s === 'override' ? '#92400e' : s === 'manual' ? '#dc2626' : '#4338ca' }),
+  deltaBadge: (v) => ({ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: v > 0 ? '#f0fdf4' : '#fef2f2', color: v > 0 ? '#16a34a' : '#dc2626' }),
   toastOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, pointerEvents: 'none' },
-  toastBox: { padding: '24px 48px', background: 'linear-gradient(135deg, #16a34a, #059669)', color: '#fff', borderRadius: 16, fontSize: 16, fontWeight: 700, boxShadow: '0 12px 40px rgba(22,163,74,0.45), 0 0 0 4px rgba(22,163,74,0.15)', textAlign: 'center', animation: 'toastPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)', pointerEvents: 'auto' },
-  evCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 },
-  eTag: { padding: '2px 8px', background: '#f3e8ff', borderRadius: 4, fontSize: 11, color: '#7c3aed' },
+  toastBox: { padding: '20px 40px', background: 'linear-gradient(135deg, #16a34a, #059669)', color: '#fff', borderRadius: 14, fontSize: 14, fontWeight: 700, boxShadow: '0 12px 40px rgba(22,163,74,0.4)', textAlign: 'center', animation: 'waFadeIn 0.3s ease', pointerEvents: 'auto' },
+  evCard: { background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', transition: 'box-shadow 0.15s, border-color 0.15s' },
+  eTag: { padding: '2px 8px', background: 'rgba(184,150,46,0.08)', borderRadius: 6, fontSize: 11, color: '#B8962E', fontWeight: 500 },
   fLabel: { display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' },
-  inp: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#1a1a2e', boxSizing: 'border-box' },
-  sel: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#1a1a2e', background: '#fff' },
+  inp: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#1a1a2e', boxSizing: 'border-box', transition: 'border-color 0.15s', outline: 'none' },
+  sel: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#1a1a2e', background: '#fff', transition: 'border-color 0.15s' },
   tArea: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#1a1a2e', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' },
 };
 

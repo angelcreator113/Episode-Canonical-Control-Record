@@ -182,7 +182,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     // Build dynamic SET clause
     const allowedFields = [
-      'name', 'event_type', 'host_brand', 'description',
+      'name', 'event_type', 'host', 'host_brand', 'description',
       'prestige', 'cost_coins', 'strictness',
       'deadline_type', 'deadline_minutes',
       'dress_code', 'dress_code_keywords',
@@ -190,7 +190,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'seeds_future_events', 'overlay_template', 'required_ui_overlays',
       'browse_pool_bias', 'browse_pool_size', 'rewards', 'status',
       'season_id', 'arc_id',
-      'is_paid', 'payment_amount', 'requirements', 'career_tier',
+      'is_paid', 'is_free', 'payment_amount', 'requirements', 'career_tier',
       'career_milestone', 'fail_consequence', 'success_unlock',
       'scene_set_id',
     ];

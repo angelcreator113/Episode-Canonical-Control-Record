@@ -27,12 +27,12 @@ function buildNav(shows) {
     {
       zone: 'CREATE SHOW',
       items: [
-        { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
         { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=events` },
         ] : []),
         { icon: '👗', label: 'Wardrobe', route: '/wardrobe' },
+        { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
       ],
     },
     {
