@@ -334,6 +334,15 @@ async function generateInvitation(eventId, models, showId) {
   // Previous versions are NOT deleted — kept for history
   const asset = await createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme);
 
+  // If event is already injected into an episode, link asset to it
+  // so it appears in the episode's Assets tab once approved
+  if (event.used_in_episode_id) {
+    await sequelize.query(
+      'UPDATE assets SET episode_id = :episodeId WHERE id = :assetId',
+      { replacements: { episodeId: event.used_in_episode_id, assetId: asset.id } }
+    );
+  }
+
   return {
     success: true,
     asset,
