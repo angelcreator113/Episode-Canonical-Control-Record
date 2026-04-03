@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EpisodeStatusBadge from './EpisodeStatusBadge';
+import EpisodeProductionChecklist from './EpisodeProductionChecklist';
 import { calculateProgress } from '../../utils/workflowRouter';
 import './EpisodeOverviewTab.css';
 
@@ -215,33 +216,18 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           </div>
         )}
         
-        {/* Progress Snapshot */}
+        {/* Production Checklist */}
         <div className="cover-section progress-section">
-          <h3 className="section-title">
-            <span className="section-icon">📊</span>
-            Progress
-          </h3>
-          
-          <div className="progress-bar-container">
-            <div className="progress-bar">
-              <div
-                className="progress-fill"
-                style={{ width: `${progress.total}%` }}
-              />
-              <span className="progress-label">{progress.total}% Complete</span>
-            </div>
-          </div>
-          
-          {progress.checks && progress.checks.length > 0 && (
-            <div className="progress-checklist">
-              {progress.checks.map((check, idx) => (
-                <div key={idx} className="check-item">
-                  <span className="check-icon">✓</span>
-                  <span className="check-label">{check.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <EpisodeProductionChecklist
+            episode={episode}
+            showId={show?.id}
+            onScriptGenerate={(data) => {
+              if (data?.script) {
+                // Could switch to script tab or show notification
+                console.log('[Overview] Script generated:', data.script.slice(0, 100));
+              }
+            }}
+          />
         </div>
         
         {/* Creative Notes */}
