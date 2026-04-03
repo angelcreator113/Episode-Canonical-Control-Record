@@ -286,9 +286,9 @@ async function createInvitationAsset(models, event, s3Url, prompt, showId) {
 async function generateInvitation(eventId, models, showId) {
   const { sequelize } = models;
 
-  // Load the event (respect soft deletes)
+  // Load the event
   const [event] = await sequelize.query(
-    'SELECT * FROM world_events WHERE id = :eventId AND (deleted_at IS NULL) LIMIT 1',
+    'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
     { replacements: { eventId }, type: sequelize.QueryTypes.SELECT }
   );
 

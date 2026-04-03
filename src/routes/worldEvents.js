@@ -715,7 +715,7 @@ router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req
               a.s3_url_processed as invitation_url, a.id as asset_id
        FROM world_events e
        LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
-       WHERE e.id = :eventId AND e.deleted_at IS NULL LIMIT 1`,
+       WHERE e.id = :eventId LIMIT 1`,
       { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
     );
 
