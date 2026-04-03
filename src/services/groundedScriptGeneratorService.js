@@ -41,7 +41,7 @@ const BEAT_TEMPLATES = {
   2:  { name: 'Login Sequence',       jawihp: true,  lala: true,  ui: 'LOGIN' },
   3:  { name: 'Welcome',              jawihp: true,  lala: false, ui: 'WELCOME' },
   4:  { name: 'Interruption Pulse 1', jawihp: true,  lala: true,  ui: 'MAIL_NOTIFICATION' },
-  5:  { name: 'Reveal',               jawihp: true,  lala: true,  ui: 'OPEN_LETTER' },
+  5:  { name: 'Reveal',               jawihp: true,  lala: true,  ui: 'OPEN_LETTER_INVITE_OVERLAY' },
   6:  { name: 'Strategic Reaction',   jawihp: true,  lala: true,  ui: 'LALA_VOICE_COMMAND' },
   7:  { name: 'Interruption Pulse 2', jawihp: true,  lala: true,  ui: 'SIDE_QUEST' },
   8:  { name: 'Transformation Loop',  jawihp: true,  lala: true,  ui: 'CLOSET_OPEN' },
@@ -161,9 +161,15 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
     .map(([slot, items]) => `${slot}: ${items.slice(0, 3).join(', ')}`)
     .join('\n') || 'Wardrobe not loaded';
 
-  const eventContext = eventData
-    ? `Event: ${eventData.name}\nPrestige: ${eventData.prestige}/10\nDress code: ${eventData.dress_code || 'Not specified'}\nCost: ${eventData.cost_coins} coins\nNarrative stakes: ${eventData.narrative_stakes || ''}`
-    : 'No event assigned';
+  let eventContext;
+  if (eventData) {
+    eventContext = `Event: ${eventData.name}\nPrestige: ${eventData.prestige}/10\nDress code: ${eventData.dress_code || 'Not specified'}\nCost: ${eventData.cost_coins} coins\nNarrative stakes: ${eventData.narrative_stakes || ''}`;
+    if (eventData.invitation_asset_id) {
+      eventContext += '\nInvitation: GENERATED — use in Beat 5 (Reveal). JAWIHP opens the mail and reads the invitation aloud. The InviteLetterOverlay should float up on screen.';
+    }
+  } else {
+    eventContext = 'No event assigned';
+  }
 
   const statsContext = lalaStats?.character_states
     ? JSON.stringify(lalaStats.character_states).slice(0, 200)

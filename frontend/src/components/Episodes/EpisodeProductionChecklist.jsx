@@ -31,6 +31,7 @@ const CHECKLIST_SECTIONS = [
       { id: 'scene_sets',        label: 'Scene sets assigned',        required: true  },
       { id: 'scene_plan',        label: 'Scene plan generated',       required: true  },
       { id: 'scene_plan_locked', label: 'Scene plan locked',          required: false },
+      { id: 'invitation_exists', label: 'Invitation generated',       required: false },
     ],
   },
   {
@@ -118,7 +119,9 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         if (showId) {
           const { data } = await api.get(`/api/v1/world/${showId}/events`);
           const events = data?.events || [];
-          results.event_linked = events.some(ev => ev.used_in_episode_id === episode.id);
+          const linkedEvent = events.find(ev => ev.used_in_episode_id === episode.id);
+          results.event_linked = !!linkedEvent;
+          results.invitation_exists = !!linkedEvent?.invitation_asset_id;
         } else {
           results.event_linked = false;
         }

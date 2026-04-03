@@ -20,7 +20,7 @@
 const axios = require('axios');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
-const { compositeInvitation } = require('./invitationCompositingService');
+const { compositeInvitation, compositeInvitationPDF, detectTheme, checkFonts } = require('./invitationCompositingService');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
@@ -91,8 +91,8 @@ const DEFAULT_THEME = {
 // ─── DALL-E PROMPT (background only — no text) ────────────────────────────────
 
 function buildBackgroundPrompt(event) {
-  const themeName = (event.theme || '').toLowerCase();
-  const themeConfig = THEME_PRESETS[themeName] || DEFAULT_THEME;
+  const themeName = detectTheme(event);
+  const themeConfig = (themeName && THEME_PRESETS[themeName]) || DEFAULT_THEME;
 
   const prestige = event.prestige || 5;
   const richness = prestige >= 8
@@ -190,14 +190,45 @@ async function deleteOldS3Asset(url) {
   }
 }
 
+// ─── VERSION COUNTING ─────────────────────────────────────────────────────────
+
+async function getNextVersion(sequelize, eventId) {
+  const [result] = await sequelize.query(
+    `SELECT COUNT(*) as count FROM assets
+     WHERE metadata->>'event_id' = :eventId
+       AND asset_type = 'INVITATION_LETTER'`,
+    { replacements: { eventId }, type: sequelize.QueryTypes.SELECT }
+  );
+  return (parseInt(result?.count || 0, 10)) + 1;
+}
+
+// ─── STYLE REFERENCE (host_brand consistency) ─────────────────────────────────
+
+async function findBrandStyleReference(sequelize, event) {
+  if (!event.host_brand) return null;
+  // Find the most recent approved invitation from the same host_brand
+  const [prev] = await sequelize.query(
+    `SELECT a.s3_url_processed FROM assets a
+     JOIN world_events e ON a.metadata->>'event_id' = e.id::text
+     WHERE e.host_brand = :brand
+       AND e.id != :eventId
+       AND a.asset_type = 'INVITATION_LETTER'
+       AND a.approval_status = 'approved'
+       AND a.deleted_at IS NULL
+     ORDER BY a.created_at DESC LIMIT 1`,
+    { replacements: { brand: event.host_brand, eventId: event.id }, type: sequelize.QueryTypes.SELECT }
+  );
+  return prev?.s3_url_processed || null;
+}
+
 // ─── ASSET RECORD ─────────────────────────────────────────────────────────────
 
-async function createInvitationAsset(models, event, s3Url, showId) {
+async function createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme) {
   const { Asset } = models;
 
   const asset = await Asset.create({
     id: uuidv4(),
-    name: `${event.name} — Invitation`,
+    name: `${event.name} — Invitation v${version}`,
     asset_type: 'INVITATION_LETTER',
     asset_role: 'UI.OVERLAY.INVITATION',
     asset_group: 'SHOW',
@@ -210,7 +241,7 @@ async function createInvitationAsset(models, event, s3Url, showId) {
     processing_status: 'none',
     mood_tags: [
       event.mood,
-      event.theme,
+      resolvedTheme,
       ...(event.dress_code_keywords || []).slice(0, 2),
     ].filter(Boolean),
     color_palette: event.color_palette || [],
@@ -219,8 +250,12 @@ async function createInvitationAsset(models, event, s3Url, showId) {
       source: 'invitation-generator-v2',
       event_id: event.id,
       event_name: event.name,
-      theme: event.theme,
+      theme: resolvedTheme,
+      theme_source: event.theme ? 'manual' : 'auto-detected',
       prestige: event.prestige,
+      version,
+      host_brand: event.host_brand || null,
+      composited: checkFonts(),
       generated_at: new Date().toISOString(),
     },
     approval_status: 'pending_review',
@@ -235,12 +270,14 @@ async function createInvitationAsset(models, event, s3Url, showId) {
  * Generate a LalaVerse invitation letter for an event.
  *
  * Pipeline: DALL-E background -> Canvas text -> Sharp composite -> S3 -> Asset
+ * Falls back to DALL-E-only if fonts are not installed.
  * Asset starts as pending_review — not linked to event until approved.
+ * Previous versions are kept (soft-delete only on the event FK, not the assets).
  *
  * @param {string} eventId
  * @param {object} models - Sequelize models
  * @param {string} showId
- * @returns {{ asset, imageUrl, eventName, theme }}
+ * @returns {{ asset, imageUrl, eventName, theme, version }}
  */
 async function generateInvitation(eventId, models, showId) {
   const { sequelize } = models;
@@ -253,26 +290,15 @@ async function generateInvitation(eventId, models, showId) {
 
   if (!event) throw new Error(`Event ${eventId} not found`);
 
-  console.log(`[InviteGen] Generating for: ${event.name} | Theme: ${event.theme || 'default'} | Prestige: ${event.prestige}`);
+  const resolvedTheme = detectTheme(event) || 'default';
+  const version = await getNextVersion(sequelize, eventId);
 
-  // Clean up old invitation asset if regenerating
-  let oldAssetUrl = null;
-  if (event.invitation_asset_id) {
-    try {
-      const [oldAsset] = await sequelize.query(
-        'SELECT s3_url_raw FROM assets WHERE id = :assetId LIMIT 1',
-        { replacements: { assetId: event.invitation_asset_id }, type: sequelize.QueryTypes.SELECT }
-      );
-      oldAssetUrl = oldAsset?.s3_url_raw;
+  console.log(`[InviteGen] Generating v${version} for: ${event.name} | Theme: ${resolvedTheme} | Prestige: ${event.prestige}`);
 
-      // Soft-delete the old asset record
-      await sequelize.query(
-        'UPDATE assets SET deleted_at = NOW() WHERE id = :assetId AND deleted_at IS NULL',
-        { replacements: { assetId: event.invitation_asset_id } }
-      );
-    } catch (err) {
-      console.warn('[InviteGen] Old asset cleanup warning:', err.message);
-    }
+  // Find style reference from same host_brand (visual consistency)
+  const brandStyleRef = await findBrandStyleReference(sequelize, event);
+  if (brandStyleRef) {
+    console.log(`[InviteGen] Using style reference from same brand: ${event.host_brand}`);
   }
 
   // Step 1: Generate background (no text) via DALL-E 3
@@ -289,29 +315,67 @@ async function generateInvitation(eventId, models, showId) {
   });
   const bgBuffer = Buffer.from(bgResponse.data);
 
-  // Step 2: Composite real text onto background via Canvas + Sharp
-  console.log('[InviteGen] Compositing invitation text...');
-  const finalBuffer = await compositeInvitation(bgBuffer, event);
-
-  // Step 3: Upload final to S3
-  const s3Url = await uploadToS3(finalBuffer, eventId, 'final');
-  console.log(`[InviteGen] Final invitation stored: ${s3Url}`);
-
-  // Clean up old S3 object (best-effort, after new one is safely stored)
-  if (oldAssetUrl) {
-    await deleteOldS3Asset(oldAssetUrl);
+  // Step 2: Composite text (or fall back to DALL-E-only image)
+  let finalBuffer;
+  const composited = await compositeInvitation(bgBuffer, event);
+  if (composited) {
+    console.log('[InviteGen] Text composited successfully (v2 pipeline)');
+    finalBuffer = composited;
+  } else {
+    console.warn('[InviteGen] Fonts not available — using DALL-E background as-is (v1 fallback)');
+    finalBuffer = bgBuffer;
   }
 
+  // Step 3: Upload final to S3
+  const s3Url = await uploadToS3(finalBuffer, eventId, `v${version}`);
+  console.log(`[InviteGen] Invitation v${version} stored: ${s3Url}`);
+
   // Step 4: Create Asset record (pending_review — not linked to event until approved)
-  const asset = await createInvitationAsset(models, event, s3Url, showId);
+  // Previous versions are NOT deleted — kept for history
+  const asset = await createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme);
 
   return {
     success: true,
     asset,
     imageUrl: s3Url,
     eventName: event.name,
-    theme: event.theme || 'default',
+    theme: resolvedTheme,
+    version,
+    composited: !!composited,
   };
 }
 
-module.exports = { generateInvitation, buildBackgroundPrompt };
+/**
+ * Export an existing invitation as a high-res print-ready PNG.
+ */
+async function exportInvitationPDF(eventId, models) {
+  const { sequelize } = models;
+
+  const [event] = await sequelize.query(
+    'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
+    { replacements: { eventId }, type: sequelize.QueryTypes.SELECT }
+  );
+  if (!event) throw new Error(`Event ${eventId} not found`);
+  if (!event.invitation_asset_id) throw new Error('No approved invitation for this event');
+
+  const [asset] = await sequelize.query(
+    'SELECT s3_url_raw FROM assets WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+    { replacements: { id: event.invitation_asset_id }, type: sequelize.QueryTypes.SELECT }
+  );
+  if (!asset?.s3_url_raw) throw new Error('Invitation asset not found');
+
+  // Download the current invitation background
+  const response = await axios.get(asset.s3_url_raw, {
+    responseType: 'arraybuffer',
+    timeout: 60000,
+  });
+  const bgBuffer = Buffer.from(response.data);
+
+  // Re-composite at full quality for print
+  const pdfBuffer = await compositeInvitationPDF(bgBuffer, event);
+  if (!pdfBuffer) throw new Error('Fonts not available for PDF export');
+
+  return pdfBuffer;
+}
+
+module.exports = { generateInvitation, exportInvitationPDF, buildBackgroundPrompt };
