@@ -89,6 +89,11 @@ async function autoInstallFonts() {
   return true;
 }
 
+// ─── FONT FAMILIES (resolved after init) ──────────────────────────────────────
+// These get set to either the luxury fonts or system fallbacks
+let HEADER_FONT = 'serif';
+let BODY_FONT = 'serif';
+
 function registerAllFonts() {
   try {
     registerFont(path.join(FONT_DIR, 'CormorantGaramond-Regular.ttf'), { family: 'CormorantGaramond', weight: 'normal', style: 'normal' });
@@ -97,29 +102,64 @@ function registerAllFonts() {
     registerFont(path.join(FONT_DIR, 'LibreBaskerville-Regular.ttf'),  { family: 'LibreBaskerville',  weight: 'normal', style: 'normal' });
     registerFont(path.join(FONT_DIR, 'LibreBaskerville-Italic.ttf'),   { family: 'LibreBaskerville',  weight: 'normal', style: 'italic' });
     registerFont(path.join(FONT_DIR, 'LibreBaskerville-Bold.ttf'),     { family: 'LibreBaskerville',  weight: 'bold',   style: 'normal' });
-    fontsAvailable = true;
-    console.log('[InviteComposite] Fonts registered successfully');
+    HEADER_FONT = 'CormorantGaramond';
+    BODY_FONT = 'LibreBaskerville';
+    console.log('[InviteComposite] Custom fonts registered (Cormorant Garamond + Libre Baskerville)');
     return true;
   } catch (err) {
-    console.warn('[InviteComposite] Font registration failed:', err.message);
-    fontsAvailable = false;
+    console.warn('[InviteComposite] Custom font registration failed:', err.message);
     return false;
   }
+}
+
+function registerSystemFallback() {
+  // Try common system serif fonts available on Linux
+  const systemFonts = [
+    '/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf',
+  ];
+
+  const available = systemFonts.filter(f => fs.existsSync(f));
+  if (available.length > 0) {
+    try {
+      if (fs.existsSync(systemFonts[0])) registerFont(systemFonts[0], { family: 'InvitationSerif', weight: 'normal', style: 'normal' });
+      if (fs.existsSync(systemFonts[1])) registerFont(systemFonts[1], { family: 'InvitationSerif', weight: 'bold',   style: 'normal' });
+      if (fs.existsSync(systemFonts[2])) registerFont(systemFonts[2], { family: 'InvitationSerif', weight: 'normal', style: 'italic' });
+      if (fs.existsSync(systemFonts[3])) registerFont(systemFonts[3], { family: 'InvitationSerif', weight: 'bold',   style: 'italic' });
+      HEADER_FONT = 'InvitationSerif';
+      BODY_FONT = 'InvitationSerif';
+      console.log('[InviteComposite] System fallback fonts registered (Liberation Serif)');
+      return true;
+    } catch (err) {
+      console.warn('[InviteComposite] System font registration failed:', err.message);
+    }
+  }
+
+  // Last resort — use Canvas built-in serif
+  HEADER_FONT = 'serif';
+  BODY_FONT = 'serif';
+  console.log('[InviteComposite] Using Canvas built-in serif (no custom fonts available)');
+  return true;
 }
 
 async function checkFonts() {
   if (fontsChecked) return fontsAvailable;
   fontsChecked = true;
 
-  // Try auto-install if missing
+  // Try auto-install custom fonts
   const installed = await autoInstallFonts();
-  if (!installed) {
-    console.warn('[InviteComposite] Font auto-install failed — compositing disabled');
-    fontsAvailable = false;
-    return false;
+  if (installed && registerAllFonts()) {
+    fontsAvailable = true;
+    return true;
   }
 
-  return registerAllFonts();
+  // Fall back to system fonts — always succeed
+  console.warn('[InviteComposite] Custom fonts unavailable — falling back to system fonts');
+  registerSystemFallback();
+  fontsAvailable = true;
+  return true;
 }
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
@@ -295,32 +335,32 @@ function buildLayoutBlocks(content, width) {
   const s = (ratio) => Math.round(width * ratio); // scale helper
 
   // Tone line
-  blocks.push({ type: 'text', text: 'An Exclusive Invitation', font: `italic ${s(0.022)}px CormorantGaramond`, color: COLORS.goldDark, lineHeight: s(0.034), align: 'center' });
+  blocks.push({ type: 'text', text: 'An Exclusive Invitation', font: `italic ${s(0.022)}px ${HEADER_FONT}`, color: COLORS.goldDark, lineHeight: s(0.034), align: 'center' });
   // LalaVerse mark
-  blocks.push({ type: 'text', text: 'LalaVerse', font: `${s(0.018)}px LibreBaskerville`, color: COLORS.gold, lineHeight: s(0.03), align: 'center' });
+  blocks.push({ type: 'text', text: 'LalaVerse', font: `${s(0.018)}px ${BODY_FONT}`, color: COLORS.gold, lineHeight: s(0.03), align: 'center' });
   blocks.push({ type: 'divider' });
 
   // Event name
-  blocks.push({ type: 'text', text: content.eventName.toUpperCase(), font: `bold ${s(0.058)}px CormorantGaramond`, color: COLORS.ink, lineHeight: s(0.07), align: 'center' });
+  blocks.push({ type: 'text', text: content.eventName.toUpperCase(), font: `bold ${s(0.058)}px ${HEADER_FONT}`, color: COLORS.ink, lineHeight: s(0.07), align: 'center' });
   if (content.eventSubtitle) {
     blocks.push({ type: 'gap', size: 4 });
-    blocks.push({ type: 'text', text: content.eventSubtitle, font: `italic ${s(0.026)}px CormorantGaramond`, color: COLORS.inkLight, lineHeight: s(0.038), align: 'center' });
+    blocks.push({ type: 'text', text: content.eventSubtitle, font: `italic ${s(0.026)}px ${HEADER_FONT}`, color: COLORS.inkLight, lineHeight: s(0.038), align: 'center' });
   }
   blocks.push({ type: 'divider' });
 
   // Greeting
-  blocks.push({ type: 'text', text: 'Dearest Lala,', font: `italic ${s(0.028)}px CormorantGaramond`, color: COLORS.ink, lineHeight: s(0.042), align: 'center' });
+  blocks.push({ type: 'text', text: 'Dearest Lala,', font: `italic ${s(0.028)}px ${HEADER_FONT}`, color: COLORS.ink, lineHeight: s(0.042), align: 'center' });
   blocks.push({ type: 'gap', size: 8 });
 
   // Body text (italic, wraps)
-  blocks.push({ type: 'text', text: content.bodyText, font: `italic ${s(0.022)}px LibreBaskerville`, color: COLORS.ink, lineHeight: s(0.036), align: 'center' });
+  blocks.push({ type: 'text', text: content.bodyText, font: `italic ${s(0.022)}px ${BODY_FONT}`, color: COLORS.ink, lineHeight: s(0.036), align: 'center' });
   blocks.push({ type: 'divider' });
 
   // Details
   const addDetail = (label, value) => {
     if (!value) return;
-    blocks.push({ type: 'label', text: label, font: `bold ${s(0.014)}px LibreBaskerville`, color: COLORS.labelColor, lineHeight: s(0.022), align: 'center' });
-    blocks.push({ type: 'text', text: value, font: `${s(0.024)}px LibreBaskerville`, color: COLORS.ink, lineHeight: s(0.036), align: 'center' });
+    blocks.push({ type: 'label', text: label, font: `bold ${s(0.014)}px ${BODY_FONT}`, color: COLORS.labelColor, lineHeight: s(0.022), align: 'center' });
+    blocks.push({ type: 'text', text: value, font: `${s(0.024)}px ${BODY_FONT}`, color: COLORS.ink, lineHeight: s(0.036), align: 'center' });
     blocks.push({ type: 'gap', size: 14 });
   };
   addDetail('LOCATION', content.location);
@@ -332,14 +372,14 @@ function buildLayoutBlocks(content, width) {
   blocks.push({ type: 'divider' });
 
   // Closing
-  blocks.push({ type: 'text', text: 'We look forward to your presence.', font: `italic ${s(0.022)}px LibreBaskerville`, color: COLORS.inkLight, lineHeight: s(0.036), align: 'center' });
+  blocks.push({ type: 'text', text: 'We look forward to your presence.', font: `italic ${s(0.022)}px ${BODY_FONT}`, color: COLORS.inkLight, lineHeight: s(0.036), align: 'center' });
   blocks.push({ type: 'gap', size: 16 });
 
   // Signature
-  blocks.push({ type: 'text', text: 'Warmly,', font: `italic ${s(0.022)}px CormorantGaramond`, color: COLORS.inkLight, lineHeight: s(0.032), align: 'center' });
-  blocks.push({ type: 'text', text: content.hostName, font: `bold ${s(0.032)}px CormorantGaramond`, color: COLORS.ink, lineHeight: s(0.044), align: 'center' });
+  blocks.push({ type: 'text', text: 'Warmly,', font: `italic ${s(0.022)}px ${HEADER_FONT}`, color: COLORS.inkLight, lineHeight: s(0.032), align: 'center' });
+  blocks.push({ type: 'text', text: content.hostName, font: `bold ${s(0.032)}px ${HEADER_FONT}`, color: COLORS.ink, lineHeight: s(0.044), align: 'center' });
   if (content.hostBrand) {
-    blocks.push({ type: 'text', text: content.hostBrand, font: `${s(0.02)}px LibreBaskerville`, color: COLORS.gold, lineHeight: s(0.03), align: 'center' });
+    blocks.push({ type: 'text', text: content.hostBrand, font: `${s(0.02)}px ${BODY_FONT}`, color: COLORS.gold, lineHeight: s(0.03), align: 'center' });
   }
 
   return blocks;
