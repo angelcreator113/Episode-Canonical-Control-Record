@@ -77,7 +77,7 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const {
-      name, event_type = 'invite', host_brand, description,
+      name, event_type = 'invite', host, host_brand, description,
       prestige = 5, cost_coins = 100, strictness = 5,
       deadline_type = 'medium', deadline_minutes,
       dress_code, dress_code_keywords = [],
@@ -101,7 +101,7 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
     const id = uuidv4();
     await models.sequelize.query(
       `INSERT INTO world_events 
-       (id, show_id, season_id, arc_id, name, event_type, host_brand, description,
+        (id, show_id, season_id, arc_id, name, event_type, host, host_brand, description,
         prestige, cost_coins, strictness, deadline_type, deadline_minutes,
         dress_code, dress_code_keywords, location_hint, narrative_stakes,
         canon_consequences, seeds_future_events,
@@ -110,7 +110,7 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
         career_milestone, fail_consequence, success_unlock,
         status, created_at, updated_at)
        VALUES
-       (:id, :showId, :season_id, :arc_id, :name, :event_type, :host_brand, :description,
+      (:id, :showId, :season_id, :arc_id, :name, :event_type, :host, :host_brand, :description,
         :prestige, :cost_coins, :strictness, :deadline_type, :deadline_minutes,
         :dress_code, :dress_code_keywords, :location_hint, :narrative_stakes,
         :canon_consequences, :seeds_future_events,
@@ -124,6 +124,7 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
           season_id: season_id || null,
           arc_id: arc_id || null,
           name, event_type,
+          host: host || null,
           host_brand: host_brand || null,
           description: description || null,
           prestige, cost_coins, strictness,
@@ -495,7 +496,7 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
       const id = uuidv4();
       await models.sequelize.query(
         `INSERT INTO world_events 
-         (id, show_id, name, event_type, host_brand, description,
+         (id, show_id, name, event_type, host, host_brand, description,
           prestige, cost_coins, strictness, deadline_type,
           dress_code, location_hint, narrative_stakes,
           browse_pool_bias, browse_pool_size,
@@ -503,7 +504,7 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
           career_milestone, fail_consequence, success_unlock,
           status, created_at, updated_at)
          VALUES
-         (:id, :showId, :name, :event_type, :host_brand, :description,
+         (:id, :showId, :name, :event_type, :host, :host_brand, :description,
           :prestige, :cost_coins, :strictness, :deadline_type,
           :dress_code, :location_hint, :narrative_stakes,
           :browse_pool_bias, :browse_pool_size,
@@ -515,6 +516,7 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
             id, showId,
             name: ev.name,
             event_type: ev.event_type || 'invite',
+            host: ev.host || null,
             host_brand: ev.host_brand || null,
             description: ev.description || null,
             prestige: ev.prestige || 5,

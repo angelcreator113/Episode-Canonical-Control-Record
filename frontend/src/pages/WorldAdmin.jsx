@@ -1679,6 +1679,7 @@ The revised event should feel like a completely different experience from the si
                 }
               } catch (err) {
                 console.warn(`[Event] Failed to save ${field}:`, err.response?.data?.error || err.message);
+                setError(err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save event field');
               }
             };
             const updateMultipleFields = async (fields) => {
@@ -1696,6 +1697,7 @@ The revised event should feel like a completely different experience from the si
                 }
               } catch (err) {
                 console.warn('[Event] Batch save failed:', err.response?.data?.error || err.message);
+                setError(err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save event field');
               }
             };
             const linkedScene = md.scene_set_id ? sceneSets.find(s => s.id === md.scene_set_id) : null;
@@ -1990,18 +1992,38 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                     for (const key of saveable) {
                       if (md[key] !== undefined && md[key] !== null) toSave[key] = md[key];
                     }
+                    // Try batch save first
                     try {
                       const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
                       if (res.data.success) {
                         setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event, ...md } : ev));
                         setToast('✅ Event saved');
                         setTimeout(() => setToast(null), 3000);
+                        return;
                       }
-                    } catch (err) {
-                      console.warn('[Event] Save failed:', err.response?.data?.error || err.message);
-                      setToast('Save failed — ' + (err.response?.data?.error || err.message));
-                      setTimeout(() => setToast(null), 4000);
+                    } catch (batchErr) {
+                      console.warn('[Event] Batch save failed, trying per-field:', batchErr.response?.data?.error);
                     }
+                    // Fallback: save fields one by one
+                    let savedCount = 0;
+                    let failedFields = [];
+                    for (const [key, val] of Object.entries(toSave)) {
+                      try {
+                        await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [key]: val });
+                        savedCount++;
+                      } catch {
+                        failedFields.push(key);
+                      }
+                    }
+                    if (savedCount > 0) {
+                      setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...md } : ev));
+                    }
+                    if (failedFields.length > 0) {
+                      setToast(`⚠️ Saved ${savedCount} fields. Failed: ${failedFields.join(', ')} — run migrations`);
+                    } else {
+                      setToast('✅ Event saved');
+                    }
+                    setTimeout(() => setToast(null), 5000);
                   }} style={{ ...S.primaryBtn, padding: '6px 20px', fontSize: 13 }}>
                     💾 Save
                   </button>
