@@ -255,14 +255,28 @@ function wrapText(ctx, text, maxWidth) {
 
 // ─── CONTENT BUILDER ─────────────────────────────────────────────────────────
 
+/**
+ * Extract a short venue name from location_hint.
+ * "Sunlit private terrace of a boutique hotel in the fashion district — honey-toned..."
+ *  -> "A boutique hotel in the fashion district"
+ */
+function shortenLocation(locationHint) {
+  if (!locationHint) return null;
+  // Take first sentence or clause
+  let short = locationHint.split(/[.—,]/).find(s => s.trim().length > 5)?.trim() || locationHint;
+  if (short.length > 60) short = short.slice(0, 57) + '...';
+  return short;
+}
+
 function buildInvitationContent(event) {
   const nameParts = (event.name || 'Event').split(' — ');
   const eventName = nameParts[0].trim();
   const eventSubtitle = nameParts[1]?.trim() || null;
 
-  let bodyText = event.narrative_stakes || event.description || '';
-  if (!bodyText && event.location_hint) {
-    bodyText = `Join us ${event.location_hint.toLowerCase().startsWith('at') ? '' : 'at '}${event.location_hint}.`;
+  // Body text — use description (public-facing), NOT narrative_stakes (producer notes)
+  let bodyText = event.description || '';
+  if (!bodyText && event.location_hint && event.dress_code) {
+    bodyText = `Join us for an afternoon of ${event.dress_code.toLowerCase()} elegance at one of the city's most coveted venues.`;
   }
   if (!bodyText && event.dress_code_keywords?.length > 0) {
     bodyText = `An evening of ${event.dress_code_keywords.slice(0, 3).join(', ')} style and connection.`;
@@ -270,43 +284,14 @@ function buildInvitationContent(event) {
   if (!bodyText) {
     bodyText = 'An exclusive gathering curated for rising voices in the industry.';
   }
-  if (bodyText.length > 220) bodyText = bodyText.slice(0, 217) + '...';
-
-  let investment;
-  if (event.is_free || event.cost_coins === 0 || event.is_paid === 'free') {
-    investment = 'Complimentary';
-  } else if (event.is_paid === 'yes' && event.payment_amount > 0) {
-    investment = `Lala earns ${event.payment_amount} coins`;
-  } else {
-    investment = `${event.cost_coins || 100} coins per guest`;
-  }
-
-  let guestPolicy;
-  const poolSize = event.browse_pool_size || 1;
-  if (poolSize >= 2) {
-    guestPolicy = 'Plus one welcome';
-  } else if (event.browse_pool_bias === 'social' || event.browse_pool_bias === 'romantic') {
-    guestPolicy = 'Plus one encouraged';
-  } else {
-    guestPolicy = 'Lala only';
-  }
-
-  let deliverable = null;
-  if (event.event_type === 'brand_deal' || event.event_type === 'deliverable') {
-    deliverable = event.success_unlock
-      ? event.success_unlock.split(',')[0].trim()
-      : 'Content creation required upon arrival';
-  }
+  if (bodyText.length > 180) bodyText = bodyText.slice(0, 177) + '...';
 
   return {
     eventName,
     eventSubtitle,
     bodyText,
-    location: event.location_hint || null,
+    location: shortenLocation(event.location_hint),
     dressCode: event.dress_code || null,
-    investment,
-    guestPolicy,
-    deliverable,
     hostName: event.host || 'The Host',
     hostBrand: event.host_brand || '',
     prestige: event.prestige || 5,
@@ -336,8 +321,6 @@ function buildLayoutBlocks(content, width) {
 
   // Tone line
   blocks.push({ type: 'text', text: 'An Exclusive Invitation', font: `italic ${s(0.022)}px ${HEADER_FONT}`, color: COLORS.goldDark, lineHeight: s(0.034), align: 'center' });
-  // LalaVerse mark
-  blocks.push({ type: 'text', text: 'LalaVerse', font: `${s(0.018)}px ${BODY_FONT}`, color: COLORS.gold, lineHeight: s(0.03), align: 'center' });
   blocks.push({ type: 'divider' });
 
   // Event name
@@ -356,18 +339,15 @@ function buildLayoutBlocks(content, width) {
   blocks.push({ type: 'text', text: content.bodyText, font: `italic ${s(0.022)}px ${BODY_FONT}`, color: COLORS.ink, lineHeight: s(0.036), align: 'center' });
   blocks.push({ type: 'divider' });
 
-  // Details
+  // Details — only in-world information (no game mechanics)
   const addDetail = (label, value) => {
     if (!value) return;
     blocks.push({ type: 'label', text: label, font: `bold ${s(0.014)}px ${BODY_FONT}`, color: COLORS.labelColor, lineHeight: s(0.022), align: 'center' });
     blocks.push({ type: 'text', text: value, font: `${s(0.024)}px ${BODY_FONT}`, color: COLORS.ink, lineHeight: s(0.036), align: 'center' });
     blocks.push({ type: 'gap', size: 14 });
   };
-  addDetail('LOCATION', content.location);
+  addDetail('VENUE', content.location);
   addDetail('DRESS CODE', content.dressCode);
-  addDetail('INVESTMENT', content.investment);
-  addDetail('GUEST POLICY', content.guestPolicy);
-  if (content.deliverable) addDetail('DELIVERABLE', content.deliverable);
 
   blocks.push({ type: 'divider' });
 
