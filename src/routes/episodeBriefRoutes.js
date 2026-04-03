@@ -196,6 +196,49 @@ router.post('/:episodeId/plan/lock-all', optionalAuth, async (req, res) => {
   }
 });
 
+// ── GENERATE GROUNDED SCRIPT ──────────────────────────────────────────────────
+
+router.post('/:episodeId/generate-script', optionalAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const { showId } = req.body;
+
+    if (!showId) {
+      return res.status(400).json({ error: 'showId is required in request body' });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+    }
+
+    const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } });
+    if (!brief) {
+      return res.status(400).json({ error: 'Episode Brief not found. Create the Brief first.' });
+    }
+
+    console.log(`[ScriptGen] Generating grounded script for episode: ${episodeId}`);
+
+    const { generateGroundedScript } = require('../services/groundedScriptGeneratorService');
+    const models = require('../models');
+    const script = await generateGroundedScript(episodeId, showId, models);
+
+    // Save script to episode
+    try {
+      const episode = await models.Episode.findByPk(episodeId);
+      if (episode) {
+        await episode.update({ script_content: script });
+      }
+    } catch (saveErr) {
+      console.warn('[ScriptGen] Could not save to episode:', saveErr.message);
+    }
+
+    return res.json({ success: true, script, episodeId });
+  } catch (err) {
+    console.error('[ScriptGen] Error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── SCRIPT CONTEXT (for script generator) ─────────────────────────────────────
 
 router.get('/:episodeId/script-context', optionalAuth, async (req, res) => {
