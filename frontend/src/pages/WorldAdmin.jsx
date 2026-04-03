@@ -1958,8 +1958,8 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
 
                   {/* Generate invitation button in detail modal */}
                   <div style={{ marginTop: 8, marginBottom: 12 }}>
-                    <InvitationButton event={md} showId={showId} onGenerated={(url) => {
-                      setEventDetailModal(prev => prev ? { ...prev, invitation_url: url } : prev);
+                    <InvitationButton event={md} showId={showId} onGenerated={(url, assetId) => {
+                      setEventDetailModal(prev => prev ? { ...prev, invitation_url: url, invitation_asset_id: assetId } : prev);
                       loadData();
                     }} />
                   </div>

@@ -44,22 +44,25 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    let query = `SELECT * FROM world_events WHERE show_id = :showId`;
+    let query = `SELECT e.*, a.s3_url_processed as invitation_url
+      FROM world_events e
+      LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
+      WHERE e.show_id = :showId`;
     const replacements = { showId };
 
     if (status) {
-      query += ` AND status = :status`;
+      query += ` AND e.status = :status`;
       replacements.status = status;
     }
     if (event_type) {
-      query += ` AND event_type = :event_type`;
+      query += ` AND e.event_type = :event_type`;
       replacements.event_type = event_type;
     }
 
     const validSorts = ['created_at', 'name', 'prestige', 'cost_coins', 'status'];
     const sortCol = validSorts.includes(sort) ? sort : 'created_at';
     const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    query += ` ORDER BY ${sortCol} ${sortOrder}`;
+    query += ` ORDER BY e.${sortCol} ${sortOrder}`;
 
     const [events] = await models.sequelize.query(query, { replacements });
 
