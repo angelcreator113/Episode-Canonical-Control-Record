@@ -187,6 +187,7 @@ export function InvitationButton({ event, showId, onGenerated }) {
 // ─── INVITATION STYLE FIELDS ──────────────────────────────────────────────────
 
 export function InvitationStyleFields({ formData, setFormData }) {
+  const [colorText, setColorText] = useState((formData.color_palette || []).join(', '));
   return (
     <div style={{
       border: '1px solid #D4AF37', borderRadius: 10,
@@ -230,11 +231,13 @@ export function InvitationStyleFields({ formData, setFormData }) {
         <input
           type="text"
           placeholder="e.g. blush, champagne, honey gold"
-          value={(formData.color_palette || []).join(', ')}
-          onChange={e => setFormData(f => ({
-            ...f,
-            color_palette: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
-          }))}
+          value={colorText}
+          onChange={e => setColorText(e.target.value)}
+          onBlur={e => {
+            const colors = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+            setColorText(colors.join(', '));
+            setFormData(f => ({ ...f, color_palette: colors }));
+          }}
           style={inputStyle}
         />
       </div>
