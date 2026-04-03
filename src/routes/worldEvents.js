@@ -182,7 +182,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     // Build dynamic SET clause
     const allowedFields = [
-      'name', 'event_type', 'host', 'host_brand', 'description',
+      'name', 'event_type', 'host_brand', 'description',
       'prestige', 'cost_coins', 'strictness',
       'deadline_type', 'deadline_minutes',
       'dress_code', 'dress_code_keywords',
@@ -190,10 +190,11 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'seeds_future_events', 'overlay_template', 'required_ui_overlays',
       'browse_pool_bias', 'browse_pool_size', 'rewards', 'status',
       'season_id', 'arc_id',
-      'is_paid', 'is_free', 'payment_amount', 'requirements', 'career_tier',
+      'is_paid', 'payment_amount', 'requirements', 'career_tier',
       'career_milestone', 'fail_consequence', 'success_unlock',
       'scene_set_id',
     ];
+    const requiredStringFields = new Set(['name', 'event_type', 'status']);
 
     const setClauses = [];
     const replacements = { showId, eventId };
@@ -247,7 +248,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
     }
 
     if (setClauses.length === 0) {
-      return res.status(400).json({ error: 'No valid fields to update' });
+      console.warn('[WorldEvents] PUT 400 — no valid fields. Received keys:', Object.keys(updates).join(', '));
+      return res.status(400).json({ error: 'No valid fields to update', received: Object.keys(updates) });
     }
 
     setClauses.push('updated_at = NOW()');
@@ -263,14 +265,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     return res.json({ success: true, event: updated[0] });
   } catch (error) {
-    console.error('Update event error:', error.message);
-    // If a column doesn't exist, retry without it
-    if (error.message?.includes('column') && error.message?.includes('does not exist')) {
-      const badCol = error.message.match(/"([^"]+)" of relation/)?.[1] || error.message.match(/column "([^"]+)"/)?.[1];
-      if (badCol) {
-        console.warn(`[WorldEvents] Column "${badCol}" missing — skipping. Run migrations to fix.`);
-        return res.status(500).json({ error: `Column "${badCol}" not in database. Run: npx sequelize-cli db:migrate` });
-      }
+    console.error('Update event error:', error);
+    if (String(error.message || '').includes('does not exist')) {
+      return res.status(400).json({ error: 'Invalid update field', message: error.message });
     }
     return res.status(500).json({ error: 'Failed to update event', message: error.message });
   }
