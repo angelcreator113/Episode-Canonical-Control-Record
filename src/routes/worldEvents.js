@@ -188,7 +188,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     // Build dynamic SET clause
     const allowedFields = [
-      'name', 'event_type', 'host_brand', 'description',
+      'name', 'event_type', 'host', 'host_brand', 'description',
       'prestige', 'cost_coins', 'strictness',
       'deadline_type', 'deadline_minutes',
       'dress_code', 'dress_code_keywords',
@@ -382,6 +382,16 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
       `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = times_used + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
       { replacements: { episodeId: episode_id, eventId } }
     );
+
+    // If this event has an approved invitation, stamp the episode_id on the asset
+    // so it appears in the episode's Assets tab
+    if (event.invitation_asset_id) {
+      await models.sequelize.query(
+        `UPDATE assets SET episode_id = :episodeId, asset_scope = 'EPISODE', updated_at = NOW()
+         WHERE id = :assetId AND deleted_at IS NULL`,
+        { replacements: { episodeId: episode_id, assetId: event.invitation_asset_id } }
+      );
+    }
 
     return res.json({
       success: true,
@@ -748,10 +758,19 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    // Mark asset as approved
+    // Look up which episode this event is linked to
+    const [event] = await models.sequelize.query(
+      'SELECT used_in_episode_id FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    const episodeId = event?.used_in_episode_id || null;
+
+    // Mark asset as approved and stamp episode_id so it appears in the episode's Assets tab
     await models.sequelize.query(
-      'UPDATE assets SET approval_status = :status, updated_at = NOW() WHERE id = :assetId',
-      { replacements: { status: 'approved', assetId } }
+      `UPDATE assets SET approval_status = :status, episode_id = :episodeId,
+       asset_scope = CASE WHEN :episodeId IS NOT NULL THEN 'EPISODE' ELSE asset_scope END,
+       updated_at = NOW() WHERE id = :assetId`,
+      { replacements: { status: 'approved', assetId, episodeId } }
     );
 
     // Link to event
@@ -760,7 +779,7 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
       { replacements: { assetId, eventId } }
     );
 
-    return res.json({ success: true, message: 'Invitation approved and linked to event' });
+    return res.json({ success: true, message: 'Invitation approved and linked to event', episodeId });
   } catch (err) {
     console.error('[InviteGen] Approve error:', err);
     return res.status(500).json({ error: err.message });

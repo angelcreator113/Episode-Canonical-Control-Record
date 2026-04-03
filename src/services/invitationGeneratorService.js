@@ -20,7 +20,7 @@
 const axios = require('axios');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
-const { compositeInvitation, compositeInvitationPDF, detectTheme, checkFonts } = require('./invitationCompositingService');
+const { compositeInvitation, compositeInvitationPDF, detectTheme } = require('./invitationCompositingService');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
@@ -121,16 +121,16 @@ ${colorText}
 Richness: ${richness}
 
 COMPOSITION:
-- Portrait card format (taller than wide)
+- The card fills the ENTIRE image edge to edge — NO surrounding background, NO border gap, NO drop shadow
+- Portrait card format (taller than wide), the card IS the image
 - Decorative elements concentrated at top and bottom edges
 - Large empty cream/ivory center zone — this is where text will appear
 - Soft vignette effect toward center (lighter in middle, slightly darker at edges)
 - ${themeConfig.atmosphere}
-- The card should feel like a premium physical invitation stationery item
-- Soft neutral background behind the card (cream or very light gray)
+- The card surface extends to all four edges of the image
 
 Style: High-end fashion editorial stationery. Think luxury wedding stationery meets fashion house invite.
-Output: Clean background suitable for text overlay compositing.`;
+Output: Edge-to-edge card surface, no outer background, suitable for text overlay compositing.`;
 }
 
 // ─── DALL-E 3 API (raw axios — matches objectGenerationService pattern) ──────
@@ -255,7 +255,7 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
       prestige: event.prestige,
       version,
       host_brand: event.host_brand || null,
-      composited: checkFonts(),
+      composited: true, // set to actual value by caller
       generated_at: new Date().toISOString(),
     },
     approval_status: 'pending_review',
@@ -333,6 +333,15 @@ async function generateInvitation(eventId, models, showId) {
   // Step 4: Create Asset record (pending_review — not linked to event until approved)
   // Previous versions are NOT deleted — kept for history
   const asset = await createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme);
+
+  // If event is already injected into an episode, link asset to it
+  // so it appears in the episode's Assets tab once approved
+  if (event.used_in_episode_id) {
+    await sequelize.query(
+      'UPDATE assets SET episode_id = :episodeId WHERE id = :assetId',
+      { replacements: { episodeId: event.used_in_episode_id, assetId: asset.id } }
+    );
+  }
 
   return {
     success: true,
