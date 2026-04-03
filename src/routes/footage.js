@@ -248,6 +248,7 @@ router.get('/episodes/:episodeId/assets', async (req, res) => {
     const episodeOnlyAssets = await Asset.findAll({
       where: {
         episode_id: episodeId,
+        deleted_at: null,
         id: { [Op.notIn]: linkedAssets.map(a => a.id) } // Exclude already linked ones
       }
     });
