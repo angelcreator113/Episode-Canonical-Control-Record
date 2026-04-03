@@ -1433,13 +1433,12 @@ The revised event should feel like a completely different experience from the si
           {eventDetailModal && (() => {
             const md = eventDetailModal;
             const updateField = async (field, value) => {
-              if (value === md[field]) return; // skip if unchanged
               try {
                 const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [field]: value });
-                if (res.data.success) {
-                  const updated = res.data.event;
-                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
-                  setEventDetailModal(updated);
+                if (res.data.success && res.data.event) {
+                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event } : ev));
+                  // Update modal but preserve any local edits by merging
+                  setEventDetailModal(prev => prev ? { ...prev, [field]: value } : prev);
                 }
               } catch (err) {
                 console.warn(`[Event] Failed to save ${field}:`, err.response?.data?.error || err.message);
