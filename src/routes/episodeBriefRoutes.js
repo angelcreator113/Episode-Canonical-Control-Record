@@ -261,7 +261,7 @@ router.post('/:episodeId/rewrite-line', optionalAuth, async (req, res) => {
           .map(l => { try { const c = JSON.parse(l.content); return `${l.title}: ${c.summary || ''}`; } catch { return l.title; } })
           .join('\n');
       }
-    } catch {}
+    } catch (err) { console.warn('[RewriteLine] Failed to load voice laws:', err?.message); }
 
     const isLala = speaker === 'Lala';
     const isPrime = speaker === 'Prime' || speaker === 'Me';
