@@ -33,11 +33,14 @@ export const BORDER_OPTIONS = [
 
 export function InvitationButton({ event, showId, onGenerated }) {
   const [generating, setGenerating] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [imageUrl, setImageUrl] = useState(event.invitation_url || null);
+  const [pendingAssetId, setPendingAssetId] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [error, setError] = useState(null);
 
-  const hasInvitation = !!imageUrl;
+  const hasInvitation = !!event.invitation_asset_id;
+  const isPending = !!pendingAssetId;
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -47,14 +50,46 @@ export function InvitationButton({ event, showId, onGenerated }) {
         `/api/v1/world/${showId}/events/${event.id}/generate-invitation`
       );
       const url = res.data.data?.imageUrl;
+      const assetId = res.data.data?.assetId;
       setImageUrl(url);
+      setPendingAssetId(assetId);
       setShowPreview(true);
-      if (onGenerated) onGenerated(url, res.data.data?.assetId);
     } catch (err) {
       setError(err.response?.data?.error || 'Generation failed');
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleApprove = async () => {
+    if (!pendingAssetId) return;
+    setApproving(true);
+    try {
+      await api.post(
+        `/api/v1/world/${showId}/events/${event.id}/approve-invitation`,
+        { assetId: pendingAssetId }
+      );
+      setPendingAssetId(null);
+      setShowPreview(false);
+      if (onGenerated) onGenerated(imageUrl, pendingAssetId);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Approval failed');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!pendingAssetId) return;
+    try {
+      await api.post(
+        `/api/v1/world/${showId}/events/${event.id}/reject-invitation`,
+        { assetId: pendingAssetId }
+      );
+    } catch { /* best-effort */ }
+    setPendingAssetId(null);
+    setImageUrl(event.invitation_url || null);
+    setShowPreview(false);
   };
 
   return (
@@ -76,8 +111,16 @@ export function InvitationButton({ event, showId, onGenerated }) {
             onClick={e => e.stopPropagation()}
           >
             <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#2C2C2C' }}>
-              {event.name} — Invitation
+              {event.name} — Invitation Preview
             </h3>
+            {isPending && (
+              <div style={{
+                padding: '6px 14px', background: '#FEF3C7', color: '#92400E',
+                borderRadius: 8, fontSize: 12, fontWeight: 600,
+              }}>
+                Pending your approval
+              </div>
+            )}
             <img
               src={imageUrl}
               alt={`${event.name} invitation`}
@@ -114,18 +157,49 @@ export function InvitationButton({ event, showId, onGenerated }) {
               >
                 {generating ? 'Generating...' : 'Regenerate'}
               </button>
+            </div>
+            {isPending && (
+              <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                <button
+                  onClick={handleReject}
+                  style={{
+                    flex: 1, background: '#FFF',
+                    color: '#DC2626', border: '1px solid #FECACA',
+                    borderRadius: 8, padding: '10px 0',
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={handleApprove}
+                  disabled={approving}
+                  style={{
+                    flex: 2, background: '#16a34a',
+                    color: '#FFF', border: 'none',
+                    borderRadius: 8, padding: '10px 0',
+                    fontSize: 13, fontWeight: 600,
+                    cursor: approving ? 'not-allowed' : 'pointer',
+                    opacity: approving ? 0.7 : 1,
+                  }}
+                >
+                  {approving ? 'Approving...' : 'Approve Invitation'}
+                </button>
+              </div>
+            )}
+            {!isPending && (
               <button
                 onClick={() => setShowPreview(false)}
                 style={{
-                  background: '#B8962E',
+                  width: '100%', background: '#B8962E',
                   color: '#FFF', border: 'none',
-                  borderRadius: 8, padding: '8px 16px',
+                  borderRadius: 8, padding: '10px 0',
                   fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 }}
               >
                 Done
               </button>
-            </div>
+            )}
           </div>
         </div>
       )}

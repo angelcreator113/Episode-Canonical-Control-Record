@@ -734,5 +734,58 @@ router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req
   }
 });
 
+// ── APPROVE INVITATION ─────────────────────────────────────────────────────
+
+router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { assetId } = req.body;
+    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Mark asset as approved
+    await models.sequelize.query(
+      'UPDATE assets SET approval_status = :status, updated_at = NOW() WHERE id = :assetId',
+      { replacements: { status: 'approved', assetId } }
+    );
+
+    // Link to event
+    await models.sequelize.query(
+      'UPDATE world_events SET invitation_asset_id = :assetId, updated_at = NOW() WHERE id = :eventId',
+      { replacements: { assetId, eventId } }
+    );
+
+    return res.json({ success: true, message: 'Invitation approved and linked to event' });
+  } catch (err) {
+    console.error('[InviteGen] Approve error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── REJECT INVITATION ──────────────────────────────────────────────────────
+
+router.post('/world/:showId/events/:eventId/reject-invitation', optionalAuth, async (req, res) => {
+  try {
+    const { assetId } = req.body;
+    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Soft-delete the rejected asset
+    await models.sequelize.query(
+      'UPDATE assets SET approval_status = :status, deleted_at = NOW(), updated_at = NOW() WHERE id = :assetId',
+      { replacements: { status: 'rejected', assetId } }
+    );
+
+    return res.json({ success: true, message: 'Invitation rejected' });
+  } catch (err) {
+    console.error('[InviteGen] Reject error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 

@@ -267,7 +267,7 @@ async function createInvitationAsset(models, event, s3Url, prompt, showId) {
       prestige: event.prestige,
       generated_at: new Date().toISOString(),
     },
-    approval_status: 'approved',
+    approval_status: 'pending_review',
   });
 
   return asset;
@@ -344,14 +344,8 @@ async function generateInvitation(eventId, models, showId) {
     await deleteOldS3Asset(oldAssetUrl);
   }
 
-  // Create Asset record
+  // Create Asset record (pending_review — not linked to event until approved)
   const asset = await createInvitationAsset(models, event, s3Url, prompt, showId);
-
-  // Link back to event
-  await sequelize.query(
-    'UPDATE world_events SET invitation_asset_id = :assetId, updated_at = NOW() WHERE id = :eventId',
-    { replacements: { assetId: asset.id, eventId } }
-  );
 
   return {
     success: true,
