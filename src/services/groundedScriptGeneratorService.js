@@ -63,7 +63,16 @@ async function generateGroundedScript(episodeId, showId, models) {
   const scenePlan = await ScenePlan.findAll({
     where: { episode_id: episodeId, deleted_at: null },
     order: [['beat_number', 'ASC']],
-    include: [{ model: SceneSet, as: 'sceneSet', attributes: ['name', 'scene_type', 'script_context', 'canonical_description'], required: false }],
+    include: [{
+      model: SceneSet, as: 'sceneSet',
+      attributes: ['name', 'scene_type', 'script_context', 'canonical_description', 'world_location_id'],
+      required: false,
+      include: models.WorldLocation ? [{
+        model: models.WorldLocation, as: 'worldLocation',
+        attributes: ['narrative_role', 'sensory_details'],
+        required: false,
+      }] : [],
+    }],
   }).catch(() => []);
 
   // 3. Load Show Brain voice rules
@@ -127,7 +136,8 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   const beatContext = scenePlan.length > 0
     ? scenePlan.map(b => {
         const tpl = BEAT_TEMPLATES[b.beat_number] || {};
-        return `BEAT ${b.beat_number}: ${b.beat_name || tpl.name}
+        const loc = b.sceneSet?.worldLocation;
+        let entry = `BEAT ${b.beat_number}: ${b.beat_name || tpl.name}
   Location: ${b.sceneSet?.name || 'Unknown'} (${b.sceneSet?.scene_type || ''})
   Angle: ${b.angle_label || ''} | Shot: ${b.shot_type || ''}
   Scene context: ${b.scene_context || b.sceneSet?.script_context || 'No description'}
@@ -135,6 +145,9 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   Director note: ${b.director_note || ''}
   UI action: ${tpl.ui || ''}
   JAWIHP speaks: ${tpl.jawihp} | Lala speaks: ${tpl.lala}`;
+        if (loc?.narrative_role) entry += `\n  Narrative role: ${loc.narrative_role}`;
+        if (loc?.sensory_details?.atmosphere) entry += `\n  Atmosphere: ${loc.sensory_details.atmosphere}`;
+        return entry;
       }).join('\n\n')
     : 'No scene plan — write based on standard 14-beat structure';
 
