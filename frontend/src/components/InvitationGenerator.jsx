@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 
 // ─── THEME OPTIONS ────────────────────────────────────────────────────────────
@@ -188,6 +188,15 @@ export function InvitationButton({ event, showId, onGenerated }) {
 
 export function InvitationStyleFields({ formData, setFormData }) {
   const [colorText, setColorText] = useState((formData.color_palette || []).join(', '));
+  const colorFocused = useRef(false);
+
+  // Sync colorText when formData changes externally (template pick, server save)
+  // but NOT while the user is actively typing in the field
+  useEffect(() => {
+    if (!colorFocused.current) {
+      setColorText((formData.color_palette || []).join(', '));
+    }
+  }, [formData.color_palette]);
   return (
     <div style={{
       border: '1px solid #D4AF37', borderRadius: 10,
@@ -232,8 +241,10 @@ export function InvitationStyleFields({ formData, setFormData }) {
           type="text"
           placeholder="e.g. blush, champagne, honey gold"
           value={colorText}
+          onFocus={() => { colorFocused.current = true; }}
           onChange={e => setColorText(e.target.value)}
           onBlur={e => {
+            colorFocused.current = false;
             const colors = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
             setColorText(colors.join(', '));
             setFormData(f => ({ ...f, color_palette: colors }));
