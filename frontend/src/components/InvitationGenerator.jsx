@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import api from '../services/api';
 
 // ─── THEME OPTIONS ────────────────────────────────────────────────────────────
@@ -187,16 +187,12 @@ export function InvitationButton({ event, showId, onGenerated }) {
 // ─── INVITATION STYLE FIELDS ──────────────────────────────────────────────────
 
 export function InvitationStyleFields({ formData, setFormData }) {
+  // Local state for text inputs — prevents parent re-renders from destroying
+  // mid-typing state. Only pushes to parent on blur.
+  // (The detail modal uses an IIFE that remounts children on every md change,
+  //  so any setFormData call that triggers a server save will reset child state.)
+  const [moodText, setMoodText] = useState(formData.mood || '');
   const [colorText, setColorText] = useState((formData.color_palette || []).join(', '));
-  const colorFocused = useRef(false);
-
-  // Sync colorText when formData changes externally (template pick, server save)
-  // but NOT while the user is actively typing in the field
-  useEffect(() => {
-    if (!colorFocused.current) {
-      setColorText((formData.color_palette || []).join(', '));
-    }
-  }, [formData.color_palette]);
   return (
     <div style={{
       border: '1px solid #D4AF37', borderRadius: 10,
@@ -229,8 +225,9 @@ export function InvitationStyleFields({ formData, setFormData }) {
         <input
           type="text"
           placeholder="e.g. intimate, aspirational, electric, mysterious"
-          value={formData.mood || ''}
-          onChange={e => setFormData(f => ({ ...f, mood: e.target.value }))}
+          value={moodText}
+          onChange={e => setMoodText(e.target.value)}
+          onBlur={e => setFormData(f => ({ ...f, mood: e.target.value }))}
           style={inputStyle}
         />
       </div>
@@ -241,10 +238,8 @@ export function InvitationStyleFields({ formData, setFormData }) {
           type="text"
           placeholder="e.g. blush, champagne, honey gold"
           value={colorText}
-          onFocus={() => { colorFocused.current = true; }}
           onChange={e => setColorText(e.target.value)}
           onBlur={e => {
-            colorFocused.current = false;
             const colors = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
             setColorText(colors.join(', '));
             setFormData(f => ({ ...f, color_palette: colors }));
