@@ -44,6 +44,8 @@ export function InvitationButton({ event, showId, onGenerated }) {
   const [deleting, setDeleting]       = useState(false);
   const [unlinking, setUnlinking]     = useState(false);
   const [toast, setToast]             = useState(null);
+  const [versions, setVersions]       = useState([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -149,6 +151,34 @@ export function InvitationButton({ event, showId, onGenerated }) {
     }
   };
 
+  const fetchVersions = async () => {
+    setLoadingVersions(true);
+    try {
+      const res = await api.get(`/api/v1/world/${showId}/events/${event.id}/invitation-history`);
+      setVersions(res.data?.data || []);
+    } catch {
+      setVersions([]);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  const deleteVersion = async (assetId) => {
+    if (!window.confirm('Delete this version permanently?')) return;
+    try {
+      await api.delete(`/api/v1/world/${showId}/events/${event.id}/invitation/${assetId}`);
+      setVersions(prev => prev.filter(v => v.id !== assetId));
+      // If we deleted the current one, clear the preview
+      if (assetId === event.invitation_asset_id) {
+        setImageUrl(null);
+        if (onGenerated) onGenerated(null, null);
+      }
+      showToast('Version deleted');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Delete failed', 'error');
+    }
+  };
+
   const btn = (bg, color, border) => ({ borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: border || 'none', background: bg, color });
   const goldBtn  = btn('#FAF7F0', '#B8962E', '1px solid #D4AF37');
   const goldFill = btn('#B8962E', '#FFF');
@@ -178,8 +208,8 @@ export function InvitationButton({ event, showId, onGenerated }) {
               )}
               {!isPending && (
                 <div style={{ display: 'flex', gap: 0 }}>
-                  {[{ key: 'preview', label: 'Preview' }, { key: 'edit', label: 'Edit Text' }].map(tab => (
-                    <button key={tab.key} onClick={() => setModalTab(tab.key)}
+                  {[{ key: 'preview', label: 'Preview' }, { key: 'edit', label: 'Edit Text' }, { key: 'history', label: 'History' }].map(tab => (
+                    <button key={tab.key} onClick={() => { setModalTab(tab.key); if (tab.key === 'history') fetchVersions(); }}
                       style={{ background: 'none', border: 'none', borderBottom: modalTab === tab.key ? '2px solid #B8962E' : '2px solid transparent', padding: '6px 16px', fontSize: 13, fontWeight: modalTab === tab.key ? 700 : 400, color: modalTab === tab.key ? '#B8962E' : '#888', cursor: 'pointer' }}>
                       {tab.label}
                     </button>
@@ -211,6 +241,51 @@ export function InvitationButton({ event, showId, onGenerated }) {
                   <button onClick={handleRerender} disabled={rerendering} style={{ ...goldFill, width: '100%', padding: '10px 0', opacity: rerendering ? 0.6 : 1, cursor: rerendering ? 'not-allowed' : 'pointer' }}>
                     {rerendering ? 'Re-rendering...' : 'Re-render Invitation'}
                   </button>
+                </div>
+              )}
+              {modalTab === 'history' && (
+                <div>
+                  {loadingVersions && <p style={{ fontSize: 12, color: '#888' }}>Loading versions...</p>}
+                  {!loadingVersions && versions.length === 0 && <p style={{ fontSize: 12, color: '#888' }}>No versions found.</p>}
+                  {versions.map((v, i) => {
+                    const isCurrent = v.id === event.invitation_asset_id;
+                    return (
+                      <div key={v.id} style={{
+                        display: 'flex', gap: 12, padding: '10px 0',
+                        borderBottom: i < versions.length - 1 ? '1px solid #F0EDE6' : 'none',
+                        opacity: isCurrent ? 1 : 0.8,
+                      }}>
+                        <img src={v.image_url} alt={`v${v.version}`}
+                          style={{ width: 60, height: 90, objectFit: 'cover', borderRadius: 6, border: isCurrent ? '2px solid #B8962E' : '1px solid #EEE', cursor: 'pointer' }}
+                          onClick={() => { setImageUrl(v.image_url); setModalTab('preview'); }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>
+                            Version {v.version || i + 1}
+                            {isCurrent && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: '#E8F5E9', color: '#16a34a', borderRadius: 4, fontWeight: 700 }}>CURRENT</span>}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                            {v.theme && <span style={{ marginRight: 8 }}>{v.theme}</span>}
+                            <span>{v.approval_status}</span>
+                            {v.composited === 'true' && <span style={{ marginLeft: 6, color: '#16a34a' }}>composited</span>}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#AAA', marginTop: 2 }}>
+                            {new Date(v.created_at).toLocaleDateString()} {new Date(v.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
+                          <a href={v.image_url} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 10, color: '#B8962E', textDecoration: 'none', fontWeight: 600 }}>Open</a>
+                          {!isCurrent && (
+                            <button onClick={() => deleteVersion(v.id)}
+                              style={{ background: 'none', border: 'none', fontSize: 10, color: '#DC2626', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

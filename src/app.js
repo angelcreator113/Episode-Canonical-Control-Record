@@ -1362,6 +1362,15 @@ try {
   console.error('✗ Failed to load Episode Brief routes:', e.message);
 }
 
+// Episode To-Do Lists
+try {
+  const todoListRoutes = require('./routes/todoListRoutes');
+  app.use('/api/v1/episodes/:episodeId/todo', todoListRoutes);
+  console.log('✓ Todo List loaded at /api/v1/episodes/:episodeId/todo');
+} catch (e) {
+  console.error('✗ Failed to load Todo List routes:', e.message);
+}
+
 // Scene Sets — generative scene pipeline (RunwayML)
 try {
   const sceneSetRoutes = require('./routes/sceneSetRoutes');
