@@ -9,6 +9,7 @@ import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
 import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
+import EpisodeTodoList from '../components/Episodes/EpisodeTodoList';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
 import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
@@ -722,6 +723,15 @@ const EpisodeDetail = () => {
         {/* Wardrobe Tab */}
         {activeTab === 'wardrobe' && (
           <div>
+            {/* To-Do Checklist */}
+            <div style={{ marginBottom: 16 }}>
+              <EpisodeTodoList
+                episodeId={episodeId}
+                showId={episode?.show_id || episode?.showId}
+                onAllRequiredComplete={() => console.log('[Wardrobe] All required slots filled!')}
+              />
+            </div>
+
             {/* Mode toggle */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 16, padding: '4px', background: '#f1f5f9', borderRadius: 10, width: 'fit-content' }}>
               <button
