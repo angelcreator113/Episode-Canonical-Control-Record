@@ -22,6 +22,7 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const Anthropic = require('@anthropic-ai/sdk');
 
 // ─── FONT MANAGEMENT ──────────────────────────────────────────────────────────
 
@@ -253,116 +254,117 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-// ─── CONTENT BUILDER ─────────────────────────────────────────────────────────
+// ─── CONTENT BUILDER (Claude-powered prose) ──────────────────────────────────
 
-/**
- * Extract a short venue name from location_hint.
- * "Sunlit private terrace of a boutique hotel in the fashion district — honey-toned..."
- *  -> "A boutique hotel in the fashion district"
- */
-function shortenLocation(locationHint) {
-  if (!locationHint) return null;
-  // Take first sentence or clause
-  let short = locationHint.split(/[.—,]/).find(s => s.trim().length > 5)?.trim() || locationHint;
-  if (short.length > 60) short = short.slice(0, 57) + '...';
-  return short;
-}
-
-function buildInvitationContent(event) {
+async function buildInvitationContent(event) {
   const nameParts = (event.name || 'Event').split(' — ');
   const eventName = nameParts[0].trim();
   const eventSubtitle = nameParts[1]?.trim() || null;
 
-  // Body text — use description (public-facing), NOT narrative_stakes (producer notes)
-  let bodyText = event.description || '';
-  if (!bodyText && event.location_hint && event.dress_code) {
-    bodyText = `Join us for an afternoon of ${event.dress_code.toLowerCase()} elegance at one of the city's most coveted venues.`;
+  // Context for Claude
+  const poolSize = event.browse_pool_size || 1;
+  const allowsGuest = poolSize >= 2 ||
+    event.browse_pool_bias === 'social' ||
+    event.browse_pool_bias === 'romantic';
+
+  let investmentText;
+  if (event.is_free || event.cost_coins === 0 || event.is_paid === 'free') {
+    investmentText = 'complimentary — no cost to attend';
+  } else if (event.is_paid === 'yes' && event.payment_amount > 0) {
+    investmentText = `Lala will earn ${event.payment_amount} coins for attending`;
+  } else {
+    investmentText = `${event.cost_coins || 100} coins per guest`;
   }
-  if (!bodyText && event.dress_code_keywords?.length > 0) {
-    bodyText = `An evening of ${event.dress_code_keywords.slice(0, 3).join(', ')} style and connection.`;
+
+  const hasDeliverable = event.event_type === 'brand_deal' || event.event_type === 'deliverable';
+  const deliverableText = hasDeliverable
+    ? (event.success_unlock?.split(',')[0]?.trim() || 'content creation required')
+    : null;
+
+  // Claude writes the invitation prose
+  const prompt = `You are writing a luxury invitation letter for a fashion life simulator show.
+
+The invitation will be printed on a beautiful card and shown on screen. It must read like a real, elegant letter written by a person — not a form, not a template, not labeled fields.
+
+EVENT DETAILS:
+Name: ${event.name}
+Host: ${event.host || 'The Host'}
+Brand: ${event.host_brand || ''}
+Location: ${event.location_hint || 'an exclusive venue'}
+Dress Code: ${event.dress_code || 'elegant'}
+Style Keywords: ${(event.dress_code_keywords || []).join(', ')}
+Investment: ${investmentText}
+Guest: ${allowsGuest ? 'Plus one is welcome' : 'Lala only — no guests'}
+${deliverableText ? `Deliverable: ${deliverableText}` : ''}
+Atmosphere/Description: ${event.description || event.narrative_stakes || ''}
+Prestige Level: ${event.prestige || 5}/10
+Mood: ${event.mood || 'aspirational'}
+
+Write the invitation as THREE parts. Return ONLY these three parts, nothing else:
+
+PART 1 — OPENING (1-2 sentences, 20-35 words):
+A beautiful, evocative opening that sets the scene and makes Lala feel chosen and special. No "You are cordially invited" cliché. Make it feel personal and specific to this event's atmosphere.
+
+PART 2 — BODY (2-4 sentences, 40-70 words):
+Written as flowing prose — weave in the location, what to expect, the dress code, the investment, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. Mention the cost naturally ("Your investment for the afternoon is X coins" or "This gathering is complimentary"). If a guest is allowed, mention it warmly. If there's a deliverable, hint at it elegantly.
+
+PART 3 — CLOSING LINE (1 sentence, under 15 words):
+An elegant closing that feels warm and anticipatory.
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS (include the labels so I can parse):
+OPENING: [your opening text]
+BODY: [your body text]
+CLOSING: [your closing line]`;
+
+  let opening = '';
+  let body = '';
+  let closing = 'We look forward to your presence.';
+
+  try {
+    const anthropic = new Anthropic();
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 400,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = response.content[0]?.text || '';
+
+    const openingMatch = text.match(/OPENING:\s*(.+?)(?=BODY:|$)/s);
+    const bodyMatch    = text.match(/BODY:\s*(.+?)(?=CLOSING:|$)/s);
+    const closingMatch = text.match(/CLOSING:\s*(.+?)$/s);
+
+    opening = openingMatch?.[1]?.trim() || '';
+    body    = bodyMatch?.[1]?.trim()    || '';
+    closing = closingMatch?.[1]?.trim() || closing;
+
+    console.log(`[InviteComposite] Claude wrote invitation prose for: ${event.name}`);
+  } catch (err) {
+    console.warn(`[InviteComposite] Claude call failed, using fallback prose: ${err.message}`);
+
+    opening = 'You have been chosen.';
+    body = [
+      event.description || event.narrative_stakes ||
+        `Join us ${event.location_hint ? `at ${event.location_hint}` : 'for an exclusive gathering'}.`,
+      event.dress_code ? `Please come dressed in ${event.dress_code}.` : '',
+      investmentText !== 'complimentary — no cost to attend'
+        ? `Your investment is ${investmentText}.`
+        : 'This gathering is complimentary.',
+      allowsGuest ? 'You are welcome to bring a guest.' : '',
+    ].filter(Boolean).join(' ');
+    closing = 'We look forward to your presence.';
   }
-  if (!bodyText) {
-    bodyText = 'An exclusive gathering curated for rising voices in the industry.';
-  }
-  if (bodyText.length > 180) bodyText = bodyText.slice(0, 177) + '...';
 
   return {
     eventName,
     eventSubtitle,
-    bodyText,
-    location: shortenLocation(event.location_hint),
-    dressCode: event.dress_code || null,
+    opening,
+    body,
+    closing,
     hostName: event.host || 'The Host',
     hostBrand: event.host_brand || '',
     prestige: event.prestige || 5,
   };
-}
-
-// ─── SMART LAYOUT ENGINE ──────────────────────────────────────────────────────
-//
-// Phase 1: Measure all content blocks and compute total natural height
-// Phase 2: If total exceeds card height, scale font sizes down proportionally
-// Phase 3: Render with computed spacing — guarantees no overflow
-
-function measureBlock(ctx, block, contentWidth) {
-  ctx.font = block.font;
-  if (block.type === 'text') {
-    const lines = wrapText(ctx, block.text, contentWidth);
-    return { ...block, lines, height: lines.length * block.lineHeight };
-  }
-  if (block.type === 'divider') return { ...block, height: 34 };
-  if (block.type === 'gap') return { ...block, height: block.size };
-  return { ...block, height: block.lineHeight || 20 };
-}
-
-function buildLayoutBlocks(content, width) {
-  const blocks = [];
-  const s = (ratio) => Math.round(width * ratio); // scale helper
-
-  // Tone line
-  blocks.push({ type: 'text', text: 'An Exclusive Invitation', font: `italic ${s(0.022)}px ${HEADER_FONT}`, color: COLORS.goldDark, lineHeight: s(0.034), align: 'center' });
-  blocks.push({ type: 'divider' });
-
-  // Event name
-  blocks.push({ type: 'text', text: content.eventName.toUpperCase(), font: `bold ${s(0.058)}px ${HEADER_FONT}`, color: COLORS.ink, lineHeight: s(0.07), align: 'center' });
-  if (content.eventSubtitle) {
-    blocks.push({ type: 'gap', size: 4 });
-    blocks.push({ type: 'text', text: content.eventSubtitle, font: `italic ${s(0.026)}px ${HEADER_FONT}`, color: COLORS.inkLight, lineHeight: s(0.038), align: 'center' });
-  }
-  blocks.push({ type: 'divider' });
-
-  // Greeting
-  blocks.push({ type: 'text', text: 'Dearest Lala,', font: `italic ${s(0.028)}px ${HEADER_FONT}`, color: COLORS.ink, lineHeight: s(0.042), align: 'center' });
-  blocks.push({ type: 'gap', size: 8 });
-
-  // Body text (italic, wraps)
-  blocks.push({ type: 'text', text: content.bodyText, font: `italic ${s(0.022)}px ${BODY_FONT}`, color: COLORS.ink, lineHeight: s(0.036), align: 'center' });
-  blocks.push({ type: 'divider' });
-
-  // Details — only in-world information (no game mechanics)
-  const addDetail = (label, value) => {
-    if (!value) return;
-    blocks.push({ type: 'label', text: label, font: `bold ${s(0.014)}px ${BODY_FONT}`, color: COLORS.labelColor, lineHeight: s(0.022), align: 'center' });
-    blocks.push({ type: 'text', text: value, font: `${s(0.024)}px ${BODY_FONT}`, color: COLORS.ink, lineHeight: s(0.036), align: 'center' });
-    blocks.push({ type: 'gap', size: 14 });
-  };
-  addDetail('VENUE', content.location);
-  addDetail('DRESS CODE', content.dressCode);
-
-  blocks.push({ type: 'divider' });
-
-  // Closing
-  blocks.push({ type: 'text', text: 'We look forward to your presence.', font: `italic ${s(0.022)}px ${BODY_FONT}`, color: COLORS.inkLight, lineHeight: s(0.036), align: 'center' });
-  blocks.push({ type: 'gap', size: 16 });
-
-  // Signature
-  blocks.push({ type: 'text', text: 'Warmly,', font: `italic ${s(0.022)}px ${HEADER_FONT}`, color: COLORS.inkLight, lineHeight: s(0.032), align: 'center' });
-  blocks.push({ type: 'text', text: content.hostName, font: `bold ${s(0.032)}px ${HEADER_FONT}`, color: COLORS.ink, lineHeight: s(0.044), align: 'center' });
-  if (content.hostBrand) {
-    blocks.push({ type: 'text', text: content.hostBrand, font: `${s(0.02)}px ${BODY_FONT}`, color: COLORS.gold, lineHeight: s(0.03), align: 'center' });
-  }
-
-  return blocks;
 }
 
 // ─── CANVAS RENDERER ──────────────────────────────────────────────────────────
@@ -371,7 +373,7 @@ function renderTextLayer(content, width = 1024, height = 1792) {
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // Card dimensions
+  // ── Cream card overlay ─────────────────────────────────────────────────────
   const cardPadH = width * 0.12;
   const cardPadV = height * 0.08;
   const cardX = cardPadH;
@@ -380,7 +382,6 @@ function renderTextLayer(content, width = 1024, height = 1792) {
   const cardH = height - (cardPadV * 2);
   const radius = 18;
 
-  // Draw cream card overlay
   ctx.beginPath();
   ctx.moveTo(cardX + radius, cardY);
   ctx.lineTo(cardX + cardW - radius, cardY);
@@ -392,16 +393,16 @@ function renderTextLayer(content, width = 1024, height = 1792) {
   ctx.lineTo(cardX, cardY + radius);
   ctx.quadraticCurveTo(cardX, cardY, cardX + radius, cardY);
   ctx.closePath();
-  ctx.fillStyle = COLORS.cream;
+  ctx.fillStyle = 'rgba(255,253,245,0.93)';
   ctx.fill();
 
   // Inner gold border
-  const borderInset = 14;
-  ctx.strokeStyle = COLORS.divider;
+  const bi = 14;
+  ctx.strokeStyle = 'rgba(212,175,55,0.35)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  const bx = cardX + borderInset, by = cardY + borderInset;
-  const bw = cardW - (borderInset * 2), bh = cardH - (borderInset * 2);
+  const bx = cardX + bi, by = cardY + bi;
+  const bw = cardW - (bi * 2), bh = cardH - (bi * 2);
   const br = radius - 4;
   ctx.moveTo(bx + br, by);
   ctx.lineTo(bx + bw - br, by);
@@ -415,82 +416,112 @@ function renderTextLayer(content, width = 1024, height = 1792) {
   ctx.closePath();
   ctx.stroke();
 
-  // Content area
-  const contentX = cardX + (cardW * 0.5);
-  const contentLeft = cardX + (cardW * 0.12);
-  const contentRight = cardX + (cardW * 0.88);
-  const contentWidth = contentRight - contentLeft;
-  const topY = cardY + (cardH * 0.06);
-  const maxContentH = cardH * 0.88;
+  // ── Layout helpers ─────────────────────────────────────────────────────────
+  const cx = cardX + cardW * 0.5;
+  const contentW = cardW * 0.76;
+  let y = cardY + cardH * 0.055;
 
-  // Phase 1: Build and measure all blocks
-  const rawBlocks = buildLayoutBlocks(content, width);
-  let measured = rawBlocks.map(b => measureBlock(ctx, b, contentWidth));
-  let totalHeight = measured.reduce((sum, b) => sum + b.height, 0);
+  const gap = (n) => { y += n; };
 
-  // Phase 2: Scale down if overflow
-  let scale = 1.0;
-  if (totalHeight > maxContentH) {
-    scale = maxContentH / totalHeight;
-    // Clamp to minimum 0.7 — below that text is unreadable
-    scale = Math.max(0.7, scale);
+  const drawDivider = () => {
+    gap(14);
+    ctx.beginPath();
+    ctx.moveTo(cx - 50, y);
+    ctx.lineTo(cx + 50, y);
+    ctx.strokeStyle = 'rgba(212,175,55,0.5)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.fillStyle = '#D4AF37';
+    ctx.beginPath();
+    ctx.arc(cx, y, 2, 0, Math.PI * 2);
+    ctx.fill();
+    gap(18);
+  };
 
-    // Rebuild blocks with scaled font sizes
-    const scaleFont = (font) => font.replace(/(\d+)px/g, (_, n) => `${Math.round(Number(n) * scale)}px`);
-    const scaledBlocks = rawBlocks.map(b => ({
-      ...b,
-      font: b.font ? scaleFont(b.font) : b.font,
-      lineHeight: b.lineHeight ? Math.round(b.lineHeight * scale) : b.lineHeight,
-      size: b.size ? Math.round(b.size * scale) : b.size,
-    }));
-    measured = scaledBlocks.map(b => measureBlock(ctx, b, contentWidth));
-    totalHeight = measured.reduce((sum, b) => sum + b.height, 0);
+  const centered = (text, font, color, lh) => {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    const lines = wrapText(ctx, text, contentW);
+    for (const line of lines) {
+      ctx.fillText(line, cx, y);
+      y += lh || (parseInt(font) * 1.5);
+    }
+  };
+
+  const centeredItalic = (text, size, color, lh) =>
+    centered(text, `italic ${size}px ${HEADER_FONT}`, color, lh || size * 1.5);
+
+  const centeredBold = (text, size, color, lh) =>
+    centered(text, `bold ${size}px ${HEADER_FONT}`, color, lh || size * 1.3);
+
+  const bodyText = (text, size, italic = false) => {
+    ctx.font = `${italic ? 'italic ' : ''}${size}px ${BODY_FONT}`;
+    ctx.fillStyle = '#2C1810';
+    ctx.textAlign = 'center';
+    const lines = wrapText(ctx, text, contentW);
+    for (const line of lines) {
+      ctx.fillText(line, cx, y);
+      y += size * 1.7;
+    }
+  };
+
+  const S = {
+    tone:      Math.round(width * 0.021),
+    eventName: Math.round(width * 0.056),
+    subtitle:  Math.round(width * 0.025),
+    greeting:  Math.round(width * 0.026),
+    opening:   Math.round(width * 0.021),
+    bodySize:  Math.round(width * 0.020),
+    closing:   Math.round(width * 0.020),
+    warmly:    Math.round(width * 0.021),
+    hostName:  Math.round(width * 0.030),
+    hostBrand: Math.round(width * 0.019),
+  };
+
+  // ── TONE LINE ──────────────────────────────────────────────────────────────
+  centeredItalic('An Exclusive Invitation', S.tone, '#8B6914', S.tone * 1.6);
+
+  drawDivider();
+
+  // ── EVENT NAME ─────────────────────────────────────────────────────────────
+  centeredBold(content.eventName.toUpperCase(), S.eventName, '#2C1810', S.eventName * 1.15);
+
+  if (content.eventSubtitle) {
+    gap(6);
+    centeredItalic(content.eventSubtitle, S.subtitle, '#4A3728', S.subtitle * 1.5);
   }
 
-  // Phase 3: Center content vertically and render
-  let y = topY + Math.max(0, (maxContentH - totalHeight) * 0.4); // slight top bias
+  drawDivider();
 
-  for (const block of measured) {
-    if (block.type === 'divider') {
-      y += 16 * scale;
-      ctx.beginPath();
-      ctx.moveTo(contentX - 60, y);
-      ctx.lineTo(contentX + 60, y);
-      ctx.strokeStyle = COLORS.goldLight;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = COLORS.goldLight;
-      ctx.beginPath();
-      ctx.arc(contentX, y, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      y += 18 * scale;
-      continue;
-    }
+  // ── GREETING ───────────────────────────────────────────────────────────────
+  centeredItalic('Dearest Lala,', S.greeting, '#2C1810', S.greeting * 1.6);
+  gap(10);
 
-    if (block.type === 'gap') {
-      y += block.height;
-      continue;
-    }
+  // ── OPENING (Claude's opening line) ────────────────────────────────────────
+  if (content.opening) {
+    centeredItalic(content.opening, S.opening, '#4A3728', S.opening * 1.7);
+    gap(10);
+  }
 
-    if (block.type === 'label') {
-      ctx.font = block.font;
-      ctx.fillStyle = block.color;
-      ctx.textAlign = 'center';
-      const spaced = block.text.split('').join(' ');
-      ctx.fillText(spaced, contentX, y);
-      y += block.height;
-      continue;
-    }
+  // ── BODY (Claude's prose) ─────────────────────────────────────────────────
+  if (content.body) {
+    bodyText(content.body, S.bodySize, false);
+  }
 
-    // text block
-    ctx.font = block.font;
-    ctx.fillStyle = block.color;
-    ctx.textAlign = block.align || 'center';
-    const lines = block.lines || [block.text];
-    for (const line of lines) {
-      ctx.fillText(line, contentX, y);
-      y += block.lineHeight;
-    }
+  drawDivider();
+
+  // ── CLOSING ────────────────────────────────────────────────────────────────
+  centeredItalic(content.closing, S.closing, '#4A3728', S.closing * 1.6);
+  gap(18);
+
+  // ── SIGNATURE ──────────────────────────────────────────────────────────────
+  centeredItalic('Warmly,', S.warmly, '#4A3728', S.warmly * 1.5);
+  gap(4);
+  centeredBold(content.hostName, S.hostName, '#2C1810', S.hostName * 1.3);
+  if (content.hostBrand) {
+    gap(4);
+    centered(content.hostBrand, `${S.hostBrand}px ${BODY_FONT}`, '#B8962E', S.hostBrand * 1.5);
   }
 
   return canvas.toBuffer('image/png');
@@ -509,7 +540,7 @@ async function compositeInvitation(backgroundBuffer, event) {
   const width = meta.width || 1024;
   const height = meta.height || 1792;
 
-  const content = buildInvitationContent(event);
+  const content = await buildInvitationContent(event);
   const textLayer = renderTextLayer(content, width, height);
 
   const final = await sharp(backgroundBuffer)
@@ -537,7 +568,7 @@ async function compositeInvitationPDF(backgroundBuffer, event) {
   const width = meta.width || 1024;
   const height = meta.height || 1792;
 
-  const content = buildInvitationContent(event);
+  const content = await buildInvitationContent(event);
   const textLayer = renderTextLayer(content, width, height);
 
   // High-res composite for print
