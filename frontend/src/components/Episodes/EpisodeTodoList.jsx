@@ -17,6 +17,7 @@ import api from '../../services/api';
 export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComplete }) {
   const [todoList, setTodoList] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [locking, setLocking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAsset, setShowAsset] = useState(false);
@@ -47,6 +48,39 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
       setError(err.response?.data?.error || 'Generation failed');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const toggleIncluded = async (slot) => {
+    if (!todoList || todoList.status === 'locked') return;
+    const updated = todoList.tasks.map(t =>
+      t.slot === slot ? { ...t, included: t.included === false ? true : false } : t
+    );
+    setTodoList(prev => ({ ...prev, tasks: updated }));
+    try {
+      await api.post(`/api/v1/episodes/${episodeId}/todo/save-selection`, { tasks: updated });
+    } catch { /* best-effort save */ }
+  };
+
+  const handleLock = async () => {
+    setLocking(true);
+    setError(null);
+    try {
+      const res = await api.post(`/api/v1/episodes/${episodeId}/todo/lock`);
+      setTodoList(prev => ({ ...prev, status: 'locked', asset_url: res.data.assetUrl }));
+    } catch (err) {
+      setError(err.response?.data?.error || 'Lock failed');
+    } finally {
+      setLocking(false);
+    }
+  };
+
+  const handleUnlock = async () => {
+    try {
+      await api.post(`/api/v1/episodes/${episodeId}/todo/unlock`);
+      setTodoList(prev => ({ ...prev, status: 'generated' }));
+    } catch (err) {
+      setError(err.response?.data?.error || 'Unlock failed');
     }
   };
 
@@ -85,7 +119,10 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
     </div>
   );
 
-  const { tasks, completion, asset_url } = todoList;
+  const { tasks, completion, asset_url, status } = todoList;
+  const isLocked = status === 'locked';
+  const includedTasks = tasks.filter(t => t.included !== false);
+  const excludedCount = tasks.length - includedTasks.length;
   const pct = completion.total > 0 ? Math.round((completion.completed / completion.total) * 100) : 0;
 
   return (
@@ -118,9 +155,11 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
         <div>
           <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1A1A1A' }}>
             Getting Ready Checklist
+            {isLocked && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: '#E8F5E9', color: '#1A7A40', borderRadius: 4, fontWeight: 700 }}>LOCKED</span>}
           </h3>
           <p style={{ margin: '3px 0 0', fontSize: 11, color: '#888' }}>
-            {completion.completed}/{completion.total} complete
+            {includedTasks.length} task{includedTasks.length !== 1 ? 's' : ''} selected
+            {excludedCount > 0 && <span> ({excludedCount} excluded)</span>}
             {completion.all_required_done && (
               <span style={{ marginLeft: 8, color: '#1A7A40', fontWeight: 700 }}>Ready to go!</span>
             )}
@@ -134,14 +173,32 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
               fontSize: 11, color: '#B8962E', cursor: 'pointer',
             }}>Preview</button>
           )}
-          <button onClick={handleGenerate} disabled={generating} style={{
-            background: 'none', border: '1px solid #D4AF37',
-            borderRadius: 6, padding: '4px 10px',
-            fontSize: 11, color: '#B8962E', cursor: generating ? 'not-allowed' : 'pointer',
-            opacity: generating ? 0.6 : 1,
-          }}>
-            {generating ? '...' : 'Regenerate'}
-          </button>
+          {!isLocked ? (
+            <>
+              <button onClick={handleLock} disabled={locking || includedTasks.length === 0} style={{
+                background: '#B8962E', color: '#FFF', border: 'none',
+                borderRadius: 6, padding: '4px 12px',
+                fontSize: 11, fontWeight: 700, cursor: locking ? 'not-allowed' : 'pointer',
+                opacity: (locking || includedTasks.length === 0) ? 0.6 : 1,
+              }}>
+                {locking ? 'Locking...' : 'Lock Checklist'}
+              </button>
+              <button onClick={handleGenerate} disabled={generating} style={{
+                background: 'none', border: '1px solid #D4AF37',
+                borderRadius: 6, padding: '4px 10px',
+                fontSize: 11, color: '#B8962E', cursor: generating ? 'not-allowed' : 'pointer',
+                opacity: generating ? 0.6 : 1,
+              }}>
+                {generating ? '...' : 'Regenerate'}
+              </button>
+            </>
+          ) : (
+            <button onClick={handleUnlock} style={{
+              background: 'none', border: '1px solid #D4AF37',
+              borderRadius: 6, padding: '4px 10px',
+              fontSize: 11, color: '#B8962E', cursor: 'pointer',
+            }}>Unlock</button>
+          )}
         </div>
       </div>
 
@@ -156,44 +213,71 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
 
       {/* Tasks */}
       <div style={{ padding: '8px 0' }}>
-        {tasks.map((task, i) => (
-          <div key={task.slot} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '10px 18px',
-            borderBottom: i < tasks.length - 1 ? '1px solid rgba(184,150,46,0.1)' : 'none',
-            background: task.completed ? 'rgba(26,122,64,0.04)' : 'transparent',
-          }}>
-            <div style={{
-              width: 20, height: 20, borderRadius: 4, flexShrink: 0,
-              border: task.completed ? 'none' : `1.5px solid ${task.required ? '#B8962E' : '#CCC'}`,
-              background: task.completed ? '#1A7A40' : 'transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+        {tasks.map((task, i) => {
+          const excluded = task.included === false;
+          return (
+            <div key={task.slot} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '10px 18px',
+              borderBottom: i < tasks.length - 1 ? '1px solid rgba(184,150,46,0.1)' : 'none',
+              background: excluded ? 'rgba(0,0,0,0.02)' : task.completed ? 'rgba(26,122,64,0.04)' : 'transparent',
+              opacity: excluded ? 0.5 : 1,
             }}>
-              {task.completed && <span style={{ color: '#FFF', fontSize: 12, fontWeight: 700 }}>✓</span>}
-            </div>
+              {/* Include/exclude toggle */}
+              {!isLocked && (
+                <button
+                  onClick={() => toggleIncluded(task.slot)}
+                  title={excluded ? 'Include in checklist' : 'Exclude from checklist'}
+                  style={{
+                    width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                    border: `1.5px solid ${excluded ? '#CCC' : '#B8962E'}`,
+                    background: excluded ? 'transparent' : '#B8962E',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', padding: 0,
+                  }}
+                >
+                  {!excluded && <span style={{ color: '#FFF', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                </button>
+              )}
 
-            <div style={{ flex: 1 }}>
-              <div style={{
-                fontSize: 13, fontWeight: 600,
-                color: task.completed ? '#888' : '#1A1A1A',
-                textDecoration: task.completed ? 'line-through' : 'none',
-              }}>
-                {task.label}
-              </div>
-              {task.description && (
-                <div style={{ fontSize: 11, color: task.completed ? '#AAA' : '#666', marginTop: 2 }}>
-                  {task.description}
+              {/* Completion checkbox (locked mode) */}
+              {isLocked && !excluded && (
+                <div style={{
+                  width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                  border: task.completed ? 'none' : `1.5px solid ${task.required ? '#B8962E' : '#CCC'}`,
+                  background: task.completed ? '#1A7A40' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {task.completed && <span style={{ color: '#FFF', fontSize: 12, fontWeight: 700 }}>✓</span>}
                 </div>
               )}
-            </div>
 
-            {!task.required && (
-              <span style={{ fontSize: 10, color: '#B8962E', fontWeight: 500, flexShrink: 0 }}>
-                optional
-              </span>
-            )}
-          </div>
-        ))}
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  fontSize: 13, fontWeight: 600,
+                  color: excluded ? '#AAA' : task.completed ? '#888' : '#1A1A1A',
+                  textDecoration: excluded ? 'line-through' : task.completed ? 'line-through' : 'none',
+                }}>
+                  {task.label}
+                </div>
+                {task.description && (
+                  <div style={{ fontSize: 11, color: excluded ? '#CCC' : task.completed ? '#AAA' : '#666', marginTop: 2 }}>
+                    {task.description}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                {!task.required && !excluded && (
+                  <span style={{ fontSize: 10, color: '#B8962E', fontWeight: 500 }}>optional</span>
+                )}
+                {excluded && (
+                  <span style={{ fontSize: 10, color: '#999', fontWeight: 500 }}>excluded</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {error && (
