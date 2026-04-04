@@ -10,7 +10,7 @@
  */
 
 const express = require('express');
-const router = express.Router({ mergeParams: true });
+const router = express.Router();
 
 let optionalAuth;
 try {
@@ -20,7 +20,7 @@ try {
   optionalAuth = (req, res, next) => next();
 }
 
-router.post('/generate', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/generate', optionalAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { showId } = req.body;
@@ -40,7 +40,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
   }
 });
 
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/episodes/:episodeId/todo', optionalAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const models = req.app.get('models') || require('../models');
@@ -57,7 +57,7 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/complete/:slot', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/complete/:slot', optionalAuth, async (req, res) => {
   try {
     const { episodeId, slot } = req.params;
     const { completed = true } = req.body;

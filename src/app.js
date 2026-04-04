@@ -1365,7 +1365,7 @@ try {
 // Episode To-Do Lists
 try {
   const todoListRoutes = require('./routes/todoListRoutes');
-  app.use('/api/v1/episodes/:episodeId/todo', todoListRoutes);
+  app.use('/api/v1', todoListRoutes);
   console.log('✓ Todo List loaded at /api/v1/episodes/:episodeId/todo');
 } catch (e) {
   console.error('✗ Failed to load Todo List routes:', e.message);
