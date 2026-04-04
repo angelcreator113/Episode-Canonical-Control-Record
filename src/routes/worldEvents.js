@@ -779,6 +779,15 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
       { replacements: { assetId, eventId } }
     );
 
+    // Clear episode_id from all previous invitation assets for this event
+    await models.sequelize.query(
+      `UPDATE assets SET episode_id = NULL
+       WHERE metadata->>'event_id' = :eventId
+         AND id != :assetId
+         AND deleted_at IS NULL`,
+      { replacements: { eventId, assetId } }
+    );
+
     return res.json({ success: true, message: 'Invitation approved and linked to event', episodeId });
   } catch (err) {
     console.error('[InviteGen] Approve error:', err);
@@ -1013,6 +1022,180 @@ router.get('/world/:showId/events/:eventId/animate-invitation/:jobId', optionalA
     }
     return res.json({ status: task.status });
   } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── EDIT INVITATION TEXT (re-render without DALL-E) ──────────────────────────
+
+router.post('/world/:showId/events/:eventId/edit-invitation-text', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { assetId, opening, body, closing } = req.body;
+
+    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const [asset] = await models.sequelize.query(
+      'SELECT * FROM assets WHERE id = :assetId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { assetId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+
+    const [event] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    // Download existing background
+    const axios = require('axios');
+    const bgResponse = await axios.get(asset.s3_url_raw || asset.s3_url_processed, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    });
+    const bgBuffer = Buffer.from(bgResponse.data);
+
+    // Build custom content (skips Claude call)
+    const customContent = {
+      eventName:    event.name.split(' — ')[0].trim(),
+      eventSubtitle: event.name.includes(' — ') ? event.name.split(' — ')[1].trim() : null,
+      opening:  opening || '',
+      body:     body    || '',
+      closing:  closing || 'We look forward to your presence.',
+      hostName:  event.host       || 'The Host',
+      hostBrand: event.host_brand || '',
+      prestige:  event.prestige   || 5,
+    };
+
+    // Re-composite with custom text
+    const { compositeInvitation } = require('../services/invitationCompositingService');
+    const finalBuffer = await compositeInvitation(bgBuffer, event, customContent);
+    if (!finalBuffer) return res.status(500).json({ error: 'Compositing failed — fonts not available' });
+
+    // Upload new version to S3
+    const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+    const { v4: uuidv4 } = require('uuid');
+    const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
+    const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+    const s3 = new S3Client({ region: AWS_REGION });
+    const s3Key = `invitations/${eventId}/${uuidv4()}-edited.png`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: finalBuffer,
+      ContentType: 'image/png',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    const newUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+
+    // Update asset record
+    const metadata = typeof asset.metadata === 'string'
+      ? JSON.parse(asset.metadata)
+      : (asset.metadata || {});
+
+    await models.sequelize.query(
+      `UPDATE assets SET s3_url_processed = :url, metadata = :metadata, updated_at = NOW() WHERE id = :assetId`,
+      {
+        replacements: {
+          url: newUrl,
+          metadata: JSON.stringify({
+            ...metadata,
+            edited: true,
+            edited_at: new Date().toISOString(),
+            custom_text: { opening, body, closing },
+          }),
+          assetId,
+        },
+      }
+    );
+
+    return res.json({ success: true, imageUrl: newUrl, message: 'Invitation text updated and re-rendered.' });
+  } catch (err) {
+    console.error('[InviteEdit] Error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── UNLINK INVITATION FROM EPISODE ───────────────────────────────────────────
+
+router.post('/world/:showId/events/:eventId/unlink-invitation', optionalAuth, async (req, res) => {
+  try {
+    const { assetId } = req.body;
+    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    await models.sequelize.query(
+      'UPDATE assets SET episode_id = NULL, updated_at = NOW() WHERE id = :assetId',
+      { replacements: { assetId } }
+    );
+
+    return res.json({ success: true, message: 'Invitation unlinked from episode. Asset remains in show library.' });
+  } catch (err) {
+    console.error('[InviteUnlink] Error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE INVITATION ASSET ──────────────────────────────────────────────────
+
+router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const { eventId, assetId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const [asset] = await models.sequelize.query(
+      'SELECT s3_url_processed, s3_url_raw FROM assets WHERE id = :assetId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { assetId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+
+    // Delete from S3 (best effort)
+    const s3Url = asset.s3_url_processed || asset.s3_url_raw;
+    if (s3Url) {
+      try {
+        const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+        const s3Key = s3Url.split('.amazonaws.com/')[1];
+        if (s3Key) {
+          const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+          await s3.send(new DeleteObjectCommand({
+            Bucket: process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET,
+            Key: decodeURIComponent(s3Key),
+          }));
+        }
+      } catch (s3Err) {
+        console.warn('[InviteDelete] S3 cleanup failed (non-blocking):', s3Err.message);
+      }
+    }
+
+    // Soft-delete the asset
+    await models.sequelize.query(
+      'UPDATE assets SET deleted_at = NOW(), episode_id = NULL WHERE id = :assetId',
+      { replacements: { assetId } }
+    );
+
+    // Clear invitation_asset_id on event if this was the current one
+    const [event] = await models.sequelize.query(
+      'SELECT invitation_asset_id FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (event?.invitation_asset_id === assetId) {
+      await models.sequelize.query(
+        'UPDATE world_events SET invitation_asset_id = NULL, updated_at = NOW() WHERE id = :eventId',
+        { replacements: { eventId } }
+      );
+    }
+
+    return res.json({ success: true, message: 'Invitation deleted from system.' });
+  } catch (err) {
+    console.error('[InviteDelete] Error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

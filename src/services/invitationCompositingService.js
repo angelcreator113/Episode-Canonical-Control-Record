@@ -533,14 +533,14 @@ function renderTextLayer(content, width = 1024, height = 1792) {
  * Composite the text layer onto the DALL-E background image.
  * Returns null if fonts are not available (caller should fall back to v1).
  */
-async function compositeInvitation(backgroundBuffer, event) {
+async function compositeInvitation(backgroundBuffer, event, customContent = null) {
   if (!(await checkFonts())) return null;
 
   const meta = await sharp(backgroundBuffer).metadata();
   const width = meta.width || 1024;
   const height = meta.height || 1792;
 
-  const content = await buildInvitationContent(event);
+  const content = customContent || await buildInvitationContent(event);
   const textLayer = renderTextLayer(content, width, height);
 
   const final = await sharp(backgroundBuffer)
