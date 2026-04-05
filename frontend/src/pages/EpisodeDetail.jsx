@@ -656,6 +656,14 @@ const EpisodeDetail = () => {
             <span className="ed-tab-icon">📤</span>
             <span className="ed-tab-label">Distribution</span>
           </button>
+          <button
+            className={`ed-tab ${activeTab === 'production' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('production')}
+            title="Production Checklist"
+          >
+            <span className="ed-tab-icon">✅</span>
+            <span className="ed-tab-label">Production</span>
+          </button>
           {/* TEMPORARILY DISABLED - YouTube Training feature in development
           <button
             className={`ed-tab ${activeTab === 'youtube' ? 'ed-tab-active' : ''}`}
@@ -777,6 +785,15 @@ const EpisodeDetail = () => {
         {/* Distribution Tab */}
         {activeTab === 'distribution' && (
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
+        )}
+
+        {/* Production Tab */}
+        {activeTab === 'production' && (
+          <EpisodeTodoList
+            episodeId={episode.id}
+            showId={episode?.show_id || episode?.showId}
+            onAllRequiredComplete={() => console.log('Episode ready!')}
+          />
         )}
       </div>
 

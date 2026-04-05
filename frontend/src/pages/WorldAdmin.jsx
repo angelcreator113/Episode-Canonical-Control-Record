@@ -1708,6 +1708,7 @@ The revised event should feel like a completely different experience from the si
               }
             };
             const linkedScene = md.scene_set_id ? sceneSets.find(s => s.id === md.scene_set_id) : null;
+            const hasInvalidSceneLink = Boolean(md.scene_set_id) && !linkedScene;
             const diff = calcDifficulty(md);
             const dl = difficultyLabel(diff);
             return (
@@ -1751,20 +1752,25 @@ The revised event should feel like a completely different experience from the si
                     <div><label style={S.fLabel}>Career Tier</label><input type="number" min={1} max={5} value={md.career_tier || 1} onChange={e => { setEventDetailModal({ ...md, career_tier: parseInt(e.target.value) || 1 }); }} onBlur={e => updateField('career_tier', parseInt(e.target.value) || 1)} style={S.sel} /></div>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={S.fLabel}>📍 Location (Scene Set)</label>
-                      {md.scene_set_id && (() => {
-                        const ss = sceneSets.find(s => s.id === md.scene_set_id);
-                        return ss ? (
+                      {linkedScene && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6 }}>
-                            {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
+                            {linkedScene.base_still_url && <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {ss.name}</div>
-                              <div style={{ fontSize: 10, color: '#64748b' }}>{ss.scene_type?.replace(/_/g, ' ')}</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {linkedScene.name}</div>
+                              <div style={{ fontSize: 10, color: '#64748b' }}>{linkedScene.scene_type?.replace(/_/g, ' ')}</div>
                             </div>
                             <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
                           </div>
-                        ) : null;
-                      })()}
-                      {!md.scene_set_id && sceneSets.length > 0 && (
+                      )}
+                      {hasInvalidSceneLink && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#fff7ed', borderRadius: 8, border: '1px solid #fed7aa', marginBottom: 6 }}>
+                          <div style={{ flex: 1, fontSize: 11, color: '#9a3412' }}>
+                            This event is linked to a scene set that no longer exists. Pick a new scene set below.
+                          </div>
+                          <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>Clear</button>
+                        </div>
+                      )}
+                      {(!md.scene_set_id || hasInvalidSceneLink) && sceneSets.length > 0 && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6 }}>
                           {sceneSets.map(ss => (
                             <button key={ss.id} onClick={() => updateField('scene_set_id', ss.id)} style={{

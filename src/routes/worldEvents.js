@@ -249,6 +249,42 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
           val = val === null ? null : JSON.stringify(val);
         }
 
+        if (field === 'scene_set_id' && val !== null) {
+          if (typeof val !== 'string') {
+            return res.status(400).json({
+              error: 'Invalid value for scene_set_id',
+              message: 'scene_set_id must be a UUID string or null',
+            });
+          }
+
+          if (!models.SceneSet) {
+            return res.status(500).json({
+              error: 'SceneSet model not loaded',
+              message: 'Unable to validate scene_set_id',
+            });
+          }
+
+          const sceneSet = await models.SceneSet.findByPk(val, {
+            attributes: ['id', 'show_id'],
+          });
+
+          if (!sceneSet) {
+            return res.status(400).json({
+              error: 'Invalid scene_set_id',
+              message: 'Selected scene set does not exist. Please re-select a valid scene set.',
+              code: 'INVALID_SCENE_SET_ID',
+            });
+          }
+
+          if (sceneSet.show_id && sceneSet.show_id !== showId) {
+            return res.status(400).json({
+              error: 'Invalid scene_set_id for this show',
+              message: 'Selected scene set belongs to a different show.',
+              code: 'SCENE_SET_SHOW_MISMATCH',
+            });
+          }
+        }
+
         setClauses.push(`${field} = :${field}`);
         replacements[field] = val;
       }
@@ -275,6 +311,13 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
     console.error('Update event error:', error);
     if (String(error.message || '').includes('does not exist')) {
       return res.status(400).json({ error: 'Invalid update field', message: error.message });
+    }
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({
+        error: 'Invalid scene_set_id',
+        message: 'Selected scene set is not valid for this event.',
+        code: 'INVALID_SCENE_SET_ID',
+      });
     }
     return res.status(500).json({ error: 'Failed to update event', message: error.message });
   }
