@@ -62,13 +62,25 @@ if (process.env.NODE_ENV !== 'test') {
       console.log('DEBUG: ENABLE_DB_SYNC =', process.env.ENABLE_DB_SYNC);
       console.log('DEBUG: DB_SYNC_FORCE =', process.env.DB_SYNC_FORCE);
       if (process.env.ENABLE_DB_SYNC === 'true') {
-        console.log('🔄 Syncing database models...');
-        const syncOptions = {
-          force: process.env.DB_SYNC_FORCE === 'true',
-          alter: process.env.DB_SYNC_ALTER === 'true',
-        };
-        await db.sequelize.sync(syncOptions);
-        console.log('✅ Database models synchronized');
+        // SAFETY: DB_SYNC_FORCE drops ALL tables and destroys ALL data
+        // Block it unless CONFIRM_FORCE_SYNC is also set (double-opt-in)
+        if (process.env.DB_SYNC_FORCE === 'true' && process.env.CONFIRM_FORCE_SYNC !== 'YES_DELETE_ALL_DATA') {
+          console.error('🚨 DB_SYNC_FORCE=true is set but CONFIRM_FORCE_SYNC is not set!');
+          console.error('🚨 Refusing to force-sync — this would DROP ALL TABLES and destroy all data.');
+          console.error('🚨 Set CONFIRM_FORCE_SYNC=YES_DELETE_ALL_DATA if you really mean it.');
+          console.log('⏭️  Skipping model sync (force-sync blocked by safety check)');
+        } else {
+          console.log('🔄 Syncing database models...');
+          const syncOptions = {
+            force: process.env.DB_SYNC_FORCE === 'true',
+            alter: process.env.DB_SYNC_ALTER === 'true',
+          };
+          if (syncOptions.force) {
+            console.warn('⚠️  FORCE SYNC ENABLED — all tables will be dropped and recreated!');
+          }
+          await db.sequelize.sync(syncOptions);
+          console.log('✅ Database models synchronized');
+        }
       } else {
         // Skip model sync - database already exists
         // Sync errors indicate schema mismatches that we don't want to auto-fix
@@ -282,12 +294,23 @@ app.get('/health', async (req, res) => {
       await db.sequelize.authenticate();
       health.database = 'connected';
 
-      // Check if shows table exists
+      // Check if shows table exists and has data
       try {
         const [results] = await db.sequelize.query(
           "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'shows')"
         );
         health.showsTableExists = results[0].exists;
+
+        if (results[0].exists) {
+          const [[countResult]] = await db.sequelize.query("SELECT COUNT(*) as count FROM shows WHERE deleted_at IS NULL");
+          health.showCount = parseInt(countResult.count);
+          const [[epResult]] = await db.sequelize.query("SELECT COUNT(*) as count FROM episodes WHERE deleted_at IS NULL");
+          health.episodeCount = parseInt(epResult.count);
+        }
+
+        // Report current database
+        const [[dbInfo]] = await db.sequelize.query("SELECT current_database() as db_name");
+        health.currentDatabase = dbInfo.db_name;
       } catch (err) {
         health.showsTableExists = false;
         health.tableCheckError = err.message;
@@ -317,9 +340,46 @@ if (process.env.NODE_ENV !== 'production') {
       DATABASE_URL: process.env.DATABASE_URL ? '***SET***' : 'NOT SET',
       DB_SSL: process.env.DB_SSL,
       AWS_REGION: process.env.AWS_REGION,
+      ENABLE_DB_SYNC: process.env.ENABLE_DB_SYNC || 'NOT SET',
+      DB_SYNC_FORCE: process.env.DB_SYNC_FORCE || 'NOT SET',
+      DB_SYNC_ALTER: process.env.DB_SYNC_ALTER || 'NOT SET',
       cwd: process.cwd(),
       __dirname,
     });
+  });
+
+  // Data diagnostic — check row counts across key tables
+  app.get('/api/v1/debug/data-check', async (req, res) => {
+    try {
+      const tables = [
+        'shows', 'episodes', 'scenes', 'assets', 'wardrobe',
+        'world_events', 'franchise_knowledge', 'scene_sets',
+      ];
+      const counts = {};
+      for (const table of tables) {
+        try {
+          const [[result]] = await db.sequelize.query(
+            `SELECT COUNT(*) as total, COUNT(CASE WHEN deleted_at IS NOT NULL THEN 1 END) as soft_deleted FROM "${table}"`
+          );
+          counts[table] = { total: parseInt(result.total), soft_deleted: parseInt(result.soft_deleted) };
+        } catch (e) {
+          counts[table] = { error: e.message };
+        }
+      }
+
+      // Check DB connection info
+      const [[dbInfo]] = await db.sequelize.query(
+        "SELECT current_database() as db_name, current_user as db_user, inet_server_addr() as server_addr, version() as pg_version"
+      );
+
+      res.json({
+        timestamp: new Date().toISOString(),
+        database: dbInfo,
+        tableCounts: counts,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 }
 

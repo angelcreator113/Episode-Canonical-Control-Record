@@ -126,25 +126,41 @@ router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const Show = getShow();
-    const { Episode } = require('../models');
-    const { fn, col } = require('sequelize');
 
+    if (!Show) {
+      console.error('GET /shows — Show model is not available');
+      return res.status(503).json({ error: 'Show model not loaded', message: 'Database models are still initializing' });
+    }
+
+    // Fetch shows first, then count episodes separately to avoid GROUP BY issues
     const shows = await Show.findAll({
-      attributes: {
-        include: [
-          [fn('COUNT', col('episodes.id')), 'episodeCount']
-        ]
-      },
-      include: [{
-        model: Episode,
-        as: 'episodes',
-        attributes: [],
-        required: false,
-      }],
-      group: ['Show.id'],
       order: [['name', 'ASC']],
     });
 
+    // Attach episode counts via a separate lightweight query
+    if (shows.length > 0) {
+      try {
+        const { Episode } = require('../models');
+        const { fn, col } = require('sequelize');
+        const counts = await Episode.findAll({
+          attributes: ['show_id', [fn('COUNT', col('id')), 'episodeCount']],
+          where: { show_id: shows.map(s => s.id) },
+          group: ['show_id'],
+          raw: true,
+        });
+        const countMap = {};
+        counts.forEach(c => { countMap[c.show_id] = parseInt(c.episodeCount); });
+        shows.forEach(s => {
+          s.dataValues.episodeCount = countMap[s.id] || 0;
+        });
+      } catch (countErr) {
+        console.warn('Failed to count episodes for shows:', countErr.message);
+        // Still return shows even if episode counts fail
+        shows.forEach(s => { s.dataValues.episodeCount = 0; });
+      }
+    }
+
+    console.log(`GET /shows — returning ${shows.length} shows`);
     res.json({
       status: 'SUCCESS',
       data: shows,
