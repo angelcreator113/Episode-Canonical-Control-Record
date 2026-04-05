@@ -173,27 +173,23 @@ async function seedStarterEpisodes(showId) {
 
   for (const ep of episodes) {
     await sequelize.query(`
-      INSERT INTO episodes (id, show_id, show_name, season_number, episode_number, episode_title,
-                           air_date, plot_summary, director, writer, duration_minutes, rating, genre,
+      INSERT INTO episodes (id, show_id, season_number, episode_number, title,
+                           air_date, description, status, categories,
                            created_at, updated_at)
-      VALUES (:id, :show_id, :show_name, :season_number, :episode_number, :episode_title,
-              :air_date, :plot_summary, :director, :writer, :duration_minutes, :rating, :genre,
+      VALUES (:id, :show_id, :season_number, :episode_number, :title,
+              :air_date, :description, :status, :categories,
               :created_at, :updated_at)
     `, {
       replacements: {
         id: uuidv4(),
         show_id: showId,
-        show_name: 'Styling Adventures with Lala',
         season_number: 1,
         episode_number: ep.num,
-        episode_title: ep.title,
+        title: ep.title,
         air_date: new Date(ep.date),
-        plot_summary: ep.summary,
-        director: ep.director,
-        writer: ep.writer,
-        duration_minutes: 45,
-        rating: 'PG-13',
-        genre: 'Drama,Comedy',
+        description: ep.summary,
+        status: 'draft',
+        categories: JSON.stringify(['drama', 'memoir']),
         created_at: now,
         updated_at: now,
       },
