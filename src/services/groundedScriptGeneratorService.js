@@ -75,13 +75,13 @@ async function generateGroundedScript(episodeId, showId, models) {
     }],
   }).catch(() => []);
 
-  // 3. Load Show Brain voice rules
+  // 3. Load Show Brain rules (all categories with always_inject)
   let franchiseLaws = [];
   if (FranchiseKnowledge) {
     franchiseLaws = await FranchiseKnowledge.findAll({
-      where: { category: 'franchise_law', status: 'active', always_inject: true },
-      attributes: ['title', 'content'],
-      limit: 20,
+      where: { status: 'active', always_inject: true },
+      attributes: ['title', 'content', 'category'],
+      limit: 50,
     }).catch(() => []);
   }
 
@@ -190,17 +190,29 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
     ? JSON.stringify(lalaStats.character_states).slice(0, 200)
     : 'Stats not loaded';
 
-  const voiceLaws = franchiseLaws.slice(0, 5).map(l => {
-    try { const c = JSON.parse(l.content); return `${l.title}: ${c.summary || c.rule || ''}`; }
-    catch { return l.title; }
-  }).join('\n') || 'No franchise laws loaded';
+  // Group Show Brain laws by category for structured injection
+  const lawsByCategory = {};
+  for (const l of franchiseLaws) {
+    const cat = l.category || 'general';
+    if (!lawsByCategory[cat]) lawsByCategory[cat] = [];
+    try {
+      const c = JSON.parse(l.content);
+      lawsByCategory[cat].push(`${l.title}: ${c.summary || c.rule || c.description || ''}`);
+    } catch {
+      lawsByCategory[cat].push(l.title);
+    }
+  }
+  const voiceLaws = Object.entries(lawsByCategory).map(([cat, rules]) =>
+    `[${cat.replace(/_/g, ' ').toUpperCase()}]\n${rules.join('\n')}`
+  ).join('\n\n') || 'No Show Brain laws loaded';
 
   return `You are writing a script for "Styling Adventures with Lala" — Episode ${brief?.position_in_arc || '?'} of Arc ${brief?.arc_number || '?'}.
 
 ${JAWIHP_VOICE_DNA}
 
-═══ FRANCHISE LAWS ═══
+═══ SHOW BRAIN ═══
 ${voiceLaws}
+
 CORE LAW: The show must NEVER feel like a dashboard. It must feel like a luxury life simulator.
 
 ═══ EPISODE CONTEXT ═══
