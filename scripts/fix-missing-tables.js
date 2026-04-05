@@ -91,6 +91,46 @@ async function run() {
     }
   }
 
+  // ─── Fix scene_angles enum columns ─────────────────────────────────────
+  // generation_status enum
+  try {
+    await sequelize.query(`
+      DO $$ BEGIN
+        CREATE TYPE scene_angle_gen_status AS ENUM ('pending', 'generating', 'complete', 'failed');
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$
+    `);
+    await sequelize.query(`ALTER TABLE scene_angles ADD COLUMN IF NOT EXISTS generation_status scene_angle_gen_status DEFAULT 'pending'`);
+    console.log('  scene_angles.generation_status: ✓');
+  } catch (e) {
+    if (!e.message.includes('already exists')) console.log(`  scene_angles.generation_status: ${e.message}`);
+  }
+
+  // post_processing_status enum
+  try {
+    await sequelize.query(`
+      DO $$ BEGIN
+        CREATE TYPE scene_angle_pp_status AS ENUM ('pending', 'processing', 'complete', 'failed');
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$
+    `);
+    await sequelize.query(`ALTER TABLE scene_angles ADD COLUMN IF NOT EXISTS post_processing_status scene_angle_pp_status DEFAULT 'pending'`);
+    console.log('  scene_angles.post_processing_status: ✓');
+  } catch (e) {
+    if (!e.message.includes('already exists')) console.log(`  scene_angles.post_processing_status: ${e.message}`);
+  }
+
+  // depth_status enum
+  try {
+    await sequelize.query(`
+      DO $$ BEGIN
+        CREATE TYPE scene_angle_depth_status AS ENUM ('pending', 'generating', 'complete', 'failed');
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$
+    `);
+    await sequelize.query(`ALTER TABLE scene_angles ADD COLUMN IF NOT EXISTS depth_status scene_angle_depth_status`);
+    console.log('  scene_angles.depth_status: ✓');
+  } catch (e) {
+    if (!e.message.includes('already exists')) console.log(`  scene_angles.depth_status: ${e.message}`);
+  }
+
   // Check and create scene_set_episodes
   if (!(await tableExists('scene_set_episodes'))) {
     console.log('Creating scene_set_episodes...');
