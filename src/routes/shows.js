@@ -132,39 +132,66 @@ router.get('/', async (req, res) => {
       return res.status(503).json({ error: 'Show model not loaded', message: 'Database models are still initializing' });
     }
 
-    // Fetch shows first, then count episodes separately to avoid GROUP BY issues
-    const shows = await Show.findAll({
-      order: [['name', 'ASC']],
-    });
+    let shows;
+
+    // Primary: Sequelize model query
+    try {
+      shows = await Show.findAll({
+        order: [['name', 'ASC']],
+      });
+    } catch (modelErr) {
+      console.error('GET /shows — Sequelize findAll failed, trying raw SQL fallback:', modelErr.message);
+      // Fallback: raw SQL in case the model has column mismatch with DB
+      try {
+        const sequelize = Show.sequelize || require('../models').sequelize;
+        shows = await sequelize.query(
+          'SELECT * FROM shows WHERE deleted_at IS NULL ORDER BY name ASC',
+          { type: sequelize.QueryTypes.SELECT }
+        );
+      } catch (rawErr) {
+        console.error('GET /shows — Raw SQL fallback also failed:', rawErr.message);
+        throw rawErr;
+      }
+    }
 
     // Attach episode counts via a separate lightweight query
-    if (shows.length > 0) {
+    if (shows && shows.length > 0) {
       try {
         const { Episode } = require('../models');
         const { fn, col } = require('sequelize');
         const counts = await Episode.findAll({
           attributes: ['show_id', [fn('COUNT', col('id')), 'episodeCount']],
-          where: { show_id: shows.map(s => s.id) },
+          where: { show_id: shows.map(s => s.id || s.dataValues?.id) },
           group: ['show_id'],
           raw: true,
         });
         const countMap = {};
         counts.forEach(c => { countMap[c.show_id] = parseInt(c.episodeCount); });
         shows.forEach(s => {
-          s.dataValues.episodeCount = countMap[s.id] || 0;
+          if (s.dataValues) {
+            s.dataValues.episodeCount = countMap[s.id] || 0;
+          } else {
+            s.episodeCount = countMap[s.id] || 0;
+          }
         });
       } catch (countErr) {
         console.warn('Failed to count episodes for shows:', countErr.message);
         // Still return shows even if episode counts fail
-        shows.forEach(s => { s.dataValues.episodeCount = 0; });
+        shows.forEach(s => {
+          if (s.dataValues) {
+            s.dataValues.episodeCount = 0;
+          } else {
+            s.episodeCount = 0;
+          }
+        });
       }
     }
 
-    console.log(`GET /shows — returning ${shows.length} shows`);
+    console.log(`GET /shows — returning ${(shows || []).length} shows`);
     res.json({
       status: 'SUCCESS',
-      data: shows,
-      count: shows.length,
+      data: shows || [],
+      count: (shows || []).length,
     });
   } catch (error) {
     console.error('Failed to get shows:', error);
