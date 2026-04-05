@@ -1,8 +1,15 @@
 /**
- * EpisodeWardrobeGameplay v2 — Full Outfit Slot System
- * 
- * Layout: Slots (left) | Browse Pool (right)
- * 
+ * EpisodeWardrobeGameplay v3 — Unified Outfit Experience
+ *
+ * Layout: Slots (left) | Browse Pool/Closet/Search (right)
+ *
+ * v3 additions:
+ *   - Three browse modes: Pool (event-curated), Closet (full), Search
+ *   - Live todo list sync from slot state
+ *   - Score preview on hover (synergy delta)
+ *   - Lala Suggests (auto-fill from best items)
+ *   - Outfit history across episodes
+ *
  * Slots:
  *   👗 Body (dress) OR (👚 Top + 👖 Bottom) — smart detection
  *   👠 Shoes (required)
@@ -146,7 +153,17 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const [confirming, setConfirming] = useState(false);
   const [purchasing, setPurchasing] = useState(null);
   const [outfitLocked, setOutfitLocked] = useState(false);
-  const [slotsReady, setSlotsReady] = useState(false); // true after initial load/restore
+  const [slotsReady, setSlotsReady] = useState(false);
+
+  // v3: Browse modes, closet, search, todo, history, Lala Suggests
+  const [browseMode, setBrowseMode] = useState('pool'); // pool | closet | search
+  const [closetItems, setClosetItems] = useState([]);
+  const [closetLoading, setClosetLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [todoList, setTodoList] = useState(null);
+  const [outfitHistory, setOutfitHistory] = useState([]);
+  const [suggestingOutfit, setSuggestingOutfit] = useState(false);
+  const [hoverItem, setHoverItem] = useState(null); // for score preview
 
   // Smart detection: dress vs top+bottom
   const bodyMode = useMemo(() => {
@@ -257,6 +274,128 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       localStorage.setItem(key, JSON.stringify(filledSlots));
     }
   }, [filledSlots, episodeId, slotsReady]);
+
+  // ─── v3: Load closet (full wardrobe for browse) ───
+  const loadCloset = useCallback(async () => {
+    if (!showId || closetItems.length > 0) return;
+    setClosetLoading(true);
+    try {
+      const res = await api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`);
+      const items = res.data?.data || res.data?.items || res.data || [];
+      setClosetItems(Array.isArray(items) ? items.map(i => ({
+        ...i,
+        aesthetic_tags: typeof i.aesthetic_tags === 'string' ? JSON.parse(i.aesthetic_tags) : (i.aesthetic_tags || []),
+        event_types: typeof i.event_types === 'string' ? JSON.parse(i.event_types) : (i.event_types || []),
+        can_select: i.is_owned !== false,
+        match_score: 0,
+      })) : []);
+    } catch { setClosetItems([]); }
+    finally { setClosetLoading(false); }
+  }, [showId, closetItems.length]);
+
+  // ─── v3: Load todo list ───
+  useEffect(() => {
+    if (!episodeId) return;
+    api.get(`/api/v1/episodes/${episodeId}/todo`).then(res => {
+      setTodoList(res.data?.data || null);
+    }).catch(() => {});
+  }, [episodeId]);
+
+  // ─── v3: Load outfit history ───
+  useEffect(() => {
+    if (!showId) return;
+    api.get(`/api/v1/wardrobe/outfit-history/${showId}`).then(res => {
+      setOutfitHistory(res.data?.history || []);
+    }).catch(() => {});
+  }, [showId]);
+
+  // ─── v3: Live todo sync — compute completion from filledSlots ───
+  const todoCompletion = useMemo(() => {
+    if (!todoList?.tasks) return null;
+    const filledCats = new Set();
+    Object.entries(filledSlots).forEach(([key, item]) => {
+      if (!item) return;
+      if (key === 'body') filledCats.add('dress');
+      else filledCats.add(key);
+    });
+    if (filledSlots.top && filledSlots.bottom) filledCats.add('dress');
+
+    const tasks = todoList.tasks.filter(t => t.included !== false).map(t => ({
+      ...t,
+      completed: filledCats.has(t.slot),
+    }));
+    const done = tasks.filter(t => t.completed).length;
+    return { tasks, done, total: tasks.length, allDone: done === tasks.length };
+  }, [todoList, filledSlots]);
+
+  // ─── v3: Score preview — what would synergy be with this item? ───
+  const hoverSynergy = useMemo(() => {
+    if (!hoverItem) return null;
+    const cat = (hoverItem.clothing_category || '').toLowerCase();
+    let slotKey = cat === 'dress' ? 'body' : cat;
+    const testSlots = { ...filledSlots, [slotKey]: hoverItem };
+    if (cat === 'dress') { testSlots.top = undefined; testSlots.bottom = undefined; }
+    const test = calculateSynergy(testSlots, event);
+    return { total: test.total, delta: test.total - synergy.total };
+  }, [hoverItem, filledSlots, event, synergy.total]);
+
+  // ─── v3: Lala Suggests ───
+  const handleLalaSuggests = async () => {
+    setSuggestingOutfit(true);
+    try {
+      // Use pool items if available, otherwise load them
+      const items = pool.length > 0 ? pool : [];
+      if (items.length === 0) { setSuggestingOutfit(false); return; }
+
+      const newSlots = {};
+      const used = new Set();
+
+      // For each slot, find best selectable item
+      for (const slot of SLOT_DEFS) {
+        const candidates = items
+          .filter(i => i.can_select && !used.has(i.id) && slot.categories.includes(i.clothing_category))
+          .sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
+        if (candidates.length > 0) {
+          newSlots[slot.key] = candidates[0];
+          used.add(candidates[0].id);
+        }
+      }
+
+      // Smart detection: if we got a dress, clear top/bottom
+      if (newSlots.body) { newSlots.top = undefined; newSlots.bottom = undefined; }
+      else if (newSlots.top || newSlots.bottom) { newSlots.body = undefined; }
+
+      setFilledSlots(newSlots);
+      setSuccess('Lala picked her favorites! Adjust as you like.');
+    } catch { setError('Lala couldn\'t decide — try manually'); }
+    finally { setSuggestingOutfit(false); }
+  };
+
+  // ─── v3: Browse items based on mode ───
+  const filteredBrowseItems = useMemo(() => {
+    const slot = SLOT_DEFS.find(s => s.key === activeSlot);
+    const cats = slot?.categories || [];
+
+    if (browseMode === 'pool') {
+      return pool.filter(item => cats.includes((item.clothing_category || '').toLowerCase()))
+        .sort((a, b) => b.match_score - a.match_score);
+    }
+    if (browseMode === 'closet') {
+      return closetItems.filter(item => cats.includes((item.clothing_category || '').toLowerCase()))
+        .sort((a, b) => (b.match_score || 0) - (a.match_score || 0) || a.name.localeCompare(b.name));
+    }
+    if (browseMode === 'search' && searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return closetItems.filter(item => {
+        const name = (item.name || '').toLowerCase();
+        const brand = (item.brand || '').toLowerCase();
+        const tags = (item.aesthetic_tags || []).join(' ').toLowerCase();
+        return (name.includes(q) || brand.includes(q) || tags.includes(q))
+          && cats.includes((item.clothing_category || '').toLowerCase());
+      });
+    }
+    return [];
+  }, [pool, closetItems, browseMode, activeSlot, searchQuery]);
 
   // ─── Assign item to slot ───
   const assignToSlot = (item) => {
@@ -373,6 +512,27 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         </div>
       </div>
 
+      {/* ═══ TODO CHECKLIST (collapsible) ═══ */}
+      {todoCompletion && (
+        <details open style={{ marginBottom: 12, background: todoCompletion.allDone ? '#f0fdf4' : '#FAF7F0', border: `1px solid ${todoCompletion.allDone ? '#bbf7d0' : '#D4AF37'}`, borderRadius: 10, overflow: 'hidden' }}>
+          <summary style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: '#1a1a2e', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>📋 Getting Ready — {todoCompletion.done}/{todoCompletion.total}</span>
+            {todoCompletion.allDone && <span style={{ color: '#1A7A40', fontSize: 11 }}>✓ Ready!</span>}
+          </summary>
+          <div style={{ padding: '0 16px 10px' }}>
+            {todoCompletion.tasks.map(t => (
+              <div key={t.slot} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: t.completed ? 0.6 : 1 }}>
+                <div style={{ width: 16, height: 16, borderRadius: 3, border: t.completed ? 'none' : '1.5px solid #B8962E', background: t.completed ? '#1A7A40' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {t.completed && <span style={{ color: '#FFF', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                </div>
+                <span style={{ fontSize: 12, color: t.completed ? '#888' : '#1a1a2e', textDecoration: t.completed ? 'line-through' : 'none' }}>{t.label}</span>
+                {!t.required && <span style={{ fontSize: 9, color: '#B8962E' }}>optional</span>}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
       {/* ═══ LOCKED STATE ═══ */}
       {outfitLocked && (
         <div style={W.lockedBanner}>
@@ -465,16 +625,45 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 {!filledSlots.shoes ? 'shoes' : ''}
               </div>
             )}
+            <button onClick={handleLalaSuggests} disabled={suggestingOutfit || pool.length === 0}
+              style={{ ...W.lockBtn, background: 'linear-gradient(135deg, #B8962E, #D4AF37)', marginTop: 6, opacity: pool.length > 0 ? 1 : 0.4 }}>
+              {suggestingOutfit ? '✨ Lala is thinking...' : '✨ Lala Suggests'}
+            </button>
           </div>
 
           {/* ──── RIGHT: BROWSE ──── */}
           <div style={W.browsePanel}>
+            {/* Browse mode tabs */}
+            <div style={{ display: 'flex', gap: 0, marginBottom: 10, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+              {[
+                { key: 'pool', label: 'For This Event' },
+                { key: 'closet', label: 'Full Closet' },
+                { key: 'search', label: 'Search' },
+              ].map(m => (
+                <button key={m.key} onClick={() => { setBrowseMode(m.key); if (m.key !== 'pool' && closetItems.length === 0) loadCloset(); }}
+                  style={{ flex: 1, padding: '6px 0', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: browseMode === m.key ? 700 : 400, background: browseMode === m.key ? '#fff' : 'transparent', color: browseMode === m.key ? '#6366f1' : '#64748b', cursor: 'pointer', boxShadow: browseMode === m.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Search bar */}
+            {browseMode === 'search' && (
+              <input type="text" placeholder="Search by name, brand, or tag..." value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: 'border-box', outline: 'none' }} />
+            )}
+
+            {closetLoading && browseMode !== 'pool' && (
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>Loading closet...</div>
+            )}
+
             <div style={W.browseHeader}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>
-                  {CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕'} Browse: {SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
+                  {CAT_ICONS[SLOT_DEFS.find(s => s.key === activeSlot)?.categories?.[0]] || '👕'} {activeSlot === 'body' ? 'Dress' : SLOT_DEFS.find(s => s.key === activeSlot)?.label || activeSlot}
                 </div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{filteredPool.length} items · Click to equip</div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>{filteredBrowseItems.length} items · Click to equip</div>
               </div>
               <div style={{ display: 'flex', gap: 3 }}>
                 {visibleSlots.filter(s => !filledSlots[s.key]).map(s => (
@@ -487,7 +676,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             </div>
 
             <div style={W.browseGrid}>
-              {filteredPool.map((item, idx) => {
+              {filteredBrowseItems.map((item, idx) => {
                 const ts = TIER_STYLES[item.tier] || TIER_STYLES.basic;
                 const rs = ROLE_STYLES[item.pool_role] || ROLE_STYLES.safe;
                 const isLocked = !item.is_owned;
@@ -505,7 +694,17 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       cursor: isUsed ? 'not-allowed' : 'pointer',
                       border: `1px solid ${rs.border}`,
                       animation: `fadeSlide 0.25s ease ${idx * 0.05}s both`,
-                    }}>
+                      position: 'relative',
+                    }}
+                    onMouseEnter={() => !isUsed && setHoverItem(item)}
+                    onMouseLeave={() => setHoverItem(null)}
+                    >
+                    {/* Score preview badge */}
+                    {hoverItem?.id === item.id && hoverSynergy && !isUsed && (
+                      <div style={{ position: 'absolute', top: -8, right: -4, padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 800, zIndex: 2, background: hoverSynergy.delta >= 0 ? '#16a34a' : '#dc2626', color: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+                        {hoverSynergy.delta >= 0 ? '+' : ''}{hoverSynergy.delta} → {hoverSynergy.total}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ ...W.rolePill, background: rs.bg, color: rs.color }}>{rs.label}</span>
                       <span style={{ ...W.tierPill, background: ts.bg, color: ts.color }}>{ts.emoji} {ts.label}</span>
@@ -552,6 +751,32 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
             </div>
           </div>
         </div>
+      )}
+
+      {/* ═══ OUTFIT HISTORY ═══ */}
+      {outfitHistory.length > 0 && (
+        <details style={{ marginTop: 16, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+          <summary style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: '#1a1a2e' }}>
+            👗 Outfit History — {outfitHistory.length} episode{outfitHistory.length !== 1 ? 's' : ''}
+          </summary>
+          <div style={{ padding: '0 16px 12px' }}>
+            {outfitHistory.map(ep => (
+              <div key={ep.episode_id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid #f1f5f9', alignItems: 'center' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#6366f1', flexShrink: 0 }}>
+                  {ep.episode_number || '?'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{ep.episode_title || 'Untitled'}</div>
+                  <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                    {ep.event_name && <span>{ep.event_name} · </span>}
+                    {ep.items.length} pieces · {ep.items.map(i => i.name).slice(0, 3).join(', ')}{ep.items.length > 3 ? '...' : ''}
+                  </div>
+                </div>
+                {ep.prestige && <span style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>⭐{ep.prestige}</span>}
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {/* ═══ INSPECT MODAL ═══ */}
