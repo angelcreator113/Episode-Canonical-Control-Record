@@ -108,6 +108,21 @@ async function generateGroundedScript(episodeId, showId, models) {
     }
   } catch { /* non-blocking */ }
 
+  // 5b. Load outfit synergy score for this episode
+  let outfitScore = null;
+  try {
+    const [scoreRows] = await sequelize.query(
+      `SELECT w.name, w.clothing_category, w.tier, w.aesthetic_tags
+       FROM episode_wardrobe ew
+       JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
+       WHERE ew.episode_id = :episodeId`,
+      { replacements: { episodeId } }
+    );
+    if (scoreRows.length > 0) {
+      outfitScore = { items: scoreRows, count: scoreRows.length };
+    }
+  } catch { /* non-blocking */ }
+
   // 6. Load Lala's stats
   let lalaStats = null;
   try {
@@ -119,7 +134,7 @@ async function generateGroundedScript(episodeId, showId, models) {
   } catch { /* non-blocking */ }
 
   // Build prompt
-  const prompt = buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats });
+  const prompt = buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore });
 
   console.log(`[ScriptGen] Generating script for episode ${episodeId} with ${scenePlan.length} beats`);
 
@@ -132,7 +147,7 @@ async function generateGroundedScript(episodeId, showId, models) {
   return response.content[0]?.text || '';
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats }) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore }) {
   const beatContext = scenePlan.length > 0
     ? scenePlan.map(b => {
         const tpl = BEAT_TEMPLATES[b.beat_number] || {};
@@ -203,6 +218,7 @@ ${statsContext}
 
 ═══ WARDROBE ═══
 ${wardrobeContext}
+${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}
