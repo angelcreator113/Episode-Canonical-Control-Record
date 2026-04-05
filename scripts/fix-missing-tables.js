@@ -26,7 +26,29 @@ async function tableExists(name) {
 }
 
 async function run() {
-  console.log('🔧 Checking for missing tables...\n');
+  console.log('🔧 Checking for missing tables and columns...\n');
+
+  // ─── Fix scene_sets missing columns ────────────────────────────────────
+  const sceneSetCols = [
+    ['base_still_url', 'TEXT'],
+    ['style_reference_url', 'TEXT'],
+    ['negative_prompt', 'TEXT'],
+    ['variation_count', 'INTEGER DEFAULT 1'],
+    ['cover_angle_id', 'UUID'],
+    ['canvas_settings', 'JSONB'],
+    ['world_location_id', 'UUID'],
+  ];
+  
+  for (const [col, type] of sceneSetCols) {
+    try {
+      await sequelize.query(`ALTER TABLE scene_sets ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+      console.log(`  scene_sets.${col}: ✓`);
+    } catch (e) {
+      if (!e.message.includes('already exists')) {
+        console.log(`  scene_sets.${col}: ${e.message}`);
+      }
+    }
+  }
 
   // Check and create scene_set_episodes
   if (!(await tableExists('scene_set_episodes'))) {
