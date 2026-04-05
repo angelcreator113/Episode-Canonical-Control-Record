@@ -46,20 +46,22 @@ const FONTS = [
 
 function download(url, dest) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    const get = (u) => {
+    const get = (u, redirects = 0) => {
+      if (redirects > 5) { reject(new Error('Too many redirects')); return; }
       https.get(u, (res) => {
-        // Follow redirects
         if (res.statusCode === 301 || res.statusCode === 302) {
-          file.close();
-          return get(res.headers.location);
+          res.resume();
+          return get(res.headers.location, redirects + 1);
         }
         if (res.statusCode !== 200) {
+          res.resume();
           reject(new Error(`HTTP ${res.statusCode} for ${u}`));
           return;
         }
+        const file = fs.createWriteStream(dest);
         res.pipe(file);
         file.on('finish', () => { file.close(); resolve(); });
+        file.on('error', (err) => { file.close(); reject(err); });
       }).on('error', reject);
     };
     get(url);

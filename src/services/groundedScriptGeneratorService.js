@@ -75,13 +75,13 @@ async function generateGroundedScript(episodeId, showId, models) {
     }],
   }).catch(() => []);
 
-  // 3. Load Show Brain voice rules
+  // 3. Load Show Brain rules (all categories with always_inject)
   let franchiseLaws = [];
   if (FranchiseKnowledge) {
     franchiseLaws = await FranchiseKnowledge.findAll({
-      where: { category: 'franchise_law', status: 'active', always_inject: true },
-      attributes: ['title', 'content'],
-      limit: 20,
+      where: { status: 'active', always_inject: true },
+      attributes: ['title', 'content', 'category'],
+      limit: 50,
     }).catch(() => []);
   }
 
@@ -108,6 +108,21 @@ async function generateGroundedScript(episodeId, showId, models) {
     }
   } catch { /* non-blocking */ }
 
+  // 5b. Load outfit synergy score for this episode
+  let outfitScore = null;
+  try {
+    const [scoreRows] = await sequelize.query(
+      `SELECT w.name, w.clothing_category, w.tier, w.aesthetic_tags
+       FROM episode_wardrobe ew
+       JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
+       WHERE ew.episode_id = :episodeId`,
+      { replacements: { episodeId } }
+    );
+    if (scoreRows.length > 0) {
+      outfitScore = { items: scoreRows, count: scoreRows.length };
+    }
+  } catch { /* non-blocking */ }
+
   // 6. Load Lala's stats
   let lalaStats = null;
   try {
@@ -119,7 +134,7 @@ async function generateGroundedScript(episodeId, showId, models) {
   } catch { /* non-blocking */ }
 
   // Build prompt
-  const prompt = buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats });
+  const prompt = buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore });
 
   console.log(`[ScriptGen] Generating script for episode ${episodeId} with ${scenePlan.length} beats`);
 
@@ -132,7 +147,7 @@ async function generateGroundedScript(episodeId, showId, models) {
   return response.content[0]?.text || '';
 }
 
-function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats }) {
+function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrobeItems, lalaStats, outfitScore }) {
   const beatContext = scenePlan.length > 0
     ? scenePlan.map(b => {
         const tpl = BEAT_TEMPLATES[b.beat_number] || {};
@@ -175,17 +190,29 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
     ? JSON.stringify(lalaStats.character_states).slice(0, 200)
     : 'Stats not loaded';
 
-  const voiceLaws = franchiseLaws.slice(0, 5).map(l => {
-    try { const c = JSON.parse(l.content); return `${l.title}: ${c.summary || c.rule || ''}`; }
-    catch { return l.title; }
-  }).join('\n') || 'No franchise laws loaded';
+  // Group Show Brain laws by category for structured injection
+  const lawsByCategory = {};
+  for (const l of franchiseLaws) {
+    const cat = l.category || 'general';
+    if (!lawsByCategory[cat]) lawsByCategory[cat] = [];
+    try {
+      const c = JSON.parse(l.content);
+      lawsByCategory[cat].push(`${l.title}: ${c.summary || c.rule || c.description || ''}`);
+    } catch {
+      lawsByCategory[cat].push(l.title);
+    }
+  }
+  const voiceLaws = Object.entries(lawsByCategory).map(([cat, rules]) =>
+    `[${cat.replace(/_/g, ' ').toUpperCase()}]\n${rules.join('\n')}`
+  ).join('\n\n') || 'No Show Brain laws loaded';
 
   return `You are writing a script for "Styling Adventures with Lala" — Episode ${brief?.position_in_arc || '?'} of Arc ${brief?.arc_number || '?'}.
 
 ${JAWIHP_VOICE_DNA}
 
-═══ FRANCHISE LAWS ═══
+═══ SHOW BRAIN ═══
 ${voiceLaws}
+
 CORE LAW: The show must NEVER feel like a dashboard. It must feel like a luxury life simulator.
 
 ═══ EPISODE CONTEXT ═══
@@ -203,6 +230,7 @@ ${statsContext}
 
 ═══ WARDROBE ═══
 ${wardrobeContext}
+${outfitScore ? `\n═══ LOCKED OUTFIT ═══\nLala is wearing ${outfitScore.count} pieces for this event:\n${outfitScore.items.map(i => `- ${i.name} (${i.clothing_category}, ${i.tier})`).join('\n')}\nBeat 8 (Transformation): Reference these SPECIFIC items by name as Lala gets dressed.\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes — she is wearing what she chose.` : ''}
 
 ═══ SCENE PLAN — 14 BEATS ═══
 ${beatContext}

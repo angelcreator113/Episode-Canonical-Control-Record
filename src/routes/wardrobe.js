@@ -1441,5 +1441,66 @@ async function getOutfitScore(models, episodeId, event = {}) {
 }
 
 
+// ═══════════════════════════════════════════
+// GET /api/v1/wardrobe/outfit-history/:showId
+// Returns outfit history across all episodes for a show
+// ═══════════════════════════════════════════
+router.get('/outfit-history/:showId', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not available' });
+
+    const [rows] = await models.sequelize.query(
+      `SELECT e.id as episode_id, e.episode_number, e.title as episode_title,
+              w.id as item_id, w.name as item_name, w.clothing_category, w.tier,
+              w.aesthetic_tags, w.s3_url, w.thumbnail_url,
+              ew.worn_at,
+              we.name as event_name, we.dress_code, we.prestige
+       FROM episode_wardrobe ew
+       JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
+       JOIN episodes e ON e.id = ew.episode_id AND e.deleted_at IS NULL
+       LEFT JOIN world_events we ON we.used_in_episode_id = e.id
+       WHERE e.show_id = :showId
+       ORDER BY e.episode_number ASC, w.clothing_category ASC`,
+      { replacements: { showId } }
+    );
+
+    // Group by episode
+    const episodes = {};
+    for (const row of rows) {
+      if (!episodes[row.episode_id]) {
+        episodes[row.episode_id] = {
+          episode_id: row.episode_id,
+          episode_number: row.episode_number,
+          episode_title: row.episode_title,
+          event_name: row.event_name,
+          dress_code: row.dress_code,
+          prestige: row.prestige,
+          items: [],
+        };
+      }
+      episodes[row.episode_id].items.push({
+        id: row.item_id,
+        name: row.item_name,
+        category: row.clothing_category,
+        tier: row.tier,
+        aesthetic_tags: _parseJSON(row.aesthetic_tags, []),
+        thumbnail_url: row.thumbnail_url || row.s3_url,
+        worn_at: row.worn_at,
+      });
+    }
+
+    return res.json({
+      success: true,
+      history: Object.values(episodes),
+      episode_count: Object.keys(episodes).length,
+    });
+  } catch (error) {
+    console.error('Outfit history error:', error);
+    return res.status(500).json({ error: 'Failed to load outfit history', detail: error.message });
+  }
+});
+
 module.exports = router;
 module.exports.getOutfitScore = getOutfitScore;

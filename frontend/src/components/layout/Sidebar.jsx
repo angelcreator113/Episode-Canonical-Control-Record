@@ -31,7 +31,6 @@ function buildNav(shows) {
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=events` },
         ] : []),
-        { icon: '👗', label: 'Wardrobe', route: '/wardrobe' },
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
       ],
     },

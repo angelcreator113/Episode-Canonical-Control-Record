@@ -253,12 +253,17 @@ router.post('/:episodeId/rewrite-line', optionalAuth, async (req, res) => {
     try {
       if (models.FranchiseKnowledge) {
         const laws = await models.FranchiseKnowledge.findAll({
-          where: { category: 'franchise_law', status: 'active', always_inject: true },
-          attributes: ['title', 'content'], limit: 10,
+          where: { status: 'active', always_inject: true },
+          attributes: ['title', 'content', 'category'], limit: 30,
         });
-        voiceLaws = laws
-          .filter(l => { const t = (l.title || '').toLowerCase(); return t.includes('voice') || t.includes('lala') || t.includes('jawihp'); })
-          .map(l => { try { const c = JSON.parse(l.content); return `${l.title}: ${c.summary || ''}`; } catch { return l.title; } })
+        // For line rewrites, prioritize voice/character rules but include all
+        const voiceFirst = laws.sort((a, b) => {
+          const aVoice = /voice|lala|jawihp|character/i.test(a.title) ? 0 : 1;
+          const bVoice = /voice|lala|jawihp|character/i.test(b.title) ? 0 : 1;
+          return aVoice - bVoice;
+        });
+        voiceLaws = voiceFirst
+          .map(l => { try { const c = JSON.parse(l.content); return `${l.title}: ${c.summary || c.rule || ''}`; } catch { return l.title; } })
           .join('\n');
       }
     } catch (err) { console.warn('[RewriteLine] Failed to load voice laws:', err?.message); }

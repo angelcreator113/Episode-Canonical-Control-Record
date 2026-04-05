@@ -9,6 +9,7 @@ import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
 import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
+import EpisodeTodoList from '../components/Episodes/EpisodeTodoList';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
 import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
@@ -731,91 +732,52 @@ const EpisodeDetail = () => {
         {/* Wardrobe Tab */}
         {activeTab === 'wardrobe' && (
           <div>
-            {/* Mode toggle */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 16, padding: '4px', background: '#f1f5f9', borderRadius: 10, width: 'fit-content' }}>
-              <button
-                onClick={() => setWardrobeMode('inventory')}
-                style={{
-                  padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  border: 'none', transition: 'all 0.15s',
-                  background: wardrobeMode === 'inventory' ? '#fff' : 'transparent',
-                  color: wardrobeMode === 'inventory' ? '#6366f1' : '#64748b',
-                  boxShadow: wardrobeMode === 'inventory' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                }}
-              >
-                📋 Assigned Items
-              </button>
-              <button
-                onClick={() => setWardrobeMode('gameplay')}
-                style={{
-                  padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  border: 'none', transition: 'all 0.15s',
-                  background: wardrobeMode === 'gameplay' ? '#fff' : 'transparent',
-                  color: wardrobeMode === 'gameplay' ? '#ec4899' : '#64748b',
-                  boxShadow: wardrobeMode === 'gameplay' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                }}
-              >
-                🎮 Browse & Select
-              </button>
-            </div>
-
-            {/* Inventory mode — existing tab */}
-            {wardrobeMode === 'inventory' && (
-              <EpisodeWardrobeTab episodeId={episodeId} episode={episode} />
-            )}
-
-            {/* Gameplay mode */}
-            {wardrobeMode === 'gameplay' && (
+            {/* Unified wardrobe — event picker + outfit builder */}
+            {episodeEvents.length > 0 ? (
               <div>
-                {/* Event picker */}
-                {episodeEvents.length > 0 ? (
-                  <div style={{ marginBottom: 16 }}>
-                    {episodeEvents.length > 1 && (
-                      <div style={{ marginBottom: 10 }}>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
-                          SELECT EVENT TO STYLE FOR
-                        </label>
-                        <select
-                          value={selectedEvent?.id || ''}
-                          onChange={(e) => {
-                            const ev = episodeEvents.find(ev => ev.id === e.target.value);
-                            setSelectedEvent(ev || null);
-                          }}
-                          style={{
-                            padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0',
-                            fontSize: 13, color: '#1a1a2e', background: '#fff', width: '100%', maxWidth: 400,
-                          }}
-                        >
-                          {episodeEvents.map(ev => (
-                            <option key={ev.id} value={ev.id}>
-                              {ev.name} — {ev.dress_code || 'No dress code'} (Prestige {ev.prestige || '?'})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {selectedEvent && (
-                      <EpisodeWardrobeGameplay
-                        episodeId={episodeId}
-                        showId={episode?.show_id || episode?.showId}
-                        event={selectedEvent}
-                        characterState={characterState}
-                        onOutfitComplete={(result) => {
-                          console.log('Outfit locked:', result.slots, 'Synergy:', result.synergy.total);
-                        }}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
-                    <div style={{ fontSize: 40, marginBottom: 8 }}>💌</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: '#64748b' }}>No events linked to this episode</div>
-                    <div style={{ fontSize: 13, marginTop: 4 }}>
-                      Inject an event from the Events Library in Producer Mode first,<br />
-                      then come back here to browse & select outfits.
-                    </div>
+                {episodeEvents.length > 1 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                      STYLING FOR EVENT
+                    </label>
+                    <select
+                      value={selectedEvent?.id || ''}
+                      onChange={(e) => {
+                        const ev = episodeEvents.find(ev => ev.id === e.target.value);
+                        setSelectedEvent(ev || null);
+                      }}
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0',
+                        fontSize: 13, color: '#1a1a2e', background: '#fff', width: '100%', maxWidth: 400,
+                      }}
+                    >
+                      {episodeEvents.map(ev => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.name} — {ev.dress_code || 'No dress code'} (Prestige {ev.prestige || '?'})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
+                {selectedEvent && (
+                  <EpisodeWardrobeGameplay
+                    episodeId={episodeId}
+                    showId={episode?.show_id || episode?.showId}
+                    event={selectedEvent}
+                    characterState={characterState}
+                    onOutfitComplete={(result) => {
+                      console.log('Outfit locked:', result.slots, 'Synergy:', result.synergy.total);
+                    }}
+                  />
+                )}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+                <div style={{ fontSize: 40, marginBottom: 8 }}>💌</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: '#64748b' }}>No events linked to this episode</div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>
+                  Inject an event from the Events Library first, then come back to build your outfit.
+                </div>
               </div>
             )}
           </div>
