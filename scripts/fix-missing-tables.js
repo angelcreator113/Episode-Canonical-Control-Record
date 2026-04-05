@@ -50,6 +50,47 @@ async function run() {
     }
   }
 
+  // ─── Fix scene_angles missing columns ──────────────────────────────────
+  const sceneAngleCols = [
+    ['angle_description', 'TEXT'],
+    ['camera_direction', 'TEXT'],
+    ['beat_affinity', 'JSONB DEFAULT \'[]\''],
+    ['mood', 'VARCHAR(255)'],
+    ['runway_prompt', 'TEXT'],
+    ['runway_seed', 'VARCHAR(255)'],
+    ['runway_job_id', 'VARCHAR(255)'],
+    ['still_image_url', 'TEXT'],
+    ['video_clip_url', 'TEXT'],
+    ['thumbnail_url', 'TEXT'],
+    ['quality_score', 'INTEGER'],
+    ['artifact_flags', 'JSONB DEFAULT \'[]\''],
+    ['quality_review', 'JSONB'],
+    ['generation_attempt', 'INTEGER DEFAULT 1'],
+    ['refined_prompt', 'TEXT'],
+    ['camera_motion', 'VARCHAR(255)'],
+    ['video_duration', 'INTEGER DEFAULT 5'],
+    ['style_reference_url', 'TEXT'],
+    ['variation_count', 'INTEGER DEFAULT 1'],
+    ['variation_data', 'JSONB'],
+    ['enhanced_still_url', 'TEXT'],
+    ['enhanced_video_url', 'TEXT'],
+    ['depth_map_url', 'TEXT'],
+    ['control_value', 'INTEGER'],
+    ['vulnerability_value', 'INTEGER'],
+    ['sort_order', 'INTEGER DEFAULT 0'],
+  ];
+  
+  for (const [col, type] of sceneAngleCols) {
+    try {
+      await sequelize.query(`ALTER TABLE scene_angles ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+      console.log(`  scene_angles.${col}: ✓`);
+    } catch (e) {
+      if (!e.message.includes('already exists')) {
+        console.log(`  scene_angles.${col}: ${e.message}`);
+      }
+    }
+  }
+
   // Check and create scene_set_episodes
   if (!(await tableExists('scene_set_episodes'))) {
     console.log('Creating scene_set_episodes...');
