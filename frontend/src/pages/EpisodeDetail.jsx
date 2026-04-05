@@ -13,7 +13,6 @@ import EpisodeTodoList from '../components/Episodes/EpisodeTodoList';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
 import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
-import EpisodeTodoList from '../components/Episodes/EpisodeTodoList';
 import './EpisodeDetail.css';
 
 
