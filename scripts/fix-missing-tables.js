@@ -1,0 +1,133 @@
+#!/usr/bin/env node
+/**
+ * Fix missing tables after DB_SYNC_FORCE incident
+ * Creates tables that may have been dropped but migration says already exists
+ */
+require('dotenv').config();
+const { Sequelize } = require('sequelize');
+
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL not set');
+  process.exit(1);
+}
+
+const sequelize = new Sequelize(DATABASE_URL, {
+  logging: false,
+  dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
+});
+
+async function tableExists(name) {
+  const [rows] = await sequelize.query(
+    `SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = $1`,
+    { bind: [name] }
+  );
+  return rows.length > 0;
+}
+
+async function run() {
+  console.log('🔧 Checking for missing tables...\n');
+
+  // Check and create scene_set_episodes
+  if (!(await tableExists('scene_set_episodes'))) {
+    console.log('Creating scene_set_episodes...');
+    await sequelize.query(`
+      CREATE TABLE scene_set_episodes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        scene_set_id UUID NOT NULL REFERENCES scene_sets(id) ON DELETE CASCADE,
+        episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    await sequelize.query(`
+      CREATE UNIQUE INDEX scene_set_episodes_unique_pair 
+      ON scene_set_episodes(scene_set_id, episode_id) 
+      WHERE deleted_at IS NULL
+    `);
+    console.log('✅ scene_set_episodes created');
+  } else {
+    console.log('✅ scene_set_episodes already exists');
+  }
+
+  // Check and create episode_briefs
+  if (!(await tableExists('episode_briefs'))) {
+    console.log('Creating episode_briefs...');
+    await sequelize.query(`
+      CREATE TABLE episode_briefs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+        brief_type VARCHAR(50) NOT NULL DEFAULT 'standard',
+        title VARCHAR(255),
+        content TEXT,
+        status VARCHAR(50) DEFAULT 'draft',
+        ai_generated BOOLEAN DEFAULT false,
+        extra_fields JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    console.log('✅ episode_briefs created');
+  } else {
+    console.log('✅ episode_briefs already exists');
+  }
+
+  // Check and create scene_plans
+  if (!(await tableExists('scene_plans'))) {
+    console.log('Creating scene_plans...');
+    await sequelize.query(`
+      CREATE TABLE scene_plans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        episode_brief_id UUID REFERENCES episode_briefs(id) ON DELETE SET NULL,
+        episode_id UUID REFERENCES episodes(id) ON DELETE SET NULL,
+        scene_number INTEGER,
+        title VARCHAR(255),
+        description TEXT,
+        location VARCHAR(255),
+        time_of_day VARCHAR(50),
+        characters JSONB DEFAULT '[]',
+        beats JSONB DEFAULT '[]',
+        emotional_arc TEXT,
+        status VARCHAR(50) DEFAULT 'planned',
+        extra_fields JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    console.log('✅ scene_plans created');
+  } else {
+    console.log('✅ scene_plans already exists');
+  }
+
+  // Check and create episode_todo_lists
+  if (!(await tableExists('episode_todo_lists'))) {
+    console.log('Creating episode_todo_lists...');
+    await sequelize.query(`
+      CREATE TABLE episode_todo_lists (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        items JSONB DEFAULT '[]',
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    console.log('✅ episode_todo_lists created');
+  } else {
+    console.log('✅ episode_todo_lists already exists');
+  }
+
+  console.log('\n✨ Table check complete');
+  await sequelize.close();
+}
+
+run().catch(e => {
+  console.error('Error:', e.message);
+  process.exit(1);
+});
