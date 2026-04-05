@@ -128,6 +128,7 @@ function WorldAdmin() {
   const [aiRevising, setAiRevising] = useState(false);
   const [compareEvents, setCompareEvents] = useState(null); // [eventA, eventB]
   const [generating, setGenerating] = useState(false);
+  const [seedingEvents, setSeedingEvents] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
   // Character editor state
@@ -209,6 +210,25 @@ function WorldAdmin() {
       }
     } catch (err) { setError(err.response?.data?.error || err.message); }
     finally { setSavingEvent(false); }
+  };
+
+  const seedEvents = async () => {
+    if (worldEvents.length >= 20 && !window.confirm(`You already have ${worldEvents.length} events. This will replace them all with 24 AI-generated events. Continue?`)) return;
+    setSeedingEvents(true);
+    setError(null);
+    try {
+      const res = await api.post('/api/v1/memories/generate-events', {
+        show_id: showId,
+        replace_existing: worldEvents.length > 0,
+      });
+      const eventsRes = await api.get(`/api/v1/world/${showId}/events`);
+      setWorldEvents(eventsRes.data?.events || []);
+      setSuccessMsg(`Seeded ${res.data.generated} events (${Object.entries(res.data.breakdown || {}).map(([k, v]) => `${v} ${k}`).join(', ')})`);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setSeedingEvents(false);
+    }
   };
 
   const deleteEvent = async (eventId) => {
@@ -1128,6 +1148,7 @@ The revised event should feel like a completely different experience from the si
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>💌 Events Library</h2>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={seedEvents} disabled={seedingEvents} style={{ ...S.smBtn, background: '#fefce8', color: '#a16207' }}>{seedingEvents ? '⏳ Seeding...' : '🌱 Seed 24 Events'}</button>
               <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S.smBtn, background: '#f0fdf4', color: '#16a34a' }}>📋 Templates</button>
               <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={{ ...S.smBtn, background: '#faf5ff', color: '#7c3aed' }}>{aiFixLoading ? '⏳...' : '✨ Enhance All'}</button>
               <button onClick={handleExportCSV} style={{ ...S.smBtn, background: '#f0f9ff', color: '#0284c7' }}>📥 Export</button>
