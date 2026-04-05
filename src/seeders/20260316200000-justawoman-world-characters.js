@@ -7,9 +7,6 @@
 
 const { v4: uuidv4 } = require('uuid');
 
-// ── Replace with your actual registry ID ─────────────────────────────
-const REGISTRY_ID = process.env.BOOK1_REGISTRY_ID || 'YOUR_REGISTRY_ID_HERE';
-
 const NOW = new Date();
 
 // Helper: builds extra_fields JSONB for narrative data that has no dedicated column
@@ -43,7 +40,43 @@ function deepProfileExtras(obj) {
 
 module.exports = {
   up: async (queryInterface) => {
-    // Check if already seeded
+    // ── Step 1: Find or create the "Book 1 · Before Lala" registry ──
+    const [existingRegistries] = await queryInterface.sequelize.query(
+      `SELECT id FROM character_registries WHERE book_tag = 'Book 1 · Before Lala' LIMIT 1;`
+    );
+    
+    let REGISTRY_ID;
+    
+    if (existingRegistries.length > 0) {
+      REGISTRY_ID = existingRegistries[0].id;
+      console.log(`📚 Found existing registry: ${REGISTRY_ID}`);
+    } else {
+      // Find the show to link the registry to
+      const [shows] = await queryInterface.sequelize.query(
+        `SELECT id FROM shows WHERE name ILIKE '%Styling Adventures%' OR name ILIKE '%Lala%' LIMIT 1;`
+      );
+      const showId = shows.length > 0 ? shows[0].id : null;
+      
+      // Create the registry
+      REGISTRY_ID = uuidv4();
+      await queryInterface.sequelize.query(`
+        INSERT INTO character_registries (id, show_id, title, book_tag, description, core_rule, status, created_at, updated_at)
+        VALUES (
+          '${REGISTRY_ID}',
+          ${showId ? `'${showId}'` : 'NULL'},
+          'Book 1 · Before Lala',
+          'Book 1 · Before Lala',
+          'The real-world layer of JustAWoman''s story — her children, her marriage, and the people who shape her becoming.',
+          'These characters exist in the real world. They are not creations. They are witnesses.',
+          'active',
+          NOW(),
+          NOW()
+        );
+      `);
+      console.log(`📚 Created new registry: ${REGISTRY_ID}`);
+    }
+    
+    // ── Step 2: Check if characters already seeded ──
     const [existing] = await queryInterface.sequelize.query(
       `SELECT id FROM registry_characters WHERE character_key = 'elias' AND registry_id = '${REGISTRY_ID}' LIMIT 1;`
     );
