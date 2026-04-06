@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3 } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -742,8 +742,32 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             {set.season && <span className="scene-sets-meta-chip"><RefreshCw size={9} /> {set.season}</span>}
           </div>
 
-          {/* Progress bar */}
-          {totalAngles > 0 && (
+          {/* Angle thumbnail strip — shows completed angles as clickable mini previews */}
+          {readyAngles > 0 && (
+            <div className="scene-sets-card-thumbstrip">
+              {sortedAngles.filter(a => a.still_image_url && a.generation_status === 'complete').slice(0, 6).map(a => (
+                <img
+                  key={a.id}
+                  src={bustUrl(a.still_image_url)}
+                  alt={a.angle_label}
+                  className="scene-sets-card-thumb"
+                  onClick={() => { setSelectedAngleId(a.id); setShowBaseLightbox(true); }}
+                  title={a.angle_name}
+                />
+              ))}
+              {readyAngles > 6 && <span className="scene-sets-card-thumb-more">+{readyAngles - 6}</span>}
+              <button
+                className="scene-sets-card-thumb-gallery"
+                onClick={() => { setSelectedAngleId(null); setShowBaseLightbox(true); }}
+                title="View gallery"
+              >
+                <Grid3X3 size={10} />
+              </button>
+            </div>
+          )}
+
+          {/* Progress bar — only when there are pending angles */}
+          {totalAngles > 0 && readyAngles < totalAngles && (
             <div className="scene-sets-progress-row">
               <div className="scene-sets-progress-bar">
                 <div className="scene-sets-progress-fill" style={{ width: `${(readyAngles / totalAngles) * 100}%` }} />
@@ -861,42 +885,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showPromptEditor && !showAddAngle && (
                   <div className="scene-sets-modal-section">
-                    {/* Description */}
+                    {/* Description — prominent */}
                     {set.canonical_description && (
-                      <div className="scene-sets-modal-field">
-                        <label>Description</label>
-                        <p style={{ fontSize: 13, lineHeight: 1.6, color: '#374151' }}>{set.canonical_description}</p>
-                      </div>
+                      <p className="scene-sets-overview-desc">{set.canonical_description}</p>
                     )}
 
-                    {/* Metadata row */}
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-                      {set.base_runway_seed && set.base_runway_seed !== 'unknown' && (
-                        <div style={{ padding: '6px 10px', background: '#f8fafc', borderRadius: 6, fontSize: 11 }}>
-                          <Lock size={10} style={{ marginRight: 4, verticalAlign: -1 }} />Seed: {set.base_runway_seed.slice(0, 16)}...
-                        </div>
-                      )}
-                      {(set.generation_cost > 0 || sortedAngles.some(a => a.generation_cost > 0)) && (
-                        <div style={{ padding: '6px 10px', background: '#f8fafc', borderRadius: 6, fontSize: 11 }}>
-                          <Clock size={10} style={{ marginRight: 4, verticalAlign: -1 }} />{(parseFloat(set.generation_cost || 0) + sortedAngles.reduce((sum, a) => sum + parseFloat(a.generation_cost || 0), 0)).toFixed(1)} credits
-                        </div>
-                      )}
+                    {/* Compact metadata chips */}
+                    <div className="scene-sets-overview-chips">
+                      {set.mood_tags?.length > 0 && set.mood_tags.map(tag => (
+                        <span key={tag} className="scene-sets-overview-chip mood">{tag}</span>
+                      ))}
                       {set.visual_language?.locked && (
-                        <div style={{ padding: '6px 10px', background: '#f0fdf4', borderRadius: 6, fontSize: 11, color: '#16a34a' }}>
-                          <Lock size={10} style={{ marginRight: 4, verticalAlign: -1 }} />Style Locked
-                          {set.visual_language.color_palette && (
-                            <span style={{ marginLeft: 6 }}>
-                              {set.visual_language.color_palette.slice(0, 5).map((c, i) => (
-                                <span key={i} style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: c, marginLeft: 2, border: '1px solid #e2e8f0' }} />
-                              ))}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {set.mood_tags?.length > 0 && (
-                        <div style={{ padding: '6px 10px', background: '#faf5ff', borderRadius: 6, fontSize: 11, color: '#7c3aed' }}>
-                          {set.mood_tags.join(' · ')}
-                        </div>
+                        <span className="scene-sets-overview-chip style">
+                          <Lock size={8} /> Style Locked
+                          {set.visual_language.color_palette?.slice(0, 4).map((c, i) => (
+                            <span key={i} style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: c, marginLeft: 2 }} />
+                          ))}
+                        </span>
                       )}
                     </div>
 
@@ -970,118 +975,65 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       </div>
                     )}
 
-                    {/* Quick angle preview (thumbnails only) */}
-                    {sortedAngles.length > 0 && (
-                      <div className="scene-sets-modal-field">
-                        <label>Angles Preview</label>
-                        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-                          {sortedAngles.slice(0, 8).map(a => (
-                            <div key={a.id} style={{ flexShrink: 0, width: 64, textAlign: 'center' }}>
-                              {a.still_image_url ? (
-                                <img src={bustUrl(a.still_image_url)} alt={a.angle_label} style={{ width: 64, height: 42, objectFit: 'cover', borderRadius: 4 }} />
-                              ) : (
-                                <div style={{ width: 64, height: 42, background: '#f1f5f9', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {a.generation_status === 'generating' ? <Loader size={10} className="spin" /> : <Sparkles size={10} style={{ color: '#ccc' }} />}
-                                </div>
-                              )}
-                              <div style={{ fontSize: 8, color: '#94a3b8', marginTop: 2 }}>{a.angle_label}</div>
-                            </div>
-                          ))}
-                          {sortedAngles.length > 8 && <div style={{ alignSelf: 'center', fontSize: 10, color: '#94a3b8' }}>+{sortedAngles.length - 8}</div>}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
                 {/* ═══ ANGLES TAB ═══ */}
                 {activeModalTab === 'angles' && !showPromptEditor && !showAddAngle && (
                   <div className="scene-sets-modal-section">
-                    {/* Batch actions bar */}
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-                      <button className="scene-sets-btn-generate" disabled={toolsAction === 'batch_gen'} onClick={async () => {
-                        setToolsAction('batch_gen');
-                        try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-all-angles`, { method: 'POST' }); const d = await r.json(); showToast(`Queued ${d.queued} angles for generation`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
-                      }}><Sparkles size={11} /> {toolsAction === 'batch_gen' ? 'Queuing...' : 'Generate All'}</button>
-
-                      <button className="scene-sets-btn-generate" onClick={async () => {
-                        try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/comparison`); setComparison(await r.json()); } catch {}
-                      }}><Eye size={11} /> Compare All</button>
-
-                      <button className="scene-sets-btn-regenerate" disabled={toolsAction === 'regen_angles'} onClick={async () => {
-                        if (!confirm('Re-suggest angles from the base image? This replaces current angles.')) return;
-                        setToolsAction('regen_angles');
-                        try {
-                          const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
-                          const d = await r.json();
-                          if (d.success) { showToast(`Created ${d.angles_created} new angles`); }
-                          else showToast(d.error || 'Failed', 'error');
-                        } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
-                      }}><RotateCcw size={11} /> {toolsAction === 'regen_angles' ? 'Analyzing...' : 'Regen Angles'}</button>
-
-                      <button className="scene-sets-btn-regenerate" onClick={async () => {
-                        if (templates.length === 0) { try { const r = await fetch(`${API_BASE}/scene-sets/templates/list`); const d = await r.json(); setTemplates(d.templates || []); } catch {} }
-                        else setTemplates([]);
-                      }}><Camera size={11} /> {templates.length ? 'Hide' : ''} Templates</button>
-                    </div>
-
-                    {/* Template grid */}
-                    {templates.length > 0 && (
-                      <div style={{ marginBottom: 14, padding: 10, background: '#fafafa', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Apply Template</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6 }}>
-                          {templates.map(t => (
-                            <button key={t.id} onClick={async () => {
-                              if (!confirm(`Apply "${t.name}" template? This replaces current angles.`)) return;
-                              try { await fetch(`${API_BASE}/scene-sets/${set.id}/apply-template`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: t.id }) }); showToast(`Applied ${t.name} template`); setTemplates([]); } catch (e) { showToast(e.message, 'error'); }
-                            }} style={{ textAlign: 'left', padding: '8px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', transition: 'border-color 0.15s' }}
-                              onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
-                              onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                              <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 2, color: '#1a1a2e' }}>{t.name}</div>
-                              <div style={{ fontSize: 10, color: '#64748b' }}>{t.scene_type} · {t.angles.length} angles</div>
-                            </button>
-                          ))}
-                        </div>
+                    {/* Compact action bar */}
+                    {pendingAngles.length > 0 && (
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                        <button className="scene-sets-btn-generate" onClick={() => onGenerateAll(set, false)} disabled={isGenerating}>
+                          <Sparkles size={11} /> Generate All ({pendingAngles.length})
+                        </button>
                       </div>
                     )}
 
-                    {/* Angle grid with favorite/reject */}
-                    <div className="scene-sets-modal-angle-grid">
-                      {sortedAngles.map(a => (
-                        <div key={a.id} className="scene-sets-modal-angle-card" style={{ position: 'relative' }}>
-                          {a.still_image_url ? (
-                            <img src={bustUrl(a.still_image_url)} alt={a.angle_label} />
-                          ) : (
-                            <div className="scene-sets-modal-angle-placeholder">
-                              {a.generation_status === 'generating' ? <Loader size={14} className="spin" /> : <Sparkles size={14} />}
+                    {/* Clean angle list */}
+                    <div className="scene-sets-angle-list">
+                      {sortedAngles.map(a => {
+                        const isComplete = a.generation_status === 'complete' && a.still_image_url;
+                        const isFailed = a.generation_status === 'failed';
+                        const isGen = a.generation_status === 'generating';
+                        return (
+                          <div key={a.id} className={`scene-sets-angle-row${isComplete ? ' complete' : ''}${isFailed ? ' failed' : ''}`}>
+                            <div className="scene-sets-angle-row-thumb">
+                              {isComplete ? (
+                                <img src={bustUrl(a.still_image_url)} alt={a.angle_label} onClick={() => { setSelectedAngleId(a.id); setShowBaseLightbox(true); }} />
+                              ) : isGen ? (
+                                <div className="scene-sets-angle-row-placeholder"><Loader size={12} className="spin" /></div>
+                              ) : (
+                                <div className="scene-sets-angle-row-placeholder"><Sparkles size={12} /></div>
+                              )}
                             </div>
-                          )}
-                          <span>{a.angle_label}</span>
-                          {a.angle_name && a.angle_name !== a.angle_label && (
-                            <div style={{ fontSize: 9, color: '#94a3b8', marginTop: -2 }}>{a.angle_name}</div>
-                          )}
-                          {a.still_image_url && (
-                            <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 3 }}>
-                              <button title="Favorite" onClick={async (e) => { e.stopPropagation(); try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/favorite`, { method: 'PATCH' }); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: a.quality_review?.favorited ? '#e11d48' : '#d1d5db', padding: '0 2px' }}>
-                                {a.quality_review?.favorited ? '★' : '☆'}
-                              </button>
-                              <button title="Reject & regenerate" onClick={async (e) => { e.stopPropagation(); if (!confirm('Reject this angle?')) return; try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'User rejected' }) }); showToast('Angle rejected'); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '0 2px' }}>
-                                ✕
-                              </button>
-                              <button title="View history" onClick={async (e) => { e.stopPropagation(); try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/history`); const d = await r.json(); setAngleHistory({ angle: a, ...d }); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '0 2px' }}>
-                                ↺
-                              </button>
+                            <div className="scene-sets-angle-row-info">
+                              <div className="scene-sets-angle-row-label">{a.angle_label}</div>
+                              <div className="scene-sets-angle-row-name">{a.angle_name}</div>
                             </div>
-                          )}
-                          {a.quality_score && <div style={{ position: 'absolute', top: 4, right: 4, fontSize: 8, background: 'rgba(0,0,0,0.5)', color: '#fff', padding: '1px 4px', borderRadius: 3 }}>{a.quality_score}</div>}
-                        </div>
-                      ))}
+                            <div className="scene-sets-angle-row-status">
+                              {isComplete && <CheckCircle2 size={14} style={{ color: '#16a34a' }} />}
+                              {isFailed && (
+                                <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Retry">
+                                  <AlertCircle size={14} style={{ color: '#dc2626' }} />
+                                </button>
+                              )}
+                              {!isComplete && !isFailed && !isGen && (
+                                <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Generate">
+                                  <Sparkles size={12} />
+                                </button>
+                              )}
+                              {isGen && <Loader size={14} className="spin" style={{ color: '#B8962E' }} />}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {sortedAngles.length === 0 && (
                       <div style={{ textAlign: 'center', padding: 24, color: '#94a3b8' }}>
-                        <Sparkles size={24} style={{ marginBottom: 8, opacity: 0.4 }} />
-                        <div style={{ fontSize: 13 }}>No angles yet. Upload a base image or apply a template.</div>
+                        <Camera size={24} style={{ marginBottom: 8, opacity: 0.4 }} />
+                        <div style={{ fontSize: 13 }}>No angles yet. Upload a base image first.</div>
                       </div>
                     )}
                   </div>
@@ -1460,6 +1412,7 @@ export default function SceneSetsTab() {
 
   const [toast, setToast] = useState(null);
   const [filterType, setFilterType] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
@@ -2107,9 +2060,14 @@ export default function SceneSetsTab() {
     }
   };
 
-  const filtered = filterType === 'ALL'
-    ? sets
-    : sets.filter(s => s.scene_type === filterType);
+  const filtered = useMemo(() => {
+    let result = filterType === 'ALL' ? sets : sets.filter(s => s.scene_type === filterType);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(s => s.name?.toLowerCase().includes(q) || s.show?.name?.toLowerCase().includes(q));
+    }
+    return result;
+  }, [sets, filterType, searchQuery]);
 
   const totalCost = sets.reduce((sum, s) => {
     const setCost = parseFloat(s.generation_cost || 0);
@@ -2152,6 +2110,15 @@ export default function SceneSetsTab() {
             {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Set</>}
           </button>
           <div className="scene-sets-filters">
+            <div className="scene-sets-search-wrap">
+              <Search size={12} className="scene-sets-search-icon" />
+              <input
+                className="scene-sets-search-input"
+                placeholder="Search locations..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
             {types.map(t => (
               <button
                 key={t}
