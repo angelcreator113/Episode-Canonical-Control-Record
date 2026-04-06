@@ -266,7 +266,7 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
  * Returns the image URL directly (no polling needed).
  * Used as the default for scene stills — richer detail than Runway for static scenes.
  */
-async function generateDallEStill(prompt) {
+async function generateDallEStill(prompt, referenceImageUrl = null) {
   const apiKey = process.env.OPENAI_API_KEY || OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
 
@@ -274,6 +274,56 @@ async function generateDallEStill(prompt) {
   console.log(`[SceneGen] DALL-E prompt (${dallePrompt.length} chars): ${dallePrompt.slice(0, 100)}...`);
 
   try {
+    // When a reference image exists, use gpt-image-1 edits endpoint
+    // to maintain visual consistency with the base image
+    if (referenceImageUrl) {
+      console.log(`[SceneGen] Using gpt-image-1 edit with base image reference`);
+      const imageRes = await axios.get(referenceImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const imageBuffer = Buffer.from(imageRes.data);
+
+      const FormData = (await import('form-data')).default;
+      const form = new FormData();
+      form.append('model', 'gpt-image-1');
+      form.append('image', imageBuffer, { filename: 'base.png', contentType: 'image/png' });
+      form.append('prompt', `Using this room as reference, generate a new camera angle of the SAME room with identical furniture, colors, and decor. ${dallePrompt}`);
+      form.append('n', '1');
+      form.append('size', '1536x1024');
+      form.append('quality', 'high');
+
+      const response = await axios.post(
+        'https://api.openai.com/v1/images/edits',
+        form,
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            ...form.getHeaders(),
+          },
+          timeout: 180000,
+        }
+      );
+
+      const b64 = response.data.data[0]?.b64_json;
+      if (b64) {
+        // Upload the base64 result to S3 and return URL
+        const imgBuf = Buffer.from(b64, 'base64');
+        const s3Key = `scenes/dalle-edit-${Date.now()}.png`;
+        await s3.send(new PutObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: s3Key,
+          Body: imgBuf,
+          ContentType: 'image/png',
+        }));
+        const url = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${s3Key}`;
+        console.log(`[SceneGen] DALL-E edit success: ${url}`);
+        return url;
+      }
+
+      const url = response.data.data[0]?.url;
+      console.log(`[SceneGen] DALL-E edit success: ${url ? 'got URL' : 'no URL in response'}`);
+      return url;
+    }
+
+    // No reference image — standard dall-e-3 generation
     const response = await axios.post(
       'https://api.openai.com/v1/images/generations',
       {
@@ -703,10 +753,8 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       } catch (_) { /* best-effort history */ }
     }
 
-    // Use Runway when base image exists (referenceImages maintains visual consistency)
-    // DALL-E only for scenes without a base image since it can't reference one
-    const hasBaseImage = !!sceneSet.base_still_url;
-    const useRunway = hasBaseImage || sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    // Try DALL-E first for stills, fall back to Runway
+    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
     if (!useRunway && OPENAI_API_KEY) {
       try {
         console.log(`[SceneGen] Using DALL-E 3 for angle still`);
@@ -725,10 +773,15 @@ async function generateAngle(sceneAngle, sceneSet, models) {
           }
         }
 
-        const dalleUrl = await generateDallEStill(enhancedPrompt);
+        const dalleUrl = await generateDallEStill(enhancedPrompt, sceneSet.base_still_url || null);
         if (dalleUrl) {
-          const s3Key = `scenes/${sceneSet.id}/angles/${sceneAngle.id}/still-${Date.now()}.png`;
-          stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+          // If gpt-image-1 edit already uploaded to S3, use directly; otherwise download & upload
+          if (dalleUrl.includes(S3_BUCKET)) {
+            stillUrl = dalleUrl;
+          } else {
+            const s3Key = `scenes/${sceneSet.id}/angles/${sceneAngle.id}/still-${Date.now()}.png`;
+            stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+          }
         }
       } catch (dalleErr) {
         console.warn(`[SceneGen] DALL-E failed for angle, falling back to Runway:`, dalleErr.message);
