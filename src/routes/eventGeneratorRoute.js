@@ -90,20 +90,15 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
       id: uuidv4(),
       show_id,
       name: ev.name,
-      event_category: ev.event_category,
-      event_type: ev.event_type || ev.event_category,
+      event_type: ev.event_type || ev.event_category || 'invite',
+      host_brand: ev.host_brand || null,
       description: ev.description,
-      reputation_score: ev.reputation_score ?? 1,
-      coin_cost: ev.coin_cost ?? 0,
       prestige: ev.prestige ?? 3,
+      cost_coins: ev.coin_cost ?? ev.cost_coins ?? 0,
       strictness: ev.strictness ?? 3,
       dress_code: ev.dress_code,
       dress_code_keywords: JSON.stringify(ev.dress_code_keywords || []),
-      style_aesthetic: ev.style_aesthetic,
-      tier: ev.tier || 'mid',
-      host_brand: ev.host_brand || null,
-      career_echo_potential: ev.career_echo_potential || null,
-      is_active: true,
+      status: 'ready',
       created_at: now,
       updated_at: now,
     }));
@@ -115,19 +110,17 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
       );
     }
 
-    // Bulk insert via raw SQL for compatibility across schemas
+    // Bulk insert via raw SQL matching actual table schema
     for (const ev of toInsert) {
       await db.sequelize.query(
         `INSERT INTO world_events
-           (id, show_id, name, event_category, event_type, description,
-            reputation_score, coin_cost, prestige, strictness, dress_code,
-            dress_code_keywords, style_aesthetic, tier, host_brand,
-            career_echo_potential, is_active, created_at, updated_at)
+           (id, show_id, name, event_type, host_brand, description,
+            prestige, cost_coins, strictness, dress_code,
+            dress_code_keywords, status, created_at, updated_at)
          VALUES
-           (:id, :show_id, :name, :event_category, :event_type, :description,
-            :reputation_score, :coin_cost, :prestige, :strictness, :dress_code,
-            :dress_code_keywords::jsonb, :style_aesthetic, :tier, :host_brand,
-            :career_echo_potential, :is_active, :created_at, :updated_at)
+           (:id, :show_id, :name, :event_type, :host_brand, :description,
+            :prestige, :cost_coins, :strictness, :dress_code,
+            :dress_code_keywords::jsonb, :status, :created_at, :updated_at)
          ON CONFLICT DO NOTHING`,
         { replacements: ev }
       );
