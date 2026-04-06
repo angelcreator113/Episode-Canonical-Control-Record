@@ -162,7 +162,7 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
 
   // For non-WIDE angles, add room extension instruction
   if (angleLabel !== 'WIDE' && angleLabel !== 'OTHER') {
-    parts.push('IMPORTANT: Extend and expand the visible room space beyond the original reference. Show areas of the room not visible in the base image — imagine the room continues in the camera direction. Maintain the same design language, color palette, and material quality throughout the extended space.');
+    parts.push('IMPORTANT: This is the SAME room as the base image — do NOT change wall colors, furniture, bedding, decor, or any existing element. Only reveal areas behind the original camera that were not visible. Any newly visible areas must use the identical wall color, flooring, and design language.');
   }
 
   parts.push('Photorealistic cinematic quality. No text overlays. No watermarks.');
@@ -315,8 +315,8 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
       form.append('image', imageBuffer, { filename: 'base.png', contentType: 'image/png' });
       const isWide = angleLabel === 'WIDE' || angleLabel === 'ESTABLISHING';
       const editInstruction = isWide
-        ? `This is a reference photo of a room. Generate a WIDE establishing shot of this EXACT same room — same furniture, wall colors, decor, lighting, and materials. Show the full room from corner to corner. ${dallePrompt}`
-        : `This is a reference photo of a room. Imagine you are INSIDE this exact room and rotating the camera to look in a different direction. Generate what you would see from a new camera angle — extending and outpainting the room beyond the edges of this photo. The room continues with the same design language, wall colors, flooring, materials, and lighting style. Invent plausible new areas (furniture, shelves, corners, windows) that feel like a natural continuation of this space. ${dallePrompt}`;
+        ? `This is a photograph of a room. Generate the EXACT same room from a wide angle showing the full space. Every detail must be identical: same wall color, same furniture pieces, same decor items, same lighting fixtures, same bedding, same flooring. This is the same physical room — not a similar one. ${dallePrompt}`
+        : `CRITICAL: This is a photograph of a REAL room. You are a camera operator INSIDE this exact room, repositioning to shoot from a different angle. RULES: 1) Every object, wall color, furniture piece, fabric, light fixture, and decor item that exists in this photo MUST remain IDENTICAL — same colors, same materials, same positions. Do NOT replace, recolor, or redesign ANY existing element. 2) The wall paint color, flooring, bedding pattern, LED lights, neon signs, posters, and all decor must match EXACTLY. 3) Only show NEW areas that are behind the original camera position — these new areas must use the same wall color, same flooring, and same design style. 4) Think of this as moving a real camera in a real room — nothing in the room changes, only the viewpoint changes. ${dallePrompt}`;
       form.append('prompt', editInstruction);
       form.append('n', '1');
       form.append('size', '1536x1024');
