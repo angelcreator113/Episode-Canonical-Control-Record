@@ -104,6 +104,7 @@ router.get('/generation-check', optionalAuth, (req, res) => {
     runway: !!process.env.RUNWAY_ML_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
     ready: !!(process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY),
+    s3_bucket: !!process.env.S3_PRIMARY_BUCKET || !!process.env.AWS_S3_BUCKET || !!process.env.S3_BUCKET_NAME,
     message: process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY
       ? 'Image generation ready'
       : 'No image generation API key configured. Set OPENAI_API_KEY (for DALL-E) or RUNWAY_ML_API_KEY (for Runway ML).',

@@ -267,31 +267,41 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
  * Used as the default for scene stills — richer detail than Runway for static scenes.
  */
 async function generateDallEStill(prompt) {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+  const apiKey = process.env.OPENAI_API_KEY || OPENAI_API_KEY;
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
 
   const dallePrompt = prompt.length > 4000 ? prompt.slice(0, 3997) + '...' : prompt;
+  console.log(`[SceneGen] DALL-E prompt (${dallePrompt.length} chars): ${dallePrompt.slice(0, 100)}...`);
 
-  const response = await axios.post(
-    'https://api.openai.com/v1/images/generations',
-    {
-      model: 'dall-e-3',
-      prompt: dallePrompt,
-      n: 1,
-      size: '1792x1024', // landscape 16:9-ish for cinematic scenes
-      quality: 'hd',
-      style: 'natural',
-      response_format: 'url',
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/images/generations',
+      {
+        model: 'dall-e-3',
+        prompt: dallePrompt,
+        n: 1,
+        size: '1792x1024',
+        quality: 'hd',
+        style: 'natural',
+        response_format: 'url',
       },
-      timeout: 120000,
-    }
-  );
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 120000,
+      }
+    );
 
-  return response.data.data[0]?.url;
+    const url = response.data.data[0]?.url;
+    console.log(`[SceneGen] DALL-E success: ${url ? 'got URL' : 'no URL in response'}`);
+    return url;
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.response?.data || err.message;
+    console.error(`[SceneGen] DALL-E API error:`, detail);
+    throw new Error(`DALL-E generation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+  }
 }
 
 /**
