@@ -707,7 +707,10 @@ The revised event should feel like a completely different experience from the si
         // Close inject panel after a brief delay so user sees the confirmation
         setTimeout(() => { setInjectTarget(null); setInjectSuccess(null); }, 2000);
         // Update local event status to 'used'
-        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'used', times_used: (ev.times_used || 0) + 1, used_in_episode_id: episodeId } : ev));
+        const updatedEvent = { ...worldEvents.find(ev => ev.id === eventId), status: 'used', times_used: ((worldEvents.find(ev => ev.id === eventId)?.times_used) || 0) + 1, used_in_episode_id: episodeId };
+        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? updatedEvent : ev));
+        // Also update the detail modal if it's showing this event
+        setEventDetailModal(prev => prev && prev.id === eventId ? { ...prev, status: 'used', used_in_episode_id: episodeId } : prev);
       } else {
         const msg = res.data?.error || res.data?.message || 'Inject returned unexpected response';
         setInjectError(msg); setError(msg);
