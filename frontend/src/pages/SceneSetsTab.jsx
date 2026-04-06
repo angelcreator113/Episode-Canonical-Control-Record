@@ -1737,39 +1737,51 @@ export default function SceneSetsTab() {
     setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     try {
-      // Fire all generation requests and collect job IDs
-      const jobMap = [];
+      // Fire all generation requests
       for (let i = 0; i < targets.length; i++) {
         progressAngles[i].status = 'generating';
         setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], currentIndex: i }));
         try {
           const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
           if (!res.ok) throw new Error('Failed');
-          const json = await res.json();
-          jobMap.push({ index: i, jobId: json.data.jobId });
         } catch {
           progressAngles[i].status = 'failed';
           setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
         }
       }
 
-      // Poll all jobs in parallel
+      // Poll scene set for all angle completions
       let completed = 0;
       let failed = progressAngles.filter(a => a.status === 'failed').length;
-
-      const pollPromises = jobMap.map(async ({ index, jobId }) => {
-        const job = await pollJob(jobId);
-        if (job.status === 'completed') {
-          progressAngles[index].status = 'done';
-          completed++;
-        } else {
-          progressAngles[index].status = 'failed';
-          failed++;
-        }
-        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-      });
-
-      await Promise.all(pollPromises);
+      const maxPolls = 60; // 4s * 60 = 4 minutes max
+      for (let poll = 0; poll < maxPolls; poll++) {
+        await new Promise(r => setTimeout(r, 4000));
+        try {
+          const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
+          const checkJson = await checkRes.json();
+          const freshAngles = checkJson.data?.angles || [];
+          let allDone = true;
+          for (let i = 0; i < targets.length; i++) {
+            if (progressAngles[i].status === 'failed') continue; // skip already failed
+            const fresh = freshAngles.find(a => a.id === targets[i].id);
+            if (fresh?.generation_status === 'complete') {
+              if (progressAngles[i].status !== 'done') {
+                progressAngles[i].status = 'done';
+                completed++;
+              }
+            } else if (fresh?.generation_status === 'failed') {
+              if (progressAngles[i].status !== 'failed') {
+                progressAngles[i].status = 'failed';
+                failed++;
+              }
+            } else {
+              allDone = false;
+            }
+          }
+          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+          if (allDone) break;
+        } catch { /* retry */ }
+      }
 
       if (failed === 0) {
         showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
@@ -1794,14 +1806,11 @@ export default function SceneSetsTab() {
     setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     try {
-      // Fire all retry requests to get job IDs
-      const jobMap = [];
+      // Fire all retry requests
       for (let i = 0; i < targets.length; i++) {
         try {
           const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
           if (!res.ok) throw new Error('Failed');
-          const json = await res.json();
-          jobMap.push({ index: i, jobId: json.data.jobId });
           progressAngles[i].status = 'generating';
         } catch {
           progressAngles[i].status = 'failed';
@@ -1809,23 +1818,30 @@ export default function SceneSetsTab() {
         setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
       }
 
-      // Poll all jobs in parallel
+      // Poll scene set for completions
       let completed = 0;
       let failed = progressAngles.filter(a => a.status === 'failed').length;
-
-      const pollPromises = jobMap.map(async ({ index, jobId }) => {
-        const job = await pollJob(jobId);
-        if (job.status === 'completed') {
-          progressAngles[index].status = 'done';
-          completed++;
-        } else {
-          progressAngles[index].status = 'failed';
-          failed++;
-        }
-        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-      });
-
-      await Promise.all(pollPromises);
+      const maxPolls = 60;
+      for (let poll = 0; poll < maxPolls; poll++) {
+        await new Promise(r => setTimeout(r, 4000));
+        try {
+          const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
+          const checkJson = await checkRes.json();
+          const freshAngles = checkJson.data?.angles || [];
+          let allDone = true;
+          for (let i = 0; i < targets.length; i++) {
+            if (progressAngles[i].status === 'failed') continue;
+            const fresh = freshAngles.find(a => a.id === targets[i].id);
+            if (fresh?.generation_status === 'complete') {
+              if (progressAngles[i].status !== 'done') { progressAngles[i].status = 'done'; completed++; }
+            } else if (fresh?.generation_status === 'failed') {
+              if (progressAngles[i].status !== 'failed') { progressAngles[i].status = 'failed'; failed++; }
+            } else { allDone = false; }
+          }
+          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+          if (allDone) break;
+        } catch { /* retry */ }
+      }
 
       if (failed === 0) {
         showToast(`All ${targets.length} failed angles retried successfully!`);
