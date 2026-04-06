@@ -753,7 +753,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   if (hasStill) {
                     if (isActive) setShowBaseLightbox(true);
                     else setSelectedAngleId(angle.id);
-                  } else if ((isPending || isFailed) && !isGenerating) {
+                  } else if (isPending || isFailed) {
                     onGenerateAngle(set, angle);
                   }
                 }}
@@ -771,7 +771,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 ) : isFailed ? (
                   <AlertCircle size={14} />
                 ) : (
-                  <Sparkles size={14} className={isPending && !isGenerating ? 'scene-sets-clickable-icon' : ''} />
+                  <Sparkles size={14} className={isPending ? 'scene-sets-clickable-icon' : ''} />
                 )}
                 {isCover && <Heart size={10} className="scene-sets-cover-badge" />}
                 {editingAngleId === angle.id ? (
@@ -1693,7 +1693,6 @@ export default function SceneSetsTab() {
   };
 
   const handleGenerateAngle = async (set, angle) => {
-    startGenerating(set.id);
     try {
       // Quick check if generation is configured
       try {
@@ -1701,7 +1700,6 @@ export default function SceneSetsTab() {
         const checkData = await checkRes.json();
         if (!checkData.ready) {
           showToast(checkData.message || 'No image generation API key configured', 'error');
-          stopGenerating(set.id);
           return;
         }
       } catch { /* proceed anyway */ }
@@ -1712,6 +1710,9 @@ export default function SceneSetsTab() {
         throw new Error(err.error || `Generation failed (${res.status})`);
       }
       const json = await res.json();
+
+      // Refresh to show angle-level spinner in filmstrip
+      await fetchSets();
 
       if (json.data?.jobId) {
         // Legacy job-based flow: poll for completion
@@ -1746,8 +1747,6 @@ export default function SceneSetsTab() {
       await fetchSets();
     } catch {
       showToast('Angle generation failed', 'error');
-    } finally {
-      stopGenerating(set.id);
     }
   };
 
