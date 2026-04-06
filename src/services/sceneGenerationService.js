@@ -869,7 +869,7 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  const IMAGE_ANALYSIS_VERSION = 3; // bump to invalidate cache when schema changes
+  const IMAGE_ANALYSIS_VERSION = 4; // bump to invalidate cache when schema changes
   // Check cache — skip if already analyzed for this base image with current version
   const vl = sceneSet.visual_language || {};
   if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
@@ -892,7 +892,8 @@ async function analyzeBaseImage(sceneSet, SceneSetModel) {
 
 Return JSON:
 {
-  "wall_color": "exact color (e.g. 'soft lavender/purple')",
+  "image_type": "room_photo | mood_board | collage | illustration | other — what kind of image is this?",
+  "wall_color": "exact color (e.g. 'soft lavender/purple') — only if this is a room photo",
   "flooring": "exact floor type and color",
   "spatial_layout": "Describe the room layout as if drawing a floor plan. Use clock positions. Example: 'Bed against back wall (12). Window left wall (9). Vanity right wall (3). Music corner (10). Door (6).'",
   "room_properties": {
@@ -1173,10 +1174,11 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
   // Region hint and retry corrections are passed to the edit instruction only,
   // NOT the image prompt — prevents DALL-E from rendering text labels on the image
 
-  // ── Features 3 & cropping: run in parallel ──
+  // ── Features 3 & cropping: run in parallel (skip for mood boards) ──
+  const isMoodBoardEarly = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
   let croppedRefUrl = null;
   let depthMapUrl = null;
-  if (sceneSet.base_still_url) {
+  if (sceneSet.base_still_url && !isMoodBoardEarly) {
     const [cropResult, depthResult] = await Promise.all([
       cropReferenceRegion(sceneSet.base_still_url, angleLabel, sceneSet.id),
       generateDepthMap(sceneSet, SceneSet),
@@ -1215,6 +1217,13 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
       } catch (_) { /* best-effort history */ }
     }
 
+    // Check if base image is a mood board — if so, don't use it as reference
+    const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
+    if (isMoodBoard) {
+      console.warn(`[SceneGen] Base image is a ${imageAnalysis.image_type}, not a room photo — generating without reference image`);
+    }
+    const referenceImageForEdit = isMoodBoard ? null : sceneSet.base_still_url;
+
     // Try DALL-E first for stills, fall back to Runway
     const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
     if (!useRunway && OPENAI_API_KEY) {
@@ -1235,7 +1244,7 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
           }
         }
 
-        const dalleUrl = await generateDallEStill(enhancedPrompt, sceneSet.base_still_url || null, angleLabel, {
+        const dalleUrl = await generateDallEStill(enhancedPrompt, referenceImageForEdit || null, angleLabel, {
           imageAnalysis,
           styleLock: style?.locked ? style : null,
           croppedRefUrl,
