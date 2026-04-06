@@ -629,7 +629,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         style={heroImage ? { cursor: 'pointer' } : undefined}
       >
         {heroImage ? (
-          <img src={heroImage} alt={set.name} />
+          <>
+            <img src={heroImage} alt={set.name} />
+            {set.generation_status === 'complete' && !isGenerating && (
+              <div className="scene-sets-base-ready-badge">Base Set</div>
+            )}
+          </>
         ) : (
           <div className="scene-sets-card-placeholder">
             <Camera size={32} strokeWidth={1.2} />

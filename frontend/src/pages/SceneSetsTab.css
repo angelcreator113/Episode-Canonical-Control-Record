@@ -3780,3 +3780,21 @@
   background: var(--ss-gold);
   color: #fff;
 }
+
+/* ── Base Ready Badge ────────────────────────────────────────────────────── */
+
+.scene-sets-base-ready-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(22, 163, 74, 0.85);
+  color: #fff;
+  backdrop-filter: blur(4px);
+}
