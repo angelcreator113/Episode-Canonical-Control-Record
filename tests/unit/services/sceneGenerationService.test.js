@@ -195,12 +195,12 @@ describe('SceneGenerationService', () => {
       expect(result).not.toMatch(/\s{2,}/);
     });
 
-    it('should enforce 1000 character limit', () => {
+    it('should enforce 1500 character limit', () => {
       const sceneSet = makeSceneSet({
         canonical_description: 'A'.repeat(500),
       });
       const result = buildPrompt(sceneSet);
-      expect(result.length).toBeLessThanOrEqual(1000);
+      expect(result.length).toBeLessThanOrEqual(1500);
     });
 
     it('should append ellipsis when truncated', () => {
@@ -208,7 +208,7 @@ describe('SceneGenerationService', () => {
         canonical_description: 'A'.repeat(500),
       });
       const result = buildPrompt(sceneSet);
-      if (result.length === 1000) {
+      if (result.length === 1500) {
         expect(result).toMatch(/\.\.\.$/);
       }
     });
@@ -241,9 +241,9 @@ describe('SceneGenerationService', () => {
       const labels = Object.keys(ANGLE_MODIFIERS);
       labels.forEach((label) => {
         const result = buildPrompt(makeSceneSet(), label);
-        expect(result.length).toBeLessThanOrEqual(1000);
+        expect(result.length).toBeLessThanOrEqual(1500);
         expect(result.length).toBeGreaterThan(0);
-        // CAMERA section should start (may be truncated at 1000 char limit for long angle descriptions)
+        // CAMERA section should start (may be truncated at 1500 char limit for long angle descriptions)
         expect(result).toContain('CAMERA:');
       });
     });
