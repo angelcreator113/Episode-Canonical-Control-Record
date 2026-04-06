@@ -3758,3 +3758,25 @@
 .scene-sets-promote-btn:hover {
   background: var(--ss-gold-light) !important;
 }
+
+/* ── Lightbox Promote Button ─────────────────────────────────────────────── */
+
+.scene-sets-lightbox-promote {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-gold);
+  background: var(--ss-gold-light);
+  color: var(--ss-gold);
+  cursor: pointer;
+}
+
+.scene-sets-lightbox-promote:hover {
+  background: var(--ss-gold);
+  color: #fff;
+}

@@ -46,7 +46,7 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
-function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle }) {
+function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle, onPromoteToBase, setId }) {
   const [images, setImages] = useState(initialImages);
   const [idx, setIdx] = useState(initialIndex || 0);
   const current = images[idx] || images[0];
@@ -111,6 +111,22 @@ function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteA
         <div className="scene-sets-lightbox-info">
           <span className="scene-sets-lightbox-label">{current.label}</span>
           <span className="scene-sets-lightbox-counter">{idx + 1} / {images.length}</span>
+          {current.angleId && onPromoteToBase && (
+            <button className="scene-sets-lightbox-promote" onClick={async () => {
+              if (!confirm(`Use "${current.label}" as the new base image? All other angles will be reset.`)) return;
+              try {
+                const r = await fetch(`${(typeof API_BASE !== 'undefined' ? API_BASE : '/api/v1')}/scene-sets/${setId}/promote-to-base`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ angle_id: current.angleId }),
+                });
+                const d = await r.json();
+                if (d.success) { onPromoteToBase(); onClose(); }
+              } catch { /* handled by caller */ }
+            }} title="Use this image as the base">
+              <Heart size={14} /> Use as Base
+            </button>
+          )}
           {current.angleId && onDeleteAngle && (
             <button className="scene-sets-lightbox-delete" onClick={handleDelete} title="Delete this angle">
               <Trash2 size={14} /> Delete
@@ -1448,7 +1464,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           const found = galleryImages.findIndex(g => g.src === bustUrl(selectedAngle.still_image_url));
           if (found >= 0) startIdx = found;
         }
-        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} onDeleteAngle={(angleId) => onDeleteSingleAngle(set, angleId)} />;
+        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} onDeleteAngle={(angleId) => onDeleteSingleAngle(set, angleId)} setId={set.id} onPromoteToBase={() => showToast('Promoted to base! Refresh to see changes.')} />;
       })()}
 
       {showPromptPreview && previewData && createPortal(
