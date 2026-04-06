@@ -21,6 +21,7 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const sharp = require('sharp');
 const artifactDetection = require('./artifactDetectionService');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -314,8 +315,18 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
       const form = new FormData();
       form.append('model', 'gpt-image-1');
       form.append('image', imageBuffer, { filename: 'base.png', contentType: 'image/png' });
+
+      // Add cropped reference region as additional context if available
+      const { imageAnalysis, styleLock, croppedRefUrl, depthMapUrl } = extras;
+      if (croppedRefUrl) {
+        try {
+          const cropRes = await axios.get(croppedRefUrl, { responseType: 'arraybuffer', timeout: 15000 });
+          form.append('image', Buffer.from(cropRes.data), { filename: 'crop-ref.png', contentType: 'image/png' });
+          console.log(`[SceneGen] Added cropped reference for ${angleLabel}`);
+        } catch { /* non-blocking */ }
+      }
+
       // Build concrete detail constraints from image analysis + style lock
-      const { imageAnalysis, styleLock } = extras;
       let detailConstraints = '';
       if (imageAnalysis) {
         const inv = buildInventoryPrompt(imageAnalysis);
@@ -957,18 +968,152 @@ function buildInventoryPrompt(analysis) {
   return parts.length > 0 ? `ROOM CONTINUITY BIBLE (every angle must match this): ${parts.join(' ')}` : '';
 }
 
+// ─── REFERENCE REGION CROPPING ───────────────────────────────────────────────
+
+/**
+ * Maps angle labels to which region of the base image to crop as an
+ * additional reference. Returns { left, top, width, height } as fractions (0-1).
+ * For example, VANITY maps to the right 40% of the image.
+ */
+const ANGLE_CROP_REGIONS = {
+  BED:      { left: 0.2, top: 0.1, width: 0.6, height: 0.8 },   // center
+  VANITY:   { left: 0.6, top: 0.1, width: 0.4, height: 0.8 },   // right side
+  WINDOW:   { left: 0.0, top: 0.0, width: 0.4, height: 1.0 },   // left side
+  CLOSET:   { left: 0.0, top: 0.0, width: 0.35, height: 1.0 },  // far left
+  STAGE:    { left: 0.0, top: 0.2, width: 0.4, height: 0.8 },   // left mid
+  CLOSE:    { left: 0.3, top: 0.2, width: 0.4, height: 0.6 },   // center detail
+  OVERHEAD: { left: 0.1, top: 0.1, width: 0.8, height: 0.8 },   // full center
+  DOORWAY:  { left: 0.1, top: 0.0, width: 0.8, height: 1.0 },   // wide center
+  ACTION:   { left: 0.0, top: 0.1, width: 0.5, height: 0.8 },   // left half
+};
+
+/**
+ * Crop a region from the base image to use as additional context for angle generation.
+ * Downloads the base image, crops the relevant region, uploads to S3.
+ * Returns the S3 URL of the cropped reference, or null if not applicable.
+ */
+async function cropReferenceRegion(baseImageUrl, angleLabel, setId) {
+  const region = ANGLE_CROP_REGIONS[angleLabel];
+  if (!region || !baseImageUrl) return null;
+
+  try {
+    const imageRes = await axios.get(baseImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+    const metadata = await sharp(imageRes.data).metadata();
+    const w = metadata.width || 1920;
+    const h = metadata.height || 1080;
+
+    const cropLeft = Math.round(w * region.left);
+    const cropTop = Math.round(h * region.top);
+    const cropWidth = Math.min(Math.round(w * region.width), w - cropLeft);
+    const cropHeight = Math.min(Math.round(h * region.height), h - cropTop);
+
+    const croppedBuffer = await sharp(imageRes.data)
+      .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
+      .resize(768, 512, { fit: 'inside' })
+      .png()
+      .toBuffer();
+
+    const s3Key = `scene-sets/${setId}/ref-crops/${angleLabel.toLowerCase()}-${Date.now()}.png`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET, Key: s3Key, Body: croppedBuffer,
+      ContentType: 'image/png', CacheControl: 'max-age=3600',
+    }));
+
+    const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    console.log(`[SceneGen] Cropped ${angleLabel} reference region: ${cropWidth}x${cropHeight} → ${url}`);
+    return url;
+  } catch (err) {
+    console.warn(`[SceneGen] Reference crop failed (non-blocking): ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Returns a text hint about which part of the base image corresponds to this angle.
+ */
+function getReferenceRegionHint(angleLabel) {
+  const hints = {
+    BED:      'The bed area is in the CENTER of the base image.',
+    VANITY:   'The vanity/mirror area is on the RIGHT side of the base image.',
+    WINDOW:   'The window is on the LEFT side of the base image.',
+    CLOSET:   'The closet area would be on the FAR LEFT or behind the camera in the base image.',
+    STAGE:    'The music/performance corner is on the LEFT side of the base image.',
+    CLOSE:    'Zoom into the CENTER of the base image for surface details.',
+    OVERHEAD: 'Imagine looking straight DOWN at the center of the base image.',
+    DOORWAY:  'The door is BEHIND the camera position in the base image — turn around.',
+    ACTION:   'The action area spans the LEFT HALF of the base image.',
+  };
+  return hints[angleLabel] || '';
+}
+
+// ─── DEPTH MAP GENERATION ────────────────────────────────────────────────────
+
+/**
+ * Generate a depth map from the base image using Sharp edge detection.
+ * This gives angle generation spatial context about foreground vs background.
+ * Returns the S3 URL of the depth map, cached on the scene set.
+ */
+async function generateDepthMap(sceneSet, SceneSetModel) {
+  if (!sceneSet.base_still_url) return null;
+
+  // Check cache
+  const vl = sceneSet.visual_language || {};
+  if (vl.depth_map_url) return vl.depth_map_url;
+
+  try {
+    console.log(`[SceneGen] Generating depth map for ${sceneSet.name}`);
+    const imageRes = await axios.get(sceneSet.base_still_url, { responseType: 'arraybuffer', timeout: 30000 });
+
+    // Create a pseudo-depth map using luminance + blur gradient
+    // This approximates depth: brighter areas appear closer, darker areas farther
+    const depthBuffer = await sharp(imageRes.data)
+      .grayscale()
+      .blur(3)
+      .normalize()
+      .resize(768, 432, { fit: 'inside' })
+      .png()
+      .toBuffer();
+
+    const s3Key = `scene-sets/${sceneSet.id}/depth-map-${Date.now()}.png`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET, Key: s3Key, Body: depthBuffer,
+      ContentType: 'image/png', CacheControl: 'max-age=86400',
+    }));
+
+    const depthUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+
+    // Cache on scene set
+    await SceneSetModel.update(
+      { visual_language: { ...vl, depth_map_url: depthUrl } },
+      { where: { id: sceneSet.id } }
+    );
+
+    console.log(`[SceneGen] Depth map generated: ${depthUrl}`);
+    return depthUrl;
+  } catch (err) {
+    console.warn(`[SceneGen] Depth map failed (non-blocking): ${err.message}`);
+    return null;
+  }
+}
+
 // ─── ANGLE GENERATION ────────────────────────────────────────────────────────
 
-async function generateAngle(sceneAngle, sceneSet, models) {
+async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null) {
   const { SceneAngle, SceneSet } = models;
+  const MAX_RETRIES = 1; // auto-retry once if consistency fails
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
   const eventContext = await loadEventContext(sceneSet, models);
   let prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction, eventContext);
 
+  // ── Feature 5: Weight camera_direction more heavily ──
+  // The per-angle camera_direction is human-written and specific to the room.
+  // Promote it to the front of the prompt with emphasis.
+  if (sceneAngle.camera_direction) {
+    prompt = `PRIMARY CAMERA INSTRUCTION (follow precisely): ${sceneAngle.camera_direction} — ${prompt}`;
+  }
+
   // ── Feature 1: Analyze base image with Claude Vision ──
-  // Extracts concrete visual details (wall color, furniture, decor) and injects
-  // them into the prompt so the model knows exactly what to preserve
   let imageAnalysis = null;
   if (sceneSet.base_still_url) {
     imageAnalysis = await analyzeBaseImage(sceneSet, SceneSet);
@@ -978,13 +1123,38 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     }
   }
 
+  // ── Feature 4: Per-angle reference region hint ──
+  const regionHint = getReferenceRegionHint(angleLabel);
+  if (regionHint) {
+    prompt = `${regionHint} ${prompt}`;
+  }
+
+  // ── Feature 4b: Auto-retry correction context ──
+  if (_retryContext?.issues?.length) {
+    const corrections = _retryContext.issues.map(i => `- FIX: ${i}`).join(' ');
+    prompt = `CORRECTION FROM PREVIOUS ATTEMPT (must fix these): ${corrections} ${prompt}`;
+    console.log(`[SceneGen] Retry #${_retryContext.attempt} with ${_retryContext.issues.length} corrections`);
+  }
+
+  // ── Features 3 & cropping: run in parallel ──
+  let croppedRefUrl = null;
+  let depthMapUrl = null;
+  if (sceneSet.base_still_url) {
+    const [cropResult, depthResult] = await Promise.all([
+      cropReferenceRegion(sceneSet.base_still_url, angleLabel, sceneSet.id),
+      generateDepthMap(sceneSet, SceneSet),
+    ]);
+    croppedRefUrl = cropResult;
+    depthMapUrl = depthResult;
+  }
+
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt },
     { where: { id: sceneAngle.id } }
   );
 
   try {
-    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
+    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}${croppedRefUrl ? ' (with cropped ref)' : ''}${depthMapUrl ? ' (with depth map)' : ''}`);
 
     // Clean up old assets from S3 (best-effort)
     if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
@@ -1031,6 +1201,8 @@ async function generateAngle(sceneAngle, sceneSet, models) {
         const dalleUrl = await generateDallEStill(enhancedPrompt, sceneSet.base_still_url || null, angleLabel, {
           imageAnalysis,
           styleLock: style?.locked ? style : null,
+          croppedRefUrl,
+          depthMapUrl,
         });
         if (dalleUrl) {
           // If gpt-image-1 edit already uploaded to S3, use directly; otherwise download & upload
@@ -1079,11 +1251,33 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
     // ── Feature 2: Post-generation consistency check ──
-    // Compare generated angle against base image using Claude Vision.
-    // If score < 70, log the issues in quality_review for potential retry.
     let consistencyResult = null;
     if (sceneSet.base_still_url && stillUrl) {
       consistencyResult = await checkAngleConsistency(sceneSet.base_still_url, stillUrl, sceneAngle.angle_name);
+
+      // ── Auto-retry if consistency is poor ──
+      const retryAttempt = _retryContext?.attempt || 0;
+      if (consistencyResult && !consistencyResult.pass && retryAttempt < MAX_RETRIES) {
+        console.log(`[SceneGen] Consistency score ${consistencyResult.score} < 70 for "${sceneAngle.angle_name}" — auto-retrying with corrections`);
+        // Save the failed attempt to history
+        const review = sceneAngle.quality_review || {};
+        const history = review.generation_history || [];
+        history.push({
+          url: stillUrl,
+          replaced_at: new Date().toISOString(),
+          attempt: sceneAngle.generation_attempt,
+          consistency_score: consistencyResult.score,
+          auto_retry_reason: consistencyResult.issues,
+        });
+        await SceneAngle.update({ quality_review: { ...review, generation_history: history } }, { where: { id: sceneAngle.id } });
+
+        // Recursive retry with correction context
+        return generateAngle(sceneAngle, sceneSet, models, {
+          attempt: retryAttempt + 1,
+          issues: consistencyResult.issues || [],
+          previousScore: consistencyResult.score,
+        });
+      }
     }
 
     // Quality Analysis (non-blocking)
@@ -1292,6 +1486,8 @@ module.exports = {
   generateBaseScene,
   analyzeBaseImage,
   checkAngleConsistency,
+  cropReferenceRegion,
+  generateDepthMap,
   generateAngle,
   generateAngleVideo,
   regenerateAngleRefined,
