@@ -68,6 +68,9 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
 
     return res.json({ success: true, events });
   } catch (error) {
+    if (error.message?.includes('does not exist')) {
+      return res.json({ success: true, events: [], note: 'Table not yet created. Run migrations.' });
+    }
     console.error('List events error:', error);
     return res.status(500).json({ error: 'Failed to load events', message: error.message });
   }

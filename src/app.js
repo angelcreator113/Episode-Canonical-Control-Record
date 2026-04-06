@@ -85,6 +85,61 @@ if (process.env.NODE_ENV !== 'test') {
         // Skip model sync - database already exists
         // Sync errors indicate schema mismatches that we don't want to auto-fix
         console.log('⏭️  Skipping model sync (database already initialized)');
+
+        // Auto-repair: detect missing tables and recreate them
+        try {
+          const [tables] = await db.sequelize.query(
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+          );
+          const existingTables = new Set(tables.map(t => t.tablename));
+
+          // Critical tables that must exist (both model-backed and migration-only)
+          const criticalTables = [
+            'shows', 'episodes', 'assets', 'scenes', 'scene_library',
+            'wardrobe_library', 'character_profiles', 'thumbnail_templates',
+            'world_events', 'character_state', 'character_state_history',
+            'decision_log', 'career_goals',
+          ];
+          const missing = criticalTables.filter(t => !existingTables.has(t));
+
+          if (missing.length > 0) {
+            console.log(`⚠️  ${missing.length} critical table(s) missing: ${missing.join(', ')}`);
+            console.log('🔄 Running sequelize.sync() to create missing model tables...');
+            // sync() with no options creates missing tables without modifying existing ones
+            await db.sequelize.sync();
+            console.log('✅ Model tables synced');
+
+            // Check if migration-only tables are still missing after sync
+            const [tablesAfter] = await db.sequelize.query(
+              "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            );
+            const tablesAfterSet = new Set(tablesAfter.map(t => t.tablename));
+            const stillMissing = criticalTables.filter(t => !tablesAfterSet.has(t));
+            if (stillMissing.length > 0) {
+              console.log(`⚠️  Still missing after sync (migration-only tables): ${stillMissing.join(', ')}`);
+              console.log('🔄 Running migrations to create remaining tables...');
+              try {
+                const { exec } = require('child_process');
+                const { promisify } = require('util');
+                const execAsync = promisify(exec);
+                const { stdout, stderr } = await execAsync('npx sequelize-cli db:migrate', {
+                  cwd: __dirname + '/..',
+                  timeout: 60000,
+                  env: { ...process.env },
+                });
+                if (stdout) console.log('Migration output:', stdout.slice(-500));
+                if (stderr) console.warn('Migration stderr:', stderr.slice(-300));
+                console.log('✅ Migrations complete');
+              } catch (migErr) {
+                console.warn('⚠️  Migration run failed (non-fatal):', migErr.message);
+              }
+            }
+          } else {
+            console.log('✅ All critical tables present');
+          }
+        } catch (repairErr) {
+          console.warn('⚠️  Table repair check failed (non-fatal):', repairErr.message);
+        }
       }
 
       isDbConnected = true;
