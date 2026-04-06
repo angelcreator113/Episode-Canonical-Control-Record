@@ -26,6 +26,7 @@ const artifactDetection = require('./artifactDetectionService');
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_API_KEY     = process.env.RUNWAY_ML_API_KEY;
 const RUNWAY_API_VERSION = '2024-11-06';
+const OPENAI_API_KEY     = process.env.OPENAI_API_KEY;
 const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
@@ -252,6 +253,58 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
   }
 }
 
+// ─── DALL-E 3 STILL GENERATION ──────────────────────────────────────────────
+
+/**
+ * Generate a high-quality still image via DALL-E 3.
+ * Returns the image URL directly (no polling needed).
+ * Used as the default for scene stills — richer detail than Runway for static scenes.
+ */
+async function generateDallEStill(prompt) {
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+
+  const dallePrompt = prompt.length > 4000 ? prompt.slice(0, 3997) + '...' : prompt;
+
+  const response = await axios.post(
+    'https://api.openai.com/v1/images/generations',
+    {
+      model: 'dall-e-3',
+      prompt: dallePrompt,
+      n: 1,
+      size: '1792x1024', // landscape 16:9-ish for cinematic scenes
+      quality: 'hd',
+      style: 'natural',
+      response_format: 'url',
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 120000,
+    }
+  );
+
+  return response.data.data[0]?.url;
+}
+
+/**
+ * Download an image from URL, upload to S3, return the S3 URL.
+ */
+async function downloadAndUploadToS3(imageUrl, s3Key) {
+  const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
+  const buffer = Buffer.from(response.data);
+
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: s3Key,
+    Body: buffer,
+    ContentType: 'image/png',
+  }));
+
+  return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+}
+
 /**
  * Poll a RunwayML task until SUCCEEDED or FAILED.
  * For multi-output tasks, returns all outputs.
@@ -472,48 +525,70 @@ async function generateBaseScene(sceneSet, models) {
   try {
     console.log(`[SceneGen] Starting base still for: ${sceneSet.name}`);
 
-    // Build style reference if set has one
-    const styleReference = sceneSet.style_reference_url
-      ? { uri: sceneSet.style_reference_url, weight: 0.7 }
-      : undefined;
+    // Determine generation engine: DALL-E (default for stills) or Runway
+    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    let stillUrl, lockedSeed = null, stillCredits = 0;
 
-    // ── Step 1: Text → Still (with multi-variation if configured) ─────────
-    const numVariations = sceneSet.variation_count || 1;
-    let stillOutputUrl, stillSeed, stillCredits;
+    if (!useRunway && OPENAI_API_KEY) {
+      // ── DALL-E 3 path: richer detail for static scene stills ─────────
+      console.log(`[SceneGen] Using DALL-E 3 for richer scene still`);
+      try {
+        const dalleUrl = await generateDallEStill(prompt);
+        if (!dalleUrl) throw new Error('DALL-E 3 did not return an image URL');
 
-    if (numVariations > 1) {
-      const varResult = await generateBestVariation(prompt, numVariations, { styleReference });
-      if (!varResult.best) {
-        await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
-        throw new Error(`Base still multi-variation failed: ${varResult.error}`);
+        const s3Key = `scenes/${sceneSet.id}/base-still-${Date.now()}.png`;
+        stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+        console.log(`[SceneGen] DALL-E still complete, uploaded to S3`);
+      } catch (dalleErr) {
+        console.warn(`[SceneGen] DALL-E 3 failed, falling back to Runway:`, dalleErr.message);
+        // Fall through to Runway path
+        stillUrl = null;
       }
-      stillOutputUrl = varResult.best.url;
-      stillSeed = varResult.seed;
-      stillCredits = varResult.creditsUsed || 0;
-    } else {
-      const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference });
-      const stillResult = await pollTask(stillJobId);
-      if (stillResult.status !== 'SUCCEEDED') {
-        await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
-        throw new Error(`Base still failed: ${stillResult.error}`);
-      }
-      stillOutputUrl = stillResult.outputUrl;
-      stillSeed = stillResult.seed;
-      stillCredits = stillResult.creditsUsed || 0;
     }
 
-    const stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
-    const lockedSeed = stillSeed != null ? String(stillSeed) : null;
+    if (!stillUrl) {
+      // ── Runway path: used as fallback or when video is needed ─────────
+      console.log(`[SceneGen] Using Runway for scene still`);
+      const styleReference = sceneSet.style_reference_url
+        ? { uri: sceneSet.style_reference_url, weight: 0.7 }
+        : undefined;
+
+      const numVariations = sceneSet.variation_count || 1;
+      let stillOutputUrl, stillSeed;
+
+      if (numVariations > 1) {
+        const varResult = await generateBestVariation(prompt, numVariations, { styleReference });
+        if (!varResult.best) {
+          await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+          throw new Error(`Base still multi-variation failed: ${varResult.error}`);
+        }
+        stillOutputUrl = varResult.best.url;
+        stillSeed = varResult.seed;
+        stillCredits = varResult.creditsUsed || 0;
+      } else {
+        const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference });
+        const stillResult = await pollTask(stillJobId);
+        if (stillResult.status !== 'SUCCEEDED') {
+          await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+          throw new Error(`Base still failed: ${stillResult.error}`);
+        }
+        stillOutputUrl = stillResult.outputUrl;
+        stillSeed = stillResult.seed;
+        stillCredits = stillResult.creditsUsed || 0;
+      }
+
+      stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
+      lockedSeed = stillSeed != null ? String(stillSeed) : null;
+    }
 
     // Clean up old base still from S3 (best-effort)
     if (sceneSet.base_still_url) {
       await deleteOldS3Asset(sceneSet.base_still_url);
     }
 
-    console.log(`[SceneGen] Still complete. Seed locked: ${lockedSeed}`);
+    console.log(`[SceneGen] Still complete.${lockedSeed ? ` Seed locked: ${lockedSeed}` : ' (DALL-E — no seed)'}`);
 
     // Lock the seed + base still URL — permanent
-    // Base video is generated on-demand only (use POST /:id/generate-video to produce it)
     await SceneSet.update({
       base_runway_seed: lockedSeed,
       base_still_url: stillUrl,
@@ -588,41 +663,57 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   );
 
   try {
-    console.log(`[SceneGen] Starting text-to-image still for angle: ${sceneAngle.angle_name}`);
-
-    // Derive a seed variation from the parent set's locked seed so sibling angles
-    // share the same stylistic base while remaining visually distinct.
-    const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
-      ? Number(sceneSet.base_runway_seed)
-      : null;
-    const seedOpt = numericSeed !== null
-      ? String(numericSeed + (sceneAngle.generation_attempt || 0) + 1)
-      : undefined;
-
-    const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
-      ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
-      : undefined;
-
-    // Anchor all angles to the base still so they show the same room from different cameras.
-    // Note: gen4_image uses 'weight' (0-1) not 'tag' for reference images
-    const referenceImages = sceneSet.base_still_url
-      ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
-      : undefined;
-
-    const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });
-    const result = await pollTask(jobId);
-
-    if (result.status !== 'SUCCEEDED') {
-      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-      throw new Error(`Angle still failed: ${result.error}`);
-    }
+    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
 
     // Clean up old assets from S3 (best-effort)
     if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
     if (sceneAngle.video_clip_url)  await deleteOldS3Asset(sceneAngle.video_clip_url);
 
-    const stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
-    const totalCost = result.creditsUsed || 0;
+    let stillUrl, totalCost = 0;
+
+    // Try DALL-E first for richer stills, fall back to Runway
+    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    if (!useRunway && OPENAI_API_KEY) {
+      try {
+        console.log(`[SceneGen] Using DALL-E 3 for angle still`);
+        const dalleUrl = await generateDallEStill(prompt);
+        if (dalleUrl) {
+          const s3Key = `scenes/${sceneSet.id}/angles/${sceneAngle.id}/still-${Date.now()}.png`;
+          stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+        }
+      } catch (dalleErr) {
+        console.warn(`[SceneGen] DALL-E failed for angle, falling back to Runway:`, dalleErr.message);
+      }
+    }
+
+    if (!stillUrl) {
+      // Runway path
+      const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
+        ? Number(sceneSet.base_runway_seed)
+        : null;
+      const seedOpt = numericSeed !== null
+        ? String(numericSeed + (sceneAngle.generation_attempt || 0) + 1)
+        : undefined;
+
+      const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
+        ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
+        : undefined;
+
+      const referenceImages = sceneSet.base_still_url
+        ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
+        : undefined;
+
+      const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });
+      const result = await pollTask(jobId);
+
+      if (result.status !== 'SUCCEEDED') {
+        await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+        throw new Error(`Angle still failed: ${result.error}`);
+      }
+
+      stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
+      totalCost = result.creditsUsed || 0;
+    }
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
