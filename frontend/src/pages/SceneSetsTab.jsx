@@ -1059,6 +1059,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/comparison`); setComparison(await r.json()); } catch {}
                       }}><Eye size={11} /> Compare All</button>
 
+                      <button className="scene-sets-btn-regenerate" disabled={toolsAction === 'regen_angles'} onClick={async () => {
+                        if (!confirm('Re-suggest angles from the base image? This replaces current angles.')) return;
+                        setToolsAction('regen_angles');
+                        try {
+                          const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
+                          const d = await r.json();
+                          if (d.success) { showToast(`Created ${d.angles_created} new angles`); fetchSets(); }
+                          else showToast(d.error || 'Failed', 'error');
+                        } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                      }}><RotateCcw size={11} /> {toolsAction === 'regen_angles' ? 'Analyzing...' : 'Regen Angles'}</button>
+
                       <button className="scene-sets-btn-regenerate" onClick={async () => {
                         if (templates.length === 0) { try { const r = await fetch(`${API_BASE}/scene-sets/templates/list`); const d = await r.json(); setTemplates(d.templates || []); } catch {} }
                         else setTemplates([]);
@@ -1538,16 +1549,24 @@ export default function SceneSetsTab() {
 
   // Poll a job until it completes or fails; returns the final job data
   const pollJob = useCallback(async (jobId) => {
-    const maxPolls = 120; // 120 * 3s = 6 min max
+    const maxPolls = 60; // 60 * 3s = 3 min max
+    let consecutiveErrors = 0;
     for (let i = 0; i < maxPolls; i++) {
       await new Promise(r => setTimeout(r, 3000));
       try {
         const res = await fetch(`${API_BASE}/scene-sets/jobs/${jobId}`);
-        if (!res.ok) continue;
+        if (res.status === 404) return { status: 'failed', error: 'Job not found — generation may not be configured' };
+        if (res.status === 502 || res.status === 503) {
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3) return { status: 'failed', error: 'Server unavailable' };
+          continue;
+        }
+        if (!res.ok) { consecutiveErrors++; if (consecutiveErrors >= 5) return { status: 'failed', error: 'Too many errors' }; continue; }
+        consecutiveErrors = 0;
         const json = await res.json();
         const job = json.data;
         if (job.status === 'completed' || job.status === 'failed') return job;
-      } catch { /* retry on network error */ }
+      } catch { consecutiveErrors++; if (consecutiveErrors >= 5) return { status: 'failed', error: 'Network error' }; }
     }
     return { status: 'failed', error: 'Polling timed out' };
   }, []);

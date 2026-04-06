@@ -1500,6 +1500,58 @@ router.delete('/:id/objects/:objectId', validateUUIDParam('id'), optionalAuth, a
 router.post('/:id/objects/:objectId/duplicate', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.duplicateObject));
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// SUGGEST ANGLES FROM IMAGE — fast, only regenerates angles (no description/prompt)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/:id/suggest-angles-from-image', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!set.base_still_url) return res.status(400).json({ error: 'No base image' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: set.base_still_url } },
+          { type: 'text', text: `Suggest 4-6 camera angles for this location. Return ONLY a JSON array:
+[{"label":"UPPERCASE_LABEL","name":"Name","description":"What this shows","camera_direction":"Camera instruction — position, direction, how to extend the space beyond the reference image"}]
+Pick angles that make sense for THIS location. No generic angles that don't fit.` },
+        ],
+      }],
+    });
+
+    const text = response.content?.[0]?.text || '';
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return res.status(500).json({ error: 'Failed to parse angles' });
+
+    const suggestedAngles = JSON.parse(match[0]);
+    await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
+    const created = await SceneAngle.bulkCreate(
+      suggestedAngles.map((a, idx) => ({
+        scene_set_id: set.id,
+        angle_label: (a.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
+        angle_name: a.name || `Angle ${idx + 1}`,
+        angle_description: a.description || '',
+        camera_direction: a.camera_direction || '',
+        generation_status: 'pending',
+        sort_order: idx,
+      })),
+      { returning: true }
+    );
+
+    res.json({ success: true, angles_created: created.length, angles: created });
+  } catch (err) {
+    console.error('Suggest angles error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // STYLE LOCK — extract and save color palette/materials from base image
 // ═══════════════════════════════════════════════════════════════════════════════
 
