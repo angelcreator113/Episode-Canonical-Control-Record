@@ -961,6 +961,48 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       </div>
                     </div>
 
+                    {/* Room Properties */}
+                    <div className="scene-sets-modal-field">
+                      <label><Camera size={11} /> Room Properties</label>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        {[
+                          { key: 'room_size', label: 'Size', options: ['compact', 'medium', 'spacious', 'grand'] },
+                          { key: 'ceiling_height', label: 'Ceiling', options: ['standard', 'tall', 'vaulted', 'double_height'] },
+                          { key: 'room_shape', label: 'Shape', options: ['rectangular', 'square', 'l_shaped', 'open_plan'] },
+                        ].map(({ key, label, options }) => (
+                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span className="scene-sets-field-label">{label}</span>
+                            <select
+                              value={set.visual_language?.room_properties?.[key] || ''}
+                              onChange={async (e) => {
+                                const val = e.target.value || null;
+                                const rp = { ...(set.visual_language?.room_properties || {}), [key]: val };
+                                try {
+                                  await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ room_properties: rp }),
+                                  });
+                                  onToast?.(`${label} set to ${val || 'auto'}`);
+                                } catch { onToast?.('Failed to update', 'error'); }
+                              }}
+                              className="scene-sets-select-sm"
+                            >
+                              <option value="">Auto-detect</option>
+                              {options.map(o => <option key={o} value={o}>{o.replace('_', ' ')}</option>)}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                      {set.visual_language?.room_properties && (
+                        <div className="scene-sets-room-props-summary">
+                          {set.visual_language.room_properties.room_size && <span>{set.visual_language.room_properties.room_size}</span>}
+                          {set.visual_language.room_properties.window_count > 0 && <span>{set.visual_language.room_properties.window_count} window{set.visual_language.room_properties.window_count > 1 ? 's' : ''}</span>}
+                          {set.visual_language.room_properties.furniture_density && <span>{set.visual_language.room_properties.furniture_density} furnishing</span>}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Linked episodes */}
                     {set.episodes && set.episodes.length > 0 && (
                       <div className="scene-sets-modal-field">

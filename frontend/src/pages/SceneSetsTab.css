@@ -3447,3 +3447,48 @@
   background: #f0fdf4;
   color: #16a34a;
 }
+
+/* ── Room Properties ─────────────────────────────────────────────────────── */
+
+.scene-sets-field-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ss-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.scene-sets-select-sm {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-ink);
+  min-width: 120px;
+  cursor: pointer;
+  transition: border-color var(--ss-transition);
+}
+
+.scene-sets-select-sm:hover {
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-room-props-summary {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-room-props-summary span {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--ss-surface);
+  border-radius: 10px;
+  color: var(--ss-muted);
+  text-transform: capitalize;
+}

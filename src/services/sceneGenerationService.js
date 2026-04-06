@@ -160,6 +160,18 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     parts.push(timeParts.join(' '));
   }
 
+  // Room properties affect spatial rendering
+  const rp = sceneSet.visual_language?.room_properties;
+  if (rp?.room_size) {
+    const sizeDescriptions = {
+      compact: 'This is a compact, cozy room — furniture is close together, minimal open floor space.',
+      medium: 'This is a medium-sized room with moderate space between furniture.',
+      spacious: 'This is a spacious room — generous open floor space, breathing room between furniture, wide sight lines.',
+      grand: 'This is a grand, expansive space — high ceilings, vast floor area, dramatic proportions.',
+    };
+    if (sizeDescriptions[rp.room_size]) parts.push(sizeDescriptions[rp.room_size]);
+  }
+
   parts.push(`CAMERA: ${cameraText}`);
 
   // For non-WIDE angles, add room extension instruction
@@ -331,10 +343,21 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
       const { imageAnalysis, styleLock, croppedRefUrl, depthMapUrl, regionHint, retryCorrections } = extras;
       let detailConstraints = '';
       if (imageAnalysis) {
-        // Use spatial layout and key items but phrase as instructions, not labels
         if (imageAnalysis.spatial_layout) detailConstraints += ` Room layout: ${imageAnalysis.spatial_layout}`;
         if (imageAnalysis.wall_color) detailConstraints += ` Walls must be ${imageAnalysis.wall_color}.`;
         if (imageAnalysis.visible_through_windows) detailConstraints += ` Windows show: ${imageAnalysis.visible_through_windows}.`;
+        // Room properties affect how the space looks from different angles
+        const rp = imageAnalysis.room_properties;
+        if (rp) {
+          const rpParts = [];
+          if (rp.room_size) rpParts.push(`Room is ${rp.room_size}`);
+          if (rp.ceiling_height && rp.ceiling_height !== 'standard') rpParts.push(`${rp.ceiling_height} ceiling`);
+          if (rp.floor_space_visible) rpParts.push(`${rp.floor_space_visible} visible floor space`);
+          if (rp.furniture_density) rpParts.push(`furniture is ${rp.furniture_density}`);
+          if (rp.depth_impression) rpParts.push(`${rp.depth_impression} depth`);
+          if (rpParts.length) detailConstraints += ` Room character: ${rpParts.join(', ')}.`;
+          if (rp.window_count) detailConstraints += ` ${rp.window_count} window(s) on ${(rp.window_walls || []).join(' and ')}.`;
+        }
       }
       if (styleLock) {
         const lockParts = [];
@@ -846,7 +869,7 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  const IMAGE_ANALYSIS_VERSION = 2; // bump to invalidate cache when schema changes
+  const IMAGE_ANALYSIS_VERSION = 3; // bump to invalidate cache when schema changes
   // Check cache — skip if already analyzed for this base image with current version
   const vl = sceneSet.visual_language || {};
   if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
@@ -871,16 +894,28 @@ Return JSON:
 {
   "wall_color": "exact color (e.g. 'soft lavender/purple')",
   "flooring": "exact floor type and color",
-  "spatial_layout": "Describe the room layout as if drawing a floor plan. Use compass directions or clock positions. Example: 'Bed centered against the back wall (12 o'clock). Window on left wall (9 o'clock) with window seat. Vanity/mirror on right wall (3 o'clock). Music corner with keyboard and guitar in far-left corner (10 o'clock). Door at 6 o'clock.'",
-  "furniture": ["item1 with exact color/material AND position in room", "item2...", ...],
-  "lighting_fixtures": ["fixture with position (e.g. 'neon lalas world sign above headboard')", ...],
-  "signature_decor": ["specific item with position (e.g. 'photo collage wall behind bed')", ...],
-  "textiles": ["item with color/pattern (e.g. 'purple tie-dye duvet on bed')", ...],
-  "visible_through_windows": "what is visible outside (e.g. 'LA night skyline with palm trees')",
+  "spatial_layout": "Describe the room layout as if drawing a floor plan. Use clock positions. Example: 'Bed against back wall (12). Window left wall (9). Vanity right wall (3). Music corner (10). Door (6).'",
+  "room_properties": {
+    "room_size": "compact | medium | spacious | grand",
+    "ceiling_height": "standard | tall | vaulted | double_height",
+    "room_shape": "rectangular | square | l_shaped | open_plan | irregular",
+    "window_count": <number>,
+    "window_walls": ["which walls have windows, e.g. 'left wall', 'back wall'"],
+    "door_count": <number>,
+    "door_positions": ["e.g. '6 o'clock', 'right wall'"],
+    "floor_space_visible": "minimal | moderate | generous — how much open floor is visible",
+    "furniture_density": "sparse | moderate | dense — how tightly packed is the furniture",
+    "depth_impression": "shallow | moderate | deep — how far back does the room extend"
+  },
+  "furniture": ["item with color/material AND position", ...],
+  "lighting_fixtures": ["fixture with position", ...],
+  "signature_decor": ["specific item with position", ...],
+  "textiles": ["item with color/pattern", ...],
+  "visible_through_windows": "what is visible outside",
   "color_palette_hex": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
-  "atmosphere": "one sentence describing overall mood, lighting quality, and time of day"
+  "atmosphere": "one sentence — mood, lighting quality, time of day"
 }
-Be extremely specific — mention neon sign text, poster subjects, exact furniture colors. The spatial_layout field is CRITICAL — describe where each major element sits relative to the others.
+Be extremely specific. The spatial_layout and room_properties fields are CRITICAL for generating consistent camera angles.
 Return ONLY JSON.` },
         ],
       }],
@@ -895,13 +930,17 @@ Return ONLY JSON.` },
     analysis.version = IMAGE_ANALYSIS_VERSION;
     analysis.analyzed_at = new Date().toISOString();
 
-    // Cache in visual_language
+    // Cache in visual_language — room_properties stored at top level for easy UI access/override
+    const updatedVl = { ...vl, image_analysis: analysis };
+    if (analysis.room_properties && !vl.room_properties_manual) {
+      updatedVl.room_properties = analysis.room_properties;
+    }
     await SceneSetModel.update(
-      { visual_language: { ...vl, image_analysis: analysis } },
+      { visual_language: updatedVl },
       { where: { id: sceneSet.id } }
     );
 
-    console.log(`[SceneGen] Image analysis complete: ${analysis.furniture?.length || 0} furniture, ${analysis.signature_decor?.length || 0} decor items`);
+    console.log(`[SceneGen] Image analysis complete: ${analysis.furniture?.length || 0} furniture, ${analysis.room_properties?.room_size || 'unknown'} room`);
     return analysis;
   } catch (err) {
     console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);

@@ -237,6 +237,16 @@ router.put('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
 
+    // Handle room_properties — stored in visual_language JSONB
+    if (req.body.room_properties) {
+      const vl = set.visual_language || {};
+      updates.visual_language = {
+        ...vl,
+        room_properties: req.body.room_properties,
+        room_properties_manual: true, // prevent auto-extraction from overwriting
+      };
+    }
+
     await set.update(updates);
     res.json({ success: true, data: set });
   } catch (err) {
