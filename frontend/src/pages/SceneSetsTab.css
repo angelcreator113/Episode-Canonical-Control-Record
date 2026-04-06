@@ -2958,7 +2958,8 @@
 .scene-sets-modal-prompt-pre {
   margin: 6px 0 0;
   padding: 10px;
-  background: rgba(0, 0, 0, 0.03);
+  background: #f8f6f0;
+  border: 1px solid #e8e4da;
   border-radius: 6px;
   font-size: 10px;
   color: #555;
@@ -2966,6 +2967,7 @@
   word-break: break-word;
   max-height: 150px;
   overflow-y: auto;
+  color-scheme: light;
 }
 
 /* ── Modal actions ── */
