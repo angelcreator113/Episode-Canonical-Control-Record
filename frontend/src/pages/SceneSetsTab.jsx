@@ -387,13 +387,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const regenerableAngles = sortedAngles.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed');
   const hasBase = !!(set.base_still_url || set.base_runway_seed);
 
-  // Selected angle for hero display — initializes to cover_angle_id if set
+  // Selected angle for detail panel — initializes to cover_angle_id if set
   const [selectedAngleId, setSelectedAngleId] = useState(set.cover_angle_id || null);
   const selectedAngle = selectedAngleId ? sortedAngles.find(a => a.id === selectedAngleId) : null;
   const coverAngle = set.cover_angle_id ? sortedAngles.find(a => a.id === set.cover_angle_id) : null;
+  // Card hero always shows the base image — angle images only in detail panel
   const heroImageRaw = useMemo(
-    () => selectedAngle?.still_image_url || coverAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null,
-    [selectedAngle, coverAngle, sortedAngles, set.base_still_url]
+    () => set.base_still_url || null,
+    [set.base_still_url]
   );
   const isCoverAngle = (angleId) => set.cover_angle_id === angleId;
   const heroImage = useMemo(() => heroImageRaw ? bustUrl(heroImageRaw) : null, [heroImageRaw, bustUrl]);
@@ -427,6 +428,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [showEpisodeManager, setShowEpisodeManager] = useState(false);
   const [selectedShowForLink, setSelectedShowForLink] = useState('');
   const [episodesToLink, setEpisodesToLink] = useState([]);
+  const [toolsAction, setToolsAction] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [comparison, setComparison] = useState(null);
+  const [seeding, setSeeding] = useState(false);
+  const showToast = onToast || (() => {});
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
   // Track generation start time
@@ -723,177 +729,49 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         )}
       </div>
 
-      {/* ── Filmstrip (visible when angles exist OR has base image for ADD/AI) ───── */}
-      {(sortedAngles.length > 0 || hasBase) && (
-        <div className="scene-sets-filmstrip">
-          {/* Base image thumb */}
-          {set.base_still_url && (
-            <button
-              className={`scene-sets-filmstrip-thumb${!selectedAngleId ? ' active' : ''}`}
-              onClick={() => setSelectedAngleId(null)}
-              title="Base image"
-            >
-              <img src={bustUrl(set.base_still_url)} alt="Base" />
-              <span className="scene-sets-filmstrip-label">BASE</span>
-            </button>
-          )}
-          {/* Angle thumbs */}
-          {sortedAngles.map(angle => {
-            const isActive = selectedAngleId === angle.id;
-            const isCover = isCoverAngle(angle.id);
-            const hasStill = !!angle.still_image_url && angle.generation_status === 'complete';
-            const isAngleGenerating = angle.generation_status === 'generating';
-            const isFailed = angle.generation_status === 'failed';
-            const isPending = angle.generation_status === 'pending';
-            return (
-              <button
-                key={angle.id}
-                className={`scene-sets-filmstrip-thumb${isActive ? ' active' : ''}${isFailed ? ' failed' : ''}${isPending ? ' pending' : ''}${isCover ? ' cover' : ''}`}
-                onClick={() => {
-                  if (hasStill) {
-                    if (isActive) setShowBaseLightbox(true);
-                    else setSelectedAngleId(angle.id);
-                  } else if (isPending || isFailed) {
-                    onGenerateAngle(set, angle);
-                  }
-                }}
-                onDoubleClick={() => {
-                  if (hasStill && onSetCoverAngle) {
-                    onSetCoverAngle(set, isCover ? null : angle.id);
-                  }
-                }}
-                title={hasStill ? `${angle.angle_name}${isCover ? ' (Cover)' : ''} — double-click to ${isCover ? 'unset' : 'set as'} cover` : isFailed ? `Retry: ${angle.angle_name}${angle.quality_review?.last_error ? ' — ' + angle.quality_review.last_error : ''}` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
-              >
-                {hasStill ? (
-                  <img src={bustUrl(angle.still_image_url)} alt={angle.angle_label} />
-                ) : isAngleGenerating ? (
-                  <Loader size={14} className="spin" />
-                ) : isFailed ? (
-                  <AlertCircle size={14} />
-                ) : (
-                  <Sparkles size={14} className={isPending ? 'scene-sets-clickable-icon' : ''} />
-                )}
-                {isCover && <Heart size={10} className="scene-sets-cover-badge" />}
-                {editingAngleId === angle.id ? (
-                  <input
-                    className="scene-sets-filmstrip-label-input"
-                    value={editingAngleLabel}
-                    onChange={e => setEditingAngleLabel(e.target.value)}
-                    onBlur={() => handleRenameAngle(angle.id, editingAngleLabel)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleRenameAngle(angle.id, editingAngleLabel); if (e.key === 'Escape') setEditingAngleId(null); }}
-                    onClick={e => e.stopPropagation()}
-                    autoFocus
-                  />
-                ) : (
-                  <span
-                    className="scene-sets-filmstrip-label"
-                    onDoubleClick={(e) => { e.stopPropagation(); setEditingAngleId(angle.id); setEditingAngleLabel(angle.angle_label); }}
-                    title="Double-click to rename"
-                  >{angle.angle_label}</span>
-                )}
-                {angle.video_clip_url && <span className="scene-sets-filmstrip-video"><Play size={8} /></span>}
-              </button>
-            );
-          })}
-          {/* Add Angle button at end of filmstrip */}
-          {hasBase && (
-            <button
-              className="scene-sets-filmstrip-thumb scene-sets-filmstrip-add"
-              onClick={() => setShowAddAngle(true)}
-              title="Add new angle"
-            >
-              <Plus size={14} />
-              <span className="scene-sets-filmstrip-label">ADD</span>
-            </button>
-          )}
-          {hasBase && (
-            <button
-              className="scene-sets-filmstrip-thumb scene-sets-filmstrip-add"
-              onClick={handleSuggestAngles}
-              disabled={loadingSuggestions}
-              title="AI suggest angles"
-            >
-              {loadingSuggestions ? <Loader size={14} className="spin" /> : <Sparkles size={14} />}
-              <span className="scene-sets-filmstrip-label">AI</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Card Body ────────────────────────────────────────── */}
+      {/* ── Compact Card Body ────────────────────────────────── */}
       <div className="scene-sets-card-body">
         <div className="scene-sets-card-header">
-          <div className="scene-sets-card-header-row">
-            <h3 className="scene-sets-card-title">{set.name}</h3>
-            {totalAngles > 0 && (
-              <span className="scene-sets-angle-badge">{readyAngles}/{totalAngles}</span>
-            )}
+          <h3 className="scene-sets-card-title" onClick={() => setShowDetails(true)} style={{ cursor: 'pointer' }}>{set.name}</h3>
+
+          {/* Compact metadata */}
+          <div className="scene-sets-card-meta-line">
+            {set.show && <span className="scene-sets-meta-chip"><Tv size={9} /> {set.show.name}</span>}
+            {set.episodes?.length > 0 && <span className="scene-sets-meta-chip"><Film size={9} /> {set.episodes.length === 1 ? `Ep ${set.episodes[0].episode_number || '?'}` : `${set.episodes.length} eps`}</span>}
+            {set.time_of_day && <span className="scene-sets-meta-chip"><Clock size={9} /> {set.time_of_day.replace('_', ' ')}</span>}
+            {set.season && <span className="scene-sets-meta-chip"><RefreshCw size={9} /> {set.season}</span>}
           </div>
-          {/* Show & Episode tags */}
-          {(set.show || (set.episodes && set.episodes.length > 0)) && (
-            <div className="scene-sets-card-tags">
-              {set.show && (
-                <span className="scene-sets-show-tag">
-                  <Tv size={10} /> {set.show.name}
-                </span>
-              )}
-              {set.episodes && set.episodes.length > 0 && (
-                <span className="scene-sets-episode-tag" onClick={() => setShowEpisodeManager(v => !v)} title="Click to manage episodes">
-                  <Film size={10} /> {set.episodes.length === 1 ? `Ep ${set.episodes[0].episode_number || set.episodes[0].title}` : `${set.episodes.length} episodes`}
-                </span>
-              )}
-              {!set.episodes?.length && (
-                <button className="scene-sets-link-episodes-btn" onClick={() => setShowEpisodeManager(true)} title="Link episodes">
-                  <Film size={10} /> + Episodes
-                </button>
-              )}
-            </div>
-          )}
-          {!set.show && !set.episodes?.length && (
-            <div className="scene-sets-card-tags">
-              <button className="scene-sets-link-episodes-btn" onClick={() => setShowEpisodeManager(true)} title="Link to show/episodes">
-                <Film size={10} /> + Link Episodes
-              </button>
+
+          {/* Progress bar */}
+          {totalAngles > 0 && (
+            <div className="scene-sets-progress-row">
+              <div className="scene-sets-progress-bar">
+                <div className="scene-sets-progress-fill" style={{ width: `${(readyAngles / totalAngles) * 100}%` }} />
+              </div>
+              <span className="scene-sets-progress-label">{readyAngles}/{totalAngles}</span>
             </div>
           )}
 
-          {(set.time_of_day || set.season) && (
-            <div className="scene-sets-card-tags" style={{ marginTop: 4 }}>
-              {set.time_of_day && (
-                <span className="scene-sets-show-tag" style={{ background: '#fef3c7', color: '#92400e', fontSize: 10 }}>
-                  <Clock size={9} /> {set.time_of_day.replace('_', ' ')}
-                </span>
-              )}
-              {set.season && (
-                <span className="scene-sets-show-tag" style={{ background: '#ecfdf5', color: '#065f46', fontSize: 10 }}>
-                  <RefreshCw size={9} /> {set.season}
-                </span>
-              )}
-            </div>
-          )}
-
+          {/* Actions — visible on hover */}
           <div className="scene-sets-card-actions">
             {!hasBase && (
               <>
-                <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}>
-                  {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate Base</>}
+                <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className="scene-sets-btn-generate">
+                  {isGenerating ? <><Loader size={12} className="spin" /></> : <><Sparkles size={12} /> Generate</>}
                 </button>
-                <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className={`scene-sets-btn-upload${isGenerating ? ' disabled' : ''}`} title="Upload one or multiple room images">
+                <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className="scene-sets-btn-upload">
                   <Upload size={12} /> Upload
                 </button>
               </>
             )}
-
             {hasBase && pendingAngles.length > 0 && (
-              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}>
-                {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All</>}
+              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className="scene-sets-btn-generate">
+                {isGenerating ? <><Loader size={12} className="spin" /></> : <><Sparkles size={12} /> Generate All</>}
               </button>
             )}
-
-
-            {totalAngles > 0 && (
-              <button onClick={() => onDeleteAllAngles(set)} disabled={isGenerating} className="scene-sets-btn-delete" title="Reset all angles">
-                <Trash2 size={12} /> Reset
+            {hasBase && (
+              <button onClick={() => setShowDetails(true)} className="scene-sets-btn-details">
+                <Eye size={12} /> Details
               </button>
             )}
           </div>
@@ -1136,7 +1014,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         try {
                           const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
                           const d = await r.json();
-                          if (d.success) { showToast(`Created ${d.angles_created} new angles`); fetchSets(); }
+                          if (d.success) { showToast(`Created ${d.angles_created} new angles`); }
                           else showToast(d.error || 'Failed', 'error');
                         } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
                       }}><RotateCcw size={11} /> {toolsAction === 'regen_angles' ? 'Analyzing...' : 'Regen Angles'}</button>
@@ -1155,7 +1033,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           {templates.map(t => (
                             <button key={t.id} onClick={async () => {
                               if (!confirm(`Apply "${t.name}" template? This replaces current angles.`)) return;
-                              try { await fetch(`${API_BASE}/scene-sets/${set.id}/apply-template`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: t.id }) }); showToast(`Applied ${t.name} template`); setTemplates([]); fetchSets(); } catch (e) { showToast(e.message, 'error'); }
+                              try { await fetch(`${API_BASE}/scene-sets/${set.id}/apply-template`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: t.id }) }); showToast(`Applied ${t.name} template`); setTemplates([]); } catch (e) { showToast(e.message, 'error'); }
                             }} style={{ textAlign: 'left', padding: '8px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', transition: 'border-color 0.15s' }}
                               onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
                               onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
@@ -1184,10 +1062,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           )}
                           {a.still_image_url && (
                             <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 3 }}>
-                              <button title="Favorite" onClick={async (e) => { e.stopPropagation(); try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/favorite`, { method: 'PATCH' }); fetchSets(); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: a.quality_review?.favorited ? '#e11d48' : '#d1d5db', padding: '0 2px' }}>
+                              <button title="Favorite" onClick={async (e) => { e.stopPropagation(); try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/favorite`, { method: 'PATCH' }); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: a.quality_review?.favorited ? '#e11d48' : '#d1d5db', padding: '0 2px' }}>
                                 {a.quality_review?.favorited ? '★' : '☆'}
                               </button>
-                              <button title="Reject & regenerate" onClick={async (e) => { e.stopPropagation(); if (!confirm('Reject this angle?')) return; try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'User rejected' }) }); showToast('Angle rejected'); fetchSets(); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '0 2px' }}>
+                              <button title="Reject & regenerate" onClick={async (e) => { e.stopPropagation(); if (!confirm('Reject this angle?')) return; try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'User rejected' }) }); showToast('Angle rejected'); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '0 2px' }}>
                                 ✕
                               </button>
                               <button title="View history" onClick={async (e) => { e.stopPropagation(); try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/history`); const d = await r.json(); setAngleHistory({ angle: a, ...d }); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '0 2px' }}>
@@ -1218,7 +1096,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'locking_style'} onClick={async () => {
                           setToolsAction('locking_style');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/lock-style`, { method: 'POST' }); const d = await r.json(); if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/lock-style`, { method: 'POST' }); const d = await r.json(); if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
                         }}><Lock size={11} /> {toolsAction === 'locking_style' ? 'Analyzing...' : 'Lock Style DNA'}</button>
                       </div>
                       {set.visual_language?.locked && (
@@ -1239,12 +1117,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'time_variants'} onClick={async () => {
                           setToolsAction('time_variants');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/time-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} time-of-day variants`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/time-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} time-of-day variants`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
                         }}><Clock size={11} /> {toolsAction === 'time_variants' ? 'Creating...' : 'Time of Day'}</button>
 
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'season_variants'} onClick={async () => {
                           setToolsAction('season_variants');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/season-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} season variants`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/season-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} season variants`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
                         }}><RefreshCw size={11} /> {toolsAction === 'season_variants' ? 'Creating...' : 'Seasons'}</button>
                       </div>
                     </div>
@@ -1280,7 +1158,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                             if (d.success && d.analysis) {
                               setEditDesc(d.analysis.description || '');
                               showToast(`Auto-filled: ${d.updated_fields.join(', ')}${d.angles_created ? ` + ${d.angles_created} angles` : ''}`);
-                              fetchSets();
                             } else {
                               showToast(d.error || 'Analysis failed', 'error');
                             }
@@ -1496,6 +1373,35 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         </div>,
         document.body
       )}
+
+      {/* Comparison Modal (card-level) */}
+      {comparison && createPortal(
+        <div className="scene-sets-modal-backdrop" onClick={() => setComparison(null)}>
+          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
+            <div className="scene-sets-modal-header">
+              <h3 className="scene-sets-modal-title">Side-by-Side Comparison</h3>
+              <button className="scene-sets-modal-close" onClick={() => setComparison(null)}><X size={16} /></button>
+            </div>
+            <div className="scene-sets-modal-body" style={{ maxHeight: '70vh', overflow: 'auto' }}>
+              {comparison.comparisons?.map(c => (
+                <div key={c.angle_id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORIGINAL</div>
+                    {c.original ? <img src={c.original} alt="Original" style={{ width: '100%', borderRadius: 6 }} /> : <div style={{ padding: 20, textAlign: 'center', color: '#ccc' }}>No base image</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{c.angle_name} {c.favorited ? '\u2605' : ''} {c.quality_score ? `(${c.quality_score}/100)` : ''}</div>
+                    <img src={c.generated} alt={c.angle_name} style={{ width: '100%', borderRadius: 6 }} />
+                  </div>
+                </div>
+              ))}
+              {(!comparison.comparisons || comparison.comparisons.length === 0) && (
+                <p style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>No generated angles to compare yet.</p>
+              )}
+            </div>
+          </div>
+        </div>, document.body
+      )}
     </div>
   );
 }, (prev, next) => {
@@ -1560,9 +1466,6 @@ export default function SceneSetsTab() {
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
   const [allShows, setAllShows] = useState([]);
   const [allEpisodes, setAllEpisodes] = useState([]);
-  const [toolsAction, setToolsAction] = useState(null); // 'locking_style' | 'batch_gen' | etc.
-  const [templates, setTemplates] = useState([]);
-  const [comparison, setComparison] = useState(null);
   const [wardrobeMatch, setWardrobeMatch] = useState(null);
   const [filmstrip, setFilmstrip] = useState(null);
   const [angleHistory, setAngleHistory] = useState(null);
@@ -1834,39 +1737,51 @@ export default function SceneSetsTab() {
     setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     try {
-      // Fire all generation requests and collect job IDs
-      const jobMap = [];
+      // Fire all generation requests
       for (let i = 0; i < targets.length; i++) {
         progressAngles[i].status = 'generating';
         setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], currentIndex: i }));
         try {
           const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
           if (!res.ok) throw new Error('Failed');
-          const json = await res.json();
-          jobMap.push({ index: i, jobId: json.data.jobId });
         } catch {
           progressAngles[i].status = 'failed';
           setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
         }
       }
 
-      // Poll all jobs in parallel
+      // Poll scene set for all angle completions
       let completed = 0;
       let failed = progressAngles.filter(a => a.status === 'failed').length;
-
-      const pollPromises = jobMap.map(async ({ index, jobId }) => {
-        const job = await pollJob(jobId);
-        if (job.status === 'completed') {
-          progressAngles[index].status = 'done';
-          completed++;
-        } else {
-          progressAngles[index].status = 'failed';
-          failed++;
-        }
-        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-      });
-
-      await Promise.all(pollPromises);
+      const maxPolls = 60; // 4s * 60 = 4 minutes max
+      for (let poll = 0; poll < maxPolls; poll++) {
+        await new Promise(r => setTimeout(r, 4000));
+        try {
+          const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
+          const checkJson = await checkRes.json();
+          const freshAngles = checkJson.data?.angles || [];
+          let allDone = true;
+          for (let i = 0; i < targets.length; i++) {
+            if (progressAngles[i].status === 'failed') continue; // skip already failed
+            const fresh = freshAngles.find(a => a.id === targets[i].id);
+            if (fresh?.generation_status === 'complete') {
+              if (progressAngles[i].status !== 'done') {
+                progressAngles[i].status = 'done';
+                completed++;
+              }
+            } else if (fresh?.generation_status === 'failed') {
+              if (progressAngles[i].status !== 'failed') {
+                progressAngles[i].status = 'failed';
+                failed++;
+              }
+            } else {
+              allDone = false;
+            }
+          }
+          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+          if (allDone) break;
+        } catch { /* retry */ }
+      }
 
       if (failed === 0) {
         showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
@@ -1891,14 +1806,11 @@ export default function SceneSetsTab() {
     setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
 
     try {
-      // Fire all retry requests to get job IDs
-      const jobMap = [];
+      // Fire all retry requests
       for (let i = 0; i < targets.length; i++) {
         try {
           const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
           if (!res.ok) throw new Error('Failed');
-          const json = await res.json();
-          jobMap.push({ index: i, jobId: json.data.jobId });
           progressAngles[i].status = 'generating';
         } catch {
           progressAngles[i].status = 'failed';
@@ -1906,23 +1818,30 @@ export default function SceneSetsTab() {
         setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
       }
 
-      // Poll all jobs in parallel
+      // Poll scene set for completions
       let completed = 0;
       let failed = progressAngles.filter(a => a.status === 'failed').length;
-
-      const pollPromises = jobMap.map(async ({ index, jobId }) => {
-        const job = await pollJob(jobId);
-        if (job.status === 'completed') {
-          progressAngles[index].status = 'done';
-          completed++;
-        } else {
-          progressAngles[index].status = 'failed';
-          failed++;
-        }
-        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-      });
-
-      await Promise.all(pollPromises);
+      const maxPolls = 60;
+      for (let poll = 0; poll < maxPolls; poll++) {
+        await new Promise(r => setTimeout(r, 4000));
+        try {
+          const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
+          const checkJson = await checkRes.json();
+          const freshAngles = checkJson.data?.angles || [];
+          let allDone = true;
+          for (let i = 0; i < targets.length; i++) {
+            if (progressAngles[i].status === 'failed') continue;
+            const fresh = freshAngles.find(a => a.id === targets[i].id);
+            if (fresh?.generation_status === 'complete') {
+              if (progressAngles[i].status !== 'done') { progressAngles[i].status = 'done'; completed++; }
+            } else if (fresh?.generation_status === 'failed') {
+              if (progressAngles[i].status !== 'failed') { progressAngles[i].status = 'failed'; failed++; }
+            } else { allDone = false; }
+          }
+          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
+          if (allDone) break;
+        } catch { /* retry */ }
+      }
 
       if (failed === 0) {
         showToast(`All ${targets.length} failed angles retried successfully!`);
@@ -2333,11 +2252,19 @@ export default function SceneSetsTab() {
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading skeletons */}
       {loading && (
-        <div className="scene-sets-loading">
-          <Loader size={20} className="spin" />
-          <p>Loading locations...</p>
+        <div className="scene-sets-grid">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="scene-sets-skeleton-card">
+              <div className="scene-sets-skeleton-image" />
+              <div className="scene-sets-skeleton-body">
+                <div className="scene-sets-skeleton-line wide" />
+                <div className="scene-sets-skeleton-line short" />
+                <div className="scene-sets-skeleton-line medium" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -2403,34 +2330,6 @@ export default function SceneSetsTab() {
         />
       )}
 
-      {/* Comparison Modal */}
-      {comparison && createPortal(
-        <div className="scene-sets-modal-backdrop" onClick={() => setComparison(null)}>
-          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
-            <div className="scene-sets-modal-header">
-              <h3 className="scene-sets-modal-title">Side-by-Side Comparison</h3>
-              <button className="scene-sets-modal-close" onClick={() => setComparison(null)}><X size={16} /></button>
-            </div>
-            <div className="scene-sets-modal-body" style={{ maxHeight: '70vh', overflow: 'auto' }}>
-              {comparison.comparisons?.map(c => (
-                <div key={c.angle_id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORIGINAL</div>
-                    {c.original ? <img src={c.original} alt="Original" style={{ width: '100%', borderRadius: 6 }} /> : <div style={{ padding: 20, textAlign: 'center', color: '#ccc' }}>No base image</div>}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{c.angle_name} {c.favorited ? '★' : ''} {c.quality_score ? `(${c.quality_score}/100)` : ''}</div>
-                    <img src={c.generated} alt={c.angle_name} style={{ width: '100%', borderRadius: 6 }} />
-                  </div>
-                </div>
-              ))}
-              {(!comparison.comparisons || comparison.comparisons.length === 0) && (
-                <p style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>No generated angles to compare yet.</p>
-              )}
-            </div>
-          </div>
-        </div>, document.body
-      )}
 
       {/* Wardrobe Match Modal */}
       {wardrobeMatch && createPortal(

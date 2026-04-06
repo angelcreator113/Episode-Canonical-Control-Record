@@ -447,6 +447,56 @@ Return ONLY the JSON object, no other text.` },
         visionAnalysis: visionAnalysis || null,
       },
     });
+
+    // Auto-analyze and lock style in background (non-blocking, after response sent)
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        const sceneGenService = require('../services/sceneGenerationService');
+        const models = require('../models');
+        const freshSet = await SceneSet.findByPk(set.id);
+        await sceneGenService.analyzeBaseImage(freshSet, models.SceneSet);
+      } catch (bgErr) {
+        console.warn('[SceneSets] Background image analysis failed:', bgErr.message);
+      }
+      // Auto-lock style if not already locked
+      const vl = (await SceneSet.findByPk(set.id))?.visual_language || {};
+      if (!vl.locked) {
+        try {
+          const client = getAnthropicClient();
+          const styleRes = await client.messages.create({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 500,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image', source: { type: 'url', url: primaryUrl } },
+                { type: 'text', text: `Extract the visual style DNA of this room. Return JSON:
+{
+  "color_palette": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
+  "materials": ["material1", "material2", "material3"],
+  "lighting_type": "warm golden / cool daylight / dramatic / soft ambient",
+  "design_style": "modern minimalist / art deco / bohemian / etc.",
+  "key_textures": ["texture1", "texture2", "texture3"]
+}
+Return ONLY JSON.` },
+              ],
+            }],
+          });
+          const text = styleRes.content?.[0]?.text || '';
+          const match = text.match(/\{[\s\S]*\}/);
+          if (match) {
+            const styleData = JSON.parse(match[0]);
+            await SceneSet.update(
+              { visual_language: { ...vl, ...styleData, locked: true } },
+              { where: { id: set.id } }
+            );
+            console.log(`[SceneSets] Auto-locked style on upload: ${styleData.design_style}`);
+          }
+        } catch (styleErr) {
+          console.warn('[SceneSets] Auto style lock on upload failed:', styleErr.message);
+        }
+      }
+    }
   } catch (err) {
     console.error('Scene Sets POST /:id/upload-base error:', err);
     res.status(500).json({ success: false, error: err.message });
