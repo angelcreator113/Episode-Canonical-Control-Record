@@ -132,25 +132,30 @@ router.get('/', async (req, res) => {
       return res.status(503).json({ error: 'Show model not loaded', message: 'Database models are still initializing' });
     }
 
+    // Helper: timeout a promise after N ms
+    const withTimeout = (promise, ms) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`Query timeout after ${ms}ms`)), ms)),
+    ]);
+
     let shows;
 
-    // Primary: Sequelize model query
+    // Primary: Sequelize model query (10s timeout)
     try {
-      shows = await Show.findAll({
-        order: [['name', 'ASC']],
-      });
+      shows = await withTimeout(Show.findAll({ order: [['name', 'ASC']] }), 10000);
     } catch (modelErr) {
       console.error('GET /shows — Sequelize findAll failed, trying raw SQL fallback:', modelErr.message);
-      // Fallback: raw SQL in case the model has column mismatch with DB
+      // Fallback: raw SQL (10s timeout)
       try {
         const sequelize = Show.sequelize || require('../models').sequelize;
-        shows = await sequelize.query(
-          'SELECT * FROM shows WHERE deleted_at IS NULL ORDER BY name ASC',
-          { type: sequelize.QueryTypes.SELECT }
+        shows = await withTimeout(
+          sequelize.query('SELECT * FROM shows WHERE deleted_at IS NULL ORDER BY name ASC', { type: sequelize.QueryTypes.SELECT }),
+          10000
         );
       } catch (rawErr) {
         console.error('GET /shows — Raw SQL fallback also failed:', rawErr.message);
-        throw rawErr;
+        // Return empty instead of hanging
+        return res.json({ status: 'SUCCESS', data: [], count: 0, note: 'Database query failed: ' + rawErr.message });
       }
     }
 

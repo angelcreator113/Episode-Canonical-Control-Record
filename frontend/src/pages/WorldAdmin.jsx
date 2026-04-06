@@ -158,9 +158,9 @@ function WorldAdmin() {
   }, [successMsg]);
 
   const loadData = async () => {
-    setLoading(true);
+    setLoading(true); setError(null);
     try {
-      await Promise.allSettled([
+      const results = await Promise.allSettled([
         api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data)).catch(() => setShow({ id: showId, title: 'Show' })),
         api.get(`/api/v1/characters/lala/state?show_id=${showId}`).then(r => setCharState(r.data)).catch(() => {}),
         api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(r => {
@@ -174,6 +174,11 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
         api.get(`/api/v1/wardrobe-library?showId=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
       ]);
+      // Show error only if ALL calls failed (not just some timeouts)
+      const failures = results.filter(r => r.status === 'rejected');
+      if (failures.length === results.length) {
+        setError('Unable to connect to server. Please try refreshing.');
+      }
     } finally { setLoading(false); }
   };
 
@@ -220,12 +225,13 @@ function WorldAdmin() {
       const res = await api.post('/api/v1/memories/generate-events', {
         show_id: showId,
         replace_existing: worldEvents.length > 0,
-      });
+      }, { timeout: 120000 });
       const eventsRes = await api.get(`/api/v1/world/${showId}/events`);
       setWorldEvents(eventsRes.data?.events || []);
       setSuccessMsg(`Seeded ${res.data.generated} events (${Object.entries(res.data.breakdown || {}).map(([k, v]) => `${v} ${k}`).join(', ')})`);
     } catch (err) {
-      setError(err.response?.data?.error || err.message);
+      const msg = err.response?.data?.error || err.message || 'Unknown error';
+      setError(msg.includes('timeout') ? 'Event generation timed out. The AI may be slow — try again.' : msg);
     } finally {
       setSeedingEvents(false);
     }
@@ -701,7 +707,10 @@ The revised event should feel like a completely different experience from the si
         // Close inject panel after a brief delay so user sees the confirmation
         setTimeout(() => { setInjectTarget(null); setInjectSuccess(null); }, 2000);
         // Update local event status to 'used'
-        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'used', times_used: (ev.times_used || 0) + 1, used_in_episode_id: episodeId } : ev));
+        const updatedEvent = { ...worldEvents.find(ev => ev.id === eventId), status: 'used', times_used: ((worldEvents.find(ev => ev.id === eventId)?.times_used) || 0) + 1, used_in_episode_id: episodeId };
+        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? updatedEvent : ev));
+        // Also update the detail modal if it's showing this event
+        setEventDetailModal(prev => prev && prev.id === eventId ? { ...prev, status: 'used', used_in_episode_id: episodeId } : prev);
       } else {
         const msg = res.data?.error || res.data?.message || 'Inject returned unexpected response';
         setInjectError(msg); setError(msg);

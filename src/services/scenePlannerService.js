@@ -97,7 +97,31 @@ async function generateScenePlan(episodeId, showId, briefData, options = {}) {
   }
 
   // Build the AI prompt
-  const systemPrompt = `You are a scene planner for "Before Lala", a memoir-style reality show about a woman navigating fashion, social media, and self-discovery.
+  // Load linked event for this episode (if any)
+  let eventContext = '';
+  try {
+    const sequelize = require('../models').sequelize;
+    const [events] = await sequelize.query(
+      `SELECT name, event_type, location_hint, dress_code, prestige, strictness, scene_set_id
+       FROM world_events WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { episodeId } }
+    );
+    if (events.length > 0) {
+      const ev = events[0];
+      eventContext = `\n## Linked Event
+- Name: ${ev.name}
+- Type: ${ev.event_type}
+- Location: ${ev.location_hint || 'Not specified'}
+- Dress Code: ${ev.dress_code || 'None'}
+- Prestige: ${ev.prestige}/10
+- Strictness: ${ev.strictness}/10
+${ev.scene_set_id ? `- Preferred Scene Set ID: ${ev.scene_set_id} (use this for EVENT beats 10-12)` : ''}
+
+IMPORTANT: The Event Travel (beat 10), Event Outcome (beat 11), and Deliverable Creation (beat 12) should use the event's location/scene set. The event's dress code and prestige level should inform the visual tone.`;
+    }
+  } catch (e) { /* world_events may not exist */ }
+
+  const systemPrompt = `You are a scene planner for "Styling Adventures with Lala", a narrative-driven luxury fashion show about a creator building her career in the LalaVerse.
 
 You map episodes to a 14-beat structure, assigning each beat to a specific scene set (location) with a camera angle, shot type, and emotional direction.
 
@@ -107,6 +131,7 @@ Your assignments must:
 - Create natural visual flow between scenes (don't jump locations randomly)
 - Match the episode's narrative_purpose and emotional arc
 - Use variety in shot types and angles within each location
+- If a linked event has a preferred scene set, use it for event-related beats (10-12)
 
 Return ONLY valid JSON — an array of 14 beat objects.`;
 
@@ -127,7 +152,7 @@ Return ONLY valid JSON — an array of 14 beat objects.`;
 - Designed Intent: ${briefData.designed_intent || 'Not set'}
 - Forward Hook: ${briefData.forward_hook || 'Not set'}
 - Arc: ${briefData.arc_number || '?'} / Position: ${briefData.position_in_arc || '?'}
-
+${eventContext}
 ## Available Scene Sets
 ${sceneSetList}
 

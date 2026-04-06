@@ -26,6 +26,7 @@ const artifactDetection = require('./artifactDetectionService');
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_API_KEY     = process.env.RUNWAY_ML_API_KEY;
 const RUNWAY_API_VERSION = '2024-11-06';
+const OPENAI_API_KEY     = process.env.OPENAI_API_KEY;
 const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
@@ -42,16 +43,16 @@ const NEGATIVE_PROMPT = `person, people, human, figure, silhouette, body, face, 
 // ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
 
 const ANGLE_MODIFIERS = {
-  WIDE:         'Wide establishing shot, full room visible, camera at medium height, balanced composition.',
-  CLOSET:       'Camera facing wardrobe wall, full-height racks or shelving visible, soft glow on fabric textures.',
-  VANITY:       'Camera at vanity mirror, close-to-medium shot, soft focus on reflection and surface details.',
-  WINDOW:       'Camera facing window, natural light streaming in, subject silhouette or three-quarter view.',
-  DOORWAY:      'Camera at doorway threshold, looking into the room, sense of arrival or departure.',
-  ESTABLISHING: 'Wide exterior or grand interior entrance, full prestige of the space visible.',
-  ACTION:       'Dynamic angle, sense of movement or event energy, slightly asymmetric composition.',
-  CLOSE:        'Close shot on a specific surface, object, or detail. Intimate and personal.',
-  OVERHEAD:     'High angle looking down, revealing the full layout and spatial relationships.',
-  OTHER:        'Unique compositional angle appropriate to this specific location.',
+  WIDE:         'Wide establishing shot showing the FULL room from corner to corner. Camera pulled back to maximum width. Include ceiling, floor, and all walls visible. Extended panoramic view revealing the complete space and all furniture.',
+  CLOSET:       'Camera facing the wardrobe/closet area. Extend the view to show full-height clothing racks, shelving, and organized accessories. Soft warm glow on fabric textures. Show the full depth of the closet space as if the wall has been extended back.',
+  VANITY:       'Camera at vanity/dressing table area. Show the full mirror, surface details, beauty products, and surrounding decor. Extend the view to include adjacent shelving or wall art. Soft glamour lighting.',
+  WINDOW:       'Camera facing the window wall. Extend the view to show the FULL window and surrounding wall space. Natural golden light streaming in. Include curtains, window seat, or plants near the window. Show what is visible beyond the glass.',
+  DOORWAY:      'Camera at the doorway threshold, looking into the room from outside. Wide enough to show the full door frame and hallway. Sense of arrival — revealing the room from an outsider perspective. Extended view showing the transition between spaces.',
+  ESTABLISHING: 'Grand wide exterior or entrance shot. Camera pulled far back. Show the full facade, entrance, or grand interior from maximum distance. Include architectural details, landscaping, or approach path. The most expansive possible view.',
+  ACTION:       'Dynamic angle with sense of movement or event energy. Slightly asymmetric composition. Show the space as if someone just walked through it. Extended view capturing the flow of the room.',
+  CLOSE:        'Close-up shot on a signature surface, object, or detail. Intimate and personal. Show texture, material quality, and craftsmanship. Extend focus to include nearby complementary details.',
+  OVERHEAD:     'High overhead angle looking straight down. Reveal the full room layout, furniture arrangement, and floor pattern. Bird\'s-eye view showing the complete spatial relationships.',
+  OTHER:        'Unique compositional angle appropriate to this specific location. Extend the visible space beyond what the reference image shows.',
 };
 
 // ─── CAMERA MOTION MAPPING (per angle type) ─────────────────────────────────
@@ -104,7 +105,7 @@ const ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human.
 
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
-function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
+function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null, eventContext = null) {
   const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
   // Condensed anchor frees ~400 chars for description vs v1.1's ~200
@@ -115,9 +116,29 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     LALAVERSE_VISUAL_ANCHOR,
     `LOCATION: ${sceneSet.name}.`,
     descriptionSlice,
-    `CAMERA: ${cameraText}`,
-    'Photorealistic cinematic quality. No text overlays. No watermarks.',
   ];
+
+  // Inject event context (location_hint + dress_code atmosphere) into the prompt
+  if (eventContext) {
+    if (eventContext.location_hint) {
+      parts.push(`Event setting: ${eventContext.location_hint.slice(0, 100)}.`);
+    }
+    if (eventContext.dress_code) {
+      parts.push(`Atmosphere suggests ${eventContext.dress_code.toLowerCase()} dress code — adjust decor formality accordingly.`);
+    }
+    if (eventContext.prestige && eventContext.prestige >= 8) {
+      parts.push('Elite luxury venue — opulent details, crystal, gold accents, dramatic lighting.');
+    }
+  }
+
+  parts.push(`CAMERA: ${cameraText}`);
+
+  // For non-WIDE angles, add room extension instruction
+  if (angleLabel !== 'WIDE' && angleLabel !== 'OTHER') {
+    parts.push('IMPORTANT: Extend and expand the visible room space beyond the original reference. Show areas of the room not visible in the base image — imagine the room continues in the camera direction. Maintain the same design language, color palette, and material quality throughout the extended space.');
+  }
+
+  parts.push('Photorealistic cinematic quality. No text overlays. No watermarks.');
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -236,6 +257,58 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
       await sleep(backoff);
     }
   }
+}
+
+// ─── DALL-E 3 STILL GENERATION ──────────────────────────────────────────────
+
+/**
+ * Generate a high-quality still image via DALL-E 3.
+ * Returns the image URL directly (no polling needed).
+ * Used as the default for scene stills — richer detail than Runway for static scenes.
+ */
+async function generateDallEStill(prompt) {
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+
+  const dallePrompt = prompt.length > 4000 ? prompt.slice(0, 3997) + '...' : prompt;
+
+  const response = await axios.post(
+    'https://api.openai.com/v1/images/generations',
+    {
+      model: 'dall-e-3',
+      prompt: dallePrompt,
+      n: 1,
+      size: '1792x1024', // landscape 16:9-ish for cinematic scenes
+      quality: 'hd',
+      style: 'natural',
+      response_format: 'url',
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 120000,
+    }
+  );
+
+  return response.data.data[0]?.url;
+}
+
+/**
+ * Download an image from URL, upload to S3, return the S3 URL.
+ */
+async function downloadAndUploadToS3(imageUrl, s3Key) {
+  const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
+  const buffer = Buffer.from(response.data);
+
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: s3Key,
+    Body: buffer,
+    ContentType: 'image/png',
+  }));
+
+  return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
 /**
@@ -413,12 +486,42 @@ async function deleteOldS3Asset(url) {
     console.warn(`[SceneGen] S3 cleanup failed (non-blocking): ${err.message}`);
   }
 }
+// ─── EVENT CONTEXT LOADER ────────────────────────────────────────────────────
+
+async function loadEventContext(sceneSet, models) {
+  try {
+    const sequelize = models.sequelize;
+    // Find events linked to this scene set
+    const [events] = await sequelize.query(
+      `SELECT location_hint, dress_code, prestige, name FROM world_events
+       WHERE scene_set_id = :sceneSetId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { sceneSetId: sceneSet.id } }
+    );
+    if (events.length > 0) return events[0];
+
+    // Fallback: find events linked to episodes that use this scene set
+    const [epEvents] = await sequelize.query(
+      `SELECT we.location_hint, we.dress_code, we.prestige, we.name
+       FROM world_events we
+       JOIN scene_set_episodes sse ON sse.episode_id = we.used_in_episode_id
+       WHERE sse.scene_set_id = :sceneSetId AND we.deleted_at IS NULL AND sse.deleted_at IS NULL
+       LIMIT 1`,
+      { replacements: { sceneSetId: sceneSet.id } }
+    );
+    if (epEvents.length > 0) return epEvents[0];
+  } catch (e) {
+    // Tables may not exist yet
+  }
+  return null;
+}
+
 // ─── HIGH-LEVEL: GENERATE BASE SCENE ─────────────────────────────────────────
 
 async function generateBaseScene(sceneSet, models) {
   const { SceneSet } = models;
 
-  const prompt = buildPrompt(sceneSet, 'WIDE');
+  const eventContext = await loadEventContext(sceneSet, models);
+  const prompt = buildPrompt(sceneSet, 'WIDE', null, eventContext);
 
   await SceneSet.update(
     { generation_status: 'generating', base_runway_prompt: prompt },
@@ -428,48 +531,70 @@ async function generateBaseScene(sceneSet, models) {
   try {
     console.log(`[SceneGen] Starting base still for: ${sceneSet.name}`);
 
-    // Build style reference if set has one
-    const styleReference = sceneSet.style_reference_url
-      ? { uri: sceneSet.style_reference_url, weight: 0.7 }
-      : undefined;
+    // Determine generation engine: DALL-E (default for stills) or Runway
+    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    let stillUrl, lockedSeed = null, stillCredits = 0;
 
-    // ── Step 1: Text → Still (with multi-variation if configured) ─────────
-    const numVariations = sceneSet.variation_count || 1;
-    let stillOutputUrl, stillSeed, stillCredits;
+    if (!useRunway && OPENAI_API_KEY) {
+      // ── DALL-E 3 path: richer detail for static scene stills ─────────
+      console.log(`[SceneGen] Using DALL-E 3 for richer scene still`);
+      try {
+        const dalleUrl = await generateDallEStill(prompt);
+        if (!dalleUrl) throw new Error('DALL-E 3 did not return an image URL');
 
-    if (numVariations > 1) {
-      const varResult = await generateBestVariation(prompt, numVariations, { styleReference });
-      if (!varResult.best) {
-        await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
-        throw new Error(`Base still multi-variation failed: ${varResult.error}`);
+        const s3Key = `scenes/${sceneSet.id}/base-still-${Date.now()}.png`;
+        stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+        console.log(`[SceneGen] DALL-E still complete, uploaded to S3`);
+      } catch (dalleErr) {
+        console.warn(`[SceneGen] DALL-E 3 failed, falling back to Runway:`, dalleErr.message);
+        // Fall through to Runway path
+        stillUrl = null;
       }
-      stillOutputUrl = varResult.best.url;
-      stillSeed = varResult.seed;
-      stillCredits = varResult.creditsUsed || 0;
-    } else {
-      const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference });
-      const stillResult = await pollTask(stillJobId);
-      if (stillResult.status !== 'SUCCEEDED') {
-        await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
-        throw new Error(`Base still failed: ${stillResult.error}`);
-      }
-      stillOutputUrl = stillResult.outputUrl;
-      stillSeed = stillResult.seed;
-      stillCredits = stillResult.creditsUsed || 0;
     }
 
-    const stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
-    const lockedSeed = stillSeed != null ? String(stillSeed) : null;
+    if (!stillUrl) {
+      // ── Runway path: used as fallback or when video is needed ─────────
+      console.log(`[SceneGen] Using Runway for scene still`);
+      const styleReference = sceneSet.style_reference_url
+        ? { uri: sceneSet.style_reference_url, weight: 0.7 }
+        : undefined;
+
+      const numVariations = sceneSet.variation_count || 1;
+      let stillOutputUrl, stillSeed;
+
+      if (numVariations > 1) {
+        const varResult = await generateBestVariation(prompt, numVariations, { styleReference });
+        if (!varResult.best) {
+          await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+          throw new Error(`Base still multi-variation failed: ${varResult.error}`);
+        }
+        stillOutputUrl = varResult.best.url;
+        stillSeed = varResult.seed;
+        stillCredits = varResult.creditsUsed || 0;
+      } else {
+        const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference });
+        const stillResult = await pollTask(stillJobId);
+        if (stillResult.status !== 'SUCCEEDED') {
+          await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+          throw new Error(`Base still failed: ${stillResult.error}`);
+        }
+        stillOutputUrl = stillResult.outputUrl;
+        stillSeed = stillResult.seed;
+        stillCredits = stillResult.creditsUsed || 0;
+      }
+
+      stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
+      lockedSeed = stillSeed != null ? String(stillSeed) : null;
+    }
 
     // Clean up old base still from S3 (best-effort)
     if (sceneSet.base_still_url) {
       await deleteOldS3Asset(sceneSet.base_still_url);
     }
 
-    console.log(`[SceneGen] Still complete. Seed locked: ${lockedSeed}`);
+    console.log(`[SceneGen] Still complete.${lockedSeed ? ` Seed locked: ${lockedSeed}` : ' (DALL-E — no seed)'}`);
 
     // Lock the seed + base still URL — permanent
-    // Base video is generated on-demand only (use POST /:id/generate-video to produce it)
     await SceneSet.update({
       base_runway_seed: lockedSeed,
       base_still_url: stillUrl,
@@ -535,8 +660,8 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  // Use the full angle-specific prompt for text→image (cheap: ~1 credit via gen4_image)
-  const prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
+  const eventContext = await loadEventContext(sceneSet, models);
+  const prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction, eventContext);
 
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt },
@@ -544,41 +669,88 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   );
 
   try {
-    console.log(`[SceneGen] Starting text-to-image still for angle: ${sceneAngle.angle_name}`);
-
-    // Derive a seed variation from the parent set's locked seed so sibling angles
-    // share the same stylistic base while remaining visually distinct.
-    const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
-      ? Number(sceneSet.base_runway_seed)
-      : null;
-    const seedOpt = numericSeed !== null
-      ? String(numericSeed + (sceneAngle.generation_attempt || 0) + 1)
-      : undefined;
-
-    const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
-      ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
-      : undefined;
-
-    // Anchor all angles to the base still so they show the same room from different cameras.
-    // Note: gen4_image uses 'weight' (0-1) not 'tag' for reference images
-    const referenceImages = sceneSet.base_still_url
-      ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
-      : undefined;
-
-    const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });
-    const result = await pollTask(jobId);
-
-    if (result.status !== 'SUCCEEDED') {
-      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-      throw new Error(`Angle still failed: ${result.error}`);
-    }
+    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
 
     // Clean up old assets from S3 (best-effort)
     if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
     if (sceneAngle.video_clip_url)  await deleteOldS3Asset(sceneAngle.video_clip_url);
 
-    const stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
-    const totalCost = result.creditsUsed || 0;
+    let stillUrl, totalCost = 0;
+
+    // Save current image to generation history before overwriting
+    if (sceneAngle.still_image_url) {
+      try {
+        const review = sceneAngle.quality_review || {};
+        const history = review.generation_history || [];
+        history.push({
+          url: sceneAngle.still_image_url,
+          replaced_at: new Date().toISOString(),
+          attempt: sceneAngle.generation_attempt,
+          quality_score: sceneAngle.quality_score,
+        });
+        review.generation_history = history;
+        await SceneAngle.update({ quality_review: review }, { where: { id: sceneAngle.id } });
+      } catch (_) { /* best-effort history */ }
+    }
+
+    // Try DALL-E first for richer stills, fall back to Runway
+    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    if (!useRunway && OPENAI_API_KEY) {
+      try {
+        console.log(`[SceneGen] Using DALL-E 3 for angle still`);
+
+        // Enhance prompt with style lock data if available
+        let enhancedPrompt = prompt;
+        const style = sceneSet.visual_language;
+        if (style?.locked) {
+          const styleParts = [];
+          if (style.color_palette) styleParts.push(`Color palette: ${style.color_palette.join(', ')}.`);
+          if (style.materials) styleParts.push(`Materials: ${style.materials.join(', ')}.`);
+          if (style.lighting_type) styleParts.push(`Lighting: ${style.lighting_type}.`);
+          if (style.design_style) styleParts.push(`Style: ${style.design_style}.`);
+          if (styleParts.length > 0) {
+            enhancedPrompt = prompt.replace('Photorealistic', styleParts.join(' ') + ' Photorealistic');
+          }
+        }
+
+        const dalleUrl = await generateDallEStill(enhancedPrompt);
+        if (dalleUrl) {
+          const s3Key = `scenes/${sceneSet.id}/angles/${sceneAngle.id}/still-${Date.now()}.png`;
+          stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+        }
+      } catch (dalleErr) {
+        console.warn(`[SceneGen] DALL-E failed for angle, falling back to Runway:`, dalleErr.message);
+      }
+    }
+
+    if (!stillUrl) {
+      // Runway path
+      const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
+        ? Number(sceneSet.base_runway_seed)
+        : null;
+      const seedOpt = numericSeed !== null
+        ? String(numericSeed + (sceneAngle.generation_attempt || 0) + 1)
+        : undefined;
+
+      const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
+        ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
+        : undefined;
+
+      const referenceImages = sceneSet.base_still_url
+        ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
+        : undefined;
+
+      const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });
+      const result = await pollTask(jobId);
+
+      if (result.status !== 'SUCCEEDED') {
+        await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+        throw new Error(`Angle still failed: ${result.error}`);
+      }
+
+      stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
+      totalCost = result.creditsUsed || 0;
+    }
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
@@ -670,7 +842,8 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  const basePrompt = buildPrompt(sceneSet, angleLabel);
+  const eventContext = await loadEventContext(sceneSet, models);
+  const basePrompt = buildPrompt(sceneSet, angleLabel, null, eventContext);
   const refinedPrompt = artifactDetection.buildRefinedPrompt(basePrompt, artifactCategories);
 
   await SceneAngle.update(
