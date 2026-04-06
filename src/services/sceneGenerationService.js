@@ -405,14 +405,23 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
           Body: imgBuf,
           ContentType: 'image/png',
         }));
-        const url = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${s3Key}`;
-        console.log(`[SceneGen] DALL-E edit success: ${url}`);
+        const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+        console.log(`[SceneGen] DALL-E edit success (b64→S3): ${url}`);
         return url;
       }
 
-      const url = response.data.data[0]?.url;
-      console.log(`[SceneGen] DALL-E edit success: ${url ? 'got URL' : 'no URL in response'}`);
-      return url;
+      // Fallback: if response has a URL instead of b64, download and re-upload to S3
+      // OpenAI URLs expire after ~1 hour so we must persist to S3
+      const tempUrl = response.data.data[0]?.url;
+      if (tempUrl) {
+        const s3Key = `scenes/dalle-edit-${Date.now()}.png`;
+        const persistedUrl = await downloadAndUploadToS3(tempUrl, s3Key);
+        console.log(`[SceneGen] DALL-E edit success (url→S3): ${persistedUrl}`);
+        return persistedUrl;
+      }
+
+      console.warn('[SceneGen] DALL-E edit returned no image data');
+      return null;
     }
 
     // No reference image — standard dall-e-3 generation
