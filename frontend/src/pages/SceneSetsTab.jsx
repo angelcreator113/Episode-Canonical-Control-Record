@@ -753,7 +753,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   if (hasStill) {
                     if (isActive) setShowBaseLightbox(true);
                     else setSelectedAngleId(angle.id);
-                  } else if (isPending && !isGenerating) {
+                  } else if ((isPending || isFailed) && !isGenerating) {
                     onGenerateAngle(set, angle);
                   }
                 }}
@@ -762,7 +762,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     onSetCoverAngle(set, isCover ? null : angle.id);
                   }
                 }}
-                title={hasStill ? `${angle.angle_name}${isCover ? ' (Cover)' : ''} — double-click to ${isCover ? 'unset' : 'set as'} cover` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
+                title={hasStill ? `${angle.angle_name}${isCover ? ' (Cover)' : ''} — double-click to ${isCover ? 'unset' : 'set as'} cover` : isFailed ? `Retry: ${angle.angle_name}` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
               >
                 {hasStill ? (
                   <img src={bustUrl(angle.still_image_url)} alt={angle.angle_label} />
