@@ -685,7 +685,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
     if (sceneAngle.video_clip_url)  await deleteOldS3Asset(sceneAngle.video_clip_url);
 
-    let stillUrl, totalCost = 0;
+    let stillUrl, totalCost = 0, generatedSeed = null;
 
     // Save current image to generation history before overwriting
     if (sceneAngle.still_image_url) {
@@ -760,6 +760,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
       stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
       totalCost = result.creditsUsed || 0;
+      generatedSeed = result.seed ?? jobId;
     }
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
@@ -776,7 +777,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: null,
-      runway_seed: String(result.seed ?? jobId),
+      runway_seed: generatedSeed ? String(generatedSeed) : null,
       generation_status: 'complete',
       generation_cost: totalCost,
       quality_score: qualityData.qualityScore,
@@ -786,7 +787,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
     await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
 
-    return { success: true, stillUrl, videoUrl: null, seed: result.seed, qualityScore: qualityData.qualityScore };
+    return { success: true, stillUrl, videoUrl: null, seed: generatedSeed, qualityScore: qualityData.qualityScore };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;
