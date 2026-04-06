@@ -317,8 +317,8 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
       form.append('image', imageBuffer, { filename: 'base.png', contentType: 'image/png' });
 
       // Add cropped reference region as additional context if available
-      const { imageAnalysis, styleLock, croppedRefUrl, depthMapUrl } = extras;
-      if (croppedRefUrl) {
+      if (extras.croppedRefUrl) {
+        const croppedRefUrl = extras.croppedRefUrl;
         try {
           const cropRes = await axios.get(croppedRefUrl, { responseType: 'arraybuffer', timeout: 15000 });
           form.append('image', Buffer.from(cropRes.data), { filename: 'crop-ref.png', contentType: 'image/png' });
@@ -326,25 +326,35 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
         } catch { /* non-blocking */ }
       }
 
-      // Build concrete detail constraints from image analysis + style lock
+      // Build detail constraints for the edit instruction (NOT visible in the generated image)
+      // These go into the system-level instruction, not the visual prompt
+      const { imageAnalysis, styleLock, croppedRefUrl, depthMapUrl, regionHint, retryCorrections } = extras;
       let detailConstraints = '';
       if (imageAnalysis) {
-        const inv = buildInventoryPrompt(imageAnalysis);
-        if (inv) detailConstraints += ` ${inv}`;
+        // Use spatial layout and key items but phrase as instructions, not labels
+        if (imageAnalysis.spatial_layout) detailConstraints += ` Room layout: ${imageAnalysis.spatial_layout}`;
+        if (imageAnalysis.wall_color) detailConstraints += ` Walls must be ${imageAnalysis.wall_color}.`;
+        if (imageAnalysis.visible_through_windows) detailConstraints += ` Windows show: ${imageAnalysis.visible_through_windows}.`;
       }
       if (styleLock) {
         const lockParts = [];
-        if (styleLock.color_palette) lockParts.push(`Exact colors: ${styleLock.color_palette.join(', ')}.`);
+        if (styleLock.color_palette) lockParts.push(`Use these exact colors: ${styleLock.color_palette.join(', ')}.`);
         if (styleLock.materials) lockParts.push(`Materials: ${styleLock.materials.join(', ')}.`);
         if (styleLock.lighting_type) lockParts.push(`Lighting: ${styleLock.lighting_type}.`);
         if (styleLock.design_style) lockParts.push(`Style: ${styleLock.design_style}.`);
-        if (lockParts.length) detailConstraints += ` STYLE DNA: ${lockParts.join(' ')}`;
+        if (lockParts.length) detailConstraints += ` ${lockParts.join(' ')}`;
       }
+      if (regionHint) detailConstraints += ` ${regionHint}`;
+      if (retryCorrections?.length) {
+        detailConstraints += ` MUST FIX from previous attempt: ${retryCorrections.join('; ')}.`;
+      }
+
+      const NO_TEXT_RULE = 'NEVER render text, labels, annotations, arrows, diagrams, or captions on the image. Generate ONLY the photographic scene.';
 
       const isWide = angleLabel === 'WIDE' || angleLabel === 'ESTABLISHING';
       const editInstruction = isWide
-        ? `This is a photograph of a room. Generate the EXACT same room from a wide angle. Every piece of furniture, every wall color, every decor item must be in the SAME position. The spatial layout is fixed — nothing moves. This is a real room photographed from a wider lens.${detailConstraints} ${dallePrompt}`
-        : `CRITICAL: This is a photograph of a REAL physical room. You are a camera operator repositioning inside this room. THE ROOM IS FIXED — it is a built set that cannot change. RULES: 1) The SPATIAL LAYOUT is locked: every piece of furniture stays in its exact position. If the bed is against the back wall, it stays there. If the vanity is on the right, it stays on the right. 2) All wall colors, flooring, furniture, fabrics, lighting fixtures, neon signs, posters, and decor must be IDENTICAL in color, material, and position. 3) When the camera turns to face a direction not visible in this photo, IMAGINE what you would see: the same wall color continues, the same flooring continues, and any new furniture must match the existing style. 4) Elements visible in this photo that would ALSO be visible from the new angle must appear in their correct positions — do NOT move or remove them.${detailConstraints} ${dallePrompt}`;
+        ? `${NO_TEXT_RULE} This is a photograph of a room. Generate the EXACT same room from a wide angle. Every piece of furniture, wall color, and decor item must be in the SAME position. The spatial layout is fixed.${detailConstraints} ${dallePrompt}`
+        : `${NO_TEXT_RULE} This is a photograph of a REAL physical room. You are a camera operator repositioning inside this room. THE ROOM IS FIXED. RULES: 1) The SPATIAL LAYOUT is locked — every piece of furniture stays in its exact position. 2) All wall colors, flooring, furniture, fabrics, lighting, neon signs, and decor must be IDENTICAL. 3) When the camera faces a new direction, imagine the same walls, floors, and style continuing. 4) Elements visible from the new angle must appear in their correct positions.${detailConstraints} ${dallePrompt}`;
       form.append('prompt', editInstruction);
       form.append('n', '1');
       form.append('size', '1536x1024');
@@ -1117,24 +1127,12 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
   let imageAnalysis = null;
   if (sceneSet.base_still_url) {
     imageAnalysis = await analyzeBaseImage(sceneSet, SceneSet);
-    const inventory = buildInventoryPrompt(imageAnalysis);
-    if (inventory) {
-      prompt = `${inventory} ${prompt}`;
-    }
+    // NOTE: inventory is NOT prepended to the image prompt — it goes into the
+    // edit instruction separately to avoid DALL-E rendering text labels on the image
   }
 
-  // ── Feature 4: Per-angle reference region hint ──
-  const regionHint = getReferenceRegionHint(angleLabel);
-  if (regionHint) {
-    prompt = `${regionHint} ${prompt}`;
-  }
-
-  // ── Feature 4b: Auto-retry correction context ──
-  if (_retryContext?.issues?.length) {
-    const corrections = _retryContext.issues.map(i => `- FIX: ${i}`).join(' ');
-    prompt = `CORRECTION FROM PREVIOUS ATTEMPT (must fix these): ${corrections} ${prompt}`;
-    console.log(`[SceneGen] Retry #${_retryContext.attempt} with ${_retryContext.issues.length} corrections`);
-  }
+  // Region hint and retry corrections are passed to the edit instruction only,
+  // NOT the image prompt — prevents DALL-E from rendering text labels on the image
 
   // ── Features 3 & cropping: run in parallel ──
   let croppedRefUrl = null;
@@ -1203,6 +1201,8 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
           styleLock: style?.locked ? style : null,
           croppedRefUrl,
           depthMapUrl,
+          regionHint: getReferenceRegionHint(angleLabel),
+          retryCorrections: _retryContext?.issues || null,
         });
         if (dalleUrl) {
           // If gpt-image-1 edit already uploaded to S3, use directly; otherwise download & upload
