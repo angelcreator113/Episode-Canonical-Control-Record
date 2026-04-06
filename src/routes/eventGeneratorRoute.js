@@ -18,12 +18,18 @@ const { optionalAuth } = require('../middleware/auth');
 
 const client = new Anthropic();
 
+const MODELS = ['claude-sonnet-4-6'];
+
 // POST /generate-events
 router.post('/generate-events', optionalAuth, async (req, res) => {
   const { show_id, replace_existing = false } = req.body;
 
   if (!show_id) {
     return res.status(400).json({ error: 'show_id required' });
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
   }
 
   try {
@@ -46,15 +52,24 @@ router.post('/generate-events', optionalAuth, async (req, res) => {
 
     const prompt = buildEventPrompt();
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
-      system: `You are the architect of LalaVerse — a fashion game world where Lala, a stylish AI content creator, 
-navigates industry events, dating scenarios, family obligations, and social drama. 
+    let message;
+    for (const model of MODELS) {
+      try {
+        message = await client.messages.create({
+          model,
+          max_tokens: 8000,
+          system: `You are the architect of LalaVerse — a fashion game world where Lala, a stylish AI content creator,
+navigates industry events, dating scenarios, family obligations, and social drama.
 Each event is a real game mechanic: it has a reputation gate, a coin cost, a dress code, and aesthetic stakes.
 Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`,
-      messages: [{ role: 'user', content: prompt }],
-    });
+          messages: [{ role: 'user', content: prompt }],
+        });
+        break;
+      } catch (modelErr) {
+        console.warn(`Event generation with ${model} failed:`, modelErr.message);
+        if (model === MODELS[MODELS.length - 1]) throw modelErr;
+      }
+    }
 
     const raw = message.content[0].text.trim().replace(/```json|```/g, '').trim();
     let events;
