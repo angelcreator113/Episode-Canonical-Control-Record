@@ -3447,3 +3447,314 @@
   background: #f0fdf4;
   color: #16a34a;
 }
+
+/* ── Room Properties ─────────────────────────────────────────────────────── */
+
+.scene-sets-field-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ss-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.scene-sets-select-sm {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-ink);
+  min-width: 120px;
+  cursor: pointer;
+  transition: border-color var(--ss-transition);
+}
+
+.scene-sets-select-sm:hover {
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-room-props-summary {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-room-props-summary span {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--ss-surface);
+  border-radius: 10px;
+  color: var(--ss-muted);
+  text-transform: capitalize;
+}
+
+/* ── Description Builder ─────────────────────────────────────────────────── */
+
+.scene-sets-desc-helper {
+  margin-bottom: 6px;
+}
+
+.scene-sets-desc-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ss-muted);
+  line-height: 1.5;
+}
+
+.scene-sets-desc-textarea {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.scene-sets-desc-textarea::placeholder {
+  font-family: 'Lora', serif;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.scene-sets-ai-desc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px dashed var(--ss-gold);
+  background: var(--ss-gold-light);
+  color: var(--ss-gold);
+  cursor: pointer;
+}
+
+.scene-sets-ai-desc-btn:hover {
+  background: rgba(184, 150, 46, 0.2);
+  border-style: solid;
+}
+
+.scene-sets-ai-desc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Episode Checkboxes ──────────────────────────────────────────────────── */
+
+.scene-sets-episode-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--ss-surface);
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+}
+
+.scene-sets-episode-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--ss-ink);
+  transition: background var(--ss-transition);
+}
+
+.scene-sets-episode-checkbox:hover {
+  background: #fff;
+}
+
+.scene-sets-episode-checkbox input[type="checkbox"] {
+  accent-color: var(--ss-gold);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.scene-sets-episode-checkbox-title {
+  color: var(--ss-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Guided Description Builder ──────────────────────────────────────────── */
+
+.scene-sets-builder-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-gold);
+  cursor: pointer;
+}
+
+.scene-sets-builder-toggle:hover {
+  background: var(--ss-gold-light);
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-guided-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scene-sets-builder-step {
+  transition: opacity 0.2s ease, max-height 0.3s ease;
+  overflow: hidden;
+}
+
+.scene-sets-builder-step.visible {
+  opacity: 1;
+  max-height: 80px;
+}
+
+.scene-sets-builder-step.hidden {
+  opacity: 0.3;
+  max-height: 0;
+  pointer-events: none;
+}
+
+.scene-sets-builder-step.answered .scene-sets-builder-input {
+  border-color: var(--ss-gold);
+  background: rgba(184, 150, 46, 0.04);
+}
+
+.scene-sets-builder-question {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ss-ink);
+  margin-bottom: 4px;
+}
+
+.scene-sets-builder-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.scene-sets-builder-input {
+  width: 100%;
+  font-family: 'Lora', serif;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+  background: #fff;
+  color: var(--ss-ink);
+  transition: border-color var(--ss-transition);
+  margin-bottom: 6px;
+}
+
+.scene-sets-builder-input:focus {
+  border-color: var(--ss-gold);
+  outline: none;
+}
+
+.scene-sets-builder-input::placeholder {
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+/* ── Safe Description Editor ─────────────────────────────────────────────── */
+
+.scene-sets-overview-desc-wrap {
+  position: relative;
+}
+
+.scene-sets-desc-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-muted);
+  cursor: pointer;
+}
+
+.scene-sets-desc-edit-btn:hover {
+  color: var(--ss-gold);
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-desc-editor {
+  margin-bottom: 12px;
+}
+
+.scene-sets-desc-editor-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ss-gold);
+  background: var(--ss-gold-light);
+  padding: 6px 10px;
+  border-radius: var(--ss-radius-sm);
+  margin-bottom: 8px;
+}
+
+.scene-sets-desc-editor-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Tools Section Labels ────────────────────────────────────────────────── */
+
+.scene-sets-tools-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ss-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+/* ── Promote to Base Button ──────────────────────────────────────────────── */
+
+.scene-sets-promote-btn {
+  font-size: 10px !important;
+  gap: 3px;
+  color: var(--ss-gold) !important;
+  border-color: var(--ss-gold) !important;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--ss-transition);
+}
+
+.scene-sets-angle-row:hover .scene-sets-promote-btn {
+  opacity: 1;
+}
+
+.scene-sets-promote-btn:hover {
+  background: var(--ss-gold-light) !important;
+}

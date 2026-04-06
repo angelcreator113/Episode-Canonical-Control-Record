@@ -160,6 +160,18 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     parts.push(timeParts.join(' '));
   }
 
+  // Room properties affect spatial rendering
+  const rp = sceneSet.visual_language?.room_properties;
+  if (rp?.room_size) {
+    const sizeDescriptions = {
+      compact: 'This is a compact, cozy room — furniture is close together, minimal open floor space.',
+      medium: 'This is a medium-sized room with moderate space between furniture.',
+      spacious: 'This is a spacious room — generous open floor space, breathing room between furniture, wide sight lines.',
+      grand: 'This is a grand, expansive space — high ceilings, vast floor area, dramatic proportions.',
+    };
+    if (sizeDescriptions[rp.room_size]) parts.push(sizeDescriptions[rp.room_size]);
+  }
+
   parts.push(`CAMERA: ${cameraText}`);
 
   // For non-WIDE angles, add room extension instruction
@@ -317,8 +329,8 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
       form.append('image', imageBuffer, { filename: 'base.png', contentType: 'image/png' });
 
       // Add cropped reference region as additional context if available
-      const { imageAnalysis, styleLock, croppedRefUrl, depthMapUrl } = extras;
-      if (croppedRefUrl) {
+      if (extras.croppedRefUrl) {
+        const croppedRefUrl = extras.croppedRefUrl;
         try {
           const cropRes = await axios.get(croppedRefUrl, { responseType: 'arraybuffer', timeout: 15000 });
           form.append('image', Buffer.from(cropRes.data), { filename: 'crop-ref.png', contentType: 'image/png' });
@@ -326,25 +338,46 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
         } catch { /* non-blocking */ }
       }
 
-      // Build concrete detail constraints from image analysis + style lock
+      // Build detail constraints for the edit instruction (NOT visible in the generated image)
+      // These go into the system-level instruction, not the visual prompt
+      const { imageAnalysis, styleLock, croppedRefUrl, depthMapUrl, regionHint, retryCorrections } = extras;
       let detailConstraints = '';
       if (imageAnalysis) {
-        const inv = buildInventoryPrompt(imageAnalysis);
-        if (inv) detailConstraints += ` ${inv}`;
+        if (imageAnalysis.spatial_layout) detailConstraints += ` Room layout: ${imageAnalysis.spatial_layout}`;
+        if (imageAnalysis.wall_color) detailConstraints += ` Walls must be ${imageAnalysis.wall_color}.`;
+        if (imageAnalysis.visible_through_windows) detailConstraints += ` Windows show: ${imageAnalysis.visible_through_windows}.`;
+        // Room properties affect how the space looks from different angles
+        const rp = imageAnalysis.room_properties;
+        if (rp) {
+          const rpParts = [];
+          if (rp.room_size) rpParts.push(`Room is ${rp.room_size}`);
+          if (rp.ceiling_height && rp.ceiling_height !== 'standard') rpParts.push(`${rp.ceiling_height} ceiling`);
+          if (rp.floor_space_visible) rpParts.push(`${rp.floor_space_visible} visible floor space`);
+          if (rp.furniture_density) rpParts.push(`furniture is ${rp.furniture_density}`);
+          if (rp.depth_impression) rpParts.push(`${rp.depth_impression} depth`);
+          if (rpParts.length) detailConstraints += ` Room character: ${rpParts.join(', ')}.`;
+          if (rp.window_count) detailConstraints += ` ${rp.window_count} window(s) on ${(rp.window_walls || []).join(' and ')}.`;
+        }
       }
       if (styleLock) {
         const lockParts = [];
-        if (styleLock.color_palette) lockParts.push(`Exact colors: ${styleLock.color_palette.join(', ')}.`);
+        if (styleLock.color_palette) lockParts.push(`Use these exact colors: ${styleLock.color_palette.join(', ')}.`);
         if (styleLock.materials) lockParts.push(`Materials: ${styleLock.materials.join(', ')}.`);
         if (styleLock.lighting_type) lockParts.push(`Lighting: ${styleLock.lighting_type}.`);
         if (styleLock.design_style) lockParts.push(`Style: ${styleLock.design_style}.`);
-        if (lockParts.length) detailConstraints += ` STYLE DNA: ${lockParts.join(' ')}`;
+        if (lockParts.length) detailConstraints += ` ${lockParts.join(' ')}`;
       }
+      if (regionHint) detailConstraints += ` ${regionHint}`;
+      if (retryCorrections?.length) {
+        detailConstraints += ` MUST FIX from previous attempt: ${retryCorrections.join('; ')}.`;
+      }
+
+      const NO_TEXT_RULE = 'NEVER render text, labels, annotations, arrows, diagrams, or captions on the image. Generate ONLY the photographic scene.';
 
       const isWide = angleLabel === 'WIDE' || angleLabel === 'ESTABLISHING';
       const editInstruction = isWide
-        ? `This is a photograph of a room. Generate the EXACT same room from a wide angle. Every piece of furniture, every wall color, every decor item must be in the SAME position. The spatial layout is fixed — nothing moves. This is a real room photographed from a wider lens.${detailConstraints} ${dallePrompt}`
-        : `CRITICAL: This is a photograph of a REAL physical room. You are a camera operator repositioning inside this room. THE ROOM IS FIXED — it is a built set that cannot change. RULES: 1) The SPATIAL LAYOUT is locked: every piece of furniture stays in its exact position. If the bed is against the back wall, it stays there. If the vanity is on the right, it stays on the right. 2) All wall colors, flooring, furniture, fabrics, lighting fixtures, neon signs, posters, and decor must be IDENTICAL in color, material, and position. 3) When the camera turns to face a direction not visible in this photo, IMAGINE what you would see: the same wall color continues, the same flooring continues, and any new furniture must match the existing style. 4) Elements visible in this photo that would ALSO be visible from the new angle must appear in their correct positions — do NOT move or remove them.${detailConstraints} ${dallePrompt}`;
+        ? `${NO_TEXT_RULE} This is a photograph of a room. Generate the EXACT same room from a wide angle. Every piece of furniture, wall color, and decor item must be in the SAME position. The spatial layout is fixed.${detailConstraints} ${dallePrompt}`
+        : `${NO_TEXT_RULE} This is a photograph of a REAL physical room. You are a camera operator repositioning inside this room. THE ROOM IS FIXED. RULES: 1) The SPATIAL LAYOUT is locked — every piece of furniture stays in its exact position. 2) All wall colors, flooring, furniture, fabrics, lighting, neon signs, and decor must be IDENTICAL. 3) When the camera faces a new direction, imagine the same walls, floors, and style continuing. 4) Elements visible from the new angle must appear in their correct positions.${detailConstraints} ${dallePrompt}`;
       form.append('prompt', editInstruction);
       form.append('n', '1');
       form.append('size', '1536x1024');
@@ -836,7 +869,7 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  const IMAGE_ANALYSIS_VERSION = 2; // bump to invalidate cache when schema changes
+  const IMAGE_ANALYSIS_VERSION = 4; // bump to invalidate cache when schema changes
   // Check cache — skip if already analyzed for this base image with current version
   const vl = sceneSet.visual_language || {};
   if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
@@ -859,18 +892,31 @@ async function analyzeBaseImage(sceneSet, SceneSetModel) {
 
 Return JSON:
 {
-  "wall_color": "exact color (e.g. 'soft lavender/purple')",
+  "image_type": "room_photo | mood_board | collage | illustration | other — what kind of image is this?",
+  "wall_color": "exact color (e.g. 'soft lavender/purple') — only if this is a room photo",
   "flooring": "exact floor type and color",
-  "spatial_layout": "Describe the room layout as if drawing a floor plan. Use compass directions or clock positions. Example: 'Bed centered against the back wall (12 o'clock). Window on left wall (9 o'clock) with window seat. Vanity/mirror on right wall (3 o'clock). Music corner with keyboard and guitar in far-left corner (10 o'clock). Door at 6 o'clock.'",
-  "furniture": ["item1 with exact color/material AND position in room", "item2...", ...],
-  "lighting_fixtures": ["fixture with position (e.g. 'neon lalas world sign above headboard')", ...],
-  "signature_decor": ["specific item with position (e.g. 'photo collage wall behind bed')", ...],
-  "textiles": ["item with color/pattern (e.g. 'purple tie-dye duvet on bed')", ...],
-  "visible_through_windows": "what is visible outside (e.g. 'LA night skyline with palm trees')",
+  "spatial_layout": "Describe the room layout as if drawing a floor plan. Use clock positions. Example: 'Bed against back wall (12). Window left wall (9). Vanity right wall (3). Music corner (10). Door (6).'",
+  "room_properties": {
+    "room_size": "compact | medium | spacious | grand",
+    "ceiling_height": "standard | tall | vaulted | double_height",
+    "room_shape": "rectangular | square | l_shaped | open_plan | irregular",
+    "window_count": <number>,
+    "window_walls": ["which walls have windows, e.g. 'left wall', 'back wall'"],
+    "door_count": <number>,
+    "door_positions": ["e.g. '6 o'clock', 'right wall'"],
+    "floor_space_visible": "minimal | moderate | generous — how much open floor is visible",
+    "furniture_density": "sparse | moderate | dense — how tightly packed is the furniture",
+    "depth_impression": "shallow | moderate | deep — how far back does the room extend"
+  },
+  "furniture": ["item with color/material AND position", ...],
+  "lighting_fixtures": ["fixture with position", ...],
+  "signature_decor": ["specific item with position", ...],
+  "textiles": ["item with color/pattern", ...],
+  "visible_through_windows": "what is visible outside",
   "color_palette_hex": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
-  "atmosphere": "one sentence describing overall mood, lighting quality, and time of day"
+  "atmosphere": "one sentence — mood, lighting quality, time of day"
 }
-Be extremely specific — mention neon sign text, poster subjects, exact furniture colors. The spatial_layout field is CRITICAL — describe where each major element sits relative to the others.
+Be extremely specific. The spatial_layout and room_properties fields are CRITICAL for generating consistent camera angles.
 Return ONLY JSON.` },
         ],
       }],
@@ -885,13 +931,17 @@ Return ONLY JSON.` },
     analysis.version = IMAGE_ANALYSIS_VERSION;
     analysis.analyzed_at = new Date().toISOString();
 
-    // Cache in visual_language
+    // Cache in visual_language — room_properties stored at top level for easy UI access/override
+    const updatedVl = { ...vl, image_analysis: analysis };
+    if (analysis.room_properties && !vl.room_properties_manual) {
+      updatedVl.room_properties = analysis.room_properties;
+    }
     await SceneSetModel.update(
-      { visual_language: { ...vl, image_analysis: analysis } },
+      { visual_language: updatedVl },
       { where: { id: sceneSet.id } }
     );
 
-    console.log(`[SceneGen] Image analysis complete: ${analysis.furniture?.length || 0} furniture, ${analysis.signature_decor?.length || 0} decor items`);
+    console.log(`[SceneGen] Image analysis complete: ${analysis.furniture?.length || 0} furniture, ${analysis.room_properties?.room_size || 'unknown'} room`);
     return analysis;
   } catch (err) {
     console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);
@@ -1117,29 +1167,18 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
   let imageAnalysis = null;
   if (sceneSet.base_still_url) {
     imageAnalysis = await analyzeBaseImage(sceneSet, SceneSet);
-    const inventory = buildInventoryPrompt(imageAnalysis);
-    if (inventory) {
-      prompt = `${inventory} ${prompt}`;
-    }
+    // NOTE: inventory is NOT prepended to the image prompt — it goes into the
+    // edit instruction separately to avoid DALL-E rendering text labels on the image
   }
 
-  // ── Feature 4: Per-angle reference region hint ──
-  const regionHint = getReferenceRegionHint(angleLabel);
-  if (regionHint) {
-    prompt = `${regionHint} ${prompt}`;
-  }
+  // Region hint and retry corrections are passed to the edit instruction only,
+  // NOT the image prompt — prevents DALL-E from rendering text labels on the image
 
-  // ── Feature 4b: Auto-retry correction context ──
-  if (_retryContext?.issues?.length) {
-    const corrections = _retryContext.issues.map(i => `- FIX: ${i}`).join(' ');
-    prompt = `CORRECTION FROM PREVIOUS ATTEMPT (must fix these): ${corrections} ${prompt}`;
-    console.log(`[SceneGen] Retry #${_retryContext.attempt} with ${_retryContext.issues.length} corrections`);
-  }
-
-  // ── Features 3 & cropping: run in parallel ──
+  // ── Features 3 & cropping: run in parallel (skip for mood boards) ──
+  const isMoodBoardEarly = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
   let croppedRefUrl = null;
   let depthMapUrl = null;
-  if (sceneSet.base_still_url) {
+  if (sceneSet.base_still_url && !isMoodBoardEarly) {
     const [cropResult, depthResult] = await Promise.all([
       cropReferenceRegion(sceneSet.base_still_url, angleLabel, sceneSet.id),
       generateDepthMap(sceneSet, SceneSet),
@@ -1178,6 +1217,13 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
       } catch (_) { /* best-effort history */ }
     }
 
+    // Check if base image is a mood board — if so, don't use it as reference
+    const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
+    if (isMoodBoard) {
+      console.warn(`[SceneGen] Base image is a ${imageAnalysis.image_type}, not a room photo — generating without reference image`);
+    }
+    const referenceImageForEdit = isMoodBoard ? null : sceneSet.base_still_url;
+
     // Try DALL-E first for stills, fall back to Runway
     const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
     if (!useRunway && OPENAI_API_KEY) {
@@ -1198,11 +1244,13 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
           }
         }
 
-        const dalleUrl = await generateDallEStill(enhancedPrompt, sceneSet.base_still_url || null, angleLabel, {
+        const dalleUrl = await generateDallEStill(enhancedPrompt, referenceImageForEdit || null, angleLabel, {
           imageAnalysis,
           styleLock: style?.locked ? style : null,
           croppedRefUrl,
           depthMapUrl,
+          regionHint: getReferenceRegionHint(angleLabel),
+          retryCorrections: _retryContext?.issues || null,
         });
         if (dalleUrl) {
           // If gpt-image-1 edit already uploaded to S3, use directly; otherwise download & upload

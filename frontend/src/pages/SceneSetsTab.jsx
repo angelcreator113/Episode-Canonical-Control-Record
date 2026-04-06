@@ -432,6 +432,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [templates, setTemplates] = useState([]);
   const [comparison, setComparison] = useState(null);
   const [seeding, setSeeding] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState('');
+  const [descRefining, setDescRefining] = useState(false);
   const showToast = onToast || (() => {});
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
@@ -885,9 +888,58 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showPromptEditor && !showAddAngle && (
                   <div className="scene-sets-modal-section">
-                    {/* Description — prominent */}
-                    {set.canonical_description && (
-                      <p className="scene-sets-overview-desc">{set.canonical_description}</p>
+                    {/* Description — view or safe edit mode */}
+                    {set.canonical_description && !editingDesc && (
+                      <div className="scene-sets-overview-desc-wrap">
+                        <p className="scene-sets-overview-desc">{set.canonical_description}</p>
+                        <button className="scene-sets-desc-edit-btn" onClick={() => { setEditingDesc(true); setDescDraft(set.canonical_description); }}>
+                          <Pencil size={10} /> Edit Description
+                        </button>
+                      </div>
+                    )}
+                    {editingDesc && (
+                      <div className="scene-sets-desc-editor">
+                        <div className="scene-sets-desc-editor-hint">
+                          Editing is safe — change wording freely. If you change visual details (colors, furniture, layout), you may need to regenerate angles.
+                        </div>
+                        <textarea
+                          className="scene-sets-desc-textarea"
+                          value={descDraft}
+                          onChange={e => setDescDraft(e.target.value)}
+                          rows={6}
+                        />
+                        <div className="scene-sets-desc-editor-actions">
+                          <button className="scene-sets-ai-desc-btn" disabled={descRefining} onClick={async () => {
+                            setDescRefining(true);
+                            try {
+                              const r = await fetch(`${API_BASE}/scene-sets/${set.id}/refine-description`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ draft: descDraft }),
+                              });
+                              const d = await r.json();
+                              if (d.refined) setDescDraft(d.refined);
+                            } catch { showToast('Refine failed', 'error'); }
+                            setDescRefining(false);
+                          }}>
+                            {descRefining ? <Loader size={10} className="spin" /> : <Sparkles size={10} />} AI Refine (keep visuals)
+                          </button>
+                          <button className="scene-sets-btn-generate" onClick={async () => {
+                            try {
+                              await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ canonical_description: descDraft }),
+                              });
+                              showToast('Description saved');
+                              setEditingDesc(false);
+                            } catch { showToast('Save failed', 'error'); }
+                          }}>
+                            <Save size={10} /> Save
+                          </button>
+                          <button className="scene-sets-btn-details" onClick={() => setEditingDesc(false)}>Cancel</button>
+                        </div>
+                      </div>
                     )}
 
                     {/* Compact metadata chips */}
@@ -961,6 +1013,48 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       </div>
                     </div>
 
+                    {/* Room Properties */}
+                    <div className="scene-sets-modal-field">
+                      <label><Camera size={11} /> Room Properties</label>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        {[
+                          { key: 'room_size', label: 'Size', options: ['compact', 'medium', 'spacious', 'grand'] },
+                          { key: 'ceiling_height', label: 'Ceiling', options: ['standard', 'tall', 'vaulted', 'double_height'] },
+                          { key: 'room_shape', label: 'Shape', options: ['rectangular', 'square', 'l_shaped', 'open_plan'] },
+                        ].map(({ key, label, options }) => (
+                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span className="scene-sets-field-label">{label}</span>
+                            <select
+                              value={set.visual_language?.room_properties?.[key] || ''}
+                              onChange={async (e) => {
+                                const val = e.target.value || null;
+                                const rp = { ...(set.visual_language?.room_properties || {}), [key]: val };
+                                try {
+                                  await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ room_properties: rp }),
+                                  });
+                                  onToast?.(`${label} set to ${val || 'auto'}`);
+                                } catch { onToast?.('Failed to update', 'error'); }
+                              }}
+                              className="scene-sets-select-sm"
+                            >
+                              <option value="">Auto-detect</option>
+                              {options.map(o => <option key={o} value={o}>{o.replace('_', ' ')}</option>)}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                      {set.visual_language?.room_properties && (
+                        <div className="scene-sets-room-props-summary">
+                          {set.visual_language.room_properties.room_size && <span>{set.visual_language.room_properties.room_size}</span>}
+                          {set.visual_language.room_properties.window_count > 0 && <span>{set.visual_language.room_properties.window_count} window{set.visual_language.room_properties.window_count > 1 ? 's' : ''}</span>}
+                          {set.visual_language.room_properties.furniture_density && <span>{set.visual_language.room_properties.furniture_density} furnishing</span>}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Linked episodes */}
                     {set.episodes && set.episodes.length > 0 && (
                       <div className="scene-sets-modal-field">
@@ -1012,6 +1106,27 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               <div className="scene-sets-angle-row-name">{a.angle_name}</div>
                             </div>
                             <div className="scene-sets-angle-row-status">
+                              {isComplete && (
+                                <button
+                                  className="scene-sets-angle-row-btn scene-sets-promote-btn"
+                                  title="Use this image as the base — regenerate all other angles from it"
+                                  onClick={async () => {
+                                    if (!confirm(`Use "${a.angle_name}" as the new base image? All other angles will be reset and regenerated from this one.`)) return;
+                                    try {
+                                      const r = await fetch(`${API_BASE}/scene-sets/${set.id}/promote-to-base`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ angle_id: a.id }),
+                                      });
+                                      const d = await r.json();
+                                      if (d.success) showToast(d.message);
+                                      else showToast(d.error, 'error');
+                                    } catch { showToast('Failed to promote', 'error'); }
+                                  }}
+                                >
+                                  <Heart size={12} /> Use as Base
+                                </button>
+                              )}
                               {isComplete && <CheckCircle2 size={14} style={{ color: '#16a34a' }} />}
                               {isFailed && (
                                 <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Retry">
@@ -1061,6 +1176,28 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Show Brain section */}
+                    <div style={{ marginBottom: 16 }}>
+                      <div className="scene-sets-tools-label">Show Brain</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button className="scene-sets-btn-generate" disabled={toolsAction === 'learning'} onClick={async () => {
+                          setToolsAction('learning');
+                          try {
+                            const r = await fetch(`${API_BASE}/scene-sets/${set.id}/learn-location`, { method: 'POST' });
+                            const d = await r.json();
+                            if (d.success) showToast(d.message || 'Location learned');
+                          } catch (e) { showToast(e.message, 'error'); }
+                          setToolsAction(null);
+                        }}>
+                          <Sparkles size={11} /> {toolsAction === 'learning' ? 'Teaching...' : 'Teach Show Brain'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                        Registers this location in the show's world — the brain will know about it when writing scenes, suggesting locations, and building the world.
+                        {set.world_location_id && <span style={{ color: '#16a34a', marginLeft: 6 }}> Linked to world map</span>}
+                      </div>
                     </div>
 
                     {/* Variants section */}
@@ -1416,6 +1553,10 @@ export default function SceneSetsTab() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
+  const [descBuilderLoading, setDescBuilderLoading] = useState(false);
+  const [showDescBuilder, setShowDescBuilder] = useState(false);
+  const [builderAnswers, setBuilderAnswers] = useState({});
+  const [builderStep, setBuilderStep] = useState(0);
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
   const [allShows, setAllShows] = useState([]);
   const [allEpisodes, setAllEpisodes] = useState([]);
@@ -2160,15 +2301,133 @@ export default function SceneSetsTab() {
               </select>
             </div>
           </div>
+
+          {/* Description — guided builder or freeform */}
           <div className="scene-sets-create-field">
-            <label>Description <span className="scene-sets-optional">(optional)</span></label>
-            <textarea
-              placeholder="Describe the space — layout, lighting, mood, signature details..."
-              value={newSet.canonical_description}
-              onChange={e => setNewSet(s => ({ ...s, canonical_description: e.target.value }))}
-              rows={3}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ margin: 0 }}>Description</label>
+              <button
+                className="scene-sets-builder-toggle"
+                onClick={() => { setShowDescBuilder(b => !b); setBuilderStep(0); }}
+              >
+                {showDescBuilder ? <><Pencil size={10} /> Write Freely</> : <><Sparkles size={10} /> Guided Builder</>}
+              </button>
+            </div>
+
+            {!showDescBuilder ? (
+              <>
+                <div className="scene-sets-desc-helper">
+                  <span className="scene-sets-desc-hint">Include: room size, wall colors, key furniture, lighting type, flooring, signature decor, window views, mood</span>
+                </div>
+                <textarea
+                  placeholder={`Example: A spacious modern kitchen with white marble countertops, brass fixtures, and a large center island. Warm pendant lights hang above the island. Floor-to-ceiling windows on the back wall show a garden view. Light oak hardwood floors. The mood is bright and inviting with morning golden light streaming in.`}
+                  value={newSet.canonical_description}
+                  onChange={e => setNewSet(s => ({ ...s, canonical_description: e.target.value }))}
+                  rows={5}
+                  className="scene-sets-desc-textarea"
+                />
+                {newSet.name.trim() && (
+                  <button
+                    className="scene-sets-ai-desc-btn"
+                    disabled={descBuilderLoading}
+                    onClick={async () => {
+                      setDescBuilderLoading(true);
+                      try {
+                        const r = await fetch(`${API_BASE}/scene-sets/ai-describe`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            name: newSet.name.trim(),
+                            scene_type: newSet.scene_type,
+                            user_notes: newSet.canonical_description.trim() || null,
+                          }),
+                        });
+                        const d = await r.json();
+                        if (d.description) {
+                          setNewSet(s => ({ ...s, canonical_description: d.description }));
+                          showToast('AI description generated');
+                        }
+                      } catch { showToast('AI description failed', 'error'); }
+                      setDescBuilderLoading(false);
+                    }}
+                  >
+                    {descBuilderLoading ? <><Loader size={10} className="spin" /> Writing...</> : <><Sparkles size={10} /> AI Write Description</>}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="scene-sets-guided-builder">
+                {/* Step-by-step questions */}
+                {[
+                  { key: 'size', q: 'How big is this space?', placeholder: 'e.g. spacious, cozy, grand ballroom, compact studio', emoji: '📐' },
+                  { key: 'colors', q: 'What are the main colors?', placeholder: 'e.g. lavender walls, white trim, gold accents, purple neon', emoji: '🎨' },
+                  { key: 'furniture', q: 'What key furniture is in the room?', placeholder: 'e.g. queen bed with tufted headboard, Hollywood vanity mirror, keyboard on stand', emoji: '🪑' },
+                  { key: 'lighting', q: 'What kind of lighting?', placeholder: 'e.g. warm fairy lights, neon sign, LED strip under bed, natural window light', emoji: '💡' },
+                  { key: 'flooring', q: 'What are the floors?', placeholder: 'e.g. plush white carpet, light oak hardwood, marble tile', emoji: '🏠' },
+                  { key: 'decor', q: 'Any signature decor or personal touches?', placeholder: 'e.g. photo collage wall, concert poster, vinyl crate, butterfly tote bag', emoji: '✨' },
+                  { key: 'windows', q: 'What do you see through the windows?', placeholder: 'e.g. LA night skyline with palm trees, garden view, city street, no windows', emoji: '🪟' },
+                  { key: 'mood', q: 'What mood or feeling should it have?', placeholder: 'e.g. dreamy and cozy, glamorous, energetic, calm and minimalist', emoji: '🌙' },
+                ].map((step, idx) => (
+                  <div key={step.key} className={`scene-sets-builder-step${idx <= builderStep ? ' visible' : ' hidden'}${builderAnswers[step.key] ? ' answered' : ''}`}>
+                    <div className="scene-sets-builder-question">
+                      <span className="scene-sets-builder-emoji">{step.emoji}</span>
+                      <span>{step.q}</span>
+                    </div>
+                    <input
+                      className="scene-sets-builder-input"
+                      placeholder={step.placeholder}
+                      value={builderAnswers[step.key] || ''}
+                      onChange={e => {
+                        setBuilderAnswers(a => ({ ...a, [step.key]: e.target.value }));
+                        if (e.target.value && idx === builderStep && builderStep < 7) {
+                          setBuilderStep(s => Math.max(s, idx + 1));
+                        }
+                      }}
+                      onFocus={() => setBuilderStep(s => Math.max(s, idx))}
+                    />
+                  </div>
+                ))}
+
+                {/* Generate from answers */}
+                {Object.values(builderAnswers).filter(Boolean).length >= 3 && (
+                  <button
+                    className="scene-sets-ai-desc-btn"
+                    style={{ marginTop: 8 }}
+                    disabled={descBuilderLoading}
+                    onClick={async () => {
+                      setDescBuilderLoading(true);
+                      try {
+                        const notes = Object.entries(builderAnswers)
+                          .filter(([, v]) => v)
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join('. ');
+                        const r = await fetch(`${API_BASE}/scene-sets/ai-describe`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            name: newSet.name.trim() || 'Untitled Location',
+                            scene_type: newSet.scene_type,
+                            user_notes: notes,
+                          }),
+                        });
+                        const d = await r.json();
+                        if (d.description) {
+                          setNewSet(s => ({ ...s, canonical_description: d.description }));
+                          setShowDescBuilder(false);
+                          showToast('Description built from your answers!');
+                        }
+                      } catch { showToast('Failed to build description', 'error'); }
+                      setDescBuilderLoading(false);
+                    }}
+                  >
+                    {descBuilderLoading ? <><Loader size={10} className="spin" /> Building...</> : <><Sparkles size={10} /> Build Description from Answers</>}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Show + Episode selection */}
           <div className="scene-sets-create-row">
             <div className="scene-sets-create-field">
               <label>Show <span className="scene-sets-optional">(optional)</span></label>
@@ -2187,26 +2446,37 @@ export default function SceneSetsTab() {
                 ))}
               </select>
             </div>
-            {createShowId && (
-              <div className="scene-sets-create-field">
-                <label>Episodes <span className="scene-sets-optional">(optional, multi-select)</span></label>
-                <select
-                  multiple
-                  value={newSet.episode_ids}
-                  onChange={e => setNewSet(s => ({ ...s, episode_ids: Array.from(e.target.selectedOptions, o => o.value) }))}
-                  style={{ minHeight: '60px' }}
-                >
-                  {allEpisodes
-                    .filter(ep => ep.show_id === createShowId)
-                    .map(ep => (
-                      <option key={ep.id} value={ep.id}>
-                        {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} — {ep.title}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            )}
           </div>
+
+          {/* Episode checkboxes — much better than multi-select */}
+          {createShowId && allEpisodes.filter(ep => ep.show_id === createShowId).length > 0 && (
+            <div className="scene-sets-create-field">
+              <label>Episodes <span className="scene-sets-optional">(select all that use this location)</span></label>
+              <div className="scene-sets-episode-checkboxes">
+                {allEpisodes
+                  .filter(ep => ep.show_id === createShowId)
+                  .map(ep => (
+                    <label key={ep.id} className="scene-sets-episode-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={newSet.episode_ids.includes(ep.id)}
+                        onChange={e => {
+                          setNewSet(s => ({
+                            ...s,
+                            episode_ids: e.target.checked
+                              ? [...s.episode_ids, ep.id]
+                              : s.episode_ids.filter(id => id !== ep.id),
+                          }));
+                        }}
+                      />
+                      <span>{ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'}</span>
+                      <span className="scene-sets-episode-checkbox-title">{ep.title}</span>
+                    </label>
+                  ))}
+              </div>
+            </div>
+          )}
+
           <div className="scene-sets-create-actions">
             <button
               className="scene-sets-btn-generate"

@@ -97,6 +97,46 @@ router.get('/', optionalAuth, async (req, res) => {
 
 // ─── Static routes MUST be before /:id to avoid Express matching them as UUIDs ──
 
+router.post('/ai-describe', optionalAuth, async (req, res) => {
+  try {
+    const { name, scene_type, user_notes } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      messages: [{
+        role: 'user',
+        content: `You are a production designer writing a location description for a show called "Before Lala" set in the LalaVerse. This description will be used to generate AI images of the location.
+
+Location name: "${name}"
+Scene type: ${scene_type || 'HOME_BASE'}
+${user_notes ? `User notes: ${user_notes}` : ''}
+
+Write a rich 2-3 sentence description that includes:
+- Room SIZE (compact/medium/spacious/grand) and SHAPE
+- Exact WALL COLORS and FLOORING
+- Key FURNITURE with materials/colors and positions
+- LIGHTING type and sources (warm, natural, neon, fairy lights, etc.)
+- SIGNATURE DECOR (specific items that make this space unique)
+- WINDOW VIEWS if applicable
+- Overall MOOD and atmosphere
+
+Be specific and visual — this description will directly generate images. Use the LalaVerse aesthetic: feminine, aspirational, warm tones, soft textures, Pinterest-worthy.
+Return ONLY the description paragraph, no labels or formatting.`,
+      }],
+    });
+
+    const description = response.content?.[0]?.text?.trim() || '';
+    res.json({ success: true, description });
+  } catch (err) {
+    console.error('AI describe error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/generation-check', optionalAuth, (req, res) => {
   res.json({
     success: true,
@@ -237,11 +277,157 @@ router.put('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
 
+    // Handle room_properties — stored in visual_language JSONB
+    if (req.body.room_properties) {
+      const vl = set.visual_language || {};
+      updates.visual_language = {
+        ...vl,
+        room_properties: req.body.room_properties,
+        room_properties_manual: true, // prevent auto-extraction from overwriting
+      };
+    }
+
     await set.update(updates);
     res.json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets PUT /:id error:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/refine-description  — AI refine while preserving visual anchors ─
+
+router.post('/:id/refine-description', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const { draft } = req.body;
+    if (!draft) return res.status(400).json({ error: 'draft is required' });
+
+    // Extract visual anchors from the current image analysis
+    const vl = set.visual_language || {};
+    const analysis = vl.image_analysis || {};
+    const anchors = [];
+    if (analysis.wall_color) anchors.push(`wall color: ${analysis.wall_color}`);
+    if (analysis.flooring) anchors.push(`flooring: ${analysis.flooring}`);
+    if (analysis.spatial_layout) anchors.push(`layout: ${analysis.spatial_layout}`);
+    if (analysis.furniture?.length) anchors.push(`furniture: ${analysis.furniture.slice(0, 5).join(', ')}`);
+    if (analysis.lighting_fixtures?.length) anchors.push(`lighting: ${analysis.lighting_fixtures.slice(0, 3).join(', ')}`);
+
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      messages: [{
+        role: 'user',
+        content: `You are editing a scene description for image generation. The user wants to improve the wording, but MUST preserve the visual identity so existing generated images stay consistent.
+
+CURRENT DESCRIPTION (user's draft to refine):
+"${draft}"
+
+${anchors.length > 0 ? `VISUAL ANCHORS (these MUST be preserved — do not change colors, materials, or layout):
+${anchors.map(a => `- ${a}`).join('\n')}` : ''}
+
+Rewrite the description to be more vivid and specific while keeping ALL visual details (colors, furniture, layout, lighting, materials) identical. Improve the prose quality, add atmospheric detail, and make it more evocative — but if it says "lavender walls", keep "lavender walls". If it mentions specific furniture, keep those exact items.
+
+Return ONLY the refined description paragraph.`,
+      }],
+    });
+
+    const refined = response.content?.[0]?.text?.trim() || '';
+    res.json({ success: true, refined });
+  } catch (err) {
+    console.error('Refine description error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /:id/learn-location  — teach show brain about this location ────────
+
+router.post('/:id/learn-location', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id, {
+      include: [
+        { model: SceneAngle, as: 'angles' },
+        ...(require('../models').Show ? [{ model: require('../models').Show, as: 'show' }] : []),
+      ],
+    });
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+
+    const models = require('../models');
+    const { FranchiseKnowledge, WorldLocation } = models;
+
+    // Create or update WorldLocation
+    let worldLoc = set.world_location_id ? await WorldLocation.findByPk(set.world_location_id) : null;
+    if (!worldLoc) {
+      worldLoc = await WorldLocation.create({
+        universe_id: set.universe_id || null,
+        name: set.name,
+        description: set.canonical_description || '',
+        location_type: set.scene_type === 'EVENT_LOCATION' ? 'exterior' : 'interior',
+        sensory_details: {
+          sight: set.canonical_description?.slice(0, 200) || '',
+          atmosphere: set.visual_language?.image_analysis?.atmosphere || '',
+        },
+        narrative_role: set.scene_type === 'HOME_BASE' ? 'sanctuary' : 'crossroads',
+      });
+      await set.update({ world_location_id: worldLoc.id });
+    }
+
+    // Create franchise knowledge entry about this location
+    const vl = set.visual_language || {};
+    const analysis = vl.image_analysis || {};
+    const rp = vl.room_properties || {};
+    const anglesInfo = (set.angles || []).map(a => a.angle_label).join(', ');
+
+    const knowledgeContent = [
+      `LOCATION: ${set.name}`,
+      set.canonical_description ? `Description: ${set.canonical_description}` : '',
+      set.show?.name ? `Show: ${set.show.name}` : '',
+      rp.room_size ? `Room size: ${rp.room_size}` : '',
+      analysis.wall_color ? `Wall color: ${analysis.wall_color}` : '',
+      analysis.spatial_layout ? `Layout: ${analysis.spatial_layout}` : '',
+      analysis.furniture?.length ? `Key furniture: ${analysis.furniture.slice(0, 6).join('; ')}` : '',
+      anglesInfo ? `Available angles: ${anglesInfo}` : '',
+      set.base_still_url ? `Has base image: yes` : 'Has base image: no',
+    ].filter(Boolean).join('\n');
+
+    // Check if entry already exists
+    const existing = await FranchiseKnowledge.findOne({
+      where: { title: `Location: ${set.name}`, category: 'world', status: 'active' },
+    });
+
+    if (existing) {
+      await existing.update({ content: knowledgeContent });
+    } else {
+      await FranchiseKnowledge.create({
+        title: `Location: ${set.name}`,
+        content: knowledgeContent,
+        category: 'world',
+        severity: 'important',
+        extracted_by: 'system',
+        status: 'active',
+        source_document: `scene-set-${set.id}`,
+      });
+    }
+
+    // Link to parent location if specified
+    const { parent_location_id } = req.body;
+    if (parent_location_id && worldLoc) {
+      await worldLoc.update({ parent_location_id });
+    }
+
+    res.json({
+      success: true,
+      world_location_id: worldLoc.id,
+      knowledge_created: !existing,
+      message: `${set.name} registered in show brain and world map`,
+    });
+  } catch (err) {
+    console.error('Learn location error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1485,6 +1671,65 @@ router.patch('/:id/cover-angle', validateUUIDParam('id'), optionalAuth, async (r
     res.json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets PATCH /:id/cover-angle error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /:id/promote-to-base  — use an angle image as the new base ────────
+
+router.post('/:id/promote-to-base', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { angle_id } = req.body;
+    if (!angle_id) return res.status(400).json({ success: false, error: 'angle_id is required' });
+
+    const angle = await SceneAngle.findOne({
+      where: { id: angle_id, scene_set_id: set.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+    if (!angle.still_image_url) return res.status(400).json({ success: false, error: 'Angle has no image' });
+
+    // Promote angle image to base
+    await set.update({
+      base_still_url: angle.still_image_url,
+      base_runway_seed: `promoted-${Date.now()}`,
+    });
+
+    // Invalidate cached image analysis so it re-analyzes the new base
+    const vl = set.visual_language || {};
+    if (vl.image_analysis) {
+      delete vl.image_analysis;
+      await set.update({ visual_language: vl });
+    }
+
+    // Reset all OTHER angles to pending (they need to regenerate from new base)
+    const { Op } = require('sequelize');
+    await SceneAngle.update(
+      { generation_status: 'pending', still_image_url: null, video_clip_url: null },
+      { where: { scene_set_id: set.id, id: { [Op.ne]: angle_id } } }
+    );
+
+    console.log(`[SceneSets] Promoted angle ${angle.angle_label} to base for ${set.name}`);
+
+    // Trigger re-analysis in background
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        const sceneGenService = require('../services/sceneGenerationService');
+        const models = require('../models');
+        const freshSet = await SceneSet.findByPk(set.id);
+        sceneGenService.analyzeBaseImage(freshSet, models.SceneSet).catch(() => {});
+      } catch { /* non-blocking */ }
+    }
+
+    res.json({
+      success: true,
+      message: `${angle.angle_label} promoted to base. Other angles reset to pending.`,
+      new_base: angle.still_image_url,
+    });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/promote-to-base error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
