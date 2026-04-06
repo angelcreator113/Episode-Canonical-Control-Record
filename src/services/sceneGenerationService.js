@@ -677,12 +677,43 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
     let stillUrl, totalCost = 0;
 
+    // Save current image to generation history before overwriting
+    if (sceneAngle.still_image_url) {
+      try {
+        const review = sceneAngle.quality_review || {};
+        const history = review.generation_history || [];
+        history.push({
+          url: sceneAngle.still_image_url,
+          replaced_at: new Date().toISOString(),
+          attempt: sceneAngle.generation_attempt,
+          quality_score: sceneAngle.quality_score,
+        });
+        review.generation_history = history;
+        await SceneAngle.update({ quality_review: review }, { where: { id: sceneAngle.id } });
+      } catch (_) { /* best-effort history */ }
+    }
+
     // Try DALL-E first for richer stills, fall back to Runway
     const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
     if (!useRunway && OPENAI_API_KEY) {
       try {
         console.log(`[SceneGen] Using DALL-E 3 for angle still`);
-        const dalleUrl = await generateDallEStill(prompt);
+
+        // Enhance prompt with style lock data if available
+        let enhancedPrompt = prompt;
+        const style = sceneSet.visual_language;
+        if (style?.locked) {
+          const styleParts = [];
+          if (style.color_palette) styleParts.push(`Color palette: ${style.color_palette.join(', ')}.`);
+          if (style.materials) styleParts.push(`Materials: ${style.materials.join(', ')}.`);
+          if (style.lighting_type) styleParts.push(`Lighting: ${style.lighting_type}.`);
+          if (style.design_style) styleParts.push(`Style: ${style.design_style}.`);
+          if (styleParts.length > 0) {
+            enhancedPrompt = prompt.replace('Photorealistic', styleParts.join(' ') + ' Photorealistic');
+          }
+        }
+
+        const dalleUrl = await generateDallEStill(enhancedPrompt);
         if (dalleUrl) {
           const s3Key = `scenes/${sceneSet.id}/angles/${sceneAngle.id}/still-${Date.now()}.png`;
           stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);

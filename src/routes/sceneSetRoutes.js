@@ -1399,4 +1399,458 @@ router.delete('/:id/objects/:objectId', validateUUIDParam('id'), optionalAuth, a
 // POST /api/v1/scene-sets/:id/objects/:objectId/duplicate - Duplicate object
 router.post('/:id/objects/:objectId/duplicate', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.duplicateObject));
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// STYLE LOCK — extract and save color palette/materials from base image
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/:id/lock-style', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!set.base_still_url) return res.status(400).json({ error: 'No base image to analyze' });
+
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: set.base_still_url } },
+          { type: 'text', text: `Extract the visual style DNA of this room. Return JSON:
+{
+  "color_palette": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
+  "materials": ["material1", "material2", "material3"],
+  "lighting_type": "string — warm golden / cool daylight / dramatic / soft ambient",
+  "design_style": "string — modern minimalist / art deco / bohemian / etc.",
+  "key_textures": ["texture1", "texture2", "texture3"]
+}
+Return ONLY JSON.` },
+        ],
+      }],
+    });
+
+    const text = response.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: 'Failed to parse style data' });
+
+    const styleData = JSON.parse(match[0]);
+    await set.update({ visual_language: { ...set.visual_language, ...styleData, locked: true } });
+
+    res.json({ success: true, data: styleData });
+  } catch (err) {
+    console.error('Style lock error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BATCH GENERATE ALL ANGLES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/:id/generate-all-angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+
+    const pendingAngles = await SceneAngle.findAll({
+      where: { scene_set_id: set.id, generation_status: 'pending' },
+      order: [['sort_order', 'ASC']],
+    });
+
+    if (pendingAngles.length === 0) {
+      return res.json({ success: true, message: 'No pending angles to generate', queued: 0 });
+    }
+
+    // Return immediately, generate in background
+    res.json({ success: true, queued: pendingAngles.length, message: `Generating ${pendingAngles.length} angles in background` });
+
+    // Background generation
+    const sceneGenService = require('../services/sceneGenerationService');
+    const models = require('../models');
+    for (const angle of pendingAngles) {
+      try {
+        await sceneGenService.generateAngle(angle, set, models);
+      } catch (err) {
+        console.error(`[BatchGen] Angle ${angle.angle_name} failed:`, err.message);
+      }
+    }
+    console.log(`[BatchGen] Completed batch generation for scene set: ${set.name}`);
+  } catch (err) {
+    console.error('Batch generate error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TIME-OF-DAY VARIANTS — generate morning/afternoon/evening/night
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/:id/time-variants', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!set.canonical_description && !set.base_runway_prompt) {
+      return res.status(400).json({ error: 'Scene needs a description or prompt first' });
+    }
+
+    const timeVariants = [
+      { suffix: 'Morning', lighting: 'Soft golden morning light streaming through windows. Warm sunrise glow. Fresh, calm, beginning-of-day atmosphere.' },
+      { suffix: 'Afternoon', lighting: 'Bright natural daylight. Clear, even illumination. Productive, alert, fully-lit atmosphere.' },
+      { suffix: 'Evening', lighting: 'Warm amber evening light. Table lamps and soft overhead glow. Intimate, relaxed, golden-hour warmth.' },
+      { suffix: 'Night', lighting: 'Moody nighttime lighting. Accent lamps, candlelight, city glow through windows. Dramatic shadows, intimate atmosphere.' },
+    ];
+
+    const createdAngles = await SceneAngle.bulkCreate(
+      timeVariants.map((v, idx) => ({
+        scene_set_id: set.id,
+        angle_label: 'WIDE',
+        angle_name: `${set.name} — ${v.suffix}`,
+        angle_description: `${v.suffix} lighting variant of the base scene`,
+        camera_direction: `Wide establishing shot. ${v.lighting} Maintain the same room layout, furniture, and design — only change the lighting and time of day.`,
+        generation_status: 'pending',
+        sort_order: 100 + idx,
+      })),
+      { returning: true }
+    );
+
+    res.json({ success: true, created: createdAngles.length, angles: createdAngles });
+  } catch (err) {
+    console.error('Time variants error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE SET TEMPLATES — pre-built templates for common locations
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/templates/list', optionalAuth, async (req, res) => {
+  const templates = [
+    { id: 'luxury_bedroom', name: 'Luxury Bedroom', scene_type: 'HOME_BASE',
+      description: 'Elegant master bedroom with king bed, soft textiles, warm lighting, vanity area',
+      angles: ['WIDE', 'BED', 'VANITY', 'WINDOW', 'CLOSET', 'DOORWAY'] },
+    { id: 'walk_in_closet', name: 'Walk-in Closet', scene_type: 'CLOSET',
+      description: 'Spacious walk-in with organized racks, island dresser, full-length mirrors, soft lighting',
+      angles: ['WIDE', 'RACKS', 'MIRROR', 'ISLAND', 'SHOES', 'DETAIL'] },
+    { id: 'gala_venue', name: 'Gala Venue', scene_type: 'EVENT_LOCATION',
+      description: 'Grand ballroom with chandeliers, round tables, stage, gold accents',
+      angles: ['ESTABLISHING', 'STAGE', 'SEATING', 'BAR', 'ENTRANCE', 'OVERHEAD'] },
+    { id: 'fashion_runway', name: 'Fashion Runway', scene_type: 'EVENT_LOCATION',
+      description: 'Sleek runway with front row seating, dramatic lighting, backstage area',
+      angles: ['ESTABLISHING', 'RUNWAY', 'FRONT_ROW', 'BACKSTAGE', 'ENTRANCE', 'DETAIL'] },
+    { id: 'rooftop_bar', name: 'Rooftop Bar', scene_type: 'EVENT_LOCATION',
+      description: 'Upscale rooftop with city skyline, lounge seating, ambient string lights',
+      angles: ['ESTABLISHING', 'BAR', 'LOUNGE', 'SKYLINE', 'ENTRANCE', 'DETAIL'] },
+    { id: 'luxury_restaurant', name: 'Luxury Restaurant', scene_type: 'EVENT_LOCATION',
+      description: 'Fine dining with intimate table settings, wine display, warm ambiance',
+      angles: ['ESTABLISHING', 'TABLE', 'BAR', 'WINDOW', 'ENTRANCE', 'DETAIL'] },
+    { id: 'studio_apartment', name: 'Studio / Content Space', scene_type: 'HOME_BASE',
+      description: 'Modern content creation studio with ring light, backdrop, desk setup',
+      angles: ['WIDE', 'DESK', 'BACKDROP', 'WINDOW', 'SHELF', 'DOORWAY'] },
+    { id: 'city_street', name: 'City Street', scene_type: 'TRANSITION',
+      description: 'Upscale city sidewalk with boutiques, cafe terraces, golden hour light',
+      angles: ['ESTABLISHING', 'STOREFRONT', 'CAFE', 'CROSSWALK', 'ALLEY', 'DETAIL'] },
+    { id: 'press_room', name: 'Press Room / Interview Set', scene_type: 'EVENT_LOCATION',
+      description: 'Professional press backdrop, interview chairs, camera setup, branded wall',
+      angles: ['WIDE', 'STAGE', 'AUDIENCE', 'BACKSTAGE', 'DETAIL', 'ENTRANCE'] },
+    { id: 'garden_terrace', name: 'Garden Terrace', scene_type: 'EVENT_LOCATION',
+      description: 'Elegant outdoor terrace with floral arrangements, fairy lights, fountain',
+      angles: ['ESTABLISHING', 'SEATING', 'GARDEN', 'FOUNTAIN', 'ENTRANCE', 'OVERHEAD'] },
+  ];
+  res.json({ success: true, templates });
+});
+
+router.post('/:id/apply-template', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const { template_id } = req.body;
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+
+    // Fetch template list from the endpoint above
+    const templates = (await new Promise(resolve => {
+      const mockRes = { json: (d) => resolve(d.templates) };
+      router.handle({ method: 'GET', url: '/templates/list', query: {} }, mockRes, () => {});
+    })).catch?.() || [];
+
+    // Hardcoded fallback
+    const templateMap = {
+      luxury_bedroom: { angles: ['WIDE', 'BED', 'VANITY', 'WINDOW', 'CLOSET', 'DOORWAY'] },
+      walk_in_closet: { angles: ['WIDE', 'RACKS', 'MIRROR', 'ISLAND', 'SHOES', 'DETAIL'] },
+      gala_venue: { angles: ['ESTABLISHING', 'STAGE', 'SEATING', 'BAR', 'ENTRANCE', 'OVERHEAD'] },
+      fashion_runway: { angles: ['ESTABLISHING', 'RUNWAY', 'FRONT_ROW', 'BACKSTAGE', 'ENTRANCE', 'DETAIL'] },
+      rooftop_bar: { angles: ['ESTABLISHING', 'BAR', 'LOUNGE', 'SKYLINE', 'ENTRANCE', 'DETAIL'] },
+      luxury_restaurant: { angles: ['ESTABLISHING', 'TABLE', 'BAR', 'WINDOW', 'ENTRANCE', 'DETAIL'] },
+      studio_apartment: { angles: ['WIDE', 'DESK', 'BACKDROP', 'WINDOW', 'SHELF', 'DOORWAY'] },
+      city_street: { angles: ['ESTABLISHING', 'STOREFRONT', 'CAFE', 'CROSSWALK', 'ALLEY', 'DETAIL'] },
+      press_room: { angles: ['WIDE', 'STAGE', 'AUDIENCE', 'BACKSTAGE', 'DETAIL', 'ENTRANCE'] },
+      garden_terrace: { angles: ['ESTABLISHING', 'SEATING', 'GARDEN', 'FOUNTAIN', 'ENTRANCE', 'OVERHEAD'] },
+    };
+
+    const tpl = templateMap[template_id];
+    if (!tpl) return res.status(400).json({ error: 'Unknown template' });
+
+    // Clear existing angles and create template angles
+    await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
+    const createdAngles = await SceneAngle.bulkCreate(
+      tpl.angles.map((label, idx) => ({
+        scene_set_id: set.id,
+        angle_label: label,
+        angle_name: label.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()),
+        angle_description: `${label} view of ${set.name}`,
+        generation_status: 'pending',
+        sort_order: idx,
+      })),
+      { returning: true }
+    );
+
+    res.json({ success: true, created: createdAngles.length, angles: createdAngles });
+  } catch (err) {
+    console.error('Apply template error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WARDROBE × SCENE MATCHING — find wardrobe items matching event dress code
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/:id/wardrobe-match', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+
+    const sequelize = require('../models').sequelize;
+
+    // Find events linked to this scene set
+    const [events] = await sequelize.query(
+      `SELECT dress_code, dress_code_keywords, name FROM world_events
+       WHERE scene_set_id = :setId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { setId: set.id } }
+    );
+
+    if (!events.length) {
+      return res.json({ success: true, event: null, matches: [], message: 'No event linked to this scene set' });
+    }
+
+    const event = events[0];
+    const keywords = typeof event.dress_code_keywords === 'string'
+      ? JSON.parse(event.dress_code_keywords || '[]')
+      : (event.dress_code_keywords || []);
+
+    // Search wardrobe library for matching items
+    let matches = [];
+    if (keywords.length > 0) {
+      matches = await sequelize.query(
+        `SELECT id, name, image_url, thumbnail_url, item_type, color, tags
+         FROM wardrobe_library
+         WHERE deleted_at IS NULL
+           AND (tags::text ILIKE ANY(ARRAY[:keywords])
+                OR name ILIKE ANY(ARRAY[:keywords])
+                OR color ILIKE ANY(ARRAY[:keywords]))
+         LIMIT 12`,
+        {
+          replacements: { keywords: keywords.map(k => `%${k}%`) },
+          type: sequelize.QueryTypes.SELECT,
+        }
+      );
+    }
+
+    res.json({ success: true, event: { name: event.name, dress_code: event.dress_code, keywords }, matches });
+  } catch (err) {
+    console.error('Wardrobe match error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SEASON VARIANTS — generate spring/summer/fall/winter versions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/:id/season-variants', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+
+    const seasonVariants = [
+      { suffix: 'Spring', desc: 'Fresh spring atmosphere. Pastel accents, blooming flowers visible through windows, light fabrics, bright natural light, airy feeling.' },
+      { suffix: 'Summer', desc: 'Warm summer atmosphere. Golden light, open windows, tropical plants, lightweight materials, vibrant energy.' },
+      { suffix: 'Fall', desc: 'Cozy autumn atmosphere. Warm amber tones, rich textures (velvet, wool), candles, falling leaves visible outside, harvest colors.' },
+      { suffix: 'Winter', desc: 'Elegant winter atmosphere. Cool blue-white light, frosty windows, plush throws, metallic accents, snow visible outside, warm interior contrast.' },
+    ];
+
+    const createdAngles = await SceneAngle.bulkCreate(
+      seasonVariants.map((v, idx) => ({
+        scene_set_id: set.id,
+        angle_label: 'WIDE',
+        angle_name: `${set.name} — ${v.suffix}`,
+        angle_description: `${v.suffix} seasonal variant`,
+        camera_direction: `Wide establishing shot. ${v.desc} Maintain the same room layout and furniture — only change seasonal decor, lighting, and atmosphere.`,
+        generation_status: 'pending',
+        sort_order: 200 + idx,
+      })),
+      { returning: true }
+    );
+
+    res.json({ success: true, created: createdAngles.length, angles: createdAngles });
+  } catch (err) {
+    console.error('Season variants error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FAVORITE / REJECT ANGLE — star or reject a generated angle
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.patch('/:id/angles/:angleId/favorite', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const angle = await SceneAngle.findOne({ where: { id: req.params.angleId, scene_set_id: req.params.id } });
+    if (!angle) return res.status(404).json({ error: 'Angle not found' });
+
+    const review = angle.quality_review || {};
+    review.favorited = !review.favorited;
+    review.reviewed_at = new Date();
+    await angle.update({ quality_review: review });
+
+    res.json({ success: true, favorited: review.favorited });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/:id/angles/:angleId/reject', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const angle = await SceneAngle.findOne({ where: { id: req.params.angleId, scene_set_id: req.params.id } });
+    if (!angle) return res.status(404).json({ error: 'Angle not found' });
+
+    const review = angle.quality_review || {};
+    review.rejected = true;
+    review.reject_reason = req.body.reason || 'Rejected by user';
+    review.reviewed_at = new Date();
+
+    // Save current image to history before resetting
+    const history = review.generation_history || [];
+    if (angle.still_image_url) {
+      history.push({
+        url: angle.still_image_url,
+        rejected_at: new Date(),
+        reason: review.reject_reason,
+        attempt: angle.generation_attempt,
+      });
+    }
+    review.generation_history = history;
+
+    await angle.update({
+      quality_review: review,
+      generation_status: 'pending',
+      generation_attempt: (angle.generation_attempt || 1) + 1,
+    });
+
+    res.json({ success: true, message: 'Angle rejected — ready to regenerate', history_count: history.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GENERATION HISTORY — view previous generations for an angle
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/:id/angles/:angleId/history', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const angle = await SceneAngle.findOne({ where: { id: req.params.angleId, scene_set_id: req.params.id } });
+    if (!angle) return res.status(404).json({ error: 'Angle not found' });
+
+    const review = angle.quality_review || {};
+    const history = review.generation_history || [];
+
+    // Add current image as the latest entry
+    const current = angle.still_image_url ? {
+      url: angle.still_image_url,
+      current: true,
+      attempt: angle.generation_attempt,
+      quality_score: angle.quality_score,
+      favorited: review.favorited || false,
+    } : null;
+
+    res.json({ success: true, current, history, total: history.length + (current ? 1 : 0) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EPISODE TIMELINE FILMSTRIP — visual preview of all beats with scenes
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/episode/:episodeId/filmstrip', optionalAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const sequelize = require('../models').sequelize;
+
+    // Load scene plan beats for this episode
+    const [beats] = await sequelize.query(
+      `SELECT sp.beat_number, sp.beat_name, sp.scene_set_id, sp.angle_label, sp.shot_type, sp.emotional_intent,
+              ss.name as scene_name, ss.base_still_url,
+              sa.still_image_url as angle_image_url
+       FROM scene_plans sp
+       LEFT JOIN scene_sets ss ON ss.id = sp.scene_set_id AND ss.deleted_at IS NULL
+       LEFT JOIN scene_angles sa ON sa.scene_set_id = sp.scene_set_id AND sa.angle_label = sp.angle_label AND sa.deleted_at IS NULL AND sa.generation_status = 'complete'
+       WHERE sp.episode_id = :episodeId AND sp.deleted_at IS NULL
+       ORDER BY sp.beat_number ASC`,
+      { replacements: { episodeId } }
+    );
+
+    // Fill in missing beats with empty slots (14-beat structure)
+    const filmstrip = [];
+    for (let i = 1; i <= 14; i++) {
+      const beat = beats.find(b => b.beat_number === i);
+      filmstrip.push({
+        beat_number: i,
+        beat_name: beat?.beat_name || `Beat ${i}`,
+        scene_name: beat?.scene_name || null,
+        image_url: beat?.angle_image_url || beat?.base_still_url || null,
+        shot_type: beat?.shot_type || null,
+        emotional_intent: beat?.emotional_intent || null,
+        has_scene: !!beat?.scene_set_id,
+      });
+    }
+
+    res.json({ success: true, filmstrip, covered: filmstrip.filter(f => f.has_scene).length });
+  } catch (err) {
+    console.error('Filmstrip error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SIDE-BY-SIDE COMPARISON — original upload vs generated angles
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/:id/comparison', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id, {
+      include: [{ model: SceneAngle, as: 'angles', order: [['sort_order', 'ASC']] }],
+    });
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+
+    const comparisons = (set.angles || [])
+      .filter(a => a.still_image_url && a.generation_status === 'complete')
+      .map(a => ({
+        angle_id: a.id,
+        angle_name: a.angle_name,
+        angle_label: a.angle_label,
+        original: set.base_still_url,
+        generated: a.still_image_url,
+        quality_score: a.quality_score,
+        favorited: a.quality_review?.favorited || false,
+      }));
+
+    res.json({ success: true, base_image: set.base_still_url, comparisons });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
