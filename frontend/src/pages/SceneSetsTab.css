@@ -3321,3 +3321,129 @@
   border-color: var(--ss-gold);
   color: var(--ss-gold);
 }
+
+/* ── Card Thumbnail Strip ────────────────────────────────────────────────── */
+
+.scene-sets-card-thumbstrip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.scene-sets-card-thumb {
+  width: 28px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid var(--ss-border);
+  transition: border-color var(--ss-transition), transform var(--ss-transition);
+}
+
+.scene-sets-card-thumb:hover {
+  border-color: var(--ss-gold);
+  transform: scale(1.15);
+  z-index: 1;
+}
+
+.scene-sets-card-thumb-more {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--ss-muted);
+  padding: 0 2px;
+}
+
+.scene-sets-card-thumb-gallery {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ss-border);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ss-muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.scene-sets-card-thumb-gallery:hover {
+  border-color: var(--ss-gold);
+  color: var(--ss-gold);
+}
+
+/* ── Search Input ────────────────────────────────────────────────────────── */
+
+.scene-sets-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.scene-sets-search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--ss-muted);
+  pointer-events: none;
+}
+
+.scene-sets-search-input {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 6px 8px 6px 26px;
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+  background: #fff;
+  color: var(--ss-ink);
+  width: 160px;
+  transition: border-color var(--ss-transition), width var(--ss-transition);
+}
+
+.scene-sets-search-input:focus {
+  border-color: var(--ss-gold);
+  outline: none;
+  width: 200px;
+}
+
+.scene-sets-search-input::placeholder {
+  color: #cbd5e1;
+}
+
+/* ── Overview Tab Polish ─────────────────────────────────────────────────── */
+
+.scene-sets-overview-desc {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #374151;
+  margin: 0 0 12px;
+}
+
+.scene-sets-overview-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.scene-sets-overview-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 10px;
+}
+
+.scene-sets-overview-chip.mood {
+  background: #faf5ff;
+  color: #7c3aed;
+}
+
+.scene-sets-overview-chip.style {
+  background: #f0fdf4;
+  color: #16a34a;
+}

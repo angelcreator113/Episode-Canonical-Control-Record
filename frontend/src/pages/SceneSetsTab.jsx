@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3 } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -742,8 +742,32 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             {set.season && <span className="scene-sets-meta-chip"><RefreshCw size={9} /> {set.season}</span>}
           </div>
 
-          {/* Progress bar */}
-          {totalAngles > 0 && (
+          {/* Angle thumbnail strip — shows completed angles as clickable mini previews */}
+          {readyAngles > 0 && (
+            <div className="scene-sets-card-thumbstrip">
+              {sortedAngles.filter(a => a.still_image_url && a.generation_status === 'complete').slice(0, 6).map(a => (
+                <img
+                  key={a.id}
+                  src={bustUrl(a.still_image_url)}
+                  alt={a.angle_label}
+                  className="scene-sets-card-thumb"
+                  onClick={() => { setSelectedAngleId(a.id); setShowBaseLightbox(true); }}
+                  title={a.angle_name}
+                />
+              ))}
+              {readyAngles > 6 && <span className="scene-sets-card-thumb-more">+{readyAngles - 6}</span>}
+              <button
+                className="scene-sets-card-thumb-gallery"
+                onClick={() => { setSelectedAngleId(null); setShowBaseLightbox(true); }}
+                title="View gallery"
+              >
+                <Grid3X3 size={10} />
+              </button>
+            </div>
+          )}
+
+          {/* Progress bar — only when there are pending angles */}
+          {totalAngles > 0 && readyAngles < totalAngles && (
             <div className="scene-sets-progress-row">
               <div className="scene-sets-progress-bar">
                 <div className="scene-sets-progress-fill" style={{ width: `${(readyAngles / totalAngles) * 100}%` }} />
@@ -861,42 +885,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showPromptEditor && !showAddAngle && (
                   <div className="scene-sets-modal-section">
-                    {/* Description */}
+                    {/* Description — prominent */}
                     {set.canonical_description && (
-                      <div className="scene-sets-modal-field">
-                        <label>Description</label>
-                        <p style={{ fontSize: 13, lineHeight: 1.6, color: '#374151' }}>{set.canonical_description}</p>
-                      </div>
+                      <p className="scene-sets-overview-desc">{set.canonical_description}</p>
                     )}
 
-                    {/* Metadata row */}
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-                      {set.base_runway_seed && set.base_runway_seed !== 'unknown' && (
-                        <div style={{ padding: '6px 10px', background: '#f8fafc', borderRadius: 6, fontSize: 11 }}>
-                          <Lock size={10} style={{ marginRight: 4, verticalAlign: -1 }} />Seed: {set.base_runway_seed.slice(0, 16)}...
-                        </div>
-                      )}
-                      {(set.generation_cost > 0 || sortedAngles.some(a => a.generation_cost > 0)) && (
-                        <div style={{ padding: '6px 10px', background: '#f8fafc', borderRadius: 6, fontSize: 11 }}>
-                          <Clock size={10} style={{ marginRight: 4, verticalAlign: -1 }} />{(parseFloat(set.generation_cost || 0) + sortedAngles.reduce((sum, a) => sum + parseFloat(a.generation_cost || 0), 0)).toFixed(1)} credits
-                        </div>
-                      )}
+                    {/* Compact metadata chips */}
+                    <div className="scene-sets-overview-chips">
+                      {set.mood_tags?.length > 0 && set.mood_tags.map(tag => (
+                        <span key={tag} className="scene-sets-overview-chip mood">{tag}</span>
+                      ))}
                       {set.visual_language?.locked && (
-                        <div style={{ padding: '6px 10px', background: '#f0fdf4', borderRadius: 6, fontSize: 11, color: '#16a34a' }}>
-                          <Lock size={10} style={{ marginRight: 4, verticalAlign: -1 }} />Style Locked
-                          {set.visual_language.color_palette && (
-                            <span style={{ marginLeft: 6 }}>
-                              {set.visual_language.color_palette.slice(0, 5).map((c, i) => (
-                                <span key={i} style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: c, marginLeft: 2, border: '1px solid #e2e8f0' }} />
-                              ))}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {set.mood_tags?.length > 0 && (
-                        <div style={{ padding: '6px 10px', background: '#faf5ff', borderRadius: 6, fontSize: 11, color: '#7c3aed' }}>
-                          {set.mood_tags.join(' · ')}
-                        </div>
+                        <span className="scene-sets-overview-chip style">
+                          <Lock size={8} /> Style Locked
+                          {set.visual_language.color_palette?.slice(0, 4).map((c, i) => (
+                            <span key={i} style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: c, marginLeft: 2 }} />
+                          ))}
+                        </span>
                       )}
                     </div>
 
@@ -1407,6 +1412,7 @@ export default function SceneSetsTab() {
 
   const [toast, setToast] = useState(null);
   const [filterType, setFilterType] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
@@ -2054,9 +2060,14 @@ export default function SceneSetsTab() {
     }
   };
 
-  const filtered = filterType === 'ALL'
-    ? sets
-    : sets.filter(s => s.scene_type === filterType);
+  const filtered = useMemo(() => {
+    let result = filterType === 'ALL' ? sets : sets.filter(s => s.scene_type === filterType);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(s => s.name?.toLowerCase().includes(q) || s.show?.name?.toLowerCase().includes(q));
+    }
+    return result;
+  }, [sets, filterType, searchQuery]);
 
   const totalCost = sets.reduce((sum, s) => {
     const setCost = parseFloat(s.generation_cost || 0);
@@ -2099,6 +2110,15 @@ export default function SceneSetsTab() {
             {showCreateForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Set</>}
           </button>
           <div className="scene-sets-filters">
+            <div className="scene-sets-search-wrap">
+              <Search size={12} className="scene-sets-search-icon" />
+              <input
+                className="scene-sets-search-input"
+                placeholder="Search locations..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
             {types.map(t => (
               <button
                 key={t}
