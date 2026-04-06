@@ -703,8 +703,10 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       } catch (_) { /* best-effort history */ }
     }
 
-    // Try DALL-E first for richer stills, fall back to Runway
-    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    // Use Runway when base image exists (referenceImages maintains visual consistency)
+    // DALL-E only for scenes without a base image since it can't reference one
+    const hasBaseImage = !!sceneSet.base_still_url;
+    const useRunway = hasBaseImage || sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
     if (!useRunway && OPENAI_API_KEY) {
       try {
         console.log(`[SceneGen] Using DALL-E 3 for angle still`);
