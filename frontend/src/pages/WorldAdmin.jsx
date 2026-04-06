@@ -225,12 +225,13 @@ function WorldAdmin() {
       const res = await api.post('/api/v1/memories/generate-events', {
         show_id: showId,
         replace_existing: worldEvents.length > 0,
-      });
+      }, { timeout: 120000 });
       const eventsRes = await api.get(`/api/v1/world/${showId}/events`);
       setWorldEvents(eventsRes.data?.events || []);
       setSuccessMsg(`Seeded ${res.data.generated} events (${Object.entries(res.data.breakdown || {}).map(([k, v]) => `${v} ${k}`).join(', ')})`);
     } catch (err) {
-      setError(err.response?.data?.error || err.message);
+      const msg = err.response?.data?.error || err.message || 'Unknown error';
+      setError(msg.includes('timeout') ? 'Event generation timed out. The AI may be slow — try again.' : msg);
     } finally {
       setSeedingEvents(false);
     }
