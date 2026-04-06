@@ -43,16 +43,16 @@ const NEGATIVE_PROMPT = `person, people, human, figure, silhouette, body, face, 
 // ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
 
 const ANGLE_MODIFIERS = {
-  WIDE:         'Wide establishing shot, full room visible, camera at medium height, balanced composition.',
-  CLOSET:       'Camera facing wardrobe wall, full-height racks or shelving visible, soft glow on fabric textures.',
-  VANITY:       'Camera at vanity mirror, close-to-medium shot, soft focus on reflection and surface details.',
-  WINDOW:       'Camera facing window, natural light streaming in, subject silhouette or three-quarter view.',
-  DOORWAY:      'Camera at doorway threshold, looking into the room, sense of arrival or departure.',
-  ESTABLISHING: 'Wide exterior or grand interior entrance, full prestige of the space visible.',
-  ACTION:       'Dynamic angle, sense of movement or event energy, slightly asymmetric composition.',
-  CLOSE:        'Close shot on a specific surface, object, or detail. Intimate and personal.',
-  OVERHEAD:     'High angle looking down, revealing the full layout and spatial relationships.',
-  OTHER:        'Unique compositional angle appropriate to this specific location.',
+  WIDE:         'Wide establishing shot showing the FULL room from corner to corner. Camera pulled back to maximum width. Include ceiling, floor, and all walls visible. Extended panoramic view revealing the complete space and all furniture.',
+  CLOSET:       'Camera facing the wardrobe/closet area. Extend the view to show full-height clothing racks, shelving, and organized accessories. Soft warm glow on fabric textures. Show the full depth of the closet space as if the wall has been extended back.',
+  VANITY:       'Camera at vanity/dressing table area. Show the full mirror, surface details, beauty products, and surrounding decor. Extend the view to include adjacent shelving or wall art. Soft glamour lighting.',
+  WINDOW:       'Camera facing the window wall. Extend the view to show the FULL window and surrounding wall space. Natural golden light streaming in. Include curtains, window seat, or plants near the window. Show what is visible beyond the glass.',
+  DOORWAY:      'Camera at the doorway threshold, looking into the room from outside. Wide enough to show the full door frame and hallway. Sense of arrival — revealing the room from an outsider perspective. Extended view showing the transition between spaces.',
+  ESTABLISHING: 'Grand wide exterior or entrance shot. Camera pulled far back. Show the full facade, entrance, or grand interior from maximum distance. Include architectural details, landscaping, or approach path. The most expansive possible view.',
+  ACTION:       'Dynamic angle with sense of movement or event energy. Slightly asymmetric composition. Show the space as if someone just walked through it. Extended view capturing the flow of the room.',
+  CLOSE:        'Close-up shot on a signature surface, object, or detail. Intimate and personal. Show texture, material quality, and craftsmanship. Extend focus to include nearby complementary details.',
+  OVERHEAD:     'High overhead angle looking straight down. Reveal the full room layout, furniture arrangement, and floor pattern. Bird\'s-eye view showing the complete spatial relationships.',
+  OTHER:        'Unique compositional angle appropriate to this specific location. Extend the visible space beyond what the reference image shows.',
 };
 
 // ─── CAMERA MOTION MAPPING (per angle type) ─────────────────────────────────
@@ -132,6 +132,12 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
   }
 
   parts.push(`CAMERA: ${cameraText}`);
+
+  // For non-WIDE angles, add room extension instruction
+  if (angleLabel !== 'WIDE' && angleLabel !== 'OTHER') {
+    parts.push('IMPORTANT: Extend and expand the visible room space beyond the original reference. Show areas of the room not visible in the base image — imagine the room continues in the camera direction. Maintain the same design language, color palette, and material quality throughout the extended space.');
+  }
+
   parts.push('Photorealistic cinematic quality. No text overlays. No watermarks.');
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();

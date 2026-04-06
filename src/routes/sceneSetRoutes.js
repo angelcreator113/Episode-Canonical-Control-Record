@@ -287,6 +287,59 @@ router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, uploadSce
       generation_status: 'complete',
     });
 
+    // Auto-analyze uploaded image with Claude Vision to fill description + prompt
+    let visionAnalysis = null;
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        const client = getAnthropicClient();
+        const visionResponse = await client.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'url', url: primaryUrl } },
+              { type: 'text', text: `Analyze this room/location image for a luxury fashion show called "Styling Adventures with Lala".
+
+Return a JSON object with exactly these fields:
+{
+  "description": "2-3 sentence description of the space — layout, key furniture, lighting, mood, color palette, materials. Be specific about what you see.",
+  "prompt": "A detailed scene generation prompt that could recreate this room. Include: architectural style, lighting type, color palette, key objects/furniture, materials/textures, atmosphere. Start with 'Empty room.' Format as a single paragraph under 400 characters.",
+  "scene_type": "HOME_BASE | CLOSET | EVENT_LOCATION | TRANSITION | EXTERIOR",
+  "mood_tags": ["array", "of", "3-5", "mood", "words"]
+}
+
+Return ONLY the JSON object, no other text.` },
+            ],
+          }],
+        });
+
+        const text = visionResponse.content?.[0]?.text || '';
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          visionAnalysis = JSON.parse(jsonMatch[0]);
+          const updates = {};
+          if (visionAnalysis.description && !set.canonical_description) {
+            updates.canonical_description = visionAnalysis.description;
+          }
+          if (visionAnalysis.prompt && !set.base_runway_prompt) {
+            updates.base_runway_prompt = visionAnalysis.prompt;
+          }
+          if (visionAnalysis.scene_type && !set.scene_type) {
+            updates.scene_type = visionAnalysis.scene_type;
+          }
+          if (visionAnalysis.mood_tags && (!set.mood_tags || set.mood_tags.length === 0)) {
+            updates.mood_tags = visionAnalysis.mood_tags;
+          }
+          if (Object.keys(updates).length > 0) {
+            await set.update(updates);
+          }
+        }
+      } catch (visionErr) {
+        console.warn('[SceneSets] Vision analysis failed (non-blocking):', visionErr.message);
+      }
+    }
+
     // When multiple images are uploaded, create ready-to-use angle entries.
     let createdAngles = [];
     if (uploadedUrls.length > 1) {
@@ -330,6 +383,7 @@ router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, uploadSce
         seed: set.base_runway_seed,
         uploadedCount: uploadedUrls.length,
         angleCountCreated: createdAngles.length,
+        visionAnalysis: visionAnalysis || null,
       },
     });
   } catch (err) {
