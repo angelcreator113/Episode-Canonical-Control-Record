@@ -263,6 +263,7 @@ export default function ShowBrain() {
   const [error, setError] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [search, setSearch] = useState('');
+  const [seeding, setSeeding] = useState(false);
 
   const fetchEntries = useCallback(async () => {
     try {
@@ -305,6 +306,22 @@ export default function ShowBrain() {
       )
     : tabEntries;
 
+  const seedBrain = async () => {
+    if (allEntries.length > 0 && !window.confirm(`Show Brain has ${allEntries.length} entries. This will replace them. Continue?`)) return;
+    setSeeding(true); setError(null);
+    try {
+      const res = await axios.post(`${API_BASE}/franchise-brain/seed`, { force: allEntries.length > 0 }, { timeout: 120000 });
+      await fetchEntries();
+      setError(null);
+      alert(`Seeded ${res.data.seeded} entries (${res.data.total} total)`);
+    } catch (err) {
+      console.error('[ShowBrain] seed error:', err);
+      const msg = err.response?.data?.error || err.message || 'Unknown error';
+      setError(`Seed failed: ${msg}`);
+      alert(`Seed failed: ${msg}`);
+    } finally { setSeeding(false); }
+  };
+
   const totalRules = allEntries.length;
 
   return (
@@ -334,11 +351,17 @@ export default function ShowBrain() {
                 Master Intelligence Document &middot; v1.0 &middot; Prime Studios &mdash; The single source of truth for Styling Adventures with Lala
               </p>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: '#D4AF37' }}>
-                {totalRules}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <button onClick={seedBrain} disabled={seeding}
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: seeding ? 'wait' : 'pointer', background: '#D4AF37', color: '#1a1a2e', border: 'none' }}>
+                {seeding ? 'Seeding...' : 'Seed Show Brain'}
+              </button>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: '#D4AF37' }}>
+                  {totalRules}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>Active Rules</div>
               </div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>Active Rules</div>
             </div>
           </div>
 
