@@ -1571,6 +1571,19 @@ export default function SceneSetsTab() {
     return { status: 'failed', error: 'Polling timed out' };
   }, []);
 
+  const pollSetStatus = useCallback(async (setId, field = 'generation_status', maxPolls = 30) => {
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        const r = await fetch(`${API_BASE}/scene-sets/${setId}`);
+        const d = await r.json();
+        if (d.data?.[field] === 'complete') return 'completed';
+        if (d.data?.[field] === 'failed') return 'failed';
+      } catch { /* retry */ }
+    }
+    return 'timeout';
+  }, []);
+
   const handleGenerateBase = async (set) => {
     startGenerating(set.id);
     try {
@@ -1583,13 +1596,17 @@ export default function SceneSetsTab() {
         throw new Error(err.error || 'Generation failed');
       }
       const json = await res.json();
-      showToast('Base generation queued...');
-      const job = await pollJob(json.data.jobId);
-      if (job.status === 'completed') {
-        showToast(`Base generated for "${set.name}"`);
 
+      if (json.data?.jobId) {
+        showToast('Base generation queued...');
+        const job = await pollJob(json.data.jobId);
+        if (job.status === 'completed') showToast(`Base generated for "${set.name}"`);
+        else showToast(job.error || 'Base generation failed', 'error');
       } else {
-        showToast(job.error || 'Base generation failed', 'error');
+        showToast('Generating base — this may take 30-60s...');
+        const status = await pollSetStatus(set.id);
+        if (status === 'completed') showToast(`Base generated for "${set.name}"`);
+        else showToast('Base generation failed or timed out', 'error');
       }
       await fetchSets();
     } catch (err) {
@@ -1612,13 +1629,17 @@ export default function SceneSetsTab() {
         throw new Error(err.error || 'Regeneration failed');
       }
       const json = await res.json();
-      showToast('Base regeneration queued...');
-      const job = await pollJob(json.data.jobId);
-      if (job.status === 'completed') {
-        showToast('Base image regenerated!');
 
+      if (json.data?.jobId) {
+        showToast('Regeneration queued...');
+        const job = await pollJob(json.data.jobId);
+        if (job.status === 'completed') showToast('Base image regenerated!');
+        else showToast(job.error || 'Regeneration failed', 'error');
       } else {
-        showToast(job.error || 'Regeneration failed', 'error');
+        showToast('Regenerating base — this may take 30-60s...');
+        const status = await pollSetStatus(set.id);
+        if (status === 'completed') showToast('Base image regenerated!');
+        else showToast('Regeneration failed or timed out', 'error');
       }
       await fetchSets();
     } catch (err) {
@@ -1680,13 +1701,36 @@ export default function SceneSetsTab() {
         throw new Error(err.error || `Generation failed (${res.status})`);
       }
       const json = await res.json();
-      showToast(`Generating "${angle.angle_name}" — queued`);
-      const job = await pollJob(json.data.jobId);
-      if (job.status === 'completed') {
-        showToast(`"${angle.angle_name}" generated!`);
 
+      if (json.data?.jobId) {
+        // Legacy job-based flow: poll for completion
+        showToast(`Generating "${angle.angle_name}" — queued`);
+        const job = await pollJob(json.data.jobId);
+        if (job.status === 'completed') {
+          showToast(`"${angle.angle_name}" generated!`);
+        } else {
+          showToast(job.error || 'Angle generation failed', 'error');
+        }
       } else {
-        showToast(job.error || 'Angle generation failed', 'error');
+        // Direct generation flow: poll scene set for angle completion
+        showToast(`Generating "${angle.angle_name}" — this may take 30-60s...`);
+        const maxPolls = 30;
+        for (let i = 0; i < maxPolls; i++) {
+          await new Promise(r => setTimeout(r, 4000));
+          try {
+            const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
+            const checkJson = await checkRes.json();
+            const updatedAngle = checkJson.data?.angles?.find(a => a.id === angle.id);
+            if (updatedAngle?.generation_status === 'complete') {
+              showToast(`"${angle.angle_name}" generated!`);
+              break;
+            }
+            if (updatedAngle?.generation_status === 'failed') {
+              showToast('Angle generation failed', 'error');
+              break;
+            }
+          } catch { /* retry */ }
+        }
       }
       await fetchSets();
     } catch {

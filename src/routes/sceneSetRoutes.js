@@ -532,21 +532,28 @@ router.post('/:id/generate-base', validateUUIDParam('id'), optionalAuth, async (
       });
     }
 
-    try { await set.update({ generation_status: 'generating' }); } catch (e) {
-      console.warn('generate-base: could not update generation_status:', e.message);
+    if (!process.env.OPENAI_API_KEY && !process.env.RUNWAY_ML_API_KEY) {
+      return res.status(503).json({ success: false, error: 'No image generation API key configured (OPENAI_API_KEY or RUNWAY_ML_API_KEY)' });
     }
 
-    await ensureGenerationJobsTable();
-    const job = await GenerationJob.create({
-      job_type: 'generate_base',
-      scene_set_id: set.id,
-      payload: { force: !!(req.body?.force) },
-    });
+    await set.update({ generation_status: 'generating' });
 
-    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
+    // Return immediately, generate in background
+    res.status(202).json({ success: true, data: { status: 'generating', message: 'Base generation started in background' } });
+
+    // Background generation
+    try {
+      const sceneGenService = require('../services/sceneGenerationService');
+      const models = require('../models');
+      await sceneGenService.generateBaseScene(set, models);
+      console.log(`[SceneGen] Base scene for "${set.name}" generation complete`);
+    } catch (genErr) {
+      console.error(`[SceneGen] Base scene for "${set.name}" failed:`, genErr.message);
+      await set.update({ generation_status: 'failed' });
+    }
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    if (!res.headersSent) res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -785,25 +792,29 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), optionalAu
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
-    await ensureGenerationJobsTable();
-    const job = await GenerationJob.create({
-      job_type: 'generate_angle',
-      scene_set_id: set.id,
-      scene_angle_id: angle.id,
-      payload: {},
-    });
-
-    // Mark the angle as generating and clear stale assets so the frontend shows a spinner
-    try {
-      await angle.update({ generation_status: 'generating', still_image_url: null, video_clip_url: null });
-    } catch (e) {
-      console.warn('generate-angle: could not update angle status:', e.message);
+    if (!process.env.OPENAI_API_KEY && !process.env.RUNWAY_ML_API_KEY) {
+      return res.status(503).json({ success: false, error: 'No image generation API key configured (OPENAI_API_KEY or RUNWAY_ML_API_KEY)' });
     }
 
-    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
+    // Mark as generating
+    await angle.update({ generation_status: 'generating' });
+
+    // Return immediately, generate in background
+    res.status(202).json({ success: true, data: { status: 'generating', message: 'Generation started in background' } });
+
+    // Background generation
+    try {
+      const sceneGenService = require('../services/sceneGenerationService');
+      const models = require('../models');
+      await sceneGenService.generateAngle(angle, set, models);
+      console.log(`[SceneGen] Angle ${angle.angle_name} generation complete`);
+    } catch (genErr) {
+      console.error(`[SceneGen] Angle ${angle.angle_name} generation failed:`, genErr.message);
+      await angle.update({ generation_status: 'failed' });
+    }
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    if (!res.headersSent) res.status(500).json({ success: false, error: err.message });
   }
 });
 
