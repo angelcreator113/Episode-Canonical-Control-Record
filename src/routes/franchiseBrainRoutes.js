@@ -313,6 +313,10 @@ router.get('/franchise-brain/amber-activity', optionalAuth, async (req, res) => 
       recent_activity: recentActivity,
     });
   } catch (err) {
+    // If table/enum issue, return empty data instead of 500
+    if (err.message?.includes('does not exist') || err.message?.includes('invalid input value')) {
+      return res.json({ amber: { total_contributions: 0, by_status: {}, recent_entries: [] }, brain_growth: { total: 0, by_category: {}, by_status: {} }, most_injected: [], recent_activity: [] });
+    }
     console.error('Amber activity error:', err);
     return res.status(500).json({ error: err.message });
   }

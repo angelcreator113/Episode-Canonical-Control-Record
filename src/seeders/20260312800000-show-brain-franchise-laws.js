@@ -28,6 +28,7 @@ module.exports = {
         ...base,
         title: 'Show Identity — Core DNA',
         content: JSON.stringify({
+          section: 'identity',
           summary: 'STYLING ADVENTURES WITH LALA is a narrative-driven luxury fashion life simulator. Fashion is strategy. Reputation is currency. Legacy is built episode by episode.',
           show_title: 'Styling Adventures with Lala',
           genre: 'Narrative-driven luxury fashion life simulator',
@@ -57,6 +58,7 @@ module.exports = {
         ...base,
         title: 'Character Bible — Lala Identity',
         content: JSON.stringify({
+          section: 'character_bible',
           summary: 'Lala is a luxury fashion creator and main protagonist in the LalaVerse. She does NOT know she is in a show.',
           full_name: 'Lala (LalaVerse Canon Character)',
           role: 'Luxury fashion creator and main protagonist',
@@ -73,6 +75,7 @@ module.exports = {
         ...base,
         title: 'Character Bible — Personality Sliders',
         content: JSON.stringify({
+          section: 'personality',
           summary: '5 personality sliders define Lala\'s baseline personality. They shift dynamically based on current stats.',
           sliders: [
             { name: 'Confidence', default: 65, desc: 'How boldly she speaks and acts.' },
@@ -101,6 +104,7 @@ module.exports = {
         ...base,
         title: 'Character Bible — Voice DNA and Interaction Grammar',
         content: JSON.stringify({
+          section: 'personality',
           summary: 'Lala\'s canonical speech patterns and interaction rules.',
           voice_dna: [
             'Uses "bestie" as a warm, confident address — not slang, elevated casual.',
@@ -127,6 +131,7 @@ module.exports = {
         ...base,
         title: 'World Rules — The 9 World Laws',
         content: JSON.stringify({
+          section: 'world_rules',
           summary: 'The canonical operating rules of LalaLand. Nothing is random. Everything is consequence-driven.',
           laws: [
             { num: 1, rule: 'Login Ritual is sacred — every episode must open with it.', consequence: 'Episode feels disconnected from the world.' },
@@ -149,6 +154,7 @@ module.exports = {
         ...base,
         title: 'World Rules — Mail System and Event Density Control',
         content: JSON.stringify({
+          section: 'world_rules',
           summary: 'All narrative events enter Lala\'s world as Mail. 5 canonical types. Event density is strictly enforced.',
           mail_types: [
             { type: 'Invite', icon: '💌', desc: 'Event invitation (fashion show, appearance, collab).', freq: '1 per episode (Episodes 1–3: only type allowed)' },
@@ -175,6 +181,7 @@ module.exports = {
         ...base,
         title: 'Stat System — 6 Core Stats',
         content: JSON.stringify({
+          section: 'stats',
           summary: '6 core stats drive every decision, outcome, and behavior. They are the engine beneath everything the audience sees.',
           stats: [
             { name: 'Prime Coins', emoji: '💫', range: '0–unlimited (starts: 500)', desc: 'Wealth and purchasing power.', status: 'Built' },
@@ -210,6 +217,7 @@ module.exports = {
         ...base,
         title: 'Show Economy — Prime Bank and Revenue',
         content: JSON.stringify({
+          section: 'economy',
           summary: 'The show economy runs on Prime Bank with 4 interconnected currency types.',
           currencies: [
             { name: 'Prime Coins', emoji: '💫', desc: 'Primary currency. Wealth and purchasing power. Used to enter events, buy wardrobe, unlock locations. Visible in Micro HUD.' },
@@ -241,6 +249,7 @@ module.exports = {
         ...base,
         title: 'Episode Architecture — The 14-Beat Structure',
         content: JSON.stringify({
+          section: 'episode_beats',
           summary: 'Every episode follows a canonical 14-beat sequence. No episode skips beats. No beat is optional.',
           beats: [
             { num: 1, name: 'Opening Ritual', desc: 'Headphones on — the show\'s sacred opening. Never skipped.' },
@@ -269,6 +278,7 @@ module.exports = {
         ...base,
         title: 'Episode Archetypes and Script Tag System',
         content: JSON.stringify({
+          section: 'episode_beats',
           summary: '5 episode archetypes and 9 script tags for machine-readable beat parsing.',
           archetypes: [
             { name: 'Rise Episode', desc: 'Lala wins. Stats climb. World responds warmly. Used for momentum building and audience trust.' },
@@ -298,6 +308,7 @@ module.exports = {
         ...base,
         title: 'The 5-Brain Intelligence System',
         content: JSON.stringify({
+          section: 'five_brains',
           summary: 'Five interconnected AI layers that make the show feel alive. One script drives the entire production pipeline.',
           vision: 'Writer Brain suggests dialogue → Editor Brain determines screen state → Director Brain confirms arc alignment → Interaction Brain adjusts Lala\'s reaction → Producer Brain tracks economic impact.',
           brains: [
@@ -362,6 +373,7 @@ module.exports = {
         ...base,
         title: 'Screen States — Editor Brain Canvas',
         content: JSON.stringify({
+          section: 'screen_states',
           summary: 'Every beat maps to exactly one Screen State. These control the entire visual production.',
           states: [
             { name: 'IDLE', desc: 'Minimal UI. Gentle drift. Lala at rest. World is quiet.' },
@@ -381,6 +393,7 @@ module.exports = {
         ...base,
         title: 'Visual and Motion Language',
         content: JSON.stringify({
+          section: 'visual_language',
           summary: 'The show has a specific luxury visual aesthetic. Not negotiable. Must NEVER feel like a dashboard.',
           aesthetic_reference: [
             'Luxury Instagram editors',
@@ -420,6 +433,7 @@ module.exports = {
         ...base,
         title: 'Season and Arc Structure — Season 1',
         content: JSON.stringify({
+          section: 'season_1',
           summary: 'Season 1: Soft Luxury Ascension. 24 episodes, 3 mini-arcs of 8.',
           theme: 'Soft Luxury Ascension — Lala earns her place in the luxury tier',
           season_dream: 'Become a Recognized Creator',
@@ -457,6 +471,7 @@ module.exports = {
         ...base,
         title: 'Multi-Platform Strategy and Content Pipeline',
         content: JSON.stringify({
+          section: 'multi_platform',
           summary: 'Same character, same stats, same arc — different lens across every platform. One show. Many worlds.',
           platforms: [
             { name: 'YouTube — Styling Adventures', desc: 'Main show. Full game world with UI overlays, evaluation scores, wardrobe gameplay. The definitive Lala experience.' },
@@ -481,6 +496,7 @@ module.exports = {
         ...base,
         title: 'Future Systems — Queued But Not Built',
         content: JSON.stringify({
+          section: 'canon_rules',
           summary: 'Systems that are designed and documented but not yet built. These are queued — not abandoned.',
           systems: [
             { name: 'Emotional Memory', desc: 'Unresolved emotions carry forward. Flags when they need resolution.', priority: 'HIGH' },
@@ -506,6 +522,7 @@ module.exports = {
         ...base,
         title: 'Locked Canon Rules — Permanent and Non-Negotiable',
         content: JSON.stringify({
+          section: 'canon_rules',
           summary: 'These decisions are permanent. They cannot be changed without a formal deviation log entry.',
           character_rules: [
             'Lala does NOT know she is in a show. Never break this. Never hint at it.',
