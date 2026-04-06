@@ -812,7 +812,16 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
-          {/* Actions — visible on hover */}
+          {/* Generate All — always visible when there are pending angles */}
+          {hasBase && pendingAngles.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({pendingAngles.length})</>}
+              </button>
+            </div>
+          )}
+
+          {/* Other actions — visible on hover */}
           <div className="scene-sets-card-actions">
             {!hasBase && (
               <>
@@ -823,11 +832,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <Upload size={12} /> Upload
                 </button>
               </>
-            )}
-            {hasBase && pendingAngles.length > 0 && (
-              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className="scene-sets-btn-generate">
-                {isGenerating ? <><Loader size={12} className="spin" /></> : <><Sparkles size={12} /> Generate All</>}
-              </button>
             )}
             {hasBase && (
               <button onClick={() => setShowDetails(true)} className="scene-sets-btn-details">
