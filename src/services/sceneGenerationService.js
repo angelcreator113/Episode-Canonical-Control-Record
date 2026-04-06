@@ -340,7 +340,7 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
 
       // Build detail constraints for the edit instruction (NOT visible in the generated image)
       // These go into the system-level instruction, not the visual prompt
-      const { imageAnalysis, styleLock, croppedRefUrl, depthMapUrl, regionHint, retryCorrections } = extras;
+      const { imageAnalysis, styleLock, regionHint, retryCorrections } = extras;
       let detailConstraints = '';
       if (imageAnalysis) {
         if (imageAnalysis.spatial_layout) detailConstraints += ` Room layout: ${imageAnalysis.spatial_layout}`;
@@ -999,24 +999,6 @@ Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drif
   }
 }
 
-/**
- * Build a visual inventory string from image analysis data.
- * Injected into angle generation prompts for concrete detail preservation.
- */
-function buildInventoryPrompt(analysis) {
-  if (!analysis) return '';
-  const parts = [];
-  if (analysis.spatial_layout) parts.push(`LAYOUT: ${analysis.spatial_layout}`);
-  if (analysis.wall_color) parts.push(`Walls: ${analysis.wall_color}.`);
-  if (analysis.flooring) parts.push(`Floor: ${analysis.flooring}.`);
-  if (analysis.furniture?.length) parts.push(`Furniture: ${analysis.furniture.join('; ')}.`);
-  if (analysis.lighting_fixtures?.length) parts.push(`Lights: ${analysis.lighting_fixtures.join('; ')}.`);
-  if (analysis.signature_decor?.length) parts.push(`Decor: ${analysis.signature_decor.join('; ')}.`);
-  if (analysis.textiles?.length) parts.push(`Textiles: ${analysis.textiles.join('; ')}.`);
-  if (analysis.visible_through_windows) parts.push(`Windows show: ${analysis.visible_through_windows}.`);
-  if (analysis.color_palette_hex?.length) parts.push(`Palette: ${analysis.color_palette_hex.join(', ')}.`);
-  return parts.length > 0 ? `ROOM CONTINUITY BIBLE (every angle must match this): ${parts.join(' ')}` : '';
-}
 
 // ─── REFERENCE REGION CROPPING ───────────────────────────────────────────────
 
