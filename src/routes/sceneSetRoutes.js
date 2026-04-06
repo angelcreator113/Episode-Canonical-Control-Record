@@ -1719,7 +1719,7 @@ router.post('/:id/promote-to-base', validateUUIDParam('id'), optionalAuth, async
         const sceneGenService = require('../services/sceneGenerationService');
         const models = require('../models');
         const freshSet = await SceneSet.findByPk(set.id);
-        sceneGenService.analyzeBaseImage(freshSet, models.SceneSet).catch(() => {});
+        sceneGenService.analyzeBaseImage(freshSet, models.SceneSet).catch(err => console.warn('[SceneSets] Background image analysis failed:', err?.message));
       } catch { /* non-blocking */ }
     }
 
