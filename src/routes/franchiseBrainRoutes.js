@@ -44,6 +44,73 @@ router.get('/franchise-brain/entries', optionalAuth, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SEED SHOW BRAIN — run all franchise knowledge seeders
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/franchise-brain/seed', optionalAuth, async (req, res) => {
+  try {
+    const { force = false } = req.body;
+    const path = require('path');
+
+    // Check existing count
+    const existing = await db.FranchiseKnowledge.count();
+    if (existing > 0 && !force) {
+      return res.status(409).json({
+        error: `Show Brain already has ${existing} entries. Pass force: true to re-seed.`,
+        existing_count: existing,
+      });
+    }
+
+    // If forcing, clear existing entries
+    if (force && existing > 0) {
+      await db.sequelize.query('DELETE FROM franchise_knowledge');
+      console.log(`Cleared ${existing} existing franchise_knowledge rows`);
+    }
+
+    const seeders = [
+      ['Cultural systems', '20260312000000-cultural-system-franchise-laws.js'],
+      ['Influencer systems', '20260312100000-influencer-systems-franchise-laws.js'],
+      ['World infrastructure', '20260312200000-world-infrastructure-franchise-laws.js'],
+      ['Social timeline', '20260312300000-social-timeline-franchise-laws.js'],
+      ['Social personality', '20260312400000-social-personality-franchise-laws.js'],
+      ['Character life simulation', '20260312500000-character-life-simulation-franchise-laws.js'],
+      ['Cultural memory', '20260312600000-cultural-memory-franchise-laws.js'],
+      ['Character depth engine', '20260312700000-character-depth-engine-franchise-laws.js'],
+      ['Show Brain (master)', '20260312800000-show-brain-franchise-laws.js'],
+      ['Embodied life rules', '20260312900000-embodied-life-rules-franchise-laws.js'],
+    ];
+
+    let totalSeeded = 0;
+    const results = [];
+    for (const [name, file] of seeders) {
+      try {
+        const seederPath = path.join(__dirname, '../seeders', file);
+        const seeder = require(seederPath);
+        const queryInterface = db.sequelize.getQueryInterface();
+        await seeder.up(queryInterface, db.Sequelize);
+        const count = await db.FranchiseKnowledge.count();
+        const added = count - totalSeeded - (force ? 0 : existing);
+        results.push({ name, status: 'ok' });
+        totalSeeded = count - (force ? 0 : existing);
+      } catch (seederErr) {
+        console.warn(`Seeder "${name}" failed:`, seederErr.message);
+        results.push({ name, status: 'failed', error: seederErr.message });
+      }
+    }
+
+    const finalCount = await db.FranchiseKnowledge.count();
+    return res.json({
+      success: true,
+      seeded: finalCount - (force ? 0 : existing),
+      total: finalCount,
+      seeders: results,
+    });
+  } catch (err) {
+    console.error('Franchise brain seed error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CREATE ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/franchise-brain/entries', optionalAuth, async (req, res) => {
