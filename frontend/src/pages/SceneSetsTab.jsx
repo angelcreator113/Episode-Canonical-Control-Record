@@ -400,6 +400,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const readyAngles = sortedAngles.filter(a => a.generation_status === 'complete').length;
   const totalAngles = sortedAngles.length;
   const pendingAngles = sortedAngles.filter(a => a.generation_status === 'pending');
+  const failedAngles = sortedAngles.filter(a => a.generation_status === 'failed');
+  const generableAngles = sortedAngles.filter(a => a.generation_status === 'pending' || a.generation_status === 'failed');
   const regenerableAngles = sortedAngles.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed');
   const hasBase = !!(set.base_still_url || set.base_runway_seed);
 
@@ -812,11 +814,25 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
-          {/* Generate All — always visible when there are pending angles */}
-          {hasBase && pendingAngles.length > 0 && (
+          {/* Generate All — always visible when there are generable angles */}
+          {hasBase && generableAngles.length > 0 && (
             <div style={{ marginTop: 6 }}>
-              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({pendingAngles.length})</>}
+              <button onClick={async () => {
+                // Reset failed angles to pending first so they get included
+                if (failedAngles.length > 0) {
+                  for (const a of failedAngles) {
+                    try {
+                      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ generation_status: 'pending' }),
+                      });
+                    } catch { /* continue */ }
+                  }
+                }
+                onGenerateAll(set, false);
+              }} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({generableAngles.length})</>}
               </button>
             </div>
           )}
@@ -1117,10 +1133,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {activeModalTab === 'angles' && !showPromptEditor && !showAddAngle && (
                   <div className="scene-sets-modal-section">
                     {/* Compact action bar */}
-                    {pendingAngles.length > 0 && (
+                    {generableAngles.length > 0 && (
                       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                         <button className="scene-sets-btn-generate" onClick={() => onGenerateAll(set, false)} disabled={isGenerating}>
-                          <Sparkles size={11} /> Generate All ({pendingAngles.length})
+                          <Sparkles size={11} /> Generate All ({generableAngles.length})
                         </button>
                       </div>
                     )}
