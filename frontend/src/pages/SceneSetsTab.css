@@ -3492,3 +3492,101 @@
   color: var(--ss-muted);
   text-transform: capitalize;
 }
+
+/* ── Description Builder ─────────────────────────────────────────────────── */
+
+.scene-sets-desc-helper {
+  margin-bottom: 6px;
+}
+
+.scene-sets-desc-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ss-muted);
+  line-height: 1.5;
+}
+
+.scene-sets-desc-textarea {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.scene-sets-desc-textarea::placeholder {
+  font-family: 'Lora', serif;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.scene-sets-ai-desc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px dashed var(--ss-gold);
+  background: var(--ss-gold-light);
+  color: var(--ss-gold);
+  cursor: pointer;
+}
+
+.scene-sets-ai-desc-btn:hover {
+  background: rgba(184, 150, 46, 0.2);
+  border-style: solid;
+}
+
+.scene-sets-ai-desc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Episode Checkboxes ──────────────────────────────────────────────────── */
+
+.scene-sets-episode-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--ss-surface);
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+}
+
+.scene-sets-episode-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--ss-ink);
+  transition: background var(--ss-transition);
+}
+
+.scene-sets-episode-checkbox:hover {
+  background: #fff;
+}
+
+.scene-sets-episode-checkbox input[type="checkbox"] {
+  accent-color: var(--ss-gold);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.scene-sets-episode-checkbox-title {
+  color: var(--ss-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

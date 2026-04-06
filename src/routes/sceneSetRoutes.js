@@ -97,6 +97,46 @@ router.get('/', optionalAuth, async (req, res) => {
 
 // ─── Static routes MUST be before /:id to avoid Express matching them as UUIDs ──
 
+router.post('/ai-describe', optionalAuth, async (req, res) => {
+  try {
+    const { name, scene_type, user_notes } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      messages: [{
+        role: 'user',
+        content: `You are a production designer writing a location description for a show called "Before Lala" set in the LalaVerse. This description will be used to generate AI images of the location.
+
+Location name: "${name}"
+Scene type: ${scene_type || 'HOME_BASE'}
+${user_notes ? `User notes: ${user_notes}` : ''}
+
+Write a rich 2-3 sentence description that includes:
+- Room SIZE (compact/medium/spacious/grand) and SHAPE
+- Exact WALL COLORS and FLOORING
+- Key FURNITURE with materials/colors and positions
+- LIGHTING type and sources (warm, natural, neon, fairy lights, etc.)
+- SIGNATURE DECOR (specific items that make this space unique)
+- WINDOW VIEWS if applicable
+- Overall MOOD and atmosphere
+
+Be specific and visual — this description will directly generate images. Use the LalaVerse aesthetic: feminine, aspirational, warm tones, soft textures, Pinterest-worthy.
+Return ONLY the description paragraph, no labels or formatting.`,
+      }],
+    });
+
+    const description = response.content?.[0]?.text?.trim() || '';
+    res.json({ success: true, description });
+  } catch (err) {
+    console.error('AI describe error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/generation-check', optionalAuth, (req, res) => {
   res.json({
     success: true,

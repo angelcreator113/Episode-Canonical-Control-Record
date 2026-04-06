@@ -1458,6 +1458,7 @@ export default function SceneSetsTab() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
+  const [descBuilderLoading, setDescBuilderLoading] = useState(false);
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
   const [allShows, setAllShows] = useState([]);
   const [allEpisodes, setAllEpisodes] = useState([]);
@@ -2202,15 +2203,51 @@ export default function SceneSetsTab() {
               </select>
             </div>
           </div>
+
+          {/* Description with AI builder */}
           <div className="scene-sets-create-field">
-            <label>Description <span className="scene-sets-optional">(optional)</span></label>
+            <label>Description</label>
+            <div className="scene-sets-desc-helper">
+              <span className="scene-sets-desc-hint">Include: room size, wall colors, key furniture, lighting type, flooring, signature decor, window views, mood</span>
+            </div>
             <textarea
-              placeholder="Describe the space — layout, lighting, mood, signature details..."
+              placeholder={`Example: A spacious modern kitchen with white marble countertops, brass fixtures, and a large center island. Warm pendant lights hang above the island. Floor-to-ceiling windows on the back wall show a garden view. Light oak hardwood floors. The mood is bright and inviting with morning golden light streaming in.`}
               value={newSet.canonical_description}
               onChange={e => setNewSet(s => ({ ...s, canonical_description: e.target.value }))}
-              rows={3}
+              rows={5}
+              className="scene-sets-desc-textarea"
             />
+            {newSet.name.trim() && (
+              <button
+                className="scene-sets-ai-desc-btn"
+                disabled={descBuilderLoading}
+                onClick={async () => {
+                  setDescBuilderLoading(true);
+                  try {
+                    const r = await fetch(`${API_BASE}/scene-sets/ai-describe`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: newSet.name.trim(),
+                        scene_type: newSet.scene_type,
+                        user_notes: newSet.canonical_description.trim() || null,
+                      }),
+                    });
+                    const d = await r.json();
+                    if (d.description) {
+                      setNewSet(s => ({ ...s, canonical_description: d.description }));
+                      showToast('AI description generated');
+                    }
+                  } catch { showToast('AI description failed', 'error'); }
+                  setDescBuilderLoading(false);
+                }}
+              >
+                {descBuilderLoading ? <><Loader size={10} className="spin" /> Writing...</> : <><Sparkles size={10} /> AI Write Description</>}
+              </button>
+            )}
           </div>
+
+          {/* Show + Episode selection */}
           <div className="scene-sets-create-row">
             <div className="scene-sets-create-field">
               <label>Show <span className="scene-sets-optional">(optional)</span></label>
@@ -2229,26 +2266,37 @@ export default function SceneSetsTab() {
                 ))}
               </select>
             </div>
-            {createShowId && (
-              <div className="scene-sets-create-field">
-                <label>Episodes <span className="scene-sets-optional">(optional, multi-select)</span></label>
-                <select
-                  multiple
-                  value={newSet.episode_ids}
-                  onChange={e => setNewSet(s => ({ ...s, episode_ids: Array.from(e.target.selectedOptions, o => o.value) }))}
-                  style={{ minHeight: '60px' }}
-                >
-                  {allEpisodes
-                    .filter(ep => ep.show_id === createShowId)
-                    .map(ep => (
-                      <option key={ep.id} value={ep.id}>
-                        {ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'} — {ep.title}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            )}
           </div>
+
+          {/* Episode checkboxes — much better than multi-select */}
+          {createShowId && allEpisodes.filter(ep => ep.show_id === createShowId).length > 0 && (
+            <div className="scene-sets-create-field">
+              <label>Episodes <span className="scene-sets-optional">(select all that use this location)</span></label>
+              <div className="scene-sets-episode-checkboxes">
+                {allEpisodes
+                  .filter(ep => ep.show_id === createShowId)
+                  .map(ep => (
+                    <label key={ep.id} className="scene-sets-episode-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={newSet.episode_ids.includes(ep.id)}
+                        onChange={e => {
+                          setNewSet(s => ({
+                            ...s,
+                            episode_ids: e.target.checked
+                              ? [...s.episode_ids, ep.id]
+                              : s.episode_ids.filter(id => id !== ep.id),
+                          }));
+                        }}
+                      />
+                      <span>{ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'}</span>
+                      <span className="scene-sets-episode-checkbox-title">{ep.title}</span>
+                    </label>
+                  ))}
+              </div>
+            </div>
+          )}
+
           <div className="scene-sets-create-actions">
             <button
               className="scene-sets-btn-generate"
