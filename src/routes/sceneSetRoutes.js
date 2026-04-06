@@ -780,6 +780,21 @@ router.post('/:id/angles', validateUUIDParam('id'), optionalAuth, async (req, re
   }
 });
 
+// ─── GET /generation-check — verify API keys are configured ──────────────────
+
+router.get('/generation-check', optionalAuth, async (req, res) => {
+  res.json({
+    success: true,
+    openai: !!process.env.OPENAI_API_KEY,
+    runway: !!process.env.RUNWAY_ML_API_KEY,
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+    ready: !!(process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY),
+    message: process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY
+      ? 'Image generation ready'
+      : 'No image generation API key configured. Set OPENAI_API_KEY (for DALL-E) or RUNWAY_ML_API_KEY (for Runway ML).',
+  });
+});
+
 // ─── POST /:id/angles/:angleId/generate  — generate a specific angle ────────
 
 router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), optionalAuth, async (req, res) => {
@@ -810,7 +825,10 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), optionalAu
       console.log(`[SceneGen] Angle ${angle.angle_name} generation complete`);
     } catch (genErr) {
       console.error(`[SceneGen] Angle ${angle.angle_name} generation failed:`, genErr.message);
-      await angle.update({ generation_status: 'failed' });
+      const review = angle.quality_review || {};
+      review.last_error = genErr.message;
+      review.failed_at = new Date().toISOString();
+      await angle.update({ generation_status: 'failed', quality_review: review });
     }
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate error:', err);

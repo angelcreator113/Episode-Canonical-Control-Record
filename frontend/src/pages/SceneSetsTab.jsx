@@ -762,7 +762,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     onSetCoverAngle(set, isCover ? null : angle.id);
                   }
                 }}
-                title={hasStill ? `${angle.angle_name}${isCover ? ' (Cover)' : ''} — double-click to ${isCover ? 'unset' : 'set as'} cover` : isFailed ? `Retry: ${angle.angle_name}` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
+                title={hasStill ? `${angle.angle_name}${isCover ? ' (Cover)' : ''} — double-click to ${isCover ? 'unset' : 'set as'} cover` : isFailed ? `Retry: ${angle.angle_name}${angle.quality_review?.last_error ? ' — ' + angle.quality_review.last_error : ''}` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
               >
                 {hasStill ? (
                   <img src={bustUrl(angle.still_image_url)} alt={angle.angle_label} />
@@ -1695,6 +1695,17 @@ export default function SceneSetsTab() {
   const handleGenerateAngle = async (set, angle) => {
     startGenerating(set.id);
     try {
+      // Quick check if generation is configured
+      try {
+        const checkRes = await fetch(`${API_BASE}/scene-sets/generation-check`);
+        const checkData = await checkRes.json();
+        if (!checkData.ready) {
+          showToast(checkData.message || 'No image generation API key configured', 'error');
+          stopGenerating(set.id);
+          return;
+        }
+      } catch { /* proceed anyway */ }
+
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
