@@ -922,7 +922,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <Camera size={12} /> Angles <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
                 </button>
                 <button className={`scene-sets-modal-tab ${showPromptEditor ? 'active' : ''}`} onClick={() => { setActiveModalTab('prompt'); setShowPromptEditor(true); setShowDetails(false); setShowAddAngle(false); setEditDesc(set.canonical_description || ''); }}>
-                  <Pencil size={12} /> Prompt
+                  <Pencil size={12} /> AI Prompt
                 </button>
                 {hasBase && (
                   <button className={`scene-sets-modal-tab ${activeModalTab === 'tools' ? 'active' : ''}`} onClick={() => { setActiveModalTab('tools'); setShowDetails(true); setShowPromptEditor(false); setShowAddAngle(false); }}>
@@ -1289,44 +1289,25 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   </div>
                 )}
 
-                {/* Prompt tab */}
+                {/* Prompt tab — shows the generated AI prompt (read-only) */}
                 {showPromptEditor && (
                   <div className="scene-sets-modal-section">
                     <div className="scene-sets-modal-field">
-                      <label>Scene Description</label>
-                      <p className="scene-sets-modal-hint">Used to build the AI generation prompt for all angles</p>
-                      {hasBase && (
-                        <button className="scene-sets-btn-generate" disabled={toolsAction === 'analyzing'} onClick={async () => {
-                          setToolsAction('analyzing');
-                          try {
-                            const r = await fetch(`${API_BASE}/scene-sets/${set.id}/analyze-image`, { method: 'POST' });
-                            const d = await r.json();
-                            if (d.success && d.analysis) {
-                              setEditDesc(d.analysis.description || '');
-                              showToast(`Auto-filled: ${d.updated_fields.join(', ')}${d.angles_created ? ` + ${d.angles_created} angles` : ''}`);
-                            } else {
-                              showToast(d.error || 'Analysis failed', 'error');
-                            }
-                          } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
-                        }} style={{ marginBottom: 8 }}>
-                          <Sparkles size={11} /> {toolsAction === 'analyzing' ? 'Analyzing image...' : 'Auto-fill from image'}
-                        </button>
-                      )}
-                      <textarea className="scene-sets-modal-textarea" value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={5} autoFocus placeholder="Describe the space — layout, lighting, mood, signature details..." />
+                      <label>Your Description</label>
+                      <p className="scene-sets-overview-desc">{localDesc || 'No description set. Go to Overview tab to add one.'}</p>
                     </div>
                     {set.base_runway_prompt && (
-                      <details className="scene-sets-modal-prompt-details">
-                        <summary>View last generated prompt</summary>
-                        <pre className="scene-sets-modal-prompt-pre">{set.base_runway_prompt}</pre>
-                      </details>
+                      <div className="scene-sets-modal-field">
+                        <label>Generated AI Prompt</label>
+                        <p className="scene-sets-modal-hint">This is what the AI actually receives when generating images. It's built automatically from your description + style settings.</p>
+                        <pre className="scene-sets-modal-prompt-pre" style={{ whiteSpace: 'pre-wrap', fontSize: 11, lineHeight: 1.5, maxHeight: 300, overflow: 'auto' }}>{set.base_runway_prompt}</pre>
+                      </div>
                     )}
-                    <div className="scene-sets-modal-actions">
-                      <button className="scene-sets-btn-generate" onClick={() => handleSavePrompt(false)} disabled={savingPrompt}>
-                        {savingPrompt ? <><Loader size={12} className="spin" /> Saving...</> : <><Save size={12} /> Save</>}
-                      </button>
-                      {hasBase && <button className="scene-sets-btn-generate" onClick={() => handleSavePrompt(true)} disabled={savingPrompt || isGenerating}><RotateCcw size={12} /> Save & Regen</button>}
-                      {hasBase && totalAngles > 0 && <button className="scene-sets-btn-regenerate" onClick={() => handleSavePrompt(false, true)} disabled={savingPrompt || isGenerating}><Sparkles size={12} /> Regen All</button>}
-                    </div>
+                    {!set.base_runway_prompt && (
+                      <div style={{ textAlign: 'center', padding: 16, color: '#94a3b8', fontSize: 12 }}>
+                        No prompt generated yet. Add a description and generate the base image.
+                      </div>
+                    )}
                   </div>
                 )}
 
