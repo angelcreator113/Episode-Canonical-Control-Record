@@ -86,60 +86,98 @@ if (process.env.NODE_ENV !== 'test') {
         // Sync errors indicate schema mismatches that we don't want to auto-fix
         console.log('⏭️  Skipping model sync (database already initialized)');
 
-        // Auto-repair: detect missing tables and recreate them
-        try {
-          const [tables] = await db.sequelize.query(
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
-          );
-          const existingTables = new Set(tables.map(t => t.tablename));
-
-          // Critical tables that must exist (both model-backed and migration-only)
-          const criticalTables = [
-            'shows', 'episodes', 'assets', 'scenes', 'scene_library',
-            'wardrobe_library', 'character_profiles', 'thumbnail_templates',
-            'world_events', 'character_state', 'character_state_history',
-            'decision_log', 'career_goals',
-          ];
-          const missing = criticalTables.filter(t => !existingTables.has(t));
-
-          if (missing.length > 0) {
-            console.log(`⚠️  ${missing.length} critical table(s) missing: ${missing.join(', ')}`);
-            console.log('🔄 Running sequelize.sync() to create missing model tables...');
-            // sync() with no options creates missing tables without modifying existing ones
-            await db.sequelize.sync();
-            console.log('✅ Model tables synced');
-
-            // Check if migration-only tables are still missing after sync
-            const [tablesAfter] = await db.sequelize.query(
+        // Auto-repair: detect missing tables and create them individually (non-blocking)
+        // Run in background so server starts accepting requests immediately
+        (async () => {
+          try {
+            const [tables] = await db.sequelize.query(
               "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
             );
-            const tablesAfterSet = new Set(tablesAfter.map(t => t.tablename));
-            const stillMissing = criticalTables.filter(t => !tablesAfterSet.has(t));
-            if (stillMissing.length > 0) {
-              console.log(`⚠️  Still missing after sync (migration-only tables): ${stillMissing.join(', ')}`);
-              console.log('🔄 Running migrations to create remaining tables...');
+            const existingTables = new Set(tables.map(t => t.tablename));
+
+            // Check model-backed tables and sync only the missing ones
+            const allModels = Object.values(db).filter(m => m && typeof m.getTableName === 'function');
+            let repaired = 0;
+            for (const model of allModels) {
               try {
-                const { exec } = require('child_process');
-                const { promisify } = require('util');
-                const execAsync = promisify(exec);
-                const { stdout, stderr } = await execAsync('npx sequelize-cli db:migrate', {
-                  cwd: __dirname + '/..',
-                  timeout: 60000,
-                  env: { ...process.env },
-                });
-                if (stdout) console.log('Migration output:', stdout.slice(-500));
-                if (stderr) console.warn('Migration stderr:', stderr.slice(-300));
-                console.log('✅ Migrations complete');
-              } catch (migErr) {
-                console.warn('⚠️  Migration run failed (non-fatal):', migErr.message);
+                const tableName = typeof model.getTableName() === 'string'
+                  ? model.getTableName()
+                  : model.getTableName().tableName;
+                if (!existingTables.has(tableName)) {
+                  console.log(`  Creating missing table: ${tableName}`);
+                  await model.sync();
+                  repaired++;
+                }
+              } catch (e) {
+                // Skip models that fail to sync (dependency issues)
               }
             }
-          } else {
-            console.log('✅ All critical tables present');
+            if (repaired > 0) console.log(`✅ Created ${repaired} missing model table(s)`);
+
+            // Check migration-only tables
+            const migrationTables = {
+              world_events: `CREATE TABLE IF NOT EXISTS world_events (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                show_id UUID NOT NULL, name VARCHAR(200) NOT NULL,
+                event_type VARCHAR(30) DEFAULT 'invite', event_category VARCHAR(50),
+                host_brand VARCHAR(200), description TEXT,
+                prestige INTEGER DEFAULT 5, cost_coins INTEGER DEFAULT 100,
+                strictness INTEGER DEFAULT 5, deadline_type VARCHAR(20) DEFAULT 'medium',
+                dress_code VARCHAR(100), dress_code_keywords JSONB DEFAULT '[]',
+                style_aesthetic VARCHAR(200), tier VARCHAR(20) DEFAULT 'mid',
+                status VARCHAR(20) DEFAULT 'ready', is_active BOOLEAN DEFAULT true,
+                reputation_score INTEGER DEFAULT 1, career_echo_potential TEXT,
+                host VARCHAR(200), invitation_asset_id UUID,
+                used_in_episode_id UUID, scene_set_id UUID,
+                created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
+                deleted_at TIMESTAMPTZ)`,
+              character_state: `CREATE TABLE IF NOT EXISTS character_state (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                show_id UUID NOT NULL, season_id UUID,
+                character_key VARCHAR(50) NOT NULL,
+                coins INTEGER DEFAULT 500, reputation INTEGER DEFAULT 1,
+                brand_trust INTEGER DEFAULT 1, influence INTEGER DEFAULT 1, stress INTEGER DEFAULT 0,
+                last_applied_episode_id UUID,
+                created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`,
+              character_state_history: `CREATE TABLE IF NOT EXISTS character_state_history (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                show_id UUID NOT NULL, season_id UUID,
+                character_key VARCHAR(50) NOT NULL, episode_id UUID,
+                source VARCHAR(50), deltas JSONB, state_after JSONB, notes TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW())`,
+              decision_log: `CREATE TABLE IF NOT EXISTS decision_log (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                show_id UUID NOT NULL, episode_id UUID,
+                type VARCHAR(50), data JSONB, notes TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW())`,
+              career_goals: `CREATE TABLE IF NOT EXISTS career_goals (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                show_id UUID NOT NULL, name VARCHAR(255) NOT NULL,
+                description TEXT, goal_type VARCHAR(50) DEFAULT 'stat',
+                stat_key VARCHAR(50), target_value INTEGER DEFAULT 10,
+                current_value INTEGER DEFAULT 0, starting_value INTEGER DEFAULT 0,
+                tier INTEGER DEFAULT 1, status VARCHAR(30) DEFAULT 'active',
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
+                deleted_at TIMESTAMPTZ)`,
+            };
+
+            for (const [tableName, createSQL] of Object.entries(migrationTables)) {
+              if (!existingTables.has(tableName)) {
+                try {
+                  await db.sequelize.query(createSQL);
+                  console.log(`  Created migration table: ${tableName}`);
+                } catch (e) {
+                  console.warn(`  Failed to create ${tableName}:`, e.message);
+                }
+              }
+            }
+
+            console.log('✅ Table repair check complete');
+          } catch (repairErr) {
+            console.warn('⚠️  Table repair failed (non-fatal):', repairErr.message);
           }
-        } catch (repairErr) {
-          console.warn('⚠️  Table repair check failed (non-fatal):', repairErr.message);
-        }
+        })();
       }
 
       isDbConnected = true;
