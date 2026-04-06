@@ -294,9 +294,12 @@ export default function ShowBrain() {
   const tabEntries = allEntries.filter(entry => {
     const appliesTo = parseAppliesTo(entry.applies_to);
     const content = parseContent(entry.content);
-    const matchesTag = appliesTo.includes(currentTab.tag);
-    const matchesSection = content.section === currentTab.section;
-    return matchesTag || matchesSection;
+    // If content has a section field, use it for precise tab matching
+    if (content.section) {
+      return content.section === currentTab.section;
+    }
+    // Otherwise fall back to applies_to tag matching
+    return appliesTo.includes(currentTab.tag);
   });
 
   const filteredEntries = search

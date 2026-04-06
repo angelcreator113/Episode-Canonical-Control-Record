@@ -97,7 +97,12 @@ router.post('/franchise-brain/seed', optionalAuth, async (req, res) => {
       }
     }
 
-    const finalCount = await db.FranchiseKnowledge.count();
+    // Activate any pending entries from seeders
+    await db.sequelize.query(
+      `UPDATE franchise_knowledge SET status = 'active' WHERE status = 'pending_review'`
+    );
+
+    const finalCount = await db.FranchiseKnowledge.count({ where: { status: 'active' } });
     return res.json({
       success: true,
       seeded: finalCount - (force ? 0 : existing),
@@ -152,6 +157,21 @@ router.patch('/franchise-brain/entries/:id/activate', optionalAuth, async (req, 
     return res.json({ entry, message: 'Entry activated' });
   } catch (err) {
     console.error('Franchise brain activate error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BULK ACTIVATE ALL PENDING ENTRIES
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/franchise-brain/activate-all', optionalAuth, async (req, res) => {
+  try {
+    const [, count] = await db.sequelize.query(
+      `UPDATE franchise_knowledge SET status = 'active', updated_at = NOW() WHERE status = 'pending_review'`
+    );
+    return res.json({ success: true, activated: count?.rowCount || 0, message: 'All pending entries activated' });
+  } catch (err) {
+    console.error('Franchise brain bulk activate error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -293,6 +313,10 @@ router.get('/franchise-brain/amber-activity', optionalAuth, async (req, res) => 
       recent_activity: recentActivity,
     });
   } catch (err) {
+    // If table/enum issue, return empty data instead of 500
+    if (err.message?.includes('does not exist') || err.message?.includes('invalid input value')) {
+      return res.json({ amber: { total_contributions: 0, by_status: {}, recent_entries: [] }, brain_growth: { total: 0, by_category: {}, by_status: {} }, most_injected: [], recent_activity: [] });
+    }
     console.error('Amber activity error:', err);
     return res.status(500).json({ error: err.message });
   }
