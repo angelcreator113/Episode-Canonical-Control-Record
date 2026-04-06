@@ -95,6 +95,21 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
+// ─── Static routes MUST be before /:id to avoid Express matching them as UUIDs ──
+
+router.get('/generation-check', optionalAuth, (req, res) => {
+  res.json({
+    success: true,
+    openai: !!process.env.OPENAI_API_KEY,
+    runway: !!process.env.RUNWAY_ML_API_KEY,
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+    ready: !!(process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY),
+    message: process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY
+      ? 'Image generation ready'
+      : 'No image generation API key configured. Set OPENAI_API_KEY (for DALL-E) or RUNWAY_ML_API_KEY (for Runway ML).',
+  });
+});
+
 // ─── POST /  — create a new scene set ─────────────────────────────────────────
 
 router.post('/', optionalAuth, async (req, res) => {
@@ -778,21 +793,6 @@ router.post('/:id/angles', validateUUIDParam('id'), optionalAuth, async (req, re
     console.error('Scene Sets POST /:id/angles error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
-});
-
-// ─── GET /generation-check — verify API keys are configured ──────────────────
-
-router.get('/generation-check', optionalAuth, async (req, res) => {
-  res.json({
-    success: true,
-    openai: !!process.env.OPENAI_API_KEY,
-    runway: !!process.env.RUNWAY_ML_API_KEY,
-    anthropic: !!process.env.ANTHROPIC_API_KEY,
-    ready: !!(process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY),
-    message: process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY
-      ? 'Image generation ready'
-      : 'No image generation API key configured. Set OPENAI_API_KEY (for DALL-E) or RUNWAY_ML_API_KEY (for Runway ML).',
-  });
 });
 
 // ─── POST /:id/angles/:angleId/generate  — generate a specific angle ────────
