@@ -44,13 +44,17 @@ const uploadSceneSetImages = upload.fields([
 // Ensure generation_jobs table exists (safe to call multiple times)
 let generationJobsSynced = false;
 async function ensureGenerationJobsTable() {
-  if (generationJobsSynced) return;
+  if (generationJobsSynced || !GenerationJob) return;
   try {
-    await GenerationJob.sync();
+    // Add timeout to prevent sync from hanging
+    await Promise.race([
+      GenerationJob.sync(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Sync timeout')), 5000)),
+    ]);
     generationJobsSynced = true;
   } catch (err) {
-    console.error('[SceneSets] Failed to sync GenerationJob table:', err.message);
-    throw new Error('Generation jobs table not available');
+    console.warn('[SceneSets] GenerationJob sync failed (non-fatal):', err.message);
+    generationJobsSynced = true; // Don't retry — accept it's unavailable
   }
 }
 
@@ -1232,6 +1236,7 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), optionalAuth, as
 
 router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
   try {
+    if (!GenerationJob) return res.json({ success: true, data: [] });
     await ensureGenerationJobsTable();
     const jobs = await GenerationJob.findAll({
       where: {
@@ -1243,6 +1248,7 @@ router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
 
     res.json({ success: true, data: jobs });
   } catch (err) {
+    if (err.message?.includes('does not exist')) return res.json({ success: true, data: [] });
     console.error('Scene Sets GET /jobs/set/:setId error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1252,6 +1258,9 @@ router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
 
 router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
   try {
+    if (!GenerationJob) {
+      return res.status(404).json({ success: false, error: 'Generation jobs not available' });
+    }
     await ensureGenerationJobsTable();
     const job = await GenerationJob.findByPk(req.params.jobId);
     if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
@@ -1273,6 +1282,10 @@ router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
       },
     });
   } catch (err) {
+    // Return 404 instead of 500 to stop polling loops
+    if (err.message?.includes('does not exist') || err.message?.includes('relation')) {
+      return res.status(404).json({ success: false, error: 'Job not found — table may not exist' });
+    }
     console.error('Scene Sets GET /jobs/:jobId error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
