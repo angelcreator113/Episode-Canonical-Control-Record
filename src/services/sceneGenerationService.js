@@ -36,7 +36,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── LALAVERSE VISUAL ANCHOR (condensed ~590 chars) ─────────────────────────
 
-const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow (lavender, peach, rose). Natural hero lighting. Materials: soft fabrics (linen, silk), light wood (oak, ash), glass, mirrors, shimmer. Tone: calm, intentional, beautiful, lived-in. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
+const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Natural hero lighting. Materials: soft fabrics, glass, mirrors, shimmer. Tone: calm, intentional, beautiful, lived-in. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
 
 // ─── NEGATIVE PROMPT (universal) ─────────────────────────────────────────────
 
@@ -110,8 +110,8 @@ const ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human.
 function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null, eventContext = null) {
   const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
-  // Condensed anchor frees ~400 chars for description vs v1.1's ~200
-  const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 350);
+  // Description gets priority — it contains the user's specific colors, furniture, layout
+  const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 500);
 
   const parts = [
     ENVIRONMENT_ONLY_CONSTRAINT,
@@ -183,9 +183,8 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
-  // Enforce char limit (Runway needs ≤1000, DALL-E/gpt-image-1 handles up to 4000)
-  // Keep at 1500 to give room for camera_direction while staying within Runway fallback limits
-  return full.length > 1500 ? full.slice(0, 1497) + '...' : full;
+  // Enforce char limit — DALL-E/gpt-image-1 handles up to 4000
+  return full.length > 2000 ? full.slice(0, 1997) + '...' : full;
 }
 
 /**
