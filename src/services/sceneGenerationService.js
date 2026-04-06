@@ -142,8 +142,9 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
-  // Enforce 1000 char limit
-  return full.length > 1000 ? full.slice(0, 997) + '...' : full;
+  // Enforce char limit (Runway needs ≤1000, DALL-E/gpt-image-1 handles up to 4000)
+  // Keep at 1500 to give room for camera_direction while staying within Runway fallback limits
+  return full.length > 1500 ? full.slice(0, 1497) + '...' : full;
 }
 
 /**
@@ -266,7 +267,7 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
  * Returns the image URL directly (no polling needed).
  * Used as the default for scene stills — richer detail than Runway for static scenes.
  */
-async function generateDallEStill(prompt, referenceImageUrl = null) {
+async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel = null) {
   const apiKey = process.env.OPENAI_API_KEY || OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
 
@@ -285,7 +286,11 @@ async function generateDallEStill(prompt, referenceImageUrl = null) {
       const form = new FormData();
       form.append('model', 'gpt-image-1');
       form.append('image', imageBuffer, { filename: 'base.png', contentType: 'image/png' });
-      form.append('prompt', `Using this room as reference, generate a new camera angle of the SAME room with identical furniture, colors, and decor. ${dallePrompt}`);
+      const isWide = angleLabel === 'WIDE' || angleLabel === 'ESTABLISHING';
+      const editInstruction = isWide
+        ? `This is a reference photo of a room. Generate a WIDE establishing shot of this EXACT same room — same furniture, wall colors, decor, lighting, and materials. Show the full room from corner to corner. ${dallePrompt}`
+        : `This is a reference photo of a room. Imagine you are INSIDE this exact room and rotating the camera to look in a different direction. Generate what you would see from a new camera angle — extending and outpainting the room beyond the edges of this photo. The room continues with the same design language, wall colors, flooring, materials, and lighting style. Invent plausible new areas (furniture, shelves, corners, windows) that feel like a natural continuation of this space. ${dallePrompt}`;
+      form.append('prompt', editInstruction);
       form.append('n', '1');
       form.append('size', '1536x1024');
       form.append('quality', 'high');
@@ -773,7 +778,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
           }
         }
 
-        const dalleUrl = await generateDallEStill(enhancedPrompt, sceneSet.base_still_url || null);
+        const dalleUrl = await generateDallEStill(enhancedPrompt, sceneSet.base_still_url || null, angleLabel);
         if (dalleUrl) {
           // If gpt-image-1 edit already uploaded to S3, use directly; otherwise download & upload
           if (dalleUrl.includes(S3_BUCKET)) {
