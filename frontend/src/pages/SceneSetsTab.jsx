@@ -434,6 +434,16 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [previewData, setPreviewData] = useState(null);
+
+  // Local optimistic state for settings that save on change
+  const [localTimeOfDay, setLocalTimeOfDay] = useState(set.time_of_day || '');
+  const [localSeason, setLocalSeason] = useState(set.season || '');
+  const [localRoomProps, setLocalRoomProps] = useState(set.visual_language?.room_properties || {});
+
+  // Sync from props when parent refreshes
+  useEffect(() => { setLocalTimeOfDay(set.time_of_day || ''); }, [set.time_of_day]);
+  useEffect(() => { setLocalSeason(set.season || ''); }, [set.season]);
+  useEffect(() => { setLocalRoomProps(set.visual_language?.room_properties || {}); }, [set.visual_language?.room_properties]);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [genStartTime, setGenStartTime] = useState(null);
   const [suggestions, setSuggestions] = useState(null);
@@ -980,19 +990,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Time of Day</span>
                           <select
-                            value={set.time_of_day || ''}
+                            value={localTimeOfDay}
                             onChange={async (e) => {
                               const val = e.target.value || null;
+                              setLocalTimeOfDay(e.target.value);
                               try {
                                 await fetch(`${API_BASE}/scene-sets/${set.id}`, {
                                   method: 'PUT',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ time_of_day: val }),
                                 });
-                                onToast?.(`Time set to ${val || 'any'}`);
-                              } catch { onToast?.('Failed to update', 'error'); }
+                                showToast(`Time set to ${val || 'any'}`);
+                              } catch { showToast('Failed to update', 'error'); }
                             }}
-                            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, background: '#fff', minWidth: 130 }}
+                            className="scene-sets-select-sm"
                           >
                             <option value="">Any / Not set</option>
                             <option value="morning">Morning</option>
@@ -1005,19 +1016,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Season</span>
                           <select
-                            value={set.season || ''}
+                            value={localSeason}
                             onChange={async (e) => {
                               const val = e.target.value || null;
+                              setLocalSeason(e.target.value);
                               try {
                                 await fetch(`${API_BASE}/scene-sets/${set.id}`, {
                                   method: 'PUT',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ season: val }),
                                 });
-                                onToast?.(`Season set to ${val || 'any'}`);
-                              } catch { onToast?.('Failed to update', 'error'); }
+                                showToast(`Season set to ${val || 'any'}`);
+                              } catch { showToast('Failed to update', 'error'); }
                             }}
-                            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, background: '#fff', minWidth: 130 }}
+                            className="scene-sets-select-sm"
                           >
                             <option value="">Any / Not set</option>
                             <option value="spring">Spring</option>
@@ -1041,18 +1053,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <span className="scene-sets-field-label">{label}</span>
                             <select
-                              value={set.visual_language?.room_properties?.[key] || ''}
+                              value={localRoomProps[key] || ''}
                               onChange={async (e) => {
                                 const val = e.target.value || null;
-                                const rp = { ...(set.visual_language?.room_properties || {}), [key]: val };
+                                const rp = { ...localRoomProps, [key]: val };
+                                setLocalRoomProps(rp);
                                 try {
                                   await fetch(`${API_BASE}/scene-sets/${set.id}`, {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ room_properties: rp }),
                                   });
-                                  onToast?.(`${label} set to ${val || 'auto'}`);
-                                } catch { onToast?.('Failed to update', 'error'); }
+                                  showToast(`${label} set to ${val || 'auto'}`);
+                                } catch { showToast('Failed to update', 'error'); }
                               }}
                               className="scene-sets-select-sm"
                             >
