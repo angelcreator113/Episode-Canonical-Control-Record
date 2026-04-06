@@ -295,6 +295,142 @@ router.put('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {
   }
 });
 
+// ─── POST /:id/refine-description  — AI refine while preserving visual anchors ─
+
+router.post('/:id/refine-description', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const { draft } = req.body;
+    if (!draft) return res.status(400).json({ error: 'draft is required' });
+
+    // Extract visual anchors from the current image analysis
+    const vl = set.visual_language || {};
+    const analysis = vl.image_analysis || {};
+    const anchors = [];
+    if (analysis.wall_color) anchors.push(`wall color: ${analysis.wall_color}`);
+    if (analysis.flooring) anchors.push(`flooring: ${analysis.flooring}`);
+    if (analysis.spatial_layout) anchors.push(`layout: ${analysis.spatial_layout}`);
+    if (analysis.furniture?.length) anchors.push(`furniture: ${analysis.furniture.slice(0, 5).join(', ')}`);
+    if (analysis.lighting_fixtures?.length) anchors.push(`lighting: ${analysis.lighting_fixtures.slice(0, 3).join(', ')}`);
+
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      messages: [{
+        role: 'user',
+        content: `You are editing a scene description for image generation. The user wants to improve the wording, but MUST preserve the visual identity so existing generated images stay consistent.
+
+CURRENT DESCRIPTION (user's draft to refine):
+"${draft}"
+
+${anchors.length > 0 ? `VISUAL ANCHORS (these MUST be preserved — do not change colors, materials, or layout):
+${anchors.map(a => `- ${a}`).join('\n')}` : ''}
+
+Rewrite the description to be more vivid and specific while keeping ALL visual details (colors, furniture, layout, lighting, materials) identical. Improve the prose quality, add atmospheric detail, and make it more evocative — but if it says "lavender walls", keep "lavender walls". If it mentions specific furniture, keep those exact items.
+
+Return ONLY the refined description paragraph.`,
+      }],
+    });
+
+    const refined = response.content?.[0]?.text?.trim() || '';
+    res.json({ success: true, refined });
+  } catch (err) {
+    console.error('Refine description error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /:id/learn-location  — teach show brain about this location ────────
+
+router.post('/:id/learn-location', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id, {
+      include: [
+        { model: SceneAngle, as: 'angles' },
+        ...(require('../models').Show ? [{ model: require('../models').Show, as: 'show' }] : []),
+      ],
+    });
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+
+    const models = require('../models');
+    const { FranchiseKnowledge, WorldLocation } = models;
+
+    // Create or update WorldLocation
+    let worldLoc = set.world_location_id ? await WorldLocation.findByPk(set.world_location_id) : null;
+    if (!worldLoc) {
+      worldLoc = await WorldLocation.create({
+        universe_id: set.universe_id || null,
+        name: set.name,
+        description: set.canonical_description || '',
+        location_type: set.scene_type === 'EVENT_LOCATION' ? 'exterior' : 'interior',
+        sensory_details: {
+          sight: set.canonical_description?.slice(0, 200) || '',
+          atmosphere: set.visual_language?.image_analysis?.atmosphere || '',
+        },
+        narrative_role: set.scene_type === 'HOME_BASE' ? 'sanctuary' : 'crossroads',
+      });
+      await set.update({ world_location_id: worldLoc.id });
+    }
+
+    // Create franchise knowledge entry about this location
+    const vl = set.visual_language || {};
+    const analysis = vl.image_analysis || {};
+    const rp = vl.room_properties || {};
+    const anglesInfo = (set.angles || []).map(a => a.angle_label).join(', ');
+
+    const knowledgeContent = [
+      `LOCATION: ${set.name}`,
+      set.canonical_description ? `Description: ${set.canonical_description}` : '',
+      set.show?.name ? `Show: ${set.show.name}` : '',
+      rp.room_size ? `Room size: ${rp.room_size}` : '',
+      analysis.wall_color ? `Wall color: ${analysis.wall_color}` : '',
+      analysis.spatial_layout ? `Layout: ${analysis.spatial_layout}` : '',
+      analysis.furniture?.length ? `Key furniture: ${analysis.furniture.slice(0, 6).join('; ')}` : '',
+      anglesInfo ? `Available angles: ${anglesInfo}` : '',
+      set.base_still_url ? `Has base image: yes` : 'Has base image: no',
+    ].filter(Boolean).join('\n');
+
+    // Check if entry already exists
+    const existing = await FranchiseKnowledge.findOne({
+      where: { title: `Location: ${set.name}`, category: 'world', status: 'active' },
+    });
+
+    if (existing) {
+      await existing.update({ content: knowledgeContent });
+    } else {
+      await FranchiseKnowledge.create({
+        title: `Location: ${set.name}`,
+        content: knowledgeContent,
+        category: 'world',
+        severity: 'important',
+        extracted_by: 'system',
+        status: 'active',
+        source_document: `scene-set-${set.id}`,
+      });
+    }
+
+    // Link to parent location if specified
+    const { parent_location_id } = req.body;
+    if (parent_location_id && worldLoc) {
+      await worldLoc.update({ parent_location_id });
+    }
+
+    res.json({
+      success: true,
+      world_location_id: worldLoc.id,
+      knowledge_created: !existing,
+      message: `${set.name} registered in show brain and world map`,
+    });
+  } catch (err) {
+    console.error('Learn location error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── DELETE /:id  — soft-delete a scene set ──────────────────────────────────
 
 router.delete('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {

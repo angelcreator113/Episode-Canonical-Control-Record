@@ -432,6 +432,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [templates, setTemplates] = useState([]);
   const [comparison, setComparison] = useState(null);
   const [seeding, setSeeding] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState('');
+  const [descRefining, setDescRefining] = useState(false);
   const showToast = onToast || (() => {});
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
@@ -885,9 +888,58 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showPromptEditor && !showAddAngle && (
                   <div className="scene-sets-modal-section">
-                    {/* Description — prominent */}
-                    {set.canonical_description && (
-                      <p className="scene-sets-overview-desc">{set.canonical_description}</p>
+                    {/* Description — view or safe edit mode */}
+                    {set.canonical_description && !editingDesc && (
+                      <div className="scene-sets-overview-desc-wrap">
+                        <p className="scene-sets-overview-desc">{set.canonical_description}</p>
+                        <button className="scene-sets-desc-edit-btn" onClick={() => { setEditingDesc(true); setDescDraft(set.canonical_description); }}>
+                          <Pencil size={10} /> Edit Description
+                        </button>
+                      </div>
+                    )}
+                    {editingDesc && (
+                      <div className="scene-sets-desc-editor">
+                        <div className="scene-sets-desc-editor-hint">
+                          Editing is safe — change wording freely. If you change visual details (colors, furniture, layout), you may need to regenerate angles.
+                        </div>
+                        <textarea
+                          className="scene-sets-desc-textarea"
+                          value={descDraft}
+                          onChange={e => setDescDraft(e.target.value)}
+                          rows={6}
+                        />
+                        <div className="scene-sets-desc-editor-actions">
+                          <button className="scene-sets-ai-desc-btn" disabled={descRefining} onClick={async () => {
+                            setDescRefining(true);
+                            try {
+                              const r = await fetch(`${API_BASE}/scene-sets/${set.id}/refine-description`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ draft: descDraft }),
+                              });
+                              const d = await r.json();
+                              if (d.refined) setDescDraft(d.refined);
+                            } catch { showToast('Refine failed', 'error'); }
+                            setDescRefining(false);
+                          }}>
+                            {descRefining ? <Loader size={10} className="spin" /> : <Sparkles size={10} />} AI Refine (keep visuals)
+                          </button>
+                          <button className="scene-sets-btn-generate" onClick={async () => {
+                            try {
+                              await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ canonical_description: descDraft }),
+                              });
+                              showToast('Description saved');
+                              setEditingDesc(false);
+                            } catch { showToast('Save failed', 'error'); }
+                          }}>
+                            <Save size={10} /> Save
+                          </button>
+                          <button className="scene-sets-btn-details" onClick={() => setEditingDesc(false)}>Cancel</button>
+                        </div>
+                      </div>
                     )}
 
                     {/* Compact metadata chips */}
@@ -1103,6 +1155,28 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Show Brain section */}
+                    <div style={{ marginBottom: 16 }}>
+                      <div className="scene-sets-tools-label">Show Brain</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button className="scene-sets-btn-generate" disabled={toolsAction === 'learning'} onClick={async () => {
+                          setToolsAction('learning');
+                          try {
+                            const r = await fetch(`${API_BASE}/scene-sets/${set.id}/learn-location`, { method: 'POST' });
+                            const d = await r.json();
+                            if (d.success) showToast(d.message || 'Location learned');
+                          } catch (e) { showToast(e.message, 'error'); }
+                          setToolsAction(null);
+                        }}>
+                          <Sparkles size={11} /> {toolsAction === 'learning' ? 'Teaching...' : 'Teach Show Brain'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                        Registers this location in the show's world — the brain will know about it when writing scenes, suggesting locations, and building the world.
+                        {set.world_location_id && <span style={{ color: '#16a34a', marginLeft: 6 }}> Linked to world map</span>}
+                      </div>
                     </div>
 
                     {/* Variants section */}

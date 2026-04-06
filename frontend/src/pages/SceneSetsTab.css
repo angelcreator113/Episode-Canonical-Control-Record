@@ -3678,3 +3678,63 @@
   font-size: 11px;
   color: #cbd5e1;
 }
+
+/* ── Safe Description Editor ─────────────────────────────────────────────── */
+
+.scene-sets-overview-desc-wrap {
+  position: relative;
+}
+
+.scene-sets-desc-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-muted);
+  cursor: pointer;
+}
+
+.scene-sets-desc-edit-btn:hover {
+  color: var(--ss-gold);
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-desc-editor {
+  margin-bottom: 12px;
+}
+
+.scene-sets-desc-editor-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ss-gold);
+  background: var(--ss-gold-light);
+  padding: 6px 10px;
+  border-radius: var(--ss-radius-sm);
+  margin-bottom: 8px;
+}
+
+.scene-sets-desc-editor-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Tools Section Labels ────────────────────────────────────────────────── */
+
+.scene-sets-tools-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ss-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
