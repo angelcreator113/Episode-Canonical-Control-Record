@@ -1106,6 +1106,27 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               <div className="scene-sets-angle-row-name">{a.angle_name}</div>
                             </div>
                             <div className="scene-sets-angle-row-status">
+                              {isComplete && (
+                                <button
+                                  className="scene-sets-angle-row-btn scene-sets-promote-btn"
+                                  title="Use this image as the base — regenerate all other angles from it"
+                                  onClick={async () => {
+                                    if (!confirm(`Use "${a.angle_name}" as the new base image? All other angles will be reset and regenerated from this one.`)) return;
+                                    try {
+                                      const r = await fetch(`${API_BASE}/scene-sets/${set.id}/promote-to-base`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ angle_id: a.id }),
+                                      });
+                                      const d = await r.json();
+                                      if (d.success) showToast(d.message);
+                                      else showToast(d.error, 'error');
+                                    } catch { showToast('Failed to promote', 'error'); }
+                                  }}
+                                >
+                                  <Heart size={12} /> Use as Base
+                                </button>
+                              )}
                               {isComplete && <CheckCircle2 size={14} style={{ color: '#16a34a' }} />}
                               {isFailed && (
                                 <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Retry">

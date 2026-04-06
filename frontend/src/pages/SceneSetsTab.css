@@ -3738,3 +3738,23 @@
   letter-spacing: 0.5px;
   margin-bottom: 8px;
 }
+
+/* ── Promote to Base Button ──────────────────────────────────────────────── */
+
+.scene-sets-promote-btn {
+  font-size: 10px !important;
+  gap: 3px;
+  color: var(--ss-gold) !important;
+  border-color: var(--ss-gold) !important;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--ss-transition);
+}
+
+.scene-sets-angle-row:hover .scene-sets-promote-btn {
+  opacity: 1;
+}
+
+.scene-sets-promote-btn:hover {
+  background: var(--ss-gold-light) !important;
+}

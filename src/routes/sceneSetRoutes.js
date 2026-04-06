@@ -1675,6 +1675,65 @@ router.patch('/:id/cover-angle', validateUUIDParam('id'), optionalAuth, async (r
   }
 });
 
+// ─── POST /:id/promote-to-base  — use an angle image as the new base ────────
+
+router.post('/:id/promote-to-base', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const { angle_id } = req.body;
+    if (!angle_id) return res.status(400).json({ success: false, error: 'angle_id is required' });
+
+    const angle = await SceneAngle.findOne({
+      where: { id: angle_id, scene_set_id: set.id },
+    });
+    if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
+    if (!angle.still_image_url) return res.status(400).json({ success: false, error: 'Angle has no image' });
+
+    // Promote angle image to base
+    await set.update({
+      base_still_url: angle.still_image_url,
+      base_runway_seed: `promoted-${Date.now()}`,
+    });
+
+    // Invalidate cached image analysis so it re-analyzes the new base
+    const vl = set.visual_language || {};
+    if (vl.image_analysis) {
+      delete vl.image_analysis;
+      await set.update({ visual_language: vl });
+    }
+
+    // Reset all OTHER angles to pending (they need to regenerate from new base)
+    const { Op } = require('sequelize');
+    await SceneAngle.update(
+      { generation_status: 'pending', still_image_url: null, video_clip_url: null },
+      { where: { scene_set_id: set.id, id: { [Op.ne]: angle_id } } }
+    );
+
+    console.log(`[SceneSets] Promoted angle ${angle.angle_label} to base for ${set.name}`);
+
+    // Trigger re-analysis in background
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        const sceneGenService = require('../services/sceneGenerationService');
+        const models = require('../models');
+        const freshSet = await SceneSet.findByPk(set.id);
+        sceneGenService.analyzeBaseImage(freshSet, models.SceneSet).catch(() => {});
+      } catch { /* non-blocking */ }
+    }
+
+    res.json({
+      success: true,
+      message: `${angle.angle_label} promoted to base. Other angles reset to pending.`,
+      new_base: angle.still_image_url,
+    });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/promote-to-base error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── POST /:id/episodes  — link episodes to a scene set ────────────────────
 
 router.post('/:id/episodes', validateUUIDParam('id'), optionalAuth, async (req, res) => {
