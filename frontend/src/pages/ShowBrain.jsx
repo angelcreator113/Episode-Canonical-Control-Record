@@ -310,11 +310,15 @@ export default function ShowBrain() {
     if (allEntries.length > 0 && !window.confirm(`Show Brain has ${allEntries.length} entries. This will replace them. Continue?`)) return;
     setSeeding(true); setError(null);
     try {
-      const res = await axios.post(`${API_BASE}/franchise-brain/seed`, { force: allEntries.length > 0 });
+      const res = await axios.post(`${API_BASE}/franchise-brain/seed`, { force: allEntries.length > 0 }, { timeout: 120000 });
       await fetchEntries();
+      setError(null);
       alert(`Seeded ${res.data.seeded} entries (${res.data.total} total)`);
     } catch (err) {
-      setError(err.response?.data?.error || err.message);
+      console.error('[ShowBrain] seed error:', err);
+      const msg = err.response?.data?.error || err.message || 'Unknown error';
+      setError(`Seed failed: ${msg}`);
+      alert(`Seed failed: ${msg}`);
     } finally { setSeeding(false); }
   };
 
