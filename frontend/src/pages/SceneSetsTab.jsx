@@ -1189,6 +1189,24 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     <div className="scene-sets-modal-field">
                       <label>Scene Description</label>
                       <p className="scene-sets-modal-hint">Used to build the AI generation prompt for all angles</p>
+                      {hasBase && (
+                        <button className="scene-sets-btn-generate" disabled={toolsAction === 'analyzing'} onClick={async () => {
+                          setToolsAction('analyzing');
+                          try {
+                            const r = await fetch(`${API_BASE}/scene-sets/${set.id}/analyze-image`, { method: 'POST' });
+                            const d = await r.json();
+                            if (d.success && d.analysis) {
+                              setEditDesc(d.analysis.description || '');
+                              showToast(`Auto-filled: ${d.updated_fields.join(', ')}${d.angles_created ? ` + ${d.angles_created} angles` : ''}`);
+                              fetchSets();
+                            } else {
+                              showToast(d.error || 'Analysis failed', 'error');
+                            }
+                          } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                        }} style={{ marginBottom: 8 }}>
+                          <Sparkles size={11} /> {toolsAction === 'analyzing' ? 'Analyzing image...' : 'Auto-fill from image'}
+                        </button>
+                      )}
                       <textarea className="scene-sets-modal-textarea" value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={5} autoFocus placeholder="Describe the space — layout, lighting, mood, signature details..." />
                     </div>
                     {set.base_runway_prompt && (

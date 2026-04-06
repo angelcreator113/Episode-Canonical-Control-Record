@@ -432,6 +432,91 @@ Return ONLY the JSON object, no other text.` },
   }
 });
 
+// ─── POST /:id/analyze-image — on-demand Vision analysis for existing scene sets ──
+
+router.post('/:id/analyze-image', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!set.base_still_url) return res.status(400).json({ error: 'No base image to analyze. Upload an image first.' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const client = getAnthropicClient();
+    const visionResponse = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: set.base_still_url } },
+          { type: 'text', text: `Analyze this location image for a luxury fashion show called "Styling Adventures with Lala".
+
+Return a JSON object with these fields:
+{
+  "description": "2-3 sentence description of the space — layout, key furniture/features, lighting, mood, color palette, materials.",
+  "prompt": "A detailed scene generation prompt to recreate this space. Include: architectural style, lighting, colors, key objects, materials, atmosphere. Start with 'Empty room.' Under 400 characters.",
+  "scene_type": "HOME_BASE | CLOSET | EVENT_LOCATION | TRANSITION | EXTERIOR",
+  "mood_tags": ["3-5", "mood", "words"],
+  "suggested_angles": [
+    {
+      "label": "SHORT_UPPERCASE_LABEL",
+      "name": "Human-readable name",
+      "description": "What this angle shows — specific to THIS location",
+      "camera_direction": "Detailed camera instruction. Include position, direction, what should be visible, how to extend the space."
+    }
+  ]
+}
+
+Suggest 4-6 angles that make sense for THIS SPECIFIC location. Do NOT include generic angles that don't fit.
+Return ONLY the JSON object, no other text.` },
+        ],
+      }],
+    });
+
+    const text = visionResponse.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse Vision response' });
+
+    const analysis = JSON.parse(jsonMatch[0]);
+
+    // Update scene set with analysis results
+    const updates = {};
+    if (analysis.description) updates.canonical_description = analysis.description;
+    if (analysis.prompt) updates.base_runway_prompt = analysis.prompt;
+    if (analysis.scene_type) updates.scene_type = analysis.scene_type;
+    if (analysis.mood_tags) updates.mood_tags = analysis.mood_tags;
+    if (Object.keys(updates).length > 0) await set.update(updates);
+
+    // Replace angles with location-specific ones if suggested
+    let createdAngles = [];
+    if (analysis.suggested_angles?.length > 0) {
+      await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
+      createdAngles = await SceneAngle.bulkCreate(
+        analysis.suggested_angles.map((angle, idx) => ({
+          scene_set_id: set.id,
+          angle_label: (angle.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
+          angle_name: angle.name || `Angle ${idx + 1}`,
+          angle_description: angle.description || '',
+          camera_direction: angle.camera_direction || '',
+          generation_status: 'pending',
+          sort_order: idx,
+        })),
+        { returning: true }
+      );
+    }
+
+    res.json({
+      success: true,
+      analysis,
+      updated_fields: Object.keys(updates),
+      angles_created: createdAngles.length,
+    });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/analyze-image error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── POST /:id/generate-base  — generate the base scene ─────────────────────
 
 router.post('/:id/generate-base', validateUUIDParam('id'), optionalAuth, async (req, res) => {
