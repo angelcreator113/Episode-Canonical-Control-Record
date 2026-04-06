@@ -102,6 +102,18 @@ module.exports = (sequelize) => {
     intimacy_value: { type: DataTypes.INTEGER, allowNull: true },
     spectacle_value: { type: DataTypes.INTEGER, allowNull: true },
     cover_angle_id: { type: DataTypes.UUID, allowNull: true },
+    time_of_day: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Default time of day: morning, afternoon, golden_hour, evening, night',
+    },
+    season: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Default season: spring, summer, fall, winter',
+    },
     canvas_settings: {
       type: DataTypes.JSONB,
       allowNull: true,

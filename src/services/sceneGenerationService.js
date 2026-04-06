@@ -131,6 +131,33 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     }
   }
 
+  // Time of day and season context
+  const timeOfDay = sceneSet.time_of_day;
+  const season = sceneSet.season;
+  if (timeOfDay || season) {
+    const timeParts = [];
+    if (timeOfDay) {
+      const timeDescriptions = {
+        morning: 'Soft golden morning light streaming through windows. Fresh, calm, beginning-of-day atmosphere.',
+        afternoon: 'Bright natural daylight. Clear, even illumination. Productive, fully-lit atmosphere.',
+        golden_hour: 'Warm golden-hour light casting long soft shadows. Rich amber tones. Romantic, nostalgic warmth.',
+        evening: 'Warm amber evening light. Table lamps and soft overhead glow. Intimate, relaxed atmosphere.',
+        night: 'Moody nighttime lighting. Accent lamps, city glow through windows. Dramatic shadows, intimate atmosphere.',
+      };
+      timeParts.push(`TIME: ${timeOfDay.replace('_', ' ')}. ${timeDescriptions[timeOfDay] || ''}`);
+    }
+    if (season) {
+      const seasonDescriptions = {
+        spring: 'Spring atmosphere — pastel accents, blooming flowers visible through windows, light fabrics, airy feeling.',
+        summer: 'Summer atmosphere — golden light, open windows, tropical plants, lightweight materials, vibrant energy.',
+        fall: 'Autumn atmosphere — warm amber tones, rich textures (velvet, wool), candles, falling leaves outside, harvest colors.',
+        winter: 'Winter atmosphere — cool blue-white exterior light, frosty windows, plush throws, snow visible outside, warm interior contrast.',
+      };
+      timeParts.push(`SEASON: ${season}. ${seasonDescriptions[season] || ''}`);
+    }
+    parts.push(timeParts.join(' '));
+  }
+
   parts.push(`CAMERA: ${cameraText}`);
 
   // For non-WIDE angles, add room extension instruction

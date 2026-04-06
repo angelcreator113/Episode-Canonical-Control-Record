@@ -857,6 +857,21 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
+          {(set.time_of_day || set.season) && (
+            <div className="scene-sets-card-tags" style={{ marginTop: 4 }}>
+              {set.time_of_day && (
+                <span className="scene-sets-show-tag" style={{ background: '#fef3c7', color: '#92400e', fontSize: 10 }}>
+                  <Clock size={9} /> {set.time_of_day.replace('_', ' ')}
+                </span>
+              )}
+              {set.season && (
+                <span className="scene-sets-show-tag" style={{ background: '#ecfdf5', color: '#065f46', fontSize: 10 }}>
+                  <RefreshCw size={9} /> {set.season}
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="scene-sets-card-actions">
             {!hasBase && (
               <>
@@ -1005,6 +1020,62 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           {set.mood_tags.join(' · ')}
                         </div>
                       )}
+                    </div>
+
+                    {/* Time of Day & Season */}
+                    <div className="scene-sets-modal-field">
+                      <label><Clock size={11} /> Environment</label>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Time of Day</span>
+                          <select
+                            value={set.time_of_day || ''}
+                            onChange={async (e) => {
+                              const val = e.target.value || null;
+                              try {
+                                await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ time_of_day: val }),
+                                });
+                                onToast?.(`Time set to ${val || 'any'}`);
+                              } catch { onToast?.('Failed to update', 'error'); }
+                            }}
+                            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, background: '#fff', minWidth: 130 }}
+                          >
+                            <option value="">Any / Not set</option>
+                            <option value="morning">Morning</option>
+                            <option value="afternoon">Afternoon</option>
+                            <option value="golden_hour">Golden Hour</option>
+                            <option value="evening">Evening</option>
+                            <option value="night">Night</option>
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Season</span>
+                          <select
+                            value={set.season || ''}
+                            onChange={async (e) => {
+                              const val = e.target.value || null;
+                              try {
+                                await fetch(`${API_BASE}/scene-sets/${set.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ season: val }),
+                                });
+                                onToast?.(`Season set to ${val || 'any'}`);
+                              } catch { onToast?.('Failed to update', 'error'); }
+                            }}
+                            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, background: '#fff', minWidth: 130 }}
+                          >
+                            <option value="">Any / Not set</option>
+                            <option value="spring">Spring</option>
+                            <option value="summer">Summer</option>
+                            <option value="fall">Fall</option>
+                            <option value="winter">Winter</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Linked episodes */}
@@ -1441,6 +1512,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   if (ps.canonical_description !== ns.canonical_description) return false;
   if (ps.cover_angle_id !== ns.cover_angle_id) return false;
   if (ps.show_id !== ns.show_id) return false;
+  if (ps.time_of_day !== ns.time_of_day) return false;
+  if (ps.season !== ns.season) return false;
   if ((ps.episodes || []).length !== (ns.episodes || []).length) return false;
   if (prev.allShows !== next.allShows) return false;
   if (prev.allEpisodes !== next.allEpisodes) return false;
