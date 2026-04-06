@@ -13,6 +13,8 @@ module.exports = {
       category: 'franchise_law',
       severity: 'critical',
       always_inject: true,
+      status: 'active',
+      extracted_by: 'document_ingestion',
       source_document: 'show-brain-v1.0',
       source_version: '1.0',
       created_at: now,

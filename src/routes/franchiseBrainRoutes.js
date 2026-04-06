@@ -97,7 +97,12 @@ router.post('/franchise-brain/seed', optionalAuth, async (req, res) => {
       }
     }
 
-    const finalCount = await db.FranchiseKnowledge.count();
+    // Activate any pending entries from seeders
+    await db.sequelize.query(
+      `UPDATE franchise_knowledge SET status = 'active' WHERE status = 'pending_review'`
+    );
+
+    const finalCount = await db.FranchiseKnowledge.count({ where: { status: 'active' } });
     return res.json({
       success: true,
       seeded: finalCount - (force ? 0 : existing),
