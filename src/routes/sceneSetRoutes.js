@@ -288,6 +288,20 @@ router.put('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {
     }
 
     await set.update(updates);
+
+    // If description changed, regenerate the base prompt and invalidate image analysis cache
+    if (updates.canonical_description) {
+      const sceneGenService = require('../services/sceneGenerationService');
+      const newPrompt = sceneGenService.buildPrompt(set);
+      const vl = set.visual_language || {};
+      const vlUpdates = { ...vl };
+      // Invalidate image analysis so it re-extracts from the new description context
+      if (vlUpdates.image_analysis) {
+        delete vlUpdates.image_analysis;
+      }
+      await set.update({ base_runway_prompt: newPrompt, visual_language: vlUpdates });
+    }
+
     res.json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets PUT /:id error:', err);
@@ -1719,7 +1733,7 @@ router.post('/:id/promote-to-base', validateUUIDParam('id'), optionalAuth, async
         const sceneGenService = require('../services/sceneGenerationService');
         const models = require('../models');
         const freshSet = await SceneSet.findByPk(set.id);
-        sceneGenService.analyzeBaseImage(freshSet, models.SceneSet).catch(() => {});
+        sceneGenService.analyzeBaseImage(freshSet, models.SceneSet).catch(err => console.warn('[SceneSets] Background image analysis failed:', err?.message));
       } catch { /* non-blocking */ }
     }
 

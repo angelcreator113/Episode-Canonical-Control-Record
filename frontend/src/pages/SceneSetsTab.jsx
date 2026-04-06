@@ -46,7 +46,7 @@ function TypeBadge({ type }) {
 
 // ─── IMAGE LIGHTBOX (base image) ──────────────────────────────────────────────
 
-function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle }) {
+function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteAngle, onPromoteToBase, setId }) {
   const [images, setImages] = useState(initialImages);
   const [idx, setIdx] = useState(initialIndex || 0);
   const current = images[idx] || images[0];
@@ -111,6 +111,22 @@ function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteA
         <div className="scene-sets-lightbox-info">
           <span className="scene-sets-lightbox-label">{current.label}</span>
           <span className="scene-sets-lightbox-counter">{idx + 1} / {images.length}</span>
+          {current.angleId && onPromoteToBase && (
+            <button className="scene-sets-lightbox-promote" onClick={async () => {
+              if (!confirm(`Use "${current.label}" as the new base image? All other angles will be reset.`)) return;
+              try {
+                const r = await fetch(`${(typeof API_BASE !== 'undefined' ? API_BASE : '/api/v1')}/scene-sets/${setId}/promote-to-base`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ angle_id: current.angleId }),
+                });
+                const d = await r.json();
+                if (d.success) { onPromoteToBase(); onClose(); }
+              } catch { /* handled by caller */ }
+            }} title="Use this image as the base">
+              <Heart size={14} /> Use as Base
+            </button>
+          )}
           {current.angleId && onDeleteAngle && (
             <button className="scene-sets-lightbox-delete" onClick={handleDelete} title="Delete this angle">
               <Trash2 size={14} /> Delete
@@ -418,6 +434,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [previewData, setPreviewData] = useState(null);
+
+  // Local optimistic state for settings that save on change
+  const [localTimeOfDay, setLocalTimeOfDay] = useState(set.time_of_day || '');
+  const [localSeason, setLocalSeason] = useState(set.season || '');
+  const [localRoomProps, setLocalRoomProps] = useState(set.visual_language?.room_properties || {});
+  const [localDesc, setLocalDesc] = useState(set.canonical_description || '');
+
+  // Sync from props when parent refreshes
+  useEffect(() => { setLocalTimeOfDay(set.time_of_day || ''); }, [set.time_of_day]);
+  useEffect(() => { setLocalSeason(set.season || ''); }, [set.season]);
+  useEffect(() => { setLocalRoomProps(set.visual_language?.room_properties || {}); }, [set.visual_language?.room_properties]);
+  useEffect(() => { setLocalDesc(set.canonical_description || ''); }, [set.canonical_description]);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [genStartTime, setGenStartTime] = useState(null);
   const [suggestions, setSuggestions] = useState(null);
@@ -601,7 +629,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         style={heroImage ? { cursor: 'pointer' } : undefined}
       >
         {heroImage ? (
-          <img src={heroImage} alt={set.name} />
+          <>
+            <img src={heroImage} alt={set.name} />
+            {set.generation_status === 'complete' && !isGenerating && (
+              <div className="scene-sets-base-ready-badge">Base Set</div>
+            )}
+          </>
         ) : (
           <div className="scene-sets-card-placeholder">
             <Camera size={32} strokeWidth={1.2} />
@@ -779,7 +812,16 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
-          {/* Actions — visible on hover */}
+          {/* Generate All — always visible when there are pending angles */}
+          {hasBase && pendingAngles.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({pendingAngles.length})</>}
+              </button>
+            </div>
+          )}
+
+          {/* Other actions — visible on hover */}
           <div className="scene-sets-card-actions">
             {!hasBase && (
               <>
@@ -790,11 +832,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <Upload size={12} /> Upload
                 </button>
               </>
-            )}
-            {hasBase && pendingAngles.length > 0 && (
-              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className="scene-sets-btn-generate">
-                {isGenerating ? <><Loader size={12} className="spin" /></> : <><Sparkles size={12} /> Generate All</>}
-              </button>
             )}
             {hasBase && (
               <button onClick={() => setShowDetails(true)} className="scene-sets-btn-details">
@@ -889,10 +926,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {activeModalTab === 'details' && !showPromptEditor && !showAddAngle && (
                   <div className="scene-sets-modal-section">
                     {/* Description — view or safe edit mode */}
-                    {set.canonical_description && !editingDesc && (
+                    {localDesc && !editingDesc && (
                       <div className="scene-sets-overview-desc-wrap">
-                        <p className="scene-sets-overview-desc">{set.canonical_description}</p>
-                        <button className="scene-sets-desc-edit-btn" onClick={() => { setEditingDesc(true); setDescDraft(set.canonical_description); }}>
+                        <p className="scene-sets-overview-desc">{localDesc}</p>
+                        <button className="scene-sets-desc-edit-btn" onClick={() => { setEditingDesc(true); setDescDraft(localDesc); }}>
                           <Pencil size={10} /> Edit Description
                         </button>
                       </div>
@@ -931,6 +968,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ canonical_description: descDraft }),
                               });
+                              setLocalDesc(descDraft);
                               showToast('Description saved');
                               setEditingDesc(false);
                             } catch { showToast('Save failed', 'error'); }
@@ -964,19 +1002,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Time of Day</span>
                           <select
-                            value={set.time_of_day || ''}
+                            value={localTimeOfDay}
                             onChange={async (e) => {
                               const val = e.target.value || null;
+                              setLocalTimeOfDay(e.target.value);
                               try {
                                 await fetch(`${API_BASE}/scene-sets/${set.id}`, {
                                   method: 'PUT',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ time_of_day: val }),
                                 });
-                                onToast?.(`Time set to ${val || 'any'}`);
-                              } catch { onToast?.('Failed to update', 'error'); }
+                                showToast(`Time set to ${val || 'any'}`);
+                              } catch { showToast('Failed to update', 'error'); }
                             }}
-                            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, background: '#fff', minWidth: 130 }}
+                            className="scene-sets-select-sm"
                           >
                             <option value="">Any / Not set</option>
                             <option value="morning">Morning</option>
@@ -989,19 +1028,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Season</span>
                           <select
-                            value={set.season || ''}
+                            value={localSeason}
                             onChange={async (e) => {
                               const val = e.target.value || null;
+                              setLocalSeason(e.target.value);
                               try {
                                 await fetch(`${API_BASE}/scene-sets/${set.id}`, {
                                   method: 'PUT',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ season: val }),
                                 });
-                                onToast?.(`Season set to ${val || 'any'}`);
-                              } catch { onToast?.('Failed to update', 'error'); }
+                                showToast(`Season set to ${val || 'any'}`);
+                              } catch { showToast('Failed to update', 'error'); }
                             }}
-                            style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, background: '#fff', minWidth: 130 }}
+                            className="scene-sets-select-sm"
                           >
                             <option value="">Any / Not set</option>
                             <option value="spring">Spring</option>
@@ -1025,18 +1065,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <span className="scene-sets-field-label">{label}</span>
                             <select
-                              value={set.visual_language?.room_properties?.[key] || ''}
+                              value={localRoomProps[key] || ''}
                               onChange={async (e) => {
                                 const val = e.target.value || null;
-                                const rp = { ...(set.visual_language?.room_properties || {}), [key]: val };
+                                const rp = { ...localRoomProps, [key]: val };
+                                setLocalRoomProps(rp);
                                 try {
                                   await fetch(`${API_BASE}/scene-sets/${set.id}`, {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ room_properties: rp }),
                                   });
-                                  onToast?.(`${label} set to ${val || 'auto'}`);
-                                } catch { onToast?.('Failed to update', 'error'); }
+                                  showToast(`${label} set to ${val || 'auto'}`);
+                                } catch { showToast('Failed to update', 'error'); }
                               }}
                               className="scene-sets-select-sm"
                             >
@@ -1448,7 +1489,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           const found = galleryImages.findIndex(g => g.src === bustUrl(selectedAngle.still_image_url));
           if (found >= 0) startIdx = found;
         }
-        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} onDeleteAngle={(angleId) => onDeleteSingleAngle(set, angleId)} />;
+        return <ImageLightbox images={galleryImages} initialIndex={startIdx} onClose={() => setShowBaseLightbox(false)} onDeleteAngle={(angleId) => onDeleteSingleAngle(set, angleId)} setId={set.id} onPromoteToBase={() => showToast('Promoted to base! Refresh to see changes.')} />;
       })()}
 
       {showPromptPreview && previewData && createPortal(
@@ -1827,60 +1868,37 @@ export default function SceneSetsTab() {
     if (targets.length === 0) return;
     startGenerating(set.id);
 
-    const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
-    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
-
     try {
-      // Fire all generation requests
-      for (let i = 0; i < targets.length; i++) {
-        progressAngles[i].status = 'generating';
-        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], currentIndex: i }));
-        try {
-          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
-          if (!res.ok) throw new Error('Failed');
-        } catch {
-          progressAngles[i].status = 'failed';
-          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
-        }
-      }
+      // Use the backend batch endpoint — it generates sequentially to avoid rate limits
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-all-angles`, { method: 'POST' });
+      const json = await res.json();
+      showToast(`Generating ${json.queued || targets.length} angles — this may take a few minutes...`);
 
-      // Poll scene set for all angle completions
-      let completed = 0;
-      let failed = progressAngles.filter(a => a.status === 'failed').length;
-      const maxPolls = 60; // 4s * 60 = 4 minutes max
+      // Poll for completion
+      const maxPolls = 120; // 5s * 120 = 10 minutes max
       for (let poll = 0; poll < maxPolls; poll++) {
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 5000));
         try {
           const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
           const checkJson = await checkRes.json();
           const freshAngles = checkJson.data?.angles || [];
-          let allDone = true;
-          for (let i = 0; i < targets.length; i++) {
-            if (progressAngles[i].status === 'failed') continue; // skip already failed
-            const fresh = freshAngles.find(a => a.id === targets[i].id);
-            if (fresh?.generation_status === 'complete') {
-              if (progressAngles[i].status !== 'done') {
-                progressAngles[i].status = 'done';
-                completed++;
-              }
-            } else if (fresh?.generation_status === 'failed') {
-              if (progressAngles[i].status !== 'failed') {
-                progressAngles[i].status = 'failed';
-                failed++;
-              }
-            } else {
-              allDone = false;
-            }
-          }
-          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-          if (allDone) break;
-        } catch { /* retry */ }
-      }
+          const generating = freshAngles.filter(a => a.generation_status === 'generating').length;
+          const completed = freshAngles.filter(a => a.generation_status === 'complete').length;
+          const failed = freshAngles.filter(a => a.generation_status === 'failed').length;
+          const pending = freshAngles.filter(a => a.generation_status === 'pending').length;
 
-      if (failed === 0) {
-        showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
-      } else {
-        showToast(`${completed} completed, ${failed} failed`, failed > 0 ? 'error' : 'success');
+          setProgress(set.id, {
+            angles: freshAngles.map(a => ({ id: a.id, label: a.angle_label, status: a.generation_status === 'complete' ? 'done' : a.generation_status })),
+            completedCount: completed,
+            failedCount: failed,
+          });
+
+          if (generating === 0 && pending === 0) {
+            if (failed === 0) showToast(`All ${completed} angles generated!`);
+            else showToast(`${completed} completed, ${failed} failed`, 'error');
+            break;
+          }
+        } catch { /* retry */ }
       }
       fetchSets();
     } catch (err) {
