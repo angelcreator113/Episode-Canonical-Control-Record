@@ -429,6 +429,9 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [selectedShowForLink, setSelectedShowForLink] = useState('');
   const [episodesToLink, setEpisodesToLink] = useState([]);
   const [toolsAction, setToolsAction] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [comparison, setComparison] = useState(null);
+  const [seeding, setSeeding] = useState(false);
   const showToast = onToast || (() => {});
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
@@ -1370,6 +1373,35 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         </div>,
         document.body
       )}
+
+      {/* Comparison Modal (card-level) */}
+      {comparison && createPortal(
+        <div className="scene-sets-modal-backdrop" onClick={() => setComparison(null)}>
+          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
+            <div className="scene-sets-modal-header">
+              <h3 className="scene-sets-modal-title">Side-by-Side Comparison</h3>
+              <button className="scene-sets-modal-close" onClick={() => setComparison(null)}><X size={16} /></button>
+            </div>
+            <div className="scene-sets-modal-body" style={{ maxHeight: '70vh', overflow: 'auto' }}>
+              {comparison.comparisons?.map(c => (
+                <div key={c.angle_id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORIGINAL</div>
+                    {c.original ? <img src={c.original} alt="Original" style={{ width: '100%', borderRadius: 6 }} /> : <div style={{ padding: 20, textAlign: 'center', color: '#ccc' }}>No base image</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{c.angle_name} {c.favorited ? '\u2605' : ''} {c.quality_score ? `(${c.quality_score}/100)` : ''}</div>
+                    <img src={c.generated} alt={c.angle_name} style={{ width: '100%', borderRadius: 6 }} />
+                  </div>
+                </div>
+              ))}
+              {(!comparison.comparisons || comparison.comparisons.length === 0) && (
+                <p style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>No generated angles to compare yet.</p>
+              )}
+            </div>
+          </div>
+        </div>, document.body
+      )}
     </div>
   );
 }, (prev, next) => {
@@ -1434,8 +1466,6 @@ export default function SceneSetsTab() {
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
   const [allShows, setAllShows] = useState([]);
   const [allEpisodes, setAllEpisodes] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [comparison, setComparison] = useState(null);
   const [wardrobeMatch, setWardrobeMatch] = useState(null);
   const [filmstrip, setFilmstrip] = useState(null);
   const [angleHistory, setAngleHistory] = useState(null);
@@ -2284,34 +2314,6 @@ export default function SceneSetsTab() {
         />
       )}
 
-      {/* Comparison Modal */}
-      {comparison && createPortal(
-        <div className="scene-sets-modal-backdrop" onClick={() => setComparison(null)}>
-          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
-            <div className="scene-sets-modal-header">
-              <h3 className="scene-sets-modal-title">Side-by-Side Comparison</h3>
-              <button className="scene-sets-modal-close" onClick={() => setComparison(null)}><X size={16} /></button>
-            </div>
-            <div className="scene-sets-modal-body" style={{ maxHeight: '70vh', overflow: 'auto' }}>
-              {comparison.comparisons?.map(c => (
-                <div key={c.angle_id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORIGINAL</div>
-                    {c.original ? <img src={c.original} alt="Original" style={{ width: '100%', borderRadius: 6 }} /> : <div style={{ padding: 20, textAlign: 'center', color: '#ccc' }}>No base image</div>}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{c.angle_name} {c.favorited ? '★' : ''} {c.quality_score ? `(${c.quality_score}/100)` : ''}</div>
-                    <img src={c.generated} alt={c.angle_name} style={{ width: '100%', borderRadius: 6 }} />
-                  </div>
-                </div>
-              ))}
-              {(!comparison.comparisons || comparison.comparisons.length === 0) && (
-                <p style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>No generated angles to compare yet.</p>
-              )}
-            </div>
-          </div>
-        </div>, document.body
-      )}
 
       {/* Wardrobe Match Modal */}
       {wardrobeMatch && createPortal(
