@@ -439,11 +439,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [localTimeOfDay, setLocalTimeOfDay] = useState(set.time_of_day || '');
   const [localSeason, setLocalSeason] = useState(set.season || '');
   const [localRoomProps, setLocalRoomProps] = useState(set.visual_language?.room_properties || {});
+  const [localDesc, setLocalDesc] = useState(set.canonical_description || '');
 
   // Sync from props when parent refreshes
   useEffect(() => { setLocalTimeOfDay(set.time_of_day || ''); }, [set.time_of_day]);
   useEffect(() => { setLocalSeason(set.season || ''); }, [set.season]);
   useEffect(() => { setLocalRoomProps(set.visual_language?.room_properties || {}); }, [set.visual_language?.room_properties]);
+  useEffect(() => { setLocalDesc(set.canonical_description || ''); }, [set.canonical_description]);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [genStartTime, setGenStartTime] = useState(null);
   const [suggestions, setSuggestions] = useState(null);
@@ -915,10 +917,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {activeModalTab === 'details' && !showPromptEditor && !showAddAngle && (
                   <div className="scene-sets-modal-section">
                     {/* Description — view or safe edit mode */}
-                    {set.canonical_description && !editingDesc && (
+                    {localDesc && !editingDesc && (
                       <div className="scene-sets-overview-desc-wrap">
-                        <p className="scene-sets-overview-desc">{set.canonical_description}</p>
-                        <button className="scene-sets-desc-edit-btn" onClick={() => { setEditingDesc(true); setDescDraft(set.canonical_description); }}>
+                        <p className="scene-sets-overview-desc">{localDesc}</p>
+                        <button className="scene-sets-desc-edit-btn" onClick={() => { setEditingDesc(true); setDescDraft(localDesc); }}>
                           <Pencil size={10} /> Edit Description
                         </button>
                       </div>
@@ -957,6 +959,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ canonical_description: descDraft }),
                               });
+                              setLocalDesc(descDraft);
                               showToast('Description saved');
                               setEditingDesc(false);
                             } catch { showToast('Save failed', 'error'); }
