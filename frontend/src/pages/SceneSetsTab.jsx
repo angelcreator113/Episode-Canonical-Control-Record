@@ -725,182 +725,49 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         )}
       </div>
 
-      {/* ── Filmstrip (visible when angles exist OR has base image for ADD/AI) ───── */}
-      {(sortedAngles.length > 0 || hasBase) && (
-        <div className="scene-sets-filmstrip">
-          {/* Base image thumb */}
-          {set.base_still_url && (
-            <button
-              className={`scene-sets-filmstrip-thumb${!selectedAngleId ? ' active' : ''}`}
-              onClick={() => setSelectedAngleId(null)}
-              title="Base image"
-            >
-              <img src={bustUrl(set.base_still_url)} alt="Base" />
-              <span className="scene-sets-filmstrip-label">BASE</span>
-            </button>
-          )}
-          {/* Angle thumbs */}
-          {sortedAngles.map(angle => {
-            const isActive = selectedAngleId === angle.id;
-            const isCover = isCoverAngle(angle.id);
-            const hasStill = !!angle.still_image_url && angle.generation_status === 'complete';
-            const isAngleGenerating = angle.generation_status === 'generating';
-            const isFailed = angle.generation_status === 'failed';
-            const isPending = angle.generation_status === 'pending';
-            return (
-              <button
-                key={angle.id}
-                className={`scene-sets-filmstrip-thumb${isActive ? ' active' : ''}${isFailed ? ' failed' : ''}${isPending ? ' pending' : ''}${isCover ? ' cover' : ''}`}
-                onClick={() => {
-                  if (hasStill) {
-                    if (isActive) setShowBaseLightbox(true);
-                    else setSelectedAngleId(angle.id);
-                  } else if (isPending || isFailed) {
-                    onGenerateAngle(set, angle);
-                  }
-                }}
-                onDoubleClick={() => {
-                  if (hasStill && onSetCoverAngle) {
-                    onSetCoverAngle(set, isCover ? null : angle.id);
-                  }
-                }}
-                title={hasStill ? `${angle.angle_name}${isCover ? ' (Cover)' : ''} — double-click to ${isCover ? 'unset' : 'set as'} cover` : isFailed ? `Retry: ${angle.angle_name}${angle.quality_review?.last_error ? ' — ' + angle.quality_review.last_error : ''}` : isPending ? `Generate: ${angle.angle_name}` : angle.angle_name}
-              >
-                {hasStill ? (
-                  <img src={bustUrl(angle.still_image_url)} alt={angle.angle_label} />
-                ) : isAngleGenerating ? (
-                  <Loader size={14} className="spin" />
-                ) : isFailed ? (
-                  <AlertCircle size={14} />
-                ) : (
-                  <Sparkles size={14} className={isPending ? 'scene-sets-clickable-icon' : ''} />
-                )}
-                {isCover && <Heart size={10} className="scene-sets-cover-badge" />}
-                {angle.quality_review?.consistency_score != null && (
-                  <span className={`scene-sets-consistency-badge ${angle.quality_review.consistency_score >= 90 ? 'high' : angle.quality_review.consistency_score >= 70 ? 'mid' : 'low'}`} title={`Consistency: ${angle.quality_review.consistency_score}%`}>
-                    {angle.quality_review.consistency_score}
-                  </span>
-                )}
-                {editingAngleId === angle.id ? (
-                  <input
-                    className="scene-sets-filmstrip-label-input"
-                    value={editingAngleLabel}
-                    onChange={e => setEditingAngleLabel(e.target.value)}
-                    onBlur={() => handleRenameAngle(angle.id, editingAngleLabel)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleRenameAngle(angle.id, editingAngleLabel); if (e.key === 'Escape') setEditingAngleId(null); }}
-                    onClick={e => e.stopPropagation()}
-                    autoFocus
-                  />
-                ) : (
-                  <span
-                    className="scene-sets-filmstrip-label"
-                    onDoubleClick={(e) => { e.stopPropagation(); setEditingAngleId(angle.id); setEditingAngleLabel(angle.angle_label); }}
-                    title="Double-click to rename"
-                  >{angle.angle_label}</span>
-                )}
-                {angle.video_clip_url && <span className="scene-sets-filmstrip-video"><Play size={8} /></span>}
-              </button>
-            );
-          })}
-          {/* Add Angle button at end of filmstrip */}
-          {hasBase && (
-            <button
-              className="scene-sets-filmstrip-thumb scene-sets-filmstrip-add"
-              onClick={() => setShowAddAngle(true)}
-              title="Add new angle"
-            >
-              <Plus size={14} />
-              <span className="scene-sets-filmstrip-label">ADD</span>
-            </button>
-          )}
-          {hasBase && (
-            <button
-              className="scene-sets-filmstrip-thumb scene-sets-filmstrip-add"
-              onClick={handleSuggestAngles}
-              disabled={loadingSuggestions}
-              title="AI suggest angles"
-            >
-              {loadingSuggestions ? <Loader size={14} className="spin" /> : <Sparkles size={14} />}
-              <span className="scene-sets-filmstrip-label">AI</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Card Body ────────────────────────────────────────── */}
+      {/* ── Compact Card Body ────────────────────────────────── */}
       <div className="scene-sets-card-body">
         <div className="scene-sets-card-header">
-          <div className="scene-sets-card-header-row">
-            <h3 className="scene-sets-card-title">{set.name}</h3>
-            {totalAngles > 0 && (
-              <span className="scene-sets-angle-badge">{readyAngles}/{totalAngles}</span>
-            )}
+          <h3 className="scene-sets-card-title" onClick={() => setShowDetails(true)} style={{ cursor: 'pointer' }}>{set.name}</h3>
+
+          {/* Compact metadata */}
+          <div className="scene-sets-card-meta-line">
+            {set.show && <span className="scene-sets-meta-chip"><Tv size={9} /> {set.show.name}</span>}
+            {set.episodes?.length > 0 && <span className="scene-sets-meta-chip"><Film size={9} /> {set.episodes.length === 1 ? `Ep ${set.episodes[0].episode_number || '?'}` : `${set.episodes.length} eps`}</span>}
+            {set.time_of_day && <span className="scene-sets-meta-chip"><Clock size={9} /> {set.time_of_day.replace('_', ' ')}</span>}
+            {set.season && <span className="scene-sets-meta-chip"><RefreshCw size={9} /> {set.season}</span>}
           </div>
-          {/* Show & Episode tags */}
-          {(set.show || (set.episodes && set.episodes.length > 0)) && (
-            <div className="scene-sets-card-tags">
-              {set.show && (
-                <span className="scene-sets-show-tag">
-                  <Tv size={10} /> {set.show.name}
-                </span>
-              )}
-              {set.episodes && set.episodes.length > 0 && (
-                <span className="scene-sets-episode-tag" onClick={() => setShowEpisodeManager(v => !v)} title="Click to manage episodes">
-                  <Film size={10} /> {set.episodes.length === 1 ? `Ep ${set.episodes[0].episode_number || set.episodes[0].title}` : `${set.episodes.length} episodes`}
-                </span>
-              )}
-              {!set.episodes?.length && (
-                <button className="scene-sets-link-episodes-btn" onClick={() => setShowEpisodeManager(true)} title="Link episodes">
-                  <Film size={10} /> + Episodes
-                </button>
-              )}
-            </div>
-          )}
-          {!set.show && !set.episodes?.length && (
-            <div className="scene-sets-card-tags">
-              <button className="scene-sets-link-episodes-btn" onClick={() => setShowEpisodeManager(true)} title="Link to show/episodes">
-                <Film size={10} /> + Link Episodes
-              </button>
+
+          {/* Progress bar */}
+          {totalAngles > 0 && (
+            <div className="scene-sets-progress-row">
+              <div className="scene-sets-progress-bar">
+                <div className="scene-sets-progress-fill" style={{ width: `${(readyAngles / totalAngles) * 100}%` }} />
+              </div>
+              <span className="scene-sets-progress-label">{readyAngles}/{totalAngles}</span>
             </div>
           )}
 
-          {(set.time_of_day || set.season) && (
-            <div className="scene-sets-card-tags" style={{ marginTop: 4 }}>
-              {set.time_of_day && (
-                <span className="scene-sets-show-tag" style={{ background: '#fef3c7', color: '#92400e', fontSize: 10 }}>
-                  <Clock size={9} /> {set.time_of_day.replace('_', ' ')}
-                </span>
-              )}
-              {set.season && (
-                <span className="scene-sets-show-tag" style={{ background: '#ecfdf5', color: '#065f46', fontSize: 10 }}>
-                  <RefreshCw size={9} /> {set.season}
-                </span>
-              )}
-            </div>
-          )}
-
+          {/* Actions — visible on hover */}
           <div className="scene-sets-card-actions">
             {!hasBase && (
               <>
-                <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}>
-                  {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate Base</>}
+                <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className="scene-sets-btn-generate">
+                  {isGenerating ? <><Loader size={12} className="spin" /></> : <><Sparkles size={12} /> Generate</>}
                 </button>
-                <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className={`scene-sets-btn-upload${isGenerating ? ' disabled' : ''}`} title="Upload one or multiple room images">
+                <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className="scene-sets-btn-upload">
                   <Upload size={12} /> Upload
                 </button>
               </>
             )}
-
             {hasBase && pendingAngles.length > 0 && (
-              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className={`scene-sets-btn-generate${isGenerating ? ' disabled' : ''}`}>
-                {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All</>}
+              <button onClick={() => onGenerateAll(set, false)} disabled={isGenerating} className="scene-sets-btn-generate">
+                {isGenerating ? <><Loader size={12} className="spin" /></> : <><Sparkles size={12} /> Generate All</>}
               </button>
             )}
-
-
-            {totalAngles > 0 && (
-              <button onClick={() => onDeleteAllAngles(set)} disabled={isGenerating} className="scene-sets-btn-delete" title="Reset all angles">
-                <Trash2 size={12} /> Reset
+            {hasBase && (
+              <button onClick={() => setShowDetails(true)} className="scene-sets-btn-details">
+                <Eye size={12} /> Details
               </button>
             )}
           </div>
