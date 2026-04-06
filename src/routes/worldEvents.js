@@ -652,7 +652,17 @@ router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), opti
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
-      system: `You are a TV show producer for "Before Lala", a memoir-style fashion reality show. You help diversify events across episodes to create compelling variety and narrative tension.
+      system: `You are a TV show producer for "Styling Adventures with Lala", a narrative-driven luxury fashion life simulator set in the LalaVerse.
+
+SHOW CONTEXT:
+- Lala is a luxury fashion creator and social media influencer building her career
+- She navigates industry events, brand collaborations, fashion shows, and creator culture
+- The show is about building a social media fashion career — NOT family drama
+- Lala does NOT have a sister. She is a solo creator
+- Event types: industry galas, press days, brand collaborations, fashion shows, cocktail evenings, editorial shoots, awards ceremonies, charity galas, launch events
+- 4 event categories: industry (primary), dating, family, social_drama
+- Industry events should dominate (at least 50% of all events)
+- Family/dating events should create tension WITH her career, not replace it
 
 Return ONLY valid JSON - an array of suggestion objects.`,
       messages: [{
