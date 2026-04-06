@@ -1,8 +1,82 @@
 /* ─── Scene Sets Tab ─────────────────────────────────────────────────────── */
 
+/* ── Design Tokens ──────────────────────────────────────────────────────── */
+:root {
+  --ss-parchment: #FAF7F0;
+  --ss-gold: #B8962E;
+  --ss-gold-light: rgba(184, 150, 46, 0.12);
+  --ss-ink: #2C2C2C;
+  --ss-muted: #94a3b8;
+  --ss-border: #e2e8f0;
+  --ss-surface: #f8fafc;
+  --ss-radius-sm: 6px;
+  --ss-radius-md: 8px;
+  --ss-radius-lg: 12px;
+  --ss-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --ss-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --ss-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --ss-transition: 0.15s ease;
+}
+
+/* ── Global interactive polish ──────────────────────────────────────────── */
+.scene-sets-container button {
+  transition: all var(--ss-transition);
+}
+
+.scene-sets-container button:focus-visible {
+  outline: 2px solid var(--ss-gold);
+  outline-offset: 2px;
+}
+
+.scene-sets-container select:focus-visible {
+  outline: 2px solid var(--ss-gold);
+  outline-offset: 2px;
+}
+
+.scene-sets-container input:focus-visible {
+  outline: 2px solid var(--ss-gold);
+  outline-offset: 2px;
+}
+
 .scene-sets-container {
   position: relative;
 }
+
+/* ── Loading skeleton ───────────────────────────────────────────────────── */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.scene-sets-skeleton-card {
+  border-radius: var(--ss-radius-lg);
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--ss-border);
+}
+
+.scene-sets-skeleton-image {
+  aspect-ratio: 16 / 10;
+  background: linear-gradient(135deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 200%;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+.scene-sets-skeleton-body {
+  padding: 16px;
+}
+
+.scene-sets-skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+  margin-bottom: 8px;
+}
+
+.scene-sets-skeleton-line.short { width: 60%; }
+.scene-sets-skeleton-line.medium { width: 80%; }
+.scene-sets-skeleton-line.wide { width: 100%; }
 
 /* ── Toast ─────────────────────────────────────────────────────────────── */
 
@@ -2999,5 +3073,52 @@
   .scene-sets-modal-tab {
     padding: 8px 10px;
     font-size: 10px;
+  }
+}
+
+/* ── Consistency Score Badge ─────────────────────────────────────────────── */
+.scene-sets-consistency-badge {
+  position: absolute;
+  bottom: 16px;
+  right: 2px;
+  font-size: 7px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  padding: 1px 3px;
+  border-radius: 3px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.scene-sets-consistency-badge.high {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.scene-sets-consistency-badge.mid {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.scene-sets-consistency-badge.low {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+/* ── 480px Small Phone Breakpoint ────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .scene-sets-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .scene-sets-filters {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .scene-sets-filter-pill {
+    font-size: 10px;
+    padding: 4px 8px;
   }
 }

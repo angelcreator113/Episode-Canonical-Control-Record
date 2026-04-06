@@ -427,6 +427,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [showEpisodeManager, setShowEpisodeManager] = useState(false);
   const [selectedShowForLink, setSelectedShowForLink] = useState('');
   const [episodesToLink, setEpisodesToLink] = useState([]);
+  const [toolsAction, setToolsAction] = useState(null);
+  const showToast = onToast || (() => {});
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
   // Track generation start time
@@ -774,6 +776,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <Sparkles size={14} className={isPending ? 'scene-sets-clickable-icon' : ''} />
                 )}
                 {isCover && <Heart size={10} className="scene-sets-cover-badge" />}
+                {angle.quality_review?.consistency_score != null && (
+                  <span className={`scene-sets-consistency-badge ${angle.quality_review.consistency_score >= 90 ? 'high' : angle.quality_review.consistency_score >= 70 ? 'mid' : 'low'}`} title={`Consistency: ${angle.quality_review.consistency_score}%`}>
+                    {angle.quality_review.consistency_score}
+                  </span>
+                )}
                 {editingAngleId === angle.id ? (
                   <input
                     className="scene-sets-filmstrip-label-input"
@@ -1136,7 +1143,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         try {
                           const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
                           const d = await r.json();
-                          if (d.success) { showToast(`Created ${d.angles_created} new angles`); fetchSets(); }
+                          if (d.success) { showToast(`Created ${d.angles_created} new angles`); }
                           else showToast(d.error || 'Failed', 'error');
                         } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
                       }}><RotateCcw size={11} /> {toolsAction === 'regen_angles' ? 'Analyzing...' : 'Regen Angles'}</button>
@@ -1155,7 +1162,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           {templates.map(t => (
                             <button key={t.id} onClick={async () => {
                               if (!confirm(`Apply "${t.name}" template? This replaces current angles.`)) return;
-                              try { await fetch(`${API_BASE}/scene-sets/${set.id}/apply-template`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: t.id }) }); showToast(`Applied ${t.name} template`); setTemplates([]); fetchSets(); } catch (e) { showToast(e.message, 'error'); }
+                              try { await fetch(`${API_BASE}/scene-sets/${set.id}/apply-template`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: t.id }) }); showToast(`Applied ${t.name} template`); setTemplates([]); } catch (e) { showToast(e.message, 'error'); }
                             }} style={{ textAlign: 'left', padding: '8px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', transition: 'border-color 0.15s' }}
                               onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'}
                               onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
@@ -1184,10 +1191,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           )}
                           {a.still_image_url && (
                             <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 3 }}>
-                              <button title="Favorite" onClick={async (e) => { e.stopPropagation(); try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/favorite`, { method: 'PATCH' }); fetchSets(); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: a.quality_review?.favorited ? '#e11d48' : '#d1d5db', padding: '0 2px' }}>
+                              <button title="Favorite" onClick={async (e) => { e.stopPropagation(); try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/favorite`, { method: 'PATCH' }); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: a.quality_review?.favorited ? '#e11d48' : '#d1d5db', padding: '0 2px' }}>
                                 {a.quality_review?.favorited ? '★' : '☆'}
                               </button>
-                              <button title="Reject & regenerate" onClick={async (e) => { e.stopPropagation(); if (!confirm('Reject this angle?')) return; try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'User rejected' }) }); showToast('Angle rejected'); fetchSets(); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '0 2px' }}>
+                              <button title="Reject & regenerate" onClick={async (e) => { e.stopPropagation(); if (!confirm('Reject this angle?')) return; try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'User rejected' }) }); showToast('Angle rejected'); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '0 2px' }}>
                                 ✕
                               </button>
                               <button title="View history" onClick={async (e) => { e.stopPropagation(); try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/history`); const d = await r.json(); setAngleHistory({ angle: a, ...d }); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#d1d5db', padding: '0 2px' }}>
@@ -1218,7 +1225,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'locking_style'} onClick={async () => {
                           setToolsAction('locking_style');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/lock-style`, { method: 'POST' }); const d = await r.json(); if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/lock-style`, { method: 'POST' }); const d = await r.json(); if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
                         }}><Lock size={11} /> {toolsAction === 'locking_style' ? 'Analyzing...' : 'Lock Style DNA'}</button>
                       </div>
                       {set.visual_language?.locked && (
@@ -1239,12 +1246,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'time_variants'} onClick={async () => {
                           setToolsAction('time_variants');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/time-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} time-of-day variants`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/time-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} time-of-day variants`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
                         }}><Clock size={11} /> {toolsAction === 'time_variants' ? 'Creating...' : 'Time of Day'}</button>
 
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'season_variants'} onClick={async () => {
                           setToolsAction('season_variants');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/season-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} season variants`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/season-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} season variants`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
                         }}><RefreshCw size={11} /> {toolsAction === 'season_variants' ? 'Creating...' : 'Seasons'}</button>
                       </div>
                     </div>
@@ -1280,7 +1287,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                             if (d.success && d.analysis) {
                               setEditDesc(d.analysis.description || '');
                               showToast(`Auto-filled: ${d.updated_fields.join(', ')}${d.angles_created ? ` + ${d.angles_created} angles` : ''}`);
-                              fetchSets();
                             } else {
                               showToast(d.error || 'Analysis failed', 'error');
                             }
@@ -1560,7 +1566,6 @@ export default function SceneSetsTab() {
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
   const [allShows, setAllShows] = useState([]);
   const [allEpisodes, setAllEpisodes] = useState([]);
-  const [toolsAction, setToolsAction] = useState(null); // 'locking_style' | 'batch_gen' | etc.
   const [templates, setTemplates] = useState([]);
   const [comparison, setComparison] = useState(null);
   const [wardrobeMatch, setWardrobeMatch] = useState(null);
@@ -2333,11 +2338,19 @@ export default function SceneSetsTab() {
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading skeletons */}
       {loading && (
-        <div className="scene-sets-loading">
-          <Loader size={20} className="spin" />
-          <p>Loading locations...</p>
+        <div className="scene-sets-grid">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="scene-sets-skeleton-card">
+              <div className="scene-sets-skeleton-image" />
+              <div className="scene-sets-skeleton-body">
+                <div className="scene-sets-skeleton-line wide" />
+                <div className="scene-sets-skeleton-line short" />
+                <div className="scene-sets-skeleton-line medium" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
