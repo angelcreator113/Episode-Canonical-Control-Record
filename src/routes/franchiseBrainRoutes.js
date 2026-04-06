@@ -162,6 +162,21 @@ router.patch('/franchise-brain/entries/:id/activate', optionalAuth, async (req, 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BULK ACTIVATE ALL PENDING ENTRIES
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/franchise-brain/activate-all', optionalAuth, async (req, res) => {
+  try {
+    const [, count] = await db.sequelize.query(
+      `UPDATE franchise_knowledge SET status = 'active', updated_at = NOW() WHERE status = 'pending_review'`
+    );
+    return res.json({ success: true, activated: count?.rowCount || 0, message: 'All pending entries activated' });
+  } catch (err) {
+    console.error('Franchise brain bulk activate error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // UPDATE ENTRY — edit title, content, category, severity, always_inject
 // ─────────────────────────────────────────────────────────────────────────────
 router.patch('/franchise-brain/entries/:id', optionalAuth, async (req, res) => {
