@@ -131,6 +131,33 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     }
   }
 
+  // Time of day and season context
+  const timeOfDay = sceneSet.time_of_day;
+  const season = sceneSet.season;
+  if (timeOfDay || season) {
+    const timeParts = [];
+    if (timeOfDay) {
+      const timeDescriptions = {
+        morning: 'Soft golden morning light streaming through windows. Fresh, calm, beginning-of-day atmosphere.',
+        afternoon: 'Bright natural daylight. Clear, even illumination. Productive, fully-lit atmosphere.',
+        golden_hour: 'Warm golden-hour light casting long soft shadows. Rich amber tones. Romantic, nostalgic warmth.',
+        evening: 'Warm amber evening light. Table lamps and soft overhead glow. Intimate, relaxed atmosphere.',
+        night: 'Moody nighttime lighting. Accent lamps, city glow through windows. Dramatic shadows, intimate atmosphere.',
+      };
+      timeParts.push(`TIME: ${timeOfDay.replace('_', ' ')}. ${timeDescriptions[timeOfDay] || ''}`);
+    }
+    if (season) {
+      const seasonDescriptions = {
+        spring: 'Spring atmosphere — pastel accents, blooming flowers visible through windows, light fabrics, airy feeling.',
+        summer: 'Summer atmosphere — golden light, open windows, tropical plants, lightweight materials, vibrant energy.',
+        fall: 'Autumn atmosphere — warm amber tones, rich textures (velvet, wool), candles, falling leaves outside, harvest colors.',
+        winter: 'Winter atmosphere — cool blue-white exterior light, frosty windows, plush throws, snow visible outside, warm interior contrast.',
+      };
+      timeParts.push(`SEASON: ${season}. ${seasonDescriptions[season] || ''}`);
+    }
+    parts.push(timeParts.join(' '));
+  }
+
   parts.push(`CAMERA: ${cameraText}`);
 
   // For non-WIDE angles, add room extension instruction
@@ -142,8 +169,9 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
-  // Enforce 1000 char limit
-  return full.length > 1000 ? full.slice(0, 997) + '...' : full;
+  // Enforce char limit (Runway needs ≤1000, DALL-E/gpt-image-1 handles up to 4000)
+  // Keep at 1500 to give room for camera_direction while staying within Runway fallback limits
+  return full.length > 1500 ? full.slice(0, 1497) + '...' : full;
 }
 
 /**
@@ -266,7 +294,7 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
  * Returns the image URL directly (no polling needed).
  * Used as the default for scene stills — richer detail than Runway for static scenes.
  */
-async function generateDallEStill(prompt) {
+async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel = null) {
   const apiKey = process.env.OPENAI_API_KEY || OPENAI_API_KEY;
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
 
@@ -274,6 +302,60 @@ async function generateDallEStill(prompt) {
   console.log(`[SceneGen] DALL-E prompt (${dallePrompt.length} chars): ${dallePrompt.slice(0, 100)}...`);
 
   try {
+    // When a reference image exists, use gpt-image-1 edits endpoint
+    // to maintain visual consistency with the base image
+    if (referenceImageUrl) {
+      console.log(`[SceneGen] Using gpt-image-1 edit with base image reference`);
+      const imageRes = await axios.get(referenceImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const imageBuffer = Buffer.from(imageRes.data);
+
+      const FormData = (await import('form-data')).default;
+      const form = new FormData();
+      form.append('model', 'gpt-image-1');
+      form.append('image', imageBuffer, { filename: 'base.png', contentType: 'image/png' });
+      const isWide = angleLabel === 'WIDE' || angleLabel === 'ESTABLISHING';
+      const editInstruction = isWide
+        ? `This is a reference photo of a room. Generate a WIDE establishing shot of this EXACT same room — same furniture, wall colors, decor, lighting, and materials. Show the full room from corner to corner. ${dallePrompt}`
+        : `This is a reference photo of a room. Imagine you are INSIDE this exact room and rotating the camera to look in a different direction. Generate what you would see from a new camera angle — extending and outpainting the room beyond the edges of this photo. The room continues with the same design language, wall colors, flooring, materials, and lighting style. Invent plausible new areas (furniture, shelves, corners, windows) that feel like a natural continuation of this space. ${dallePrompt}`;
+      form.append('prompt', editInstruction);
+      form.append('n', '1');
+      form.append('size', '1536x1024');
+      form.append('quality', 'high');
+
+      const response = await axios.post(
+        'https://api.openai.com/v1/images/edits',
+        form,
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            ...form.getHeaders(),
+          },
+          timeout: 180000,
+        }
+      );
+
+      const b64 = response.data.data[0]?.b64_json;
+      if (b64) {
+        // Upload the base64 result to S3 and return URL
+        const imgBuf = Buffer.from(b64, 'base64');
+        const s3Key = `scenes/dalle-edit-${Date.now()}.png`;
+        await s3.send(new PutObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: s3Key,
+          Body: imgBuf,
+          ContentType: 'image/png',
+        }));
+        const url = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${s3Key}`;
+        console.log(`[SceneGen] DALL-E edit success: ${url}`);
+        return url;
+      }
+
+      const url = response.data.data[0]?.url;
+      console.log(`[SceneGen] DALL-E edit success: ${url ? 'got URL' : 'no URL in response'}`);
+      return url;
+    }
+
+    // No reference image — standard dall-e-3 generation
     const response = await axios.post(
       'https://api.openai.com/v1/images/generations',
       {
@@ -685,7 +767,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
     if (sceneAngle.video_clip_url)  await deleteOldS3Asset(sceneAngle.video_clip_url);
 
-    let stillUrl, totalCost = 0;
+    let stillUrl, totalCost = 0, generatedSeed = null;
 
     // Save current image to generation history before overwriting
     if (sceneAngle.still_image_url) {
@@ -703,7 +785,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       } catch (_) { /* best-effort history */ }
     }
 
-    // Try DALL-E first for richer stills, fall back to Runway
+    // Try DALL-E first for stills, fall back to Runway
     const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
     if (!useRunway && OPENAI_API_KEY) {
       try {
@@ -723,10 +805,15 @@ async function generateAngle(sceneAngle, sceneSet, models) {
           }
         }
 
-        const dalleUrl = await generateDallEStill(enhancedPrompt);
+        const dalleUrl = await generateDallEStill(enhancedPrompt, sceneSet.base_still_url || null, angleLabel);
         if (dalleUrl) {
-          const s3Key = `scenes/${sceneSet.id}/angles/${sceneAngle.id}/still-${Date.now()}.png`;
-          stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+          // If gpt-image-1 edit already uploaded to S3, use directly; otherwise download & upload
+          if (dalleUrl.includes(S3_BUCKET)) {
+            stillUrl = dalleUrl;
+          } else {
+            const s3Key = `scenes/${sceneSet.id}/angles/${sceneAngle.id}/still-${Date.now()}.png`;
+            stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+          }
         }
       } catch (dalleErr) {
         console.warn(`[SceneGen] DALL-E failed for angle, falling back to Runway:`, dalleErr.message);
@@ -760,6 +847,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
       stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
       totalCost = result.creditsUsed || 0;
+      generatedSeed = result.seed ?? jobId;
     }
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
@@ -776,7 +864,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: null,
-      runway_seed: String(result.seed ?? jobId),
+      runway_seed: generatedSeed ? String(generatedSeed) : null,
       generation_status: 'complete',
       generation_cost: totalCost,
       quality_score: qualityData.qualityScore,
@@ -786,7 +874,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
     await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
 
-    return { success: true, stillUrl, videoUrl: null, seed: result.seed, qualityScore: qualityData.qualityScore };
+    return { success: true, stillUrl, videoUrl: null, seed: generatedSeed, qualityScore: qualityData.qualityScore };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;
