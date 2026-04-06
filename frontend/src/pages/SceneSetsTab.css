@@ -3590,3 +3590,91 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Guided Description Builder ──────────────────────────────────────────── */
+
+.scene-sets-builder-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-gold);
+  cursor: pointer;
+}
+
+.scene-sets-builder-toggle:hover {
+  background: var(--ss-gold-light);
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-guided-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scene-sets-builder-step {
+  transition: opacity 0.2s ease, max-height 0.3s ease;
+  overflow: hidden;
+}
+
+.scene-sets-builder-step.visible {
+  opacity: 1;
+  max-height: 80px;
+}
+
+.scene-sets-builder-step.hidden {
+  opacity: 0.3;
+  max-height: 0;
+  pointer-events: none;
+}
+
+.scene-sets-builder-step.answered .scene-sets-builder-input {
+  border-color: var(--ss-gold);
+  background: rgba(184, 150, 46, 0.04);
+}
+
+.scene-sets-builder-question {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ss-ink);
+  margin-bottom: 4px;
+}
+
+.scene-sets-builder-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.scene-sets-builder-input {
+  width: 100%;
+  font-family: 'Lora', serif;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+  background: #fff;
+  color: var(--ss-ink);
+  transition: border-color var(--ss-transition);
+  margin-bottom: 6px;
+}
+
+.scene-sets-builder-input:focus {
+  border-color: var(--ss-gold);
+  outline: none;
+}
+
+.scene-sets-builder-input::placeholder {
+  font-size: 11px;
+  color: #cbd5e1;
+}

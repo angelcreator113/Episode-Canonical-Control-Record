@@ -1459,6 +1459,9 @@ export default function SceneSetsTab() {
   const [creating, setCreating] = useState(false);
   const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
   const [descBuilderLoading, setDescBuilderLoading] = useState(false);
+  const [showDescBuilder, setShowDescBuilder] = useState(false);
+  const [builderAnswers, setBuilderAnswers] = useState({});
+  const [builderStep, setBuilderStep] = useState(0);
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
   const [allShows, setAllShows] = useState([]);
   const [allEpisodes, setAllEpisodes] = useState([]);
@@ -2204,46 +2207,128 @@ export default function SceneSetsTab() {
             </div>
           </div>
 
-          {/* Description with AI builder */}
+          {/* Description — guided builder or freeform */}
           <div className="scene-sets-create-field">
-            <label>Description</label>
-            <div className="scene-sets-desc-helper">
-              <span className="scene-sets-desc-hint">Include: room size, wall colors, key furniture, lighting type, flooring, signature decor, window views, mood</span>
-            </div>
-            <textarea
-              placeholder={`Example: A spacious modern kitchen with white marble countertops, brass fixtures, and a large center island. Warm pendant lights hang above the island. Floor-to-ceiling windows on the back wall show a garden view. Light oak hardwood floors. The mood is bright and inviting with morning golden light streaming in.`}
-              value={newSet.canonical_description}
-              onChange={e => setNewSet(s => ({ ...s, canonical_description: e.target.value }))}
-              rows={5}
-              className="scene-sets-desc-textarea"
-            />
-            {newSet.name.trim() && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ margin: 0 }}>Description</label>
               <button
-                className="scene-sets-ai-desc-btn"
-                disabled={descBuilderLoading}
-                onClick={async () => {
-                  setDescBuilderLoading(true);
-                  try {
-                    const r = await fetch(`${API_BASE}/scene-sets/ai-describe`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        name: newSet.name.trim(),
-                        scene_type: newSet.scene_type,
-                        user_notes: newSet.canonical_description.trim() || null,
-                      }),
-                    });
-                    const d = await r.json();
-                    if (d.description) {
-                      setNewSet(s => ({ ...s, canonical_description: d.description }));
-                      showToast('AI description generated');
-                    }
-                  } catch { showToast('AI description failed', 'error'); }
-                  setDescBuilderLoading(false);
-                }}
+                className="scene-sets-builder-toggle"
+                onClick={() => { setShowDescBuilder(b => !b); setBuilderStep(0); }}
               >
-                {descBuilderLoading ? <><Loader size={10} className="spin" /> Writing...</> : <><Sparkles size={10} /> AI Write Description</>}
+                {showDescBuilder ? <><Pencil size={10} /> Write Freely</> : <><Sparkles size={10} /> Guided Builder</>}
               </button>
+            </div>
+
+            {!showDescBuilder ? (
+              <>
+                <div className="scene-sets-desc-helper">
+                  <span className="scene-sets-desc-hint">Include: room size, wall colors, key furniture, lighting type, flooring, signature decor, window views, mood</span>
+                </div>
+                <textarea
+                  placeholder={`Example: A spacious modern kitchen with white marble countertops, brass fixtures, and a large center island. Warm pendant lights hang above the island. Floor-to-ceiling windows on the back wall show a garden view. Light oak hardwood floors. The mood is bright and inviting with morning golden light streaming in.`}
+                  value={newSet.canonical_description}
+                  onChange={e => setNewSet(s => ({ ...s, canonical_description: e.target.value }))}
+                  rows={5}
+                  className="scene-sets-desc-textarea"
+                />
+                {newSet.name.trim() && (
+                  <button
+                    className="scene-sets-ai-desc-btn"
+                    disabled={descBuilderLoading}
+                    onClick={async () => {
+                      setDescBuilderLoading(true);
+                      try {
+                        const r = await fetch(`${API_BASE}/scene-sets/ai-describe`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            name: newSet.name.trim(),
+                            scene_type: newSet.scene_type,
+                            user_notes: newSet.canonical_description.trim() || null,
+                          }),
+                        });
+                        const d = await r.json();
+                        if (d.description) {
+                          setNewSet(s => ({ ...s, canonical_description: d.description }));
+                          showToast('AI description generated');
+                        }
+                      } catch { showToast('AI description failed', 'error'); }
+                      setDescBuilderLoading(false);
+                    }}
+                  >
+                    {descBuilderLoading ? <><Loader size={10} className="spin" /> Writing...</> : <><Sparkles size={10} /> AI Write Description</>}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="scene-sets-guided-builder">
+                {/* Step-by-step questions */}
+                {[
+                  { key: 'size', q: 'How big is this space?', placeholder: 'e.g. spacious, cozy, grand ballroom, compact studio', emoji: '📐' },
+                  { key: 'colors', q: 'What are the main colors?', placeholder: 'e.g. lavender walls, white trim, gold accents, purple neon', emoji: '🎨' },
+                  { key: 'furniture', q: 'What key furniture is in the room?', placeholder: 'e.g. queen bed with tufted headboard, Hollywood vanity mirror, keyboard on stand', emoji: '🪑' },
+                  { key: 'lighting', q: 'What kind of lighting?', placeholder: 'e.g. warm fairy lights, neon sign, LED strip under bed, natural window light', emoji: '💡' },
+                  { key: 'flooring', q: 'What are the floors?', placeholder: 'e.g. plush white carpet, light oak hardwood, marble tile', emoji: '🏠' },
+                  { key: 'decor', q: 'Any signature decor or personal touches?', placeholder: 'e.g. photo collage wall, concert poster, vinyl crate, butterfly tote bag', emoji: '✨' },
+                  { key: 'windows', q: 'What do you see through the windows?', placeholder: 'e.g. LA night skyline with palm trees, garden view, city street, no windows', emoji: '🪟' },
+                  { key: 'mood', q: 'What mood or feeling should it have?', placeholder: 'e.g. dreamy and cozy, glamorous, energetic, calm and minimalist', emoji: '🌙' },
+                ].map((step, idx) => (
+                  <div key={step.key} className={`scene-sets-builder-step${idx <= builderStep ? ' visible' : ' hidden'}${builderAnswers[step.key] ? ' answered' : ''}`}>
+                    <div className="scene-sets-builder-question">
+                      <span className="scene-sets-builder-emoji">{step.emoji}</span>
+                      <span>{step.q}</span>
+                    </div>
+                    <input
+                      className="scene-sets-builder-input"
+                      placeholder={step.placeholder}
+                      value={builderAnswers[step.key] || ''}
+                      onChange={e => {
+                        setBuilderAnswers(a => ({ ...a, [step.key]: e.target.value }));
+                        if (e.target.value && idx === builderStep && builderStep < 7) {
+                          setBuilderStep(s => Math.max(s, idx + 1));
+                        }
+                      }}
+                      onFocus={() => setBuilderStep(s => Math.max(s, idx))}
+                    />
+                  </div>
+                ))}
+
+                {/* Generate from answers */}
+                {Object.values(builderAnswers).filter(Boolean).length >= 3 && (
+                  <button
+                    className="scene-sets-ai-desc-btn"
+                    style={{ marginTop: 8 }}
+                    disabled={descBuilderLoading}
+                    onClick={async () => {
+                      setDescBuilderLoading(true);
+                      try {
+                        const notes = Object.entries(builderAnswers)
+                          .filter(([, v]) => v)
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join('. ');
+                        const r = await fetch(`${API_BASE}/scene-sets/ai-describe`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            name: newSet.name.trim() || 'Untitled Location',
+                            scene_type: newSet.scene_type,
+                            user_notes: notes,
+                          }),
+                        });
+                        const d = await r.json();
+                        if (d.description) {
+                          setNewSet(s => ({ ...s, canonical_description: d.description }));
+                          setShowDescBuilder(false);
+                          showToast('Description built from your answers!');
+                        }
+                      } catch { showToast('Failed to build description', 'error'); }
+                      setDescBuilderLoading(false);
+                    }}
+                  >
+                    {descBuilderLoading ? <><Loader size={10} className="spin" /> Building...</> : <><Sparkles size={10} /> Build Description from Answers</>}
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
