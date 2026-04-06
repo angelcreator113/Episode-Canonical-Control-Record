@@ -997,13 +997,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         <p>{set.script_context}</p>
                       </div>
                     )}
-                    {/* Angle grid */}
+                    {/* Angle grid with favorite/reject */}
                     {sortedAngles.length > 0 && (
                       <div className="scene-sets-modal-field">
                         <label>Angles ({readyAngles}/{totalAngles})</label>
                         <div className="scene-sets-modal-angle-grid">
                           {sortedAngles.map(a => (
-                            <div key={a.id} className="scene-sets-modal-angle-card">
+                            <div key={a.id} className="scene-sets-modal-angle-card" style={{ position: 'relative' }}>
                               {a.still_image_url ? (
                                 <img src={bustUrl(a.still_image_url)} alt={a.angle_label} />
                               ) : (
@@ -1012,8 +1012,78 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                                 </div>
                               )}
                               <span>{a.angle_label}</span>
+                              {a.still_image_url && (
+                                <div style={{ display: 'flex', gap: 2, justifyContent: 'center', marginTop: 2 }}>
+                                  <button title="Favorite" onClick={async (e) => { e.stopPropagation(); try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/favorite`, { method: 'PATCH' }); fetchSets(); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: a.quality_review?.favorited ? '#e11d48' : '#ccc', padding: '1px 3px' }}>
+                                    {a.quality_review?.favorited ? '★' : '☆'}
+                                  </button>
+                                  <button title="Reject & regenerate" onClick={async (e) => { e.stopPropagation(); if (!confirm('Reject this angle? It will be saved to history and reset for regeneration.')) return; try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'User rejected' }) }); showToast('Angle rejected — ready to regenerate'); fetchSets(); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#94a3b8', padding: '1px 3px' }}>
+                                    ✕
+                                  </button>
+                                  <button title="View history" onClick={async (e) => { e.stopPropagation(); try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}/history`); const d = await r.json(); setAngleHistory({ angle: a, ...d }); } catch {} }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#94a3b8', padding: '1px 3px' }}>
+                                    ↺
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Scene Set Tools ── */}
+                    {hasBase && (
+                      <div className="scene-sets-modal-field" style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12, marginTop: 8 }}>
+                        <label>Tools</label>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button className="scene-sets-btn-generate" disabled={toolsAction === 'locking_style'} onClick={async () => {
+                            setToolsAction('locking_style');
+                            try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/lock-style`, { method: 'POST' }); const d = await r.json(); if (d.success) showToast(`Style locked: ${d.data.color_palette?.join(', ') || 'done'}`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          }}><Lock size={11} /> {toolsAction === 'locking_style' ? 'Locking...' : 'Lock Style'}</button>
+
+                          <button className="scene-sets-btn-generate" disabled={toolsAction === 'batch_gen'} onClick={async () => {
+                            setToolsAction('batch_gen');
+                            try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-all-angles`, { method: 'POST' }); const d = await r.json(); showToast(`Queued ${d.queued} angles for generation`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          }}><Sparkles size={11} /> {toolsAction === 'batch_gen' ? 'Queuing...' : 'Generate All Angles'}</button>
+
+                          <button className="scene-sets-btn-generate" disabled={toolsAction === 'time_variants'} onClick={async () => {
+                            setToolsAction('time_variants');
+                            try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/time-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} time-of-day variants`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          }}><Clock size={11} /> Time Variants</button>
+
+                          <button className="scene-sets-btn-generate" disabled={toolsAction === 'season_variants'} onClick={async () => {
+                            setToolsAction('season_variants');
+                            try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/season-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} season variants`); fetchSets(); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          }}><RefreshCw size={11} /> Season Variants</button>
+
+                          <button className="scene-sets-btn-generate" onClick={async () => {
+                            try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/comparison`); setComparison(await r.json()); } catch {}
+                          }}><Eye size={11} /> Compare</button>
+
+                          <button className="scene-sets-btn-generate" onClick={async () => {
+                            try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/wardrobe-match`); setWardrobeMatch(await r.json()); } catch {}
+                          }}><Heart size={11} /> Wardrobe Match</button>
+                        </div>
+
+                        {/* Template selector */}
+                        <div style={{ marginTop: 8 }}>
+                          <button className="scene-sets-btn-regenerate" onClick={async () => {
+                            if (templates.length === 0) { try { const r = await fetch(`${API_BASE}/scene-sets/templates/list`); const d = await r.json(); setTemplates(d.templates || []); } catch {} }
+                            else setTemplates([]);
+                          }}><Camera size={11} /> {templates.length ? 'Hide' : 'Show'} Templates</button>
+                          {templates.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6, marginTop: 6 }}>
+                              {templates.map(t => (
+                                <button key={t.id} onClick={async () => {
+                                  if (!confirm(`Apply "${t.name}" template? This replaces current angles.`)) return;
+                                  try { await fetch(`${API_BASE}/scene-sets/${set.id}/apply-template`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: t.id }) }); showToast(`Applied ${t.name} template`); setTemplates([]); fetchSets(); } catch (e) { showToast(e.message, 'error'); }
+                                }} style={{ textAlign: 'left', padding: '6px 8px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 10, cursor: 'pointer' }}>
+                                  <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 2 }}>{t.name}</div>
+                                  <div style={{ color: '#64748b' }}>{t.angles.length} angles</div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1295,6 +1365,12 @@ export default function SceneSetsTab() {
   const [reviewModal, setReviewModal] = useState(null); // { setId, angle }
   const [allShows, setAllShows] = useState([]);
   const [allEpisodes, setAllEpisodes] = useState([]);
+  const [toolsAction, setToolsAction] = useState(null); // 'locking_style' | 'batch_gen' | etc.
+  const [templates, setTemplates] = useState([]);
+  const [comparison, setComparison] = useState(null);
+  const [wardrobeMatch, setWardrobeMatch] = useState(null);
+  const [filmstrip, setFilmstrip] = useState(null);
+  const [angleHistory, setAngleHistory] = useState(null);
   const [createShowId, setCreateShowId] = useState('');
 
   const showToast = (msg, type = 'success') => {
@@ -2068,6 +2144,95 @@ export default function SceneSetsTab() {
           onClose={() => setReviewModal(null)}
           onSubmit={handleReviewSubmit}
         />
+      )}
+
+      {/* Comparison Modal */}
+      {comparison && createPortal(
+        <div className="scene-sets-modal-backdrop" onClick={() => setComparison(null)}>
+          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 900 }}>
+            <div className="scene-sets-modal-header">
+              <h3 className="scene-sets-modal-title">Side-by-Side Comparison</h3>
+              <button className="scene-sets-modal-close" onClick={() => setComparison(null)}><X size={16} /></button>
+            </div>
+            <div className="scene-sets-modal-body" style={{ maxHeight: '70vh', overflow: 'auto' }}>
+              {comparison.comparisons?.map(c => (
+                <div key={c.angle_id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>ORIGINAL</div>
+                    {c.original ? <img src={c.original} alt="Original" style={{ width: '100%', borderRadius: 6 }} /> : <div style={{ padding: 20, textAlign: 'center', color: '#ccc' }}>No base image</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{c.angle_name} {c.favorited ? '★' : ''} {c.quality_score ? `(${c.quality_score}/100)` : ''}</div>
+                    <img src={c.generated} alt={c.angle_name} style={{ width: '100%', borderRadius: 6 }} />
+                  </div>
+                </div>
+              ))}
+              {(!comparison.comparisons || comparison.comparisons.length === 0) && (
+                <p style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>No generated angles to compare yet.</p>
+              )}
+            </div>
+          </div>
+        </div>, document.body
+      )}
+
+      {/* Wardrobe Match Modal */}
+      {wardrobeMatch && createPortal(
+        <div className="scene-sets-modal-backdrop" onClick={() => setWardrobeMatch(null)}>
+          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+            <div className="scene-sets-modal-header">
+              <h3 className="scene-sets-modal-title">Wardrobe Match</h3>
+              <button className="scene-sets-modal-close" onClick={() => setWardrobeMatch(null)}><X size={16} /></button>
+            </div>
+            <div className="scene-sets-modal-body">
+              {wardrobeMatch.event ? (
+                <>
+                  <div style={{ padding: '8px 12px', background: '#fef3c7', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
+                    Event: <strong>{wardrobeMatch.event.name}</strong> — Dress code: <strong>{wardrobeMatch.event.dress_code || 'None'}</strong>
+                    {wardrobeMatch.event.keywords?.length > 0 && <div style={{ marginTop: 4 }}>Keywords: {wardrobeMatch.event.keywords.join(', ')}</div>}
+                  </div>
+                  {wardrobeMatch.matches?.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+                      {wardrobeMatch.matches.map(m => (
+                        <div key={m.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                          {(m.thumbnail_url || m.image_url) && <img src={m.thumbnail_url || m.image_url} alt={m.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />}
+                          <div style={{ padding: '4px 6px', fontSize: 10, fontWeight: 600 }}>{m.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p style={{ color: '#94a3b8', textAlign: 'center' }}>No wardrobe items match the dress code keywords.</p>}
+                </>
+              ) : <p style={{ color: '#94a3b8', textAlign: 'center', padding: 20 }}>No event linked to this scene set.</p>}
+            </div>
+          </div>
+        </div>, document.body
+      )}
+
+      {/* Angle History Modal */}
+      {angleHistory && createPortal(
+        <div className="scene-sets-modal-backdrop" onClick={() => setAngleHistory(null)}>
+          <div className="scene-sets-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
+            <div className="scene-sets-modal-header">
+              <h3 className="scene-sets-modal-title">Generation History — {angleHistory.angle?.angle_name}</h3>
+              <button className="scene-sets-modal-close" onClick={() => setAngleHistory(null)}><X size={16} /></button>
+            </div>
+            <div className="scene-sets-modal-body" style={{ maxHeight: '60vh', overflow: 'auto' }}>
+              {angleHistory.current && (
+                <div style={{ marginBottom: 12, padding: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', marginBottom: 4 }}>CURRENT (Attempt {angleHistory.current.attempt}) {angleHistory.current.favorited ? '★' : ''}</div>
+                  <img src={angleHistory.current.url} alt="Current" style={{ width: '100%', borderRadius: 6 }} />
+                </div>
+              )}
+              {angleHistory.history?.length > 0 ? angleHistory.history.map((h, i) => (
+                <div key={i} style={{ marginBottom: 12, padding: 8, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, opacity: 0.7 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', marginBottom: 4 }}>
+                    Attempt {h.attempt || '?'} — {h.reason || 'Replaced'} — {h.rejected_at ? new Date(h.rejected_at).toLocaleDateString() : h.replaced_at ? new Date(h.replaced_at).toLocaleDateString() : ''}
+                  </div>
+                  <img src={h.url} alt={`Attempt ${h.attempt}`} style={{ width: '100%', borderRadius: 6 }} />
+                </div>
+              )) : <p style={{ color: '#94a3b8', textAlign: 'center' }}>No previous generations.</p>}
+            </div>
+          </div>
+        </div>, document.body
       )}
     </div>
   );
