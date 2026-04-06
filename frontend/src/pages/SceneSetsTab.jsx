@@ -387,13 +387,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const regenerableAngles = sortedAngles.filter(a => a.generation_status === 'complete' || a.generation_status === 'failed');
   const hasBase = !!(set.base_still_url || set.base_runway_seed);
 
-  // Selected angle for hero display — initializes to cover_angle_id if set
+  // Selected angle for detail panel — initializes to cover_angle_id if set
   const [selectedAngleId, setSelectedAngleId] = useState(set.cover_angle_id || null);
   const selectedAngle = selectedAngleId ? sortedAngles.find(a => a.id === selectedAngleId) : null;
   const coverAngle = set.cover_angle_id ? sortedAngles.find(a => a.id === set.cover_angle_id) : null;
+  // Card hero always shows the base image — angle images only in detail panel
   const heroImageRaw = useMemo(
-    () => selectedAngle?.still_image_url || coverAngle?.still_image_url || sortedAngles.find(a => a.still_image_url)?.still_image_url || set.base_still_url || null,
-    [selectedAngle, coverAngle, sortedAngles, set.base_still_url]
+    () => set.base_still_url || null,
+    [set.base_still_url]
   );
   const isCoverAngle = (angleId) => set.cover_angle_id === angleId;
   const heroImage = useMemo(() => heroImageRaw ? bustUrl(heroImageRaw) : null, [heroImageRaw, bustUrl]);
