@@ -1195,7 +1195,7 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), optionalAuth, asyn
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
-    const allowed = ['angle_label', 'angle_name', 'angle_description', 'camera_direction', 'beat_affinity'];
+    const allowed = ['angle_label', 'angle_name', 'angle_description', 'camera_direction', 'beat_affinity', 'generation_status'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
