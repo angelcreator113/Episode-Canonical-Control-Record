@@ -1827,60 +1827,37 @@ export default function SceneSetsTab() {
     if (targets.length === 0) return;
     startGenerating(set.id);
 
-    const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label, status: 'queued' }));
-    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
-
     try {
-      // Fire all generation requests
-      for (let i = 0; i < targets.length; i++) {
-        progressAngles[i].status = 'generating';
-        setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], currentIndex: i }));
-        try {
-          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
-          if (!res.ok) throw new Error('Failed');
-        } catch {
-          progressAngles[i].status = 'failed';
-          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles] }));
-        }
-      }
+      // Use the backend batch endpoint — it generates sequentially to avoid rate limits
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-all-angles`, { method: 'POST' });
+      const json = await res.json();
+      showToast(`Generating ${json.queued || targets.length} angles — this may take a few minutes...`);
 
-      // Poll scene set for all angle completions
-      let completed = 0;
-      let failed = progressAngles.filter(a => a.status === 'failed').length;
-      const maxPolls = 60; // 4s * 60 = 4 minutes max
+      // Poll for completion
+      const maxPolls = 120; // 5s * 120 = 10 minutes max
       for (let poll = 0; poll < maxPolls; poll++) {
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 5000));
         try {
           const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
           const checkJson = await checkRes.json();
           const freshAngles = checkJson.data?.angles || [];
-          let allDone = true;
-          for (let i = 0; i < targets.length; i++) {
-            if (progressAngles[i].status === 'failed') continue; // skip already failed
-            const fresh = freshAngles.find(a => a.id === targets[i].id);
-            if (fresh?.generation_status === 'complete') {
-              if (progressAngles[i].status !== 'done') {
-                progressAngles[i].status = 'done';
-                completed++;
-              }
-            } else if (fresh?.generation_status === 'failed') {
-              if (progressAngles[i].status !== 'failed') {
-                progressAngles[i].status = 'failed';
-                failed++;
-              }
-            } else {
-              allDone = false;
-            }
-          }
-          setProgress(set.id, (p) => ({ ...p, angles: [...progressAngles], completedCount: completed, failedCount: failed }));
-          if (allDone) break;
-        } catch { /* retry */ }
-      }
+          const generating = freshAngles.filter(a => a.generation_status === 'generating').length;
+          const completed = freshAngles.filter(a => a.generation_status === 'complete').length;
+          const failed = freshAngles.filter(a => a.generation_status === 'failed').length;
+          const pending = freshAngles.filter(a => a.generation_status === 'pending').length;
 
-      if (failed === 0) {
-        showToast(`All ${targets.length} angles ${regenerate ? 'regenerated' : 'generated'}!`);
-      } else {
-        showToast(`${completed} completed, ${failed} failed`, failed > 0 ? 'error' : 'success');
+          setProgress(set.id, {
+            angles: freshAngles.map(a => ({ id: a.id, label: a.angle_label, status: a.generation_status === 'complete' ? 'done' : a.generation_status })),
+            completedCount: completed,
+            failedCount: failed,
+          });
+
+          if (generating === 0 && pending === 0) {
+            if (failed === 0) showToast(`All ${completed} angles generated!`);
+            else showToast(`${completed} completed, ${failed} failed`, 'error');
+            break;
+          }
+        } catch { /* retry */ }
       }
       fetchSets();
     } catch (err) {
