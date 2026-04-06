@@ -332,8 +332,8 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
 
       const isWide = angleLabel === 'WIDE' || angleLabel === 'ESTABLISHING';
       const editInstruction = isWide
-        ? `This is a photograph of a room. Generate the EXACT same room from a wide angle showing the full space. Every detail must be identical: same wall color, same furniture pieces, same decor items, same lighting fixtures, same bedding, same flooring. This is the same physical room — not a similar one.${detailConstraints} ${dallePrompt}`
-        : `CRITICAL: This is a photograph of a REAL room. You are a camera operator INSIDE this exact room, repositioning to shoot from a different angle. RULES: 1) Every object, wall color, furniture piece, fabric, light fixture, and decor item that exists in this photo MUST remain IDENTICAL — same colors, same materials, same positions. Do NOT replace, recolor, or redesign ANY existing element. 2) The wall paint color, flooring, bedding pattern, LED lights, neon signs, posters, and all decor must match EXACTLY. 3) Only show NEW areas that are behind the original camera position — these new areas must use the same wall color, same flooring, and same design style. 4) Think of this as moving a real camera in a real room — nothing in the room changes, only the viewpoint changes.${detailConstraints} ${dallePrompt}`;
+        ? `This is a photograph of a room. Generate the EXACT same room from a wide angle. Every piece of furniture, every wall color, every decor item must be in the SAME position. The spatial layout is fixed — nothing moves. This is a real room photographed from a wider lens.${detailConstraints} ${dallePrompt}`
+        : `CRITICAL: This is a photograph of a REAL physical room. You are a camera operator repositioning inside this room. THE ROOM IS FIXED — it is a built set that cannot change. RULES: 1) The SPATIAL LAYOUT is locked: every piece of furniture stays in its exact position. If the bed is against the back wall, it stays there. If the vanity is on the right, it stays on the right. 2) All wall colors, flooring, furniture, fabrics, lighting fixtures, neon signs, posters, and decor must be IDENTICAL in color, material, and position. 3) When the camera turns to face a direction not visible in this photo, IMAGINE what you would see: the same wall color continues, the same flooring continues, and any new furniture must match the existing style. 4) Elements visible in this photo that would ALSO be visible from the new angle must appear in their correct positions — do NOT move or remove them.${detailConstraints} ${dallePrompt}`;
       form.append('prompt', editInstruction);
       form.append('n', '1');
       form.append('size', '1536x1024');
@@ -825,9 +825,10 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  // Check cache — skip if already analyzed for this base image
+  const IMAGE_ANALYSIS_VERSION = 2; // bump to invalidate cache when schema changes
+  // Check cache — skip if already analyzed for this base image with current version
   const vl = sceneSet.visual_language || {};
-  if (vl.image_analysis?.source_url === sceneSet.base_still_url) {
+  if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
     console.log(`[SceneGen] Using cached image analysis for ${sceneSet.name}`);
     return vl.image_analysis;
   }
@@ -838,25 +839,28 @@ async function analyzeBaseImage(sceneSet, SceneSetModel) {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 800,
+      max_tokens: 1200,
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'url', url: sceneSet.base_still_url } },
-          { type: 'text', text: `You are a set designer cataloging this room for a film production. List EXACTLY what you see — this will be used to ensure different camera angles of this room look identical.
+          { type: 'text', text: `You are a production designer creating a continuity bible for this room. A different AI will generate new camera angles of this SAME room — it needs to know EXACTLY what is here and WHERE everything is positioned, so every angle looks like the same physical space.
 
 Return JSON:
 {
-  "wall_color": "exact color description (e.g. 'soft lavender/purple')",
-  "flooring": "exact flooring description",
-  "furniture": ["item1 with color/material", "item2 with color/material", ...],
-  "lighting_fixtures": ["fixture1", "fixture2", ...],
-  "signature_decor": ["specific decor item 1", "specific decor item 2", ...],
-  "textiles": ["bedding/curtain/rug descriptions with colors and patterns"],
+  "wall_color": "exact color (e.g. 'soft lavender/purple')",
+  "flooring": "exact floor type and color",
+  "spatial_layout": "Describe the room layout as if drawing a floor plan. Use compass directions or clock positions. Example: 'Bed centered against the back wall (12 o'clock). Window on left wall (9 o'clock) with window seat. Vanity/mirror on right wall (3 o'clock). Music corner with keyboard and guitar in far-left corner (10 o'clock). Door at 6 o'clock.'",
+  "furniture": ["item1 with exact color/material AND position in room", "item2...", ...],
+  "lighting_fixtures": ["fixture with position (e.g. 'neon lalas world sign above headboard')", ...],
+  "signature_decor": ["specific item with position (e.g. 'photo collage wall behind bed')", ...],
+  "textiles": ["item with color/pattern (e.g. 'purple tie-dye duvet on bed')", ...],
+  "visible_through_windows": "what is visible outside (e.g. 'LA night skyline with palm trees')",
   "color_palette_hex": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
-  "atmosphere": "one sentence describing the overall mood and lighting"
+  "atmosphere": "one sentence describing overall mood, lighting quality, and time of day"
 }
-Return ONLY JSON. Be extremely specific — mention brand names, neon sign text, poster subjects, etc.` },
+Be extremely specific — mention neon sign text, poster subjects, exact furniture colors. The spatial_layout field is CRITICAL — describe where each major element sits relative to the others.
+Return ONLY JSON.` },
         ],
       }],
     });
@@ -867,6 +871,7 @@ Return ONLY JSON. Be extremely specific — mention brand names, neon sign text,
 
     const analysis = JSON.parse(match[0]);
     analysis.source_url = sceneSet.base_still_url;
+    analysis.version = IMAGE_ANALYSIS_VERSION;
     analysis.analyzed_at = new Date().toISOString();
 
     // Cache in visual_language
@@ -909,10 +914,12 @@ Return JSON:
   "score": <0-100, where 100 = identical room, 0 = completely different>,
   "wall_color_match": <true/false>,
   "furniture_match": <true/false>,
+  "layout_match": <true/false — are furniture positions consistent with being the same room?>,
   "decor_match": <true/false>,
+  "window_view_match": <true/false — if windows visible, does the outside view match?>,
   "issues": ["specific discrepancy 1", "specific discrepancy 2"]
 }
-Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drifts), below 70 = fail (different room). Return ONLY JSON.` },
+Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drifts), below 70 = fail (different room). Pay special attention to whether furniture is in the CORRECT position — items should not teleport between walls. Return ONLY JSON.` },
         ],
       }],
     });
@@ -938,14 +945,16 @@ Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drif
 function buildInventoryPrompt(analysis) {
   if (!analysis) return '';
   const parts = [];
-  if (analysis.wall_color) parts.push(`Wall color: ${analysis.wall_color}.`);
+  if (analysis.spatial_layout) parts.push(`LAYOUT: ${analysis.spatial_layout}`);
+  if (analysis.wall_color) parts.push(`Walls: ${analysis.wall_color}.`);
   if (analysis.flooring) parts.push(`Floor: ${analysis.flooring}.`);
-  if (analysis.furniture?.length) parts.push(`Furniture: ${analysis.furniture.join(', ')}.`);
-  if (analysis.lighting_fixtures?.length) parts.push(`Lights: ${analysis.lighting_fixtures.join(', ')}.`);
-  if (analysis.signature_decor?.length) parts.push(`Decor: ${analysis.signature_decor.join(', ')}.`);
-  if (analysis.textiles?.length) parts.push(`Textiles: ${analysis.textiles.join(', ')}.`);
+  if (analysis.furniture?.length) parts.push(`Furniture: ${analysis.furniture.join('; ')}.`);
+  if (analysis.lighting_fixtures?.length) parts.push(`Lights: ${analysis.lighting_fixtures.join('; ')}.`);
+  if (analysis.signature_decor?.length) parts.push(`Decor: ${analysis.signature_decor.join('; ')}.`);
+  if (analysis.textiles?.length) parts.push(`Textiles: ${analysis.textiles.join('; ')}.`);
+  if (analysis.visible_through_windows) parts.push(`Windows show: ${analysis.visible_through_windows}.`);
   if (analysis.color_palette_hex?.length) parts.push(`Palette: ${analysis.color_palette_hex.join(', ')}.`);
-  return parts.length > 0 ? `ROOM INVENTORY (must match exactly): ${parts.join(' ')}` : '';
+  return parts.length > 0 ? `ROOM CONTINUITY BIBLE (every angle must match this): ${parts.join(' ')}` : '';
 }
 
 // ─── ANGLE GENERATION ────────────────────────────────────────────────────────
