@@ -2664,8 +2664,8 @@
   background: #FAF7F0;
   border-radius: 16px;
   width: 90vw;
-  max-width: 560px;
-  max-height: 85vh;
+  max-width: 640px;
+  max-height: 80vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05);
@@ -2777,18 +2777,19 @@
 .scene-sets-modal-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 10px 16px;
+  gap: 4px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   color: #777;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: all 0.12s ease;
+  white-space: nowrap;
 }
 
 .scene-sets-modal-tab:hover {
@@ -2957,7 +2958,8 @@
 .scene-sets-modal-prompt-pre {
   margin: 6px 0 0;
   padding: 10px;
-  background: rgba(0, 0, 0, 0.03);
+  background: #f8f6f0;
+  border: 1px solid #e8e4da;
   border-radius: 6px;
   font-size: 10px;
   color: #555;
@@ -2965,6 +2967,7 @@
   word-break: break-word;
   max-height: 150px;
   overflow-y: auto;
+  color-scheme: light;
 }
 
 /* ── Modal actions ── */

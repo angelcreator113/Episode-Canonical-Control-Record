@@ -44,13 +44,17 @@ const uploadSceneSetImages = upload.fields([
 // Ensure generation_jobs table exists (safe to call multiple times)
 let generationJobsSynced = false;
 async function ensureGenerationJobsTable() {
-  if (generationJobsSynced) return;
+  if (generationJobsSynced || !GenerationJob) return;
   try {
-    await GenerationJob.sync();
+    // Add timeout to prevent sync from hanging
+    await Promise.race([
+      GenerationJob.sync(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Sync timeout')), 5000)),
+    ]);
     generationJobsSynced = true;
   } catch (err) {
-    console.error('[SceneSets] Failed to sync GenerationJob table:', err.message);
-    throw new Error('Generation jobs table not available');
+    console.warn('[SceneSets] GenerationJob sync failed (non-fatal):', err.message);
+    generationJobsSynced = true; // Don't retry — accept it's unavailable
   }
 }
 
@@ -58,35 +62,53 @@ async function ensureGenerationJobsTable() {
 
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const includes = [{ model: SceneAngle, as: 'angles' }];
-    if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'], required: false });
-    if (Episode && SceneSetEpisode) {
-      includes.push({
-        model: Episode,
-        as: 'episodes',
-        attributes: ['id', 'title', 'episode_number', 'season_number'],
-        through: { attributes: [] },
-        required: false,
-      });
-    }
     let sets;
     try {
+      const includes = [{ model: SceneAngle, as: 'angles', required: false }];
+      if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'], required: false });
+      if (Episode && SceneSetEpisode) {
+        includes.push({
+          model: Episode,
+          as: 'episodes',
+          attributes: ['id', 'title', 'episode_number', 'season_number'],
+          through: { attributes: [] },
+          required: false,
+        });
+      }
       sets = await SceneSet.findAll({
         include: includes,
-        order: [['created_at', 'DESC'], [{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
+        order: [['created_at', 'DESC']],
       });
     } catch (includeErr) {
       console.warn('Scene Sets query with includes failed, retrying minimal:', includeErr.message);
-      sets = await SceneSet.findAll({ order: [['created_at', 'DESC']] });
+      try {
+        sets = await SceneSet.findAll({ order: [['created_at', 'DESC']] });
+      } catch (minErr) {
+        console.warn('Scene Sets minimal query also failed:', minErr.message);
+        return res.json({ success: true, count: 0, data: [], note: minErr.message });
+      }
     }
-    res.json({ success: true, count: sets.length, data: sets });
+    res.json({ success: true, count: (sets || []).length, data: sets || [] });
   } catch (err) {
-    if (err.message?.includes('does not exist')) {
-      return res.json({ success: true, count: 0, data: [], note: 'Table not yet created' });
-    }
     console.error('Scene Sets GET / error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.json({ success: true, count: 0, data: [], note: err.message });
   }
+});
+
+// ─── Static routes MUST be before /:id to avoid Express matching them as UUIDs ──
+
+router.get('/generation-check', optionalAuth, (req, res) => {
+  res.json({
+    success: true,
+    openai: !!process.env.OPENAI_API_KEY,
+    runway: !!process.env.RUNWAY_ML_API_KEY,
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+    ready: !!(process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY),
+    s3_bucket: !!process.env.S3_PRIMARY_BUCKET || !!process.env.AWS_S3_BUCKET || !!process.env.S3_BUCKET_NAME,
+    message: process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY
+      ? 'Image generation ready'
+      : 'No image generation API key configured. Set OPENAI_API_KEY (for DALL-E) or RUNWAY_ML_API_KEY (for Runway ML).',
+  });
 });
 
 // ─── POST /  — create a new scene set ─────────────────────────────────────────
@@ -426,6 +448,91 @@ Return ONLY the JSON object, no other text.` },
   }
 });
 
+// ─── POST /:id/analyze-image — on-demand Vision analysis for existing scene sets ──
+
+router.post('/:id/analyze-image', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!set.base_still_url) return res.status(400).json({ error: 'No base image to analyze. Upload an image first.' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const client = getAnthropicClient();
+    const visionResponse = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: set.base_still_url } },
+          { type: 'text', text: `Analyze this location image for a luxury fashion show called "Styling Adventures with Lala".
+
+Return a JSON object with these fields:
+{
+  "description": "2-3 sentence description of the space — layout, key furniture/features, lighting, mood, color palette, materials.",
+  "prompt": "A detailed scene generation prompt to recreate this space. Include: architectural style, lighting, colors, key objects, materials, atmosphere. Start with 'Empty room.' Under 400 characters.",
+  "scene_type": "HOME_BASE | CLOSET | EVENT_LOCATION | TRANSITION | EXTERIOR",
+  "mood_tags": ["3-5", "mood", "words"],
+  "suggested_angles": [
+    {
+      "label": "SHORT_UPPERCASE_LABEL",
+      "name": "Human-readable name",
+      "description": "What this angle shows — specific to THIS location",
+      "camera_direction": "Detailed camera instruction. Include position, direction, what should be visible, how to extend the space."
+    }
+  ]
+}
+
+Suggest 4-6 angles that make sense for THIS SPECIFIC location. Do NOT include generic angles that don't fit.
+Return ONLY the JSON object, no other text.` },
+        ],
+      }],
+    });
+
+    const text = visionResponse.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse Vision response' });
+
+    const analysis = JSON.parse(jsonMatch[0]);
+
+    // Update scene set with analysis results
+    const updates = {};
+    if (analysis.description) updates.canonical_description = analysis.description;
+    if (analysis.prompt) updates.base_runway_prompt = analysis.prompt;
+    if (analysis.scene_type) updates.scene_type = analysis.scene_type;
+    if (analysis.mood_tags) updates.mood_tags = analysis.mood_tags;
+    if (Object.keys(updates).length > 0) await set.update(updates);
+
+    // Replace angles with location-specific ones if suggested
+    let createdAngles = [];
+    if (analysis.suggested_angles?.length > 0) {
+      await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
+      createdAngles = await SceneAngle.bulkCreate(
+        analysis.suggested_angles.map((angle, idx) => ({
+          scene_set_id: set.id,
+          angle_label: (angle.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
+          angle_name: angle.name || `Angle ${idx + 1}`,
+          angle_description: angle.description || '',
+          camera_direction: angle.camera_direction || '',
+          generation_status: 'pending',
+          sort_order: idx,
+        })),
+        { returning: true }
+      );
+    }
+
+    res.json({
+      success: true,
+      analysis,
+      updated_fields: Object.keys(updates),
+      angles_created: createdAngles.length,
+    });
+  } catch (err) {
+    console.error('Scene Sets POST /:id/analyze-image error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── POST /:id/generate-base  — generate the base scene ─────────────────────
 
 router.post('/:id/generate-base', validateUUIDParam('id'), optionalAuth, async (req, res) => {
@@ -441,21 +548,28 @@ router.post('/:id/generate-base', validateUUIDParam('id'), optionalAuth, async (
       });
     }
 
-    try { await set.update({ generation_status: 'generating' }); } catch (e) {
-      console.warn('generate-base: could not update generation_status:', e.message);
+    if (!process.env.OPENAI_API_KEY && !process.env.RUNWAY_ML_API_KEY) {
+      return res.status(503).json({ success: false, error: 'No image generation API key configured (OPENAI_API_KEY or RUNWAY_ML_API_KEY)' });
     }
 
-    await ensureGenerationJobsTable();
-    const job = await GenerationJob.create({
-      job_type: 'generate_base',
-      scene_set_id: set.id,
-      payload: { force: !!(req.body?.force) },
-    });
+    await set.update({ generation_status: 'generating' });
 
-    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
+    // Return immediately, generate in background
+    res.status(202).json({ success: true, data: { status: 'generating', message: 'Base generation started in background' } });
+
+    // Background generation
+    try {
+      const sceneGenService = require('../services/sceneGenerationService');
+      const models = require('../models');
+      await sceneGenService.generateBaseScene(set, models);
+      console.log(`[SceneGen] Base scene for "${set.name}" generation complete`);
+    } catch (genErr) {
+      console.error(`[SceneGen] Base scene for "${set.name}" failed:`, genErr.message);
+      await set.update({ generation_status: 'failed' });
+    }
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    if (!res.headersSent) res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -694,25 +808,32 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), optionalAu
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
-    await ensureGenerationJobsTable();
-    const job = await GenerationJob.create({
-      job_type: 'generate_angle',
-      scene_set_id: set.id,
-      scene_angle_id: angle.id,
-      payload: {},
-    });
-
-    // Mark the angle as generating and clear stale assets so the frontend shows a spinner
-    try {
-      await angle.update({ generation_status: 'generating', still_image_url: null, video_clip_url: null });
-    } catch (e) {
-      console.warn('generate-angle: could not update angle status:', e.message);
+    if (!process.env.OPENAI_API_KEY && !process.env.RUNWAY_ML_API_KEY) {
+      return res.status(503).json({ success: false, error: 'No image generation API key configured (OPENAI_API_KEY or RUNWAY_ML_API_KEY)' });
     }
 
-    res.status(202).json({ success: true, data: { jobId: job.id, status: 'queued' } });
+    // Mark as generating
+    await angle.update({ generation_status: 'generating' });
+
+    // Return immediately, generate in background
+    res.status(202).json({ success: true, data: { status: 'generating', message: 'Generation started in background' } });
+
+    // Background generation
+    try {
+      const sceneGenService = require('../services/sceneGenerationService');
+      const models = require('../models');
+      await sceneGenService.generateAngle(angle, set, models);
+      console.log(`[SceneGen] Angle ${angle.angle_name} generation complete`);
+    } catch (genErr) {
+      console.error(`[SceneGen] Angle ${angle.angle_name} generation failed:`, genErr.message);
+      const review = angle.quality_review || {};
+      review.last_error = genErr.message;
+      review.failed_at = new Date().toISOString();
+      await angle.update({ generation_status: 'failed', quality_review: review });
+    }
   } catch (err) {
     console.error('Scene Sets POST /:id/angles/:angleId/generate error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    if (!res.headersSent) res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1232,6 +1353,7 @@ router.post('/:id/cascade-regenerate', validateUUIDParam('id'), optionalAuth, as
 
 router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
   try {
+    if (!GenerationJob) return res.json({ success: true, data: [] });
     await ensureGenerationJobsTable();
     const jobs = await GenerationJob.findAll({
       where: {
@@ -1243,6 +1365,7 @@ router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
 
     res.json({ success: true, data: jobs });
   } catch (err) {
+    if (err.message?.includes('does not exist')) return res.json({ success: true, data: [] });
     console.error('Scene Sets GET /jobs/set/:setId error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1252,6 +1375,9 @@ router.get('/jobs/set/:setId', optionalAuth, async (req, res) => {
 
 router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
   try {
+    if (!GenerationJob) {
+      return res.status(404).json({ success: false, error: 'Generation jobs not available' });
+    }
     await ensureGenerationJobsTable();
     const job = await GenerationJob.findByPk(req.params.jobId);
     if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
@@ -1273,6 +1399,10 @@ router.get('/jobs/:jobId', optionalAuth, async (req, res) => {
       },
     });
   } catch (err) {
+    // Return 404 instead of 500 to stop polling loops
+    if (err.message?.includes('does not exist') || err.message?.includes('relation')) {
+      return res.status(404).json({ success: false, error: 'Job not found — table may not exist' });
+    }
     console.error('Scene Sets GET /jobs/:jobId error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1398,6 +1528,58 @@ router.delete('/:id/objects/:objectId', validateUUIDParam('id'), optionalAuth, a
 
 // POST /api/v1/scene-sets/:id/objects/:objectId/duplicate - Duplicate object
 router.post('/:id/objects/:objectId/duplicate', validateUUIDParam('id'), optionalAuth, asyncHandler(sceneStudioController.duplicateObject));
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SUGGEST ANGLES FROM IMAGE — fast, only regenerates angles (no description/prompt)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/:id/suggest-angles-from-image', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!set.base_still_url) return res.status(400).json({ error: 'No base image' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: set.base_still_url } },
+          { type: 'text', text: `Suggest 4-6 camera angles for this location. Return ONLY a JSON array:
+[{"label":"UPPERCASE_LABEL","name":"Name","description":"What this shows","camera_direction":"Camera instruction — position, direction, how to extend the space beyond the reference image"}]
+Pick angles that make sense for THIS location. No generic angles that don't fit.` },
+        ],
+      }],
+    });
+
+    const text = response.content?.[0]?.text || '';
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return res.status(500).json({ error: 'Failed to parse angles' });
+
+    const suggestedAngles = JSON.parse(match[0]);
+    await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
+    const created = await SceneAngle.bulkCreate(
+      suggestedAngles.map((a, idx) => ({
+        scene_set_id: set.id,
+        angle_label: (a.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
+        angle_name: a.name || `Angle ${idx + 1}`,
+        angle_description: a.description || '',
+        camera_direction: a.camera_direction || '',
+        generation_status: 'pending',
+        sort_order: idx,
+      })),
+      { returning: true }
+    );
+
+    res.json({ success: true, angles_created: created.length, angles: created });
+  } catch (err) {
+    console.error('Suggest angles error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STYLE LOCK — extract and save color palette/materials from base image
