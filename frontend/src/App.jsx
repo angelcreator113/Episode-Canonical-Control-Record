@@ -296,7 +296,7 @@ function AppContent() {
           <Route path="/universe/social-import" element={<UniverseSocialImportPage />} />
           <Route path="/universe/series" element={<SeriesPage />} />
           <Route path="/universe/production" element={<UniverseProductionPage />} />
-          <Route path="/universe/wardrobe" element={<UniverseWardrobePage />} />
+          <Route path="/universe/wardrobe" element={<Navigate to="/wardrobe-library" replace />} />
           <Route path="/universe/assets" element={<UniverseAssetsPage />} />
           <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
           <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
@@ -350,9 +350,9 @@ function AppContent() {
           {/* ===== PRODUCTION ROUTES ===== */}
           
           {/* Wardrobe */}
-          <Route path="/wardrobe" element={<Wardrobe />} />
-          <Route path="/wardrobe/analytics" element={<WardrobeAnalytics />} />
-          <Route path="/wardrobe/outfits" element={<OutfitSets />} />
+          <Route path="/wardrobe" element={<Navigate to="/wardrobe-library" replace />} />
+          <Route path="/wardrobe/analytics" element={<Navigate to="/wardrobe-library" replace />} />
+          <Route path="/wardrobe/outfits" element={<Navigate to="/wardrobe-library" replace />} />
           <Route path="/wardrobe-library" element={<WardrobeBrowser mode="library" />} />
           <Route path="/wardrobe-library/upload" element={<WardrobeLibraryUpload />} />
           <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />
@@ -551,7 +551,7 @@ function AppContent() {
             '/universe/social-import': 'Social Import',
             '/universe/series': 'Series',
             '/universe/production': 'Production',
-            '/universe/wardrobe': 'Wardrobe',
+            '/universe/wardrobe': 'Wardrobe Library',
             '/universe/assets': 'Assets',
             '/universe/world-state': 'World State',
             '/universe/tensions': 'Tensions',
@@ -584,7 +584,7 @@ function AppContent() {
             '/pressure': 'Narrative Pressure Dashboard',
             '/assembler': 'Novel Assembler',
             '/press': 'LalaVerse Press',
-            '/wardrobe': 'Wardrobe',
+            '/wardrobe-library': 'Wardrobe Library',
             '/template-studio': 'Template Studio',
             '/amber': 'Amber Command Center',
             '/settings': 'Settings',

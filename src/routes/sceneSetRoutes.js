@@ -59,21 +59,31 @@ async function ensureGenerationJobsTable() {
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const includes = [{ model: SceneAngle, as: 'angles' }];
-    if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'] });
+    if (Show) includes.push({ model: Show, as: 'show', attributes: ['id', 'name', 'icon', 'color'], required: false });
     if (Episode && SceneSetEpisode) {
       includes.push({
         model: Episode,
         as: 'episodes',
         attributes: ['id', 'title', 'episode_number', 'season_number'],
         through: { attributes: [] },
+        required: false,
       });
     }
-    const sets = await SceneSet.findAll({
-      include: includes,
-      order: [['created_at', 'DESC'], [{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
-    });
+    let sets;
+    try {
+      sets = await SceneSet.findAll({
+        include: includes,
+        order: [['created_at', 'DESC'], [{ model: SceneAngle, as: 'angles' }, 'sort_order', 'ASC']],
+      });
+    } catch (includeErr) {
+      console.warn('Scene Sets query with includes failed, retrying minimal:', includeErr.message);
+      sets = await SceneSet.findAll({ order: [['created_at', 'DESC']] });
+    }
     res.json({ success: true, count: sets.length, data: sets });
   } catch (err) {
+    if (err.message?.includes('does not exist')) {
+      return res.json({ success: true, count: 0, data: [], note: 'Table not yet created' });
+    }
     console.error('Scene Sets GET / error:', err);
     res.status(500).json({ success: false, error: err.message });
   }

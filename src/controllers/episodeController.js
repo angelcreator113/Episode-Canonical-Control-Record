@@ -65,35 +65,53 @@ module.exports = {
         }
       }
 
-      const { count, rows } = await Episode.findAndCountAll({
-        where,
-        limit: parseInt(limit),
-        offset,
-        order,
-        attributes: [
-          'id',
-          'episode_number',
-          'season_number',
-          'title',
-          'description',
-          'air_date',
-          'status',
-          'categories',
-          'show_id',
-          'evaluation_json',
-          'evaluation_status',
-          'script_content',
-          'created_at',
-          'updated_at',
-        ],
-        include: [
-          {
-            model: Show,
-            as: 'show',
-            attributes: ['id', 'name', 'icon', 'color'],
-          },
-        ],
-      });
+      let count, rows;
+      try {
+        ({ count, rows } = await Episode.findAndCountAll({
+          where,
+          limit: parseInt(limit),
+          offset,
+          order,
+          attributes: [
+            'id',
+            'episode_number',
+            'season_number',
+            'title',
+            'description',
+            'air_date',
+            'status',
+            'categories',
+            'show_id',
+            'evaluation_json',
+            'evaluation_status',
+            'script_content',
+            'created_at',
+            'updated_at',
+          ],
+          include: [
+            {
+              model: Show,
+              as: 'show',
+              attributes: ['id', 'name', 'icon', 'color'],
+              required: false,
+            },
+          ],
+        }));
+      } catch (includeErr) {
+        console.warn('Episode list with Show include failed, retrying without:', includeErr.message);
+        ({ count, rows } = await Episode.findAndCountAll({
+          where,
+          limit: parseInt(limit),
+          offset,
+          order,
+          attributes: [
+            'id', 'episode_number', 'season_number', 'title', 'description',
+            'air_date', 'status', 'categories', 'show_id',
+            'evaluation_json', 'evaluation_status', 'script_content',
+            'created_at', 'updated_at',
+          ],
+        }));
+      }
 
       // Log activity (wrapped in try-catch to prevent failures)
       // TEMPORARILY DISABLED DUE TO AUDIT LOG ERRORS

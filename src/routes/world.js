@@ -56,6 +56,9 @@ router.get('/world/:showId/history', optionalAuth, async (req, res) => {
 
     return res.json({ success: true, history });
   } catch (error) {
+    if (error.message?.includes('does not exist')) {
+      return res.json({ success: true, history: [], note: 'Table not yet created. Run migrations.' });
+    }
     console.error('World history error:', error);
     return res.status(500).json({ error: 'Failed to load history', message: error.message });
   }
