@@ -50,7 +50,7 @@ router.post('/generate-events', optionalAuth, async (req, res) => {
       }
     }
 
-    const prompt = buildEventPrompt();
+    const prompt = await buildEventPrompt(db, show_id);
 
     let message;
     for (const model of MODELS) {
@@ -98,6 +98,7 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
       strictness: ev.strictness ?? 3,
       dress_code: ev.dress_code,
       dress_code_keywords: JSON.stringify(ev.dress_code_keywords || []),
+      location_hint: ev.location_hint || null,
       status: 'ready',
       created_at: now,
       updated_at: now,
@@ -116,11 +117,11 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
         `INSERT INTO world_events
            (id, show_id, name, event_type, host_brand, description,
             prestige, cost_coins, strictness, dress_code,
-            dress_code_keywords, status, created_at, updated_at)
+            dress_code_keywords, location_hint, status, created_at, updated_at)
          VALUES
            (:id, :show_id, :name, :event_type, :host_brand, :description,
             :prestige, :cost_coins, :strictness, :dress_code,
-            :dress_code_keywords::jsonb, :status, :created_at, :updated_at)
+            :dress_code_keywords::jsonb, :location_hint, :status, :created_at, :updated_at)
          ON CONFLICT DO NOTHING`,
         { replacements: ev }
       );
@@ -144,9 +145,44 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
 
 // ── Prompt ────────────────────────────────────────────────────────────────
 
-function buildEventPrompt() {
-  return `Generate exactly 24 LalaVerse game events for the Styling Adventures fashion show.
+async function buildEventPrompt(db, show_id) {
+  // Load Show Brain rules for context
+  let brainContext = '';
+  try {
+    const brainEntries = await db.FranchiseKnowledge.findAll({
+      where: { status: 'active', always_inject: true },
+      attributes: ['title', 'content'],
+      limit: 10,
+      order: [['severity', 'ASC']],
+    });
+    if (brainEntries.length > 0) {
+      const rules = brainEntries.map(e => {
+        const content = typeof e.content === 'string' ? e.content : JSON.stringify(e.content);
+        const summary = content.length > 200 ? content.slice(0, 200) + '...' : content;
+        return `- ${e.title}: ${summary}`;
+      }).join('\n');
+      brainContext = `\nSHOW BRAIN RULES (follow these):\n${rules}\n`;
+    }
+  } catch (e) { /* franchise_knowledge may not exist */ }
 
+  // Load World Locations for event placement
+  let locationContext = '';
+  try {
+    const locations = await db.sequelize.query(
+      `SELECT name, description, location_type, sensory_details FROM world_locations WHERE deleted_at IS NULL ORDER BY name LIMIT 20`,
+      { type: db.sequelize.QueryTypes.SELECT }
+    );
+    if (locations.length > 0) {
+      const locs = locations.map(l => {
+        const sensory = l.sensory_details ? (typeof l.sensory_details === 'string' ? l.sensory_details : JSON.stringify(l.sensory_details)) : '';
+        return `- ${l.name} (${l.location_type || 'venue'}): ${(l.description || '').slice(0, 100)}${sensory ? ' | ' + sensory.slice(0, 80) : ''}`;
+      }).join('\n');
+      locationContext = `\nAVAILABLE LALAVERSE LOCATIONS (use these for location_hint — do NOT invent new locations):\n${locs}\n`;
+    }
+  } catch (e) { /* world_locations may not exist */ }
+
+  return `Generate exactly 24 LalaVerse game events for the Styling Adventures fashion show.
+${brainContext}${locationContext}
 CATEGORY SPLIT (non-negotiable):
 - industry: 12 events (primary — this is a fashion show first)
 - dating: 4 events
@@ -154,52 +190,32 @@ CATEGORY SPLIT (non-negotiable):
 - social_drama: 4 events
 
 INDUSTRY EVENTS (12): Include the following types spread across the 12:
-  galas, press days, VIP receptions, runway shows, cocktail evenings, 
-  brand salons, editorial shoots, awards ceremonies, charity galas, 
+  galas, press days, VIP receptions, runway shows, cocktail evenings,
+  brand salons, editorial shoots, awards ceremonies, charity galas,
   launch events, industry showcases, rooftop/garden socials.
-  
-  Already existing (include these with the SAME name, add full details):
-  - Velour Annual Gala (rep 8, prestige 9, elite tier)
-  - Industry VIP Reception (rep 5, prestige 7)
-  - Press Day Showcase (rep 3, prestige 5)
-  - Sunset Charity Gala (rep 6, prestige 8)
-  - Salon de Mode Preview (rep 4, prestige 6)
-  - Rooftop Cocktail Evening (rep 3, prestige 5)
-  - Afternoon Garden Social (rep 2, prestige 4)
-  Generate 5 new industry events to complete the 12.
 
 DATING EVENTS (4): Scenarios where Lala's personal life collides with her career.
-  Examples: a situationship going public at an industry event, a first date at 
-  a luxury restaurant, a reunion with someone who knew her before she was known,
-  a press photographer catching something she did not intend.
+  Lala is a SOLO creator — she does NOT have siblings. Dating events should involve
+  romantic interests, situationships, or past relationships intersecting with career moments.
 
 FAMILY EVENTS (4): Family obligations that create direct tension with career momentum.
-  JustAWoman built these events knowing the cost family demands on ambition.
-  Examples: a celebration that conflicts with a major brand opportunity, 
-  a family member visiting during a critical launch week, a difficult conversation
-  about money and priorities, a milestone that reframes why any of this matters.
+  Focus on parents, extended family, or chosen family — NOT siblings.
 
 SOCIAL_DRAMA EVENTS (4): Reputation-altering social moments.
-  Examples: a feud with another creator that becomes public, an alliance that 
-  costs her in the wrong rooms, a moment of exclusion at an event she earned,
-  a rumor that spreads faster than the truth.
+  Creator feuds, exclusion from events, rumors, alliance betrayals.
 
 For each event return a JSON object with these exact fields:
 {
   "name": "string — specific and evocative, not generic",
-  "event_category": "industry | dating | family | social_drama",
-  "event_type": "string — more specific type tag (gala, press_day, date, family_obligation, etc.)",
+  "event_type": "string — gala, press_day, date, family_obligation, feud, etc.",
   "description": "2-3 sentences. What is this event. What is actually at stake for Lala.",
-  "reputation_score": number 1-10 (minimum reputation required to attend),
-  "coin_cost": number (0-500, 0 for family/drama events that don't cost coins),
   "prestige": number 1-10 (how prestigious is this event in the world),
+  "cost_coins": number (0-500, 0 for family/drama events that don't cost coins),
   "strictness": number 1-10 (how strict is the dress code),
   "dress_code": "string — the formal dress code requirement",
   "dress_code_keywords": ["array", "of", "style", "keywords", "for", "matching"],
-  "style_aesthetic": "string — the aesthetic of the event (e.g. 'minimalist luxury', 'old money editorial')",
-  "tier": "basic | mid | luxury | elite",
   "host_brand": "string or null — if an in-world brand hosts (Velour Atelier, Ori Beauty, etc.)",
-  "career_echo_potential": "1 sentence — how this event connects to JustAWoman's journey or LalaVerse franchise mythology. Can be null for straightforward events."
+  "location_hint": "string — use one of the AVAILABLE LALAVERSE LOCATIONS above, or describe a specific venue"
 }
 
 Return a JSON array of exactly 24 objects. No other text.`;

@@ -104,7 +104,7 @@ const ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human.
 
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
-function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
+function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null, eventContext = null) {
   const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
   // Condensed anchor frees ~400 chars for description vs v1.1's ~200
@@ -115,9 +115,23 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     LALAVERSE_VISUAL_ANCHOR,
     `LOCATION: ${sceneSet.name}.`,
     descriptionSlice,
-    `CAMERA: ${cameraText}`,
-    'Photorealistic cinematic quality. No text overlays. No watermarks.',
   ];
+
+  // Inject event context (location_hint + dress_code atmosphere) into the prompt
+  if (eventContext) {
+    if (eventContext.location_hint) {
+      parts.push(`Event setting: ${eventContext.location_hint.slice(0, 100)}.`);
+    }
+    if (eventContext.dress_code) {
+      parts.push(`Atmosphere suggests ${eventContext.dress_code.toLowerCase()} dress code — adjust decor formality accordingly.`);
+    }
+    if (eventContext.prestige && eventContext.prestige >= 8) {
+      parts.push('Elite luxury venue — opulent details, crystal, gold accents, dramatic lighting.');
+    }
+  }
+
+  parts.push(`CAMERA: ${cameraText}`);
+  parts.push('Photorealistic cinematic quality. No text overlays. No watermarks.');
 
   const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -413,12 +427,42 @@ async function deleteOldS3Asset(url) {
     console.warn(`[SceneGen] S3 cleanup failed (non-blocking): ${err.message}`);
   }
 }
+// ─── EVENT CONTEXT LOADER ────────────────────────────────────────────────────
+
+async function loadEventContext(sceneSet, models) {
+  try {
+    const sequelize = models.sequelize;
+    // Find events linked to this scene set
+    const [events] = await sequelize.query(
+      `SELECT location_hint, dress_code, prestige, name FROM world_events
+       WHERE scene_set_id = :sceneSetId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { sceneSetId: sceneSet.id } }
+    );
+    if (events.length > 0) return events[0];
+
+    // Fallback: find events linked to episodes that use this scene set
+    const [epEvents] = await sequelize.query(
+      `SELECT we.location_hint, we.dress_code, we.prestige, we.name
+       FROM world_events we
+       JOIN scene_set_episodes sse ON sse.episode_id = we.used_in_episode_id
+       WHERE sse.scene_set_id = :sceneSetId AND we.deleted_at IS NULL AND sse.deleted_at IS NULL
+       LIMIT 1`,
+      { replacements: { sceneSetId: sceneSet.id } }
+    );
+    if (epEvents.length > 0) return epEvents[0];
+  } catch (e) {
+    // Tables may not exist yet
+  }
+  return null;
+}
+
 // ─── HIGH-LEVEL: GENERATE BASE SCENE ─────────────────────────────────────────
 
 async function generateBaseScene(sceneSet, models) {
   const { SceneSet } = models;
 
-  const prompt = buildPrompt(sceneSet, 'WIDE');
+  const eventContext = await loadEventContext(sceneSet, models);
+  const prompt = buildPrompt(sceneSet, 'WIDE', null, eventContext);
 
   await SceneSet.update(
     { generation_status: 'generating', base_runway_prompt: prompt },
@@ -535,8 +579,8 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  // Use the full angle-specific prompt for text→image (cheap: ~1 credit via gen4_image)
-  const prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
+  const eventContext = await loadEventContext(sceneSet, models);
+  const prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction, eventContext);
 
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt },
@@ -670,7 +714,8 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  const basePrompt = buildPrompt(sceneSet, angleLabel);
+  const eventContext = await loadEventContext(sceneSet, models);
+  const basePrompt = buildPrompt(sceneSet, angleLabel, null, eventContext);
   const refinedPrompt = artifactDetection.buildRefinedPrompt(basePrompt, artifactCategories);
 
   await SceneAngle.update(
