@@ -287,27 +287,43 @@ router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, uploadSce
       generation_status: 'complete',
     });
 
-    // Auto-analyze uploaded image with Claude Vision to fill description + prompt
+    // Auto-analyze uploaded image with Claude Vision to fill description, prompt, and suggest angles
     let visionAnalysis = null;
     if (process.env.ANTHROPIC_API_KEY) {
       try {
         const client = getAnthropicClient();
         const visionResponse = await client.messages.create({
           model: 'claude-sonnet-4-6',
-          max_tokens: 1000,
+          max_tokens: 1500,
           messages: [{
             role: 'user',
             content: [
               { type: 'image', source: { type: 'url', url: primaryUrl } },
-              { type: 'text', text: `Analyze this room/location image for a luxury fashion show called "Styling Adventures with Lala".
+              { type: 'text', text: `Analyze this location image for a luxury fashion show called "Styling Adventures with Lala".
 
-Return a JSON object with exactly these fields:
+Return a JSON object with these fields:
 {
-  "description": "2-3 sentence description of the space — layout, key furniture, lighting, mood, color palette, materials. Be specific about what you see.",
-  "prompt": "A detailed scene generation prompt that could recreate this room. Include: architectural style, lighting type, color palette, key objects/furniture, materials/textures, atmosphere. Start with 'Empty room.' Format as a single paragraph under 400 characters.",
+  "description": "2-3 sentence description of the space — layout, key furniture/features, lighting, mood, color palette, materials.",
+  "prompt": "A detailed scene generation prompt to recreate this space. Include: architectural style, lighting, colors, key objects, materials, atmosphere. Start with 'Empty room.' Under 400 characters.",
   "scene_type": "HOME_BASE | CLOSET | EVENT_LOCATION | TRANSITION | EXTERIOR",
-  "mood_tags": ["array", "of", "3-5", "mood", "words"]
+  "mood_tags": ["3-5", "mood", "words"],
+  "suggested_angles": [
+    {
+      "label": "SHORT_UPPERCASE_LABEL",
+      "name": "Human-readable name",
+      "description": "What this angle shows — be specific to THIS location",
+      "camera_direction": "Detailed camera instruction for generating this view. Include position, direction, what should be visible, and how to extend the space beyond what the reference shows."
+    }
+  ]
 }
+
+IMPORTANT for suggested_angles:
+- Suggest 4-6 angles that make sense for THIS SPECIFIC location
+- Do NOT include generic angles that don't fit (e.g. no CLOSET for a restaurant, no VANITY for an outdoor space)
+- Each angle should show a DIFFERENT part or perspective of the space
+- camera_direction should instruct the AI to extend/imagine the room beyond the reference image
+- Use labels like: WIDE, ENTRANCE, BAR, SEATING, STAGE, BACKSTAGE, TABLE, SKYLINE, GARDEN, BALCONY, HALLWAY, LOBBY, POOL, KITCHEN, BED, CLOSET, VANITY, WINDOW, DOORWAY, OVERHEAD, DETAIL, etc.
+- First angle should always be the widest/most establishing view
 
 Return ONLY the JSON object, no other text.` },
             ],
@@ -340,9 +356,10 @@ Return ONLY the JSON object, no other text.` },
       }
     }
 
-    // When multiple images are uploaded, create ready-to-use angle entries.
+    // Create location-appropriate angles based on vision analysis (or handle multi-upload)
     let createdAngles = [];
     if (uploadedUrls.length > 1) {
+      // Multi-image upload: create angle entries from each uploaded image
       const existingCount = await SceneAngle.count({ where: { scene_set_id: set.id } });
       createdAngles = await SceneAngle.bulkCreate(
         uploadedUrls.map((img, idx) => {
@@ -368,8 +385,25 @@ Return ONLY the JSON object, no other text.` },
       if (!set.cover_angle_id && createdAngles[0]?.id) {
         await set.update({ cover_angle_id: createdAngles[0].id });
       }
+    } else if (visionAnalysis?.suggested_angles?.length > 0) {
+      // Single image + vision analysis: create location-specific angles
+      // Clear old generic angles first
+      await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
+
+      createdAngles = await SceneAngle.bulkCreate(
+        visionAnalysis.suggested_angles.map((angle, idx) => ({
+          scene_set_id: set.id,
+          angle_label: (angle.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
+          angle_name: angle.name || `Angle ${idx + 1}`,
+          angle_description: angle.description || '',
+          camera_direction: angle.camera_direction || '',
+          generation_status: 'pending',
+          sort_order: idx,
+        })),
+        { returning: true }
+      );
     } else {
-      // Single-image upload keeps current behavior: reset angle thumbnails to regenerate from new base.
+      // Fallback: reset existing angles to regenerate from new base
       await SceneAngle.update(
         { still_image_url: null, video_clip_url: null, generation_status: 'pending' },
         { where: { scene_set_id: set.id } }
