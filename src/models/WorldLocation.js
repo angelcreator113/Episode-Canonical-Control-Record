@@ -134,7 +134,18 @@ module.exports = (sequelize) => {
         as: 'sceneSets',
       });
     }
-    // WorldEvent + StoryCalendarEvent associations require migrations 20260709/20260710
+    if (models.WorldEvent) {
+      WorldLocation.hasMany(models.WorldEvent, {
+        foreignKey: 'venue_location_id',
+        as: 'events',
+      });
+    }
+    if (models.StoryCalendarEvent) {
+      WorldLocation.hasMany(models.StoryCalendarEvent, {
+        foreignKey: 'location_id',
+        as: 'calendarEvents',
+      });
+    }
   };
 
   return WorldLocation;
