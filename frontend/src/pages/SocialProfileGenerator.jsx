@@ -8,124 +8,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
-
-const API = '/api/v1/social-profiles';
-
-// ── Prime Studios Design Tokens ────────────────────────────────────────
-const C = {
-  pink:       '#d4789a',
-  pinkLight:  '#fce8f0',
-  pinkMid:    '#f0b8cc',
-  blue:       '#7ab3d4',
-  blueLight:  '#e8f3fa',
-  lavender:   '#a889c8',
-  lavLight:   '#ede6f7',
-  ink:        '#1a1625',
-  inkMid:     '#4a3f5c',
-  inkLight:   '#7a6e8a',
-  surface:    '#ffffff',
-  surfaceAlt: '#faf8fc',
-  border:     '#ede8f5',
-  shadow:     '0 2px 16px rgba(168,137,200,0.10)',
-  shadowMd:   '0 6px 32px rgba(168,137,200,0.15)',
-  radius:     '12px',
-  radiusSm:   '8px',
-  font:       "'DM Sans', 'Segoe UI', sans-serif",
-};
-
-const PLATFORMS = [
-  { value:'instagram', label:'Instagram' },
-  { value:'tiktok',   label:'TikTok' },
-  { value:'youtube',  label:'YouTube' },
-  { value:'twitter',  label:'Twitter / X' },
-  { value:'onlyfans', label:'OnlyFans' },
-  { value:'twitch',   label:'Twitch' },
-  { value:'substack', label:'Substack' },
-  { value:'multi',    label:'Multi-Platform' },
-];
-
-const ARCHETYPE_LABELS = {
-  polished_curator:  'Polished Curator',
-  messy_transparent: 'Messy Transparent',
-  soft_life:         'Soft Life',
-  explicitly_paid:   'Explicitly Paid',
-  overnight_rise:    'Overnight Rise',
-  cautionary:        'Cautionary',
-  the_peer:          'The Peer',
-  the_watcher:       'The Watcher',
-  chaos_creator:     'Chaos Creator',
-  community_builder: 'Community Builder',
-};
-
-const STATUS_LABELS = {
-  draft:'Draft', generated:'Generated', finalized:'Finalized', crossed:'Crossed', archived:'Archived',
-};
-
-const STATUS_COLORS = {
-  draft:     { bg:'#f0f0f5',     color:'#6b6a80' },
-  generated: { bg:C.blueLight,  color:'#1e4a7a' },
-  finalized: { bg:'#e8f5ee',    color:'#2d7a50' },
-  crossed:   { bg:C.lavLight,   color:'#5c2d8a' },
-  archived:  { bg:'#f0ede6',    color:'#6b6560' },
-};
-
-const FEED_STATE_CONFIG = {
-  rising:        { label:'Rising',        color:'#4a8a3c', bg:'#eef7ec' },
-  peaking:       { label:'Peaking',       color:'#8a6010', bg:'#fdf8e8' },
-  plateauing:    { label:'Plateauing',    color:'#6b6a80', bg:'#f0f0f5' },
-  controversial: { label:'Controversial', color:'#8a4410', bg:'#fdf0e8' },
-  cancelled:     { label:'Cancelled',     color:'#8a2020', bg:'#fde8e8' },
-  gone_dark:     { label:'Gone Dark',     color:'#444',    bg:'#eee' },
-  rebuilding:    { label:'Rebuilding',    color:'#1e4a7a', bg:C.blueLight },
-  crossed:       { label:'Crossed',       color:'#5c2d8a', bg:C.lavLight },
-};
-
-const LALAVERSE_CITIES = [
-  { value:'nova_prime',  label:'Nova Prime', desc:'Fashion & Aspiration' },
-  { value:'velour_city', label:'Velour City', desc:'Music & Culture' },
-  { value:'the_drift',   label:'The Drift', desc:'Underground & Anti-Algorithm' },
-  { value:'solenne',     label:'Solenne', desc:'Luxury & Soft Life' },
-  { value:'cascade_row', label:'Cascade Row', desc:'Commerce & Hustle' },
-];
-
-const LALA_RELATIONSHIPS = [
-  { value:'mutual_unaware', label:'Mutual Unaware' },
-  { value:'one_sided',      label:'Lala watches them' },
-  { value:'aware',          label:'Both aware' },
-  { value:'direct',         label:'Know each other' },
-  { value:'competitive',    label:'Active competition' },
-];
-
-const CAREER_PRESSURES = [
-  { value:'ahead',          label:'Ahead of Lala' },
-  { value:'level',          label:'Level with Lala' },
-  { value:'behind',         label:'Behind Lala' },
-  { value:'different_lane', label:'Different lane' },
-];
-
-const PROTAGONISTS = [
-  {
-    key:'justawoman', label:'Book 1 · JustAWoman', icon:'◈',
-    context: {
-      name:'JustAWoman',
-      description:'A Black woman, mother, wife, content creator in fashion/beauty/lifestyle.',
-      wound:'She does everything right and the right room has not found her yet.',
-      goal:'To be legendary.', audience:'Besties',
-      detail:'She posts for women. Men show up with their wallets and something in her responds.',
-    },
-  },
-  {
-    key:'lala', label:'Book 2 · Lala', icon:'✦',
-    context: {
-      name:'Lala',
-      description:'Born from JustAWoman\'s world but building her own. Young, sharp, digitally native.',
-      wound:'She inherited her mother\'s ambition but not her patience.',
-      goal:'To become something that can\'t be copied.',
-      audience:'The generation that learned to perform before they learned to feel',
-      detail:'The line between consuming and creating dissolved before she noticed.',
-    },
-  },
-];
+import ProfileCard from './feed/ProfileCard';
+import {
+  API, SCHED_API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
+  FEED_STATE_CONFIG, LALAVERSE_CITIES, LALA_RELATIONSHIPS, CAREER_PRESSURES,
+  PROTAGONISTS, lalaClass, fp, authHeaders,
+} from './feed/feedConstants';
 
 function FeedPagination({ page, totalPages, loading, setPage }) {
   if(loading||totalPages<=1)return null;
@@ -164,9 +52,7 @@ function ExportDropdown({ exporting, onExport }) {
   );
 }
 
-function lalaClass(score) { return score>=7?'high':score>=4?'mid':'low'; }
-function getToken() { return localStorage.getItem('authToken')||localStorage.getItem('token')||sessionStorage.getItem('token'); }
-function authHeaders() { const t=getToken(); return t?{Authorization:`Bearer ${t}`,'Content-Type':'application/json'}:{'Content-Type':'application/json'}; }
+// lalaClass, authHeaders imported from ./feed/feedConstants
 
 // ══════════════════════════════════════════════════════════════════════
 export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId }) {
@@ -462,7 +348,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   };
 
   // ── Feed Automation helpers ──────────────────────────────────────────
-  const SCHED_API = '/api/v1/feed-scheduler';
+  // SCHED_API imported from ./feed/feedConstants
   const schedSSERef = useRef(null);
 
   // Connect to scheduler SSE when automation tab is active
@@ -639,7 +525,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     }catch(err){setError(err.message);}
   };
 
-  const fp = p=>p?.full_profile||p||{};
+  // fp imported from ./feed/feedConstants
   const feedCap = feedLayer==='lalaverse'?200:443;
   // Use statusCounts.total (native layer only) for cap display; fallback to totalCount minus crossovers
   const nativeTotal = statusCounts.total != null ? statusCounts.total : Math.max(0, totalCount - crossoverCount);
@@ -1099,70 +985,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
             {/* ── GRID VIEW ── */}
             {!loading&&profiles.length>0&&feedView==='grid' && (
               <div className="spg-card-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:16}}>
-                {profiles.map(p=>{
-                  const d=fp(p);
-                  const isChecked=selectAllPages||selectedIds.has(p.id);
-                  const isActive=selected?.id===p.id;
-                  const sc=p.current_state&&FEED_STATE_CONFIG[p.current_state];
-                  const stc=STATUS_COLORS[p.status]||STATUS_COLORS.draft;
-                  const score=p.lala_relevance_score??d.lala_relevance_score??0;
-                  const lc=lalaClass(score);
-                  return (
-                    <div key={p.id} onClick={()=>bulkMode?toggleSelect(p.id):selectProfile(selected?.id===p.id?null:p)}
-                      style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${isActive?C.lavender:isChecked?C.lavender+'80':(feedLayer==='lalaverse'&&p.feed_layer==='real_world')?C.blue+'60':C.border}`,cursor:'pointer',overflow:'hidden',boxShadow:isActive?C.shadowMd:C.shadow,transition:'all 0.15s',position:'relative'}}>
-                      <div style={{height:3,background:(feedLayer==='lalaverse'&&p.feed_layer==='real_world')?`linear-gradient(90deg,${C.blue},${C.lavender})`:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
-                      {bulkMode && (
-                        <div style={{position:'absolute',top:10,right:10,width:20,height:20,borderRadius:5,border:`2px solid ${isChecked?C.lavender:C.border}`,background:isChecked?C.lavender:C.surface,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700}}>
-                          {isChecked?'✓':''}
-                        </div>
-                      )}
-                      <div style={{padding:'12px 14px'}}>
-                        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:4,gap:6}}>
-                          <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{p.handle}</span>
-                          <div style={{display:'flex',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
-                            {sc&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10,background:sc.bg,color:sc.color}}>{sc.label}</span>}
-                            <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10,background:stc.bg,color:stc.color}}>{STATUS_LABELS[p.status]||p.status}</span>
-                          </div>
-                        </div>
-                        {(p.display_name||d.display_name)&&<div style={{fontSize:12,color:C.inkMid,marginBottom:2}}>{p.display_name||d.display_name}</div>}
-                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
-                          <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
-                          {(p.archetype||d.archetype)&&<span style={{fontSize:10,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
-                          {p.registry_character_id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#eef0fb',color:'#6366f1'}} title="Linked to registry character">Registry</span>}
-                          {p.adult_content_present&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+</span>}
-                          {feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}} title="From JustAWoman's Feed — Lala follows this account">◈ Following</span>}
-                        </div>
-                        <div style={{fontSize:12,color:C.inkMid,lineHeight:1.5,marginBottom:8,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
-                          {p.content_persona||d.content_persona||p.vibe_sentence}
-                        </div>
-                        {(p.geographic_cluster||p.engagement_rate)&&(
-                          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
-                            {p.geographic_cluster&&<span style={{fontSize:10,color:C.inkLight}}>📍 {p.geographic_cluster}</span>}
-                            {p.engagement_rate&&<span style={{fontSize:10,color:C.inkLight}}>💬 {p.engagement_rate}</span>}
-                          </div>
-                        )}
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                          <span style={{fontSize:11,color:C.inkLight}}>{p.follower_count_approx||d.follower_count_approx||'—'}</span>
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            {p.followers?.length>0&&(
-                              <div style={{display:'flex',gap:3}}>
-                                {p.followers.map(f=>(
-                                  <span key={f.character_key} title={`${f.character_name} follows`} style={{fontSize:14,color:f.character_key==='justawoman'?C.blue:C.lavender}}>{f.character_key==='justawoman'?'◈':'✦'}</span>
-                                ))}
-                              </div>
-                            )}
-                            <div style={{display:'flex',alignItems:'center',gap:3}}>
-                              <div style={{width:40,height:3,borderRadius:2,background:C.border,overflow:'hidden'}}>
-                                <div style={{height:'100%',borderRadius:2,background:lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight,width:`${score*10}%`}}/>
-                              </div>
-                              <span style={{fontSize:10,fontWeight:700,color:lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight}}>✦{score}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {profiles.map(p=>(
+                  <ProfileCard key={p.id} profile={p} selected={selected} feedLayer={feedLayer}
+                    bulkMode={bulkMode} isChecked={selectAllPages||selectedIds.has(p.id)}
+                    onSelect={selectProfile} onToggle={toggleSelect}/>
+                ))}
               </div>
             )}
 
