@@ -581,4 +581,41 @@ router.get('/events/:id/spawned', authenticateToken, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// POST /events/:id/auto-spawn — Auto-generate world events from calendar
+// Uses AI matching: picks host from feed, venue from locations, builds guest list
+// ═══════════════════════════════════════════════════════════════════════
+
+router.post('/events/:id/auto-spawn', authenticateToken, async (req, res) => {
+  try {
+    const models = getModels(req);
+    const { StoryCalendarEvent } = models;
+    if (!StoryCalendarEvent) return res.status(500).json({ error: 'Calendar model not loaded' });
+
+    const calendarEvent = await StoryCalendarEvent.findByPk(req.params.id);
+    if (!calendarEvent) return res.status(404).json({ error: 'Calendar event not found' });
+
+    const { show_id, event_count = 1, max_guests = 8 } = req.body;
+    if (!show_id) return res.status(400).json({ error: 'show_id is required' });
+
+    const eventAutomation = require('../services/eventAutomationService');
+    const events = await eventAutomation.spawnEventsFromCalendar(
+      calendarEvent, show_id, models,
+      { eventCount: Math.min(3, parseInt(event_count) || 1), maxGuests: parseInt(max_guests) || 8 }
+    );
+
+    res.status(201).json({
+      success: true,
+      data: {
+        events_created: events.length,
+        events,
+        source: { calendar_event_id: calendarEvent.id, title: calendarEvent.title },
+      },
+    });
+  } catch (err) {
+    console.error('POST /events/:id/auto-spawn error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
