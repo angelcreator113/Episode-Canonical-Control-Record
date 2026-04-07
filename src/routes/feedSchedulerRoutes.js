@@ -315,11 +315,16 @@ function processAutoGenInBackground(jobId, db, layer, count) {
         const completedCount = created.length;
         const failedCount = errors.length;
 
-        await job.update({
-          completed: completedCount,
-          failed: failedCount,
-          total: progress.total || count,
-        });
+        // Wrap DB update in try/catch so a transient DB error doesn't crash the whole job
+        try {
+          await job.update({
+            completed: completedCount,
+            failed: failedCount,
+            total: progress.total || count,
+          });
+        } catch (dbErr) {
+          console.warn(`[FeedScheduler] Job #${jobId} progress DB update failed (non-fatal): ${dbErr.message}`);
+        }
 
         // Push SSE event (same format as bulk import)
         if (progress.status === 'created') {
@@ -371,7 +376,10 @@ function processAutoGenInBackground(jobId, db, layer, count) {
           completed_at: new Date(),
         }).catch(e => console.warn('[feed-scheduler] job status update error:', e?.message));
       }
-      notifyJobSSE(jobId, 'error', { job_id: jobId, error: err.message });
+      // Use 'job_error' instead of 'error' — SSE event named 'error' conflicts
+      // with EventSource's built-in error event, causing the browser to treat
+      // it as a connection failure instead of delivering the error data.
+      notifyJobSSE(jobId, 'job_error', { job_id: jobId, error: err.message });
     }
   });
 }

@@ -298,22 +298,39 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     const es=new EventSource(`${API}/bulk/jobs/${jobId}/stream`);
     sseRef.current=es;
     es.addEventListener('connected',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,id:jobId}));}catch{}});
-    es.addEventListener('status',e=>{try{const d=JSON.parse(e.data);const job=d.job||d;const s=job.status||'pending';setActiveJob(p=>({...p,id:jobId,status:s,completed:job.completed??p?.completed??0,failed:job.failed??p?.failed??0,total:job.total??p?.total??0}));if(['completed','failed','cancelled'].includes(s)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}catch{}});
+    es.addEventListener('status',e=>{try{const d=JSON.parse(e.data);const job=d.job||d;let s=job.status||'pending';
+      // Detect stuck jobs: if status is still processing but error_message is set and no progress made, treat as failed
+      if(s==='processing'&&job.error_message&&(job.completed||0)===0&&(job.failed||0)===0){s='failed';}
+      setActiveJob(p=>({...p,id:jobId,status:s,completed:job.completed??p?.completed??0,failed:job.failed??p?.failed??0,total:job.total??p?.total??0,error_message:job.error_message||p?.error_message}));if(['completed','failed','cancelled'].includes(s)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}catch{}});
     es.addEventListener('started',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'processing'}));}catch{}});
     es.addEventListener('profile_generating',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,current:d.current,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('profile_complete',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('profile_failed',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing',lastError:d.error||p?.lastError}));}catch{}});
     es.addEventListener('cancelled',()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
     es.addEventListener('done',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch{}localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
-    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}}catch{}},3000);});
+    // Listen for job_error (custom named event from backend — NOT the built-in EventSource error)
+    es.addEventListener('job_error',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,status:'failed',error_message:d.error||'Unknown error'}));localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}catch{}});
+    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){
+      // Detect stuck: processing with error_message but 0 progress
+      const isStuck=d.job.status==='processing'&&d.job.error_message&&(d.job.completed||0)===0&&(d.job.failed||0)===0;
+      if(isStuck){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');loadProfiles();}
+      else{setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}
+    }}catch{}},3000);});
     // Safety-net: if still pending after 4s, poll REST to catch missed SSE events
     const pendingFallback=setTimeout(async()=>{try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job&&d.job.status!=='pending'){setActiveJob(prev=>{if(prev?.status==='pending')return{...prev,...d.job};return prev;});if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},4000);
-    const origClose=es.close.bind(es);es.close=()=>{clearTimeout(pendingFallback);origClose();};
+    // Safety-net: if stuck at 0 progress for 2 minutes, poll REST to detect dead jobs
+    const stuckFallback=setTimeout(async()=>{try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){if(['completed','failed','cancelled'].includes(d.job.status)){setActiveJob(d.job);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}else if((d.job.completed||0)===0&&(d.job.failed||0)===0&&d.job.error_message){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},120000);
+    const origClose=es.close.bind(es);es.close=()=>{clearTimeout(pendingFallback);clearTimeout(stuckFallback);origClose();};
   },[loadProfiles]);
 
   useEffect(()=>{
     const saved=localStorage.getItem('spg_active_job');
-    if(saved){fetch(`${API}/bulk/jobs/${saved}`,{headers:authHeaders()}).then(r=>r.json()).then(d=>{if(d.job){setActiveJob(d.job);if(!['completed','failed','cancelled'].includes(d.job.status))connectJobSSE(saved);else localStorage.removeItem('spg_active_job');}}).catch(()=>{});}
+    if(saved){fetch(`${API}/bulk/jobs/${saved}`,{headers:authHeaders()}).then(r=>r.json()).then(d=>{if(d.job){
+      // Detect stuck jobs on reconnect: processing with error_message but 0 progress
+      const isStuck=d.job.status==='processing'&&d.job.error_message&&(d.job.completed||0)===0&&(d.job.failed||0)===0;
+      if(isStuck){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');}
+      else{setActiveJob(d.job);if(!['completed','failed','cancelled'].includes(d.job.status))connectJobSSE(saved);else localStorage.removeItem('spg_active_job');}
+    }}).catch(()=>{});}
     return()=>{if(sseRef.current){sseRef.current.close();sseRef.current=null;}if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}if(searchTimer.current)clearTimeout(searchTimer.current);if(toastTimer.current)clearTimeout(toastTimer.current);};
   },[connectJobSSE]);
 
