@@ -1671,6 +1671,112 @@ router.delete('/:id/episodes/:episodeId', validateUUIDParam('id'), optionalAuth,
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// SCENE SPEC routes — room layout, zones, objects, camera contracts
+// ══════════════════════════════════════════════════════════════════════
+
+const sceneSpecService = require('../services/sceneSpecService');
+
+// GET /api/v1/scene-sets/:id/spec - Get scene spec
+router.get('/:id/spec', validateUUIDParam('id'), async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    res.json({ success: true, data: set.scene_spec || null });
+  } catch (err) {
+    console.error('GET /:id/spec error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/v1/scene-sets/:id/spec/generate - Build spec from base image via AI
+router.post('/:id/spec/generate', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.base_still_url) return res.status(400).json({ success: false, error: 'No base image — upload a base still first' });
+
+    // Force regeneration by clearing cached spec
+    if (req.body.force) {
+      await SceneSet.update({ scene_spec: null }, { where: { id: set.id } });
+      set.scene_spec = null;
+    }
+
+    const spec = await sceneSpecService.buildSceneSpec(set, SceneSet);
+    if (!spec) {
+      return res.status(500).json({ success: false, error: 'Failed to generate scene spec — check ANTHROPIC_API_KEY' });
+    }
+
+    res.json({ success: true, data: spec });
+  } catch (err) {
+    console.error('POST /:id/spec/generate error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/scene-sets/:id/spec - Replace entire scene spec
+router.put('/:id/spec', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const spec = req.body.spec || req.body;
+    if (!spec || typeof spec !== 'object') {
+      return res.status(400).json({ success: false, error: 'spec must be a JSON object' });
+    }
+
+    spec._meta = spec._meta || {};
+    spec._meta.last_edited = new Date().toISOString();
+    spec._meta.source = 'user_edit';
+
+    await SceneSet.update({ scene_spec: spec }, { where: { id: set.id } });
+    res.json({ success: true, data: spec });
+  } catch (err) {
+    console.error('PUT /:id/spec error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PATCH /api/v1/scene-sets/:id/spec - Merge edits into existing spec
+router.patch('/:id/spec', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const edits = req.body;
+    if (!edits || typeof edits !== 'object') {
+      return res.status(400).json({ success: false, error: 'Request body must be a JSON object with spec fields to merge' });
+    }
+
+    const merged = sceneSpecService.mergeSpecEdits(set.scene_spec, edits);
+    await SceneSet.update({ scene_spec: merged }, { where: { id: set.id } });
+    res.json({ success: true, data: merged });
+  } catch (err) {
+    console.error('PATCH /:id/spec error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/v1/scene-sets/:id/spec/validate-angle - Validate a generated angle against spec
+router.post('/:id/spec/validate-angle', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.scene_spec) return res.status(400).json({ success: false, error: 'No scene spec — generate one first' });
+
+    const { image_url, angle_label } = req.body;
+    if (!image_url || !angle_label) {
+      return res.status(400).json({ success: false, error: 'image_url and angle_label are required' });
+    }
+
+    const result = await sceneSpecService.validateAngleAgainstSpec(image_url, set.scene_spec, angle_label);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('POST /:id/spec/validate-angle error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // SCENE STUDIO routes for scene sets
 // ══════════════════════════════════════════════════════════════════════
 

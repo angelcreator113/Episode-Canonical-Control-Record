@@ -120,6 +120,12 @@ module.exports = (sequelize) => {
       defaultValue: null,
       comment: 'Scene Studio canvas settings for this scene set',
     },
+    scene_spec: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'SceneSpec — room layout, zones, objects with continuity rules, camera contracts, and room states',
+    },
   }, {
     sequelize,
     modelName: 'SceneSet',
