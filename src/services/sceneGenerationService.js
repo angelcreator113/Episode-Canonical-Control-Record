@@ -869,7 +869,7 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  const IMAGE_ANALYSIS_VERSION = 6; // bump to invalidate cache when schema changes
+  const IMAGE_ANALYSIS_VERSION = 7; // bump to invalidate cache when schema changes
   // Check cache — skip if already analyzed for this base image with current version
   const vl = sceneSet.visual_language || {};
   if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
@@ -883,7 +883,7 @@ async function analyzeBaseImage(sceneSet, SceneSetModel) {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
+      max_tokens: 2500,
       messages: [{
         role: 'user',
         content: [
@@ -937,9 +937,18 @@ Return ONLY JSON.` },
 
     const text = response.content?.[0]?.text || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
+    if (!match) {
+      console.warn(`[SceneGen] Image analysis returned no JSON. Response: ${text.slice(0, 200)}`);
+      return null;
+    }
 
-    const analysis = JSON.parse(match[0]);
+    let analysis;
+    try {
+      analysis = JSON.parse(match[0]);
+    } catch (parseErr) {
+      console.warn(`[SceneGen] Image analysis JSON parse failed: ${parseErr.message}. Raw: ${match[0].slice(0, 200)}`);
+      return null;
+    }
     analysis.source_url = sceneSet.base_still_url;
     analysis.version = IMAGE_ANALYSIS_VERSION;
     analysis.analyzed_at = new Date().toISOString();
