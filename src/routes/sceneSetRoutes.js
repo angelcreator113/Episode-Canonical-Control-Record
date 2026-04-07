@@ -1718,6 +1718,12 @@ router.post('/:id/suggest-angles-from-image', validateUUIDParam('id'), optionalA
     if (!set.base_still_url) return res.status(400).json({ error: 'No base image' });
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
+    // Get existing angles so we don't suggest duplicates
+    const existingAngles = await SceneAngle.findAll({ where: { scene_set_id: set.id } });
+    const existingLabels = existingAngles.map(a => a.angle_label);
+    const existingCount = existingAngles.length;
+    const keepExisting = existingCount > 0;
+
     const client = getAnthropicClient();
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -1726,9 +1732,10 @@ router.post('/:id/suggest-angles-from-image', validateUUIDParam('id'), optionalA
         role: 'user',
         content: [
           { type: 'image', source: { type: 'url', url: set.base_still_url } },
-          { type: 'text', text: `Suggest 4-6 camera angles for this location. Return ONLY a JSON array:
+          { type: 'text', text: `Suggest ${keepExisting ? '3-4 additional' : '4-6'} camera angles for this location. Return ONLY a JSON array:
 [{"label":"UPPERCASE_LABEL","name":"Name","description":"What this shows","camera_direction":"Camera instruction — position, direction, how to extend the space beyond the reference image"}]
-Pick angles that make sense for THIS location. No generic angles that don't fit.` },
+Pick angles that make sense for THIS location. No generic angles that don't fit.
+${existingLabels.length > 0 ? `ALREADY HAVE these angles — do NOT suggest duplicates: ${existingLabels.join(', ')}` : ''}` },
         ],
       }],
     });
@@ -1738,16 +1745,22 @@ Pick angles that make sense for THIS location. No generic angles that don't fit.
     if (!match) return res.status(500).json({ error: 'Failed to parse angles' });
 
     const suggestedAngles = JSON.parse(match[0]);
-    await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
+
+    // Filter out any that duplicate existing labels
+    const newAngles = suggestedAngles.filter(a => {
+      const label = (a.label || '').toUpperCase().replace(/[^A-Z_]/g, '');
+      return !existingLabels.includes(label);
+    });
+
     const created = await SceneAngle.bulkCreate(
-      suggestedAngles.map((a, idx) => ({
+      newAngles.map((a, idx) => ({
         scene_set_id: set.id,
         angle_label: (a.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
-        angle_name: a.name || `Angle ${idx + 1}`,
+        angle_name: a.name || `Angle ${existingCount + idx + 1}`,
         angle_description: a.description || '',
         camera_direction: a.camera_direction || '',
         generation_status: 'pending',
-        sort_order: idx,
+        sort_order: existingCount + idx,
       })),
       { returning: true }
     );
