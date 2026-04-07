@@ -54,34 +54,15 @@ module.exports = (sequelize) => {
     },
 
     // ── Venue & Location ──
-    venue_location_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: { model: 'world_locations', key: 'id' },
-      onDelete: 'SET NULL',
-      comment: 'FK to WorldLocation — the venue where this event takes place',
-    },
-    venue_name: {
-      type: DataTypes.STRING(200),
-      allowNull: true,
-      comment: 'Display name: "Club Noir"',
-    },
-    venue_address: {
-      type: DataTypes.STRING(255),
-      allowNull: true,
-      comment: 'Full address for invitation: "742 Ocean Drive, South Beach, Miami"',
-    },
+    // NOTE: venue_location_id, venue_name, venue_address, event_date, event_time,
+    // guest_list, invitation_details, source_calendar_event_id, deleted_at
+    // are added by migration 20260709/20260711. They are NOT defined here to
+    // prevent crashes if migrations haven't run. Access them via raw queries
+    // or re-enable after confirming migrations are complete.
     location_hint: {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: 'Descriptive text: "Parisian rooftop garden, golden hour"',
-    },
-    source_calendar_event_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: { model: 'story_calendar_events', key: 'id' },
-      onDelete: 'SET NULL',
-      comment: 'The cultural calendar event that spawned this world event',
     },
     scene_set_id: {
       type: DataTypes.UUID,
@@ -91,26 +72,6 @@ module.exports = (sequelize) => {
       comment: 'Visual scene set for this event venue',
     },
 
-    // ── Date & Time ──
-    event_date: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-      comment: 'Story date: "Friday, March 15th" or "Tonight"',
-    },
-    event_time: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-      comment: 'Event time: "9:00 PM - 2:00 AM"',
-    },
-
-    // ── Guest List ──
-    guest_list: {
-      type: DataTypes.JSONB,
-      allowNull: true,
-      defaultValue: [],
-      comment: '[{ character_id, character_name, rsvp_status, plus_one }]',
-    },
-
     // ── Invitation ──
     invitation_asset_id: {
       type: DataTypes.UUID,
@@ -118,12 +79,6 @@ module.exports = (sequelize) => {
       references: { model: 'assets', key: 'id' },
       onDelete: 'SET NULL',
       comment: 'Generated invitation card image',
-    },
-    invitation_details: {
-      type: DataTypes.JSONB,
-      allowNull: true,
-      defaultValue: null,
-      comment: '{ tagline, rsvp_by, attire_note, special_instructions, hosted_by }',
     },
 
     // ── Scoring ──
@@ -259,21 +214,18 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'world_events',
     timestamps: true,
-    paranoid: true,
+    paranoid: false,
     underscored: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
-    deletedAt: 'deleted_at',
   });
 
   WorldEvent.associate = (models) => {
-    // Venue location
-    if (models.WorldLocation) {
-      WorldEvent.belongsTo(models.WorldLocation, {
-        foreignKey: 'venue_location_id',
-        as: 'venue',
-      });
-    }
+    // NOTE: venue_location_id + source_calendar_event_id associations
+    // disabled until migrations 20260709/20260711 are confirmed run.
+    // Re-enable after: belongsTo WorldLocation as 'venue',
+    // belongsTo StoryCalendarEvent as 'sourceCalendarEvent'
+
     // Visual scene set
     if (models.SceneSet) {
       WorldEvent.belongsTo(models.SceneSet, {
@@ -300,13 +252,6 @@ module.exports = (sequelize) => {
       WorldEvent.belongsTo(models.Episode, {
         foreignKey: 'used_in_episode_id',
         as: 'usedInEpisode',
-      });
-    }
-    // Source cultural calendar event
-    if (models.StoryCalendarEvent) {
-      WorldEvent.belongsTo(models.StoryCalendarEvent, {
-        foreignKey: 'source_calendar_event_id',
-        as: 'sourceCalendarEvent',
       });
     }
   };
