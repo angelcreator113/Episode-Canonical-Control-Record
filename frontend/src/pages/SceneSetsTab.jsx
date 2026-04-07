@@ -828,7 +828,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 { key: 'uploading', label: 'Uploading image', icon: Upload },
                 { key: 'building_spec', label: 'Analyzing room — objects, zones, layout', icon: FileText },
                 { key: 'creating_angles', label: 'Creating camera angles from spec', icon: Camera },
-              ].map((step, i) => {
+              ].map((step) => {
                 const stages = ['uploading', 'building_spec', 'creating_angles'];
                 const currentIdx = stages.indexOf(specStage);
                 const stepIdx = stages.indexOf(step.key);
@@ -847,51 +847,112 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
-          {/* ── Spec status + action buttons (only when NOT in pipeline) ── */}
-          {!specStage && hasBase && hasSpec && (
-            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
-              <ShieldCheck size={10} /> Spec: {set.scene_spec.objects?.length || 0} objects, {set.scene_spec.camera_contracts?.length || 0} contracts
+          {/* ── Status + Next Action Panel (when NOT in pipeline) ── */}
+          {!specStage && hasBase && (
+            <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
+              {/* Step 1: No spec yet */}
+              {!hasSpec && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 1: Build Scene Spec</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
+                    Analyze your image to catalog every object, define zones, and create camera contracts for consistent angle generation.
+                  </div>
+                  <button onClick={async () => {
+                    setBuildingSpec(true);
+                    try {
+                      const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                      const d = await r.json();
+                      if (d.success) showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} contracts`);
+                      else showToast(d.error || 'Failed', 'error');
+                    } catch (e) { showToast(e.message, 'error'); }
+                    setBuildingSpec(false);
+                  }} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                    {buildingSpec ? <><Loader size={12} className="spin" /> Analyzing room...</> : <><FileText size={12} /> Build Scene Spec</>}
+                  </button>
+                </>
+              )}
+
+              {/* Step 2: Spec exists, no angles */}
+              {hasSpec && totalAngles === 0 && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
+                    <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                      Spec: {set.scene_spec.objects?.length || 0} objects · {set.scene_spec.zones?.length || 0} zones · {set.scene_spec.camera_contracts?.length || 0} contracts
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 2: Create Camera Angles</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
+                    Create {set.scene_spec?.camera_contracts?.length || 0} camera angles from your spec — each with required objects and validation rules.
+                  </div>
+                  <button onClick={async () => {
+                    setSeeding(true);
+                    try {
+                      const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                      const d = await r.json();
+                      if (d.success) showToast(`${d.data?.angles_created || 0} angles created!`);
+                      else showToast(d.error || 'Failed', 'error');
+                    } catch (e) { showToast(e.message, 'error'); }
+                    setSeeding(false);
+                  }} disabled={seeding} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                    {seeding ? <><Loader size={12} className="spin" /> Creating...</> : <><Camera size={12} /> Create {set.scene_spec?.camera_contracts?.length || 0} Camera Angles</>}
+                  </button>
+                </>
+              )}
+
+              {/* Step 3: Spec + angles exist, ready to generate */}
+              {hasSpec && totalAngles > 0 && generableAngles.length > 0 && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
+                    <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                      Spec: {set.scene_spec.objects?.length || 0} objects · {set.scene_spec.camera_contracts?.length || 0} contracts
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 3: Generate {generableAngles.length} Angle Images</span>
+                  </div>
+                  <button onClick={async () => {
+                    if (failedAngles.length > 0) {
+                      for (const a of failedAngles) {
+                        try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generation_status: 'pending' }) }); } catch { /* continue */ }
+                      }
+                    }
+                    onGenerateAll(set, false);
+                  }} disabled={isGenerating} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                    {isGenerating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All Angles ({generableAngles.length})</>}
+                  </button>
+                </>
+              )}
+
+              {/* All done: spec + angles all generated */}
+              {hasSpec && totalAngles > 0 && generableAngles.length === 0 && readyAngles === totalAngles && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <CheckCircle2 size={14} style={{ color: '#16a34a' }} />
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
+                    Complete — {readyAngles} angles generated with spec enforcement
+                  </span>
+                </div>
+              )}
+
+              {/* No spec but has angles (legacy) */}
+              {!hasSpec && totalAngles > 0 && (
+                <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>
+                  {readyAngles}/{totalAngles} angles (no spec — build one for better consistency)
+                </div>
+              )}
             </div>
           )}
 
-          {/* Create Angles — when base + spec exist but no angles */}
-          {!specStage && hasBase && hasSpec && totalAngles === 0 && (
-            <div style={{ marginTop: 6 }}>
-              <button onClick={async () => {
-                setSeeding(true);
-                try {
-                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-                  const d = await r.json();
-                  if (d.success) showToast(`${d.data?.angles_created || 0} angles created from spec!`);
-                  else showToast(d.error || 'Failed', 'error');
-                } catch (e) { showToast(e.message, 'error'); }
-                setSeeding(false);
-              }} disabled={seeding} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                {seeding ? <><Loader size={12} className="spin" /> Creating angles...</> : <><Camera size={12} /> Create Angles from Spec ({set.scene_spec?.camera_contracts?.length || 0})</>}
-              </button>
-            </div>
-          )}
-
-          {/* Build Spec — when base exists but no spec (manual trigger) */}
-          {!specStage && hasBase && !hasSpec && (
-            <div style={{ marginTop: 6 }}>
-              <button onClick={async () => {
-                setBuildingSpec(true);
-                try {
-                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-                  const d = await r.json();
-                  if (d.success) showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} contracts`);
-                  else showToast(d.error || 'Failed', 'error');
-                } catch (e) { showToast(e.message, 'error'); }
-                setBuildingSpec(false);
-              }} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                {buildingSpec ? <><Loader size={12} className="spin" /> Building spec...</> : <><FileText size={12} /> Build Scene Spec</>}
-              </button>
-            </div>
-          )}
-
-          {/* Generate All — always visible when there are generable angles */}
-          {hasBase && generableAngles.length > 0 && (
+          {/* Generate All — for sets without spec but with pending angles */}
+          {!specStage && hasBase && !hasSpec && generableAngles.length > 0 && (
             <div style={{ marginTop: 6 }}>
               <button onClick={async () => {
                 // Reset failed angles to pending first so they get included
