@@ -33,7 +33,7 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 8000,
+    max_tokens: 16000,
     messages: [{
       role: 'user',
       content: [
@@ -59,14 +59,41 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
   try {
     spec = JSON.parse(match[0]);
   } catch (parseErr) {
-    // Try to fix common JSON issues (trailing commas, etc.)
-    let cleaned = match[0]
-      .replace(/,\s*}/g, '}')
-      .replace(/,\s*]/g, ']');
+    // Try to repair common Claude JSON issues
+    let repaired = match[0]
+      .replace(/,\s*}/g, '}')       // trailing commas before }
+      .replace(/,\s*]/g, ']')       // trailing commas before ]
+      .replace(/'/g, '"')           // single quotes to double
+      .replace(/\n/g, '\\n')        // unescaped newlines in strings
+      .replace(/\\n/g, ' ')         // then collapse them
+      .replace(/\t/g, ' ');         // tabs
+
     try {
-      spec = JSON.parse(cleaned);
+      spec = JSON.parse(repaired);
     } catch {
-      throw new Error(`JSON parse failed: ${parseErr.message}. First 300 chars of JSON: ${match[0].slice(0, 300)}`);
+      // If still failing, the JSON is likely truncated — try to close it
+      let truncated = match[0];
+      // Count open braces/brackets and close them
+      const opens = (truncated.match(/\{/g) || []).length;
+      const closes = (truncated.match(/\}/g) || []).length;
+      const openBrackets = (truncated.match(/\[/g) || []).length;
+      const closeBrackets = (truncated.match(/\]/g) || []).length;
+
+      // Remove any trailing partial key-value or string
+      truncated = truncated.replace(/,?\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+      // Close arrays then objects
+      for (let i = 0; i < openBrackets - closeBrackets; i++) truncated += ']';
+      for (let i = 0; i < opens - closes; i++) truncated += '}';
+
+      // Clean trailing commas again after truncation repair
+      truncated = truncated.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+
+      try {
+        spec = JSON.parse(truncated);
+        console.warn(`[SceneSpec] Repaired truncated JSON (closed ${opens - closes} braces, ${openBrackets - closeBrackets} brackets)`);
+      } catch (finalErr) {
+        throw new Error(`JSON parse failed after repair attempts: ${parseErr.message}. Response was ${text.length} chars, stop_reason: ${response.stop_reason}. First 300 chars: ${match[0].slice(0, 300)}`);
+      }
     }
   }
 
