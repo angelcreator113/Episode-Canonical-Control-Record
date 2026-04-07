@@ -269,7 +269,7 @@ router.post('/:id/rooms/:roomId/generate-empty', async (req, res) => {
     });
     if (!sceneSet) return res.status(404).json({ success: false, error: 'No scene set for this room' });
 
-    const templateId = sceneSet.canvas_settings?.room_layout_template || sceneSet.room_layout_template;
+    const templateId = sceneSet.canvas_settings?.room_layout_template;
     const template = propertyService.getTemplate(templateId);
     if (!template) {
       return res.status(400).json({ success: false, error: 'No room layout template selected' });
