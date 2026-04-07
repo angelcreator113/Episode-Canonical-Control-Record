@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3 } from 'lucide-react';
+import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3, FileText, ShieldCheck, ShieldAlert, MapPin, Box } from 'lucide-react';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -465,6 +465,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
   const [descRefining, setDescRefining] = useState(false);
+  const [buildingSpec, setBuildingSpec] = useState(false);
+  const hasSpec = !!(set.scene_spec?.objects?.length);
   const showToast = onToast || (() => {});
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
@@ -837,6 +839,38 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
+          {/* Build Scene Spec — shown when base exists but no spec yet */}
+          {hasBase && !hasSpec && !buildingSpec && (
+            <div style={{ marginTop: 6 }}>
+              <button onClick={async () => {
+                setBuildingSpec(true);
+                showToast('Building scene spec from image...');
+                try {
+                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                  const d = await r.json();
+                  if (d.success) {
+                    showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} camera contracts`);
+                  } else {
+                    showToast(d.error || 'Failed to build spec', 'error');
+                  }
+                } catch (e) { showToast(e.message, 'error'); }
+                setBuildingSpec(false);
+              }} className="scene-sets-btn-details" style={{ width: '100%' }}>
+                <FileText size={12} /> Build Scene Spec
+              </button>
+            </div>
+          )}
+          {buildingSpec && (
+            <div style={{ marginTop: 6, textAlign: 'center', padding: '8px 0', color: '#B8962E', fontSize: 11 }}>
+              <Loader size={12} className="spin" style={{ marginRight: 4 }} /> Analyzing room layout, objects, zones...
+            </div>
+          )}
+          {hasBase && hasSpec && (
+            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+              <ShieldCheck size={10} /> Spec: {set.scene_spec.objects?.length || 0} objects, {set.scene_spec.camera_contracts?.length || 0} contracts
+            </div>
+          )}
+
           {/* Generate All — always visible when there are generable angles */}
           {hasBase && generableAngles.length > 0 && (
             <div style={{ marginTop: 6 }}>
@@ -949,6 +983,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' ? 'active' : ''}`} onClick={() => { setActiveModalTab('angles'); setShowDetails(true); setShowAddAngle(false); }}>
                   <Camera size={12} /> Angles <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
                 </button>
+                {hasBase && (
+                  <button className={`scene-sets-modal-tab ${activeModalTab === 'spec' ? 'active' : ''}`} onClick={() => { setActiveModalTab('spec'); setShowDetails(true); setShowAddAngle(false); }}>
+                    <FileText size={12} /> Spec {hasSpec && <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>✓</span>}
+                  </button>
+                )}
                 {hasBase && (
                   <button className={`scene-sets-modal-tab ${showAddAngle ? 'active' : ''}`} onClick={() => { setActiveModalTab('add-angle'); setShowAddAngle(true); setShowDetails(false); }}>
                     <Plus size={12} /> Add Angle
@@ -1251,6 +1290,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               <div className="scene-sets-angle-row-name">{a.angle_name}</div>
                             </div>
                             <div className="scene-sets-angle-row-status">
+                              {isComplete && (() => {
+                                const sv = a.quality_review?.spec_validation;
+                                if (sv) {
+                                  const scoreColor = sv.score >= 80 ? '#16a34a' : sv.score >= 60 ? '#B8962E' : '#dc2626';
+                                  return (
+                                    <span title={sv.missing_required?.length ? `Missing: ${sv.missing_required.join(', ')}` : `Spec score: ${sv.score}`}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, color: scoreColor, fontFamily: "'DM Mono', monospace" }}>
+                                      {sv.pass ? <ShieldCheck size={11} /> : <ShieldAlert size={11} />}
+                                      {sv.score}
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                               {isComplete && (
                                 <button
                                   className="scene-sets-angle-row-btn scene-sets-promote-btn"
@@ -1296,6 +1349,166 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         <div style={{ fontSize: 13 }}>No angles yet. Upload a base image first.</div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* ═══ SPEC TAB ═══ */}
+                {activeModalTab === 'spec' && !showAddAngle && (
+                  <div className="scene-sets-modal-section">
+                    {!hasSpec && (
+                      <div style={{ textAlign: 'center', padding: 32 }}>
+                        <FileText size={32} style={{ color: '#94a3b8', marginBottom: 12 }} />
+                        <div style={{ fontSize: 14, color: '#64748b', marginBottom: 16 }}>
+                          No scene spec yet. Build one from your base image to enforce object consistency across angles.
+                        </div>
+                        <button
+                          className="scene-sets-btn-generate"
+                          disabled={buildingSpec}
+                          onClick={async () => {
+                            setBuildingSpec(true);
+                            showToast('Building scene spec...');
+                            try {
+                              const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                              const d = await r.json();
+                              if (d.success) showToast(`Spec built: ${d.data?.objects?.length || 0} objects`);
+                              else showToast(d.error || 'Failed', 'error');
+                            } catch (e) { showToast(e.message, 'error'); }
+                            setBuildingSpec(false);
+                          }}
+                        >
+                          {buildingSpec ? <><Loader size={12} className="spin" /> Building...</> : <><Sparkles size={12} /> Build Scene Spec from Image</>}
+                        </button>
+                      </div>
+                    )}
+
+                    {hasSpec && (() => {
+                      const spec = set.scene_spec;
+                      return (
+                        <>
+                          {/* Room summary */}
+                          {spec.room && (
+                            <div style={{ marginBottom: 16, padding: 12, background: '#FAF7F0', borderRadius: 8, border: '1px solid #eee' }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 4 }}>Room</div>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: '#2C2C2C' }}>{spec.room.label || set.name}</div>
+                              {spec.room.atmosphere && <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>{spec.room.atmosphere}</div>}
+                              <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: '#666', fontFamily: "'DM Mono', monospace" }}>
+                                {spec.room.approx_sq_ft && <span>{spec.room.approx_sq_ft} sq ft</span>}
+                                {spec.room.ceiling_height_ft && <span>{spec.room.ceiling_height_ft}ft ceilings</span>}
+                                {spec.room.shape && <span>{spec.room.shape}</span>}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Zones */}
+                          {spec.zones?.length > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <MapPin size={10} /> Zones ({spec.zones.length})
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {spec.zones.map(z => (
+                                  <div key={z.id} style={{ background: '#f0f0f0', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
+                                    <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{z.label}</div>
+                                    {z.purpose && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{z.purpose}</div>}
+                                    <div style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{z.object_ids?.length || 0} objects</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Objects */}
+                          {spec.objects?.length > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Box size={10} /> Objects ({spec.objects.length})
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                                {spec.objects.map(obj => (
+                                  <div key={obj.id} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: 6, padding: '8px 10px', fontSize: 11 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      <span style={{
+                                        width: 6, height: 6, borderRadius: '50%',
+                                        background: obj.category === 'signature' ? '#B8962E' : obj.category === 'anchor' ? '#2563eb' : obj.category === 'character' ? '#9333ea' : '#94a3b8',
+                                        flexShrink: 0,
+                                      }} />
+                                      <span style={{ fontWeight: 600, color: '#2C2C2C' }}>{obj.label}</span>
+                                    </div>
+                                    <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{obj.category} · {obj.wall || obj.zone}</div>
+                                    {obj.continuity?.locked_text && (
+                                      <div style={{ fontSize: 9, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginTop: 3 }}>
+                                        Text: "{obj.continuity.locked_text}"
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Camera Contracts */}
+                          {spec.camera_contracts?.length > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Camera size={10} /> Camera Contracts ({spec.camera_contracts.length})
+                              </div>
+                              {spec.camera_contracts.map((c, i) => (
+                                <div key={i} style={{ marginBottom: 8, padding: 10, background: '#fafafa', border: '1px solid #eee', borderRadius: 6 }}>
+                                  <div style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{c.angle}</div>
+                                  {c.description && <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{c.description}</div>}
+                                  <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                    {(c.required || []).map(id => (
+                                      <span key={id} style={{ background: '#dcfce7', color: '#166534', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>✓ {id}</span>
+                                    ))}
+                                    {(c.expected || []).map(id => (
+                                      <span key={id} style={{ background: '#fef3c7', color: '#92400e', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>~ {id}</span>
+                                    ))}
+                                    {(c.out_of_frame || []).map(id => (
+                                      <span key={id} style={{ background: '#fecaca', color: '#991b1b', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>✗ {id}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Room States */}
+                          {spec.states?.length > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>
+                                Room States ({spec.states.length})
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {spec.states.map(s => (
+                                  <div key={s.id} style={{ background: '#f8f4ff', border: '1px solid #e9e5f5', borderRadius: 6, padding: '6px 10px', fontSize: 11, minWidth: 120 }}>
+                                    <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{s.label}</div>
+                                    <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{s.time}</div>
+                                    {s.ambient && <div style={{ fontSize: 10, color: '#666', marginTop: 4, fontStyle: 'italic', lineHeight: 1.3 }}>{typeof s.ambient === 'string' ? s.ambient.slice(0, 100) : ''}...</div>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Actions */}
+                          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                            <button className="scene-sets-btn-details" disabled={buildingSpec} onClick={async () => {
+                              setBuildingSpec(true);
+                              showToast('Rebuilding scene spec...');
+                              try {
+                                const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                                const d = await r.json();
+                                if (d.success) showToast(`Spec rebuilt: ${d.data?.objects?.length || 0} objects`);
+                                else showToast(d.error || 'Failed', 'error');
+                              } catch (e) { showToast(e.message, 'error'); }
+                              setBuildingSpec(false);
+                            }}>
+                              {buildingSpec ? <Loader size={11} className="spin" /> : <RefreshCw size={11} />} Rebuild Spec
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 
