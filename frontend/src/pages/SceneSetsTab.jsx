@@ -691,8 +691,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     </button>
                   )}
                   {hasBase && totalAngles === 0 && (
-                    <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
-                      <Sparkles size={12} /> Seed Default Angles
+                    <button onClick={async () => {
+                      setShowMenu(false);
+                      setSeeding(true);
+                      try {
+                        const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
+                        const d = await r.json();
+                        if (d.success) showToast(`Created ${d.angles_created || 0} angles`);
+                        else showToast(d.error || 'Failed', 'error');
+                      } catch (e) { showToast(e.message, 'error'); }
+                      setSeeding(false);
+                    }} disabled={isGenerating || seeding}>
+                      <Sparkles size={12} /> Suggest Angles
                     </button>
                   )}
                   <button onClick={() => { setShowMenu(false); menuUploadRef.current?.click(); }} disabled={isGenerating}>
