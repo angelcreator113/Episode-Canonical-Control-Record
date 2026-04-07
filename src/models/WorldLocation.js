@@ -57,6 +57,24 @@ module.exports = (sequelize) => {
       allowNull: true,
       defaultValue: {},
     },
+    style_guide: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Property style guide — materials, palette, hardware, architecture cascading to child rooms',
+    },
+    floor_plan: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Floor plan — room connections, doorway links, spatial layout',
+    },
+    property_type: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Property classification: penthouse, mansion, apartment, townhouse, studio',
+    },
   }, {
     tableName: 'world_locations',
     timestamps: true,
