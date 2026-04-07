@@ -1014,6 +1014,150 @@ Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drif
 }
 
 
+// ─── MOOD VARIATION SYSTEM ───────────────────────────────────────────────────
+
+/**
+ * Mood presets — each defines color grading parameters for Sharp.
+ * Applied to the base image (or any angle) to create lighting/atmosphere variants
+ * WITHOUT regenerating the room. The furniture, layout, and decor stay pixel-perfect.
+ */
+const MOOD_PRESETS = {
+  morning: {
+    label: 'Morning',
+    description: 'Soft golden morning light streaming through windows',
+    tint: { r: 255, g: 230, b: 200 },  // warm golden
+    brightness: 1.15,
+    saturation: 1.05,
+    contrast: 0.95,
+  },
+  golden_hour: {
+    label: 'Golden Hour',
+    description: 'Rich amber golden-hour warmth with long shadows',
+    tint: { r: 255, g: 200, b: 140 },  // deep amber
+    brightness: 1.05,
+    saturation: 1.2,
+    contrast: 1.1,
+  },
+  night: {
+    label: 'Night',
+    description: 'Moody nighttime with neon and fairy light glow',
+    tint: { r: 180, g: 170, b: 255 },  // cool purple/blue
+    brightness: 0.7,
+    saturation: 1.15,
+    contrast: 1.2,
+  },
+  glam: {
+    label: 'Glam Mode',
+    description: 'Vanity lights bright, warm beauty lighting',
+    tint: { r: 255, g: 240, b: 230 },  // soft warm white
+    brightness: 1.2,
+    saturation: 0.95,
+    contrast: 0.9,
+  },
+  filming: {
+    label: 'Filming Mode',
+    description: 'Ring light active, even studio-like illumination',
+    tint: { r: 245, g: 245, b: 255 },  // neutral cool white
+    brightness: 1.25,
+    saturation: 0.9,
+    contrast: 1.05,
+  },
+  cozy: {
+    label: 'Cozy Evening',
+    description: 'Warm table lamps and fairy lights, intimate glow',
+    tint: { r: 255, g: 210, b: 170 },  // warm amber
+    brightness: 0.85,
+    saturation: 1.1,
+    contrast: 1.05,
+  },
+  dramatic: {
+    label: 'Dramatic',
+    description: 'High contrast with deep shadows and bright highlights',
+    tint: { r: 220, g: 200, b: 255 },  // slight purple
+    brightness: 0.9,
+    saturation: 1.3,
+    contrast: 1.4,
+  },
+};
+
+/**
+ * Apply a mood preset to an image using Sharp color grading.
+ * Returns the S3 URL of the mood-variant image.
+ * The original image is NOT modified — a new file is created.
+ */
+async function applyMoodVariant(sourceImageUrl, mood, setId, angleId = 'base') {
+  const preset = MOOD_PRESETS[mood];
+  if (!preset || !sourceImageUrl) return null;
+
+  try {
+    console.log(`[SceneGen] Applying mood "${mood}" to ${angleId}`);
+    const imageRes = await axios.get(sourceImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+
+    // Apply color grading with Sharp
+    let pipeline = sharp(imageRes.data);
+
+    // Brightness and contrast
+    pipeline = pipeline.modulate({
+      brightness: preset.brightness,
+      saturation: preset.saturation,
+    });
+
+    // Color tint via tint overlay
+    const metadata = await sharp(imageRes.data).metadata();
+    const w = metadata.width || 1920;
+    const h = metadata.height || 1080;
+
+    // Create a tint overlay
+    const tintOverlay = await sharp({
+      create: {
+        width: w,
+        height: h,
+        channels: 4,
+        background: { r: preset.tint.r, g: preset.tint.g, b: preset.tint.b, alpha: 0.15 },
+      },
+    }).png().toBuffer();
+
+    // Composite tint over the graded image
+    const gradedBuffer = await pipeline
+      .composite([{ input: tintOverlay, blend: 'over' }])
+      .png()
+      .toBuffer();
+
+    // Upload to S3
+    const s3Key = `scene-sets/${setId}/moods/${angleId}-${mood}-${Date.now()}.png`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: gradedBuffer,
+      ContentType: 'image/png',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    console.log(`[SceneGen] Mood variant "${mood}" created: ${url}`);
+    return url;
+  } catch (err) {
+    console.warn(`[SceneGen] Mood variant failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Generate all mood variants for a given image (base or angle).
+ * Returns an object mapping mood names to S3 URLs.
+ */
+async function generateMoodVariants(sourceImageUrl, setId, angleId = 'base', moods = null) {
+  const moodList = moods || Object.keys(MOOD_PRESETS);
+  const results = {};
+
+  for (const mood of moodList) {
+    const url = await applyMoodVariant(sourceImageUrl, mood, setId, angleId);
+    if (url) results[mood] = url;
+  }
+
+  return results;
+}
+
 // ─── REFERENCE REGION CROPPING ───────────────────────────────────────────────
 
 /**
@@ -1438,6 +1582,9 @@ module.exports = {
   checkAngleConsistency,
   cropReferenceRegion,
   generateDepthMap,
+  applyMoodVariant,
+  generateMoodVariants,
+  MOOD_PRESETS,
   generateAngle,
   generateAngleVideo,
   regenerateAngleRefined,
