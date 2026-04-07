@@ -64,15 +64,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
           required: false,
         });
       }
-      // Include venue location
-      if (models.WorldLocation) {
-        include.push({
-          model: models.WorldLocation,
-          as: 'venue',
-          attributes: ['id', 'name', 'street_address', 'city', 'district', 'venue_type', 'venue_details', 'location_type'],
-          required: false,
-        });
-      }
+      // NOTE: venue include disabled until migration 20260709 adds venue_location_id
       // Include scene set basic info
       if (models.SceneSet) {
         include.push({
@@ -82,6 +74,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
           required: false,
         });
       }
+      // NOTE: sourceCalendarEvent include disabled until migration 20260711
 
       const events = await models.WorldEvent.findAll({
         where,
@@ -317,7 +310,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'season_id', 'arc_id',
       'is_paid', 'payment_amount', 'requirements', 'career_tier',
       'career_milestone', 'fail_consequence', 'success_unlock',
-      'scene_set_id',
+      'scene_set_id', 'source_calendar_event_id',
+      'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
+      'guest_list', 'invitation_details',
       'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
     ];
     const requiredStringFields = new Set(['name', 'event_type', 'status']);

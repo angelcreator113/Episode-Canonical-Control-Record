@@ -134,18 +134,9 @@ module.exports = (sequelize) => {
         as: 'sceneSets',
       });
     }
-    if (models.WorldEvent) {
-      WorldLocation.hasMany(models.WorldEvent, {
-        foreignKey: 'venue_location_id',
-        as: 'events',
-      });
-    }
-    if (models.StoryCalendarEvent) {
-      WorldLocation.hasMany(models.StoryCalendarEvent, {
-        foreignKey: 'location_id',
-        as: 'calendarEvents',
-      });
-    }
+    // NOTE: WorldEvent + StoryCalendarEvent associations disabled until
+    // migrations 20260709/20260710 add venue_location_id and location_id.
+    // Re-enable: hasMany WorldEvent as 'events', hasMany StoryCalendarEvent as 'calendarEvents'
   };
 
   return WorldLocation;

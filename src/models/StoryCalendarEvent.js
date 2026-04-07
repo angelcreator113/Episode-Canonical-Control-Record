@@ -19,12 +19,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'source_line_id',
         as: 'sourceLine',
       });
-      if (models.WorldLocation) {
-        StoryCalendarEvent.belongsTo(models.WorldLocation, {
-          foreignKey: 'location_id',
-          as: 'location',
-        });
-      }
+      // NOTE: location_id + source_calendar_event_id associations disabled
+      // until migrations 20260710/20260711 are confirmed run.
+      // Re-enable: belongsTo WorldLocation as 'location',
+      // hasMany WorldEvent as 'spawnedEvents'
     }
   }
   StoryCalendarEvent.init({
@@ -57,13 +55,8 @@ module.exports = (sequelize, DataTypes) => {
       type:      DataTypes.STRING(255),
       allowNull: true,
     },
-    location_id: {
-      type:      DataTypes.UUID,
-      allowNull: true,
-      references: { model: 'world_locations', key: 'id' },
-      onDelete: 'SET NULL',
-      comment: 'FK to WorldLocation — links calendar event to a specific location',
-    },
+    // NOTE: location_id added by migration 20260710 — not defined here
+    // to prevent crashes if migration hasn't run
     location_name: {
       type:      DataTypes.STRING(255),
       allowNull: true,

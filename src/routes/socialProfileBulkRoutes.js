@@ -90,7 +90,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext);
   const aiRes = await Promise.race([
     client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3000,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -228,7 +228,7 @@ router.post('/parse-paste', optionalAuth, async (req, res) => {
     if (creators.length === 0 && lines.length > 0) {
       try {
         const aiExtraction = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 4000,
           messages: [{
             role: 'user',
@@ -428,7 +428,7 @@ router.post('/parse-file', optionalAuth, upload.single('file'), async (req, res)
     for (let i = 0; i < chunks.length; i++) {
       try {
         const extraction = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 4000,
           messages: [{
             role: 'user',

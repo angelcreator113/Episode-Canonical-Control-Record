@@ -3139,50 +3139,58 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
       return res.json({ locations: rows });
     }
 
-    const include = [];
-    // Include child locations
-    include.push({
-      model: WorldLocation,
-      as: 'childLocations',
-      attributes: ['id', 'name', 'location_type', 'venue_type'],
-      required: false,
-    });
-    // Include linked scene sets
-    if (models.SceneSet) {
+    // Try rich query with includes, fall back to simple query if columns missing
+    try {
+      const include = [];
       include.push({
-        model: models.SceneSet,
-        as: 'sceneSets',
-        attributes: ['id', 'name', 'scene_type', 'base_still_url', 'generation_status'],
+        model: WorldLocation,
+        as: 'childLocations',
+        attributes: ['id', 'name', 'location_type'],
         required: false,
       });
-    }
-    // Include world events at this venue
-    if (models.WorldEvent) {
-      include.push({
-        model: models.WorldEvent,
-        as: 'events',
-        attributes: ['id', 'name', 'event_type', 'event_date', 'status'],
-        required: false,
-        limit: 5,
-      });
-    }
-    // Include calendar events
-    if (models.StoryCalendarEvent) {
-      include.push({
-        model: models.StoryCalendarEvent,
-        as: 'calendarEvents',
-        attributes: ['id', 'title', 'event_type', 'start_datetime', 'cultural_category'],
-        required: false,
-        limit: 5,
-      });
-    }
+      if (models.SceneSet) {
+        include.push({
+          model: models.SceneSet,
+          as: 'sceneSets',
+          attributes: ['id', 'name', 'scene_type', 'base_still_url', 'generation_status'],
+          required: false,
+        });
+      }
+      if (models.WorldEvent) {
+        try {
+          include.push({
+            model: models.WorldEvent,
+            as: 'events',
+            attributes: ['id', 'name', 'event_type', 'status'],
+            required: false,
+            limit: 5,
+          });
+        } catch { /* association may not exist */ }
+      }
+      if (models.StoryCalendarEvent) {
+        try {
+          include.push({
+            model: models.StoryCalendarEvent,
+            as: 'calendarEvents',
+            attributes: ['id', 'title', 'event_type', 'start_datetime'],
+            required: false,
+            limit: 5,
+          });
+        } catch { /* association may not exist */ }
+      }
 
-    const rows = await WorldLocation.findAll({
-      include,
-      order: [['name', 'ASC']],
-      limit: 200,
-    });
-    res.json({ locations: rows });
+      const rows = await WorldLocation.findAll({
+        include,
+        order: [['name', 'ASC']],
+        limit: 200,
+      });
+      return res.json({ locations: rows });
+    } catch (richErr) {
+      // Fallback: simple query without includes
+      console.warn('WorldLocations rich query failed, falling back:', richErr.message);
+      const rows = await WorldLocation.findAll({ order: [['name', 'ASC']], limit: 200 });
+      return res.json({ locations: rows });
+    }
   } catch (err) { res.json({ locations: [] }); }
 });
 
@@ -3290,8 +3298,11 @@ router.post('/world/locations/seed-infrastructure', optionalAuth, async (req, re
       }
       created++;
     }
-    res.json({ seeded: created, total: INFRA.length, message: `Seeded ${created} new locations` });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json({ success: true, created, total: INFRA.length, message: `Seeded ${created} new locations` });
+  } catch (err) {
+    console.error('Seed infrastructure error:', err.message);
+    res.status(500).json({ error: err.message, hint: 'Check if migrations have been run — new columns may be missing' });
+  }
 });
 
 /* ═══════════════════════════════════════════════════════════

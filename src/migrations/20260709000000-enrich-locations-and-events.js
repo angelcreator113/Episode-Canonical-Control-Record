@@ -11,67 +11,40 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Helper: add column only if it doesn't exist
+    const addIfMissing = async (table, col, def) => {
+      const desc = await queryInterface.describeTable(table).catch(() => ({}));
+      if (!desc[col]) await queryInterface.addColumn(table, col, def);
+    };
+
     // ── 1. Enrich world_locations ──────────────────────────────────────
 
-    // Address fields — so any location can be placed on a map
-    await queryInterface.addColumn('world_locations', 'street_address', {
-      type: Sequelize.STRING(255),
-      allowNull: true,
-      comment: 'Street address: "742 Ocean Drive"',
+    await addIfMissing('world_locations', 'street_address', {
+      type: Sequelize.STRING(255), allowNull: true, comment: 'Street address: "742 Ocean Drive"',
     });
-
-    await queryInterface.addColumn('world_locations', 'city', {
-      type: Sequelize.STRING(100),
-      allowNull: true,
-      comment: 'City name: "Miami"',
+    await addIfMissing('world_locations', 'city', {
+      type: Sequelize.STRING(100), allowNull: true, comment: 'City name: "Miami"',
     });
-
-    await queryInterface.addColumn('world_locations', 'district', {
-      type: Sequelize.STRING(100),
-      allowNull: true,
-      comment: 'Neighborhood/district: "South Beach"',
+    await addIfMissing('world_locations', 'district', {
+      type: Sequelize.STRING(100), allowNull: true, comment: 'Neighborhood/district: "South Beach"',
     });
-
-    await queryInterface.addColumn('world_locations', 'coordinates', {
-      type: Sequelize.JSONB,
-      allowNull: true,
-      defaultValue: null,
-      comment: '{ lat, lng } for map placement',
+    await addIfMissing('world_locations', 'coordinates', {
+      type: Sequelize.JSONB, allowNull: true, defaultValue: null, comment: '{ lat, lng } for map placement',
     });
-
-    // Venue-specific fields
-    await queryInterface.addColumn('world_locations', 'venue_type', {
-      type: Sequelize.STRING(50),
-      allowNull: true,
-      comment: 'Business type: restaurant, club, cafe, salon, gallery, shopping, gym, studio',
+    await addIfMissing('world_locations', 'venue_type', {
+      type: Sequelize.STRING(50), allowNull: true, comment: 'Business type: restaurant, club, cafe, salon, gallery, shopping, gym, studio',
     });
-
-    await queryInterface.addColumn('world_locations', 'venue_details', {
-      type: Sequelize.JSONB,
-      allowNull: true,
-      defaultValue: null,
-      comment: '{ hours, price_level, capacity, dress_code, vibe_tags, menu_style, website }',
+    await addIfMissing('world_locations', 'venue_details', {
+      type: Sequelize.JSONB, allowNull: true, defaultValue: null, comment: '{ hours, price_level, capacity, dress_code, vibe_tags }',
     });
-
-    // Property fields (for HOME_BASE hierarchy)
-    await queryInterface.addColumn('world_locations', 'style_guide', {
-      type: Sequelize.JSONB,
-      allowNull: true,
-      defaultValue: null,
-      comment: 'Property style guide — materials, palette, architecture cascading to child rooms',
+    await addIfMissing('world_locations', 'style_guide', {
+      type: Sequelize.JSONB, allowNull: true, defaultValue: null, comment: 'Property style guide — materials, palette, architecture',
     });
-
-    await queryInterface.addColumn('world_locations', 'floor_plan', {
-      type: Sequelize.JSONB,
-      allowNull: true,
-      defaultValue: null,
-      comment: 'Floor plan — room connections, spatial layout',
+    await addIfMissing('world_locations', 'floor_plan', {
+      type: Sequelize.JSONB, allowNull: true, defaultValue: null, comment: 'Floor plan — room connections, spatial layout',
     });
-
-    await queryInterface.addColumn('world_locations', 'property_type', {
-      type: Sequelize.STRING(50),
-      allowNull: true,
-      comment: 'Property classification: penthouse, mansion, apartment, townhouse, studio',
+    await addIfMissing('world_locations', 'property_type', {
+      type: Sequelize.STRING(50), allowNull: true, comment: 'Property classification: penthouse, mansion, apartment, townhouse, studio',
     });
 
     // ── 2. Add venue + guest fields to world_events ────────────────────
