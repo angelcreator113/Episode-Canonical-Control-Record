@@ -514,141 +514,16 @@ router.post('/:id/upload-base', validateUUIDParam('id'), optionalAuth, uploadSce
       generation_status: 'complete',
     });
 
-    // Auto-analyze uploaded image with Claude Vision to fill description, prompt, and suggest angles
-    let visionAnalysis = null;
-    if (process.env.ANTHROPIC_API_KEY) {
-      try {
-        const client = getAnthropicClient();
-        const visionResponse = await client.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1500,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'url', url: primaryUrl } },
-              { type: 'text', text: `Analyze this location image for a luxury fashion show called "Styling Adventures with Lala".
-
-Return a JSON object with these fields:
-{
-  "description": "2-3 sentence description of the space — layout, key furniture/features, lighting, mood, color palette, materials.",
-  "prompt": "A detailed scene generation prompt to recreate this space. Include: architectural style, lighting, colors, key objects, materials, atmosphere. Start with 'Empty room.' Under 400 characters.",
-  "scene_type": "HOME_BASE | CLOSET | EVENT_LOCATION | TRANSITION | EXTERIOR",
-  "mood_tags": ["3-5", "mood", "words"],
-  "suggested_angles": [
-    {
-      "label": "SHORT_UPPERCASE_LABEL",
-      "name": "Human-readable name",
-      "description": "What this angle shows — be specific to THIS location",
-      "camera_direction": "Detailed camera instruction for generating this view. Include position, direction, what should be visible, and how to extend the space beyond what the reference shows."
-    }
-  ]
-}
-
-IMPORTANT for suggested_angles:
-- Suggest 4-6 angles that make sense for THIS SPECIFIC location
-- Do NOT include generic angles that don't fit (e.g. no CLOSET for a restaurant, no VANITY for an outdoor space)
-- Each angle should show a DIFFERENT part or perspective of the space
-- camera_direction should instruct the AI to extend/imagine the room beyond the reference image
-- Use labels like: WIDE, ENTRANCE, BAR, SEATING, STAGE, BACKSTAGE, TABLE, SKYLINE, GARDEN, BALCONY, HALLWAY, LOBBY, POOL, KITCHEN, BED, CLOSET, VANITY, WINDOW, DOORWAY, OVERHEAD, DETAIL, etc.
-- First angle should always be the widest/most establishing view
-
-Return ONLY the JSON object, no other text.` },
-            ],
-          }],
-        });
-
-        const text = visionResponse.content?.[0]?.text || '';
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          visionAnalysis = JSON.parse(jsonMatch[0]);
-          const updates = {};
-          if (visionAnalysis.description && !set.canonical_description) {
-            updates.canonical_description = visionAnalysis.description;
-          }
-          if (visionAnalysis.prompt && !set.base_runway_prompt) {
-            updates.base_runway_prompt = visionAnalysis.prompt;
-          }
-          if (visionAnalysis.scene_type && !set.scene_type) {
-            updates.scene_type = visionAnalysis.scene_type;
-          }
-          if (visionAnalysis.mood_tags && (!set.mood_tags || set.mood_tags.length === 0)) {
-            updates.mood_tags = visionAnalysis.mood_tags;
-          }
-          if (Object.keys(updates).length > 0) {
-            await set.update(updates);
-          }
-        }
-      } catch (visionErr) {
-        console.warn('[SceneSets] Vision analysis failed (non-blocking):', visionErr.message);
-      }
-    }
-
-    // Create location-appropriate angles based on vision analysis (or handle multi-upload)
-    let createdAngles = [];
-    if (uploadedUrls.length > 1) {
-      // Multi-image upload: create angle entries from each uploaded image
-      const existingCount = await SceneAngle.count({ where: { scene_set_id: set.id } });
-      createdAngles = await SceneAngle.bulkCreate(
-        uploadedUrls.map((img, idx) => {
-          const baseName = String(img.originalName || `Upload ${idx + 1}`)
-            .replace(/\.[^.]+$/, '')
-            .replace(/[_-]+/g, ' ')
-            .trim()
-            .slice(0, 100);
-          return {
-            scene_set_id: set.id,
-            angle_label: 'OTHER',
-            angle_name: baseName || `Uploaded Angle ${idx + 1}`,
-            angle_description: 'Uploaded reference angle',
-            camera_direction: 'Uploaded still reference for this room angle.',
-            generation_status: 'complete',
-            still_image_url: img.url,
-            sort_order: existingCount + idx,
-          };
-        }),
-        { returning: true }
-      );
-
-      if (!set.cover_angle_id && createdAngles[0]?.id) {
-        await set.update({ cover_angle_id: createdAngles[0].id });
-      }
-    } else if (visionAnalysis?.suggested_angles?.length > 0) {
-      // Single image + vision analysis: create location-specific angles
-      // Clear old generic angles first
-      await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
-
-      createdAngles = await SceneAngle.bulkCreate(
-        visionAnalysis.suggested_angles.map((angle, idx) => ({
-          scene_set_id: set.id,
-          angle_label: (angle.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
-          angle_name: angle.name || `Angle ${idx + 1}`,
-          angle_description: angle.description || '',
-          camera_direction: angle.camera_direction || '',
-          generation_status: 'pending',
-          sort_order: idx,
-        })),
-        { returning: true }
-      );
-    } else {
-      // Fallback: reset existing angles to regenerate from new base
-      await SceneAngle.update(
-        { still_image_url: null, video_clip_url: null, generation_status: 'pending' },
-        { where: { scene_set_id: set.id } }
-      );
-    }
-
     res.json({
       success: true,
       data: {
         stillUrl: primaryUrl,
         seed: set.base_runway_seed,
         uploadedCount: uploadedUrls.length,
-        angleCountCreated: createdAngles.length,
-        visionAnalysis: visionAnalysis || null,
       },
     });
 
-    // Auto-analyze and lock style in background (non-blocking, after response sent)
+    // Background: analyze image and lock style (non-blocking, after response sent)
     if (process.env.ANTHROPIC_API_KEY) {
       try {
         const sceneGenService = require('../services/sceneGenerationService');

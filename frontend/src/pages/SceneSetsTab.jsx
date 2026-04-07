@@ -1293,7 +1293,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {showPromptEditor && (
                   <div className="scene-sets-modal-section">
                     <div className="scene-sets-modal-field">
-                      <label>Your Description</label>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label>Your Description</label>
+                        <button className="scene-sets-desc-edit-btn" onClick={() => { setShowPromptEditor(false); setShowDetails(true); setActiveModalTab('details'); setEditingDesc(true); setDescDraft(localDesc); }}>
+                          <Pencil size={10} /> Edit in Overview
+                        </button>
+                      </div>
                       <p className="scene-sets-overview-desc">{localDesc || 'No description set. Go to Overview tab to add one.'}</p>
                     </div>
                     {set.base_runway_prompt && (
@@ -1590,7 +1595,7 @@ export default function SceneSetsTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
+  const [newSet, setNewSet] = useState({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [], time_of_day: '', season: '', room_size: '', ceiling_height: '', room_shape: '' });
   const [descBuilderLoading, setDescBuilderLoading] = useState(false);
   const [showDescBuilder, setShowDescBuilder] = useState(false);
   const [builderAnswers, setBuilderAnswers] = useState({});
@@ -1977,6 +1982,8 @@ export default function SceneSetsTab() {
       };
       if (newSet.show_id) createPayload.show_id = newSet.show_id;
       if (newSet.episode_ids?.length > 0) createPayload.episode_ids = newSet.episode_ids;
+      if (newSet.time_of_day) createPayload.time_of_day = newSet.time_of_day;
+      if (newSet.season) createPayload.season = newSet.season;
       const res = await fetch(`${API_BASE}/scene-sets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1984,8 +1991,24 @@ export default function SceneSetsTab() {
       });
       if (!res.ok) throw new Error('Failed to create');
       const json = await res.json();
+
+      // Save room properties if set (stored in visual_language JSONB)
+      const rp = {};
+      if (newSet.room_size) rp.room_size = newSet.room_size;
+      if (newSet.ceiling_height) rp.ceiling_height = newSet.ceiling_height;
+      if (newSet.room_shape) rp.room_shape = newSet.room_shape;
+      if (Object.keys(rp).length > 0 && json.data?.id) {
+        try {
+          await fetch(`${API_BASE}/scene-sets/${json.data.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ room_properties: rp }),
+          });
+        } catch { /* non-critical */ }
+      }
+
       const setName = newSet.name.trim();
-      setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [] });
+      setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [], time_of_day: '', season: '', room_size: '', ceiling_height: '', room_shape: '' });
       setCreateShowId('');
       setShowCreateForm(false);
       await fetchSets();
@@ -2491,6 +2514,61 @@ export default function SceneSetsTab() {
               </div>
             </div>
           )}
+
+          {/* Environment & Room Properties */}
+          <div className="scene-sets-create-row" style={{ marginTop: 8 }}>
+            <div className="scene-sets-create-field">
+              <label>Time of Day <span className="scene-sets-optional">(optional)</span></label>
+              <select value={newSet.time_of_day} onChange={e => setNewSet(s => ({ ...s, time_of_day: e.target.value }))}>
+                <option value="">Any</option>
+                <option value="morning">Morning</option>
+                <option value="afternoon">Afternoon</option>
+                <option value="golden_hour">Golden Hour</option>
+                <option value="evening">Evening</option>
+                <option value="night">Night</option>
+              </select>
+            </div>
+            <div className="scene-sets-create-field">
+              <label>Season <span className="scene-sets-optional">(optional)</span></label>
+              <select value={newSet.season} onChange={e => setNewSet(s => ({ ...s, season: e.target.value }))}>
+                <option value="">Any</option>
+                <option value="spring">Spring</option>
+                <option value="summer">Summer</option>
+                <option value="fall">Fall</option>
+                <option value="winter">Winter</option>
+              </select>
+            </div>
+          </div>
+          <div className="scene-sets-create-row">
+            <div className="scene-sets-create-field">
+              <label>Room Size <span className="scene-sets-optional">(optional)</span></label>
+              <select value={newSet.room_size} onChange={e => setNewSet(s => ({ ...s, room_size: e.target.value }))}>
+                <option value="">Auto</option>
+                <option value="compact">Compact</option>
+                <option value="medium">Medium</option>
+                <option value="spacious">Spacious</option>
+                <option value="grand">Grand</option>
+              </select>
+            </div>
+            <div className="scene-sets-create-field">
+              <label>Ceiling <span className="scene-sets-optional">(optional)</span></label>
+              <select value={newSet.ceiling_height} onChange={e => setNewSet(s => ({ ...s, ceiling_height: e.target.value }))}>
+                <option value="">Standard</option>
+                <option value="tall">Tall</option>
+                <option value="vaulted">Vaulted</option>
+                <option value="double_height">Double Height</option>
+              </select>
+            </div>
+            <div className="scene-sets-create-field">
+              <label>Shape <span className="scene-sets-optional">(optional)</span></label>
+              <select value={newSet.room_shape} onChange={e => setNewSet(s => ({ ...s, room_shape: e.target.value }))}>
+                <option value="">Rectangular</option>
+                <option value="square">Square</option>
+                <option value="l_shaped">L-Shaped</option>
+                <option value="open_plan">Open Plan</option>
+              </select>
+            </div>
+          </div>
 
           <div className="scene-sets-create-actions">
             <button

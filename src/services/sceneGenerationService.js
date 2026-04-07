@@ -110,81 +110,79 @@ const ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human.
 function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null, eventContext = null) {
   const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
-  // Description gets priority — it contains the user's specific colors, furniture, layout
-  const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 500);
+  // User description is the MOST important part — use the full text
+  const description = (sceneSet.canonical_description || '').trim();
 
+  // Build prompt with description first, boilerplate minimal
+  // IMPORTANT: avoid label-like text (LOCATION:, CAMERA:, etc.) that DALL-E renders literally
   const parts = [
-    ENVIRONMENT_ONLY_CONSTRAINT,
-    LALAVERSE_VISUAL_ANCHOR,
-    `LOCATION: ${sceneSet.name}.`,
-    descriptionSlice,
+    'Empty room, no people, no text, no labels, no annotations, no watermarks.',
+    `${sceneSet.name}.`,
+    description,
   ];
 
-  // Inject event context (location_hint + dress_code atmosphere) into the prompt
-  if (eventContext) {
-    if (eventContext.location_hint) {
-      parts.push(`Event setting: ${eventContext.location_hint.slice(0, 100)}.`);
-    }
-    if (eventContext.dress_code) {
-      parts.push(`Atmosphere suggests ${eventContext.dress_code.toLowerCase()} dress code — adjust decor formality accordingly.`);
-    }
-    if (eventContext.prestige && eventContext.prestige >= 8) {
-      parts.push('Elite luxury venue — opulent details, crystal, gold accents, dramatic lighting.');
-    }
-  }
-
-  // Time of day and season context
+  // Time/season as natural descriptions, not labels
   const timeOfDay = sceneSet.time_of_day;
   const season = sceneSet.season;
-  if (timeOfDay || season) {
-    const timeParts = [];
-    if (timeOfDay) {
-      const timeDescriptions = {
-        morning: 'Soft golden morning light streaming through windows. Fresh, calm, beginning-of-day atmosphere.',
-        afternoon: 'Bright natural daylight. Clear, even illumination. Productive, fully-lit atmosphere.',
-        golden_hour: 'Warm golden-hour light casting long soft shadows. Rich amber tones. Romantic, nostalgic warmth.',
-        evening: 'Warm amber evening light. Table lamps and soft overhead glow. Intimate, relaxed atmosphere.',
-        night: 'Moody nighttime lighting. Accent lamps, city glow through windows. Dramatic shadows, intimate atmosphere.',
-      };
-      timeParts.push(`TIME: ${timeOfDay.replace('_', ' ')}. ${timeDescriptions[timeOfDay] || ''}`);
-    }
-    if (season) {
-      const seasonDescriptions = {
-        spring: 'Spring atmosphere — pastel accents, blooming flowers visible through windows, light fabrics, airy feeling.',
-        summer: 'Summer atmosphere — golden light, open windows, tropical plants, lightweight materials, vibrant energy.',
-        fall: 'Autumn atmosphere — warm amber tones, rich textures (velvet, wool), candles, falling leaves outside, harvest colors.',
-        winter: 'Winter atmosphere — cool blue-white exterior light, frosty windows, plush throws, snow visible outside, warm interior contrast.',
-      };
-      timeParts.push(`SEASON: ${season}. ${seasonDescriptions[season] || ''}`);
-    }
-    parts.push(timeParts.join(' '));
+  if (timeOfDay) {
+    const timeDescriptions = {
+      morning: 'Soft golden morning light streaming through windows.',
+      afternoon: 'Bright natural daylight with even illumination.',
+      golden_hour: 'Warm golden-hour light casting long soft shadows.',
+      evening: 'Warm amber evening light with table lamps and soft glow.',
+      night: 'Nighttime lighting with accent lamps and city glow through windows.',
+    };
+    parts.push(timeDescriptions[timeOfDay] || '');
+  }
+  if (season) {
+    const seasonDescriptions = {
+      spring: 'Spring atmosphere with pastel accents and blooming flowers visible outside.',
+      summer: 'Summer atmosphere with golden light and open windows.',
+      fall: 'Autumn atmosphere with warm amber tones and rich textures.',
+      winter: 'Winter atmosphere with cool blue-white light and frosty windows.',
+    };
+    parts.push(seasonDescriptions[season] || '');
   }
 
   // Room properties affect spatial rendering
   const rp = sceneSet.visual_language?.room_properties;
-  if (rp?.room_size) {
-    const sizeDescriptions = {
-      compact: 'This is a compact, cozy room — furniture is close together, minimal open floor space.',
-      medium: 'This is a medium-sized room with moderate space between furniture.',
-      spacious: 'This is a spacious room — generous open floor space, breathing room between furniture, wide sight lines.',
-      grand: 'This is a grand, expansive space — high ceilings, vast floor area, dramatic proportions.',
-    };
-    if (sizeDescriptions[rp.room_size]) parts.push(sizeDescriptions[rp.room_size]);
+  if (rp) {
+    const rpParts = [];
+    if (rp.room_size) {
+      const sizeDescriptions = {
+        compact: 'Compact cozy room with furniture close together.',
+        medium: 'Medium-sized room with moderate space between furniture.',
+        spacious: 'Spacious room with generous open floor space and wide sight lines.',
+        grand: 'Grand expansive space with high ceilings and vast floor area.',
+      };
+      rpParts.push(sizeDescriptions[rp.room_size] || '');
+    }
+    if (rp.ceiling_height && rp.ceiling_height !== 'standard') {
+      const ceilingDesc = { tall: 'Tall ceilings.', vaulted: 'Vaulted cathedral ceilings.', double_height: 'Double-height ceilings with dramatic vertical space.' };
+      rpParts.push(ceilingDesc[rp.ceiling_height] || '');
+    }
+    if (rp.room_shape && rp.room_shape !== 'rectangular') {
+      const shapeDesc = { square: 'Square room layout.', l_shaped: 'L-shaped room with two distinct areas.', open_plan: 'Open plan layout flowing into adjacent spaces.' };
+      rpParts.push(shapeDesc[rp.room_shape] || '');
+    }
+    const rpText = rpParts.filter(Boolean).join(' ');
+    if (rpText) parts.push(rpText);
   }
 
-  parts.push(`CAMERA: ${cameraText}`);
+  // Camera direction as natural text
+  parts.push(cameraText);
 
-  // For non-WIDE angles, add room extension instruction
+  // For non-WIDE angles
   if (angleLabel !== 'WIDE' && angleLabel !== 'OTHER') {
-    parts.push('IMPORTANT: This is the SAME room as the base image — do NOT change wall colors, furniture, bedding, decor, or any existing element. Only reveal areas behind the original camera that were not visible. Any newly visible areas must use the identical wall color, flooring, and design language.');
+    parts.push('Same room as the reference image. Same wall colors, furniture, and decor. Only the camera position changed.');
   }
 
-  parts.push('Photorealistic cinematic quality. No text overlays. No watermarks.');
+  parts.push('Photorealistic cinematic quality. Pinterest-worthy feminine aesthetic. Soft natural lighting.');
 
-  const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+  const full = parts.filter(Boolean).join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
-  // Enforce char limit — DALL-E/gpt-image-1 handles up to 4000
-  return full.length > 2000 ? full.slice(0, 1997) + '...' : full;
+  // DALL-E handles up to 4000 chars — give the description room to breathe
+  return full.length > 3500 ? full.slice(0, 3497) + '...' : full;
 }
 
 /**
