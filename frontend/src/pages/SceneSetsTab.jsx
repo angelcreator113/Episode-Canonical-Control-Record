@@ -1295,7 +1295,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     <div className="scene-sets-modal-field">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <label>Your Description</label>
-                        <button className="scene-sets-desc-edit-btn" onClick={() => { setShowPromptEditor(false); setActiveModalTab('details'); setEditingDesc(true); setDescDraft(localDesc); }}>
+                        <button className="scene-sets-desc-edit-btn" onClick={() => { setShowPromptEditor(false); setShowDetails(true); setActiveModalTab('details'); setEditingDesc(true); setDescDraft(localDesc); }}>
                           <Pencil size={10} /> Edit in Overview
                         </button>
                       </div>
