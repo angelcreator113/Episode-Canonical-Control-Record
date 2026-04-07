@@ -41,6 +41,7 @@ const {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  validateClaudeAccess,
   setDb,
   addSSEClient,
 } = require('../services/feedScheduler');
@@ -240,6 +241,16 @@ router.post('/auto-generate-job', optionalAuth, async (req, res) => {
       });
     }
 
+    // Pre-flight: validate Claude API access before creating a job
+    const apiCheck = await validateClaudeAccess();
+    if (!apiCheck.ok) {
+      console.error(`[FeedScheduler] Pre-flight API check failed: ${apiCheck.error}`);
+      return res.status(503).json({
+        error: `AI service unavailable: ${apiCheck.error}`,
+        detail: 'The Claude API must be reachable to generate profiles. Check your ANTHROPIC_API_KEY.',
+      });
+    }
+
     // Create a job record so progress is persisted in the DB
     const job = await db.BulkImportJob.create({
       status: 'pending',
@@ -392,6 +403,10 @@ router.post('/preview-sparks', optionalAuth, async (req, res) => {
   const count = Math.min(parseInt(req.body.count) || 5, 20);
 
   try {
+    const apiCheck = await validateClaudeAccess();
+    if (!apiCheck.ok) {
+      return res.status(503).json({ error: `AI service unavailable: ${apiCheck.error}` });
+    }
     const sparks = await generateSmartSparks(db, layer, count);
     res.json({ sparks, layer, count: sparks.length });
   } catch (err) {

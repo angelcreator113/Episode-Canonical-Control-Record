@@ -23,8 +23,38 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const AI_MODEL = 'claude-sonnet-4-6';
 const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
-const AI_TIMEOUT_MS = 90000; // 90s timeout — fail fast, retry rather than hang
-const AI_MAX_RETRIES = 1;
+const AI_TIMEOUT_MS = 60000; // 60s timeout — enough for large profile generation prompts
+const AI_MAX_RETRIES = 0;   // No retries — fail fast, let the batch loop handle partial success
+
+/**
+ * Quick pre-flight check — validates API key + model access with a tiny call.
+ * Returns { ok: true } or { ok: false, error: string }.
+ */
+async function validateClaudeAccess() {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return { ok: false, error: 'ANTHROPIC_API_KEY environment variable is not set' };
+    const client = new Anthropic({ apiKey });
+    const response = await Promise.race([
+      client.messages.create({
+        model: AI_MODEL,
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Say "ok"' }],
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('API validation timed out (10s)')), 10000)),
+    ]);
+    if (!response?.content?.length) return { ok: false, error: 'AI returned empty response during validation' };
+    return { ok: true };
+  } catch (err) {
+    const msg = err.status === 401 ? 'Invalid API key (401 Unauthorized)'
+      : err.status === 403 ? 'API key lacks permission for this model (403 Forbidden)'
+      : err.status === 404 ? `Model "${AI_MODEL}" not found (404)`
+      : err.status === 429 ? 'Rate limited — try again in a moment (429)'
+      : err.status === 529 ? 'Anthropic API overloaded (529) — try again shortly'
+      : err.message || 'Unknown API error';
+    return { ok: false, error: msg };
+  }
+}
 
 /**
  * Call Claude with timeout, retry, and model fallback logic.
@@ -46,7 +76,7 @@ async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES }
             messages: [{ role: 'user', content: prompt }],
           }),
           new Promise((_, reject) => {
-            timer = setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS);
+            timer = setTimeout(() => reject(new Error(`AI call timed out after ${AI_TIMEOUT_MS / 1000}s`)), AI_TIMEOUT_MS);
           }),
         ]);
         clearTimeout(timer);
@@ -342,7 +372,8 @@ Return ONLY the JSON array. No markdown, no explanation.`;
 
   console.log(`[FeedScheduler] Calling Claude for ${count} sparks (layer=${layer})...`);
   const sparkStart = Date.now();
-  const response = await callClaude(prompt, { maxTokens: 8000 });
+  // Sparks are small objects (~200 tokens each) — 4000 is plenty for up to 20 sparks
+  const response = await callClaude(prompt, { maxTokens: 4000 });
   console.log(`[FeedScheduler] Claude spark response received in ${((Date.now() - sparkStart) / 1000).toFixed(1)}s`);
 
   const rawText = response?.content?.[0]?.text;
@@ -403,7 +434,7 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   }
 
   // Generate full profiles from sparks (batch 3 at a time for speed)
-  const BATCH_CONCURRENCY = 3;
+  const BATCH_CONCURRENCY = 2; // 2 parallel calls to avoid rate limits and timeouts
   for (let i = 0; i < sparks.length; i += BATCH_CONCURRENCY) {
     const batch = sparks.slice(i, i + BATCH_CONCURRENCY);
     if (progressCallback) {
@@ -495,7 +526,7 @@ Do not reference JustAWoman or the real world in any generated content.
 Lala does not know she was built. The world she lives in feels complete and self-contained.`;
   }
 
-  const response = await callClaude(prompt, { maxTokens: 8000 });
+  const response = await callClaude(prompt, { maxTokens: 6000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
@@ -512,6 +543,17 @@ Lala does not know she was built. The world she lives in feels complete and self
   const safeFollowerTier = sanitizeEnum(generated.follower_tier || spark.follower_tier, VALID_FOLLOWER_TIERS, 'mid');
   const safeArchetype = sanitizeEnum(generated.archetype || spark.archetype, VALID_ARCHETYPES, 'polished_curator');
   const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
+
+  // Re-check cap at insert time to prevent race conditions between concurrent jobs
+  const cap = FEED_CAPS[layer];
+  if (cap) {
+    const currentCount = await db.SocialProfile.count({
+      where: { feed_layer: layer, lalaverse_cap_exempt: false },
+    });
+    if (currentCount >= cap) {
+      throw new Error(`Feed cap reached (${currentCount}/${cap}) — skipping ${spark.handle}`);
+    }
+  }
 
   const profile = await db.SocialProfile.create({
     series_id:             null,
@@ -994,5 +1036,6 @@ module.exports = {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  validateClaudeAccess,
   addSSEClient,
 };
