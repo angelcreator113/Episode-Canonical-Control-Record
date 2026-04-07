@@ -22,7 +22,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 // const { generateHandleFromCharacter, inferArchetypeFromRole, inferLalaRelationship, inferCareerPressure, inferFollowerTier } = require('../utils/feedProfileUtils');
 
 const AI_MODEL = 'claude-sonnet-4-6';
-const AI_FALLBACK_MODEL = 'claude-sonnet-4-20250514';
+const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
 const AI_TIMEOUT_MS = 120000; // 120s timeout matching bulk routes
 const AI_MAX_RETRIES = 1;
 

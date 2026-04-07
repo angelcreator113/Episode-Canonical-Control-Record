@@ -293,11 +293,13 @@ function processAutoGenInBackground(jobId, db, layer, count) {
 
       await job.update({ status: 'processing', started_at: new Date() });
       notifyJobSSE(jobId, 'started', { job_id: jobId, total: count });
+      console.log(`[FeedScheduler] Auto-gen job #${jobId} started: layer=${layer}, count=${count}`);
 
       const created = [];
       const errors = [];
 
       const result = await autoGenerateBatch(db, layer, count, async (progress) => {
+        console.log(`[FeedScheduler] Job #${jobId} progress: status=${progress.status}, current=${progress.current}/${progress.total}${progress.error ? ', error=' + progress.error : ''}`);
         // Update DB on each profile so progress survives page navigation
         if (progress.status === 'created' && progress.profile) {
           created.push({
