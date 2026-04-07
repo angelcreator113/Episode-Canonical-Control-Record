@@ -684,19 +684,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <Pencil size={12} /> Edit Description
                     </button>
                   )}
-                  {hasBase && totalAngles === 0 && (
+                  {hasBase && (
                     <button onClick={async () => {
                       setShowMenu(false);
                       setSeeding(true);
+                      showToast('Analyzing your image for camera angles...');
                       try {
                         const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
                         const d = await r.json();
-                        if (d.success) showToast(`Created ${d.angles_created || 0} angles`);
-                        else showToast(d.error || 'Failed', 'error');
+                        if (d.success) {
+                          showToast(`${d.angles_created || 0} angles suggested! Click "Generate All" to create images.`);
+                        } else {
+                          showToast(d.error || 'Failed to suggest angles', 'error');
+                        }
                       } catch (e) { showToast(e.message, 'error'); }
                       setSeeding(false);
                     }} disabled={isGenerating || seeding}>
-                      <Sparkles size={12} /> Suggest Angles
+                      <Sparkles size={12} /> {seeding ? 'Analyzing...' : 'Suggest Angles'}
                     </button>
                   )}
                   {hasBase && sortedAngles.some(a => a.still_image_url) && (
@@ -811,6 +815,25 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <div className="scene-sets-progress-fill" style={{ width: `${(readyAngles / totalAngles) * 100}%` }} />
               </div>
               <span className="scene-sets-progress-label">{readyAngles}/{totalAngles}</span>
+            </div>
+          )}
+
+          {/* Suggest Angles — when base exists but no angles */}
+          {hasBase && totalAngles === 0 && (
+            <div style={{ marginTop: 6 }}>
+              <button onClick={async () => {
+                setSeeding(true);
+                showToast('Analyzing your image for camera angles...');
+                try {
+                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
+                  const d = await r.json();
+                  if (d.success) showToast(`${d.angles_created || 0} angles suggested!`);
+                  else showToast(d.error || 'Failed', 'error');
+                } catch (e) { showToast(e.message, 'error'); }
+                setSeeding(false);
+              }} disabled={seeding} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                {seeding ? <><Loader size={12} className="spin" /> Analyzing image...</> : <><Sparkles size={12} /> Suggest Angles from Image</>}
+              </button>
             </div>
           )}
 
