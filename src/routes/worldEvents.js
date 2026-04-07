@@ -64,15 +64,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
           required: false,
         });
       }
-      // Include venue location
-      if (models.WorldLocation) {
-        include.push({
-          model: models.WorldLocation,
-          as: 'venue',
-          attributes: ['id', 'name', 'street_address', 'city', 'district', 'venue_type', 'location_type'],
-          required: false,
-        });
-      }
+      // venue + calendar includes require migrations 20260709/20260711
       // Include scene set basic info
       if (models.SceneSet) {
         include.push({
@@ -82,15 +74,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
           required: false,
         });
       }
-      // Include source calendar event
-      if (models.StoryCalendarEvent) {
-        include.push({
-          model: models.StoryCalendarEvent,
-          as: 'sourceCalendarEvent',
-          attributes: ['id', 'title', 'event_type', 'cultural_category', 'start_datetime'],
-          required: false,
-        });
-      }
+      // sourceCalendarEvent include requires migration 20260711
 
       const events = await models.WorldEvent.findAll({
         where,

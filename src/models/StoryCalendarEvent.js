@@ -19,18 +19,7 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'source_line_id',
         as: 'sourceLine',
       });
-      if (models.WorldLocation) {
-        StoryCalendarEvent.belongsTo(models.WorldLocation, {
-          foreignKey: 'location_id',
-          as: 'location',
-        });
-      }
-      if (models.WorldEvent) {
-        StoryCalendarEvent.hasMany(models.WorldEvent, {
-          foreignKey: 'source_calendar_event_id',
-          as: 'spawnedEvents',
-        });
-      }
+      // location_id + spawnedEvents associations require migrations 20260710/20260711
     }
   }
   StoryCalendarEvent.init({
@@ -63,10 +52,7 @@ module.exports = (sequelize, DataTypes) => {
       type:      DataTypes.STRING(255),
       allowNull: true,
     },
-    location_id: {
-      type:      DataTypes.UUID,
-      allowNull: true,
-    },
+    // location_id requires migration 20260710
     location_name: {
       type:      DataTypes.STRING(255),
       allowNull: true,

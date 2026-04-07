@@ -54,24 +54,10 @@ module.exports = (sequelize) => {
     },
 
     // ── Venue & Location ──
-    venue_location_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
-    venue_name: {
-      type: DataTypes.STRING(200),
-      allowNull: true,
-    },
-    venue_address: {
-      type: DataTypes.STRING(255),
-      allowNull: true,
-    },
+    // Fields below require migration 20260709/20260711.
+    // Run: npm run migrate:up — then re-enable these fields.
     location_hint: {
       type: DataTypes.TEXT,
-      allowNull: true,
-    },
-    source_calendar_event_id: {
-      type: DataTypes.UUID,
       allowNull: true,
     },
     scene_set_id: {
@@ -79,30 +65,9 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
-    // ── Date & Time ──
-    event_date: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-    },
-    event_time: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-    },
-
-    // ── Guest List ──
-    guest_list: {
-      type: DataTypes.JSONB,
-      allowNull: true,
-      defaultValue: [],
-    },
-
     // ── Invitation ──
     invitation_asset_id: {
       type: DataTypes.UUID,
-      allowNull: true,
-    },
-    invitation_details: {
-      type: DataTypes.JSONB,
       allowNull: true,
       defaultValue: null,
     },
@@ -240,20 +205,14 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'world_events',
     timestamps: true,
-    paranoid: true,
+    paranoid: false,
     underscored: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
-    deletedAt: 'deleted_at',
   });
 
   WorldEvent.associate = (models) => {
-    if (models.WorldLocation) {
-      WorldEvent.belongsTo(models.WorldLocation, {
-        foreignKey: 'venue_location_id',
-        as: 'venue',
-      });
-    }
+    // venue_location_id + source_calendar_event_id require migration 20260709/20260711
     // Visual scene set
     if (models.SceneSet) {
       WorldEvent.belongsTo(models.SceneSet, {
@@ -283,12 +242,7 @@ module.exports = (sequelize) => {
       });
     }
     // Source calendar event
-    if (models.StoryCalendarEvent) {
-      WorldEvent.belongsTo(models.StoryCalendarEvent, {
-        foreignKey: 'source_calendar_event_id',
-        as: 'sourceCalendarEvent',
-      });
-    }
+    // source_calendar_event_id association requires migration 20260711
   };
 
   return WorldEvent;
