@@ -1997,23 +1997,8 @@ export default function SceneSetsTab() {
       setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [], time_of_day: '', season: '', room_size: '', ceiling_height: '', room_shape: '' });
       setCreateShowId('');
       setShowCreateForm(false);
+      showToast(`Created "${setName}" — upload a base image to get started`);
       await fetchSets();
-
-      // If a generation job was auto-queued, poll it and update when done
-      if (json.jobId) {
-        showToast(`Created "${setName}" — generating base image...`);
-        if (json.data?.id) startGenerating(json.data.id);
-        const job = await pollJob(json.jobId);
-        if (job.status === 'completed') {
-          showToast(`Base image generated for "${setName}"`);
-        } else {
-          showToast(job.error || 'Base generation failed', 'error');
-        }
-        await fetchSets();
-        if (json.data?.id) stopGenerating(json.data.id);
-      } else {
-        showToast(`Created "${setName}"`);
-      }
     } catch {
       showToast('Failed to create location', 'error');
     } finally {

@@ -188,7 +188,7 @@ router.post('/', optionalAuth, async (req, res) => {
       time_of_day: time_of_day || null,
       season: season || null,
       notes: notes || null,
-      generation_status: canonical_description ? 'generating' : 'pending',
+      generation_status: 'pending',
     };
     let set;
     try {
@@ -213,19 +213,8 @@ router.post('/', optionalAuth, async (req, res) => {
       }
     }
 
-    // Auto-enqueue base generation when a description is provided
-    let jobId = null;
-    if (canonical_description) {
-      await ensureGenerationJobsTable();
-      const job = await GenerationJob.create({
-        job_type: 'generate_base',
-        scene_set_id: set.id,
-        payload: {},
-      });
-      jobId = job.id;
-    }
-
-    res.status(201).json({ success: true, data: set, jobId });
+    // No auto-generation — user uploads or generates base manually
+    res.status(201).json({ success: true, data: set });
   } catch (err) {
     console.error('Scene Sets POST / error:', err);
     res.status(500).json({ success: false, error: err.message });
