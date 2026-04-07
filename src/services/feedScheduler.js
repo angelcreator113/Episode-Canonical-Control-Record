@@ -82,7 +82,26 @@ function parseAIJson(text) {
   if (!jsonMatch) throw new Error('AI did not return valid JSON');
   // Fix trailing commas before } or ]
   const fixed = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
-  return JSON.parse(fixed);
+  try { return JSON.parse(fixed); } catch { /* try truncation repair */ }
+
+  // JSON may be truncated — try to close unclosed braces/brackets
+  let truncated = fixed;
+  // Remove trailing partial key-value or string
+  truncated = truncated.replace(/,?\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+  const opens = (truncated.match(/\{/g) || []).length;
+  const closes = (truncated.match(/\}/g) || []).length;
+  const openBrackets = (truncated.match(/\[/g) || []).length;
+  const closeBrackets = (truncated.match(/\]/g) || []).length;
+  for (let i = 0; i < openBrackets - closeBrackets; i++) truncated += ']';
+  for (let i = 0; i < opens - closes; i++) truncated += '}';
+  truncated = truncated.replace(/,\s*([\]}])/g, '$1');
+  try {
+    const result = JSON.parse(truncated);
+    console.warn(`[FeedScheduler] Repaired truncated JSON (closed ${opens - closes} braces, ${openBrackets - closeBrackets} brackets)`);
+    return result;
+  } catch {
+    throw new Error('AI did not return valid JSON (truncation repair also failed)');
+  }
 }
 
 /**
@@ -320,7 +339,7 @@ Return a JSON array of exactly ${count} objects:
 
 Return ONLY the JSON array. No markdown, no explanation.`;
 
-  const response = await callClaude(prompt, { maxTokens: 4000 });
+  const response = await callClaude(prompt, { maxTokens: 8000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error('AI returned empty response for spark generation');
@@ -467,7 +486,7 @@ Do not reference JustAWoman or the real world in any generated content.
 Lala does not know she was built. The world she lives in feels complete and self-contained.`;
   }
 
-  const response = await callClaude(prompt, { maxTokens: 4000 });
+  const response = await callClaude(prompt, { maxTokens: 8000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
