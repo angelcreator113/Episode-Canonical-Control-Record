@@ -869,7 +869,7 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  const IMAGE_ANALYSIS_VERSION = 5; // bump to invalidate cache when schema changes
+  const IMAGE_ANALYSIS_VERSION = 7; // bump to invalidate cache when schema changes
   // Check cache — skip if already analyzed for this base image with current version
   const vl = sceneSet.visual_language || {};
   if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
@@ -883,7 +883,7 @@ async function analyzeBaseImage(sceneSet, SceneSetModel) {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
+      max_tokens: 2500,
       messages: [{
         role: 'user',
         content: [
@@ -920,6 +920,8 @@ Return JSON:
   "visible_through_windows": "what is visible outside",
   "atmosphere": "one sentence — mood, lighting quality, time of day",
 
+  "description": "Write a rich 2-3 sentence description of this room as if describing a film set. Include: room size, wall colors, key furniture with materials/colors and positions, lighting sources, signature decor, window views, flooring, and overall mood. Be specific enough that someone could recreate this exact room from your description alone.",
+
   "room_properties": {
     "room_size": "compact | medium | spacious | grand",
     "ceiling_height": "standard | tall | vaulted | double_height",
@@ -935,14 +937,23 @@ Return ONLY JSON.` },
 
     const text = response.content?.[0]?.text || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
+    if (!match) {
+      console.warn(`[SceneGen] Image analysis returned no JSON. Response: ${text.slice(0, 200)}`);
+      return null;
+    }
 
-    const analysis = JSON.parse(match[0]);
+    let analysis;
+    try {
+      analysis = JSON.parse(match[0]);
+    } catch (parseErr) {
+      console.warn(`[SceneGen] Image analysis JSON parse failed: ${parseErr.message}. Raw: ${match[0].slice(0, 200)}`);
+      return null;
+    }
     analysis.source_url = sceneSet.base_still_url;
     analysis.version = IMAGE_ANALYSIS_VERSION;
     analysis.analyzed_at = new Date().toISOString();
 
-    // Cache blueprint in visual_language
+    // Cache blueprint in visual_language + auto-fill description if empty
     const updatedVl = { ...vl, image_analysis: analysis };
     if (analysis.layout_map) updatedVl.layout_map = analysis.layout_map;
     if (analysis.anchor_objects) updatedVl.anchor_objects = analysis.anchor_objects;
@@ -950,8 +961,19 @@ Return ONLY JSON.` },
     if (analysis.room_properties && !vl.room_properties_manual) {
       updatedVl.room_properties = analysis.room_properties;
     }
+
+    // Auto-fill description from image analysis if the set has no description yet
+    const updateFields = { visual_language: updatedVl };
+    if (analysis.description && !sceneSet.canonical_description) {
+      updateFields.canonical_description = analysis.description;
+      // Also regenerate the prompt from the new description
+      const tempSet = { ...sceneSet, canonical_description: analysis.description, visual_language: updatedVl };
+      updateFields.base_runway_prompt = buildPrompt(tempSet);
+      console.log(`[SceneGen] Auto-filled description from image analysis`);
+    }
+
     await SceneSetModel.update(
-      { visual_language: updatedVl },
+      updateFields,
       { where: { id: sceneSet.id } }
     );
 
@@ -1286,6 +1308,169 @@ async function generateDepthMap(sceneSet, SceneSetModel) {
   }
 }
 
+// ─── CROP + OUTPAINT CAMERA SYSTEM ───────────────────────────────────────────
+
+/**
+ * Camera directions for crop-based angles.
+ * Each defines: which part of the base to keep, and which direction to extend.
+ * Coordinates are fractions (0-1) of the base image dimensions.
+ */
+const CAMERA_CROP_MAP = {
+  // Close-ups: crop a region, extend slightly
+  VANITY_CLOSEUP:     { crop: { left: 0.55, top: 0.1, width: 0.45, height: 0.9 }, extend: 'right', extendAmount: 0.5 },
+  VANITY:             { crop: { left: 0.55, top: 0.1, width: 0.45, height: 0.9 }, extend: 'right', extendAmount: 0.5 },
+  WINDOW_CITYVIEW:    { crop: { left: 0.0, top: 0.0, width: 0.45, height: 1.0 }, extend: 'left', extendAmount: 0.5 },
+  WINDOW:             { crop: { left: 0.0, top: 0.0, width: 0.45, height: 1.0 }, extend: 'left', extendAmount: 0.5 },
+  NEON_HEADBOARD:     { crop: { left: 0.2, top: 0.0, width: 0.6, height: 0.7 }, extend: 'up', extendAmount: 0.3 },
+  BED:                { crop: { left: 0.2, top: 0.1, width: 0.6, height: 0.9 }, extend: 'none', extendAmount: 0 },
+  OVERHEAD_BED:       null, // Can't crop — needs full regeneration
+  CHANDELIER_WORMS_EYE: null, // Can't crop — different perspective
+  DOORWAY_ESTABLISHING: null, // Can't crop — behind camera
+  TRIPOD_CONTENT_CREATOR: null, // Can't crop — different position
+  BALCONY_GOLDEN_HOUR: { crop: { left: 0.0, top: 0.0, width: 0.5, height: 1.0 }, extend: 'left', extendAmount: 0.6 },
+  DETAIL:             { crop: { left: 0.3, top: 0.3, width: 0.4, height: 0.4 }, extend: 'none', extendAmount: 0 },
+  CLOSE:              { crop: { left: 0.3, top: 0.3, width: 0.4, height: 0.4 }, extend: 'none', extendAmount: 0 },
+  WIDE:               null, // Base image IS the wide shot
+};
+
+/**
+ * Generate an angle by cropping the base image and optionally outpainting.
+ * Returns the S3 URL of the result, or null if this angle can't be cropped.
+ *
+ * For crop-only angles (BED, DETAIL): crops + upscales. Pixel-perfect.
+ * For crop+extend angles (VANITY, WINDOW): crops, extends canvas, uses
+ * gpt-image-1 to fill the new area while keeping original pixels.
+ */
+async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt) {
+  const config = CAMERA_CROP_MAP[angleLabel];
+  if (!config || !baseImageUrl) return null;
+
+  try {
+    console.log(`[SceneGen] Crop+outpaint for ${angleLabel}: crop=${JSON.stringify(config.crop)}, extend=${config.extend}`);
+
+    // Download base image
+    const imageRes = await axios.get(baseImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+    const metadata = await sharp(imageRes.data).metadata();
+    const w = metadata.width || 1920;
+    const h = metadata.height || 1080;
+
+    // Calculate crop region
+    const cropLeft = Math.round(w * config.crop.left);
+    const cropTop = Math.round(h * config.crop.top);
+    const cropWidth = Math.min(Math.round(w * config.crop.width), w - cropLeft);
+    const cropHeight = Math.min(Math.round(h * config.crop.height), h - cropTop);
+
+    // Crop the region
+    const croppedBuffer = await sharp(imageRes.data)
+      .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
+      .toBuffer();
+
+    if (config.extend === 'none' || config.extendAmount === 0) {
+      // Pure crop — just upscale to target resolution
+      const resultBuffer = await sharp(croppedBuffer)
+        .resize(1536, 1024, { fit: 'cover' })
+        .png()
+        .toBuffer();
+
+      const s3Key = `scene-sets/${setId}/angles/${angleId}/crop-${Date.now()}.png`;
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: resultBuffer,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+      console.log(`[SceneGen] Pure crop complete for ${angleLabel}: ${url}`);
+      return url;
+    }
+
+    // Crop + outpaint: extend the canvas and use gpt-image-1 to fill
+    // Target: 1536x1024 final image
+    const targetW = 1536;
+    const targetH = 1024;
+
+    // Scale cropped region to fit within the target, leaving room for extension
+    const scaleFactor = config.extend === 'right' || config.extend === 'left'
+      ? targetH / cropHeight
+      : targetW / cropWidth;
+    const scaledW = Math.round(cropWidth * scaleFactor);
+    const scaledH = Math.round(cropHeight * scaleFactor);
+
+    const scaledCrop = await sharp(croppedBuffer)
+      .resize(scaledW, scaledH, { fit: 'fill' })
+      .png()
+      .toBuffer();
+
+    // Create the extended canvas with the crop positioned on one side
+    let compositeLeft = 0;
+    let compositeTop = 0;
+    if (config.extend === 'right') compositeLeft = 0;
+    if (config.extend === 'left') compositeLeft = targetW - scaledW;
+    if (config.extend === 'up') compositeTop = targetH - scaledH;
+
+    const canvas = await sharp({
+      create: { width: targetW, height: targetH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([{ input: scaledCrop, left: compositeLeft, top: compositeTop }])
+      .png()
+      .toBuffer();
+
+    // Send to gpt-image-1 edits with the canvas as the image
+    // The transparent area is where the AI will generate new content
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.warn('[SceneGen] No OPENAI_API_KEY — returning crop without outpaint');
+      // Fall back to just the crop
+      const s3Key = `scene-sets/${setId}/angles/${angleId}/crop-${Date.now()}.png`;
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: canvas,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    }
+
+    const FormData = (await import('form-data')).default;
+    const form = new FormData();
+    form.append('model', 'gpt-image-1');
+    form.append('image', canvas, { filename: 'canvas.png', contentType: 'image/png' });
+    form.append('prompt', `Do not render any text or labels. Continue this room seamlessly — match the existing wall color, flooring, lighting, and style exactly. Fill the transparent area with a natural continuation of this room. ${prompt || ''}`);
+    form.append('size', '1536x1024');
+    form.append('quality', 'high');
+
+    const response = await axios.post(
+      'https://api.openai.com/v1/images/edits',
+      form,
+      {
+        headers: { 'Authorization': `Bearer ${apiKey}`, ...form.getHeaders() },
+        timeout: 180000,
+      }
+    );
+
+    // Get the result and upload to S3
+    const b64 = response.data.data[0]?.b64_json;
+    let resultUrl;
+    if (b64) {
+      const imgBuf = Buffer.from(b64, 'base64');
+      const s3Key = `scene-sets/${setId}/angles/${angleId}/outpaint-${Date.now()}.png`;
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: imgBuf,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      resultUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    } else {
+      const tempUrl = response.data.data[0]?.url;
+      if (tempUrl) {
+        const s3Key = `scene-sets/${setId}/angles/${angleId}/outpaint-${Date.now()}.png`;
+        resultUrl = await downloadAndUploadToS3(tempUrl, s3Key);
+      }
+    }
+
+    console.log(`[SceneGen] Crop+outpaint complete for ${angleLabel}: ${resultUrl}`);
+    return resultUrl;
+  } catch (err) {
+    console.warn(`[SceneGen] Crop+outpaint failed for ${angleLabel}: ${err.message}`);
+    return null;
+  }
+}
+
 // ─── ANGLE GENERATION ────────────────────────────────────────────────────────
 
 async function generateAngle(sceneAngle, sceneSet, models) {
@@ -1337,6 +1522,21 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
 
     let stillUrl, totalCost = 0, generatedSeed = null;
+
+    // ── STEP 1: Try crop + outpaint (pixel-preserving) ──
+    // For angles where we can crop from the base image, this gives the best
+    // consistency because original pixels are kept untouched.
+    if (referenceImageForEdit && CAMERA_CROP_MAP[angleLabel] !== undefined) {
+      stillUrl = await cropAndOutpaint(
+        referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt
+      );
+      if (stillUrl) {
+        console.log(`[SceneGen] Crop+outpaint succeeded for ${angleLabel}`);
+      }
+    }
+
+    // ── STEP 2: Fall back to full generation if crop failed or not applicable ──
+    if (!stillUrl) {
 
     // Try DALL-E first, fall back to Runway
     const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
@@ -1395,6 +1595,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       totalCost = result.creditsUsed || 0;
       generatedSeed = result.seed ?? jobId;
     }
+    } // end of fallback full-generation block
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
