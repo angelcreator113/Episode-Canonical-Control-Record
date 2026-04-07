@@ -544,6 +544,17 @@ Lala does not know she was built. The world she lives in feels complete and self
   const safeArchetype = sanitizeEnum(generated.archetype || spark.archetype, VALID_ARCHETYPES, 'polished_curator');
   const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
+  // Re-check cap at insert time to prevent race conditions between concurrent jobs
+  const cap = FEED_CAPS[layer];
+  if (cap) {
+    const currentCount = await db.SocialProfile.count({
+      where: { feed_layer: layer, lalaverse_cap_exempt: false },
+    });
+    if (currentCount >= cap) {
+      throw new Error(`Feed cap reached (${currentCount}/${cap}) — skipping ${spark.handle}`);
+    }
+  }
+
   const profile = await db.SocialProfile.create({
     series_id:             null,
     handle:                (spark.handle.startsWith('@') ? spark.handle : `@${spark.handle}`).slice(0, 100),
