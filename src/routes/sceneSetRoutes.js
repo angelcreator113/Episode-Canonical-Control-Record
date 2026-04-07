@@ -1681,7 +1681,9 @@ router.get('/:id/spec', validateUUIDParam('id'), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    res.json({ success: true, data: set.scene_spec || null });
+    // Read from scene_spec column, fall back to visual_language.scene_spec (pre-migration)
+    const spec = set.scene_spec || set.visual_language?.scene_spec || null;
+    res.json({ success: true, data: spec });
   } catch (err) {
     console.error('GET /:id/spec error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -1697,7 +1699,14 @@ router.post('/:id/spec/generate', validateUUIDParam('id'), optionalAuth, async (
 
     // Force regeneration by clearing cached spec
     if (req.body.force) {
-      await SceneSet.update({ scene_spec: null }, { where: { id: set.id } });
+      try {
+        await SceneSet.update({ scene_spec: null }, { where: { id: set.id } });
+      } catch {
+        // Column may not exist yet — clear from visual_language instead
+        const vl = set.visual_language || {};
+        delete vl.scene_spec;
+        await SceneSet.update({ visual_language: vl }, { where: { id: set.id } });
+      }
       set.scene_spec = null;
     }
 

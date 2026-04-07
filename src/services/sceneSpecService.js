@@ -16,8 +16,8 @@ const SPEC_VERSION = '2.0';
 async function buildSceneSpec(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  // Check cache
-  const existing = sceneSet.scene_spec;
+  // Check cache — scene_spec column or visual_language fallback
+  const existing = sceneSet.scene_spec || sceneSet.visual_language?.scene_spec;
   if (existing?.version === SPEC_VERSION && existing?._meta?.base_still_url === sceneSet.base_still_url) {
     console.log(`[SceneSpec] Using cached spec for ${sceneSet.name}`);
     return existing;
@@ -65,10 +65,24 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
 
     // Persist
     if (SceneSetModel) {
-      await SceneSetModel.update(
-        { scene_spec: spec },
-        { where: { id: sceneSet.id } }
-      );
+      try {
+        await SceneSetModel.update(
+          { scene_spec: spec },
+          { where: { id: sceneSet.id } }
+        );
+      } catch (persistErr) {
+        // Column may not exist yet (migration pending) — fall back to visual_language
+        if (persistErr.message?.includes('scene_spec') || persistErr.message?.includes('column')) {
+          console.warn(`[SceneSpec] scene_spec column not found, storing in visual_language.scene_spec`);
+          const vl = sceneSet.visual_language || {};
+          await SceneSetModel.update(
+            { visual_language: { ...vl, scene_spec: spec } },
+            { where: { id: sceneSet.id } }
+          );
+        } else {
+          throw persistErr;
+        }
+      }
     }
 
     console.log(`[SceneSpec] Spec built: ${spec.objects?.length || 0} objects, ${spec.zones?.length || 0} zones, ${spec.camera_contracts?.length || 0} contracts`);
