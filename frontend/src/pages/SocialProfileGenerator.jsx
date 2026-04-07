@@ -177,7 +177,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const [error,setError]         = useState(null);
   const [filterStatus,setFilterStatus] = useState(null);
   const [view,setView]           = useState('feed');
-  const [protagonist,setProtagonist] = useState(PROTAGONISTS[0]);
+  const [protagonist,setProtagonist] = useState(defaultFeedLayer === 'lalaverse' ? PROTAGONISTS[1] : PROTAGONISTS[0]);
   const [page,setPage]           = useState(1);
   const [totalPages,setTotalPages] = useState(1);
   const [totalCount,setTotalCount] = useState(0);
@@ -657,8 +657,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
             </button>
           </div>
         </div>
-        {/* Feed layer switcher */}
-        <div className="spg-feed-switcher" style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
+        {/* Feed layer switcher — hidden when embedded with a locked layer */}
+        {!(embedded && defaultFeedLayer) && <div className="spg-feed-switcher" style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
           <button onClick={()=>{setFeedLayer('real_world');setPage(1);setProtagonist(PROTAGONISTS[0]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='real_world'?C.blue:'transparent',color:feedLayer==='real_world'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             JustAWoman's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='real_world'?`${stats.total}/${feedCap}`:''}</span>
@@ -667,7 +667,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
             background:feedLayer==='lalaverse'?C.lavender:'transparent',color:feedLayer==='lalaverse'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             Lala's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${nativeTotal}/${feedCap}`:''}</span>
           </button>
-        </div>
+        </div>}
 
         {/* Stats */}
         <div className="spg-stats-row" style={{display:'flex',gap:20,alignItems:'center',flexWrap:'wrap'}}>
