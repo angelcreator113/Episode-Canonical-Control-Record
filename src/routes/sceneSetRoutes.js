@@ -1681,7 +1681,9 @@ router.get('/:id/spec', validateUUIDParam('id'), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    res.json({ success: true, data: set.scene_spec || null });
+    // Read from scene_spec column, fall back to visual_language.scene_spec (pre-migration)
+    const spec = set.scene_spec || set.visual_language?.scene_spec || null;
+    res.json({ success: true, data: spec });
   } catch (err) {
     console.error('GET /:id/spec error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -1694,22 +1696,28 @@ router.post('/:id/spec/generate', validateUUIDParam('id'), optionalAuth, async (
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
     if (!set.base_still_url) return res.status(400).json({ success: false, error: 'No base image — upload a base still first' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ success: false, error: 'ANTHROPIC_API_KEY not configured on server' });
 
     // Force regeneration by clearing cached spec
     if (req.body.force) {
-      await SceneSet.update({ scene_spec: null }, { where: { id: set.id } });
+      try {
+        await SceneSet.update({ scene_spec: null }, { where: { id: set.id } });
+      } catch {
+        // Column may not exist yet — clear from visual_language instead
+        const vl = set.visual_language || {};
+        delete vl.scene_spec;
+        await SceneSet.update({ visual_language: vl }, { where: { id: set.id } });
+      }
       set.scene_spec = null;
     }
 
+    console.log(`[SceneSpec] Starting spec generation for ${set.name} (${set.id}), base_still_url: ${set.base_still_url?.slice(0, 80)}`);
     const spec = await sceneSpecService.buildSceneSpec(set, SceneSet);
-    if (!spec) {
-      return res.status(500).json({ success: false, error: 'Failed to generate scene spec — check ANTHROPIC_API_KEY' });
-    }
 
     res.json({ success: true, data: spec });
   } catch (err) {
-    console.error('POST /:id/spec/generate error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('POST /:id/spec/generate error:', err.message, err.stack?.slice(0, 500));
+    res.status(500).json({ success: false, error: `Spec generation failed: ${err.message}` });
   }
 });
 

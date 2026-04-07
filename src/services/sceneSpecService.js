@@ -14,45 +14,88 @@ const SPEC_VERSION = '2.0';
  * @returns {object|null} The generated SceneSpec
  */
 async function buildSceneSpec(sceneSet, SceneSetModel) {
-  if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not configured');
+  }
+  if (!sceneSet.base_still_url) {
+    throw new Error('No base_still_url on scene set');
+  }
 
-  // Check cache
-  const existing = sceneSet.scene_spec;
+  // Check cache — scene_spec column or visual_language fallback
+  const existing = sceneSet.scene_spec || sceneSet.visual_language?.scene_spec;
   if (existing?.version === SPEC_VERSION && existing?._meta?.base_still_url === sceneSet.base_still_url) {
     console.log(`[SceneSpec] Using cached spec for ${sceneSet.name}`);
     return existing;
   }
 
+  console.log(`[SceneSpec] Building scene spec for ${sceneSet.name}, image: ${sceneSet.base_still_url?.slice(0, 80)}`);
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 16000,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'url', url: sceneSet.base_still_url } },
+        { type: 'text', text: buildSpecPrompt(sceneSet) },
+      ],
+    }],
+  });
+
+  const text = response.content?.[0]?.text || '';
+  console.log(`[SceneSpec] Claude response length: ${text.length}, stop_reason: ${response.stop_reason}`);
+
+  if (!text) {
+    throw new Error(`Claude returned empty response. stop_reason: ${response.stop_reason}, content types: ${response.content?.map(c => c.type).join(',')}`);
+  }
+
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) {
+    throw new Error(`Claude response contained no JSON. First 500 chars: ${text.slice(0, 500)}`);
+  }
+
+  let spec;
   try {
-    console.log(`[SceneSpec] Building scene spec for ${sceneSet.name}`);
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    spec = JSON.parse(match[0]);
+  } catch (parseErr) {
+    // Try to repair common Claude JSON issues
+    let repaired = match[0]
+      .replace(/,\s*}/g, '}')       // trailing commas before }
+      .replace(/,\s*]/g, ']')       // trailing commas before ]
+      .replace(/'/g, '"')           // single quotes to double
+      .replace(/\n/g, '\\n')        // unescaped newlines in strings
+      .replace(/\\n/g, ' ')         // then collapse them
+      .replace(/\t/g, ' ');         // tabs
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'url', url: sceneSet.base_still_url } },
-          { type: 'text', text: buildSpecPrompt(sceneSet) },
-        ],
-      }],
-    });
-
-    const text = response.content?.[0]?.text || '';
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) {
-      console.warn(`[SceneSpec] No JSON returned. Response: ${text.slice(0, 300)}`);
-      return null;
-    }
-
-    let spec;
     try {
-      spec = JSON.parse(match[0]);
-    } catch (parseErr) {
-      console.warn(`[SceneSpec] JSON parse failed: ${parseErr.message}`);
-      return null;
+      spec = JSON.parse(repaired);
+    } catch {
+      // If still failing, the JSON is likely truncated — try to close it
+      let truncated = match[0];
+      // Count open braces/brackets and close them
+      const opens = (truncated.match(/\{/g) || []).length;
+      const closes = (truncated.match(/\}/g) || []).length;
+      const openBrackets = (truncated.match(/\[/g) || []).length;
+      const closeBrackets = (truncated.match(/\]/g) || []).length;
+
+      // Remove any trailing partial key-value or string
+      truncated = truncated.replace(/,?\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+      // Close arrays then objects
+      for (let i = 0; i < openBrackets - closeBrackets; i++) truncated += ']';
+      for (let i = 0; i < opens - closes; i++) truncated += '}';
+
+      // Clean trailing commas again after truncation repair
+      truncated = truncated.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+
+      try {
+        spec = JSON.parse(truncated);
+        console.warn(`[SceneSpec] Repaired truncated JSON (closed ${opens - closes} braces, ${openBrackets - closeBrackets} brackets)`);
+      } catch (finalErr) {
+        throw new Error(`JSON parse failed after repair attempts: ${parseErr.message}. Response was ${text.length} chars, stop_reason: ${response.stop_reason}. First 300 chars: ${match[0].slice(0, 300)}`);
+      }
     }
+  }
 
     // Add metadata
     spec.version = SPEC_VERSION;
@@ -65,18 +108,28 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
 
     // Persist
     if (SceneSetModel) {
-      await SceneSetModel.update(
-        { scene_spec: spec },
-        { where: { id: sceneSet.id } }
-      );
+      try {
+        await SceneSetModel.update(
+          { scene_spec: spec },
+          { where: { id: sceneSet.id } }
+        );
+      } catch (persistErr) {
+        // Column may not exist yet (migration pending) — fall back to visual_language
+        if (persistErr.message?.includes('scene_spec') || persistErr.message?.includes('column')) {
+          console.warn(`[SceneSpec] scene_spec column not found, storing in visual_language.scene_spec`);
+          const vl = sceneSet.visual_language || {};
+          await SceneSetModel.update(
+            { visual_language: { ...vl, scene_spec: spec } },
+            { where: { id: sceneSet.id } }
+          );
+        } else {
+          throw persistErr;
+        }
+      }
     }
 
     console.log(`[SceneSpec] Spec built: ${spec.objects?.length || 0} objects, ${spec.zones?.length || 0} zones, ${spec.camera_contracts?.length || 0} contracts`);
     return spec;
-  } catch (err) {
-    console.error(`[SceneSpec] Build failed: ${err.message}`);
-    return null;
-  }
 }
 
 /**

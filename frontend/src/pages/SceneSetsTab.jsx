@@ -890,38 +890,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
-          {/* Build Scene Spec — shown when base exists but no spec yet */}
-          {hasBase && !hasSpec && !buildingSpec && (
-            <div style={{ marginTop: 6 }}>
-              <button onClick={async () => {
-                setBuildingSpec(true);
-                showToast('Building scene spec from image...');
-                try {
-                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-                  const d = await r.json();
-                  if (d.success) {
-                    showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} camera contracts`);
-                  } else {
-                    showToast(d.error || 'Failed to build spec', 'error');
-                  }
-                } catch (e) { showToast(e.message, 'error'); }
-                setBuildingSpec(false);
-              }} className="scene-sets-btn-details" style={{ width: '100%' }}>
-                <FileText size={12} /> Build Scene Spec
-              </button>
-            </div>
-          )}
-          {buildingSpec && (
-            <div style={{ marginTop: 6, textAlign: 'center', padding: '8px 0', color: '#B8962E', fontSize: 11 }}>
-              <Loader size={12} className="spin" style={{ marginRight: 4 }} /> Analyzing room layout, objects, zones...
-            </div>
-          )}
-          {hasBase && hasSpec && (
-            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
-              <ShieldCheck size={10} /> Spec: {set.scene_spec.objects?.length || 0} objects, {set.scene_spec.camera_contracts?.length || 0} contracts
-            </div>
-          )}
-
           {/* Generate All — always visible when there are generable angles */}
           {hasBase && generableAngles.length > 0 && (
             <div style={{ marginTop: 6 }}>
