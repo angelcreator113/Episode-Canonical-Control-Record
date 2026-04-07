@@ -1,6 +1,6 @@
 'use strict';
 
-const Anthropic = require('@anthropic-ai/sdk').default;
+const Anthropic = require('@anthropic-ai/sdk');
 
 const SPEC_VERSION = '2.0';
 
