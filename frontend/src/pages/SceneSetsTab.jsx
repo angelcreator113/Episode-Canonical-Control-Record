@@ -918,20 +918,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 </button>
               </div>
 
-              {/* Tab bar */}
+              {/* Tab bar — just 2 tabs */}
               <div className="scene-sets-modal-tabs">
-                <button className={`scene-sets-modal-tab ${activeModalTab === 'details' ? 'active' : ''}`} onClick={() => { setActiveModalTab('details'); setShowDetails(true); setShowPromptEditor(false); setShowAddAngle(false); }}>
+                <button className={`scene-sets-modal-tab ${activeModalTab === 'details' ? 'active' : ''}`} onClick={() => { setActiveModalTab('details'); setShowDetails(true); setShowAddAngle(false); }}>
                   <Eye size={12} /> Overview
                 </button>
-                <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' ? 'active' : ''}`} onClick={() => { setActiveModalTab('angles'); setShowDetails(true); setShowPromptEditor(false); setShowAddAngle(false); }}>
+                <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' ? 'active' : ''}`} onClick={() => { setActiveModalTab('angles'); setShowDetails(true); setShowAddAngle(false); }}>
                   <Camera size={12} /> Angles <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
                 </button>
-                {hasBase && (
-                  <button className={`scene-sets-modal-tab ${activeModalTab === 'tools' ? 'active' : ''}`} onClick={() => { setActiveModalTab('tools'); setShowDetails(true); setShowPromptEditor(false); setShowAddAngle(false); }}>
-                    <Sparkles size={12} /> Tools
-                  </button>
-                )}
-                {hasBase && (
                   <button className={`scene-sets-modal-tab ${showAddAngle ? 'active' : ''}`} onClick={() => { setActiveModalTab('add-angle'); setShowAddAngle(true); setShowDetails(false); setShowPromptEditor(false); }}>
                     <Plus size={12} /> Add Angle
                   </button>
@@ -1136,6 +1130,46 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       </details>
                     )}
 
+                    {/* Mood Variants — inline in Overview */}
+                    {hasBase && (
+                      <div style={{ marginTop: 12 }}>
+                        <div className="scene-sets-tools-label">Mood Variations</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {[
+                            { key: 'morning', label: '🌅 Morning' },
+                            { key: 'golden_hour', label: '🌇 Golden Hr' },
+                            { key: 'night', label: '🌙 Night' },
+                            { key: 'glam', label: '💄 Glam' },
+                            { key: 'cozy', label: '🕯️ Cozy' },
+                            { key: 'dramatic', label: '🎭 Dramatic' },
+                          ].map(m => (
+                            <button key={m.key} className="scene-sets-mood-btn" disabled={toolsAction === `mood_${m.key}`}
+                              onClick={async () => {
+                                setToolsAction(`mood_${m.key}`);
+                                try {
+                                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/mood-variants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ moods: [m.key] }) });
+                                  const d = await r.json();
+                                  if (d.success) showToast(`${m.label} created`);
+                                } catch (e) { showToast(e.message, 'error'); }
+                                setToolsAction(null);
+                              }}>
+                              {toolsAction === `mood_${m.key}` ? <Loader size={10} className="spin" /> : m.label}
+                            </button>
+                          ))}
+                        </div>
+                        {set.visual_language?.mood_variants?.base && (
+                          <div style={{ display: 'flex', gap: 6, marginTop: 6, overflowX: 'auto' }}>
+                            {Object.entries(set.visual_language.mood_variants.base).map(([mood, url]) => (
+                              <div key={mood} style={{ flexShrink: 0, textAlign: 'center' }}>
+                                <img src={bustUrl(url)} alt={mood} style={{ width: 64, height: 42, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }} onClick={() => window.open(url, '_blank')} />
+                                <div style={{ fontSize: 8, color: '#94a3b8', marginTop: 1, textTransform: 'capitalize' }}>{mood.replace('_', ' ')}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                   </div>
                 )}
 
@@ -1221,8 +1255,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   </div>
                 )}
 
-                {/* ═══ TOOLS TAB ═══ */}
-                {activeModalTab === 'tools' && !showAddAngle && (
+                {/* ═══ TOOLS (hidden — merged into Overview) ═══ */}
+                {activeModalTab === 'tools_REMOVED' && (
                   <div className="scene-sets-modal-section">
                     {/* Style section */}
                     <div style={{ marginBottom: 16 }}>
@@ -2323,274 +2357,45 @@ export default function SceneSetsTab() {
         </div>
       </div>
 
-      {/* Create Form */}
+      {/* Create Form — minimal: just name + type */}
       {showCreateForm && (
         <div className="scene-sets-create-form">
           <div className="scene-sets-create-row">
-            <div className="scene-sets-create-field">
+            <div className="scene-sets-create-field" style={{ flex: 2 }}>
               <label>Location Name</label>
               <input
                 type="text"
-                placeholder="e.g. Lala's Kitchen — Golden Hour"
+                placeholder="e.g. Lala's Bedroom, The Gala Venue"
                 value={newSet.name}
                 onChange={e => setNewSet(s => ({ ...s, name: e.target.value }))}
                 autoFocus
+                onKeyDown={e => { if (e.key === 'Enter' && newSet.name.trim()) handleCreate(); }}
               />
             </div>
             <div className="scene-sets-create-field">
-              <label>Scene Type</label>
+              <label>Type</label>
               <select
                 value={newSet.scene_type}
                 onChange={e => setNewSet(s => ({ ...s, scene_type: e.target.value }))}
               >
                 <option value="HOME_BASE">Home Base</option>
                 <option value="CLOSET">Closet</option>
-                <option value="EVENT_LOCATION">Event Location</option>
+                <option value="EVENT_LOCATION">Event</option>
                 <option value="TRANSITION">Transition</option>
                 <option value="OTHER">Other</option>
               </select>
             </div>
-          </div>
-
-          {/* Description — guided builder or freeform */}
-          <div className="scene-sets-create-field">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <label style={{ margin: 0 }}>Description</label>
+            <div className="scene-sets-create-field" style={{ alignSelf: 'flex-end' }}>
               <button
-                className="scene-sets-builder-toggle"
-                onClick={() => { setShowDescBuilder(b => !b); setBuilderStep(0); }}
+                className="scene-sets-btn-generate"
+                onClick={handleCreate}
+                disabled={creating || !newSet.name.trim()}
               >
-                {showDescBuilder ? <><Pencil size={10} /> Write Freely</> : <><Sparkles size={10} /> Guided Builder</>}
+                {creating ? <Loader size={12} className="spin" /> : <Plus size={12} />} Create
               </button>
             </div>
-
-            {!showDescBuilder ? (
-              <>
-                <div className="scene-sets-desc-helper">
-                  <span className="scene-sets-desc-hint">Include: room size, wall colors, key furniture, lighting type, flooring, signature decor, window views, mood</span>
-                </div>
-                <textarea
-                  placeholder={`Example: A spacious modern kitchen with white marble countertops, brass fixtures, and a large center island. Warm pendant lights hang above the island. Floor-to-ceiling windows on the back wall show a garden view. Light oak hardwood floors. The mood is bright and inviting with morning golden light streaming in.`}
-                  value={newSet.canonical_description}
-                  onChange={e => setNewSet(s => ({ ...s, canonical_description: e.target.value }))}
-                  rows={5}
-                  className="scene-sets-desc-textarea"
-                />
-                {newSet.name.trim() && (
-                  <button
-                    className="scene-sets-ai-desc-btn"
-                    disabled={descBuilderLoading}
-                    onClick={async () => {
-                      setDescBuilderLoading(true);
-                      try {
-                        const r = await fetch(`${API_BASE}/scene-sets/ai-describe`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            name: newSet.name.trim(),
-                            scene_type: newSet.scene_type,
-                            user_notes: newSet.canonical_description.trim() || null,
-                          }),
-                        });
-                        const d = await r.json();
-                        if (d.description) {
-                          setNewSet(s => ({ ...s, canonical_description: d.description }));
-                          showToast('AI description generated');
-                        }
-                      } catch { showToast('AI description failed', 'error'); }
-                      setDescBuilderLoading(false);
-                    }}
-                  >
-                    {descBuilderLoading ? <><Loader size={10} className="spin" /> Writing...</> : <><Sparkles size={10} /> AI Write Description</>}
-                  </button>
-                )}
-              </>
-            ) : (
-              <div className="scene-sets-guided-builder">
-                {/* Step-by-step questions */}
-                {[
-                  { key: 'size', q: 'How big is this space?', placeholder: 'e.g. spacious, cozy, grand ballroom, compact studio', emoji: '📐' },
-                  { key: 'colors', q: 'What are the main colors?', placeholder: 'e.g. lavender walls, white trim, gold accents, purple neon', emoji: '🎨' },
-                  { key: 'furniture', q: 'What key furniture is in the room?', placeholder: 'e.g. queen bed with tufted headboard, Hollywood vanity mirror, keyboard on stand', emoji: '🪑' },
-                  { key: 'lighting', q: 'What kind of lighting?', placeholder: 'e.g. warm fairy lights, neon sign, LED strip under bed, natural window light', emoji: '💡' },
-                  { key: 'flooring', q: 'What are the floors?', placeholder: 'e.g. plush white carpet, light oak hardwood, marble tile', emoji: '🏠' },
-                  { key: 'decor', q: 'Any signature decor or personal touches?', placeholder: 'e.g. photo collage wall, concert poster, vinyl crate, butterfly tote bag', emoji: '✨' },
-                  { key: 'windows', q: 'What do you see through the windows?', placeholder: 'e.g. LA night skyline with palm trees, garden view, city street, no windows', emoji: '🪟' },
-                  { key: 'mood', q: 'What mood or feeling should it have?', placeholder: 'e.g. dreamy and cozy, glamorous, energetic, calm and minimalist', emoji: '🌙' },
-                ].map((step, idx) => (
-                  <div key={step.key} className={`scene-sets-builder-step${idx <= builderStep ? ' visible' : ' hidden'}${builderAnswers[step.key] ? ' answered' : ''}`}>
-                    <div className="scene-sets-builder-question">
-                      <span className="scene-sets-builder-emoji">{step.emoji}</span>
-                      <span>{step.q}</span>
-                    </div>
-                    <input
-                      className="scene-sets-builder-input"
-                      placeholder={step.placeholder}
-                      value={builderAnswers[step.key] || ''}
-                      onChange={e => {
-                        setBuilderAnswers(a => ({ ...a, [step.key]: e.target.value }));
-                        if (e.target.value && idx === builderStep && builderStep < 7) {
-                          setBuilderStep(s => Math.max(s, idx + 1));
-                        }
-                      }}
-                      onFocus={() => setBuilderStep(s => Math.max(s, idx))}
-                    />
-                  </div>
-                ))}
-
-                {/* Generate from answers */}
-                {Object.values(builderAnswers).filter(Boolean).length >= 3 && (
-                  <button
-                    className="scene-sets-ai-desc-btn"
-                    style={{ marginTop: 8 }}
-                    disabled={descBuilderLoading}
-                    onClick={async () => {
-                      setDescBuilderLoading(true);
-                      try {
-                        const notes = Object.entries(builderAnswers)
-                          .filter(([, v]) => v)
-                          .map(([k, v]) => `${k}: ${v}`)
-                          .join('. ');
-                        const r = await fetch(`${API_BASE}/scene-sets/ai-describe`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            name: newSet.name.trim() || 'Untitled Location',
-                            scene_type: newSet.scene_type,
-                            user_notes: notes,
-                          }),
-                        });
-                        const d = await r.json();
-                        if (d.description) {
-                          setNewSet(s => ({ ...s, canonical_description: d.description }));
-                          setShowDescBuilder(false);
-                          showToast('Description built from your answers!');
-                        }
-                      } catch { showToast('Failed to build description', 'error'); }
-                      setDescBuilderLoading(false);
-                    }}
-                  >
-                    {descBuilderLoading ? <><Loader size={10} className="spin" /> Building...</> : <><Sparkles size={10} /> Build Description from Answers</>}
-                  </button>
-                )}
-              </div>
-            )}
           </div>
-
-          {/* Show + Episode selection */}
-          <div className="scene-sets-create-row">
-            <div className="scene-sets-create-field">
-              <label>Show <span className="scene-sets-optional">(optional)</span></label>
-              <select
-                value={newSet.show_id}
-                onChange={e => {
-                  const showId = e.target.value;
-                  setNewSet(s => ({ ...s, show_id: showId, episode_ids: [] }));
-                  setCreateShowId(showId);
-                  if (showId) loadEpisodesForShow(showId);
-                }}
-              >
-                <option value="">No show</option>
-                {allShows.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Episode checkboxes — much better than multi-select */}
-          {createShowId && allEpisodes.filter(ep => ep.show_id === createShowId).length > 0 && (
-            <div className="scene-sets-create-field">
-              <label>Episodes <span className="scene-sets-optional">(select all that use this location)</span></label>
-              <div className="scene-sets-episode-checkboxes">
-                {allEpisodes
-                  .filter(ep => ep.show_id === createShowId)
-                  .map(ep => (
-                    <label key={ep.id} className="scene-sets-episode-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={newSet.episode_ids.includes(ep.id)}
-                        onChange={e => {
-                          setNewSet(s => ({
-                            ...s,
-                            episode_ids: e.target.checked
-                              ? [...s.episode_ids, ep.id]
-                              : s.episode_ids.filter(id => id !== ep.id),
-                          }));
-                        }}
-                      />
-                      <span>{ep.season_number ? `S${ep.season_number}` : ''}E{ep.episode_number || '?'}</span>
-                      <span className="scene-sets-episode-checkbox-title">{ep.title}</span>
-                    </label>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {/* Environment & Room Properties */}
-          <div className="scene-sets-create-row" style={{ marginTop: 8 }}>
-            <div className="scene-sets-create-field">
-              <label>Time of Day <span className="scene-sets-optional">(optional)</span></label>
-              <select value={newSet.time_of_day} onChange={e => setNewSet(s => ({ ...s, time_of_day: e.target.value }))}>
-                <option value="">Any</option>
-                <option value="morning">Morning</option>
-                <option value="afternoon">Afternoon</option>
-                <option value="golden_hour">Golden Hour</option>
-                <option value="evening">Evening</option>
-                <option value="night">Night</option>
-              </select>
-            </div>
-            <div className="scene-sets-create-field">
-              <label>Season <span className="scene-sets-optional">(optional)</span></label>
-              <select value={newSet.season} onChange={e => setNewSet(s => ({ ...s, season: e.target.value }))}>
-                <option value="">Any</option>
-                <option value="spring">Spring</option>
-                <option value="summer">Summer</option>
-                <option value="fall">Fall</option>
-                <option value="winter">Winter</option>
-              </select>
-            </div>
-          </div>
-          <div className="scene-sets-create-row">
-            <div className="scene-sets-create-field">
-              <label>Room Size <span className="scene-sets-optional">(optional)</span></label>
-              <select value={newSet.room_size} onChange={e => setNewSet(s => ({ ...s, room_size: e.target.value }))}>
-                <option value="">Auto</option>
-                <option value="compact">Compact</option>
-                <option value="medium">Medium</option>
-                <option value="spacious">Spacious</option>
-                <option value="grand">Grand</option>
-              </select>
-            </div>
-            <div className="scene-sets-create-field">
-              <label>Ceiling <span className="scene-sets-optional">(optional)</span></label>
-              <select value={newSet.ceiling_height} onChange={e => setNewSet(s => ({ ...s, ceiling_height: e.target.value }))}>
-                <option value="">Standard</option>
-                <option value="tall">Tall</option>
-                <option value="vaulted">Vaulted</option>
-                <option value="double_height">Double Height</option>
-              </select>
-            </div>
-            <div className="scene-sets-create-field">
-              <label>Shape <span className="scene-sets-optional">(optional)</span></label>
-              <select value={newSet.room_shape} onChange={e => setNewSet(s => ({ ...s, room_shape: e.target.value }))}>
-                <option value="">Rectangular</option>
-                <option value="square">Square</option>
-                <option value="l_shaped">L-Shaped</option>
-                <option value="open_plan">Open Plan</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="scene-sets-create-actions">
-            <button
-              className="scene-sets-btn-generate"
-              onClick={handleCreate}
-              disabled={creating || !newSet.name.trim()}
-            >
-              {creating ? <><Loader size={12} className="spin" /> Creating...</> : <><Plus size={12} /> Create Location</>}
-            </button>
-          </div>
+          <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>You'll add the description, base image, and settings after creating.</p>
         </div>
       )}
 
