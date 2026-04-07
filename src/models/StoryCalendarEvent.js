@@ -25,6 +25,12 @@ module.exports = (sequelize, DataTypes) => {
           as: 'location',
         });
       }
+      if (models.WorldEvent) {
+        StoryCalendarEvent.hasMany(models.WorldEvent, {
+          foreignKey: 'source_calendar_event_id',
+          as: 'spawnedEvents',
+        });
+      }
     }
   }
   StoryCalendarEvent.init({

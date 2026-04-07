@@ -460,4 +460,125 @@ The story is set in year 8385. Use real months/days but year 8385.`,
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// POST /events/:id/spawn-world-event — Create a world event from a calendar event
+// ═══════════════════════════════════════════════════════════════════════
+
+router.post('/events/:id/spawn-world-event', authenticateToken, async (req, res) => {
+  try {
+    const models = getModels(req);
+    const { StoryCalendarEvent, WorldEvent, WorldLocation } = models;
+
+    if (!StoryCalendarEvent) return res.status(500).json({ error: 'StoryCalendarEvent model not loaded' });
+
+    const calendarEvent = await StoryCalendarEvent.findByPk(req.params.id, {
+      include: WorldLocation ? [{ model: WorldLocation, as: 'location' }] : [],
+    });
+    if (!calendarEvent) return res.status(404).json({ error: 'Calendar event not found' });
+
+    // Build world event from calendar event data
+    const {
+      show_id,
+      event_name, name: eventName, event_type: ceType,
+      // Override fields from request body
+    } = req.body;
+
+    if (!show_id) return res.status(400).json({ error: 'show_id is required — which show should this event belong to?' });
+
+    // Resolve venue from calendar event's location
+    const venue = calendarEvent.location || null;
+    const venueAddress = venue
+      ? [venue.street_address, venue.district, venue.city].filter(Boolean).join(', ')
+      : calendarEvent.location_address || null;
+
+    // Map calendar event_type to world event_type
+    const typeMap = {
+      'lalaverse_cultural': 'invite',
+      'world_event': 'invite',
+      'story_event': 'invite',
+      'character_event': 'guest',
+    };
+
+    if (WorldEvent) {
+      const worldEvent = await WorldEvent.create({
+        show_id,
+        name: req.body.name || calendarEvent.title,
+        event_type: req.body.event_type || typeMap[calendarEvent.event_type] || 'invite',
+        host: req.body.host || null,
+        host_brand: req.body.host_brand || null,
+        description: req.body.description || calendarEvent.what_world_knows || calendarEvent.title,
+        venue_location_id: calendarEvent.location_id || null,
+        venue_name: req.body.venue_name || venue?.name || calendarEvent.location_name || null,
+        venue_address: req.body.venue_address || venueAddress || null,
+        event_date: req.body.event_date || (calendarEvent.start_datetime ? new Date(calendarEvent.start_datetime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : null),
+        event_time: req.body.event_time || null,
+        location_hint: calendarEvent.location_name || calendarEvent.lalaverse_district || null,
+        dress_code: req.body.dress_code || null,
+        prestige: req.body.prestige || Math.min(10, (calendarEvent.severity_level || 5) + 2),
+        narrative_stakes: req.body.narrative_stakes || calendarEvent.what_only_we_know || null,
+        source_calendar_event_id: calendarEvent.id,
+        scene_set_id: req.body.scene_set_id || null,
+        status: 'draft',
+      });
+
+      return res.status(201).json({
+        success: true,
+        event: worldEvent.toJSON(),
+        source: {
+          calendar_event_id: calendarEvent.id,
+          calendar_event_title: calendarEvent.title,
+        },
+      });
+    }
+
+    // Fallback: raw SQL if WorldEvent model not available
+    const { v4: uuidv4 } = require('uuid');
+    const id = uuidv4();
+    await models.sequelize.query(
+      `INSERT INTO world_events (id, show_id, name, event_type, description, location_hint, source_calendar_event_id, status, created_at, updated_at)
+       VALUES (:id, :show_id, :name, :event_type, :desc, :location_hint, :source_id, 'draft', NOW(), NOW())`,
+      {
+        replacements: {
+          id, show_id,
+          name: req.body.name || calendarEvent.title,
+          event_type: req.body.event_type || 'invite',
+          desc: calendarEvent.what_world_knows || calendarEvent.title,
+          location_hint: calendarEvent.location_name || null,
+          source_id: calendarEvent.id,
+        },
+      }
+    );
+
+    res.status(201).json({ success: true, event: { id, name: req.body.name || calendarEvent.title }, source: { calendar_event_id: calendarEvent.id } });
+  } catch (err) {
+    console.error('POST /events/:id/spawn-world-event error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// GET /events/:id/spawned — List world events spawned from a calendar event
+// ═══════════════════════════════════════════════════════════════════════
+
+router.get('/events/:id/spawned', authenticateToken, async (req, res) => {
+  try {
+    const models = getModels(req);
+    if (models.WorldEvent) {
+      const events = await models.WorldEvent.findAll({
+        where: { source_calendar_event_id: req.params.id },
+        order: [['created_at', 'DESC']],
+      });
+      return res.json({ success: true, events });
+    }
+
+    const [events] = await models.sequelize.query(
+      `SELECT * FROM world_events WHERE source_calendar_event_id = :id ORDER BY created_at DESC`,
+      { replacements: { id: req.params.id } }
+    );
+    res.json({ success: true, events });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

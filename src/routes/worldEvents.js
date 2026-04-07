@@ -82,6 +82,15 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
           required: false,
         });
       }
+      // Include source calendar event
+      if (models.StoryCalendarEvent) {
+        include.push({
+          model: models.StoryCalendarEvent,
+          as: 'sourceCalendarEvent',
+          attributes: ['id', 'title', 'event_type', 'cultural_category', 'start_datetime'],
+          required: false,
+        });
+      }
 
       const events = await models.WorldEvent.findAll({
         where,
@@ -317,7 +326,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'season_id', 'arc_id',
       'is_paid', 'payment_amount', 'requirements', 'career_tier',
       'career_milestone', 'fail_consequence', 'success_unlock',
-      'scene_set_id',
+      'scene_set_id', 'source_calendar_event_id',
+      'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
+      'guest_list', 'invitation_details',
       'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
     ];
     const requiredStringFields = new Set(['name', 'event_type', 'status']);

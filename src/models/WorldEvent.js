@@ -76,6 +76,13 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'Descriptive text: "Parisian rooftop garden, golden hour"',
     },
+    source_calendar_event_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: 'story_calendar_events', key: 'id' },
+      onDelete: 'SET NULL',
+      comment: 'The cultural calendar event that spawned this world event',
+    },
     scene_set_id: {
       type: DataTypes.UUID,
       allowNull: true,
@@ -293,6 +300,13 @@ module.exports = (sequelize) => {
       WorldEvent.belongsTo(models.Episode, {
         foreignKey: 'used_in_episode_id',
         as: 'usedInEpisode',
+      });
+    }
+    // Source cultural calendar event
+    if (models.StoryCalendarEvent) {
+      WorldEvent.belongsTo(models.StoryCalendarEvent, {
+        foreignKey: 'source_calendar_event_id',
+        as: 'sourceCalendarEvent',
       });
     }
   };
