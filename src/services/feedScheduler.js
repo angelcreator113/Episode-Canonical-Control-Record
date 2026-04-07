@@ -24,7 +24,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const AI_MODEL = 'claude-sonnet-4-6';
 const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
 const AI_TIMEOUT_MS = 60000; // 60s timeout — enough for large profile generation prompts
-const AI_MAX_RETRIES = 1;
+const AI_MAX_RETRIES = 0;   // No retries — fail fast, let the batch loop handle partial success
 
 /**
  * Quick pre-flight check — validates API key + model access with a tiny call.
@@ -372,7 +372,8 @@ Return ONLY the JSON array. No markdown, no explanation.`;
 
   console.log(`[FeedScheduler] Calling Claude for ${count} sparks (layer=${layer})...`);
   const sparkStart = Date.now();
-  const response = await callClaude(prompt, { maxTokens: 8000 });
+  // Sparks are small objects (~200 tokens each) — 4000 is plenty for up to 20 sparks
+  const response = await callClaude(prompt, { maxTokens: 4000 });
   console.log(`[FeedScheduler] Claude spark response received in ${((Date.now() - sparkStart) / 1000).toFixed(1)}s`);
 
   const rawText = response?.content?.[0]?.text;
@@ -525,7 +526,7 @@ Do not reference JustAWoman or the real world in any generated content.
 Lala does not know she was built. The world she lives in feels complete and self-contained.`;
   }
 
-  const response = await callClaude(prompt, { maxTokens: 8000 });
+  const response = await callClaude(prompt, { maxTokens: 6000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
