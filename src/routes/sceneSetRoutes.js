@@ -1754,8 +1754,34 @@ Pick angles that make sense for THIS location. No generic angles that don't fit.
 
     res.json({ success: true, angles_created: created.length, angles: created });
   } catch (err) {
-    console.error('Suggest angles error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Suggest angles error:', err?.message || err);
+
+    // Fallback: create default angles if image analysis fails
+    try {
+      const defaultAngles = [
+        { label: 'WIDE', name: 'Wide Establishing Shot', description: 'Full room panoramic view', camera_direction: 'Wide-angle shot from corner showing the entire room.' },
+        { label: 'BED', name: 'Bed Close-Up', description: 'Focus on the bed area', camera_direction: 'Straight-on shot of the bed and headboard area.' },
+        { label: 'VANITY', name: 'Vanity Area', description: 'Vanity or desk area', camera_direction: 'Angled shot of the vanity/desk area with mirror.' },
+        { label: 'WINDOW', name: 'Window View', description: 'Window and natural light', camera_direction: 'Shot facing the window showing the view and natural light.' },
+        { label: 'DETAIL', name: 'Detail Shot', description: 'Close-up on decor', camera_direction: 'Close-up on signature decor items and textures.' },
+      ];
+      const created = await SceneAngle.bulkCreate(
+        defaultAngles.map((a, idx) => ({
+          scene_set_id: req.params.id,
+          angle_label: a.label,
+          angle_name: a.name,
+          angle_description: a.description,
+          camera_direction: a.camera_direction,
+          generation_status: 'pending',
+          sort_order: idx,
+        })),
+        { returning: true }
+      );
+      return res.json({ success: true, angles_created: created.length, angles: created, fallback: true });
+    } catch (fallbackErr) {
+      console.error('Fallback angles also failed:', fallbackErr?.message);
+    }
+    res.status(500).json({ error: err?.message || 'Failed to suggest angles' });
   }
 });
 
