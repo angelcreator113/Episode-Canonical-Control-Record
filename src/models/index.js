@@ -111,6 +111,7 @@ let RelationshipEvent; // Relationship timeline turning points
 let StoryRevision; // Revision history for edited stories
 let WorldTimelineEvent; // World calendar/timeline events
 let WorldLocation; // Location/geography database
+let WorldEvent; // LalaVerse events (galas, parties, brand deals)
 let WorldStateSnapshot; // World-state snapshots per chapter
 let PipelineTracking; // End-to-end pipeline status tracking
 let StoryThread; // Story thread / subplot tracking
@@ -356,6 +357,7 @@ try {
   StoryRevision = require('./StoryRevision')(sequelize);
   WorldTimelineEvent = require('./WorldTimelineEvent')(sequelize);
   WorldLocation = require('./WorldLocation')(sequelize);
+  WorldEvent = require('./WorldEvent')(sequelize);
   WorldStateSnapshot = require('./WorldStateSnapshot')(sequelize);
   PipelineTracking = require('./PipelineTracking')(sequelize);
   StoryThread = require('./StoryThread')(sequelize);
@@ -508,6 +510,7 @@ const requiredModels = {
   StoryRevision,
   WorldTimelineEvent,
   WorldLocation,
+  WorldEvent,
   WorldStateSnapshot,
   PipelineTracking,
   StoryThread,
@@ -649,6 +652,9 @@ if (WorldTimelineEvent && WorldTimelineEvent.associate) {
 }
 if (WorldLocation && WorldLocation.associate) {
   WorldLocation.associate(requiredModels);
+}
+if (WorldEvent && WorldEvent.associate) {
+  WorldEvent.associate(requiredModels);
 }
 
 // CharacterRelationship → RelationshipEvent (1:N)
@@ -1973,6 +1979,7 @@ module.exports.RelationshipEvent = RelationshipEvent;
 module.exports.StoryRevision = StoryRevision;
 module.exports.WorldTimelineEvent = WorldTimelineEvent;
 module.exports.WorldLocation = WorldLocation;
+module.exports.WorldEvent = WorldEvent;
 module.exports.WorldStateSnapshot = WorldStateSnapshot;
 module.exports.PipelineTracking = PipelineTracking;
 module.exports.StoryThread = StoryThread;
