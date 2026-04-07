@@ -99,9 +99,11 @@ router.post('/', async (req, res) => {
       name,
       description: description || `${name} — a luxury property in the LalaVerse`,
       location_type: 'property',
-      property_type: property_type || 'penthouse',
-      style_guide: mergedGuide,
       universe_id: universe_id || null,
+      metadata: {
+        property_type: property_type || 'penthouse',
+        style_guide: mergedGuide,
+      },
     });
 
     res.status(201).json({ success: true, data: property });
@@ -149,11 +151,17 @@ router.patch('/:id', async (req, res) => {
     const property = await WorldLocation.findByPk(req.params.id);
     if (!property) return res.status(404).json({ success: false, error: 'Property not found' });
 
-    const allowed = ['name', 'description', 'property_type', 'style_guide', 'floor_plan', 'metadata'];
+    const allowed = ['name', 'description', 'metadata'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
+    // Store property-specific fields in metadata
+    const meta = { ...(property.metadata || {}), ...(updates.metadata || {}) };
+    if (req.body.property_type !== undefined) meta.property_type = req.body.property_type;
+    if (req.body.style_guide !== undefined) meta.style_guide = req.body.style_guide;
+    if (req.body.floor_plan !== undefined) meta.floor_plan = req.body.floor_plan;
+    updates.metadata = meta;
 
     await property.update(updates);
     res.json({ success: true, data: property });
@@ -199,9 +207,12 @@ router.post('/:id/rooms', async (req, res) => {
       scene_type: sceneType,
       world_location_id: room.id,
       universe_id: property.universe_id,
-      room_type: resolvedRoomType,
-      room_layout_template: template_id || null,
       generation_status: 'pending',
+      // Store room-specific fields in canvas_settings until migration adds dedicated columns
+      canvas_settings: {
+        room_type: resolvedRoomType,
+        room_layout_template: template_id || null,
+      },
     });
 
     res.status(201).json({
@@ -258,13 +269,19 @@ router.post('/:id/rooms/:roomId/generate-empty', async (req, res) => {
     });
     if (!sceneSet) return res.status(404).json({ success: false, error: 'No scene set for this room' });
 
-    const template = propertyService.getTemplate(sceneSet.room_layout_template);
+    const templateId = sceneSet.canvas_settings?.room_layout_template || sceneSet.room_layout_template;
+    const template = propertyService.getTemplate(templateId);
     if (!template) {
       return res.status(400).json({ success: false, error: 'No room layout template selected' });
     }
 
-    // Build the effective style guide (property + room overrides)
-    const styleGuide = propertyService.getEffectiveStyleGuide(room, property);
+    // Build the effective style guide (property metadata + room metadata)
+    const propertyStyleGuide = property.metadata?.style_guide || property.style_guide;
+    const roomStyleGuide = room.metadata?.style_guide || room.style_guide;
+    const styleGuide = { ...(propertyStyleGuide || {}), ...(roomStyleGuide || {}) };
+    if (propertyStyleGuide?.materials || roomStyleGuide?.materials) {
+      styleGuide.materials = { ...(propertyStyleGuide?.materials || {}), ...(roomStyleGuide?.materials || {}) };
+    }
 
     // Build the empty room prompt
     const prompt = propertyService.buildEmptyRoomPrompt(template, styleGuide);

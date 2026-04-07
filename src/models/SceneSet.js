@@ -126,30 +126,6 @@ module.exports = (sequelize) => {
       defaultValue: null,
       comment: 'SceneSpec — room layout, zones, objects with continuity rules, camera contracts, and room states',
     },
-    room_type: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-      defaultValue: null,
-      comment: 'Room type within a property: bedroom, closet, bathroom, living_room, kitchen, hallway, terrace',
-    },
-    room_connections: {
-      type: DataTypes.JSONB,
-      allowNull: true,
-      defaultValue: null,
-      comment: 'Connections to other rooms: [{ object_id, target_scene_set_id, connection_type }]',
-    },
-    room_layout_template: {
-      type: DataTypes.STRING(100),
-      allowNull: true,
-      defaultValue: null,
-      comment: 'Empty room layout template ID',
-    },
-    empty_room_url: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      defaultValue: null,
-      comment: 'URL to the empty room base image (before decoration)',
-    },
   }, {
     sequelize,
     modelName: 'SceneSet',
