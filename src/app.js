@@ -1536,6 +1536,15 @@ try {
   console.error('✗ Failed to load Scene Sets routes:', e.message);
 }
 
+// Properties — multi-room HOME_BASE management
+try {
+  const propertyRoutes = require('./routes/propertyRoutes');
+  app.use('/api/v1/properties', propertyRoutes);
+  console.log('✓ Properties loaded at /api/v1/properties');
+} catch (e) {
+  console.error('✗ Failed to load Property routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({

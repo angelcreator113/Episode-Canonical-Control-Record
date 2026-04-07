@@ -57,6 +57,56 @@ module.exports = (sequelize) => {
       allowNull: true,
       defaultValue: {},
     },
+    // ── Address fields ──
+    street_address: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Street address: "742 Ocean Drive"',
+    },
+    city: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    district: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: 'Neighborhood/district: "South Beach"',
+    },
+    coordinates: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: '{ lat, lng } for map placement',
+    },
+    // ── Venue fields ──
+    venue_type: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Business type: restaurant, club, cafe, salon, gallery, shopping, gym, studio',
+    },
+    venue_details: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: '{ hours, price_level, capacity, dress_code, vibe_tags }',
+    },
+    // ── Property fields ──
+    style_guide: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Property style guide — materials, palette, architecture',
+    },
+    floor_plan: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+    },
+    property_type: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'penthouse, mansion, apartment, townhouse, studio',
+    },
   }, {
     tableName: 'world_locations',
     timestamps: true,
@@ -82,6 +132,12 @@ module.exports = (sequelize) => {
       WorldLocation.hasMany(models.SceneSet, {
         foreignKey: 'world_location_id',
         as: 'sceneSets',
+      });
+    }
+    if (models.WorldEvent) {
+      WorldLocation.hasMany(models.WorldEvent, {
+        foreignKey: 'venue_location_id',
+        as: 'events',
       });
     }
   };
