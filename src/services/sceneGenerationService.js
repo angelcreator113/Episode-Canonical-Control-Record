@@ -869,7 +869,7 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  const IMAGE_ANALYSIS_VERSION = 5; // bump to invalidate cache when schema changes
+  const IMAGE_ANALYSIS_VERSION = 6; // bump to invalidate cache when schema changes
   // Check cache — skip if already analyzed for this base image with current version
   const vl = sceneSet.visual_language || {};
   if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
@@ -920,6 +920,8 @@ Return JSON:
   "visible_through_windows": "what is visible outside",
   "atmosphere": "one sentence — mood, lighting quality, time of day",
 
+  "description": "Write a rich 2-3 sentence description of this room as if describing a film set. Include: room size, wall colors, key furniture with materials/colors and positions, lighting sources, signature decor, window views, flooring, and overall mood. Be specific enough that someone could recreate this exact room from your description alone.",
+
   "room_properties": {
     "room_size": "compact | medium | spacious | grand",
     "ceiling_height": "standard | tall | vaulted | double_height",
@@ -942,7 +944,7 @@ Return ONLY JSON.` },
     analysis.version = IMAGE_ANALYSIS_VERSION;
     analysis.analyzed_at = new Date().toISOString();
 
-    // Cache blueprint in visual_language
+    // Cache blueprint in visual_language + auto-fill description if empty
     const updatedVl = { ...vl, image_analysis: analysis };
     if (analysis.layout_map) updatedVl.layout_map = analysis.layout_map;
     if (analysis.anchor_objects) updatedVl.anchor_objects = analysis.anchor_objects;
@@ -950,8 +952,19 @@ Return ONLY JSON.` },
     if (analysis.room_properties && !vl.room_properties_manual) {
       updatedVl.room_properties = analysis.room_properties;
     }
+
+    // Auto-fill description from image analysis if the set has no description yet
+    const updateFields = { visual_language: updatedVl };
+    if (analysis.description && !sceneSet.canonical_description) {
+      updateFields.canonical_description = analysis.description;
+      // Also regenerate the prompt from the new description
+      const tempSet = { ...sceneSet, canonical_description: analysis.description, visual_language: updatedVl };
+      updateFields.base_runway_prompt = buildPrompt(tempSet);
+      console.log(`[SceneGen] Auto-filled description from image analysis`);
+    }
+
     await SceneSetModel.update(
-      { visual_language: updatedVl },
+      updateFields,
       { where: { id: sceneSet.id } }
     );
 
