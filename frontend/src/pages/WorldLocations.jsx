@@ -222,12 +222,70 @@ export default function WorldLocations() {
         </div>
       )}
 
-      {/* Scene sets linked */}
+      {/* Sensory details */}
+      {loc.sensory_details && Object.values(loc.sensory_details).some(Boolean) && (
+        <div className="wl-card-sensory">
+          {Object.entries(loc.sensory_details).filter(([,v]) => v).map(([k,v]) => (
+            <div key={k} className="wl-sensory-item">
+              <span className="wl-sensory-label">{k}</span>
+              <span className="wl-sensory-value">{v}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Scene sets linked — with thumbnail */}
       {loc.sceneSets?.length > 0 && (
         <div className="wl-card-scenes">
           {loc.sceneSets.map(ss => (
-            <span key={ss.id} className="wl-tag wl-tag-scene">{ss.name}</span>
+            <div key={ss.id} className="wl-scene-link">
+              {ss.base_still_url && <img src={ss.base_still_url} alt={ss.name} className="wl-scene-thumb" />}
+              <span className="wl-scene-name">{ss.name}</span>
+              <span className="wl-tag wl-tag-scene">{ss.scene_type?.replace(/_/g, ' ')}</span>
+            </div>
           ))}
+        </div>
+      )}
+
+      {/* World events at this location */}
+      {loc.events?.length > 0 && (
+        <div className="wl-card-events">
+          <div className="wl-card-sub-label">Events</div>
+          {loc.events.map(ev => (
+            <div key={ev.id} className="wl-event-item">
+              <span className="wl-event-name">{ev.name}</span>
+              <span className="wl-tag">{ev.event_type}</span>
+              {ev.event_date && <span className="wl-event-date">{ev.event_date}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Calendar events at this location */}
+      {loc.calendarEvents?.length > 0 && (
+        <div className="wl-card-events">
+          <div className="wl-card-sub-label">Calendar</div>
+          {loc.calendarEvents.map(ce => (
+            <div key={ce.id} className="wl-event-item">
+              <span className="wl-event-name">{ce.title}</span>
+              <span className="wl-tag wl-tag-calendar">{ce.cultural_category || ce.event_type}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Child locations */}
+      {loc.childLocations?.length > 0 && (
+        <div className="wl-card-children">
+          <div className="wl-card-sub-label">Contains</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {loc.childLocations.map(child => (
+              <span key={child.id} className="wl-tag wl-tag-child">
+                <LocationIcon type={child.location_type} venueType={child.venue_type} size={10} />
+                {child.name}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>

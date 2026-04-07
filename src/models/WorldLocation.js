@@ -140,6 +140,12 @@ module.exports = (sequelize) => {
         as: 'events',
       });
     }
+    if (models.StoryCalendarEvent) {
+      WorldLocation.hasMany(models.StoryCalendarEvent, {
+        foreignKey: 'location_id',
+        as: 'calendarEvents',
+      });
+    }
   };
 
   return WorldLocation;

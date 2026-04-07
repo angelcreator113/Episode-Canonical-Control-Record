@@ -3138,7 +3138,50 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
       const rows = await Q(req, 'SELECT * FROM world_locations ORDER BY name ASC LIMIT 200');
       return res.json({ locations: rows });
     }
-    const rows = await WorldLocation.findAll({ order: [['name', 'ASC']], limit: 200 });
+
+    const include = [];
+    // Include child locations
+    include.push({
+      model: WorldLocation,
+      as: 'childLocations',
+      attributes: ['id', 'name', 'location_type', 'venue_type'],
+      required: false,
+    });
+    // Include linked scene sets
+    if (models.SceneSet) {
+      include.push({
+        model: models.SceneSet,
+        as: 'sceneSets',
+        attributes: ['id', 'name', 'scene_type', 'base_still_url', 'generation_status'],
+        required: false,
+      });
+    }
+    // Include world events at this venue
+    if (models.WorldEvent) {
+      include.push({
+        model: models.WorldEvent,
+        as: 'events',
+        attributes: ['id', 'name', 'event_type', 'event_date', 'status'],
+        required: false,
+        limit: 5,
+      });
+    }
+    // Include calendar events
+    if (models.StoryCalendarEvent) {
+      include.push({
+        model: models.StoryCalendarEvent,
+        as: 'calendarEvents',
+        attributes: ['id', 'title', 'event_type', 'start_datetime', 'cultural_category'],
+        required: false,
+        limit: 5,
+      });
+    }
+
+    const rows = await WorldLocation.findAll({
+      include,
+      order: [['name', 'ASC']],
+      limit: 200,
+    });
     res.json({ locations: rows });
   } catch (err) { res.json({ locations: [] }); }
 });
