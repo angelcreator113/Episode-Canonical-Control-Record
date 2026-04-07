@@ -23,7 +23,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const AI_MODEL = 'claude-sonnet-4-6';
 const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
-const AI_TIMEOUT_MS = 30000; // 30s timeout — fail fast so UI shows errors quickly
+const AI_TIMEOUT_MS = 60000; // 60s timeout — enough for large profile generation prompts
 const AI_MAX_RETRIES = 1;
 
 /**
@@ -433,7 +433,7 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   }
 
   // Generate full profiles from sparks (batch 3 at a time for speed)
-  const BATCH_CONCURRENCY = 3;
+  const BATCH_CONCURRENCY = 2; // 2 parallel calls to avoid rate limits and timeouts
   for (let i = 0; i < sparks.length; i += BATCH_CONCURRENCY) {
     const batch = sparks.slice(i, i + BATCH_CONCURRENCY);
     if (progressCallback) {
