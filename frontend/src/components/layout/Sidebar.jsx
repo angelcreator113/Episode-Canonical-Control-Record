@@ -28,7 +28,11 @@ function buildNav(shows) {
       zone: 'CREATE SHOW',
       items: [
         { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
-        { icon: '👥', label: "Lala's Feed", route: '/world-studio?tab=feed' },
+        ...(showId ? [
+          { icon: '👥', label: "Lala's Feed", route: `/shows/${showId}/world?tab=feed` },
+        ] : [
+          { icon: '👥', label: "Lala's Feed", route: '/world-studio?tab=feed' },
+        ]),
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=events` },
         ] : []),

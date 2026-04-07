@@ -15,11 +15,13 @@
  * Location: frontend/src/pages/WorldAdmin.jsx
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
 import './WorldAdmin.css';
+
+const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
 const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
@@ -74,6 +76,7 @@ const EVENT_STATUS_CONFIG = {
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
   { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
+  { key: 'feed', icon: '👥', label: "Lala's Feed" },
   { key: 'events', icon: '💌', label: 'Events Library' },
   { key: 'goals', icon: '🎯', label: 'Career Goals' },
   { key: 'wardrobe', icon: '👗', label: 'Wardrobe' },
@@ -1149,6 +1152,13 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
         </div>
+      )}
+
+      {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
+      {activeTab === 'feed' && (
+        <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
+          <SocialProfileGenerator embedded showId={showId} />
+        </Suspense>
       )}
 
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
