@@ -28,6 +28,7 @@ function buildNav(shows) {
       zone: 'CREATE SHOW',
       items: [
         { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
+        { icon: '👥', label: "Lala's Feed", route: '/world-studio?tab=feed' },
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=events` },
         ] : []),
@@ -39,6 +40,7 @@ function buildNav(shows) {
       items: [
         { icon: '📜', label: 'World State', route: '/universe/world-state' },
         { icon: '📍', label: 'World Locations', route: '/world-locations' },
+        { icon: '🎉', label: 'Events Library', route: showId ? `/shows/${showId}/world?tab=events` : '/world-studio?tab=feed' },
         { icon: '📅', label: 'Cultural Calendar', route: '/cultural-calendar' },
         { icon: '📜', label: 'Cultural Memory', route: '/cultural-memory' },
         { icon: '🏗️', label: 'Infrastructure', route: '/world-infrastructure' },
