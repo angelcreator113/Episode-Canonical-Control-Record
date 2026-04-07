@@ -265,11 +265,15 @@ export default function useSceneStudioState() {
       isVisible: true,
       isLocked: false,
       isActiveVariant: true,
+      // Auto-tag with active angle when editing a scene set angle
+      sceneAngleId: newObj.sceneAngleId !== undefined
+        ? newObj.sceneAngleId
+        : (contextType === 'sceneSet' ? activeAngleId : null),
     };
     setObjects((prev) => [...prev, obj]);
     setSelectedIds(new Set([obj.id]));
     markDirty();
-  }, [objects, pushHistory]);
+  }, [objects, pushHistory, contextType, activeAngleId]);
 
   const removeObject = useCallback((id) => {
     pushHistory(JSON.parse(JSON.stringify(objects)));

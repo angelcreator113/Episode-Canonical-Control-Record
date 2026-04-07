@@ -23,6 +23,7 @@ const os = require('os');
 const path = require('path');
 const sharp = require('sharp');
 const artifactDetection = require('./artifactDetectionService');
+const sceneSpecService = require('./sceneSpecService');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
@@ -1486,6 +1487,16 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     } catch (err) {
       console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);
     }
+
+    // Auto-build SceneSpec if not present
+    if (!sceneSet.scene_spec && imageAnalysis) {
+      try {
+        const spec = await sceneSpecService.buildSceneSpec(sceneSet, SceneSet);
+        if (spec) sceneSet.scene_spec = spec;
+      } catch (specErr) {
+        console.warn(`[SceneGen] SceneSpec build failed (non-blocking): ${specErr.message}`);
+      }
+    }
   }
 
   // Build blueprint-driven camera instruction
@@ -1503,11 +1514,35 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     prompt = `${sceneAngle.camera_direction}. ${prompt}`;
   }
 
-  // Build anchor constraint — tell the AI which objects MUST appear
+  // ── SceneSpec camera contracts (preferred) or fallback to anchor_objects ──
+  const spec = sceneSet.scene_spec;
+  let specConstraints = '';
+  if (spec?.camera_contracts && spec?.objects) {
+    specConstraints = sceneSpecService.buildAngleConstraints(spec, angleLabel);
+
+    // Add state-driven ambient if time_of_day is set
+    const timeOfDay = sceneSet.time_of_day;
+    if (timeOfDay) {
+      const ambient = sceneSpecService.buildStateAmbient(spec, timeOfDay);
+      if (ambient) {
+        prompt = `${ambient} ${prompt}`;
+      }
+    }
+  }
+
+  // Build legacy anchors (used both as prompt fallback and as DALL-E hint)
   const relevantAnchors = anchorObjects
     .filter(a => !a.must_appear_in || a.must_appear_in.length === 0 || a.must_appear_in.some(label => angleLabel.includes(label)))
     .map(a => `${a.name} (${a.position}): ${a.description}`)
     .slice(0, 5);
+
+  if (specConstraints) {
+    prompt = `${specConstraints}\n\n${prompt}`;
+    console.log(`[SceneGen] Using SceneSpec camera contracts for ${angleLabel}`);
+  } else if (relevantAnchors.length > 0) {
+    // Fallback to legacy anchor_objects when no spec
+    prompt = `These objects MUST appear: ${relevantAnchors.join('; ')}. ${prompt}`;
+  }
 
   // Determine if base is usable as reference
   const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
@@ -1599,6 +1634,28 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
+    // ── SceneSpec post-generation validation ──
+    let specValidation = null;
+    if (spec?.camera_contracts && stillUrl) {
+      try {
+        specValidation = await sceneSpecService.validateAngleAgainstSpec(stillUrl, spec, angleLabel);
+        console.log(`[SceneGen] Spec validation for ${angleLabel}: score=${specValidation.score}, missing=${specValidation.missing_required?.length || 0}`);
+      } catch (valErr) {
+        console.warn(`[SceneGen] Spec validation failed (non-blocking): ${valErr.message}`);
+      }
+    }
+
+    const qualityReview = sceneAngle.quality_review || {};
+    if (specValidation) {
+      qualityReview.spec_validation = {
+        score: specValidation.score,
+        pass: specValidation.pass,
+        missing_required: specValidation.missing_required,
+        issues: specValidation.issues,
+        validated_at: new Date().toISOString(),
+      };
+    }
+
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: null,
@@ -1606,11 +1663,12 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       generation_status: 'complete',
       generation_cost: totalCost,
       generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
+      quality_review: qualityReview,
     }, { where: { id: sceneAngle.id } });
 
     await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
 
-    return { success: true, stillUrl, seed: generatedSeed };
+    return { success: true, stillUrl, seed: generatedSeed, specValidation };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;

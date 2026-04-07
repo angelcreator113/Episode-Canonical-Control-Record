@@ -1671,6 +1671,112 @@ router.delete('/:id/episodes/:episodeId', validateUUIDParam('id'), optionalAuth,
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// SCENE SPEC routes — room layout, zones, objects, camera contracts
+// ══════════════════════════════════════════════════════════════════════
+
+const sceneSpecService = require('../services/sceneSpecService');
+
+// GET /api/v1/scene-sets/:id/spec - Get scene spec
+router.get('/:id/spec', validateUUIDParam('id'), async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    res.json({ success: true, data: set.scene_spec || null });
+  } catch (err) {
+    console.error('GET /:id/spec error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/v1/scene-sets/:id/spec/generate - Build spec from base image via AI
+router.post('/:id/spec/generate', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.base_still_url) return res.status(400).json({ success: false, error: 'No base image — upload a base still first' });
+
+    // Force regeneration by clearing cached spec
+    if (req.body.force) {
+      await SceneSet.update({ scene_spec: null }, { where: { id: set.id } });
+      set.scene_spec = null;
+    }
+
+    const spec = await sceneSpecService.buildSceneSpec(set, SceneSet);
+    if (!spec) {
+      return res.status(500).json({ success: false, error: 'Failed to generate scene spec — check ANTHROPIC_API_KEY' });
+    }
+
+    res.json({ success: true, data: spec });
+  } catch (err) {
+    console.error('POST /:id/spec/generate error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/scene-sets/:id/spec - Replace entire scene spec
+router.put('/:id/spec', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const spec = req.body.spec || req.body;
+    if (!spec || typeof spec !== 'object') {
+      return res.status(400).json({ success: false, error: 'spec must be a JSON object' });
+    }
+
+    spec._meta = spec._meta || {};
+    spec._meta.last_edited = new Date().toISOString();
+    spec._meta.source = 'user_edit';
+
+    await SceneSet.update({ scene_spec: spec }, { where: { id: set.id } });
+    res.json({ success: true, data: spec });
+  } catch (err) {
+    console.error('PUT /:id/spec error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PATCH /api/v1/scene-sets/:id/spec - Merge edits into existing spec
+router.patch('/:id/spec', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+
+    const edits = req.body;
+    if (!edits || typeof edits !== 'object') {
+      return res.status(400).json({ success: false, error: 'Request body must be a JSON object with spec fields to merge' });
+    }
+
+    const merged = sceneSpecService.mergeSpecEdits(set.scene_spec, edits);
+    await SceneSet.update({ scene_spec: merged }, { where: { id: set.id } });
+    res.json({ success: true, data: merged });
+  } catch (err) {
+    console.error('PATCH /:id/spec error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/v1/scene-sets/:id/spec/validate-angle - Validate a generated angle against spec
+router.post('/:id/spec/validate-angle', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.scene_spec) return res.status(400).json({ success: false, error: 'No scene spec — generate one first' });
+
+    const { image_url, angle_label } = req.body;
+    if (!image_url || !angle_label) {
+      return res.status(400).json({ success: false, error: 'image_url and angle_label are required' });
+    }
+
+    const result = await sceneSpecService.validateAngleAgainstSpec(image_url, set.scene_spec, angle_label);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('POST /:id/spec/validate-angle error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // SCENE STUDIO routes for scene sets
 // ══════════════════════════════════════════════════════════════════════
 
@@ -1718,6 +1824,12 @@ router.post('/:id/suggest-angles-from-image', validateUUIDParam('id'), optionalA
     if (!set.base_still_url) return res.status(400).json({ error: 'No base image' });
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
+    // Get existing angles so we don't suggest duplicates
+    const existingAngles = await SceneAngle.findAll({ where: { scene_set_id: set.id } });
+    const existingLabels = existingAngles.map(a => a.angle_label);
+    const existingCount = existingAngles.length;
+    const keepExisting = existingCount > 0;
+
     const client = getAnthropicClient();
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -1726,9 +1838,10 @@ router.post('/:id/suggest-angles-from-image', validateUUIDParam('id'), optionalA
         role: 'user',
         content: [
           { type: 'image', source: { type: 'url', url: set.base_still_url } },
-          { type: 'text', text: `Suggest 4-6 camera angles for this location. Return ONLY a JSON array:
+          { type: 'text', text: `Suggest ${keepExisting ? '3-4 additional' : '4-6'} camera angles for this location. Return ONLY a JSON array:
 [{"label":"UPPERCASE_LABEL","name":"Name","description":"What this shows","camera_direction":"Camera instruction — position, direction, how to extend the space beyond the reference image"}]
-Pick angles that make sense for THIS location. No generic angles that don't fit.` },
+Pick angles that make sense for THIS location. No generic angles that don't fit.
+${existingLabels.length > 0 ? `ALREADY HAVE these angles — do NOT suggest duplicates: ${existingLabels.join(', ')}` : ''}` },
         ],
       }],
     });
@@ -1738,16 +1851,22 @@ Pick angles that make sense for THIS location. No generic angles that don't fit.
     if (!match) return res.status(500).json({ error: 'Failed to parse angles' });
 
     const suggestedAngles = JSON.parse(match[0]);
-    await SceneAngle.destroy({ where: { scene_set_id: set.id }, force: true });
+
+    // Filter out any that duplicate existing labels
+    const newAngles = suggestedAngles.filter(a => {
+      const label = (a.label || '').toUpperCase().replace(/[^A-Z_]/g, '');
+      return !existingLabels.includes(label);
+    });
+
     const created = await SceneAngle.bulkCreate(
-      suggestedAngles.map((a, idx) => ({
+      newAngles.map((a, idx) => ({
         scene_set_id: set.id,
         angle_label: (a.label || 'OTHER').toUpperCase().replace(/[^A-Z_]/g, ''),
-        angle_name: a.name || `Angle ${idx + 1}`,
+        angle_name: a.name || `Angle ${existingCount + idx + 1}`,
         angle_description: a.description || '',
         camera_direction: a.camera_direction || '',
         generation_status: 'pending',
-        sort_order: idx,
+        sort_order: existingCount + idx,
       })),
       { returning: true }
     );

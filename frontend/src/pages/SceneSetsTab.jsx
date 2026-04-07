@@ -1205,14 +1205,29 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 {/* ═══ ANGLES TAB ═══ */}
                 {activeModalTab === 'angles' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
-                    {/* Compact action bar */}
-                    {generableAngles.length > 0 && (
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    {/* Action bar */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      {generableAngles.length > 0 && (
                         <button className="scene-sets-btn-generate" onClick={() => onGenerateAll(set, false)} disabled={isGenerating}>
                           <Sparkles size={11} /> Generate All ({generableAngles.length})
                         </button>
-                      </div>
-                    )}
+                      )}
+                      {hasBase && (
+                        <button className="scene-sets-btn-details" disabled={seeding} onClick={async () => {
+                          setSeeding(true);
+                          showToast('Suggesting more angles...');
+                          try {
+                            const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
+                            const d = await r.json();
+                            if (d.success) showToast(`${d.angles_created || 0} new angles added`);
+                            else showToast(d.error || 'Failed', 'error');
+                          } catch (e) { showToast(e.message, 'error'); }
+                          setSeeding(false);
+                        }}>
+                          {seeding ? <Loader size={11} className="spin" /> : <Plus size={11} />} Suggest More
+                        </button>
+                      )}
+                    </div>
 
                     {/* Clean angle list */}
                     <div className="scene-sets-angle-list">
