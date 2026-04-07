@@ -54,8 +54,23 @@ module.exports = (sequelize) => {
     },
 
     // ── Venue & Location ──
-    // NOTE: venue_location_id, venue_name, venue_address added by migration
-    // 20260709000000 — use metadata JSONB fallback until migration runs
+    venue_location_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: 'world_locations', key: 'id' },
+      onDelete: 'SET NULL',
+      comment: 'FK to WorldLocation — the venue where this event takes place',
+    },
+    venue_name: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+      comment: 'Display name: "Club Noir"',
+    },
+    venue_address: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Full address for invitation: "742 Ocean Drive, South Beach, Miami"',
+    },
     location_hint: {
       type: DataTypes.TEXT,
       allowNull: true,
@@ -69,8 +84,25 @@ module.exports = (sequelize) => {
       comment: 'Visual scene set for this event venue',
     },
 
-    // NOTE: event_date, event_time, guest_list added by migration
-    // 20260709000000 — use invitation_details JSONB fallback until migration runs
+    // ── Date & Time ──
+    event_date: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Story date: "Friday, March 15th" or "Tonight"',
+    },
+    event_time: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Event time: "9:00 PM - 2:00 AM"',
+    },
+
+    // ── Guest List ──
+    guest_list: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: [],
+      comment: '[{ character_id, character_name, rsvp_status, plus_one }]',
+    },
 
     // ── Invitation ──
     invitation_asset_id: {
@@ -80,7 +112,12 @@ module.exports = (sequelize) => {
       onDelete: 'SET NULL',
       comment: 'Generated invitation card image',
     },
-    // NOTE: invitation_details added by migration 20260709000000
+    invitation_details: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: '{ tagline, rsvp_by, attire_note, special_instructions, hosted_by }',
+    },
 
     // ── Scoring ──
     prestige: {
@@ -215,17 +252,21 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'world_events',
     timestamps: true,
-    paranoid: false, // Override global paranoid — deleted_at column added by migration 20260709000000
+    paranoid: true,
     underscored: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
+    deletedAt: 'deleted_at',
   });
 
   WorldEvent.associate = (models) => {
-    // NOTE: venue_location_id association enabled after migration 20260709000000
-    // if (models.WorldLocation) {
-    //   WorldEvent.belongsTo(models.WorldLocation, { foreignKey: 'venue_location_id', as: 'venue' });
-    // }
+    // Venue location
+    if (models.WorldLocation) {
+      WorldEvent.belongsTo(models.WorldLocation, {
+        foreignKey: 'venue_location_id',
+        as: 'venue',
+      });
+    }
     // Visual scene set
     if (models.SceneSet) {
       WorldEvent.belongsTo(models.SceneSet, {

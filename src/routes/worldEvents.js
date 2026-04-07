@@ -64,6 +64,15 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
           required: false,
         });
       }
+      // Include venue location
+      if (models.WorldLocation) {
+        include.push({
+          model: models.WorldLocation,
+          as: 'venue',
+          attributes: ['id', 'name', 'street_address', 'city', 'district', 'venue_type', 'venue_details', 'location_type'],
+          required: false,
+        });
+      }
       // Include scene set basic info
       if (models.SceneSet) {
         include.push({
