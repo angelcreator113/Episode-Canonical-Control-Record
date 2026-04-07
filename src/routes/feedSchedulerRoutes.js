@@ -403,6 +403,10 @@ router.post('/preview-sparks', optionalAuth, async (req, res) => {
   const count = Math.min(parseInt(req.body.count) || 5, 20);
 
   try {
+    const apiCheck = await validateClaudeAccess();
+    if (!apiCheck.ok) {
+      return res.status(503).json({ error: `AI service unavailable: ${apiCheck.error}` });
+    }
     const sparks = await generateSmartSparks(db, layer, count);
     res.json({ sparks, layer, count: sparks.length });
   } catch (err) {
