@@ -144,16 +144,29 @@ function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null
     parts.push(seasonDescriptions[season] || '');
   }
 
-  // Room size as natural text
+  // Room properties affect spatial rendering
   const rp = sceneSet.visual_language?.room_properties;
-  if (rp?.room_size) {
-    const sizeDescriptions = {
-      compact: 'Compact cozy room with furniture close together.',
-      medium: 'Medium-sized room with moderate space between furniture.',
-      spacious: 'Spacious room with generous open floor space and wide sight lines.',
-      grand: 'Grand expansive space with high ceilings and vast floor area.',
-    };
-    if (sizeDescriptions[rp.room_size]) parts.push(sizeDescriptions[rp.room_size]);
+  if (rp) {
+    const rpParts = [];
+    if (rp.room_size) {
+      const sizeDescriptions = {
+        compact: 'Compact cozy room with furniture close together.',
+        medium: 'Medium-sized room with moderate space between furniture.',
+        spacious: 'Spacious room with generous open floor space and wide sight lines.',
+        grand: 'Grand expansive space with high ceilings and vast floor area.',
+      };
+      rpParts.push(sizeDescriptions[rp.room_size] || '');
+    }
+    if (rp.ceiling_height && rp.ceiling_height !== 'standard') {
+      const ceilingDesc = { tall: 'Tall ceilings.', vaulted: 'Vaulted cathedral ceilings.', double_height: 'Double-height ceilings with dramatic vertical space.' };
+      rpParts.push(ceilingDesc[rp.ceiling_height] || '');
+    }
+    if (rp.room_shape && rp.room_shape !== 'rectangular') {
+      const shapeDesc = { square: 'Square room layout.', l_shaped: 'L-shaped room with two distinct areas.', open_plan: 'Open plan layout flowing into adjacent spaces.' };
+      rpParts.push(shapeDesc[rp.room_shape] || '');
+    }
+    const rpText = rpParts.filter(Boolean).join(' ');
+    if (rpText) parts.push(rpText);
   }
 
   // Camera direction as natural text
