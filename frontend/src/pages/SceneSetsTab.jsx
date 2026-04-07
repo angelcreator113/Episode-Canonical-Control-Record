@@ -638,9 +638,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             )}
           </>
         ) : (
-          <div className="scene-sets-card-placeholder">
-            <Camera size={32} strokeWidth={1.2} />
-            <span>{hasBase ? 'Generate angles to see visuals' : 'Not yet generated'}</span>
+          <div className="scene-sets-card-placeholder" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} style={{ cursor: 'pointer' }}>
+            <Upload size={28} strokeWidth={1.2} />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Upload Base Image</span>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>or drag & drop</span>
           </div>
         )}
 
@@ -837,24 +838,29 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
-          {/* Other actions — visible on hover */}
-          <div className="scene-sets-card-actions">
-            {!hasBase && (
-              <>
-                <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className="scene-sets-btn-generate">
-                  {isGenerating ? <><Loader size={12} className="spin" /></> : <><Sparkles size={12} /> Generate</>}
-                </button>
-                <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className="scene-sets-btn-upload">
-                  <Upload size={12} /> Upload
-                </button>
-              </>
-            )}
-            {hasBase && (
+          {/* No base — show upload + generate as always-visible buttons */}
+          {!hasBase && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <button onClick={() => fileInputRef.current?.click()} disabled={isGenerating} className="scene-sets-btn-generate" style={{ flex: 1 }}>
+                <Upload size={12} /> Upload Image
+              </button>
+              <button onClick={() => onGenerateBase(set)} disabled={isGenerating} className="scene-sets-btn-details">
+                {isGenerating ? <Loader size={12} className="spin" /> : <Sparkles size={12} />} AI Generate
+              </button>
+            </div>
+          )}
+
+          {/* Has base — details on hover */}
+          {hasBase && (
+            <div className="scene-sets-card-actions">
               <button onClick={() => setShowDetails(true)} className="scene-sets-btn-details">
                 <Eye size={12} /> Details
               </button>
-            )}
-          </div>
+              <button onClick={() => fileInputRef.current?.click()} className="scene-sets-btn-details">
+                <Upload size={12} /> Replace
+              </button>
+            </div>
+          )}
 
           <input
             ref={fileInputRef}
@@ -921,9 +927,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' ? 'active' : ''}`} onClick={() => { setActiveModalTab('angles'); setShowDetails(true); setShowPromptEditor(false); setShowAddAngle(false); }}>
                   <Camera size={12} /> Angles <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
                 </button>
-                <button className={`scene-sets-modal-tab ${showPromptEditor ? 'active' : ''}`} onClick={() => { setActiveModalTab('prompt'); setShowPromptEditor(true); setShowDetails(false); setShowAddAngle(false); setEditDesc(set.canonical_description || ''); }}>
-                  <Pencil size={12} /> AI Prompt
-                </button>
                 {hasBase && (
                   <button className={`scene-sets-modal-tab ${activeModalTab === 'tools' ? 'active' : ''}`} onClick={() => { setActiveModalTab('tools'); setShowDetails(true); setShowPromptEditor(false); setShowAddAngle(false); }}>
                     <Sparkles size={12} /> Tools
@@ -939,7 +942,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
               {/* Tab content */}
               <div className="scene-sets-modal-body">
                 {/* ═══ OVERVIEW TAB ═══ */}
-                {activeModalTab === 'details' && !showPromptEditor && !showAddAngle && (
+                {activeModalTab === 'details' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
                     {/* Description — view or safe edit mode */}
                     {localDesc && !editingDesc && (
@@ -1126,11 +1129,19 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       </div>
                     )}
 
+                    {/* AI Prompt (collapsed) */}
+                    {set.base_runway_prompt && (
+                      <details className="scene-sets-modal-field" style={{ marginTop: 8 }}>
+                        <summary style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', userSelect: 'none' }}>View AI Prompt</summary>
+                        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 10, lineHeight: 1.5, maxHeight: 200, overflow: 'auto', background: '#f8fafc', padding: 10, borderRadius: 6, marginTop: 6, color: '#475569' }}>{set.base_runway_prompt}</pre>
+                      </details>
+                    )}
+
                   </div>
                 )}
 
                 {/* ═══ ANGLES TAB ═══ */}
-                {activeModalTab === 'angles' && !showPromptEditor && !showAddAngle && (
+                {activeModalTab === 'angles' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
                     {/* Compact action bar */}
                     {generableAngles.length > 0 && (
@@ -1212,7 +1223,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 )}
 
                 {/* ═══ TOOLS TAB ═══ */}
-                {activeModalTab === 'tools' && !showPromptEditor && !showAddAngle && (
+                {activeModalTab === 'tools' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
                     {/* Style section */}
                     <div style={{ marginBottom: 16 }}>
@@ -1290,31 +1301,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 )}
 
                 {/* Prompt tab — shows the generated AI prompt (read-only) */}
-                {showPromptEditor && (
-                  <div className="scene-sets-modal-section">
-                    <div className="scene-sets-modal-field">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label>Your Description</label>
-                        <button className="scene-sets-desc-edit-btn" onClick={() => { setShowPromptEditor(false); setShowDetails(true); setActiveModalTab('details'); setEditingDesc(true); setDescDraft(localDesc); }}>
-                          <Pencil size={10} /> Edit in Overview
-                        </button>
-                      </div>
-                      <p className="scene-sets-overview-desc">{localDesc || 'No description set. Go to Overview tab to add one.'}</p>
-                    </div>
-                    {set.base_runway_prompt && (
-                      <div className="scene-sets-modal-field">
-                        <label>Generated AI Prompt</label>
-                        <p className="scene-sets-modal-hint">This is what the AI actually receives when generating images. It's built automatically from your description + style settings.</p>
-                        <pre className="scene-sets-modal-prompt-pre" style={{ whiteSpace: 'pre-wrap', fontSize: 11, lineHeight: 1.5, maxHeight: 300, overflow: 'auto' }}>{set.base_runway_prompt}</pre>
-                      </div>
-                    )}
-                    {!set.base_runway_prompt && (
-                      <div style={{ textAlign: 'center', padding: 16, color: '#94a3b8', fontSize: 12 }}>
-                        No prompt generated yet. Add a description and generate the base image.
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Add Angle tab */}
                 {showAddAngle && (
