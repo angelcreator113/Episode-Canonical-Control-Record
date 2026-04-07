@@ -88,8 +88,8 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
     console.log(`[SceneSpec] Spec built: ${spec.objects?.length || 0} objects, ${spec.zones?.length || 0} zones, ${spec.camera_contracts?.length || 0} contracts`);
     return spec;
   } catch (err) {
-    console.error(`[SceneSpec] Build failed: ${err.message}`);
-    return null;
+    console.error(`[SceneSpec] Build failed: ${err.message}`, err.stack?.slice(0, 500));
+    throw err; // Re-throw so the route handler can return the actual error message
   }
 }
 
