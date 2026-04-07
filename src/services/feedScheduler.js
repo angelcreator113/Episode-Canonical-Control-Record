@@ -23,7 +23,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const AI_MODEL = 'claude-sonnet-4-6';
 const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
-const AI_TIMEOUT_MS = 120000; // 120s timeout matching bulk routes
+const AI_TIMEOUT_MS = 90000; // 90s timeout — fail fast, retry rather than hang
 const AI_MAX_RETRIES = 1;
 
 /**
@@ -32,7 +32,8 @@ const AI_MAX_RETRIES = 1;
 async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES } = {}) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let lastErr;
-  const models = [AI_MODEL, AI_FALLBACK_MODEL];
+  // Deduplicate — don't retry the same model twice
+  const models = AI_MODEL === AI_FALLBACK_MODEL ? [AI_MODEL] : [AI_MODEL, AI_FALLBACK_MODEL];
 
   for (const model of models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -339,7 +340,10 @@ Return a JSON array of exactly ${count} objects:
 
 Return ONLY the JSON array. No markdown, no explanation.`;
 
+  console.log(`[FeedScheduler] Calling Claude for ${count} sparks (layer=${layer})...`);
+  const sparkStart = Date.now();
   const response = await callClaude(prompt, { maxTokens: 8000 });
+  console.log(`[FeedScheduler] Claude spark response received in ${((Date.now() - sparkStart) / 1000).toFixed(1)}s`);
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error('AI returned empty response for spark generation');
@@ -383,7 +387,12 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   // Generate smart sparks
   let sparks;
   try {
+    console.log(`[FeedScheduler] Generating ${toCreate} smart sparks for layer=${layer}...`);
+    if (progressCallback) {
+      await progressCallback({ current: 0, total: toCreate, status: 'generating', spark: { handle: 'Planning creators...' } });
+    }
     sparks = await generateSmartSparks(db, layer, toCreate);
+    console.log(`[FeedScheduler] Generated ${sparks.length} sparks successfully`);
   } catch (err) {
     // Fallback to random sparks if AI generation fails
     console.log(`[FeedScheduler] Smart spark generation failed, using fallback: ${err.message}`);
