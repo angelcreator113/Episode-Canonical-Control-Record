@@ -1157,7 +1157,7 @@ The revised event should feel like a completely different experience from the si
       {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
       {activeTab === 'feed' && (
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
-          <SocialProfileGenerator embedded showId={showId} />
+          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" />
         </Suspense>
       )}
 

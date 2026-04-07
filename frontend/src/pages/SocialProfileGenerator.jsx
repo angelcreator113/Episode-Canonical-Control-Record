@@ -169,7 +169,7 @@ function getToken() { return localStorage.getItem('authToken')||localStorage.get
 function authHeaders() { const t=getToken(); return t?{Authorization:`Bearer ${t}`,'Content-Type':'application/json'}:{'Content-Type':'application/json'}; }
 
 // ══════════════════════════════════════════════════════════════════════
-export default function SocialProfileGenerator({ embedded=false, worldTag }) {
+export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId }) {
   const [profiles,setProfiles]   = useState([]);
   const [selected,setSelected]   = useState(null);
   const [loading,setLoading]     = useState(false);
@@ -241,7 +241,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [templates,setTemplates] = useState([]);
   const [templateName,setTemplateName] = useState('');
   // LalaVerse Feed layer
-  const [feedLayer,setFeedLayer] = useState('real_world');
+  const [feedLayer,setFeedLayer] = useState(defaultFeedLayer || 'real_world');
   const [lvCity,setLvCity]       = useState('');
   const [lvRelationship,setLvRelationship] = useState('mutual_unaware');
   const [lvPressure,setLvPressure] = useState('level');
