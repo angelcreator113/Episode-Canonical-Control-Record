@@ -676,18 +676,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 190 }}
                   onClick={e => e.stopPropagation()}
                 >
-                  <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); setShowDetails(false); setShowAddAngle(false); }}>
-                    <Pencil size={12} /> Edit Prompt
-                  </button>
-                  <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
-                    <Eye size={12} /> Preview Prompt
-                  </button>
-                  <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }} disabled={isGenerating}>
-                    <Upload size={12} /> Upload Images
+                  <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }}>
+                    <Upload size={12} /> {hasBase ? 'Replace Base Image' : 'Upload Base Image'}
                   </button>
                   {hasBase && (
-                    <button onClick={() => { setShowMenu(false); onCascadeRegenerate(set); }} disabled={isGenerating}>
-                      <RotateCcw size={12} /> Regenerate All
+                    <button onClick={() => { setShowMenu(false); setShowDetails(true); setActiveModalTab('details'); setEditingDesc(true); setDescDraft(localDesc); }}>
+                      <Pencil size={12} /> Edit Description
                     </button>
                   )}
                   {hasBase && totalAngles === 0 && (
@@ -705,9 +699,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <Sparkles size={12} /> Suggest Angles
                     </button>
                   )}
-                  <button onClick={() => { setShowMenu(false); menuUploadRef.current?.click(); }} disabled={isGenerating}>
-                    <Upload size={12} /> Upload Images
-                  </button>
                   {hasBase && sortedAngles.some(a => a.still_image_url) && (
                     <button onClick={async () => {
                       setShowMenu(false);
@@ -716,22 +707,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         : sortedAngles.find(a => a.still_image_url);
                       if (!targetAngle) return;
                       try {
-                        const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-                          method: 'PUT',
+                        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/promote-to-base`, {
+                          method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ base_still_url: targetAngle.still_image_url }),
+                          body: JSON.stringify({ angle_id: targetAngle.id }),
                         });
-                        if (!res.ok) throw new Error('Failed');
-                        if (onSetCoverAngle) onSetCoverAngle(set, targetAngle.id);
-                        if (onToast) onToast(`Set "${targetAngle.angle_label}" as base image`);
-                      } catch {
-                        if (onToast) onToast('Failed to set base image', 'error');
-                      }
+                        const d = await res.json();
+                        if (d.success) showToast(d.message);
+                        else showToast(d.error, 'error');
+                      } catch { showToast('Failed to set base', 'error'); }
                     }}>
-                      <Camera size={12} /> Set {selectedAngle?.angle_label || 'Current'} as Base
+                      <Camera size={12} /> Use {selectedAngle?.angle_label || sortedAngles.find(a => a.still_image_url)?.angle_label || 'Angle'} as Base
                     </button>
                   )}
-                  <button onClick={() => { setShowMenu(false); setShowDetails(true); setShowPromptEditor(false); setShowAddAngle(false); }}>
+                  <button onClick={() => { setShowMenu(false); setShowDetails(true); setActiveModalTab('details'); }}>
                     <Eye size={12} /> Details
                   </button>
                   <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
