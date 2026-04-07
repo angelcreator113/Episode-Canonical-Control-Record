@@ -3138,7 +3138,50 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
       const rows = await Q(req, 'SELECT * FROM world_locations ORDER BY name ASC LIMIT 200');
       return res.json({ locations: rows });
     }
-    const rows = await WorldLocation.findAll({ order: [['name', 'ASC']], limit: 200 });
+
+    const include = [];
+    // Include child locations
+    include.push({
+      model: WorldLocation,
+      as: 'childLocations',
+      attributes: ['id', 'name', 'location_type', 'venue_type'],
+      required: false,
+    });
+    // Include linked scene sets
+    if (models.SceneSet) {
+      include.push({
+        model: models.SceneSet,
+        as: 'sceneSets',
+        attributes: ['id', 'name', 'scene_type', 'base_still_url', 'generation_status'],
+        required: false,
+      });
+    }
+    // Include world events at this venue
+    if (models.WorldEvent) {
+      include.push({
+        model: models.WorldEvent,
+        as: 'events',
+        attributes: ['id', 'name', 'event_type', 'event_date', 'status'],
+        required: false,
+        limit: 5,
+      });
+    }
+    // Include calendar events
+    if (models.StoryCalendarEvent) {
+      include.push({
+        model: models.StoryCalendarEvent,
+        as: 'calendarEvents',
+        attributes: ['id', 'title', 'event_type', 'start_datetime', 'cultural_category'],
+        required: false,
+        limit: 5,
+      });
+    }
+
+    const rows = await WorldLocation.findAll({
+      include,
+      order: [['name', 'ASC']],
+      limit: 200,
+    });
     res.json({ locations: rows });
   } catch (err) { res.json({ locations: [] }); }
 });
@@ -3146,12 +3189,27 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
 // POST /world/locations — create a location
 router.post('/world/locations', optionalAuth, async (req, res) => {
   try {
-    const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata } = req.body;
+    const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, street_address, city, district, coordinates, venue_type, venue_details, property_type, style_guide, floor_plan } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const WorldLocation = models.WorldLocation;
     if (WorldLocation) {
-      const loc = await WorldLocation.create({ name, slug, description, location_type: location_type || 'interior', sensory_details: sensory_details || {}, narrative_role, associated_characters: associated_characters || [], parent_location_id, metadata: metadata || {} });
+      const loc = await WorldLocation.create({
+        name, slug, description,
+        location_type: location_type || 'interior',
+        sensory_details: sensory_details || {},
+        narrative_role, associated_characters: associated_characters || [],
+        parent_location_id, metadata: metadata || {},
+        street_address: street_address || null,
+        city: city || null,
+        district: district || null,
+        coordinates: coordinates || null,
+        venue_type: venue_type || null,
+        venue_details: venue_details || null,
+        property_type: property_type || null,
+        style_guide: style_guide || null,
+        floor_plan: floor_plan || null,
+      });
       return res.json({ location: loc });
     }
     const id = require('uuid').v4();
@@ -3167,7 +3225,7 @@ router.post('/world/locations', optionalAuth, async (req, res) => {
 // PUT /world/locations/:id — update a location
 router.put('/world/locations/:id', optionalAuth, async (req, res) => {
   try {
-    const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata'];
+    const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata', 'street_address', 'city', 'district', 'coordinates', 'venue_type', 'venue_details', 'property_type', 'style_guide', 'floor_plan'];
     const WorldLocation = models.WorldLocation;
     if (WorldLocation) {
       const loc = await WorldLocation.findByPk(req.params.id);

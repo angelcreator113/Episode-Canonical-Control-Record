@@ -40,6 +40,7 @@ const EMPTY_EVENT = {
   is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
   requirements: {}, scene_set_id: null,
+  venue_name: '', venue_address: '', event_date: '', event_time: '',
   theme: '', color_palette: [], mood: '', floral_style: '', border_style: '',
 };
 
@@ -1483,13 +1484,47 @@ The revised event should feel like a completely different experience from the si
                 </div>
               )}
 
-              {/* Location picker — prominent position */}
+              {/* Venue & Location — combined picker */}
               <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Location (Scene Set)</label>
+                <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Venue & Location</label>
+
+                {/* Venue name + address */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <input
+                    value={eventForm.venue_name || ''}
+                    onChange={e => setEventForm(p => ({ ...p, venue_name: e.target.value }))}
+                    placeholder="Venue Name (e.g. Club Noir)"
+                    style={S.sel}
+                  />
+                  <input
+                    value={eventForm.venue_address || ''}
+                    onChange={e => setEventForm(p => ({ ...p, venue_address: e.target.value }))}
+                    placeholder="Address (e.g. 742 Ocean Drive, South Beach, Miami)"
+                    style={S.sel}
+                  />
+                </div>
+
+                {/* Event date + time */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <input
+                    value={eventForm.event_date || ''}
+                    onChange={e => setEventForm(p => ({ ...p, event_date: e.target.value }))}
+                    placeholder="Event Date (e.g. Friday, March 15th)"
+                    style={S.sel}
+                  />
+                  <input
+                    value={eventForm.event_time || ''}
+                    onChange={e => setEventForm(p => ({ ...p, event_time: e.target.value }))}
+                    placeholder="Time (e.g. 9:00 PM - 2:00 AM)"
+                    style={S.sel}
+                  />
+                </div>
+
+                {/* Scene set picker */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <select value={eventForm.scene_set_id || ''} onChange={e => setEventForm(p => ({ ...p, scene_set_id: e.target.value || null }))} style={{ ...S.sel, flex: 1, minWidth: 200 }}>
-                    <option value="">— No location linked —</option>
-                    {sceneSets.map(ss => (
+                    <option value="">— Scene Set (visual) —</option>
+                    {sceneSets.filter(ss => ss.scene_type === 'EVENT_LOCATION' || ss.base_still_url).map(ss => (
                       <option key={ss.id} value={ss.id}>📍 {ss.name} ({ss.scene_type?.replace(/_/g, ' ')})</option>
                     ))}
                   </select>
@@ -1502,9 +1537,6 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     ) : null;
                   })()}
-                  {!eventForm.scene_set_id && sceneSets.length === 0 && (
-                    <span style={{ fontSize: 10, color: '#94a3b8' }}>No scene sets found — create them in Scene Sets first</span>
-                  )}
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
