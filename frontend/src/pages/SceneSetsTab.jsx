@@ -926,7 +926,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 <button className={`scene-sets-modal-tab ${activeModalTab === 'angles' ? 'active' : ''}`} onClick={() => { setActiveModalTab('angles'); setShowDetails(true); setShowAddAngle(false); }}>
                   <Camera size={12} /> Angles <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>{readyAngles}/{totalAngles}</span>
                 </button>
-                  <button className={`scene-sets-modal-tab ${showAddAngle ? 'active' : ''}`} onClick={() => { setActiveModalTab('add-angle'); setShowAddAngle(true); setShowDetails(false); setShowPromptEditor(false); }}>
+                {hasBase && (
+                  <button className={`scene-sets-modal-tab ${showAddAngle ? 'active' : ''}`} onClick={() => { setActiveModalTab('add-angle'); setShowAddAngle(true); setShowDetails(false); }}>
                     <Plus size={12} /> Add Angle
                   </button>
                 )}
@@ -945,6 +946,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           <Pencil size={10} /> Edit Description
                         </button>
                       </div>
+                    )}
+                    {!localDesc && !editingDesc && (
+                      <button className="scene-sets-ai-desc-btn" style={{ marginBottom: 12 }} onClick={() => { setEditingDesc(true); setDescDraft(''); }}>
+                        <Pencil size={10} /> Add Description
+                      </button>
                     )}
                     {editingDesc && (
                       <div className="scene-sets-desc-editor">
