@@ -41,6 +41,7 @@ const {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  validateClaudeAccess,
   setDb,
   addSSEClient,
 } = require('../services/feedScheduler');
@@ -237,6 +238,16 @@ router.post('/auto-generate-job', optionalAuth, async (req, res) => {
         error: `Feed cap reached (${currentCount}/${cap}). Delete or exempt profiles to generate more.`,
         current: currentCount,
         cap,
+      });
+    }
+
+    // Pre-flight: validate Claude API access before creating a job
+    const apiCheck = await validateClaudeAccess();
+    if (!apiCheck.ok) {
+      console.error(`[FeedScheduler] Pre-flight API check failed: ${apiCheck.error}`);
+      return res.status(503).json({
+        error: `AI service unavailable: ${apiCheck.error}`,
+        detail: 'The Claude API must be reachable to generate profiles. Check your ANTHROPIC_API_KEY.',
       });
     }
 

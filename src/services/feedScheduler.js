@@ -23,8 +23,38 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const AI_MODEL = 'claude-sonnet-4-6';
 const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
-const AI_TIMEOUT_MS = 90000; // 90s timeout — fail fast, retry rather than hang
+const AI_TIMEOUT_MS = 30000; // 30s timeout — fail fast so UI shows errors quickly
 const AI_MAX_RETRIES = 1;
+
+/**
+ * Quick pre-flight check — validates API key + model access with a tiny call.
+ * Returns { ok: true } or { ok: false, error: string }.
+ */
+async function validateClaudeAccess() {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return { ok: false, error: 'ANTHROPIC_API_KEY environment variable is not set' };
+    const client = new Anthropic({ apiKey });
+    const response = await Promise.race([
+      client.messages.create({
+        model: AI_MODEL,
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Say "ok"' }],
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('API validation timed out (10s)')), 10000)),
+    ]);
+    if (!response?.content?.length) return { ok: false, error: 'AI returned empty response during validation' };
+    return { ok: true };
+  } catch (err) {
+    const msg = err.status === 401 ? 'Invalid API key (401 Unauthorized)'
+      : err.status === 403 ? 'API key lacks permission for this model (403 Forbidden)'
+      : err.status === 404 ? `Model "${AI_MODEL}" not found (404)`
+      : err.status === 429 ? 'Rate limited — try again in a moment (429)'
+      : err.status === 529 ? 'Anthropic API overloaded (529) — try again shortly'
+      : err.message || 'Unknown API error';
+    return { ok: false, error: msg };
+  }
+}
 
 /**
  * Call Claude with timeout, retry, and model fallback logic.
@@ -46,7 +76,7 @@ async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES }
             messages: [{ role: 'user', content: prompt }],
           }),
           new Promise((_, reject) => {
-            timer = setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS);
+            timer = setTimeout(() => reject(new Error(`AI call timed out after ${AI_TIMEOUT_MS / 1000}s`)), AI_TIMEOUT_MS);
           }),
         ]);
         clearTimeout(timer);
@@ -994,5 +1024,6 @@ module.exports = {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  validateClaudeAccess,
   addSSEClient,
 };
