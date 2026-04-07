@@ -1783,7 +1783,7 @@ export default function SceneSetsTab() {
       showToast(uploadedCount > 1
         ? `${uploadedCount} images uploaded for "${set.name}"`
         : `Base image uploaded for "${set.name}"`);
-      fetchSets();
+      await fetchSets();
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
     } finally {
