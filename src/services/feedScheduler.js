@@ -22,8 +22,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 // const { generateHandleFromCharacter, inferArchetypeFromRole, inferLalaRelationship, inferCareerPressure, inferFollowerTier } = require('../utils/feedProfileUtils');
 
 const AI_MODEL = 'claude-sonnet-4-6';
-const AI_FALLBACK_MODEL = 'claude-sonnet-4-20250514';
-const AI_TIMEOUT_MS = 120000; // 120s timeout matching bulk routes
+const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
+const AI_TIMEOUT_MS = 90000; // 90s timeout — fail fast, retry rather than hang
 const AI_MAX_RETRIES = 1;
 
 /**
@@ -32,7 +32,8 @@ const AI_MAX_RETRIES = 1;
 async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES } = {}) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let lastErr;
-  const models = [AI_MODEL, AI_FALLBACK_MODEL];
+  // Deduplicate — don't retry the same model twice
+  const models = AI_MODEL === AI_FALLBACK_MODEL ? [AI_MODEL] : [AI_MODEL, AI_FALLBACK_MODEL];
 
   for (const model of models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -82,7 +83,26 @@ function parseAIJson(text) {
   if (!jsonMatch) throw new Error('AI did not return valid JSON');
   // Fix trailing commas before } or ]
   const fixed = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
-  return JSON.parse(fixed);
+  try { return JSON.parse(fixed); } catch { /* try truncation repair */ }
+
+  // JSON may be truncated — try to close unclosed braces/brackets
+  let truncated = fixed;
+  // Remove trailing partial key-value or string
+  truncated = truncated.replace(/,?\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+  const opens = (truncated.match(/\{/g) || []).length;
+  const closes = (truncated.match(/\}/g) || []).length;
+  const openBrackets = (truncated.match(/\[/g) || []).length;
+  const closeBrackets = (truncated.match(/\]/g) || []).length;
+  for (let i = 0; i < openBrackets - closeBrackets; i++) truncated += ']';
+  for (let i = 0; i < opens - closes; i++) truncated += '}';
+  truncated = truncated.replace(/,\s*([\]}])/g, '$1');
+  try {
+    const result = JSON.parse(truncated);
+    console.warn(`[FeedScheduler] Repaired truncated JSON (closed ${opens - closes} braces, ${openBrackets - closeBrackets} brackets)`);
+    return result;
+  } catch {
+    throw new Error('AI did not return valid JSON (truncation repair also failed)');
+  }
 }
 
 /**
@@ -320,7 +340,10 @@ Return a JSON array of exactly ${count} objects:
 
 Return ONLY the JSON array. No markdown, no explanation.`;
 
-  const response = await callClaude(prompt, { maxTokens: 4000 });
+  console.log(`[FeedScheduler] Calling Claude for ${count} sparks (layer=${layer})...`);
+  const sparkStart = Date.now();
+  const response = await callClaude(prompt, { maxTokens: 8000 });
+  console.log(`[FeedScheduler] Claude spark response received in ${((Date.now() - sparkStart) / 1000).toFixed(1)}s`);
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error('AI returned empty response for spark generation');
@@ -364,7 +387,12 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   // Generate smart sparks
   let sparks;
   try {
+    console.log(`[FeedScheduler] Generating ${toCreate} smart sparks for layer=${layer}...`);
+    if (progressCallback) {
+      await progressCallback({ current: 0, total: toCreate, status: 'generating', spark: { handle: 'Planning creators...' } });
+    }
     sparks = await generateSmartSparks(db, layer, toCreate);
+    console.log(`[FeedScheduler] Generated ${sparks.length} sparks successfully`);
   } catch (err) {
     // Fallback to random sparks if AI generation fails
     console.log(`[FeedScheduler] Smart spark generation failed, using fallback: ${err.message}`);
@@ -467,7 +495,7 @@ Do not reference JustAWoman or the real world in any generated content.
 Lala does not know she was built. The world she lives in feels complete and self-contained.`;
   }
 
-  const response = await callClaude(prompt, { maxTokens: 4000 });
+  const response = await callClaude(prompt, { maxTokens: 8000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
@@ -487,16 +515,16 @@ Lala does not know she was built. The world she lives in feels complete and self
 
   const profile = await db.SocialProfile.create({
     series_id:             null,
-    handle:                spark.handle.startsWith('@') ? spark.handle : `@${spark.handle}`,
+    handle:                (spark.handle.startsWith('@') ? spark.handle : `@${spark.handle}`).slice(0, 100),
     platform:              spark.platform,
     vibe_sentence:         spark.vibe_sentence,
     status:                'generated',
     generation_model:      AI_MODEL,
     full_profile:          generated,
-    display_name:          generated.display_name,
+    display_name:          (generated.display_name || '').slice(0, 200) || null,
     follower_tier:         safeFollowerTier,
-    follower_count_approx: generated.follower_count_approx,
-    content_category:      generated.content_category,
+    follower_count_approx: (generated.follower_count_approx || '').slice(0, 50) || null,
+    content_category:      (generated.content_category || '').slice(0, 100) || null,
     archetype:             safeArchetype,
     content_persona:       generated.content_persona,
     real_signal:           generated.real_signal,
@@ -506,7 +534,7 @@ Lala does not know she was built. The world she lives in feels complete and self
     adult_content_type:    generated.adult_content_type,
     adult_content_framing: generated.adult_content_framing,
     parasocial_function:   generated.parasocial_function,
-    emotional_activation:  generated.emotional_activation,
+    emotional_activation:  (generated.emotional_activation || '').slice(0, 200) || null,
     watch_reason:          generated.watch_reason,
     what_it_costs_her:     generated.what_it_costs_her,
     current_trajectory:    safeTrajectory,
@@ -521,8 +549,8 @@ Lala does not know she was built. The world she lives in feels complete and self
     world_exists:          generated.world_exists || false,
     crossing_trigger:      generated.crossing_trigger,
     crossing_mechanism:    generated.crossing_mechanism,
-    post_frequency:        generated.post_frequency,
-    engagement_rate:       generated.engagement_rate,
+    post_frequency:        (generated.post_frequency || '').slice(0, 100) || null,
+    engagement_rate:       (generated.engagement_rate || '').slice(0, 50) || null,
     platform_metrics:      generated.platform_metrics || {},
     geographic_base:       (generated.geographic_base || '').slice(0, 200) || null,
     geographic_cluster:    (generated.geographic_cluster || '').slice(0, 100) || null,

@@ -800,7 +800,7 @@ async function processJobInBackground(jobId, concurrency = 3) {
           completed_at: new Date(),
         }).catch(e => console.warn('[social-bulk] job status update error:', e?.message));
       }
-      notifyJobSSE(jobId, 'error', { job_id: jobId, error: err.message });
+      notifyJobSSE(jobId, 'job_error', { job_id: jobId, error: err.message });
     }
   });
 }
