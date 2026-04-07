@@ -377,7 +377,7 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, allShows, allEpisodes, onLoadEpisodes, onToast }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
@@ -820,21 +820,72 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
-          {/* Suggest Angles — when base exists but no angles */}
-          {hasBase && totalAngles === 0 && (
+          {/* ── Pipeline Progress Panel — shows during upload+spec+angles flow ── */}
+          {specStage && specStage !== 'done' && (
+            <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, letterSpacing: '0.5px' }}>Setting up scene</div>
+              {[
+                { key: 'uploading', label: 'Uploading image', icon: Upload },
+                { key: 'building_spec', label: 'Analyzing room — objects, zones, layout', icon: FileText },
+                { key: 'creating_angles', label: 'Creating camera angles from spec', icon: Camera },
+              ].map((step, i) => {
+                const stages = ['uploading', 'building_spec', 'creating_angles'];
+                const currentIdx = stages.indexOf(specStage);
+                const stepIdx = stages.indexOf(step.key);
+                const isDone = stepIdx < currentIdx;
+                const isCurrent = stepIdx === currentIdx;
+                const Icon = step.icon;
+                return (
+                  <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', opacity: isDone ? 0.5 : isCurrent ? 1 : 0.3 }}>
+                    <div style={{ width: 18, display: 'flex', justifyContent: 'center' }}>
+                      {isDone ? <CheckCircle2 size={12} style={{ color: '#16a34a' }} /> : isCurrent ? <Loader size={12} className="spin" style={{ color: '#B8962E' }} /> : <Icon size={12} style={{ color: '#ccc' }} />}
+                    </div>
+                    <span style={{ fontSize: 11, color: isCurrent ? '#2C2C2C' : '#888', fontWeight: isCurrent ? 600 : 400 }}>{step.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Spec status + action buttons (only when NOT in pipeline) ── */}
+          {!specStage && hasBase && hasSpec && (
+            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+              <ShieldCheck size={10} /> Spec: {set.scene_spec.objects?.length || 0} objects, {set.scene_spec.camera_contracts?.length || 0} contracts
+            </div>
+          )}
+
+          {/* Create Angles — when base + spec exist but no angles */}
+          {!specStage && hasBase && hasSpec && totalAngles === 0 && (
             <div style={{ marginTop: 6 }}>
               <button onClick={async () => {
                 setSeeding(true);
-                showToast('Analyzing your image for camera angles...');
                 try {
-                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
+                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
                   const d = await r.json();
-                  if (d.success) showToast(`${d.angles_created || 0} angles suggested!`);
+                  if (d.success) showToast(`${d.data?.angles_created || 0} angles created from spec!`);
                   else showToast(d.error || 'Failed', 'error');
                 } catch (e) { showToast(e.message, 'error'); }
                 setSeeding(false);
               }} disabled={seeding} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                {seeding ? <><Loader size={12} className="spin" /> Analyzing image...</> : <><Sparkles size={12} /> Suggest Angles from Image</>}
+                {seeding ? <><Loader size={12} className="spin" /> Creating angles...</> : <><Camera size={12} /> Create Angles from Spec ({set.scene_spec?.camera_contracts?.length || 0})</>}
+              </button>
+            </div>
+          )}
+
+          {/* Build Spec — when base exists but no spec (manual trigger) */}
+          {!specStage && hasBase && !hasSpec && (
+            <div style={{ marginTop: 6 }}>
+              <button onClick={async () => {
+                setBuildingSpec(true);
+                try {
+                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                  const d = await r.json();
+                  if (d.success) showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} contracts`);
+                  else showToast(d.error || 'Failed', 'error');
+                } catch (e) { showToast(e.message, 'error'); }
+                setBuildingSpec(false);
+              }} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                {buildingSpec ? <><Loader size={12} className="spin" /> Building spec...</> : <><FileText size={12} /> Build Scene Spec</>}
               </button>
             </div>
           )}
@@ -1892,6 +1943,7 @@ export default function SceneSetsTab() {
   const [error, setError] = useState(null);
   const [generatingIds, setGeneratingIds] = useState(new Set());
   const [generationProgressMap, setGenerationProgressMap] = useState({});
+  const [specStageMap, setSpecStageMap] = useState({}); // { [setId]: 'uploading' | 'building_spec' | 'creating_angles' | null }
 
   // Helpers to manage multi-set generation tracking
   const startGenerating = useCallback((id) => {
@@ -2097,7 +2149,10 @@ export default function SceneSetsTab() {
 
   const handleUploadBase = async (set, files) => {
     startGenerating(set.id);
+    const setStage = (stage) => setSpecStageMap(prev => ({ ...prev, [set.id]: stage }));
     try {
+      // ── Stage 1: Upload ──
+      setStage('uploading');
       const formData = new FormData();
       const fileList = Array.isArray(files) ? files : [files].filter(Boolean);
       if (fileList.length === 0) throw new Error('No image file selected');
@@ -2110,16 +2165,39 @@ export default function SceneSetsTab() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Upload failed');
       }
-      const json = await res.json().catch(() => ({}));
-      const uploadedCount = json?.data?.uploadedCount || fileList.length;
-      showToast(uploadedCount > 1
-        ? `${uploadedCount} images uploaded for "${set.name}"`
-        : `Base image uploaded for "${set.name}"`);
       await fetchSets();
+
+      // ── Stage 2: Build Scene Spec ──
+      setStage('building_spec');
+      try {
+        const specRes = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: true }),
+        });
+        const specJson = await specRes.json();
+        if (specJson.success && specJson.data?.camera_contracts?.length) {
+          // ── Stage 3: Create Angles ──
+          setStage('creating_angles');
+          try {
+            await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({}),
+            });
+          } catch { /* non-blocking */ }
+        }
+      } catch { /* non-blocking */ }
+
+      setStage('done');
+      await fetchSets();
+      showToast('Setup complete — review your spec, then generate angles!');
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
     } finally {
       stopGenerating(set.id);
+      // Clear stage after a brief delay so user sees "done"
+      setTimeout(() => setStage(null), 2000);
     }
   };
 
@@ -2715,6 +2793,7 @@ export default function SceneSetsTab() {
               onDeleteSingleAngle={handleDeleteSingleAngle}
               isGeneratingProp={generatingIds.has(set.id)}
               generationProgress={generationProgressMap[set.id] || null}
+              specStage={specStageMap[set.id] || null}
               allShows={allShows}
               allEpisodes={allEpisodes}
               onLoadEpisodes={loadEpisodesForShow}
