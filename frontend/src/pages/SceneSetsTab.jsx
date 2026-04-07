@@ -627,8 +627,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       {/* ── Hero Preview ─────────────────────────────────────── */}
       <div
         className={`scene-sets-card-preview${heroImage ? ' has-image' : ''}`}
-        onClick={() => { if (heroImage) setShowBaseLightbox(true); }}
-        style={heroImage ? { cursor: 'pointer' } : undefined}
+        onDoubleClick={() => { if (heroImage) setShowBaseLightbox(true); }}
+        title={heroImage ? 'Double-click to view full size' : undefined}
       >
         {heroImage ? (
           <>
