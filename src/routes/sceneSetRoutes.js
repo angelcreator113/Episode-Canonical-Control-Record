@@ -1776,6 +1776,50 @@ router.post('/:id/spec/validate-angle', validateUUIDParam('id'), optionalAuth, a
   }
 });
 
+// POST /api/v1/scene-sets/:id/spec/create-angles - Create angles from spec camera contracts
+router.post('/:id/spec/create-angles', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
+    if (!set.scene_spec?.camera_contracts?.length) {
+      return res.status(400).json({ success: false, error: 'No camera contracts in scene spec' });
+    }
+
+    // Get existing angle labels to avoid duplicates
+    const existing = await SceneAngle.findAll({ where: { scene_set_id: set.id }, attributes: ['angle_label'] });
+    const existingLabels = new Set(existing.map(a => a.angle_label?.toUpperCase()));
+
+    const contracts = set.scene_spec.camera_contracts;
+    const created = [];
+
+    for (let i = 0; i < contracts.length; i++) {
+      const c = contracts[i];
+      const label = (c.angle || `ANGLE_${i + 1}`).toUpperCase();
+      if (existingLabels.has(label)) continue;
+
+      const angle = await SceneAngle.create({
+        scene_set_id: set.id,
+        angle_label: label,
+        angle_name: c.description || label,
+        angle_description: c.validation || c.description || '',
+        camera_direction: c.description || '',
+        sort_order: existing.length + i,
+        generation_status: 'pending',
+      });
+      created.push(angle);
+      existingLabels.add(label);
+    }
+
+    res.json({
+      success: true,
+      data: { angles_created: created.length, total: existing.length + created.length },
+    });
+  } catch (err) {
+    console.error('POST /:id/spec/create-angles error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════
 // SCENE STUDIO routes for scene sets
 // ══════════════════════════════════════════════════════════════════════

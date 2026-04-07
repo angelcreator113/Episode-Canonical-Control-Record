@@ -820,8 +820,26 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
             </div>
           )}
 
-          {/* Suggest Angles — when base exists but no angles */}
-          {hasBase && totalAngles === 0 && (
+          {/* Create Angles — when base + spec exist but no angles, use spec contracts */}
+          {hasBase && hasSpec && totalAngles === 0 && (
+            <div style={{ marginTop: 6 }}>
+              <button onClick={async () => {
+                setSeeding(true);
+                showToast('Creating angles from scene spec...');
+                try {
+                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                  const d = await r.json();
+                  if (d.success) showToast(`${d.data?.angles_created || 0} angles created from spec!`);
+                  else showToast(d.error || 'Failed', 'error');
+                } catch (e) { showToast(e.message, 'error'); }
+                setSeeding(false);
+              }} disabled={seeding} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                {seeding ? <><Loader size={12} className="spin" /> Creating angles...</> : <><Camera size={12} /> Create Angles from Spec ({set.scene_spec?.camera_contracts?.length || 0})</>}
+              </button>
+            </div>
+          )}
+          {/* Suggest Angles from AI — fallback when base exists but no spec */}
+          {hasBase && !hasSpec && totalAngles === 0 && (
             <div style={{ marginTop: 6 }}>
               <button onClick={async () => {
                 setSeeding(true);
@@ -2115,6 +2133,39 @@ export default function SceneSetsTab() {
       showToast(uploadedCount > 1
         ? `${uploadedCount} images uploaded for "${set.name}"`
         : `Base image uploaded for "${set.name}"`);
+      await fetchSets();
+
+      // ── Auto-build Scene Spec from the uploaded image ──
+      showToast('Building scene spec from your image...');
+      try {
+        const specRes = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: true }),
+        });
+        const specJson = await specRes.json();
+        if (specJson.success && specJson.data?.camera_contracts?.length) {
+          const objCount = specJson.data.objects?.length || 0;
+          const contractCount = specJson.data.camera_contracts?.length || 0;
+          showToast(`Scene spec built: ${objCount} objects, ${contractCount} camera angles`);
+
+          // ── Auto-create angles from spec camera contracts ──
+          try {
+            const anglesRes = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({}),
+            });
+            const anglesJson = await anglesRes.json();
+            if (anglesJson.success && anglesJson.data?.angles_created > 0) {
+              showToast(`${anglesJson.data.angles_created} camera angles created from spec — ready to generate!`);
+            }
+          } catch { /* angles creation is non-blocking */ }
+        } else {
+          showToast('Image uploaded. Build a scene spec to define camera angles.', 'info');
+        }
+      } catch { /* spec build is non-blocking */ }
+
       await fetchSets();
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
