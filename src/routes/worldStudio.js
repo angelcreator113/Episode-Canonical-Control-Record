@@ -3146,12 +3146,27 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
 // POST /world/locations — create a location
 router.post('/world/locations', optionalAuth, async (req, res) => {
   try {
-    const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata } = req.body;
+    const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, street_address, city, district, coordinates, venue_type, venue_details, property_type, style_guide, floor_plan } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const WorldLocation = models.WorldLocation;
     if (WorldLocation) {
-      const loc = await WorldLocation.create({ name, slug, description, location_type: location_type || 'interior', sensory_details: sensory_details || {}, narrative_role, associated_characters: associated_characters || [], parent_location_id, metadata: metadata || {} });
+      const loc = await WorldLocation.create({
+        name, slug, description,
+        location_type: location_type || 'interior',
+        sensory_details: sensory_details || {},
+        narrative_role, associated_characters: associated_characters || [],
+        parent_location_id, metadata: metadata || {},
+        street_address: street_address || null,
+        city: city || null,
+        district: district || null,
+        coordinates: coordinates || null,
+        venue_type: venue_type || null,
+        venue_details: venue_details || null,
+        property_type: property_type || null,
+        style_guide: style_guide || null,
+        floor_plan: floor_plan || null,
+      });
       return res.json({ location: loc });
     }
     const id = require('uuid').v4();
@@ -3167,7 +3182,7 @@ router.post('/world/locations', optionalAuth, async (req, res) => {
 // PUT /world/locations/:id — update a location
 router.put('/world/locations/:id', optionalAuth, async (req, res) => {
   try {
-    const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata'];
+    const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata', 'street_address', 'city', 'district', 'coordinates', 'venue_type', 'venue_details', 'property_type', 'style_guide', 'floor_plan'];
     const WorldLocation = models.WorldLocation;
     if (WorldLocation) {
       const loc = await WorldLocation.findByPk(req.params.id);
