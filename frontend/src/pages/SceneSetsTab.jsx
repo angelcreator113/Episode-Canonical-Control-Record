@@ -627,8 +627,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       {/* ── Hero Preview ─────────────────────────────────────── */}
       <div
         className={`scene-sets-card-preview${heroImage ? ' has-image' : ''}`}
-        onClick={() => { if (heroImage) setShowBaseLightbox(true); }}
-        style={heroImage ? { cursor: 'pointer' } : undefined}
+        onDoubleClick={() => { if (heroImage) setShowBaseLightbox(true); }}
+        title={heroImage ? 'Double-click to view full size' : undefined}
       >
         {heroImage ? (
           <>
@@ -676,18 +676,12 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   style={{ top: menuRef.current?.getBoundingClientRect().bottom + 4, left: menuRef.current?.getBoundingClientRect().right - 190 }}
                   onClick={e => e.stopPropagation()}
                 >
-                  <button onClick={() => { setShowMenu(false); setEditDesc(set.canonical_description || ''); setShowPromptEditor(true); setShowDetails(false); setShowAddAngle(false); }}>
-                    <Pencil size={12} /> Edit Prompt
-                  </button>
-                  <button onClick={() => { setShowMenu(false); handlePreviewPrompt(); }} disabled={loadingPreview}>
-                    <Eye size={12} /> Preview Prompt
-                  </button>
-                  <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }} disabled={isGenerating}>
-                    <Upload size={12} /> Upload Images
+                  <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }}>
+                    <Upload size={12} /> {hasBase ? 'Replace Base Image' : 'Upload Base Image'}
                   </button>
                   {hasBase && (
-                    <button onClick={() => { setShowMenu(false); onCascadeRegenerate(set); }} disabled={isGenerating}>
-                      <RotateCcw size={12} /> Regenerate All
+                    <button onClick={() => { setShowMenu(false); setShowDetails(true); setActiveModalTab('details'); setEditingDesc(true); setDescDraft(localDesc); }}>
+                      <Pencil size={12} /> Edit Description
                     </button>
                   )}
                   {hasBase && totalAngles === 0 && (
@@ -705,9 +699,6 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <Sparkles size={12} /> Suggest Angles
                     </button>
                   )}
-                  <button onClick={() => { setShowMenu(false); menuUploadRef.current?.click(); }} disabled={isGenerating}>
-                    <Upload size={12} /> Upload Images
-                  </button>
                   {hasBase && sortedAngles.some(a => a.still_image_url) && (
                     <button onClick={async () => {
                       setShowMenu(false);
@@ -716,22 +707,20 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         : sortedAngles.find(a => a.still_image_url);
                       if (!targetAngle) return;
                       try {
-                        const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-                          method: 'PUT',
+                        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/promote-to-base`, {
+                          method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ base_still_url: targetAngle.still_image_url }),
+                          body: JSON.stringify({ angle_id: targetAngle.id }),
                         });
-                        if (!res.ok) throw new Error('Failed');
-                        if (onSetCoverAngle) onSetCoverAngle(set, targetAngle.id);
-                        if (onToast) onToast(`Set "${targetAngle.angle_label}" as base image`);
-                      } catch {
-                        if (onToast) onToast('Failed to set base image', 'error');
-                      }
+                        const d = await res.json();
+                        if (d.success) showToast(d.message);
+                        else showToast(d.error, 'error');
+                      } catch { showToast('Failed to set base', 'error'); }
                     }}>
-                      <Camera size={12} /> Set {selectedAngle?.angle_label || 'Current'} as Base
+                      <Camera size={12} /> Use {selectedAngle?.angle_label || sortedAngles.find(a => a.still_image_url)?.angle_label || 'Angle'} as Base
                     </button>
                   )}
-                  <button onClick={() => { setShowMenu(false); setShowDetails(true); setShowPromptEditor(false); setShowAddAngle(false); }}>
+                  <button onClick={() => { setShowMenu(false); setShowDetails(true); setActiveModalTab('details'); }}>
                     <Eye size={12} /> Details
                   </button>
                   <button onClick={() => { setShowMenu(false); onDeleteSet(set); }} disabled={isGenerating} className="scene-sets-kebab-danger">
@@ -1278,21 +1267,63 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       </div>
                     </div>
 
-                    {/* Variants section */}
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Variants</div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="scene-sets-btn-generate" disabled={toolsAction === 'time_variants'} onClick={async () => {
-                          setToolsAction('time_variants');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/time-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} time-of-day variants`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
-                        }}><Clock size={11} /> {toolsAction === 'time_variants' ? 'Creating...' : 'Time of Day'}</button>
-
-                        <button className="scene-sets-btn-generate" disabled={toolsAction === 'season_variants'} onClick={async () => {
-                          setToolsAction('season_variants');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/season-variants`, { method: 'POST' }); const d = await r.json(); showToast(`Created ${d.created} season variants`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
-                        }}><RefreshCw size={11} /> {toolsAction === 'season_variants' ? 'Creating...' : 'Seasons'}</button>
+                    {/* Mood Variants — same room, different lighting */}
+                    {hasBase && (
+                      <div style={{ marginBottom: 16 }}>
+                        <div className="scene-sets-tools-label">Mood Variations</div>
+                        <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>Same room, same furniture — only the lighting and atmosphere changes. No regeneration needed.</p>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {[
+                            { key: 'morning', label: '🌅 Morning', desc: 'Golden sunrise light' },
+                            { key: 'golden_hour', label: '🌇 Golden Hour', desc: 'Warm amber' },
+                            { key: 'night', label: '🌙 Night', desc: 'Neon + fairy glow' },
+                            { key: 'glam', label: '💄 Glam', desc: 'Vanity lights bright' },
+                            { key: 'filming', label: '🎥 Filming', desc: 'Ring light studio' },
+                            { key: 'cozy', label: '🕯️ Cozy', desc: 'Warm lamps' },
+                            { key: 'dramatic', label: '🎭 Dramatic', desc: 'High contrast' },
+                          ].map(m => (
+                            <button
+                              key={m.key}
+                              className="scene-sets-mood-btn"
+                              disabled={toolsAction === `mood_${m.key}`}
+                              onClick={async () => {
+                                setToolsAction(`mood_${m.key}`);
+                                try {
+                                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/mood-variants`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ moods: [m.key] }),
+                                  });
+                                  const d = await r.json();
+                                  if (d.success) showToast(`${m.label} variant created`);
+                                  else showToast(d.error, 'error');
+                                } catch (e) { showToast(e.message, 'error'); }
+                                setToolsAction(null);
+                              }}
+                              title={m.desc}
+                            >
+                              {toolsAction === `mood_${m.key}` ? <Loader size={10} className="spin" /> : m.label}
+                            </button>
+                          ))}
+                        </div>
+                        {/* Show generated mood variants */}
+                        {set.visual_language?.mood_variants?.base && (
+                          <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto' }}>
+                            {Object.entries(set.visual_language.mood_variants.base).map(([mood, url]) => (
+                              <div key={mood} style={{ flexShrink: 0, textAlign: 'center' }}>
+                                <img
+                                  src={bustUrl(url)}
+                                  alt={mood}
+                                  style={{ width: 80, height: 52, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
+                                  onClick={() => { window.open(url, '_blank'); }}
+                                />
+                                <div style={{ fontSize: 8, color: '#94a3b8', marginTop: 2, textTransform: 'capitalize' }}>{mood.replace('_', ' ')}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )}
 
                     {/* Analysis section */}
                     <div>

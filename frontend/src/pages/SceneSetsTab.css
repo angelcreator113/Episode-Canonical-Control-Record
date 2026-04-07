@@ -3798,3 +3798,31 @@
   color: #fff;
   backdrop-filter: blur(4px);
 }
+
+/* ── Mood Variant Buttons ────────────────────────────────────────────────── */
+
+.scene-sets-mood-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scene-sets-mood-btn:hover {
+  border-color: var(--ss-gold);
+  background: var(--ss-gold-light);
+}
+
+.scene-sets-mood-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

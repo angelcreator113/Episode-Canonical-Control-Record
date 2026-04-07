@@ -335,46 +335,40 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
         } catch { /* non-blocking */ }
       }
 
-      // Build detail constraints for the edit instruction (NOT visible in the generated image)
-      // These go into the system-level instruction, not the visual prompt
-      const { imageAnalysis, styleLock, regionHint, retryCorrections } = extras;
+      // Build blueprint-driven constraints for the edit instruction
+      const { imageAnalysis, styleLock, regionHint, anchors } = extras;
       let detailConstraints = '';
-      if (imageAnalysis) {
-        if (imageAnalysis.spatial_layout) detailConstraints += ` Room layout: ${imageAnalysis.spatial_layout}`;
-        if (imageAnalysis.wall_color) detailConstraints += ` Walls must be ${imageAnalysis.wall_color}.`;
-        if (imageAnalysis.visible_through_windows) detailConstraints += ` Windows show: ${imageAnalysis.visible_through_windows}.`;
-        // Room properties affect how the space looks from different angles
-        const rp = imageAnalysis.room_properties;
-        if (rp) {
-          const rpParts = [];
-          if (rp.room_size) rpParts.push(`Room is ${rp.room_size}`);
-          if (rp.ceiling_height && rp.ceiling_height !== 'standard') rpParts.push(`${rp.ceiling_height} ceiling`);
-          if (rp.floor_space_visible) rpParts.push(`${rp.floor_space_visible} visible floor space`);
-          if (rp.furniture_density) rpParts.push(`furniture is ${rp.furniture_density}`);
-          if (rp.depth_impression) rpParts.push(`${rp.depth_impression} depth`);
-          if (rpParts.length) detailConstraints += ` Room character: ${rpParts.join(', ')}.`;
-          if (rp.window_count) detailConstraints += ` ${rp.window_count} window(s) on ${(rp.window_walls || []).join(' and ')}.`;
-        }
+
+      // Blueprint layout — tells the AI what's on each wall
+      const layoutMap = imageAnalysis?.layout_map;
+      if (layoutMap) {
+        const walls = [];
+        if (layoutMap.back_wall) walls.push(`Back wall: ${layoutMap.back_wall}`);
+        if (layoutMap.left_wall) walls.push(`Left wall: ${layoutMap.left_wall}`);
+        if (layoutMap.right_wall) walls.push(`Right wall: ${layoutMap.right_wall}`);
+        if (layoutMap.center) walls.push(`Center: ${layoutMap.center}`);
+        if (layoutMap.ceiling) walls.push(`Ceiling: ${layoutMap.ceiling}`);
+        if (walls.length) detailConstraints += ` Room blueprint: ${walls.join('. ')}.`;
       }
+
+      // Anchor objects — things that MUST appear and never change
+      if (anchors?.length) {
+        detailConstraints += ` Fixed objects that must appear: ${anchors.join('; ')}.`;
+      }
+
+      // Wall color and window view
+      if (imageAnalysis?.wall_color) detailConstraints += ` Walls: ${imageAnalysis.wall_color}.`;
+      if (imageAnalysis?.visible_through_windows) detailConstraints += ` Outside windows: ${imageAnalysis.visible_through_windows}.`;
+
+      // Style lock
       if (styleLock) {
         const lockParts = [];
-        if (styleLock.color_palette) lockParts.push(`Use these exact colors: ${styleLock.color_palette.join(', ')}.`);
-        if (styleLock.materials) lockParts.push(`Materials: ${styleLock.materials.join(', ')}.`);
+        if (styleLock.color_palette) lockParts.push(`Colors: ${styleLock.color_palette.join(', ')}.`);
         if (styleLock.lighting_type) lockParts.push(`Lighting: ${styleLock.lighting_type}.`);
-        if (styleLock.design_style) lockParts.push(`Style: ${styleLock.design_style}.`);
         if (lockParts.length) detailConstraints += ` ${lockParts.join(' ')}`;
       }
       if (regionHint) detailConstraints += ` ${regionHint}`;
-      if (retryCorrections?.length) {
-        detailConstraints += ` MUST FIX from previous attempt: ${retryCorrections.join('; ')}.`;
-      }
-
-      const NO_TEXT_RULE = 'NEVER render text, labels, annotations, arrows, diagrams, or captions on the image. Generate ONLY the photographic scene.';
-
-      const isWide = angleLabel === 'WIDE' || angleLabel === 'ESTABLISHING';
-      const editInstruction = isWide
-        ? `${NO_TEXT_RULE} This is a photograph of a room. Generate the EXACT same room from a wide angle. Every piece of furniture, wall color, and decor item must be in the SAME position. The spatial layout is fixed.${detailConstraints} ${dallePrompt}`
-        : `${NO_TEXT_RULE} This is a photograph of a REAL physical room. You are a camera operator repositioning inside this room. THE ROOM IS FIXED. RULES: 1) The SPATIAL LAYOUT is locked — every piece of furniture stays in its exact position. 2) All wall colors, flooring, furniture, fabrics, lighting, neon signs, and decor must be IDENTICAL. 3) When the camera faces a new direction, imagine the same walls, floors, and style continuing. 4) Elements visible from the new angle must appear in their correct positions.${detailConstraints} ${dallePrompt}`;
+      const editInstruction = `Do not render any text, labels, or annotations on the image. This is a photograph of a built set. The room is FIXED — nothing moves, nothing changes. You are repositioning the camera inside this same room to get a different shot. Every wall color, piece of furniture, decor item, and lighting fixture stays identical.${detailConstraints} ${dallePrompt}`;
       form.append('prompt', editInstruction);
       form.append('n', '1');
       form.append('size', '1536x1024');
@@ -875,7 +869,7 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
 async function analyzeBaseImage(sceneSet, SceneSetModel) {
   if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
 
-  const IMAGE_ANALYSIS_VERSION = 4; // bump to invalidate cache when schema changes
+  const IMAGE_ANALYSIS_VERSION = 5; // bump to invalidate cache when schema changes
   // Check cache — skip if already analyzed for this base image with current version
   const vl = sceneSet.visual_language || {};
   if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
@@ -889,40 +883,51 @@ async function analyzeBaseImage(sceneSet, SceneSetModel) {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1200,
+      max_tokens: 1500,
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'url', url: sceneSet.base_still_url } },
-          { type: 'text', text: `You are a production designer creating a continuity bible for this room. A different AI will generate new camera angles of this SAME room — it needs to know EXACTLY what is here and WHERE everything is positioned, so every angle looks like the same physical space.
+          { type: 'text', text: `You are a virtual production designer creating a SCENE BLUEPRINT for this room. This blueprint will be used to generate consistent camera angles — the room is a fixed set, only the camera moves.
 
 Return JSON:
 {
-  "image_type": "room_photo | mood_board | collage | illustration | other — what kind of image is this?",
-  "wall_color": "exact color (e.g. 'soft lavender/purple') — only if this is a room photo",
+  "image_type": "room_photo | mood_board | collage | illustration | other",
+
+  "layout_map": {
+    "back_wall": "what is against the back wall (12 o'clock from camera)",
+    "left_wall": "what is on the left wall (9 o'clock)",
+    "right_wall": "what is on the right wall (3 o'clock)",
+    "front_wall": "what is behind the camera / entrance area (6 o'clock)",
+    "center": "what is in the center of the room",
+    "ceiling": "what is on/hanging from the ceiling"
+  },
+
+  "anchor_objects": [
+    {"name": "object name", "position": "which wall/area", "description": "exact appearance — color, material, size", "must_appear_in": ["which angles would see this object"]}
+  ],
+
+  "camera_regions": {
+    "center_crop": "what you'd see zooming into the center 60%",
+    "left_crop": "what you'd see looking at the left 40%",
+    "right_crop": "what you'd see looking at the right 40%",
+    "top_crop": "what you'd see looking at the upper 40%"
+  },
+
+  "wall_color": "exact wall color",
   "flooring": "exact floor type and color",
-  "spatial_layout": "Describe the room layout as if drawing a floor plan. Use clock positions. Example: 'Bed against back wall (12). Window left wall (9). Vanity right wall (3). Music corner (10). Door (6).'",
+  "color_palette_hex": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
+  "visible_through_windows": "what is visible outside",
+  "atmosphere": "one sentence — mood, lighting quality, time of day",
+
   "room_properties": {
     "room_size": "compact | medium | spacious | grand",
     "ceiling_height": "standard | tall | vaulted | double_height",
-    "room_shape": "rectangular | square | l_shaped | open_plan | irregular",
-    "window_count": <number>,
-    "window_walls": ["which walls have windows, e.g. 'left wall', 'back wall'"],
-    "door_count": <number>,
-    "door_positions": ["e.g. '6 o'clock', 'right wall'"],
-    "floor_space_visible": "minimal | moderate | generous — how much open floor is visible",
-    "furniture_density": "sparse | moderate | dense — how tightly packed is the furniture",
-    "depth_impression": "shallow | moderate | deep — how far back does the room extend"
-  },
-  "furniture": ["item with color/material AND position", ...],
-  "lighting_fixtures": ["fixture with position", ...],
-  "signature_decor": ["specific item with position", ...],
-  "textiles": ["item with color/pattern", ...],
-  "visible_through_windows": "what is visible outside",
-  "color_palette_hex": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
-  "atmosphere": "one sentence — mood, lighting quality, time of day"
+    "room_shape": "rectangular | square | l_shaped | open_plan"
+  }
 }
-Be extremely specific. The spatial_layout and room_properties fields are CRITICAL for generating consistent camera angles.
+
+CRITICAL: The layout_map and anchor_objects are the foundation. Be extremely specific about what is on each wall and which objects are signature (must never change between angles).
 Return ONLY JSON.` },
         ],
       }],
@@ -937,8 +942,11 @@ Return ONLY JSON.` },
     analysis.version = IMAGE_ANALYSIS_VERSION;
     analysis.analyzed_at = new Date().toISOString();
 
-    // Cache in visual_language — room_properties stored at top level for easy UI access/override
+    // Cache blueprint in visual_language
     const updatedVl = { ...vl, image_analysis: analysis };
+    if (analysis.layout_map) updatedVl.layout_map = analysis.layout_map;
+    if (analysis.anchor_objects) updatedVl.anchor_objects = analysis.anchor_objects;
+    if (analysis.camera_regions) updatedVl.camera_regions = analysis.camera_regions;
     if (analysis.room_properties && !vl.room_properties_manual) {
       updatedVl.room_properties = analysis.room_properties;
     }
@@ -1005,6 +1013,150 @@ Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drif
   }
 }
 
+
+// ─── MOOD VARIATION SYSTEM ───────────────────────────────────────────────────
+
+/**
+ * Mood presets — each defines color grading parameters for Sharp.
+ * Applied to the base image (or any angle) to create lighting/atmosphere variants
+ * WITHOUT regenerating the room. The furniture, layout, and decor stay pixel-perfect.
+ */
+const MOOD_PRESETS = {
+  morning: {
+    label: 'Morning',
+    description: 'Soft golden morning light streaming through windows',
+    tint: { r: 255, g: 230, b: 200 },  // warm golden
+    brightness: 1.15,
+    saturation: 1.05,
+    contrast: 0.95,
+  },
+  golden_hour: {
+    label: 'Golden Hour',
+    description: 'Rich amber golden-hour warmth with long shadows',
+    tint: { r: 255, g: 200, b: 140 },  // deep amber
+    brightness: 1.05,
+    saturation: 1.2,
+    contrast: 1.1,
+  },
+  night: {
+    label: 'Night',
+    description: 'Moody nighttime with neon and fairy light glow',
+    tint: { r: 180, g: 170, b: 255 },  // cool purple/blue
+    brightness: 0.7,
+    saturation: 1.15,
+    contrast: 1.2,
+  },
+  glam: {
+    label: 'Glam Mode',
+    description: 'Vanity lights bright, warm beauty lighting',
+    tint: { r: 255, g: 240, b: 230 },  // soft warm white
+    brightness: 1.2,
+    saturation: 0.95,
+    contrast: 0.9,
+  },
+  filming: {
+    label: 'Filming Mode',
+    description: 'Ring light active, even studio-like illumination',
+    tint: { r: 245, g: 245, b: 255 },  // neutral cool white
+    brightness: 1.25,
+    saturation: 0.9,
+    contrast: 1.05,
+  },
+  cozy: {
+    label: 'Cozy Evening',
+    description: 'Warm table lamps and fairy lights, intimate glow',
+    tint: { r: 255, g: 210, b: 170 },  // warm amber
+    brightness: 0.85,
+    saturation: 1.1,
+    contrast: 1.05,
+  },
+  dramatic: {
+    label: 'Dramatic',
+    description: 'High contrast with deep shadows and bright highlights',
+    tint: { r: 220, g: 200, b: 255 },  // slight purple
+    brightness: 0.9,
+    saturation: 1.3,
+    contrast: 1.4,
+  },
+};
+
+/**
+ * Apply a mood preset to an image using Sharp color grading.
+ * Returns the S3 URL of the mood-variant image.
+ * The original image is NOT modified — a new file is created.
+ */
+async function applyMoodVariant(sourceImageUrl, mood, setId, angleId = 'base') {
+  const preset = MOOD_PRESETS[mood];
+  if (!preset || !sourceImageUrl) return null;
+
+  try {
+    console.log(`[SceneGen] Applying mood "${mood}" to ${angleId}`);
+    const imageRes = await axios.get(sourceImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+
+    // Apply color grading with Sharp
+    let pipeline = sharp(imageRes.data);
+
+    // Brightness and contrast
+    pipeline = pipeline.modulate({
+      brightness: preset.brightness,
+      saturation: preset.saturation,
+    });
+
+    // Color tint via tint overlay
+    const metadata = await sharp(imageRes.data).metadata();
+    const w = metadata.width || 1920;
+    const h = metadata.height || 1080;
+
+    // Create a tint overlay
+    const tintOverlay = await sharp({
+      create: {
+        width: w,
+        height: h,
+        channels: 4,
+        background: { r: preset.tint.r, g: preset.tint.g, b: preset.tint.b, alpha: 0.15 },
+      },
+    }).png().toBuffer();
+
+    // Composite tint over the graded image
+    const gradedBuffer = await pipeline
+      .composite([{ input: tintOverlay, blend: 'over' }])
+      .png()
+      .toBuffer();
+
+    // Upload to S3
+    const s3Key = `scene-sets/${setId}/moods/${angleId}-${mood}-${Date.now()}.png`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: gradedBuffer,
+      ContentType: 'image/png',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    console.log(`[SceneGen] Mood variant "${mood}" created: ${url}`);
+    return url;
+  } catch (err) {
+    console.warn(`[SceneGen] Mood variant failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Generate all mood variants for a given image (base or angle).
+ * Returns an object mapping mood names to S3 URLs.
+ */
+async function generateMoodVariants(sourceImageUrl, setId, angleId = 'base', moods = null) {
+  const moodList = moods || Object.keys(MOOD_PRESETS);
+  const results = {};
+
+  for (const mood of moodList) {
+    const url = await applyMoodVariant(sourceImageUrl, mood, setId, angleId);
+    if (url) results[mood] = url;
+  }
+
+  return results;
+}
 
 // ─── REFERENCE REGION CROPPING ───────────────────────────────────────────────
 
@@ -1140,15 +1292,8 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  const eventContext = await loadEventContext(sceneSet, models);
-  let prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction, eventContext);
 
-  // Weight camera_direction more heavily
-  if (sceneAngle.camera_direction) {
-    prompt = `${sceneAngle.camera_direction}. ${prompt}`;
-  }
-
-  // Analyze base image (cached — only runs once per base image)
+  // Analyze base image to get blueprint (cached)
   let imageAnalysis = null;
   if (sceneSet.base_still_url) {
     try {
@@ -1157,6 +1302,27 @@ async function generateAngle(sceneAngle, sceneSet, models) {
       console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);
     }
   }
+
+  // Build blueprint-driven camera instruction
+  const vl = sceneSet.visual_language || {};
+  const layoutMap = vl.layout_map || imageAnalysis?.layout_map || {};
+  const anchorObjects = vl.anchor_objects || imageAnalysis?.anchor_objects || [];
+  const cameraRegions = vl.camera_regions || imageAnalysis?.camera_regions || {};
+
+  // Build the prompt using blueprint data
+  const eventContext = await loadEventContext(sceneSet, models);
+  let prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction, eventContext);
+
+  // Add camera direction
+  if (sceneAngle.camera_direction) {
+    prompt = `${sceneAngle.camera_direction}. ${prompt}`;
+  }
+
+  // Build anchor constraint — tell the AI which objects MUST appear
+  const relevantAnchors = anchorObjects
+    .filter(a => !a.must_appear_in || a.must_appear_in.length === 0 || a.must_appear_in.some(label => angleLabel.includes(label)))
+    .map(a => `${a.name} (${a.position}): ${a.description}`)
+    .slice(0, 5);
 
   // Determine if base is usable as reference
   const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
@@ -1193,6 +1359,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
           imageAnalysis,
           styleLock: style?.locked ? style : null,
           regionHint: getReferenceRegionHint(angleLabel),
+          anchors: relevantAnchors,
         });
         if (dalleUrl) {
           if (dalleUrl.includes(S3_BUCKET)) {
@@ -1415,6 +1582,9 @@ module.exports = {
   checkAngleConsistency,
   cropReferenceRegion,
   generateDepthMap,
+  applyMoodVariant,
+  generateMoodVariants,
+  MOOD_PRESETS,
   generateAngle,
   generateAngleVideo,
   regenerateAngleRefined,

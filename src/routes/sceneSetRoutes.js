@@ -1907,6 +1907,47 @@ router.post('/:id/time-variants', validateUUIDParam('id'), optionalAuth, async (
   }
 });
 
+// ─── POST /:id/mood-variants  — generate mood/lighting variants ──────────────
+
+router.post('/:id/mood-variants', validateUUIDParam('id'), optionalAuth, async (req, res) => {
+  try {
+    const set = await SceneSet.findByPk(req.params.id);
+    if (!set) return res.status(404).json({ error: 'Scene set not found' });
+    if (!set.base_still_url) return res.status(400).json({ error: 'No base image. Upload one first.' });
+
+    const { moods, angle_id } = req.body;
+    const sceneGenService = require('../services/sceneGenerationService');
+
+    // Generate mood variants for base image or a specific angle
+    let sourceUrl = set.base_still_url;
+    let sourceLabel = 'base';
+    if (angle_id) {
+      const angle = await SceneAngle.findOne({ where: { id: angle_id, scene_set_id: set.id } });
+      if (angle?.still_image_url) {
+        sourceUrl = angle.still_image_url;
+        sourceLabel = angle.angle_label || angle.id;
+      }
+    }
+
+    const variants = await sceneGenService.generateMoodVariants(sourceUrl, set.id, sourceLabel, moods || null);
+
+    // Store mood variants in visual_language
+    const vl = set.visual_language || {};
+    vl.mood_variants = { ...(vl.mood_variants || {}), [sourceLabel]: variants };
+    await set.update({ visual_language: vl });
+
+    res.json({
+      success: true,
+      source: sourceLabel,
+      variants,
+      count: Object.keys(variants).length,
+    });
+  } catch (err) {
+    console.error('Mood variants error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SCENE SET TEMPLATES — pre-built templates for common locations
 // ═══════════════════════════════════════════════════════════════════════════════
