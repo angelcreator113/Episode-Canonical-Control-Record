@@ -338,15 +338,16 @@ function GenerationProgress({ progress }) {
         {angles.map((a, i) => {
           const isDone = a.status === 'done';
           const isFailed = a.status === 'failed';
-          const isCurrent = i === currentIndex && !isDone && !isFailed;
-          const isQueued = !isDone && !isFailed && !isCurrent;
+          const isCurrent = a.status === 'generating' || (i === currentIndex && !isDone && !isFailed && a.status !== 'queued');
           return (
             <div key={a.id} className={`scene-sets-progress-angle ${
               isDone ? 'done' : isFailed ? 'failed' : isCurrent ? 'current' : 'queued'
             }`}>
               {isDone ? <CheckCircle2 size={12} /> : isFailed ? <AlertCircle size={12} /> : isCurrent ? <Loader size={12} className="spin" /> : <span className="scene-sets-progress-dot" />}
               <span>{a.label}</span>
-              {isCurrent && <span className="scene-sets-progress-step">generating still + video</span>}
+              {isCurrent && <span className="scene-sets-progress-step">generating...</span>}
+              {isDone && <span className="scene-sets-progress-step" style={{ color: '#16a34a' }}>done</span>}
+              {isFailed && <span className="scene-sets-progress-step" style={{ color: '#dc2626' }}>failed</span>}
             </div>
           );
         })}
@@ -2295,11 +2296,14 @@ export default function SceneSetsTab() {
     if (targets.length === 0) return;
     startGenerating(set.id);
 
+    // Show progress immediately with all angles queued
+    const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label || a.angle_name, status: 'queued' }));
+    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+
     try {
       // Use the backend batch endpoint — it generates sequentially to avoid rate limits
       const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-all-angles`, { method: 'POST' });
       const json = await res.json();
-      showToast(`Generating ${json.queued || targets.length} angles — this may take a few minutes...`);
 
       // Poll for completion
       const maxPolls = 120; // 5s * 120 = 10 minutes max
@@ -2314,8 +2318,26 @@ export default function SceneSetsTab() {
           const failed = freshAngles.filter(a => a.generation_status === 'failed').length;
           const pending = freshAngles.filter(a => a.generation_status === 'pending').length;
 
+          // Find the current generating angle index
+          const currentGenerating = freshAngles.find(a => a.generation_status === 'generating');
+          const currentIdx = currentGenerating
+            ? progressAngles.findIndex(p => p.id === currentGenerating.id)
+            : progressAngles.findIndex(p => p.status === 'queued');
+
+          // Update each angle's status
+          const updatedAngles = progressAngles.map(pa => {
+            const fresh = freshAngles.find(fa => fa.id === pa.id);
+            if (!fresh) return pa;
+            if (fresh.generation_status === 'complete') return { ...pa, status: 'done' };
+            if (fresh.generation_status === 'failed') return { ...pa, status: 'failed' };
+            if (fresh.generation_status === 'generating') return { ...pa, status: 'generating' };
+            return pa;
+          });
+
           setProgress(set.id, {
-            angles: freshAngles.map(a => ({ id: a.id, label: a.angle_label, status: a.generation_status === 'complete' ? 'done' : a.generation_status })),
+            angles: updatedAngles,
+            currentIndex: currentIdx >= 0 ? currentIdx : 0,
+            startTime: Date.now() - (poll + 1) * 5000,
             completedCount: completed,
             failedCount: failed,
           });
