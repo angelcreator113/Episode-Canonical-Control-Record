@@ -1136,44 +1136,31 @@ async function generateDepthMap(sceneSet, SceneSetModel) {
 
 // ─── ANGLE GENERATION ────────────────────────────────────────────────────────
 
-async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null) {
+async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
-  const MAX_RETRIES = 1; // auto-retry once if consistency fails
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
   const eventContext = await loadEventContext(sceneSet, models);
   let prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction, eventContext);
 
-  // ── Feature 5: Weight camera_direction more heavily ──
-  // The per-angle camera_direction is human-written and specific to the room.
-  // Promote it to the front of the prompt with emphasis.
+  // Weight camera_direction more heavily
   if (sceneAngle.camera_direction) {
-    prompt = `PRIMARY CAMERA INSTRUCTION (follow precisely): ${sceneAngle.camera_direction} — ${prompt}`;
+    prompt = `${sceneAngle.camera_direction}. ${prompt}`;
   }
 
-  // ── Feature 1: Analyze base image with Claude Vision ──
+  // Analyze base image (cached — only runs once per base image)
   let imageAnalysis = null;
   if (sceneSet.base_still_url) {
-    imageAnalysis = await analyzeBaseImage(sceneSet, SceneSet);
-    // NOTE: inventory is NOT prepended to the image prompt — it goes into the
-    // edit instruction separately to avoid DALL-E rendering text labels on the image
+    try {
+      imageAnalysis = await analyzeBaseImage(sceneSet, SceneSet);
+    } catch (err) {
+      console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);
+    }
   }
 
-  // Region hint and retry corrections are passed to the edit instruction only,
-  // NOT the image prompt — prevents DALL-E from rendering text labels on the image
-
-  // ── Features 3 & cropping: run in parallel (skip for mood boards) ──
-  const isMoodBoardEarly = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
-  let croppedRefUrl = null;
-  let depthMapUrl = null;
-  if (sceneSet.base_still_url && !isMoodBoardEarly) {
-    const [cropResult, depthResult] = await Promise.all([
-      cropReferenceRegion(sceneSet.base_still_url, angleLabel, sceneSet.id),
-      generateDepthMap(sceneSet, SceneSet),
-    ]);
-    croppedRefUrl = cropResult;
-    depthMapUrl = depthResult;
-  }
+  // Determine if base is usable as reference
+  const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
+  const referenceImageForEdit = isMoodBoard ? null : sceneSet.base_still_url;
 
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt },
@@ -1181,67 +1168,33 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
   );
 
   try {
-    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}${croppedRefUrl ? ' (with cropped ref)' : ''}${depthMapUrl ? ' (with depth map)' : ''}`);
-
-    // Clean up old assets from S3 (best-effort)
-    if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
-    if (sceneAngle.video_clip_url)  await deleteOldS3Asset(sceneAngle.video_clip_url);
+    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
 
     let stillUrl, totalCost = 0, generatedSeed = null;
 
-    // Save current image to generation history before overwriting
-    if (sceneAngle.still_image_url) {
-      try {
-        const review = sceneAngle.quality_review || {};
-        const history = review.generation_history || [];
-        history.push({
-          url: sceneAngle.still_image_url,
-          replaced_at: new Date().toISOString(),
-          attempt: sceneAngle.generation_attempt,
-          quality_score: sceneAngle.quality_score,
-        });
-        review.generation_history = history;
-        await SceneAngle.update({ quality_review: review }, { where: { id: sceneAngle.id } });
-      } catch (_) { /* best-effort history */ }
-    }
-
-    // Check if base image is a mood board — if so, don't use it as reference
-    const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
-    if (isMoodBoard) {
-      console.warn(`[SceneGen] Base image is a ${imageAnalysis.image_type}, not a room photo — generating without reference image`);
-    }
-    const referenceImageForEdit = isMoodBoard ? null : sceneSet.base_still_url;
-
-    // Try DALL-E first for stills, fall back to Runway
+    // Try DALL-E first, fall back to Runway
     const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
     if (!useRunway && OPENAI_API_KEY) {
       try {
-        console.log(`[SceneGen] Using DALL-E 3 for angle still`);
-
-        // Enhance prompt with style lock data if available
+        // Enhance prompt with style lock if available
         let enhancedPrompt = prompt;
         const style = sceneSet.visual_language;
         if (style?.locked) {
           const styleParts = [];
-          if (style.color_palette) styleParts.push(`Color palette: ${style.color_palette.join(', ')}.`);
-          if (style.materials) styleParts.push(`Materials: ${style.materials.join(', ')}.`);
+          if (style.color_palette) styleParts.push(`Colors: ${style.color_palette.join(', ')}.`);
           if (style.lighting_type) styleParts.push(`Lighting: ${style.lighting_type}.`);
           if (style.design_style) styleParts.push(`Style: ${style.design_style}.`);
           if (styleParts.length > 0) {
-            enhancedPrompt = prompt.replace('Photorealistic', styleParts.join(' ') + ' Photorealistic');
+            enhancedPrompt = `${styleParts.join(' ')} ${prompt}`;
           }
         }
 
-        const dalleUrl = await generateDallEStill(enhancedPrompt, referenceImageForEdit || null, angleLabel, {
+        const dalleUrl = await generateDallEStill(enhancedPrompt, referenceImageForEdit, angleLabel, {
           imageAnalysis,
           styleLock: style?.locked ? style : null,
-          croppedRefUrl,
-          depthMapUrl,
           regionHint: getReferenceRegionHint(angleLabel),
-          retryCorrections: _retryContext?.issues || null,
         });
         if (dalleUrl) {
-          // If gpt-image-1 edit already uploaded to S3, use directly; otherwise download & upload
           if (dalleUrl.includes(S3_BUCKET)) {
             stillUrl = dalleUrl;
           } else {
@@ -1255,23 +1208,15 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
     }
 
     if (!stillUrl) {
-      // Runway path
-      const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
-        ? Number(sceneSet.base_runway_seed)
-        : null;
-      const seedOpt = numericSeed !== null
-        ? String(numericSeed + (sceneAngle.generation_attempt || 0) + 1)
-        : undefined;
-
+      // Runway fallback
       const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
         ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
         : undefined;
-
       const referenceImages = sceneSet.base_still_url
         ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
         : undefined;
 
-      const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });
+      const { jobId } = await startTextToImage(prompt, { styleReference, referenceImages });
       const result = await pollTask(jobId);
 
       if (result.status !== 'SUCCEEDED') {
@@ -1286,72 +1231,18 @@ async function generateAngle(sceneAngle, sceneSet, models, _retryContext = null)
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
-    // ── Feature 2: Post-generation consistency check ──
-    let consistencyResult = null;
-    if (sceneSet.base_still_url && stillUrl) {
-      consistencyResult = await checkAngleConsistency(sceneSet.base_still_url, stillUrl, sceneAngle.angle_name);
-
-      // ── Auto-retry if consistency is poor ──
-      const retryAttempt = _retryContext?.attempt || 0;
-      if (consistencyResult && !consistencyResult.pass && retryAttempt < MAX_RETRIES) {
-        console.log(`[SceneGen] Consistency score ${consistencyResult.score} < 70 for "${sceneAngle.angle_name}" — auto-retrying with corrections`);
-        // Save the failed attempt to history
-        const review = sceneAngle.quality_review || {};
-        const history = review.generation_history || [];
-        history.push({
-          url: stillUrl,
-          replaced_at: new Date().toISOString(),
-          attempt: sceneAngle.generation_attempt,
-          consistency_score: consistencyResult.score,
-          auto_retry_reason: consistencyResult.issues,
-        });
-        await SceneAngle.update({ quality_review: { ...review, generation_history: history } }, { where: { id: sceneAngle.id } });
-
-        // Recursive retry with correction context
-        return generateAngle(sceneAngle, sceneSet, models, {
-          attempt: retryAttempt + 1,
-          issues: consistencyResult.issues || [],
-          previousScore: consistencyResult.score,
-        });
-      }
-    }
-
-    // Quality Analysis (non-blocking)
-    let qualityData = { qualityScore: null, flags: [] };
-    try {
-      qualityData = await artifactDetection.analyzeImageQuality(stillUrl);
-      console.log(`[SceneGen] Quality score: ${qualityData.qualityScore}/100, flags: ${qualityData.flags.length}`);
-    } catch (qaErr) {
-      console.warn(`[SceneGen] Quality analysis failed (non-blocking): ${qaErr.message}`);
-    }
-
-    // Merge consistency data into quality review
-    const qualityReview = sceneAngle.quality_review || {};
-    if (consistencyResult) {
-      qualityReview.consistency_score = consistencyResult.score;
-      qualityReview.consistency_issues = consistencyResult.issues;
-      qualityReview.consistency_pass = consistencyResult.pass;
-    }
-
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: null,
       runway_seed: generatedSeed ? String(generatedSeed) : null,
       generation_status: 'complete',
       generation_cost: totalCost,
-      quality_score: qualityData.qualityScore,
-      artifact_flags: qualityData.flags || [],
-      quality_review: qualityReview,
       generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
     }, { where: { id: sceneAngle.id } });
 
     await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
 
-    return {
-      success: true, stillUrl, videoUrl: null, seed: generatedSeed,
-      qualityScore: qualityData.qualityScore,
-      consistencyScore: consistencyResult?.score,
-    };
+    return { success: true, stillUrl, seed: generatedSeed };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;

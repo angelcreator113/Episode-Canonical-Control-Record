@@ -691,8 +691,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     </button>
                   )}
                   {hasBase && totalAngles === 0 && (
-                    <button onClick={async () => { setShowMenu(false); setSeeding(true); await onSeedAngles(set); setSeeding(false); }} disabled={isGenerating || seeding}>
-                      <Sparkles size={12} /> Seed Default Angles
+                    <button onClick={async () => {
+                      setShowMenu(false);
+                      setSeeding(true);
+                      try {
+                        const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
+                        const d = await r.json();
+                        if (d.success) showToast(`Created ${d.angles_created || 0} angles`);
+                        else showToast(d.error || 'Failed', 'error');
+                      } catch (e) { showToast(e.message, 'error'); }
+                      setSeeding(false);
+                    }} disabled={isGenerating || seeding}>
+                      <Sparkles size={12} /> Suggest Angles
                     </button>
                   )}
                   <button onClick={() => { setShowMenu(false); menuUploadRef.current?.click(); }} disabled={isGenerating}>
@@ -1783,7 +1793,7 @@ export default function SceneSetsTab() {
       showToast(uploadedCount > 1
         ? `${uploadedCount} images uploaded for "${set.name}"`
         : `Base image uploaded for "${set.name}"`);
-      fetchSets();
+      await fetchSets();
     } catch (err) {
       showToast(err.message || 'Upload failed', 'error');
     } finally {
@@ -1997,23 +2007,8 @@ export default function SceneSetsTab() {
       setNewSet({ name: '', scene_type: 'HOME_BASE', canonical_description: '', show_id: '', episode_ids: [], time_of_day: '', season: '', room_size: '', ceiling_height: '', room_shape: '' });
       setCreateShowId('');
       setShowCreateForm(false);
+      showToast(`Created "${setName}" — upload a base image to get started`);
       await fetchSets();
-
-      // If a generation job was auto-queued, poll it and update when done
-      if (json.jobId) {
-        showToast(`Created "${setName}" — generating base image...`);
-        if (json.data?.id) startGenerating(json.data.id);
-        const job = await pollJob(json.jobId);
-        if (job.status === 'completed') {
-          showToast(`Base image generated for "${setName}"`);
-        } else {
-          showToast(job.error || 'Base generation failed', 'error');
-        }
-        await fetchSets();
-        if (json.data?.id) stopGenerating(json.data.id);
-      } else {
-        showToast(`Created "${setName}"`);
-      }
     } catch {
       showToast('Failed to create location', 'error');
     } finally {
