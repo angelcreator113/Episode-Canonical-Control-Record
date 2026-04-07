@@ -14,7 +14,12 @@ const SPEC_VERSION = '2.0';
  * @returns {object|null} The generated SceneSpec
  */
 async function buildSceneSpec(sceneSet, SceneSetModel) {
-  if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not configured');
+  }
+  if (!sceneSet.base_still_url) {
+    throw new Error('No base_still_url on scene set');
+  }
 
   // Check cache — scene_spec column or visual_language fallback
   const existing = sceneSet.scene_spec || sceneSet.visual_language?.scene_spec;
@@ -23,36 +28,47 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
     return existing;
   }
 
+  console.log(`[SceneSpec] Building scene spec for ${sceneSet.name}, image: ${sceneSet.base_still_url?.slice(0, 80)}`);
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 8000,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'url', url: sceneSet.base_still_url } },
+        { type: 'text', text: buildSpecPrompt(sceneSet) },
+      ],
+    }],
+  });
+
+  const text = response.content?.[0]?.text || '';
+  console.log(`[SceneSpec] Claude response length: ${text.length}, stop_reason: ${response.stop_reason}`);
+
+  if (!text) {
+    throw new Error(`Claude returned empty response. stop_reason: ${response.stop_reason}, content types: ${response.content?.map(c => c.type).join(',')}`);
+  }
+
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) {
+    throw new Error(`Claude response contained no JSON. First 500 chars: ${text.slice(0, 500)}`);
+  }
+
+  let spec;
   try {
-    console.log(`[SceneSpec] Building scene spec for ${sceneSet.name}`);
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'url', url: sceneSet.base_still_url } },
-          { type: 'text', text: buildSpecPrompt(sceneSet) },
-        ],
-      }],
-    });
-
-    const text = response.content?.[0]?.text || '';
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) {
-      console.warn(`[SceneSpec] No JSON returned. Response: ${text.slice(0, 300)}`);
-      return null;
-    }
-
-    let spec;
+    spec = JSON.parse(match[0]);
+  } catch (parseErr) {
+    // Try to fix common JSON issues (trailing commas, etc.)
+    let cleaned = match[0]
+      .replace(/,\s*}/g, '}')
+      .replace(/,\s*]/g, ']');
     try {
-      spec = JSON.parse(match[0]);
-    } catch (parseErr) {
-      console.warn(`[SceneSpec] JSON parse failed: ${parseErr.message}`);
-      return null;
+      spec = JSON.parse(cleaned);
+    } catch {
+      throw new Error(`JSON parse failed: ${parseErr.message}. First 300 chars of JSON: ${match[0].slice(0, 300)}`);
     }
+  }
 
     // Add metadata
     spec.version = SPEC_VERSION;
@@ -87,10 +103,6 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
 
     console.log(`[SceneSpec] Spec built: ${spec.objects?.length || 0} objects, ${spec.zones?.length || 0} zones, ${spec.camera_contracts?.length || 0} contracts`);
     return spec;
-  } catch (err) {
-    console.error(`[SceneSpec] Build failed: ${err.message}`, err.stack?.slice(0, 500));
-    throw err; // Re-throw so the route handler can return the actual error message
-  }
 }
 
 /**

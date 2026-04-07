@@ -1713,9 +1713,6 @@ router.post('/:id/spec/generate', validateUUIDParam('id'), optionalAuth, async (
 
     console.log(`[SceneSpec] Starting spec generation for ${set.name} (${set.id}), base_still_url: ${set.base_still_url?.slice(0, 80)}`);
     const spec = await sceneSpecService.buildSceneSpec(set, SceneSet);
-    if (!spec) {
-      return res.status(500).json({ success: false, error: 'Scene spec generation returned null — check server logs for details' });
-    }
 
     res.json({ success: true, data: spec });
   } catch (err) {
