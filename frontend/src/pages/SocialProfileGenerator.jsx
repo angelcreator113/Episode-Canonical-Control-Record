@@ -1037,6 +1037,21 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
           <div onClick={()=>setSelected(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.25)',backdropFilter:'blur(2px)',cursor:'pointer'}}/>
           {/* Panel */}
           <div style={{position:'relative',width:'min(520px,90vw)',height:'100%',background:C.surface,boxShadow:'-4px 0 24px rgba(0,0,0,0.12)',overflowY:'auto',animation:'slideInRight 0.2s ease-out'}}>
+            {/* Quick action: Create Event from this profile */}
+            {showId && selected && feedLayer === 'lalaverse' && (
+              <div style={{padding:'8px 16px',background:'#FAF7F0',borderBottom:'1px solid #e8e0d0',display:'flex',gap:8,alignItems:'center'}}>
+                <button onClick={async()=>{
+                  try{
+                    const res=await fetch(`${API}/world/${showId}/events/from-profile`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile_id:selected.id,event_template:'Event'})});
+                    const d=await res.json();
+                    if(d.success)showToast(`✅ Event created: "${d.event?.name||'New event'}" — check Events Library`);
+                    else showToast(d.error||'Failed','error');
+                  }catch(e){showToast(e.message,'error');}
+                }} style={{padding:'5px 12px',borderRadius:6,border:'1px solid #B8962E',background:'transparent',color:'#B8962E',fontWeight:600,fontSize:11,cursor:'pointer'}}>
+                  🎭 Create Event Hosted by {selected.display_name||selected.handle}
+                </button>
+              </div>
+            )}
             <DetailPanel profile={selected} fp={fp(selected)} onClose={()=>setSelected(null)}
               onFinalize={finalizeProfile} onCross={crossProfile} onEdit={editProfile} onDelete={deleteProfile} onRefresh={loadProfiles}
               onRegenerate={regenerateProfile} regenerating={regenerating}

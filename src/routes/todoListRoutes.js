@@ -187,4 +187,75 @@ router.post('/episodes/:episodeId/todo/unlock', optionalAuth, async (req, res) =
   }
 });
 
+// POST /episodes/:episodeId/todo/complete-social/:slot — Mark a social task as complete
+router.post('/episodes/:episodeId/todo/complete-social/:slot', optionalAuth, async (req, res) => {
+  try {
+    const { episodeId, slot } = req.params;
+    const { completed = true } = req.body;
+    const { sequelize } = req.app.get('models') || require('../models');
+
+    const [todoList] = await sequelize.query(
+      'SELECT id, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+
+    if (!todoList) return res.status(404).json({ error: 'No to-do list found' });
+
+    let socialTasks = todoList.social_tasks;
+    if (typeof socialTasks === 'string') socialTasks = JSON.parse(socialTasks);
+    if (!Array.isArray(socialTasks)) return res.status(400).json({ error: 'No social tasks found' });
+
+    socialTasks = socialTasks.map(t => t.slot === slot ? { ...t, completed } : t);
+
+    await sequelize.query(
+      'UPDATE episode_todo_lists SET social_tasks = :tasks, updated_at = NOW() WHERE id = :id',
+      { replacements: { tasks: JSON.stringify(socialTasks), id: todoList.id } }
+    );
+
+    const completion = {
+      total: socialTasks.length,
+      completed: socialTasks.filter(t => t.completed).length,
+      required_total: socialTasks.filter(t => t.required).length,
+      required_done: socialTasks.filter(t => t.required && t.completed).length,
+      score: Math.round((socialTasks.filter(t => t.completed).length / socialTasks.length) * 10),
+    };
+
+    return res.json({ success: true, social_tasks: socialTasks, completion });
+  } catch (err) {
+    console.error('Complete social task error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /episodes/:episodeId/todo/social — Get social tasks with completion status
+router.get('/episodes/:episodeId/todo/social', optionalAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const { sequelize } = req.app.get('models') || require('../models');
+
+    const [todoList] = await sequelize.query(
+      'SELECT social_tasks, financial_summary FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+
+    if (!todoList) return res.json({ success: true, social_tasks: [], financial_summary: null });
+
+    let socialTasks = todoList.social_tasks;
+    if (typeof socialTasks === 'string') socialTasks = JSON.parse(socialTasks);
+
+    let financialSummary = todoList.financial_summary;
+    if (typeof financialSummary === 'string') financialSummary = JSON.parse(financialSummary);
+
+    const completion = {
+      total: (socialTasks || []).length,
+      completed: (socialTasks || []).filter(t => t.completed).length,
+      score: (socialTasks || []).length > 0 ? Math.round(((socialTasks || []).filter(t => t.completed).length / socialTasks.length) * 10) : 0,
+    };
+
+    return res.json({ success: true, social_tasks: socialTasks || [], financial_summary: financialSummary, completion });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
