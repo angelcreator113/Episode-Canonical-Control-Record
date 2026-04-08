@@ -1059,9 +1059,12 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                   showId={showId}
                   showToast={showToast}
                   onNavigateToEvents={()=>{
-                    const tabBtn=document.querySelector('[data-tab-key="events"]');
-                    if(tabBtn)tabBtn.click();
-                    else setSelected(null);
+                    setSelected(null);
+                    // Navigate to Events Library tab — update URL param
+                    const url = new URL(window.location);
+                    url.searchParams.set('tab', 'events');
+                    window.history.pushState({}, '', url);
+                    window.location.reload();
                   }}
                 />
               </div>
