@@ -521,7 +521,7 @@ async function generateAndSaveProfile(db, spark, layer) {
   const adv = spark.advanced_context || {};
   const advHints = Object.entries(adv).filter(([,v])=>v).map(([k,v])=>`${k.replace('_hint','')}: ${v}`).join(', ');
 
-  const prompt = `Generate a social media creator profile as JSON for a literary fiction novel.
+  let prompt = `Generate a social media creator profile as JSON for a literary fiction novel.
 
 PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
 
