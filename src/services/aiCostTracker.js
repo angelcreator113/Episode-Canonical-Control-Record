@@ -80,7 +80,7 @@ function inferRouteName() {
 // The counter resets at midnight UTC.
 let dailySpend = 0;
 let dailySpendDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
-const DAILY_BUDGET = parseFloat(process.env.AI_DAILY_BUDGET_USD) || Infinity;
+const DAILY_BUDGET = parseFloat(process.env.AI_DAILY_BUDGET_USD) || 50;
 
 function checkBudget(costEstimate) {
   const today = new Date().toISOString().slice(0, 10);

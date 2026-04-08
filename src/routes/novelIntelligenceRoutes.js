@@ -302,7 +302,7 @@ Generate the full manuscript metadata. Respond ONLY in valid JSON:
 }`;
 
     const response = await client.messages.create({
-      model:      'claude-opus-4-5',
+      model:      'claude-sonnet-4-6',
       max_tokens: 4000,
       messages:   [{ role: 'user', content: cascadePrompt }],
     });
@@ -321,7 +321,7 @@ Generate the full manuscript metadata. Respond ONLY in valid JSON:
           ...metadata,
           stories_included:  stories.length,
           generated_at:      new Date(),
-          generation_model:  'claude-opus-4-5',
+          generation_model:  'claude-sonnet-4-6',
           author_approved:   false,
           lala_seed_count:   metadata.lala_seed_moments?.length || 0,
         })
@@ -329,7 +329,7 @@ Generate the full manuscript metadata. Respond ONLY in valid JSON:
           series_id:         series_id || null,
           book_id,
           stories_included:  stories.length,
-          generation_model:  'claude-opus-4-5',
+          generation_model:  'claude-sonnet-4-6',
           lala_seed_count:   metadata.lala_seed_moments?.length || 0,
           ...metadata,
         });

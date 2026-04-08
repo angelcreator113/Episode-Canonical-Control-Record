@@ -63,7 +63,7 @@ router.post('/:id/unfollow-thread', async (req, res) => {
       const profileHandle = entanglement.profile?.handle || 'the profile';
 
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 300,
         system: `You are Amber, production intelligence for "Before Lala". Generate a 2–3 sentence story thread proposal describing what an unfollow looks like for this character emotionally and narratively. This is a proposal — NEVER auto-write to manuscript.`,
         messages: [{

@@ -595,6 +595,7 @@ async function uploadToS3(filePath, episodeId) {
       Key: key,
       Body: fileContent,
       ContentType: 'video/mp4',
+      StorageClass: 'INTELLIGENT_TIERING',
     })
     .promise();
 
