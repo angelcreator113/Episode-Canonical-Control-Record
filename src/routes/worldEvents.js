@@ -46,66 +46,37 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
 
     // Use WorldEvent model if available, fall back to raw SQL
     if (models.WorldEvent) {
-      const where = { show_id: showId };
-      if (status) where.status = status;
-      if (event_type) where.event_type = event_type;
+      try {
+        const where = { show_id: showId };
+        if (status) where.status = status;
+        if (event_type) where.event_type = event_type;
 
-      const validSorts = ['created_at', 'name', 'prestige', 'cost_coins', 'status'];
-      const sortCol = validSorts.includes(sort) ? sort : 'created_at';
-      const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+        const validSorts = ['created_at', 'name', 'prestige', 'cost_coins', 'status'];
+        const sortCol = validSorts.includes(sort) ? sort : 'created_at';
+        const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-      const include = [];
-      // Include invitation asset URL
-      if (models.Asset) {
-        include.push({
-          model: models.Asset,
-          as: 'invitationAsset',
-          attributes: ['id', 's3_url_processed', 's3_url_raw'],
-          required: false,
+        // Try with includes first, fallback to no includes
+        let events;
+        try {
+          const include = [];
+          if (models.Asset) include.push({ model: models.Asset, as: 'invitationAsset', attributes: ['id', 's3_url_processed', 's3_url_raw'], required: false });
+          if (models.SceneSet) include.push({ model: models.SceneSet, as: 'sceneSet', attributes: ['id', 'name', 'base_still_url', 'scene_type'], required: false });
+          events = await models.WorldEvent.findAll({ where, include, order: [[sortCol, sortOrder]] });
+        } catch (includeErr) {
+          console.warn('[WorldEvents] Includes failed, trying without:', includeErr.message);
+          events = await models.WorldEvent.findAll({ where, order: [[sortCol, sortOrder]] });
+        }
+
+        const mapped = events.map(e => {
+          const json = e.toJSON();
+          json.invitation_url = json.invitationAsset?.s3_url_processed || null;
+          return json;
         });
-      }
-      // Include venue location
-      if (models.WorldLocation) {
-        include.push({
-          model: models.WorldLocation,
-          as: 'venue',
-          attributes: ['id', 'name', 'street_address', 'city', 'district', 'venue_type', 'location_type'],
-          required: false,
-        });
-      }
-      // Include scene set basic info
-      if (models.SceneSet) {
-        include.push({
-          model: models.SceneSet,
-          as: 'sceneSet',
-          attributes: ['id', 'name', 'base_still_url', 'scene_type'],
-          required: false,
-        });
-      }
-      // Include source calendar event
-      if (models.StoryCalendarEvent) {
-        include.push({
-          model: models.StoryCalendarEvent,
-          as: 'sourceCalendarEvent',
-          attributes: ['id', 'title', 'event_type', 'cultural_category', 'start_datetime'],
-          required: false,
-        });
-      }
 
-      const events = await models.WorldEvent.findAll({
-        where,
-        include,
-        order: [[sortCol, sortOrder]],
-      });
-
-      // Map invitation_url for backward compatibility
-      const mapped = events.map(e => {
-        const json = e.toJSON();
-        json.invitation_url = json.invitationAsset?.s3_url_processed || null;
-        return json;
-      });
-
-      return res.json({ success: true, events: mapped });
+        return res.json({ success: true, events: mapped });
+      } catch (modelErr) {
+        console.warn('[WorldEvents] Model query failed, falling back to raw SQL:', modelErr.message);
+      }
     }
 
     // Fallback: raw SQL (original behavior)
