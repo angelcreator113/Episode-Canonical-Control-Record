@@ -17,6 +17,8 @@ console.log('🔍 This log confirms latest code is running!');
 
 // AI Cost Tracking — patches Anthropic SDK before any routes load
 require('./services/aiCostTracker');
+// AI Response Cache — caches identical non-creative calls in Redis (must load after cost tracker)
+require('./services/aiResponseCache');
 
 console.log('📋 Environment:', process.env.NODE_ENV || 'development');
 console.log('📋 Database URL:', process.env.DATABASE_URL ? '***SET***' : '❌ NOT SET');
