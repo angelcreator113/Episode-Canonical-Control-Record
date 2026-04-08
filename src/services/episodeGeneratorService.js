@@ -310,6 +310,16 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     console.warn('[EpisodeGenerator] Character sync failed (non-blocking):', syncErr.message);
   }
 
+  // Generate post-event feed activity
+  let feedPosts = [];
+  try {
+    const feedActivity = require('./feedActivityService');
+    feedPosts = await feedActivity.generatePostEventActivity(event, models);
+    console.log(`[EpisodeGenerator] Feed activity: ${feedPosts.length} posts generated`);
+  } catch (feedErr) {
+    console.warn('[EpisodeGenerator] Feed activity failed (non-blocking):', feedErr.message);
+  }
+
   return {
     episode: episode.toJSON(),
     brief: brief?.toJSON() || null,
@@ -318,6 +328,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     financials,
     socialTasks,
     beats: BEAT_TEMPLATES,
+    feedPosts,
   };
 }
 
