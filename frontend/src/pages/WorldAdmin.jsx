@@ -112,6 +112,7 @@ function WorldAdmin() {
 
   // Event editor state
   const [editingEvent, setEditingEvent] = useState(null);
+  const [autoFilling, setAutoFilling] = useState(false);
   const [eventForm, setEventForm] = useState({ ...EMPTY_EVENT });
   const [savingEvent, setSavingEvent] = useState(false);
   const [injectTarget, setInjectTarget] = useState(null);
@@ -1164,20 +1165,48 @@ The revised event should feel like a completely different experience from the si
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
       {activeTab === 'events' && (
         <div style={S.content}>
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ ...S.cardTitle, margin: 0 }}>💌 Events Library</h2>
+          {/* Header — simplified with primary auto-fill action */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events Library</h2>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                {worldEvents.length} events · {worldEvents.filter(e => e.status === 'used').length} used · {worldEvents.filter(e => !e.used_in_episode_id && e.status !== 'used').length} available
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button onClick={seedEvents} disabled={seedingEvents} style={{ ...S.smBtn, background: '#fefce8', color: '#a16207' }}>{seedingEvents ? '⏳ Seeding...' : '🌱 Seed 24 Events'}</button>
-              <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S.smBtn, background: '#f0fdf4', color: '#16a34a' }}>📋 Templates</button>
-              <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={{ ...S.smBtn, background: '#faf5ff', color: '#7c3aed' }}>{aiFixLoading ? '⏳...' : '✨ Enhance All'}</button>
-              <button onClick={handleExportCSV} style={{ ...S.smBtn, background: '#f0f9ff', color: '#0284c7' }}>📥 Export</button>
-              {bulkMode ? (
-                <button onClick={() => { setBulkMode(false); setSelectedEvents(new Set()); }} style={{ ...S.smBtn, background: '#fef2f2', color: '#dc2626' }}>✕ Cancel</button>
-              ) : (
-                <button onClick={() => setBulkMode(true)} style={S.smBtn}>☐ Select</button>
-              )}
+              <button onClick={async () => {
+                setAutoFilling(true);
+                setToast('🗓️ Generating events for this month...');
+                try {
+                  // Step 1: Generate seasonal calendar events
+                  const month = new Date().getMonth();
+                  const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
+                  if (!calRes.data.success) throw new Error(calRes.data.error);
+                  const seasonalCount = calRes.data.data.count;
+                  setToast(`📅 ${seasonalCount} seasonal events created. Spawning world events...`);
+
+                  // Step 2: Auto-spawn world events from each seasonal event
+                  const calEvents = calRes.data.data.created || [];
+                  let spawned = 0;
+                  for (const ce of calEvents) {
+                    try {
+                      const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, {
+                        show_id: showId, event_count: 1, max_guests: 6,
+                      });
+                      if (spawnRes.data.success) spawned += spawnRes.data.data.events_created;
+                    } catch { /* continue */ }
+                  }
+                  setToast(`✅ Created ${seasonalCount} seasonal + ${spawned} world events with hosts & venues!`);
+                  loadData();
+                } catch (err) { setToast('Auto-fill failed: ' + (err.response?.data?.error || err.message)); }
+                setAutoFilling(false);
+                setTimeout(() => setToast(null), 5000);
+              }} disabled={autoFilling} style={{ ...S.primaryBtn, background: '#B8962E' }}>
+                {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
+              </button>
               <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
+              <button onClick={() => setShowTemplates(!showTemplates)} style={S.smBtn}>📋 Templates</button>
+              <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={S.smBtn}>{aiFixLoading ? '⏳...' : '✨ Enhance'}</button>
             </div>
           </div>
 
@@ -1751,11 +1780,39 @@ The revised event should feel like a completely different experience from the si
               );
             })}
             {worldEvents.length === 0 && !editingEvent && (
-              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>💌</div>
-                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No events yet</div>
-                <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>Create reusable events that inject directly into episode scripts.</div>
-                <button onClick={openNewEvent} style={S.primaryBtn}>+ Create First Event</button>
+              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 12 }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🗓️</div>
+                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#2C2C2C' }}>No events yet</div>
+                <div style={{ fontSize: 13, color: '#666', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px', lineHeight: 1.5 }}>
+                  Events are the story moments — parties, brand deals, collabs, drama.
+                  Auto-fill generates events from your Cultural Calendar with hosts from Lala's Feed.
+                </div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={async () => {
+                    setAutoFilling(true);
+                    setToast('🗓️ Generating events for this month...');
+                    try {
+                      const month = new Date().getMonth();
+                      const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
+                      if (!calRes.data.success) throw new Error(calRes.data.error);
+                      const calEvents = calRes.data.data.created || [];
+                      let spawned = 0;
+                      for (const ce of calEvents) {
+                        try {
+                          const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, { show_id: showId, event_count: 1, max_guests: 6 });
+                          if (spawnRes.data.success) spawned += spawnRes.data.data.events_created;
+                        } catch { /* continue */ }
+                      }
+                      setToast(`✅ Created ${calRes.data.data.count} seasonal + ${spawned} world events!`);
+                      loadData();
+                    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                    setAutoFilling(false);
+                    setTimeout(() => setToast(null), 5000);
+                  }} disabled={autoFilling} style={{ ...S.primaryBtn, background: '#B8962E', padding: '10px 24px', fontSize: 14 }}>
+                    {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
+                  </button>
+                  <button onClick={openNewEvent} style={{ ...S.smBtn, padding: '10px 20px', fontSize: 13 }}>+ Create Manually</button>
+                </div>
               </div>
             )}
           </div>
