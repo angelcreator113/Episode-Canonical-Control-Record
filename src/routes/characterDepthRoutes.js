@@ -171,11 +171,12 @@ function buildDimensionPrompt(dimension, fields) {
 }
 
 async function callClaude(systemPrompt, userMessage, model = FAST_MODEL, maxTokens = 4000) {
+  const system = [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }];
   try {
     const res = await anthropic.messages.create({
       model,
       max_tokens: maxTokens,
-      system: systemPrompt,
+      system,
       messages: [{ role: 'user', content: userMessage }],
     });
     return res.content[0]?.text || '';
@@ -185,7 +186,7 @@ async function callClaude(systemPrompt, userMessage, model = FAST_MODEL, maxToke
       const res = await anthropic.messages.create({
         model: fallback,
         max_tokens: maxTokens,
-        system: systemPrompt,
+        system,
         messages: [{ role: 'user', content: userMessage }],
       });
       return res.content[0]?.text || '';
