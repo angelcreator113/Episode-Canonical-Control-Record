@@ -1107,6 +1107,47 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     )}
 
+                    {/* ── Social Tasks + Beats (load on demand) ── */}
+                    <div style={{ marginTop: 14 }}>
+                      <button
+                        onClick={async (e) => {
+                          const btn = e.target;
+                          if (btn.dataset.loaded) return;
+                          btn.textContent = '⏳ Loading...';
+                          try {
+                            const res = await api.get(`/api/v1/episodes/${ep.id}`);
+                            const todoRes = await fetch(`/api/v1/world/${showId}/events`).then(r => r.json()).catch(() => ({ events: [] }));
+                            const linkedEv = todoRes.events?.find(ev => ev.used_in_episode_id === ep.id);
+
+                            // Show social tasks from canon_consequences.automation
+                            const automation = linkedEv?.canon_consequences?.automation;
+                            const guests = automation?.guest_profiles || [];
+                            const host = automation?.host_display_name;
+
+                            let html = '';
+                            if (host) html += `<div style="margin-bottom:8px"><strong>Host:</strong> ${host} (${automation?.host_handle || ''})</div>`;
+                            if (guests.length > 0) html += `<div style="margin-bottom:8px"><strong>Guest List:</strong> ${guests.map(g => g.display_name || g.handle).join(', ')}</div>`;
+                            if (linkedEv?.venue_name) html += `<div style="margin-bottom:8px"><strong>Venue:</strong> ${linkedEv.venue_name}${linkedEv.venue_address ? ' — ' + linkedEv.venue_address : ''}</div>`;
+
+                            html += '<div style="margin-top:12px;font-weight:600;color:#B8962E">📱 Social Media Tasks</div>';
+                            html += '<div style="margin-top:4px;display:grid;gap:4px">';
+                            const tasks = ['GRWM video', 'Outfit reveal to stories', 'Film arrival at venue', 'Photo with host', 'Go live from event', 'BTS stories', 'Post event recap', 'Thank host publicly', 'Engage with attendee posts'];
+                            tasks.forEach(t => { html += `<div style="font-size:12px;padding:4px 8px;background:#f8f8f8;border-radius:4px">☐ ${t}</div>`; });
+                            html += '</div>';
+
+                            const container = btn.parentNode.querySelector('.ep-tasks-content');
+                            if (container) { container.innerHTML = html; container.style.display = 'block'; }
+                            btn.textContent = '📱 Tasks & Details ▲';
+                            btn.dataset.loaded = 'true';
+                          } catch { btn.textContent = '📱 View Tasks & Details'; }
+                        }}
+                        style={{ ...S.smBtn, background: '#FAF7F0', borderColor: '#e8e0d0', color: '#B8962E' }}
+                      >
+                        📱 View Tasks & Details
+                      </button>
+                      <div className="ep-tasks-content" style={{ display: 'none', marginTop: 10, padding: 12, background: '#fafafa', borderRadius: 8, fontSize: 12, lineHeight: 1.6 }} />
+                    </div>
+
                     {/* ── Evaluation Details ── */}
                     {ej && (
                       <div style={{ marginTop: 14 }}>
