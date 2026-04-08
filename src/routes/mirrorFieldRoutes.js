@@ -46,7 +46,7 @@ router.post('/:id/mirror/propose', async (req, res) => {
       const Anthropic = require('@anthropic-ai/sdk');
       const client = new Anthropic();
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 300,
         system: `You are Amber, production intelligence for "Before Lala". You analyze Feed profiles and map each to a dimension of JustAWoman's interior life.
 

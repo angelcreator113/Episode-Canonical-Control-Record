@@ -100,7 +100,7 @@ No explanation. No markdown. Just the JSON.`;
 
   try {
     const r = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 150,
       system,
       messages: [{ role: 'user', content: user }],

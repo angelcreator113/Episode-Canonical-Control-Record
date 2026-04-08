@@ -3121,7 +3121,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
       response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 16000,
-        system: systemPrompt,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: userPrompt }],
       });
     } catch (apiErr) {
@@ -3132,7 +3132,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
         response = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 16000,
-          system: systemPrompt,
+          system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: userPrompt }],
         });
       } else {
@@ -3370,7 +3370,7 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
       const stream = anthropic.messages.stream({
         model: 'claude-sonnet-4-6',
         max_tokens: 16000,
-        system: systemPrompt,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: userPrompt }],
       });
 
@@ -3390,7 +3390,7 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
         const retryStream = anthropic.messages.stream({
           model: 'claude-sonnet-4-6',
           max_tokens: 16000,
-          system: systemPrompt,
+          system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: userPrompt }],
         });
 
@@ -3628,7 +3628,7 @@ Use this exact structure:
     const response = await anthropicClient.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
-      system: ARC_SYSTEM_PROMPT,
+      system: [{ type: 'text', text: ARC_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }],
     });
 
