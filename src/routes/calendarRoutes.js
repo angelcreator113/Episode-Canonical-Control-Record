@@ -464,7 +464,7 @@ The story is set in year 8385. Use real months/days but year 8385.`,
 // POST /events/:id/spawn-world-event — Create a world event from a calendar event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/events/:id/spawn-world-event', authenticateToken, async (req, res) => {
+router.post('/events/:id/spawn-world-event', optionalAuth, async (req, res) => {
   try {
     const models = getModels(req);
     const { StoryCalendarEvent, WorldEvent, WorldLocation } = models;
@@ -560,7 +560,7 @@ router.post('/events/:id/spawn-world-event', authenticateToken, async (req, res)
 // GET /events/:id/spawned — List world events spawned from a calendar event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.get('/events/:id/spawned', authenticateToken, async (req, res) => {
+router.get('/events/:id/spawned', optionalAuth, async (req, res) => {
   try {
     const models = getModels(req);
     if (models.WorldEvent) {
@@ -586,7 +586,7 @@ router.get('/events/:id/spawned', authenticateToken, async (req, res) => {
 // Uses AI matching: picks host from feed, venue from locations, builds guest list
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/events/:id/auto-spawn', authenticateToken, async (req, res) => {
+router.post('/events/:id/auto-spawn', optionalAuth, async (req, res) => {
   try {
     const models = getModels(req);
     const { StoryCalendarEvent } = models;
@@ -613,9 +613,54 @@ router.post('/events/:id/auto-spawn', authenticateToken, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('POST /events/:id/auto-spawn error:', err);
+    console.error('POST /events/:id/auto-spawn error:', err.message, err.stack?.slice(0, 300));
+    res.status(500).json({ error: `Auto-spawn failed: ${err.message}` });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// POST /events/generate-seasonal — Auto-generate seasonal events for a month
+// ═══════════════════════════════════════════════════════════════════════
+
+router.post('/events/generate-seasonal', optionalAuth, async (req, res) => {
+  try {
+    const { month, count = 4, year = 2026, show_id } = req.body;
+    if (month === undefined || month < 0 || month > 11) {
+      return res.status(400).json({ error: 'month is required (0-11)' });
+    }
+
+    const seasonalService = require('../services/seasonalEventService');
+    const models = getModels(req);
+    const result = await seasonalService.generateSeasonalEvents(month, show_id, models, { count, year });
+
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: `Generated ${result.count} seasonal events for ${result.month}`,
+    });
+  } catch (err) {
+    console.error('POST /events/generate-seasonal error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// GET /events/feed-templates — Get feed event templates with seasonal affinities
+// ═══════════════════════════════════════════════════════════════════════
+
+router.get('/events/feed-templates', (req, res) => {
+  const seasonalService = require('../services/seasonalEventService');
+  const month = req.query.month !== undefined ? parseInt(req.query.month) : new Date().getMonth();
+  const relevant = seasonalService.getRelevantTemplates(month);
+  res.json({
+    success: true,
+    data: {
+      all: seasonalService.FEED_EVENT_TEMPLATES,
+      relevant,
+      month,
+      seasons: seasonalService.MONTH_SEASONS[month] || [],
+    },
+  });
 });
 
 module.exports = router;
