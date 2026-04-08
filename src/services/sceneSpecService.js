@@ -60,7 +60,7 @@ async function buildSceneSpec(sceneSet, SceneSetModel) {
     spec = JSON.parse(match[0]);
   } catch (parseErr) {
     // Try to repair common Claude JSON issues
-    let repaired = match[0]
+    const repaired = match[0]
       .replace(/,\s*}/g, '}')       // trailing commas before }
       .replace(/,\s*]/g, ']')       // trailing commas before ]
       .replace(/'/g, '"')           // single quotes to double

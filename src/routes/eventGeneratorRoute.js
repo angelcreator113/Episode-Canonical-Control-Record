@@ -145,7 +145,7 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
 
 // ── Prompt ────────────────────────────────────────────────────────────────
 
-async function buildEventPrompt(db, show_id) {
+async function buildEventPrompt(db, _show_id) {
   // Load Show Brain rules for context
   let brainContext = '';
   try {

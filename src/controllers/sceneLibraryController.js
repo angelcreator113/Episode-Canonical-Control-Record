@@ -75,7 +75,7 @@ exports.listLibraryScenes = async (req, res) => {
     }
 
     // Build include — make Show join optional so scene-library works even if shows table has issues
-    let include = [];
+    const include = [];
     if (Show) {
       include.push({
         model: Show,

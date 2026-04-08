@@ -21,7 +21,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 // feedProfileUtils imported for future use
 // const { generateHandleFromCharacter, inferArchetypeFromRole, inferLalaRelationship, inferCareerPressure, inferFollowerTier } = require('../utils/feedProfileUtils');
 
-const AI_MODEL = 'claude-sonnet-4-6';
+const AI_MODEL = 'claude-sonnet-4-6';           // Full profile generation (complex, rich output)
+const AI_MODEL_SIMPLE = 'claude-haiku-4-5-20251001';  // Spark generation (simple JSON, ~4x cheaper)
 const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
 const AI_TIMEOUT_MS = 60000; // 60s timeout — enough for large profile generation prompts
 const AI_MAX_RETRIES = 0;   // No retries — fail fast, let the batch loop handle partial success
@@ -58,12 +59,17 @@ async function validateClaudeAccess() {
 
 /**
  * Call Claude with timeout, retry, and model fallback logic.
+ * @param {string} prompt - The prompt to send
+ * @param {Object} options - Call options
+ * @param {number} options.maxTokens - Max output tokens (default 4000)
+ * @param {number} options.retries - Retry count (default AI_MAX_RETRIES)
+ * @param {string} options.model - Override model (default AI_MODEL, use AI_MODEL_SIMPLE for sparks)
  */
-async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES } = {}) {
+async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES, model = AI_MODEL } = {}) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let lastErr;
   // Deduplicate — don't retry the same model twice
-  const models = AI_MODEL === AI_FALLBACK_MODEL ? [AI_MODEL] : [AI_MODEL, AI_FALLBACK_MODEL];
+  const models = model === AI_FALLBACK_MODEL ? [model] : [model, AI_FALLBACK_MODEL];
 
   for (const model of models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -370,10 +376,11 @@ Return a JSON array of exactly ${count} objects:
 
 Return ONLY the JSON array. No markdown, no explanation.`;
 
-  console.log(`[FeedScheduler] Calling Claude for ${count} sparks (layer=${layer})...`);
+  console.log(`[FeedScheduler] Calling Claude (Haiku) for ${count} sparks (layer=${layer})...`);
   const sparkStart = Date.now();
   // Sparks are small objects (~200 tokens each) — 4000 is plenty for up to 20 sparks
-  const response = await callClaude(prompt, { maxTokens: 4000 });
+  // Using Haiku for sparks: simpler task, ~4x cheaper than Sonnet
+  const response = await callClaude(prompt, { maxTokens: 4000, model: AI_MODEL_SIMPLE });
   console.log(`[FeedScheduler] Claude spark response received in ${((Date.now() - sparkStart) / 1000).toFixed(1)}s`);
 
   const rawText = response?.content?.[0]?.text;

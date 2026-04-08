@@ -20,7 +20,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { createCanvas, registerFont } = require('canvas');
-const sharp = require('sharp');
+const _sharp = require('sharp');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -167,7 +167,7 @@ function renderTodoAsset(tasks, event, options = {}) {
   const theme = event.theme || '';
   let accentColor = '#B8962E';
   let bgColor     = 'rgba(250,247,240,0.97)';
-  let checkColor  = '#1A7A40';
+  const checkColor  = '#1A7A40';
 
   if (theme.includes('avant-garde')) {
     accentColor = '#1A1A1A'; bgColor = 'rgba(245,245,245,0.97)';
