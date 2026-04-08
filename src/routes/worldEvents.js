@@ -1484,16 +1484,27 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     };
 
     let event;
-    if (models.WorldEvent) {
-      event = await models.WorldEvent.create(eventData);
-    } else {
+    try {
+      if (models.WorldEvent) {
+        event = await models.WorldEvent.create(eventData);
+      }
+    } catch (createErr) {
+      console.warn('WorldEvent.create failed, using raw SQL:', createErr.message);
+      event = null;
+    }
+
+    if (!event) {
       const { v4: uuidv4 } = require('uuid');
       eventData.id = uuidv4();
-      await models.sequelize.query(
-        `INSERT INTO world_events (id, show_id, name, event_type, host, prestige, location_hint, canon_consequences, status, created_at, updated_at)
-         VALUES (:id, :show_id, :name, :event_type, :host, :prestige, :location_hint, :canon_consequences, 'draft', NOW(), NOW())`,
-        { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
-      );
+      try {
+        await models.sequelize.query(
+          `INSERT INTO world_events (id, show_id, name, event_type, host, prestige, location_hint, canon_consequences, status, created_at, updated_at)
+           VALUES (:id, :show_id, :name, :event_type, :host, :prestige, :location_hint, :canon_consequences, 'draft', NOW(), NOW())`,
+          { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
+        );
+      } catch (sqlErr) {
+        return res.status(500).json({ error: `Event creation failed: ${sqlErr.message}` });
+      }
       event = eventData;
     }
 
