@@ -613,8 +613,8 @@ router.post('/events/:id/auto-spawn', optionalAuth, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('POST /events/:id/auto-spawn error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('POST /events/:id/auto-spawn error:', err.message, err.stack?.slice(0, 300));
+    res.status(500).json({ error: `Auto-spawn failed: ${err.message}` });
   }
 });
 

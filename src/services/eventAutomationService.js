@@ -325,23 +325,47 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     };
 
     // Use WorldEvent model if available, fall back to raw SQL
-    if (models.WorldEvent) {
-      const event = await models.WorldEvent.create(eventData);
-      createdEvents.push(event.toJSON());
-    } else {
-      await models.sequelize.query(
-        `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
-         prestige, location_hint, dress_code, narrative_stakes, canon_consequences, status, created_at, updated_at)
-         VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
-         :prestige, :location_hint, :dress_code, :narrative_stakes, :canon_consequences, :status, NOW(), NOW())`,
-        {
-          replacements: {
-            ...eventData,
-            canon_consequences: JSON.stringify(eventData.canon_consequences),
-          },
-        }
-      );
-      createdEvents.push(eventData);
+    try {
+      if (models.WorldEvent) {
+        const event = await models.WorldEvent.create(eventData);
+        createdEvents.push(event.toJSON());
+      } else {
+        await models.sequelize.query(
+          `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
+           prestige, location_hint, dress_code, narrative_stakes, canon_consequences, status, created_at, updated_at)
+           VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
+           :prestige, :location_hint, :dress_code, :narrative_stakes, :canon_consequences, :status, NOW(), NOW())`,
+          {
+            replacements: {
+              ...eventData,
+              canon_consequences: JSON.stringify(eventData.canon_consequences),
+            },
+          }
+        );
+        createdEvents.push(eventData);
+      }
+    } catch (createErr) {
+      console.error(`[EventAutomation] Failed to create event "${eventName}":`, createErr.message);
+      // Try raw SQL as last resort
+      try {
+        await models.sequelize.query(
+          `INSERT INTO world_events (id, show_id, name, event_type, host, description, prestige, location_hint, canon_consequences, status, created_at, updated_at)
+           VALUES (:id, :show_id, :name, :event_type, :host, :description, :prestige, :location_hint, :canon_consequences, 'draft', NOW(), NOW())`,
+          {
+            replacements: {
+              id: eventData.id, show_id: showId, name: eventName,
+              event_type: eventData.event_type, host: hostName || null,
+              description: eventData.description || eventName,
+              prestige: prestige, location_hint: eventData.location_hint || null,
+              canon_consequences: JSON.stringify(eventData.canon_consequences),
+            },
+          }
+        );
+        createdEvents.push(eventData);
+      } catch (sqlErr) {
+        console.error(`[EventAutomation] Raw SQL fallback also failed:`, sqlErr.message);
+        throw new Error(`Event creation failed: ${createErr.message}`);
+      }
     }
   }
 
