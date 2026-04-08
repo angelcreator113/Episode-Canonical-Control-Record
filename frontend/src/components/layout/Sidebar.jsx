@@ -37,12 +37,13 @@ function buildNav(shows) {
     {
       zone: 'WORLD BUILDING',
       items: [
-        { icon: '📜', label: 'World State', route: '/universe/world-state' },
-        { icon: '📍', label: 'World Locations', route: '/world-locations' },
-        { icon: '📅', label: 'Cultural Calendar', route: '/cultural-calendar' },
-        { icon: '📜', label: 'Cultural Memory', route: '/cultural-memory' },
-        { icon: '🏗️', label: 'Infrastructure', route: '/world-infrastructure' },
-        { icon: '⭐', label: 'Influencer Systems', route: '/influencer-systems' },
+        { icon: '🗺️', label: 'World Setup Guide', route: '/world-setup' },
+        { icon: '🏗️', label: '1. Power Structures', route: '/world-infrastructure', hint: 'Cities, companies, schools' },
+        { icon: '⭐', label: '2. Fame & Influence', route: '/influencer-systems', hint: 'How creators rise & fall' },
+        { icon: '📅', label: '3. Cultural Calendar', route: '/cultural-calendar', hint: 'Yearly events & rhythms' },
+        { icon: '📜', label: '4. Cultural Memory', route: '/cultural-memory', hint: 'Shared history & legends' },
+        { icon: '📍', label: '5. Locations & Venues', route: '/world-locations', hint: 'Where things happen' },
+        { icon: '📊', label: 'World State', route: '/universe/world-state', hint: 'Current story snapshot' },
       ],
     },
     {
@@ -407,7 +408,12 @@ function Sidebar({ isOpen, onClose }) {
                     title={collapsed ? item.label : undefined}
                   >
                     <span className="ps-nav-icon">{item.icon}</span>
-                    {!collapsed && <span className="ps-nav-label">{item.label}</span>}
+                    {!collapsed && (
+                      <span className="ps-nav-label">
+                        {item.label}
+                        {item.hint && <span className="ps-nav-hint">{item.hint}</span>}
+                      </span>
+                    )}
                   </NavLink>
                 );
               })}
