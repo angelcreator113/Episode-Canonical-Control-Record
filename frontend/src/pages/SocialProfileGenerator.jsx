@@ -12,10 +12,11 @@ import ProfileCard from './feed/ProfileCard';
 import { DetailPanel, FeedStatePicker } from './feed/ProfileDetailPanel';
 import FeedViewContent from './feed/FeedViews';
 
-// Local Spinner — avoid named import that may fail during code-splitting
+// Local Spinner — avoid named import that fails during code-splitting
 function Spinner() {
   return <span style={{display:'inline-block',width:14,height:14,border:'2px solid #eee',borderTopColor:'#a889c8',borderRadius:'50%',animation:'spin 0.6s linear infinite'}}/>;
 }
+
 import {
   API, SCHED_API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, LALAVERSE_CITIES, LALA_RELATIONSHIPS, CAREER_PRESSURES,
