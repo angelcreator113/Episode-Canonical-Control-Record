@@ -862,9 +862,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                 <option value="handle">Handle A–Z</option>
               </select>
               <button onClick={()=>{const e=!bulkMode;setBulkMode(e);setSelectedIds(new Set());if(e)setSelected(null);}} style={{padding:'6px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',
-                background:bulkMode?C.lavLight:'transparent',color:bulkMode?C.lavender:C.inkLight,
-                border:`1.5px solid ${bulkMode?C.lavender:C.border}`}}>
-                {bulkMode?'✕ Cancel':'☐ Select'}
+                background:bulkMode?'#fef2f2':'transparent',color:bulkMode?'#dc2626':C.inkLight,
+                border:`1.5px solid ${bulkMode?'#fecaca':C.border}`}}>
+                {bulkMode?'✕ Exit Select Mode':'☐ Select Multiple'}
               </button>
             </div>
           </div>
@@ -926,18 +926,30 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
             )}
           </div>
 
-          {/* Bulk action bar */}
+          {/* Bulk action bar — prominent when active */}
           {bulkMode && (
-            <div className="spg-bulk-bar" style={{background:C.lavLight,borderBottom:`1px solid ${C.lavender}40`,padding:'8px 24px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
-              <button onClick={()=>setSelectedIds(new Set(profiles.map(p=>p.id)))} style={sBtnSm}>Select Page ({profiles.length})</button>
-              {totalCount>profiles.length&&<button onClick={()=>setSelectAllPages(true)} style={sBtnSm}>Select All {totalCount}</button>}
-              {(selectedIds.size>0||selectAllPages)&&<span style={{fontSize:12,color:C.lavender,fontWeight:700}}>{selectAllPages?`All ${totalCount}`:selectedIds.size} selected</span>}
-              <div style={{marginLeft:'auto',display:'flex',gap:6}}>
-                <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/finalize','Finalize $n profile(s)?',r=>{const t=r.reduce((a,d)=>a+(d.finalized||0),0);showToast(`Finalized ${t} profile(s)`);})} style={{...sBtnSm,background:'#e8f5ee',color:'#2d7a50'}}>✓ Finalize</button>
-                <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/cross','Cross $n profile(s) into the story world?',r=>{const t=r.reduce((a,d)=>a+(d.crossed||0),0);showToast(`Crossed ${t} profile(s)`);})} style={{...sBtnSm,background:C.lavLight,color:C.lavender}}>✦ Cross</button>
-                <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/archive','Archive $n profile(s)?',r=>{const t=r.reduce((a,d)=>a+(d.archived||0),0);showToast(`Archived ${t} profile(s)`);})} style={sBtnSm}>▪ Archive</button>
-                <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/delete','Permanently delete $n profile(s)? This cannot be undone.',r=>{const t=r.reduce((a,d)=>a+(d.deleted||0),0);showToast(`Deleted ${t} profile(s)`,'warn');})} style={{...sBtnSm,color:C.pink}}>✕ Delete</button>
+            <div className="spg-bulk-bar" style={{background:'#FAF7F0',borderBottom:'2px solid #B8962E',padding:'12px 24px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <button onClick={()=>setSelectedIds(new Set(profiles.map(p=>p.id)))} style={{...sBtnSm,background:'#fff',border:'1px solid #B8962E',color:'#B8962E'}}>☑ Select Page ({profiles.length})</button>
+                {totalCount>profiles.length&&<button onClick={()=>setSelectAllPages(true)} style={{...sBtnSm,background:'#fff',border:'1px solid #B8962E',color:'#B8962E'}}>☑ Select All {totalCount}</button>}
               </div>
+              {(selectedIds.size>0||selectAllPages) ? (
+                <>
+                  <div style={{padding:'4px 12px',background:'#B8962E',color:'#fff',borderRadius:20,fontSize:12,fontWeight:700}}>
+                    {selectAllPages?`All ${totalCount}`:selectedIds.size} selected
+                  </div>
+                  <div style={{height:20,width:1,background:'#ddd'}}/>
+                  <span style={{fontSize:11,color:'#888'}}>Choose action:</span>
+                  <div style={{display:'flex',gap:6}}>
+                    <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/finalize','Finalize $n profile(s)? They will be marked as reviewed and ready for the story.',r=>{const t=r.reduce((a,d)=>a+(d.finalized||0),0);showToast(`✅ Finalized ${t} profile(s) — they can now host events and appear in episodes`);})} style={{...sBtnSm,background:'#d4edda',color:'#155724',fontWeight:700,padding:'6px 14px'}}>✓ Finalize</button>
+                    <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/cross','Cross $n profile(s) into the story world? They will be marked as active story characters.',r=>{const t=r.reduce((a,d)=>a+(d.crossed||0),0);showToast(`✦ Crossed ${t} profile(s) into the story`);})} style={{...sBtnSm,background:'#e8daff',color:'#5b21b6',fontWeight:700,padding:'6px 14px'}}>✦ Cross</button>
+                    <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/archive','Archive $n profile(s)? They will be hidden but not deleted.',r=>{const t=r.reduce((a,d)=>a+(d.archived||0),0);showToast(`▪ Archived ${t} profile(s)`);})} style={{...sBtnSm,padding:'6px 14px'}}>▪ Archive</button>
+                    <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/delete','⚠️ Permanently delete $n profile(s)? This cannot be undone.',r=>{const t=r.reduce((a,d)=>a+(d.deleted||0),0);showToast(`🗑️ Deleted ${t} profile(s)`,'warn');})} style={{...sBtnSm,color:'#dc2626',border:'1px solid #fecaca',padding:'6px 14px'}}>✕ Delete</button>
+                  </div>
+                </>
+              ) : (
+                <span style={{fontSize:12,color:'#B8962E',fontStyle:'italic'}}>Click profiles to select them, then choose an action</span>
+              )}
             </div>
           )}
 
