@@ -104,11 +104,11 @@ const VIDEO_MOVEMENT_MODIFIERS = {
 
 // ─── ENVIRONMENT-ONLY CONSTRAINT (Scene Rule #1 — frozen Session 21) ────────
 
-const ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human. No figure. No silhouette. No body. No face. No hands. No reflection of a person. Environment only.';
+const _ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human. No figure. No silhouette. No body. No face. No hands. No reflection of a person. Environment only.';
 
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
-function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null, eventContext = null) {
+function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null, _eventContext = null) {
   const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
   // User description is the MOST important part — use the full text
@@ -1501,9 +1501,9 @@ async function generateAngle(sceneAngle, sceneSet, models) {
 
   // Build blueprint-driven camera instruction
   const vl = sceneSet.visual_language || {};
-  const layoutMap = vl.layout_map || imageAnalysis?.layout_map || {};
+  const _layoutMap = vl.layout_map || imageAnalysis?.layout_map || {};
   const anchorObjects = vl.anchor_objects || imageAnalysis?.anchor_objects || [];
-  const cameraRegions = vl.camera_regions || imageAnalysis?.camera_regions || {};
+  const _cameraRegions = vl.camera_regions || imageAnalysis?.camera_regions || {};
 
   // Build the prompt using blueprint data
   const eventContext = await loadEventContext(sceneSet, models);

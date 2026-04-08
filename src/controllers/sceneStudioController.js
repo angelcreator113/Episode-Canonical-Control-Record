@@ -28,7 +28,7 @@ async function isStudioMigrated() {
 }
 
 let _hasCanvasSettings = null;
-async function hasCanvasSettingsColumn() {
+async function _hasCanvasSettingsColumn() {
   if (_hasCanvasSettings !== null) return _hasCanvasSettings;
   try {
     const cols = await sequelize.getQueryInterface().describeTable('scenes');
@@ -175,7 +175,7 @@ exports.saveCanvas = async (req, res) => {
   try {
     const { id } = req.params;
     const { objects, canvas_settings, background_url } = req.body;
-    let idMap = {};
+    const idMap = {};
 
     const scene = await Scene.findByPk(id, { transaction });
     if (!scene) {
@@ -197,7 +197,7 @@ exports.saveCanvas = async (req, res) => {
         console.log('Scene Studio saveCanvas: background_url persisted for scene:', id, '→', background_url.substring(0, 80));
       } catch (bgErr) {
         console.warn('Scene Studio saveCanvas: background_url write failed:', bgErr.message);
-        try { await sequelize.query('ROLLBACK TO SAVEPOINT bg_url_write', { transaction }); } catch (_) {}
+        try { await sequelize.query('ROLLBACK TO SAVEPOINT bg_url_write', { transaction }); } catch (_) { /* rollback failed, tx continues */ }
       }
     }
 
@@ -880,7 +880,7 @@ exports.saveSceneSetCanvas = async (req, res) => {
   try {
     const { id } = req.params;
     const { objects, canvas_settings } = req.body;
-    let idMap = {};
+    const idMap = {};
 
     const sceneSet = await SceneSet.findByPk(id, { transaction });
     if (!sceneSet) {

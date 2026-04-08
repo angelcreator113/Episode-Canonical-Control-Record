@@ -45,7 +45,7 @@ router.put('/:episodeId', optionalAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
 
-    let brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } });
+    const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } });
     if (!brief) return res.status(404).json({ error: 'Brief not found. GET first to auto-create.' });
 
     if (brief.status === 'locked') {
@@ -243,7 +243,7 @@ router.post('/:episodeId/generate-script', optionalAuth, async (req, res) => {
 
 router.post('/:episodeId/rewrite-line', optionalAuth, async (req, res) => {
   try {
-    const { line, speaker, beatName, beatContext, showId } = req.body;
+    const { line, speaker, beatName, beatContext, showId: _showId } = req.body;
     if (!line) return res.status(400).json({ error: 'line is required' });
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 

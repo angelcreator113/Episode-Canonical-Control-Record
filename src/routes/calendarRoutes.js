@@ -479,7 +479,7 @@ router.post('/events/:id/spawn-world-event', authenticateToken, async (req, res)
     // Build world event from calendar event data
     const {
       show_id,
-      event_name, name: eventName, event_type: ceType,
+      event_name: _event_name, name: _eventName, event_type: _ceType,
       // Override fields from request body
     } = req.body;
 

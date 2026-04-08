@@ -88,7 +88,7 @@ router.post('/franchise-brain/seed', optionalAuth, async (req, res) => {
         const queryInterface = db.sequelize.getQueryInterface();
         await seeder.up(queryInterface, db.Sequelize);
         const count = await db.FranchiseKnowledge.count();
-        const added = count - totalSeeded - (force ? 0 : existing);
+        const _added = count - totalSeeded - (force ? 0 : existing);
         results.push({ name, status: 'ok' });
         totalSeeded = count - (force ? 0 : existing);
       } catch (seederErr) {

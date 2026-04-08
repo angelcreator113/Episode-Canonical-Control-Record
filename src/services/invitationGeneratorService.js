@@ -176,7 +176,7 @@ async function uploadToS3(buffer, eventId, suffix, contentType = 'image/png') {
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
-async function deleteOldS3Asset(url) {
+async function _deleteOldS3Asset(url) {
   if (!url || !S3_BUCKET) return;
   try {
     const bucketHost = `${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/`;
