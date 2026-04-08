@@ -265,7 +265,7 @@ Respond ONLY with valid JSON — no preamble, no markdown fences.
 
   try {
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',  // Haiku for JSON analysis
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1000,
       messages: [{ role: 'user', content: prompt }],
     });

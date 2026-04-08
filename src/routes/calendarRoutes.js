@@ -428,7 +428,7 @@ router.post('/auto-detect', authenticateToken, async (req, res) => {
       const Anthropic = require('@anthropic-ai/sdk');
       const client = new Anthropic();
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 500,
         system: `You are Amber, production intelligence for a narrative fiction project. You scan approved storyteller lines for temporal markers and propose calendar events.
 
@@ -616,6 +616,51 @@ router.post('/events/:id/auto-spawn', authenticateToken, async (req, res) => {
     console.error('POST /events/:id/auto-spawn error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// POST /events/generate-seasonal — Auto-generate seasonal events for a month
+// ═══════════════════════════════════════════════════════════════════════
+
+router.post('/events/generate-seasonal', authenticateToken, async (req, res) => {
+  try {
+    const { month, count = 4, year = 2026, show_id } = req.body;
+    if (month === undefined || month < 0 || month > 11) {
+      return res.status(400).json({ error: 'month is required (0-11)' });
+    }
+
+    const seasonalService = require('../services/seasonalEventService');
+    const models = getModels(req);
+    const result = await seasonalService.generateSeasonalEvents(month, show_id, models, { count, year });
+
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: `Generated ${result.count} seasonal events for ${result.month}`,
+    });
+  } catch (err) {
+    console.error('POST /events/generate-seasonal error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// GET /events/feed-templates — Get feed event templates with seasonal affinities
+// ═══════════════════════════════════════════════════════════════════════
+
+router.get('/events/feed-templates', (req, res) => {
+  const seasonalService = require('../services/seasonalEventService');
+  const month = req.query.month !== undefined ? parseInt(req.query.month) : new Date().getMonth();
+  const relevant = seasonalService.getRelevantTemplates(month);
+  res.json({
+    success: true,
+    data: {
+      all: seasonalService.FEED_EVENT_TEMPLATES,
+      relevant,
+      month,
+      seasons: seasonalService.MONTH_SEASONS[month] || [],
+    },
+  });
 });
 
 module.exports = router;

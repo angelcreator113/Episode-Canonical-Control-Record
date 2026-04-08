@@ -857,7 +857,7 @@ Write a concise camera placement and framing direction (1-2 sentences). Describe
 
     const client = getAnthropicClient();
     const message = await client.messages.create({
-      model: CLAUDE_MODEL,
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
       temperature: 0.5,
       messages: [{ role: 'user', content: prompt }],

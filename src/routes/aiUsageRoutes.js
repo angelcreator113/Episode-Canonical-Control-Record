@@ -290,4 +290,17 @@ router.get('/optimizations', async (req, res) => {
   }
 });
 
+// ── GET /cache-stats — AI response cache hit/miss stats ──────────────────────
+router.get('/cache-stats', async (_req, res) => {
+  try {
+    const { getCacheStats, CACHE_ENABLED } = require('../services/aiResponseCache');
+    const stats = getCacheStats();
+    const total = stats.hits + stats.misses;
+    const hitRate = total > 0 ? ((stats.hits / total) * 100).toFixed(1) : '0.0';
+    res.json({ enabled: CACHE_ENABLED, ...stats, hit_rate_pct: hitRate });
+  } catch (err) {
+    res.json({ enabled: false, error: err.message });
+  }
+});
+
 module.exports = router;

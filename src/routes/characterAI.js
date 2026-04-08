@@ -47,11 +47,12 @@ const FALLBACK_MODEL = 'claude-sonnet-4-20250514';
 
 async function callClaude(systemPrompt, userMessage, maxTokens = 4000) {
   const model = PRIMARY_MODEL;
+  const system = [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }];
   try {
     const res = await anthropic.messages.create({
       model,
       max_tokens: maxTokens,
-      system: systemPrompt,
+      system,
       messages: [{ role: 'user', content: userMessage }],
     });
     return res.content[0]?.text || '';
@@ -60,7 +61,7 @@ async function callClaude(systemPrompt, userMessage, maxTokens = 4000) {
       const res = await anthropic.messages.create({
         model: FALLBACK_MODEL,
         max_tokens: maxTokens,
-        system: systemPrompt,
+        system,
         messages: [{ role: 'user', content: userMessage }],
       });
       return res.content[0]?.text || '';

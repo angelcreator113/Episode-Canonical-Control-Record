@@ -97,7 +97,7 @@ Respond ONLY with a JSON array. No preamble. No explanation.
 ]`;
 
   const response = await getAnthropic().messages.create({
-    model: 'claude-haiku-4-5-20251001',  // Haiku for simple task list generation
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 800,
     messages: [{ role: 'user', content: prompt }],
   });

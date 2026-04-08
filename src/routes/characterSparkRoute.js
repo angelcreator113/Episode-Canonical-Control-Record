@@ -141,7 +141,7 @@ Return JSON with this structure:
 }`;
 
     const msg = await anthropic.messages.create({
-      model: 'claude-opus-4-5-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       system,
       messages: [{ role: 'user', content: userPrompt }],

@@ -100,7 +100,7 @@ No explanation. No markdown. Just the JSON.`;
 
   try {
     const r = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',  // Haiku for simple JSON scoring
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 150,
       system,
       messages: [{ role: 'user', content: user }],
