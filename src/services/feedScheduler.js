@@ -557,7 +557,7 @@ Return ONLY valid JSON with these fields:
   "lala_relevance_reason": "Why they matter to ${ctx.name}"
 }`;
 
-  const response = await callClaude(prompt, { maxTokens: 3000 });
+  const response = await callClaude(prompt, { maxTokens: 6000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
