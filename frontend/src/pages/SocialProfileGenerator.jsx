@@ -9,8 +9,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
 import ProfileCard from './feed/ProfileCard';
-import { DetailPanel, FeedStatePicker } from './feed/ProfileDetailPanel';
-import FeedViewContent, { Spinner } from './feed/FeedViews';
 import {
   API, SCHED_API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, LALAVERSE_CITIES, LALA_RELATIONSHIPS, CAREER_PRESSURES,
@@ -655,20 +653,12 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
         <div className="spg-autogen-bar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:stats.total>0&&!activeJob?'0':'16px 24px'}}>
           {/* Collapsed toggle when profiles exist and no active job */}
           {stats.total>0&&!activeJob&&(
-            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 24px'}}>
-              <button onClick={()=>setShowAutoGenBar(s=>!s)} style={{background:'transparent',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:C.inkLight,padding:'4px 0'}}>
-                <span style={{transition:'transform 0.2s',display:'inline-block',transform:showAutoGenBar?'rotate(90deg)':'none'}}>▸</span>
-                {showAutoGenBar?'Hide':'More'} Options
-              </button>
-              {!showAutoGenBar&&<button onClick={()=>{setAutoGenCount(5);runAutoGenerate();}} disabled={autoGenRunning||!!activeJob||stats.total>=feedCap} style={{
-                padding:'6px 18px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,border:'none',
-                cursor:autoGenRunning||stats.total>=feedCap?'not-allowed':'pointer',
-                background:stats.total>=feedCap?C.border:C.lavender,color:stats.total>=feedCap?C.inkLight:'#fff',
-              }}>
-                {stats.total>=feedCap?'Cap Reached':'+ Generate 5'}
-              </button>}
+            <button onClick={()=>setShowAutoGenBar(s=>!s)} style={{width:'100%',padding:'10px 24px',background:'transparent',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:8,fontSize:12,fontWeight:600,color:C.inkLight}}>
+              <span style={{transition:'transform 0.2s',display:'inline-block',transform:showAutoGenBar?'rotate(90deg)':'none'}}>▸</span>
+              Add Creators
+              <span style={{opacity:0.6,fontSize:11}}>— auto-generate or manually spark</span>
               <span style={{marginLeft:'auto',fontSize:11,color:stats.total>=feedCap?'#c0392b':C.inkLight}}>{stats.total}/{feedCap}</span>
-            </div>
+            </button>
           )}
           {(stats.total===0||activeJob||showAutoGenBar)&&<div style={{padding:stats.total>0&&!activeJob?'0 24px 16px':'0'}}>
           {/* Primary: Auto-Generate */}
