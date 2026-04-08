@@ -1049,39 +1049,21 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
           <div onClick={()=>setSelected(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.25)',backdropFilter:'blur(2px)',cursor:'pointer'}}/>
           {/* Panel */}
           <div style={{position:'relative',width:'min(520px,90vw)',height:'100%',background:C.surface,boxShadow:'-4px 0 24px rgba(0,0,0,0.12)',overflowY:'auto',animation:'slideInRight 0.2s ease-out'}}>
-            {/* Quick action: Create Event from this profile */}
+            {/* Quick action: Create Event + show existing events */}
             {showId && selected && feedLayer === 'lalaverse' && (
               <div id="profile-event-bar" style={{padding:'10px 16px',background:'#FAF7F0',borderBottom:'1px solid #e8e0d0'}}>
-                <button onClick={async(e)=>{
-                  const bar=document.getElementById('profile-event-bar');
-                  const btn=e.target.closest('button');
-                  btn.disabled=true;btn.textContent='⏳ Creating...';
-                  try{
-                    const res=await fetch(`/api/v1/world/${showId}/events/from-profile`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile_id:selected.id,event_template:'Event'})});
-                    const d=await res.json();
-                    if(d.success){
-                      const ev=d.event;
-                      bar.innerHTML=`
-                        <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:6px">✅ Event Created!</div>
-                        <div style="background:#fff;border:1px solid #d4edda;border-radius:8px;padding:10px">
-                          <div style="font-weight:700;font-size:13px;color:#2C2C2C;margin-bottom:4px">${ev.name||'New Event'}</div>
-                          <div style="font-size:11px;color:#666;margin-bottom:2px">👤 Host: ${ev.host||selected.display_name||selected.handle}</div>
-                          ${ev.location_hint?`<div style="font-size:11px;color:#666;margin-bottom:2px">📍 ${ev.location_hint}</div>`:''}
-                          <div style="font-size:11px;color:#666;margin-bottom:6px">⭐ Prestige: ${ev.prestige||5} · Status: ${ev.status||'draft'}</div>
-                          <div style="display:flex;gap:6px">
-                            <button onclick="document.querySelector('[data-tab=events]')?.click()" style="padding:4px 10px;border-radius:4px;border:1px solid #B8962E;background:transparent;color:#B8962E;font-weight:600;font-size:10px;cursor:pointer">View in Events Library →</button>
-                          </div>
-                        </div>
-                      `;
-                      showToast(`✅ Event created for ${selected.display_name||selected.handle}`);
-                    }else{
-                      btn.disabled=false;btn.textContent=`🎭 Create Event Hosted by ${selected.display_name||selected.handle}`;
-                      showToast(d.error||'Failed','error');
-                    }
-                  }catch(err){btn.disabled=false;btn.textContent=`🎭 Create Event`;showToast(err.message,'error');}
-                }} style={{padding:'6px 14px',borderRadius:6,border:'1px solid #B8962E',background:'transparent',color:'#B8962E',fontWeight:600,fontSize:11,cursor:'pointer',width:'100%',textAlign:'left'}}>
-                  🎭 Create Event Hosted by {selected.display_name||selected.handle}
-                </button>
+                {/* Load existing events for this profile on mount */}
+                <ProfileEventSection
+                  profileId={selected.id}
+                  profileName={selected.display_name||selected.handle}
+                  showId={showId}
+                  showToast={showToast}
+                  onNavigateToEvents={()=>{
+                    const tabBtn=document.querySelector('[data-tab-key="events"]');
+                    if(tabBtn)tabBtn.click();
+                    else setSelected(null);
+                  }}
+                />
               </div>
             )}
             <DetailPanel profile={selected} fp={fp(selected)} onClose={()=>setSelected(null)}
@@ -1114,6 +1096,76 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
 
 // ── Shared button style for bulk bar ──────────────────────────────────
 const sBtnSm = { padding:'5px 12px', borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', border:`1px solid ${C.border}`, background:'transparent', color:C.inkMid };
+
+// ── ProfileEventSection — shows existing events + create button ──
+function ProfileEventSection({ profileId, profileName, showId, showToast, onNavigateToEvents }) {
+  const [events, setEvents] = React.useState(null);
+  const [creating, setCreating] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!profileId || !showId) return;
+    fetch(`/api/v1/world/${showId}/events`)
+      .then(r => r.json())
+      .then(d => {
+        const all = d.events || d.success && d.events || [];
+        const hosted = all.filter(ev => {
+          const auto = ev.canon_consequences?.automation;
+          return auto?.host_profile_id === profileId;
+        });
+        setEvents(hosted);
+      })
+      .catch(() => setEvents([]));
+  }, [profileId, showId]);
+
+  const createEvent = async () => {
+    setCreating(true);
+    try {
+      const res = await fetch(`/api/v1/world/${showId}/events/from-profile`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: profileId, event_template: 'Event' }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setEvents(prev => [...(prev || []), d.event]);
+        showToast(`✅ Event created for ${profileName}`);
+      } else {
+        showToast(d.error || 'Failed', 'error');
+      }
+    } catch (e) { showToast(e.message, 'error'); }
+    setCreating(false);
+  };
+
+  if (events === null) return <div style={{ fontSize: 11, color: '#999' }}>Loading events...</div>;
+
+  return (
+    <div>
+      {/* Existing events */}
+      {events.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 6 }}>Events Hosted ({events.length})</div>
+          {events.map(ev => (
+            <div key={ev.id} style={{ background: '#fff', border: '1px solid #d4edda', borderRadius: 8, padding: '8px 10px', marginBottom: 6 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#2C2C2C', marginBottom: 2 }}>{ev.name}</div>
+              <div style={{ fontSize: 10, color: '#666', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <span>⭐ {ev.prestige || 5}</span>
+                <span style={{ padding: '0 4px', borderRadius: 3, background: ev.status === 'used' ? '#d4edda' : '#fef3c7', fontSize: 9 }}>{ev.status}</span>
+                {ev.location_hint && <span>📍 {ev.location_hint.slice(0, 30)}</span>}
+              </div>
+              <button onClick={onNavigateToEvents} style={{ marginTop: 4, padding: '3px 8px', borderRadius: 4, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                View in Events Library →
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create button */}
+      <button onClick={createEvent} disabled={creating} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer', width: '100%', textAlign: 'left' }}>
+        {creating ? '⏳ Creating...' : `🎭 Create Event Hosted by ${profileName}`}
+      </button>
+    </div>
+  );
+}
 
 // Spinner imported from ./feed/FeedViews
 
