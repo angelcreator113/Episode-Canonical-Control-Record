@@ -851,7 +851,7 @@ async function safeAI(systemPrompt, userPrompt, maxTokens = 800) {
     const res = await anthropic.messages.create({
       model:      'claude-sonnet-4-6',
       max_tokens: maxTokens,
-      system:     systemPrompt,
+      system:     [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages:   [{ role: 'user', content: userPrompt }],
     });
     return res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
@@ -869,7 +869,7 @@ async function safeAIWithTemp(systemPrompt, userPrompt, maxTokens = 800, tempera
       model:       'claude-sonnet-4-6',
       max_tokens:  maxTokens,
       temperature,
-      system:      systemPrompt,
+      system:      [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages:    [{ role: 'user', content: userPrompt }],
     });
     return res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();

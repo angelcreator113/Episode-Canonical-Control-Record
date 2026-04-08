@@ -1147,7 +1147,7 @@ export default function WorldStudio() {
       {studioTab === 'feed' && (
         <div className="ws4-feed-tab">
           <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading Feed Generator…</div>}>
-            <SocialProfileGenerator embedded={true} worldTag={worldTag} />
+            <SocialProfileGenerator embedded={true} worldTag={worldTag} defaultFeedLayer="real_world" />
           </Suspense>
         </div>
       )}

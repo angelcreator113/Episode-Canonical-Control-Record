@@ -376,7 +376,7 @@ Rules:
 
     const systemPrompt = contextInstructions[context] || contextInstructions.scene_studio_object;
 
-    const MODELS = ['claude-sonnet-4-6'];
+    const MODELS = ['claude-haiku-4-5-20251001'];
     let enhanced = null;
 
     for (const model of MODELS) {

@@ -63,14 +63,37 @@ function calculateCost(model, usage) {
 function inferRouteName() {
   const stack = new Error().stack || '';
   const lines = stack.split('\n');
+  
+  // Skip these service files — they're wrappers, not the actual callers
+  const skipServices = ['aiCostTracker', 'anthropic', 'index'];
+  
+  let foundRoute = null;
+  let foundService = null;
+  
   for (const line of lines) {
-    // Look for route files
-    const match = line.match(/\broutes[\\/]([a-zA-Z_-]+)\b/);
-    if (match) return match[1];
-    // Look for service files
-    const svcMatch = line.match(/\bservices[\\/]([a-zA-Z_-]+)\b/);
-    if (svcMatch) return svcMatch[1];
+    // Look for route files (highest priority)
+    const routeMatch = line.match(/\broutes[\\/]([a-zA-Z0-9_-]+)\.js/);
+    if (routeMatch && !foundRoute) {
+      foundRoute = routeMatch[1];
+    }
+    
+    // Look for service files (lower priority, skip wrapper services)
+    const svcMatch = line.match(/\bservices[\\/]([a-zA-Z0-9_-]+)\.js/);
+    if (svcMatch && !foundService && !skipServices.includes(svcMatch[1])) {
+      foundService = svcMatch[1];
+    }
+    
+    // Look for workers
+    const workerMatch = line.match(/\bworkers[\\/]([a-zA-Z0-9_-]+)\.js/);
+    if (workerMatch) {
+      return `worker:${workerMatch[1]}`;
+    }
   }
+  
+  // Prefer route over service
+  if (foundRoute) return foundRoute;
+  if (foundService) return `svc:${foundService}`;
+  
   return 'unknown';
 }
 
@@ -80,7 +103,7 @@ function inferRouteName() {
 // The counter resets at midnight UTC.
 let dailySpend = 0;
 let dailySpendDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
-const DAILY_BUDGET = parseFloat(process.env.AI_DAILY_BUDGET_USD) || Infinity;
+const DAILY_BUDGET = parseFloat(process.env.AI_DAILY_BUDGET_USD) || 50;
 
 function checkBudget(costEstimate) {
   const today = new Date().toISOString().slice(0, 10);
