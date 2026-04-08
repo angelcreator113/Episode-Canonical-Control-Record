@@ -122,6 +122,7 @@ const NarrativePressureDashboard = lazy(() => import('./pages/NarrativePressureD
 const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
 const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
 const WorldSetupGuide = lazy(() => import('./pages/WorldSetupGuide'));
+const PropertyManager = lazy(() => import('./pages/PropertyManager'));
 const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
 const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
 const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
@@ -410,6 +411,7 @@ function AppContent() {
           {/* Cultural Calendar — LalaVerse Social & Industry Calendar */}
           <Route path="/cultural-calendar" element={<CulturalCalendar />} />
           <Route path="/world-setup" element={<WorldSetupGuide />} />
+          <Route path="/property-manager" element={<PropertyManager />} />
 
           {/* Influencer Systems — Archetypes, Relationships, Economy, Trends, Momentum, Legacy */}
           <Route path="/influencer-systems" element={<InfluencerSystems />} />
@@ -575,6 +577,7 @@ function AppContent() {
             '/social-personality': 'Social Personality Engine',
             '/feed-relationships': 'Feed Relationship Map',
             '/world-setup': 'World Setup Guide',
+            '/property-manager': 'Property Manager',
             '/cultural-calendar': 'Cultural Calendar',
             '/influencer-systems': 'Influencer Systems',
             '/world-infrastructure': 'World Infrastructure',

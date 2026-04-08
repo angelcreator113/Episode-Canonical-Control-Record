@@ -1441,5 +1441,42 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
   }
 });
 
+// GET /world/:showId/events/:eventId/feed-activity — get post-event feed posts
+router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const models = await getModels();
+
+    let event;
+    if (models.WorldEvent) {
+      event = await models.WorldEvent.findByPk(eventId, { attributes: ['id', 'name', 'canon_consequences'] });
+    }
+    if (!event) {
+      const [rows] = await models.sequelize.query('SELECT id, name, canon_consequences FROM world_events WHERE id = :id', { replacements: { id: eventId } });
+      event = rows?.[0];
+    }
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    const cc = typeof event.canon_consequences === 'string' ? JSON.parse(event.canon_consequences) : (event.canon_consequences || {});
+    const posts = cc.feed_activity || [];
+
+    // If no posts yet, generate them
+    if (posts.length === 0 && cc.automation) {
+      try {
+        const feedActivity = require('../services/feedActivityService');
+        const generated = await feedActivity.generatePostEventActivity(
+          { ...event, canon_consequences: cc },
+          models
+        );
+        return res.json({ success: true, posts: generated, generated: true });
+      } catch { /* fall through */ }
+    }
+
+    return res.json({ success: true, posts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 
