@@ -301,6 +301,15 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     }
   } catch { /* non-blocking */ }
 
+  // Sync character profiles (host + guests)
+  try {
+    const characterSync = require('./characterSyncService');
+    const syncResult = await characterSync.syncAfterEvent(event, episode, models);
+    console.log(`[EpisodeGenerator] Character sync: ${syncResult.updated} profiles updated`);
+  } catch (syncErr) {
+    console.warn('[EpisodeGenerator] Character sync failed (non-blocking):', syncErr.message);
+  }
+
   return {
     episode: episode.toJSON(),
     brief: brief?.toJSON() || null,
