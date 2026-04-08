@@ -1428,5 +1428,47 @@ router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// POST /world/:showId/events/:eventId/generate-episode
+// Auto-generate a complete episode from an event
+// ═══════════════════════════════════════════════════════════════════════
+
+router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Load event
+    let event;
+    if (models.WorldEvent) {
+      event = await models.WorldEvent.findByPk(eventId);
+    }
+    if (!event) {
+      const [rows] = await models.sequelize.query(
+        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId',
+        { replacements: { eventId, showId } }
+      );
+      event = rows?.[0];
+    }
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    const episodeGenerator = require('../services/episodeGeneratorService');
+    const result = await episodeGenerator.generateEpisodeFromEvent(event, models, {
+      showId,
+      wardrobeItems: [], // can be populated from selected wardrobe later
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: result,
+      message: `Episode "${result.episode.title}" created with ${result.scenePlan.length} beats, ${result.socialTasks.length} social tasks`,
+    });
+  } catch (error) {
+    console.error('Generate episode error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
 
