@@ -287,7 +287,7 @@ Return ONLY the rewritten dialogue. No speaker prefix, no quotes, no explanation
 
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 200, messages: [{ role: 'user', content: prompt }] });
+    const response = await client.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] });
     const rewrittenLine = response.content[0]?.text?.trim() || line;
 
     return res.json({ rewrittenLine, original: line });

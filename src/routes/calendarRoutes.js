@@ -428,7 +428,7 @@ router.post('/auto-detect', authenticateToken, async (req, res) => {
       const Anthropic = require('@anthropic-ai/sdk');
       const client = new Anthropic();
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 500,
         system: `You are Amber, production intelligence for a narrative fiction project. You scan approved storyteller lines for temporal markers and propose calendar events.
 
