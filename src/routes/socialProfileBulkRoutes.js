@@ -86,7 +86,7 @@ function categorizeError(err) {
 // SHARED PROFILE GENERATION — Deduplicated (#4)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey: _characterKey }) {
+async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey: _characterKey, feedLayer }) {
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext);
   const aiRes = await Promise.race([
     client.messages.create({
@@ -145,6 +145,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
         full_profile: profile,
         status: 'generated',
         series_id: seriesId || null,
+        feed_layer: feedLayer || 'real_world',
       },
     });
     saved = record;
@@ -157,6 +158,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
         full_profile: profile,
         lala_relevance_score: profile.lala_relevance_score,
         status: 'generated',
+        feed_layer: feedLayer || record.feed_layer || 'real_world',
       });
     }
 
@@ -495,7 +497,7 @@ ${chunks[i]}`,
 // ── POST /generate — Sync with parallel concurrency (#2, #4) ─────────────────
 router.post('/generate', optionalAuth, async (req, res) => {
   try {
-    const { creators, series_id, character_context, character_key, concurrency } = req.body;
+    const { creators, series_id, character_context, character_key, feed_layer, concurrency } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
       return res.status(400).json({ error: 'No creators provided' });
     }
@@ -508,7 +510,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
 
     const tasks = creators.map(c => async () => {
       try {
-        return await generateSingleProfile(c, { db, seriesId: series_id, characterContext: character_context, characterKey: character_key });
+        return await generateSingleProfile(c, { db, seriesId: series_id, characterContext: character_context, characterKey: character_key, feedLayer: feed_layer });
       } catch (creatorErr) {
         console.error(`[bulk-generate] Failed for @${c.handle}:`, creatorErr.message);
         const errInfo = categorizeError(creatorErr);
@@ -546,7 +548,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
 // Create a background job for bulk generation — returns immediately
 router.post('/generate-job', optionalAuth, async (req, res) => {
   try {
-    const { creators, series_id, character_context, character_key, concurrency } = req.body;
+    const { creators, series_id, character_context, character_key, feed_layer, concurrency } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
       return res.status(400).json({ error: 'No creators provided' });
     }
@@ -566,7 +568,7 @@ router.post('/generate-job', optionalAuth, async (req, res) => {
       failed: 0,
       candidates: creators,
       results: [],
-      character_context: character_context || null,
+      character_context: character_context ? { ...character_context, feed_layer: feed_layer || 'real_world' } : { feed_layer: feed_layer || 'real_world' },
       character_key: character_key || null,
       series_id: series_id || null,
     });
@@ -713,6 +715,7 @@ async function processJobInBackground(jobId, concurrency = 3) {
             seriesId: job.series_id,
             characterContext: job.character_context,
             characterKey: job.character_key,
+            feedLayer: job.character_context?.feed_layer || 'real_world',
           });
           completedCount++;
 
