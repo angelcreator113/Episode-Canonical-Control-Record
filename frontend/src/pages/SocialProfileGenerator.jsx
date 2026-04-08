@@ -1042,7 +1042,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
               <div style={{padding:'8px 16px',background:'#FAF7F0',borderBottom:'1px solid #e8e0d0',display:'flex',gap:8,alignItems:'center'}}>
                 <button onClick={async()=>{
                   try{
-                    const res=await fetch(`${API}/world/${showId}/events/from-profile`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile_id:selected.id,event_template:'Event'})});
+                    const res=await fetch(`/api/v1/world/${showId}/events/from-profile`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile_id:selected.id,event_template:'Event'})});
                     const d=await res.json();
                     if(d.success)showToast(`✅ Event created: "${d.event?.name||'New event'}" — check Events Library`);
                     else showToast(d.error||'Failed','error');
