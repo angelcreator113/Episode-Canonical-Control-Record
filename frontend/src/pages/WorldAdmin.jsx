@@ -1730,6 +1730,21 @@ The revised event should feel like a completely different experience from the si
                   <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>Edit</button>
                   <button onClick={() => copyEvent(ev)} style={S.smBtn}>Copy</button>
                   <InvitationButton event={ev} showId={showId} onGenerated={() => loadData()} />
+                  {!linkedEpisode && (
+                    <button onClick={async () => {
+                      try {
+                        setToast('🎬 Generating episode...');
+                        const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-episode`);
+                        if (res.data.success) {
+                          setToast(`✅ Episode "${res.data.data.episode.title}" created with ${res.data.data.scenePlan.length} beats + ${res.data.data.socialTasks.length} social tasks`);
+                          loadData();
+                        } else {
+                          setToast(res.data.error || 'Failed');
+                        }
+                      } catch (err) { setToast('Episode generation failed: ' + (err.response?.data?.error || err.message)); }
+                      setTimeout(() => setToast(null), 5000);
+                    }} style={{ ...S.smBtn, background: '#f0fdf4', borderColor: '#bbf7d0', color: '#16a34a' }}>🎬 Generate Episode</button>
+                  )}
                   <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>Delete</button>
                 </div>
               </div>
