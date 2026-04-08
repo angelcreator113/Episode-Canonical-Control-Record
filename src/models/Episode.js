@@ -142,6 +142,20 @@ module.exports = (sequelize) => {
         field: 'browse_pool_json',
         comment: 'Generated closet-browse pool for this episode',
       },
+      total_income: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
+      total_expenses: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+      },
+      financial_score: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
     },
     {
       sequelize,

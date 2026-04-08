@@ -111,6 +111,7 @@ function WorldAdmin() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [expandedEpisode, setExpandedEpisode] = useState(null);
+  const [episodeBlueprint, setEpisodeBlueprint] = useState(null); // holds generated episode data for modal
 
   // Event editor state
   const [editingEvent, setEditingEvent] = useState(null);
@@ -1107,6 +1108,47 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     )}
 
+                    {/* ── Social Tasks + Beats (load on demand) ── */}
+                    <div style={{ marginTop: 14 }}>
+                      <button
+                        onClick={async (e) => {
+                          const btn = e.target;
+                          if (btn.dataset.loaded) return;
+                          btn.textContent = '⏳ Loading...';
+                          try {
+                            const res = await api.get(`/api/v1/episodes/${ep.id}`);
+                            const todoRes = await fetch(`/api/v1/world/${showId}/events`).then(r => r.json()).catch(() => ({ events: [] }));
+                            const linkedEv = todoRes.events?.find(ev => ev.used_in_episode_id === ep.id);
+
+                            // Show social tasks from canon_consequences.automation
+                            const automation = linkedEv?.canon_consequences?.automation;
+                            const guests = automation?.guest_profiles || [];
+                            const host = automation?.host_display_name;
+
+                            let html = '';
+                            if (host) html += `<div style="margin-bottom:8px"><strong>Host:</strong> ${host} (${automation?.host_handle || ''})</div>`;
+                            if (guests.length > 0) html += `<div style="margin-bottom:8px"><strong>Guest List:</strong> ${guests.map(g => g.display_name || g.handle).join(', ')}</div>`;
+                            if (linkedEv?.venue_name) html += `<div style="margin-bottom:8px"><strong>Venue:</strong> ${linkedEv.venue_name}${linkedEv.venue_address ? ' — ' + linkedEv.venue_address : ''}</div>`;
+
+                            html += '<div style="margin-top:12px;font-weight:600;color:#B8962E">📱 Social Media Tasks</div>';
+                            html += '<div style="margin-top:4px;display:grid;gap:4px">';
+                            const tasks = ['GRWM video', 'Outfit reveal to stories', 'Film arrival at venue', 'Photo with host', 'Go live from event', 'BTS stories', 'Post event recap', 'Thank host publicly', 'Engage with attendee posts'];
+                            tasks.forEach(t => { html += `<div style="font-size:12px;padding:4px 8px;background:#f8f8f8;border-radius:4px">☐ ${t}</div>`; });
+                            html += '</div>';
+
+                            const container = btn.parentNode.querySelector('.ep-tasks-content');
+                            if (container) { container.innerHTML = html; container.style.display = 'block'; }
+                            btn.textContent = '📱 Tasks & Details ▲';
+                            btn.dataset.loaded = 'true';
+                          } catch { btn.textContent = '📱 View Tasks & Details'; }
+                        }}
+                        style={{ ...S.smBtn, background: '#FAF7F0', borderColor: '#e8e0d0', color: '#B8962E' }}
+                      >
+                        📱 View Tasks & Details
+                      </button>
+                      <div className="ep-tasks-content" style={{ display: 'none', marginTop: 10, padding: 12, background: '#fafafa', borderRadius: 8, fontSize: 12, lineHeight: 1.6 }} />
+                    </div>
+
                     {/* ── Evaluation Details ── */}
                     {ej && (
                       <div style={{ marginTop: 14 }}>
@@ -1903,10 +1945,34 @@ The revised event should feel like a completely different experience from the si
                   {ev.dress_code && <span style={S.eTag}>👗 {ev.dress_code}</span>}
                   <span style={{ padding: '2px 8px', background: diff.bg, color: diff.color, borderRadius: 6, fontSize: 10, fontWeight: 700 }}>🎯 {difficulty} {diff.text}</span>
                 </div>
-                {/* Host & payment */}
-                {(ev.host || ev.host_brand) && (
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>🏛️ {ev.host}{ev.host_brand ? ` — ${ev.host_brand}` : ''}</div>
-                )}
+                {/* Host, venue, guests from automation */}
+                {(() => {
+                  const auto = ev.canon_consequences?.automation;
+                  return (
+                    <div style={{ marginBottom: 6 }}>
+                      {(ev.host || auto?.host_handle) && (
+                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>
+                          👤 {ev.host || auto?.host_display_name}{auto?.host_handle ? ` (${auto.host_handle})` : ''}{ev.host_brand ? ` — ${ev.host_brand}` : ''}
+                        </div>
+                      )}
+                      {(ev.venue_name || auto?.venue_name) && (
+                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>
+                          📍 {ev.venue_name || auto?.venue_name}{ev.venue_address || auto?.venue_address ? ` — ${ev.venue_address || auto.venue_address}` : ''}
+                        </div>
+                      )}
+                      {auto?.guest_profiles?.length > 0 && (
+                        <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>
+                          👥 {auto.guest_profiles.length} guests: {auto.guest_profiles.slice(0, 3).map(g => g.handle || g.display_name).join(', ')}{auto.guest_profiles.length > 3 ? '...' : ''}
+                        </div>
+                      )}
+                      {(ev.event_date || ev.event_time) && (
+                        <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                          📅 {ev.event_date}{ev.event_time ? ` · ${ev.event_time}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {(ev.is_paid || ev.is_free || ev.cost_coins > 0) && (
                   <div style={{ display: 'flex', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
                     {ev.is_paid && <span style={{ padding: '1px 6px', background: '#f0fdf4', borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#16a34a' }}>💰 Paid{ev.payment_amount ? ` (${ev.payment_amount})` : ''}</span>}
@@ -1932,6 +1998,20 @@ The revised event should feel like a completely different experience from the si
                   </div>
                 )}
                 {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.narrative_stakes}</div>}
+                {/* Feed activity preview */}
+                {ev.canon_consequences?.feed_activity?.length > 0 && (
+                  <div style={{ marginBottom: 6, padding: '6px 8px', background: '#fafafa', borderRadius: 6, borderLeft: '2px solid #B8962E' }}>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: '#B8962E', marginBottom: 3, fontFamily: "'DM Mono', monospace" }}>📢 FEED ACTIVITY</div>
+                    {ev.canon_consequences.feed_activity.slice(0, 2).map((post, pi) => (
+                      <div key={pi} style={{ fontSize: 10, color: '#666', marginBottom: 2 }}>
+                        <span style={{ fontWeight: 600 }}>{post.handle}</span>: "{post.content?.slice(0, 60)}{post.content?.length > 60 ? '...' : ''}"
+                      </div>
+                    ))}
+                    {ev.canon_consequences.feed_activity.length > 2 && (
+                      <div style={{ fontSize: 9, color: '#999' }}>+{ev.canon_consequences.feed_activity.length - 2} more posts</div>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>Edit</button>
                   <button onClick={() => copyEvent(ev)} style={S.smBtn}>Copy</button>
@@ -1942,7 +2022,8 @@ The revised event should feel like a completely different experience from the si
                         setToast('🎬 Generating episode...');
                         const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-episode`);
                         if (res.data.success) {
-                          setToast(`✅ Episode "${res.data.data.episode.title}" created with ${res.data.data.scenePlan.length} beats + ${res.data.data.socialTasks.length} social tasks`);
+                          setEpisodeBlueprint(res.data.data);
+                          setToast(`✅ Episode created!`);
                           loadData();
                         } else {
                           setToast(res.data.error || 'Failed');
@@ -2577,6 +2658,109 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
             </div>
           )}
         </div>
+      )}
+
+      {/* ════════════════════════ EPISODE BLUEPRINT MODAL ════════════════════════ */}
+      {episodeBlueprint && createPortal(
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setEpisodeBlueprint(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>🎬 Episode Blueprint</h2>
+              <button onClick={() => setEpisodeBlueprint(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
+            </div>
+
+            {/* Episode info */}
+            <div style={{ background: '#FAF7F0', borderRadius: 10, padding: 14, marginBottom: 16, border: '1px solid #e8e0d0' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#2C2C2C', marginBottom: 4 }}>{episodeBlueprint.episode?.title}</div>
+              <div style={{ fontSize: 12, color: '#666' }}>Episode {episodeBlueprint.episode?.episode_number} · {episodeBlueprint.brief?.episode_archetype} · Intent: {episodeBlueprint.brief?.designed_intent}</div>
+            </div>
+
+            {/* Financials */}
+            {episodeBlueprint.financials && (
+              <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div style={{ padding: '8px 14px', background: '#f0fdf4', borderRadius: 8, textAlign: 'center', flex: 1 }}>
+                  <div style={{ fontSize: 10, color: '#16a34a' }}>Income</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>{episodeBlueprint.financials.total_income}</div>
+                </div>
+                <div style={{ padding: '8px 14px', background: '#fef2f2', borderRadius: 8, textAlign: 'center', flex: 1 }}>
+                  <div style={{ fontSize: 10, color: '#dc2626' }}>Expenses</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#dc2626' }}>{episodeBlueprint.financials.total_expenses}</div>
+                </div>
+                <div style={{ padding: '8px 14px', background: episodeBlueprint.financials.net_profit >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, textAlign: 'center', flex: 1 }}>
+                  <div style={{ fontSize: 10, color: '#666' }}>Net</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: episodeBlueprint.financials.net_profit >= 0 ? '#16a34a' : '#dc2626' }}>{episodeBlueprint.financials.net_profit}</div>
+                </div>
+              </div>
+            )}
+
+            {/* 14 Beats Timeline */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>14 Beats</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {(episodeBlueprint.beats || []).map((beat, i) => {
+                  const phaseColors = { before: '#fef3c7', during: '#dbeafe', after: '#f3e8ff' };
+                  const phaseDots = { before: '#f59e0b', during: '#3b82f6', after: '#8b5cf6' };
+                  return (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 10px', background: phaseColors[beat.phase] || '#f8f8f8', borderRadius: 6 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: phaseDots[beat.phase] || '#999', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{beat.beat}</div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{beat.label}</div>
+                        <div style={{ fontSize: 11, color: '#666' }}>{beat.description}</div>
+                        <div style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{beat.phase} · {beat.emotional_intent}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Social Tasks */}
+            {episodeBlueprint.socialTasks?.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>📱 Social Media Tasks ({episodeBlueprint.socialTasks.length})</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                  {episodeBlueprint.socialTasks.map((task, i) => (
+                    <div key={i} style={{ padding: '6px 10px', background: '#f8f8f8', borderRadius: 6, fontSize: 11 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ color: '#999' }}>☐</span>
+                        <span style={{ fontWeight: 600 }}>{task.label}</span>
+                        {task.required && <span style={{ fontSize: 8, padding: '1px 4px', background: '#fef2f2', color: '#dc2626', borderRadius: 3 }}>required</span>}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{task.description}</div>
+                      <div style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{task.platform} · {task.timing}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Feed Activity */}
+            {episodeBlueprint.feedPosts?.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>📢 Feed Activity ({episodeBlueprint.feedPosts.length} posts)</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {episodeBlueprint.feedPosts.map((post, i) => (
+                    <div key={i} style={{ padding: '8px 12px', background: '#fafafa', borderRadius: 8, borderLeft: '3px solid #B8962E' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{post.handle} <span style={{ fontWeight: 400, color: '#999' }}>({post.role})</span></div>
+                      <div style={{ fontSize: 12, color: '#333', fontStyle: 'italic' }}>"{post.content}"</div>
+                      <div style={{ fontSize: 9, color: '#aaa', marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{post.platform}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setActiveTab('episodes'); setEpisodeBlueprint(null); }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                View in Episode Ledger
+              </button>
+              <button onClick={() => setEpisodeBlueprint(null)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ════════════════════════ WARDROBE ════════════════════════ */}

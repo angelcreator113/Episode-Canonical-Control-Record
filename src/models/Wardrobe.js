@@ -213,7 +213,21 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         defaultValue: 0,
-        comment: 'In-game coin cost to unlock',
+        comment: 'In-game coin cost / story price',
+      },
+      acquisition_type: {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+        defaultValue: 'purchased',
+        comment: 'purchased | gifted | borrowed | rented | custom | vintage',
+      },
+      rental_price: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
+      resale_value: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
       },
       reputation_required: {
         type: DataTypes.INTEGER,

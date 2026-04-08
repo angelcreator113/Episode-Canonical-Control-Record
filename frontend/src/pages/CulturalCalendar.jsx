@@ -42,13 +42,8 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 /* ─── Tabs ──────────────────────────────────────────────────────────── */
 const TABS = [
   { id: 'timeline',  label: 'Timeline' },
-  { id: 'hierarchy', label: 'Hierarchy' },
-  { id: 'industries', label: 'Industries' },
   { id: 'awards',    label: 'Awards' },
-  { id: 'media',     label: 'Media' },
-  { id: 'algorithm', label: 'Algorithm' },
-  { id: 'micro',     label: 'Micro Events' },
-  { id: 'famous',    label: 'Famous 25' },
+  { id: 'micro',     label: 'Feed Events' },
 ];
 
 /* ─── Celebrity & Creator Hierarchy (6 Tiers) ──────────────────────── */
@@ -303,6 +298,15 @@ export default function CulturalCalendar() {
     setSpawning(null);
   };
 
+  // Delete calendar event
+  const handleDeleteCalendarEvent = async (eventId) => {
+    try {
+      await fetch(`/api/v1/calendar/events/${eventId}`, { method: 'DELETE' });
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      setSpawnResult({ type: 'success', message: 'Event deleted' });
+    } catch { setSpawnResult({ type: 'error', message: 'Delete failed' }); }
+  };
+
   /* ── Fetch events from API ── */
   useEffect(() => {
     let cancelled = false;
@@ -380,7 +384,7 @@ export default function CulturalCalendar() {
           <TimelineView byMonth={byMonth()} toggle={toggle}
             expandedId={expandedId} majorCount={majorEvents.length}
             microCount={microEvents.length} totalCount={events.length} data={data}
-            onCreateEvent={handleCreateEvent} spawning={spawning} />
+            onCreateEvent={handleCreateEvent} spawning={spawning} onDelete={handleDeleteCalendarEvent} />
         )}
         {!loading && tab === 'hierarchy' && <HierarchyView />}
         {!loading && tab === 'industries' && <IndustriesView />}
@@ -389,7 +393,7 @@ export default function CulturalCalendar() {
         {!loading && tab === 'algorithm'  && <AlgorithmView />}
         {!loading && tab === 'micro'      && (
           <MicroView events={microEvents} toggle={toggle} expandedId={expandedId}
-            onCreateEvent={handleCreateEvent} spawning={spawning} />
+            onCreateEvent={handleCreateEvent} spawning={spawning} onDelete={handleDeleteCalendarEvent} />
         )}
         {!loading && tab === 'famous'     && <FamousView />}
       </div>
@@ -424,7 +428,7 @@ function Stat({ n, label, color }) {
   );
 }
 
-function EventCard({ ev, expanded, toggle, onCreateEvent }) {
+function EventCard({ ev, expanded, toggle, onCreateEvent, onDelete }) {
   const cat = CAT_COLORS[ev.cultural_category] || CAT_COLORS.community;
   const sev = SEVERITY_LABEL[ev.severity_level] || '';
   const activities = Array.isArray(ev.activities) ? ev.activities : [];
@@ -459,14 +463,23 @@ function EventCard({ ev, expanded, toggle, onCreateEvent }) {
               {phrases.map((p, i) => <span key={i} className="cc-phrase">{p}</span>)}
             </div>
           )}
-          {onCreateEvent && (
-            <button
-              className="cc-event-create-btn"
-              onClick={(e) => { e.stopPropagation(); onCreateEvent(ev); }}
-            >
-              🎉 Create Event from This
-            </button>
-          )}
+          {/* Location & date info */}
+          {ev.location_name && <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>📍 {ev.location_name}{ev.lalaverse_district ? ` — ${ev.lalaverse_district}` : ''}</div>}
+          {ev.start_datetime && <div style={{ fontSize: 11, color: '#888' }}>📅 {new Date(ev.start_datetime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>}
+
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            {onCreateEvent && (
+              <button className="cc-event-create-btn" onClick={(e) => { e.stopPropagation(); onCreateEvent(ev); }}>
+                🎉 Create Event
+              </button>
+            )}
+            {onDelete && (
+              <button onClick={(e) => { e.stopPropagation(); if (confirm(`Delete "${ev.title}"?`)) onDelete(ev.id); }}
+                style={{ padding: '5px 10px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                🗑️ Delete
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -500,7 +513,7 @@ function TierPanel({ title, icon, tiers, constantKey }) {
    TIMELINE VIEW
    ═══════════════════════════════════════════════════════════════════════ */
 
-function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, totalCount, data, onCreateEvent, spawning }) {
+function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, totalCount, data, onCreateEvent, spawning, onDelete }) {
   return (
     <>
       <div className="cc-stats">
@@ -517,7 +530,7 @@ function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, tot
             <div className="cc-month-events">
               {byMonth[i] && byMonth[i].length > 0 ? (
                 byMonth[i].map(ev => (
-                  <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} onCreateEvent={onCreateEvent} />
+                  <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} onCreateEvent={onCreateEvent} onDelete={onDelete} />
                 ))
               ) : (
                 <div className="cc-month-empty">No major events</div>
@@ -728,7 +741,7 @@ function AlgorithmView() {
    MICRO VIEW — Floating Events + Birthdays
    ═══════════════════════════════════════════════════════════════════════ */
 
-function MicroView({ events: microEvents, toggle, expandedId, onCreateEvent, spawning }) {
+function MicroView({ events: microEvents, toggle, expandedId, onCreateEvent, spawning, onDelete }) {
   return (
     <>
       <h2 className="cc-section-title">Micro Events</h2>
@@ -739,7 +752,7 @@ function MicroView({ events: microEvents, toggle, expandedId, onCreateEvent, spa
       {microEvents.length > 0 ? (
         <div className="cc-micro-grid">
           {microEvents.map(ev => (
-            <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} onCreateEvent={onCreateEvent} />
+            <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} onCreateEvent={onCreateEvent} onDelete={onDelete} />
           ))}
         </div>
       ) : (

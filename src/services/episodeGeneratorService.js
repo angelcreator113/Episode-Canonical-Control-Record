@@ -222,10 +222,11 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
       const row = await ScenePlan.create({
         episode_id: episode.id,
         beat_number: beat.beat,
-        beat_label: beat.label,
+        beat_name: beat.label,
         emotional_intent: beat.emotional_intent,
         scene_set_id: sceneSetId,
-        description: beat.description,
+        scene_context: beat.description,
+        sort_order: beat.beat,
         locked: false,
         ai_suggested: true,
       });
@@ -301,6 +302,25 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     }
   } catch { /* non-blocking */ }
 
+  // Sync character profiles (host + guests)
+  try {
+    const characterSync = require('./characterSyncService');
+    const syncResult = await characterSync.syncAfterEvent(event, episode, models);
+    console.log(`[EpisodeGenerator] Character sync: ${syncResult.updated} profiles updated`);
+  } catch (syncErr) {
+    console.warn('[EpisodeGenerator] Character sync failed (non-blocking):', syncErr.message);
+  }
+
+  // Generate post-event feed activity
+  let feedPosts = [];
+  try {
+    const feedActivity = require('./feedActivityService');
+    feedPosts = await feedActivity.generatePostEventActivity(event, models);
+    console.log(`[EpisodeGenerator] Feed activity: ${feedPosts.length} posts generated`);
+  } catch (feedErr) {
+    console.warn('[EpisodeGenerator] Feed activity failed (non-blocking):', feedErr.message);
+  }
+
   return {
     episode: episode.toJSON(),
     brief: brief?.toJSON() || null,
@@ -309,6 +329,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     financials,
     socialTasks,
     beats: BEAT_TEMPLATES,
+    feedPosts,
   };
 }
 

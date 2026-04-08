@@ -415,6 +415,10 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
       if (editFormData.website) updateData.append('website', editFormData.website);
       if (editFormData.purchaseLink) updateData.append('purchaseLink', editFormData.purchaseLink);
       if (editFormData.price) updateData.append('price', editFormData.price);
+      if (editFormData.coin_cost) updateData.append('coin_cost', editFormData.coin_cost);
+      if (editFormData.brand) updateData.append('brand', editFormData.brand);
+      if (editFormData.acquisition_type) updateData.append('acquisition_type', editFormData.acquisition_type);
+      if (editFormData.tier) updateData.append('tier', editFormData.tier);
       if (editFormData.color) updateData.append('color', editFormData.color);
       if (editFormData.size) updateData.append('size', editFormData.size);
       if (editFormData.occasion) updateData.append('occasion', editFormData.occasion);
@@ -1434,16 +1438,43 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
               
               <div className="form-row">
                 <div className="form-section">
-                  <label>Price</label>
-                  <input type="number" name="price" value={editFormData.price} onChange={handleEditInputChange} step="0.01" min="0" />
+                  <label>Your Price (what you paid)</label>
+                  <input type="number" name="price" value={editFormData.price} onChange={handleEditInputChange} step="0.01" min="0" placeholder="e.g. 45.00" />
+                </div>
+                <div className="form-section">
+                  <label>Story Price (LalaVerse coins)</label>
+                  <input type="number" name="coin_cost" value={editFormData.coin_cost || ''} onChange={handleEditInputChange} step="1" min="0" placeholder="e.g. 2400" />
+                </div>
+                <div className="form-section">
+                  <label>Brand</label>
+                  <input type="text" name="brand" value={editFormData.brand || ''} onChange={handleEditInputChange} placeholder="e.g. Velour, Zara" />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-section">
+                  <label>How Lala Got It</label>
+                  <select name="acquisition_type" value={editFormData.acquisition_type || 'purchased'} onChange={handleEditInputChange}>
+                    <option value="purchased">Purchased</option>
+                    <option value="gifted">Gifted</option>
+                    <option value="borrowed">Borrowed</option>
+                    <option value="rented">Rented</option>
+                    <option value="custom">Custom Made</option>
+                    <option value="vintage">Vintage</option>
+                  </select>
+                </div>
+                <div className="form-section">
+                  <label>Tier</label>
+                  <select name="tier" value={editFormData.tier || 'basic'} onChange={handleEditInputChange}>
+                    <option value="basic">Basic (Fast Fashion)</option>
+                    <option value="mid">Mid (Contemporary)</option>
+                    <option value="luxury">Luxury (Designer)</option>
+                    <option value="elite">Elite (Haute Couture)</option>
+                  </select>
                 </div>
                 <div className="form-section">
                   <label>Color</label>
                   <input type="text" name="color" value={editFormData.color} onChange={handleEditInputChange} />
-                </div>
-                <div className="form-section">
-                  <label>Size</label>
-                  <input type="text" name="size" value={editFormData.size} onChange={handleEditInputChange} />
                 </div>
               </div>
               
