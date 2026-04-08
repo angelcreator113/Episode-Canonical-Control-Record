@@ -99,6 +99,7 @@ function WorldAdmin() {
   const [sceneSets, setSceneSets] = useState([]);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
+  const [worldLocations, setWorldLocations] = useState([]);
   const [wardrobeFilter, setWardrobeFilter] = useState('all');       // all | owned | locked
   const [wardrobeTierFilter, setWardrobeTierFilter] = useState('all'); // all | basic | mid | luxury | elite
   const [wardrobeCatFilter, setWardrobeCatFilter] = useState('all');   // all | dress | top | ...
@@ -178,6 +179,7 @@ function WorldAdmin() {
         api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
         api.get(`/api/v1/wardrobe-library?showId=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
+        api.get('/api/v1/world/locations').then(r => setWorldLocations(r.data?.locations || [])).catch(() => setWorldLocations([])),
       ]);
       // Show error only if ALL calls failed (not just some timeouts)
       const failures = results.filter(r => r.status === 'rejected');
@@ -1532,11 +1534,40 @@ The revised event should feel like a completely different experience from the si
                 </div>
               )}
 
-              {/* Venue & Location — combined picker */}
+              {/* Venue & Location — WorldLocation picker + scene set */}
               <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
                 <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Venue & Location</label>
 
-                {/* Venue name + address */}
+                {/* WorldLocation venue picker — auto-fills name + address */}
+                <div style={{ marginBottom: 8 }}>
+                  <select
+                    value={eventForm.venue_location_id || ''}
+                    onChange={e => {
+                      const locId = e.target.value || null;
+                      const loc = worldLocations.find(l => l.id === locId);
+                      const addr = loc ? [loc.street_address, loc.district, loc.city].filter(Boolean).join(', ') : '';
+                      setEventForm(p => ({
+                        ...p,
+                        venue_location_id: locId,
+                        venue_name: loc?.name || p.venue_name || '',
+                        venue_address: addr || p.venue_address || '',
+                        location_hint: addr || loc?.name || p.location_hint || '',
+                      }));
+                    }}
+                    style={{ ...S.sel, width: '100%', marginBottom: 6 }}
+                  >
+                    <option value="">— Choose a venue from World Locations —</option>
+                    {worldLocations.filter(l => l.location_type === 'venue' || l.venue_type).map(l => (
+                      <option key={l.id} value={l.id}>🏪 {l.name}{l.venue_type ? ` (${l.venue_type.replace(/_/g, ' ')})` : ''}{l.district ? ` — ${l.district}` : ''}</option>
+                    ))}
+                    <option disabled>──── Other locations ────</option>
+                    {worldLocations.filter(l => l.location_type !== 'venue' && !l.venue_type).map(l => (
+                      <option key={l.id} value={l.id}>📍 {l.name} ({l.location_type})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Venue name + address (editable, auto-filled from location) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                   <input
                     value={eventForm.venue_name || ''}
@@ -1568,11 +1599,14 @@ The revised event should feel like a completely different experience from the si
                   />
                 </div>
 
-                {/* Scene set picker */}
+                {/* Scene set picker for visual representation */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <select value={eventForm.scene_set_id || ''} onChange={e => setEventForm(p => ({ ...p, scene_set_id: e.target.value || null }))} style={{ ...S.sel, flex: 1, minWidth: 200 }}>
                     <option value="">— Scene Set (visual) —</option>
-                    {sceneSets.filter(ss => ss.scene_type === 'EVENT_LOCATION' || ss.base_still_url).map(ss => (
+                    {sceneSets.filter(ss => ss.scene_type === 'EVENT_LOCATION').map(ss => (
+                      <option key={ss.id} value={ss.id}>🎬 {ss.name} (EVENT)</option>
+                    ))}
+                    {sceneSets.filter(ss => ss.scene_type !== 'EVENT_LOCATION' && ss.base_still_url).map(ss => (
                       <option key={ss.id} value={ss.id}>📍 {ss.name} ({ss.scene_type?.replace(/_/g, ' ')})</option>
                     ))}
                   </select>
