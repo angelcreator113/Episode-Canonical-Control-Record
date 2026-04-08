@@ -488,11 +488,9 @@ function sanitizeEnum(value, validSet, fallback) {
 
 /**
  * Call Claude to generate a full profile from a spark, then save it.
+ * Uses a compact prompt optimized for batch generation speed.
  */
 async function generateAndSaveProfile(db, spark, layer) {
-  // Build the generation prompt (importing the shared builder)
-  const { buildGenerationPrompt } = require('../routes/socialProfileRoutes');
-
   const characterContext = layer === 'lalaverse'
     ? {
         name: 'Lala',
@@ -511,20 +509,12 @@ async function generateAndSaveProfile(db, spark, layer) {
         detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
       };
 
-  let prompt = buildGenerationPrompt(
-    spark.handle, spark.platform, spark.vibe_sentence,
-    characterContext, spark.advanced_context || null,
-  );
+  // Compact prompt for batch generation — ~60% smaller than the full buildGenerationPrompt
+  const ctx = characterContext;
+  const adv = spark.advanced_context || {};
+  const advHints = Object.entries(adv).filter(([,v])=>v).map(([k,v])=>`${k.replace('_hint','')}: ${v}`).join(', ');
 
-  if (layer === 'lalaverse' && spark.city) {
-    prompt += `\n\nLALAVERSE CONTEXT:
-This creator lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}
-Generate a profile that feels native to that city's creator culture.
-Lala's relationship to this creator: ${spark.lala_relationship || 'mutual_unaware'}.
-Career position relative to Lala: ${spark.career_pressure || 'level'}.
-Do not reference JustAWoman or the real world in any generated content.
-Lala does not know she was built. The world she lives in feels complete and self-contained.`;
-  }
+  let prompt = `Generate a social media creator profile as JSON for a literary fiction novel.
 
   const response = await callClaude(prompt, { maxTokens: 6000 });
 

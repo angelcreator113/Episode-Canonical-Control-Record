@@ -79,7 +79,7 @@ async function fetchWithRetry(url, opts, { retries = 2, baseDelay = 3000 } = {})
   }
 }
 
-export default function FeedBulkImport({ onDone, seriesId, characterContext, characterKey, onJobStarted }) {
+export default function FeedBulkImport({ onDone, seriesId, characterContext, characterKey, feedLayer, onJobStarted }) {
   const draft = useRef(loadDraft());
 
   const [mode, setMode]           = useState(draft.current?.mode || 'paste');
@@ -277,7 +277,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
         try {
           const res = await fetchWithRetry(`${API}/bulk/generate`, {
             method: 'POST', headers: getAuthHeaders(),
-            body: JSON.stringify({ creators: batch, series_id: seriesId, character_context: characterContext, character_key: characterKey }),
+            body: JSON.stringify({ creators: batch, series_id: seriesId, character_context: characterContext, character_key: characterKey, feed_layer: feedLayer || 'real_world' }),
           }, { retries: 2, baseDelay: 4000 });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
@@ -329,6 +329,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
           series_id: seriesId,
           character_context: characterContext,
           character_key: characterKey,
+          feed_layer: feedLayer || 'real_world',
         }),
       });
       const data = await res.json();

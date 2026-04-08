@@ -2237,7 +2237,7 @@ export default function CharacterRegistryPage() {
         {feedMapMode ? (
           <FeedRelationshipMap />
         ) : feedMode ? (
-          <SocialProfileGenerator embedded />
+          <SocialProfileGenerator embedded defaultFeedLayer="real_world" />
         ) : worldMode ? (
           <>
             {/* World header */}
