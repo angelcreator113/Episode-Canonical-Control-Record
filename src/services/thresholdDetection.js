@@ -42,7 +42,7 @@ async function safeAI(system, user, max = 200) {
   if (!anthropic) return null;
   try {
     const r = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6', max_tokens: max,
+      model: 'claude-haiku-4-5-20251001', max_tokens: max,  // Haiku for simple detection
       system, messages: [{ role: 'user', content: user }],
     });
     return r.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();

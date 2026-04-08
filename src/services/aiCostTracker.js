@@ -63,14 +63,37 @@ function calculateCost(model, usage) {
 function inferRouteName() {
   const stack = new Error().stack || '';
   const lines = stack.split('\n');
+  
+  // Skip these service files — they're wrappers, not the actual callers
+  const skipServices = ['aiCostTracker', 'anthropic', 'index'];
+  
+  let foundRoute = null;
+  let foundService = null;
+  
   for (const line of lines) {
-    // Look for route files
-    const match = line.match(/\broutes[\\/]([a-zA-Z_-]+)\b/);
-    if (match) return match[1];
-    // Look for service files
-    const svcMatch = line.match(/\bservices[\\/]([a-zA-Z_-]+)\b/);
-    if (svcMatch) return svcMatch[1];
+    // Look for route files (highest priority)
+    const routeMatch = line.match(/\broutes[\\/]([a-zA-Z0-9_-]+)\.js/);
+    if (routeMatch && !foundRoute) {
+      foundRoute = routeMatch[1];
+    }
+    
+    // Look for service files (lower priority, skip wrapper services)
+    const svcMatch = line.match(/\bservices[\\/]([a-zA-Z0-9_-]+)\.js/);
+    if (svcMatch && !foundService && !skipServices.includes(svcMatch[1])) {
+      foundService = svcMatch[1];
+    }
+    
+    // Look for workers
+    const workerMatch = line.match(/\bworkers[\\/]([a-zA-Z0-9_-]+)\.js/);
+    if (workerMatch) {
+      return `worker:${workerMatch[1]}`;
+    }
   }
+  
+  // Prefer route over service
+  if (foundRoute) return foundRoute;
+  if (foundService) return `svc:${foundService}`;
+  
   return 'unknown';
 }
 
