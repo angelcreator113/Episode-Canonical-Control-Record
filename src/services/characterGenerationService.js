@@ -29,6 +29,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const Anthropic = require('@anthropic-ai/sdk');
+const { formatSystemPrompt } = require('./promptCacheHelper');
 const client    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const _DEEP_PROFILE_DIMENSIONS = [
@@ -138,24 +139,8 @@ async function generateFullCharacter({ spark, worldContext, bookContext, existin
 // INTERIOR ARCHITECTURE
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age }) {
-  const isMinor = age != null && age < 18;
-  const minorRule = isMinor
-    ? `\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${age}). Do NOT generate "sexuality_desire" content. Set it to: "Dimension deferred — character is a minor."\n`
-    : '';
-
-  const prompt = `${worldString}
-${bookString}
-${castString}
-${minorRule}
-
-You are generating the complete interior architecture for a character.
-
-Character: ${name}
-Vibe: ${vibe}
-Role in story: ${role}
-
-Generate a complete JSON object with exactly these fields. Every field is required. Be specific, contradictory where appropriate, and never generic.
+// Static system prompt for interior architecture - cached for 90% cost reduction
+const INTERIOR_ARCHITECTURE_SYSTEM = `You are generating the complete interior architecture for a character. Generate a complete JSON object with exactly these fields. Every field is required. Be specific, contradictory where appropriate, and never generic.
 
 {
   "want_architecture": {
@@ -224,10 +209,28 @@ Generate a complete JSON object with exactly these fields. Every field is requir
 
 Return ONLY the JSON object. No preamble. No explanation.`;
 
+async function generateInteriorArchitecture({ name, vibe, role, worldString, bookString, castString, age }) {
+  const isMinor = age != null && age < 18;
+  const minorRule = isMinor
+    ? `\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${age}). Do NOT generate "sexuality_desire" content. Set it to: "Dimension deferred — character is a minor."\n`
+    : '';
+
+  // Dynamic user message with character-specific data only
+  const userMessage = `${worldString}
+${bookString}
+${castString}
+${minorRule}
+
+Character: ${name}
+Vibe: ${vibe}
+Role in story: ${role}`;
+
   const response = await client.messages.create({
     model:      'claude-sonnet-4-20250514',
     max_tokens: 4000,
-    messages:   [{ role: 'user', content: prompt }],
+    // Cached system prompt - reduces input cost by ~90% for repeated calls
+    system:     formatSystemPrompt(INTERIOR_ARCHITECTURE_SYSTEM),
+    messages:   [{ role: 'user', content: userMessage }],
   });
 
   const text  = response.content[0]?.text || '{}';

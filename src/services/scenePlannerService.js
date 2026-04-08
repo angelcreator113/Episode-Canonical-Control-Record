@@ -9,7 +9,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
-const { ScenePlan, SceneSet, SceneSetEpisode, SceneAngle, WorldLocation } = require('../models');
+const { ScenePlan, SceneSet, SceneSetEpisode: _SceneSetEpisode, SceneAngle, WorldLocation } = require('../models');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;

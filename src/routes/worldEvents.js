@@ -136,8 +136,8 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
       requirements = {}, career_tier = 1,
       career_milestone, fail_consequence, success_unlock,
       // New venue fields (stored in event even pre-migration)
-      venue_location_id, venue_name, venue_address, event_date, event_time,
-      guest_list, invitation_details, scene_set_id,
+      venue_location_id, venue_name, venue_address, event_date: _event_date, event_time: _event_time,
+      guest_list: _guest_list, invitation_details: _invitation_details, scene_set_id,
     } = req.body;
 
     if (!name) return res.status(400).json({ error: 'Event name is required' });
@@ -302,7 +302,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'guest_list', 'invitation_details',
       'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
     ];
-    const requiredStringFields = new Set(['name', 'event_type', 'status']);
+    const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
     const setClauses = [];
     const replacements = { showId, eventId };

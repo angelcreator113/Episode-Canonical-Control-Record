@@ -2166,7 +2166,7 @@ router.post('/:id/apply-template', validateUUIDParam('id'), optionalAuth, async 
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
 
     // Fetch template list from the endpoint above
-    const templates = (await new Promise(resolve => {
+    const _templates = (await new Promise(resolve => {
       const mockRes = { json: (d) => resolve(d.templates) };
       router.handle({ method: 'GET', url: '/templates/list', query: {} }, mockRes, () => {});
     })).catch?.() || [];

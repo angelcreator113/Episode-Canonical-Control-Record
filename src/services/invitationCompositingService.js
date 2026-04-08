@@ -165,7 +165,7 @@ async function checkFonts() {
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 
-const COLORS = {
+const _COLORS = {
   gold:       '#B8962E',
   goldLight:  '#D4AF37',
   goldDark:   '#8B6914',

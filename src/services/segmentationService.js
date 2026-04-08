@@ -18,8 +18,8 @@ const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
 const s3 = new S3Client({ region: AWS_REGION });
 
-const POLL_INTERVAL_MS = 2000;
-const MAX_POLL_ATTEMPTS = 60; // 2 min timeout
+const _POLL_INTERVAL_MS = 2000;
+const _MAX_POLL_ATTEMPTS = 60; // 2 min timeout
 
 // SAM model for click-to-segment (supports multi-point)
 const SAM_MODEL = process.env.REPLICATE_SAM_MODEL || 'meta/sam-2-large';
