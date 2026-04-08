@@ -1051,15 +1051,35 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
           <div style={{position:'relative',width:'min(520px,90vw)',height:'100%',background:C.surface,boxShadow:'-4px 0 24px rgba(0,0,0,0.12)',overflowY:'auto',animation:'slideInRight 0.2s ease-out'}}>
             {/* Quick action: Create Event from this profile */}
             {showId && selected && feedLayer === 'lalaverse' && (
-              <div style={{padding:'8px 16px',background:'#FAF7F0',borderBottom:'1px solid #e8e0d0',display:'flex',gap:8,alignItems:'center'}}>
-                <button onClick={async()=>{
+              <div id="profile-event-bar" style={{padding:'10px 16px',background:'#FAF7F0',borderBottom:'1px solid #e8e0d0'}}>
+                <button onClick={async(e)=>{
+                  const bar=document.getElementById('profile-event-bar');
+                  const btn=e.target.closest('button');
+                  btn.disabled=true;btn.textContent='⏳ Creating...';
                   try{
                     const res=await fetch(`/api/v1/world/${showId}/events/from-profile`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile_id:selected.id,event_template:'Event'})});
                     const d=await res.json();
-                    if(d.success)showToast(`✅ Event created: "${d.event?.name||'New event'}" — check Events Library`);
-                    else showToast(d.error||'Failed','error');
-                  }catch(e){showToast(e.message,'error');}
-                }} style={{padding:'5px 12px',borderRadius:6,border:'1px solid #B8962E',background:'transparent',color:'#B8962E',fontWeight:600,fontSize:11,cursor:'pointer'}}>
+                    if(d.success){
+                      const ev=d.event;
+                      bar.innerHTML=`
+                        <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:6px">✅ Event Created!</div>
+                        <div style="background:#fff;border:1px solid #d4edda;border-radius:8px;padding:10px">
+                          <div style="font-weight:700;font-size:13px;color:#2C2C2C;margin-bottom:4px">${ev.name||'New Event'}</div>
+                          <div style="font-size:11px;color:#666;margin-bottom:2px">👤 Host: ${ev.host||selected.display_name||selected.handle}</div>
+                          ${ev.location_hint?`<div style="font-size:11px;color:#666;margin-bottom:2px">📍 ${ev.location_hint}</div>`:''}
+                          <div style="font-size:11px;color:#666;margin-bottom:6px">⭐ Prestige: ${ev.prestige||5} · Status: ${ev.status||'draft'}</div>
+                          <div style="display:flex;gap:6px">
+                            <button onclick="document.querySelector('[data-tab=events]')?.click()" style="padding:4px 10px;border-radius:4px;border:1px solid #B8962E;background:transparent;color:#B8962E;font-weight:600;font-size:10px;cursor:pointer">View in Events Library →</button>
+                          </div>
+                        </div>
+                      `;
+                      showToast(`✅ Event created for ${selected.display_name||selected.handle}`);
+                    }else{
+                      btn.disabled=false;btn.textContent=`🎭 Create Event Hosted by ${selected.display_name||selected.handle}`;
+                      showToast(d.error||'Failed','error');
+                    }
+                  }catch(err){btn.disabled=false;btn.textContent=`🎭 Create Event`;showToast(err.message,'error');}
+                }} style={{padding:'6px 14px',borderRadius:6,border:'1px solid #B8962E',background:'transparent',color:'#B8962E',fontWeight:600,fontSize:11,cursor:'pointer',width:'100%',textAlign:'left'}}>
                   🎭 Create Event Hosted by {selected.display_name||selected.handle}
                 </button>
               </div>
