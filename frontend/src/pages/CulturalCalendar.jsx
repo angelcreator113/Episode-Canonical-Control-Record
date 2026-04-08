@@ -42,13 +42,8 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 /* ─── Tabs ──────────────────────────────────────────────────────────── */
 const TABS = [
   { id: 'timeline',  label: 'Timeline' },
-  { id: 'hierarchy', label: 'Hierarchy' },
-  { id: 'industries', label: 'Industries' },
   { id: 'awards',    label: 'Awards' },
-  { id: 'media',     label: 'Media' },
-  { id: 'algorithm', label: 'Algorithm' },
-  { id: 'micro',     label: 'Micro Events' },
-  { id: 'famous',    label: 'Famous 25' },
+  { id: 'micro',     label: 'Feed Events' },
 ];
 
 /* ─── Celebrity & Creator Hierarchy (6 Tiers) ──────────────────────── */
