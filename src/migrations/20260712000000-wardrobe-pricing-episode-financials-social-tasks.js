@@ -8,18 +8,18 @@ module.exports = {
     };
 
     // ── Wardrobe: acquisition + rental/resale ──
-    await addIfMissing('wardrobes', 'acquisition_type', {
+    await addIfMissing('wardrobe', 'acquisition_type', {
       type: Sequelize.STRING(30),
       allowNull: true,
       defaultValue: 'purchased',
       comment: 'purchased | gifted | borrowed | rented | custom | vintage',
     });
-    await addIfMissing('wardrobes', 'rental_price', {
+    await addIfMissing('wardrobe', 'rental_price', {
       type: Sequelize.DECIMAL(10, 2),
       allowNull: true,
       comment: 'Cost to borrow for one event (in coins)',
     });
-    await addIfMissing('wardrobes', 'resale_value', {
+    await addIfMissing('wardrobe', 'resale_value', {
       type: Sequelize.DECIMAL(10, 2),
       allowNull: true,
       comment: 'What Lala can sell it for after wearing',
@@ -60,9 +60,9 @@ module.exports = {
   },
 
   async down(queryInterface) {
-    await queryInterface.removeColumn('wardrobes', 'acquisition_type').catch(() => {});
-    await queryInterface.removeColumn('wardrobes', 'rental_price').catch(() => {});
-    await queryInterface.removeColumn('wardrobes', 'resale_value').catch(() => {});
+    await queryInterface.removeColumn('wardrobe', 'acquisition_type').catch(() => {});
+    await queryInterface.removeColumn('wardrobe', 'rental_price').catch(() => {});
+    await queryInterface.removeColumn('wardrobe', 'resale_value').catch(() => {});
     await queryInterface.removeColumn('episodes', 'total_income').catch(() => {});
     await queryInterface.removeColumn('episodes', 'total_expenses').catch(() => {});
     await queryInterface.removeColumn('episodes', 'financial_score').catch(() => {});
