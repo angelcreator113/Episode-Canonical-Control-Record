@@ -76,14 +76,32 @@ const EVENT_TEMPLATES = {
 
 // ─── CORE FUNCTIONS ──────────────────────────────────────────────────────────
 
+// Maps archetypes to event hosting styles
+const ARCHETYPE_EVENT_FIT = {
+  polished_curator: ['invite', 'brand_deal', 'upgrade'], // hosts elegant events
+  messy_transparent: ['guest', 'invite'],                 // attends, doesn't host formal events
+  soft_life: ['invite', 'brand_deal'],                    // luxury events
+  explicitly_paid: ['brand_deal'],                        // only paid appearances
+  overnight_rise: ['invite', 'guest'],                    // new to the scene
+  cautionary: ['guest'],                                  // attends, risky to host
+  the_peer: ['invite', 'guest'],                          // collaborative events
+  the_watcher: [],                                        // doesn't host
+  chaos_creator: ['invite'],                              // hosts wild events
+  community_builder: ['invite', 'guest', 'upgrade'],      // hosts community events
+};
+
+// Maps follower tiers to prestige ranges they can host
+const TIER_PRESTIGE = {
+  mega: { min: 6, max: 10 },
+  macro: { min: 4, max: 8 },
+  mid: { min: 2, max: 6 },
+  micro: { min: 1, max: 4 },
+};
+
 /**
  * Find the best host profile for a cultural event.
- * Picks the highest-scoring profile whose content_category matches the event.
- *
- * @param {object} calendarEvent — StoryCalendarEvent
- * @param {object} models — Sequelize models
- * @param {object} [options] — { excludeIds: [] }
- * @returns {object|null} SocialProfile
+ * Uses multi-factor matching: content category, archetype fit,
+ * follower tier vs event prestige, brand partnerships.
  */
 async function findHostProfile(calendarEvent, models, options = {}) {
   const { SocialProfile } = models;
@@ -91,6 +109,7 @@ async function findHostProfile(calendarEvent, models, options = {}) {
 
   const category = calendarEvent.cultural_category || calendarEvent.event_type || 'default';
   const contentMatches = CATEGORY_TO_CONTENT[category] || CATEGORY_TO_CONTENT.fashion;
+  const severity = calendarEvent.severity_level || 5;
 
   const { Op } = require('sequelize');
   const where = {
@@ -98,21 +117,66 @@ async function findHostProfile(calendarEvent, models, options = {}) {
     feed_layer: 'lalaverse',
   };
 
-  if (contentMatches.length > 0) {
-    where.content_category = { [Op.in]: contentMatches };
-  }
-
   if (options.excludeIds?.length) {
     where.id = { [Op.notIn]: options.excludeIds };
   }
 
-  const profile = await SocialProfile.findOne({
+  // Get candidate profiles — broader search, then rank
+  const candidates = await SocialProfile.findAll({
     where,
     order: [['lala_relevance_score', 'DESC']],
-    attributes: ['id', 'handle', 'display_name', 'content_category', 'lala_relevance_score', 'geographic_base', 'brand_partnerships', 'registry_character_id'],
+    limit: 20,
+    attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype',
+      'follower_tier', 'lala_relevance_score', 'geographic_base', 'brand_partnerships',
+      'registry_character_id', 'revenue_streams'],
   });
 
-  return profile;
+  if (candidates.length === 0) return null;
+
+  // Score each candidate
+  const scored = candidates.map(profile => {
+    let score = 0;
+    const p = profile.toJSON ? profile.toJSON() : profile;
+
+    // Content category match (0-30 points)
+    if (contentMatches.includes(p.content_category)) score += 30;
+    else if (p.content_category) score += 5; // any category > none
+
+    // Archetype hosting fit (0-25 points)
+    const archFit = ARCHETYPE_EVENT_FIT[p.archetype] || ['invite'];
+    if (archFit.includes('invite')) score += 15;
+    if (archFit.includes('brand_deal')) score += 10;
+    if (archFit.length === 0) score -= 20; // watchers don't host
+
+    // Follower tier vs event severity (0-20 points)
+    const tierRange = TIER_PRESTIGE[p.follower_tier] || TIER_PRESTIGE.mid;
+    if (severity >= tierRange.min && severity <= tierRange.max) score += 20;
+    else if (severity < tierRange.min) score += 10; // overqualified is ok
+    else score += 5; // underqualified gets some points
+
+    // Brand partnerships relevance (0-15 points)
+    const brands = Array.isArray(p.brand_partnerships) ? p.brand_partnerships : [];
+    if (brands.length > 0) score += 10;
+    if (brands.some(b => contentMatches.some(cm =>
+      (b.brand || '').toLowerCase().includes(cm) || cm.includes((b.brand || '').toLowerCase())
+    ))) score += 5;
+
+    // Lala relevance bonus (0-10 points)
+    score += Math.min(10, Math.round((p.lala_relevance_score || 0)));
+
+    return { profile, score };
+  });
+
+  // Sort by score descending, return top match
+  scored.sort((a, b) => b.score - a.score);
+
+  console.log(`[EventAutomation] Host matching for "${calendarEvent.title}" (${category}, severity ${severity}):`);
+  scored.slice(0, 3).forEach((s, i) => {
+    const p = s.profile.toJSON ? s.profile.toJSON() : s.profile;
+    console.log(`  ${i + 1}. ${p.handle} (${p.content_category}, ${p.archetype}, ${p.follower_tier}) → score: ${s.score}`);
+  });
+
+  return scored[0]?.profile || null;
 }
 
 /**
@@ -205,30 +269,62 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
     } catch { /* relationships table may not exist */ }
   }
 
-  // 2. Fill remaining spots with category-matched profiles
+  // 2. Fill remaining spots — mix of category matches, diverse archetypes and tiers
   if (guests.length < maxGuests) {
     const category = calendarEvent.cultural_category || 'default';
     const contentMatches = CATEGORY_TO_CONTENT[category] || [];
     const excludeIds = [hostProfile?.id, ...guests.map(g => g.profile_id)].filter(Boolean);
 
-    const fillers = await SocialProfile.findAll({
+    // Get more candidates than needed, then diversify
+    const candidatePool = await SocialProfile.findAll({
       where: {
         status: { [Op.in]: ['finalized', 'generated'] },
         feed_layer: 'lalaverse',
-        ...(contentMatches.length > 0 ? { content_category: { [Op.in]: contentMatches } } : {}),
         ...(excludeIds.length > 0 ? { id: { [Op.notIn]: excludeIds } } : {}),
       },
       order: [['lala_relevance_score', 'DESC']],
-      limit: maxGuests - guests.length,
-      attributes: ['id', 'handle', 'display_name'],
+      limit: Math.max(20, maxGuests * 3),
+      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'lala_relationship'],
     });
 
-    for (const p of fillers) {
+    // Score and rank: category match + diversity bonus
+    const usedArchetypes = new Set();
+    const usedTiers = new Set();
+    const remaining = maxGuests - guests.length;
+    const selected = [];
+
+    for (const p of candidatePool) {
+      if (selected.length >= remaining) break;
+      const pData = p.toJSON ? p.toJSON() : p;
+
+      let score = 0;
+      // Category match
+      if (contentMatches.includes(pData.content_category)) score += 20;
+      // Archetype diversity bonus
+      if (!usedArchetypes.has(pData.archetype)) score += 10;
+      // Tier diversity bonus
+      if (!usedTiers.has(pData.follower_tier)) score += 8;
+      // Lala relationship bonus — direct connections more interesting
+      if (pData.lala_relationship === 'direct') score += 15;
+      if (pData.lala_relationship === 'competitive') score += 12;
+      if (pData.lala_relationship === 'aware') score += 8;
+
+      selected.push({ profile: p, score, data: pData });
+    }
+
+    // Sort by score, pick top N
+    selected.sort((a, b) => b.score - a.score);
+
+    for (const s of selected.slice(0, remaining)) {
+      usedArchetypes.add(s.data.archetype);
+      usedTiers.add(s.data.follower_tier);
       guests.push({
-        profile_id: p.id,
-        handle: p.handle,
-        display_name: p.display_name,
-        relationship: 'industry',
+        profile_id: s.data.id,
+        handle: s.data.handle,
+        display_name: s.data.display_name,
+        relationship: contentMatches.includes(s.data.content_category) ? 'industry' : 'scene',
+        archetype: s.data.archetype,
+        follower_tier: s.data.follower_tier,
       });
     }
   }
@@ -325,23 +421,47 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     };
 
     // Use WorldEvent model if available, fall back to raw SQL
-    if (models.WorldEvent) {
-      const event = await models.WorldEvent.create(eventData);
-      createdEvents.push(event.toJSON());
-    } else {
-      await models.sequelize.query(
-        `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
-         prestige, location_hint, dress_code, narrative_stakes, canon_consequences, status, created_at, updated_at)
-         VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
-         :prestige, :location_hint, :dress_code, :narrative_stakes, :canon_consequences, :status, NOW(), NOW())`,
-        {
-          replacements: {
-            ...eventData,
-            canon_consequences: JSON.stringify(eventData.canon_consequences),
-          },
-        }
-      );
-      createdEvents.push(eventData);
+    try {
+      if (models.WorldEvent) {
+        const event = await models.WorldEvent.create(eventData);
+        createdEvents.push(event.toJSON());
+      } else {
+        await models.sequelize.query(
+          `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
+           prestige, location_hint, dress_code, narrative_stakes, canon_consequences, status, created_at, updated_at)
+           VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
+           :prestige, :location_hint, :dress_code, :narrative_stakes, :canon_consequences, :status, NOW(), NOW())`,
+          {
+            replacements: {
+              ...eventData,
+              canon_consequences: JSON.stringify(eventData.canon_consequences),
+            },
+          }
+        );
+        createdEvents.push(eventData);
+      }
+    } catch (createErr) {
+      console.error(`[EventAutomation] Failed to create event "${eventName}":`, createErr.message);
+      // Try raw SQL as last resort
+      try {
+        await models.sequelize.query(
+          `INSERT INTO world_events (id, show_id, name, event_type, host, description, prestige, location_hint, canon_consequences, status, created_at, updated_at)
+           VALUES (:id, :show_id, :name, :event_type, :host, :description, :prestige, :location_hint, :canon_consequences, 'draft', NOW(), NOW())`,
+          {
+            replacements: {
+              id: eventData.id, show_id: showId, name: eventName,
+              event_type: eventData.event_type, host: hostName || null,
+              description: eventData.description || eventName,
+              prestige: prestige, location_hint: eventData.location_hint || null,
+              canon_consequences: JSON.stringify(eventData.canon_consequences),
+            },
+          }
+        );
+        createdEvents.push(eventData);
+      } catch (sqlErr) {
+        console.error(`[EventAutomation] Raw SQL fallback also failed:`, sqlErr.message);
+        throw new Error(`Event creation failed: ${createErr.message}`);
+      }
     }
   }
 

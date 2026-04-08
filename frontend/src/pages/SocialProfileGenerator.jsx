@@ -10,7 +10,12 @@ import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
 import ProfileCard from './feed/ProfileCard';
 import { DetailPanel, FeedStatePicker } from './feed/ProfileDetailPanel';
-import FeedViewContent, { Spinner } from './feed/FeedViews';
+import FeedViewContent, { Spinner as ImportedSpinner } from './feed/FeedViews';
+
+// Fallback Spinner in case import fails
+const Spinner = ImportedSpinner || function() {
+  return <span style={{display:'inline-block',width:14,height:14,border:'2px solid #eee',borderTopColor:'#a889c8',borderRadius:'50%',animation:'spin 0.6s linear infinite'}}/>;
+};
 import {
   API, SCHED_API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, LALAVERSE_CITIES, LALA_RELATIONSHIPS, CAREER_PRESSURES,
