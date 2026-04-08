@@ -1998,6 +1998,20 @@ The revised event should feel like a completely different experience from the si
                   </div>
                 )}
                 {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.narrative_stakes}</div>}
+                {/* Feed activity preview */}
+                {ev.canon_consequences?.feed_activity?.length > 0 && (
+                  <div style={{ marginBottom: 6, padding: '6px 8px', background: '#fafafa', borderRadius: 6, borderLeft: '2px solid #B8962E' }}>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: '#B8962E', marginBottom: 3, fontFamily: "'DM Mono', monospace" }}>📢 FEED ACTIVITY</div>
+                    {ev.canon_consequences.feed_activity.slice(0, 2).map((post, pi) => (
+                      <div key={pi} style={{ fontSize: 10, color: '#666', marginBottom: 2 }}>
+                        <span style={{ fontWeight: 600 }}>{post.handle}</span>: "{post.content?.slice(0, 60)}{post.content?.length > 60 ? '...' : ''}"
+                      </div>
+                    ))}
+                    {ev.canon_consequences.feed_activity.length > 2 && (
+                      <div style={{ fontSize: 9, color: '#999' }}>+{ev.canon_consequences.feed_activity.length - 2} more posts</div>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>Edit</button>
                   <button onClick={() => copyEvent(ev)} style={S.smBtn}>Copy</button>
