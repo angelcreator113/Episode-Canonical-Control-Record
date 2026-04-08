@@ -647,7 +647,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
 
       {/* ── Bulk Import View ─────────────────────────────────── */}
       {view==='bulk' && (
-        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);}} characterContext={protagonist.context} characterKey={protagonist.key} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
+        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);}} characterContext={protagonist.context} characterKey={protagonist.key} feedLayer={feedLayer} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
       )}
 
       {view==='feed' && <>
