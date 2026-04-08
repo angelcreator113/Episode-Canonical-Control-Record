@@ -122,7 +122,7 @@ CRITICAL RULES FOR THIS SESSION:
 Keep it tight. This brief should take 30 seconds to read and give the assistant everything it needs.`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1000,
       messages: [{ role: 'user', content: briefPrompt }],
     });
@@ -223,7 +223,7 @@ Respond ONLY in valid JSON:
 }`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       system: 'You are the Post-Generation Review agent. You read finished scenes for franchise violations. Be specific — quote lines, name laws. Respond ONLY in valid JSON.',
       messages: [{ role: 'user', content: reviewPrompt }],
