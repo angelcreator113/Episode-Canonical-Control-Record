@@ -1441,6 +1441,69 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
   }
 });
 
+// POST /world/:showId/events/from-profile — Create event from a feed profile
+router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { profile_id, event_template } = req.body;
+    const models = await getModels();
+    if (!models?.SocialProfile) return res.status(500).json({ error: 'Models not loaded' });
+
+    const profile = await models.SocialProfile.findByPk(profile_id, {
+      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'brand_partnerships', 'registry_character_id', 'lala_relevance_score'],
+    });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    const p = profile.toJSON();
+    const prestige = p.follower_tier === 'mega' ? 8 : p.follower_tier === 'macro' ? 6 : p.follower_tier === 'mid' ? 4 : 3;
+
+    // Find venue
+    const eventAutomation = require('../services/eventAutomationService');
+    const fakeCalEvent = { cultural_category: p.content_category || 'creator_economy' };
+    const venue = await eventAutomation.findVenue(fakeCalEvent, models);
+
+    const eventData = {
+      show_id: showId,
+      name: event_template ? `${p.display_name || p.handle}'s ${event_template}` : `${p.display_name || p.handle} Hosts`,
+      event_type: 'invite',
+      host: p.display_name || p.handle,
+      prestige,
+      location_hint: venue ? [venue.street_address, venue.district, venue.city].filter(Boolean).join(', ') : null,
+      canon_consequences: {
+        automation: {
+          host_profile_id: p.id,
+          host_handle: p.handle,
+          host_display_name: p.display_name,
+          host_registry_character_id: p.registry_character_id,
+          venue_location_id: venue?.id,
+          venue_name: venue?.name,
+          guest_profiles: [],
+        },
+      },
+      status: 'draft',
+    };
+
+    let event;
+    if (models.WorldEvent) {
+      event = await models.WorldEvent.create(eventData);
+    } else {
+      const { v4: uuidv4 } = require('uuid');
+      eventData.id = uuidv4();
+      await models.sequelize.query(
+        `INSERT INTO world_events (id, show_id, name, event_type, host, prestige, location_hint, canon_consequences, status, created_at, updated_at)
+         VALUES (:id, :show_id, :name, :event_type, :host, :prestige, :location_hint, :canon_consequences, 'draft', NOW(), NOW())`,
+        { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
+      );
+      event = eventData;
+    }
+
+    res.status(201).json({ success: true, event: event.toJSON ? event.toJSON() : event });
+  } catch (err) {
+    console.error('POST /world/:showId/events/from-profile error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /world/:showId/events/:eventId/feed-activity — get post-event feed posts
 router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (req, res) => {
   try {
