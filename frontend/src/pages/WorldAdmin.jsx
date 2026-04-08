@@ -77,6 +77,7 @@ const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
   { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
   { key: 'feed', icon: '👥', label: "Lala's Feed" },
+  { key: 'feed-events', icon: '🎭', label: 'Feed Events' },
   { key: 'events', icon: '💌', label: 'Events Library' },
   { key: 'goals', icon: '🎯', label: 'Career Goals' },
   { key: 'wardrobe', icon: '👗', label: 'Wardrobe' },
@@ -99,6 +100,7 @@ function WorldAdmin() {
   const [sceneSets, setSceneSets] = useState([]);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
+  const [worldLocations, setWorldLocations] = useState([]);
   const [wardrobeFilter, setWardrobeFilter] = useState('all');       // all | owned | locked
   const [wardrobeTierFilter, setWardrobeTierFilter] = useState('all'); // all | basic | mid | luxury | elite
   const [wardrobeCatFilter, setWardrobeCatFilter] = useState('all');   // all | dress | top | ...
@@ -178,6 +180,7 @@ function WorldAdmin() {
         api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
         api.get(`/api/v1/wardrobe-library?showId=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
+        api.get('/api/v1/world/locations').then(r => setWorldLocations(r.data?.locations || [])).catch(() => setWorldLocations([])),
       ]);
       // Show error only if ALL calls failed (not just some timeouts)
       const failures = results.filter(r => r.status === 'rejected');
@@ -1075,6 +1078,35 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     )}
 
+                    {/* ── Episode Financials ── */}
+                    {(ep.total_income > 0 || ep.total_expenses > 0) && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Episode P&L</div>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          <div style={{ padding: '8px 14px', background: '#f0fdf4', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ fontSize: 10, color: '#16a34a' }}>Income</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#16a34a' }}>{ep.total_income || 0}</div>
+                          </div>
+                          <div style={{ padding: '8px 14px', background: '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ fontSize: 10, color: '#dc2626' }}>Expenses</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#dc2626' }}>{ep.total_expenses || 0}</div>
+                          </div>
+                          <div style={{ padding: '8px 14px', background: (ep.total_income || 0) >= (ep.total_expenses || 0) ? '#f0fdf4' : '#fef2f2', borderRadius: 8, textAlign: 'center' }}>
+                            <div style={{ fontSize: 10, color: '#666' }}>Net</div>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: (ep.total_income || 0) >= (ep.total_expenses || 0) ? '#16a34a' : '#dc2626' }}>
+                              {((ep.total_income || 0) - (ep.total_expenses || 0)).toFixed(0)}
+                            </div>
+                          </div>
+                          {ep.financial_score && (
+                            <div style={{ padding: '8px 14px', background: '#FAF7F0', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 10, color: '#B8962E' }}>Financial IQ</div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: '#B8962E' }}>{ep.financial_score}/10</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* ── Evaluation Details ── */}
                     {ej && (
                       <div style={{ marginTop: 14 }}>
@@ -1160,6 +1192,110 @@ The revised event should feel like a completely different experience from the si
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
           <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" />
         </Suspense>
+      )}
+
+      {/* ════════════════════════ FEED EVENTS ════════════════════════ */}
+      {activeTab === 'feed-events' && (
+        <div style={S.content}>
+          <div style={{ marginBottom: 16 }}>
+            <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Feed Events</h2>
+            <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
+              Event templates that feed profiles can host. Pick a template → choose a host from Lala's Feed → choose a venue → create the event.
+            </p>
+          </div>
+
+          {/* Current season context */}
+          <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 6 }}>
+              Current Season: {['January','February','March','April','May','June','July','August','September','October','November','December'][new Date().getMonth()]}
+            </div>
+            <div style={{ fontSize: 12, color: '#666' }}>
+              Feed events fire when the cultural moment is right. These templates match the current month's seasonal context.
+            </div>
+          </div>
+
+          {/* Feed event templates grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+            {[
+              { name: 'Creator Roast Night', category: 'creator_economy', icon: '🔥', desc: 'Public roasting of creators by other creators. Everything is jokes until someone goes too far.', energy: 'chaotic' },
+              { name: 'Fashion Mystery Box', category: 'fashion', icon: '📦', desc: 'Style looks from a mystery selection. Constraint reveals true taste — or lack of it.', energy: 'creative' },
+              { name: 'Creator Speed Dating', category: 'creator_economy', icon: '⚡', desc: 'Rapid-fire collab pitches. Alliances form fast. Some are regretted faster.', energy: 'networking' },
+              { name: 'Street Style Marathon', category: 'fashion', icon: '👟', desc: 'Extended street style documentation — the week\'s best looks ranked publicly.', energy: 'competitive' },
+              { name: 'Beauty Battles', category: 'beauty', icon: '💄', desc: 'Head-to-head beauty challenges. The audience votes. The loser loses followers publicly.', energy: 'dramatic' },
+              { name: 'Design Lab Week', category: 'creative', icon: '🎨', desc: 'Experimental design projects and innovation challenges. Where new ideas are tested publicly.', energy: 'creative' },
+              { name: 'Community Build Week', category: 'creator_economy', icon: '🤝', desc: 'Collaborative content between otherwise competing creators. Forced proximity events.', energy: 'wholesome' },
+              { name: 'The Great Glow-Up Challenge', category: 'beauty', icon: '✨', desc: 'Dramatic transformation challenge. Before and after content that goes viral.', energy: 'aspirational' },
+              { name: 'Creator Charity Week', category: 'creator_economy', icon: '💝', desc: 'Creators raise money for causes. Reputation washing meets genuine impact.', energy: 'feel-good' },
+              { name: 'Midnight Music Festival', category: 'music', icon: '🎵', desc: 'Late-night music and performance event. Unexpected collabs happen after midnight.', energy: 'electric' },
+              { name: 'Virtual Travel Festival', category: 'lifestyle', icon: '✈️', desc: 'Digital travel content — who can make home feel like elsewhere.', energy: 'escapist' },
+              { name: 'Artist Residency Month', category: 'creative', icon: '🖼️', desc: 'Creators slow down and make something intentional. The antidote to the content grind.', energy: 'reflective' },
+              { name: 'Creator Talent Show', category: 'creator_economy', icon: '🎤', desc: 'Hidden talents revealed. Singers, dancers, comedians — the audience discovers new sides.', energy: 'surprising' },
+            ].map(template => {
+              const catColors = {
+                fashion: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
+                beauty: { bg: '#fce7f3', border: '#ec4899', text: '#9d174d' },
+                creator_economy: { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },
+                creative: { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3' },
+                music: { bg: '#fae8ff', border: '#a855f7', text: '#6b21a8' },
+                lifestyle: { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
+              };
+              const cc = catColors[template.category] || catColors.creator_economy;
+
+              return (
+                <div key={template.name} style={{ background: '#fff', border: `1px solid ${cc.border}30`, borderLeft: `4px solid ${cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 20 }}>{template.icon}</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#2C2C2C' }}>{template.name}</div>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: cc.bg, color: cc.text, fontWeight: 600 }}>{template.category.replace(/_/g, ' ')}</span>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12, color: '#666', margin: '0 0 10px', lineHeight: 1.5 }}>{template.desc}</p>
+                  <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+                    <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setToast(`🎭 Creating "${template.name}" — finding host and venue...`);
+                      try {
+                        // Create a calendar event from this template, then auto-spawn
+                        const calRes = await api.post('/api/v1/calendar/events', {
+                          title: template.name,
+                          event_type: 'lalaverse_cultural',
+                          cultural_category: template.category,
+                          severity_level: 5,
+                          what_world_knows: template.desc,
+                          is_micro_event: true,
+                          visibility: 'public',
+                          start_datetime: new Date().toISOString(),
+                        });
+                        const calEvent = calRes.data?.event || calRes.data;
+                        if (calEvent?.id) {
+                          const spawnRes = await api.post(`/api/v1/calendar/events/${calEvent.id}/auto-spawn`, {
+                            show_id: showId, event_count: 1, max_guests: 6,
+                          });
+                          if (spawnRes.data.success) {
+                            const created = spawnRes.data.data.events?.[0];
+                            setToast(`✅ "${created?.name || template.name}" created with host and guest list! Check Events Library.`);
+                            loadData();
+                          } else {
+                            setToast('Event created but auto-spawn failed. Check Events Library.');
+                          }
+                        }
+                      } catch (err) {
+                        setToast('❌ Failed: ' + (err.response?.data?.error || err.message));
+                      }
+                      setTimeout(() => setToast(null), 5000);
+                    }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
+                  >
+                    🎭 Create This Event
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
@@ -1532,11 +1668,40 @@ The revised event should feel like a completely different experience from the si
                 </div>
               )}
 
-              {/* Venue & Location — combined picker */}
+              {/* Venue & Location — WorldLocation picker + scene set */}
               <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
                 <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Venue & Location</label>
 
-                {/* Venue name + address */}
+                {/* WorldLocation venue picker — auto-fills name + address */}
+                <div style={{ marginBottom: 8 }}>
+                  <select
+                    value={eventForm.venue_location_id || ''}
+                    onChange={e => {
+                      const locId = e.target.value || null;
+                      const loc = worldLocations.find(l => l.id === locId);
+                      const addr = loc ? [loc.street_address, loc.district, loc.city].filter(Boolean).join(', ') : '';
+                      setEventForm(p => ({
+                        ...p,
+                        venue_location_id: locId,
+                        venue_name: loc?.name || p.venue_name || '',
+                        venue_address: addr || p.venue_address || '',
+                        location_hint: addr || loc?.name || p.location_hint || '',
+                      }));
+                    }}
+                    style={{ ...S.sel, width: '100%', marginBottom: 6 }}
+                  >
+                    <option value="">— Choose a venue from World Locations —</option>
+                    {worldLocations.filter(l => l.location_type === 'venue' || l.venue_type).map(l => (
+                      <option key={l.id} value={l.id}>🏪 {l.name}{l.venue_type ? ` (${l.venue_type.replace(/_/g, ' ')})` : ''}{l.district ? ` — ${l.district}` : ''}</option>
+                    ))}
+                    <option disabled>──── Other locations ────</option>
+                    {worldLocations.filter(l => l.location_type !== 'venue' && !l.venue_type).map(l => (
+                      <option key={l.id} value={l.id}>📍 {l.name} ({l.location_type})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Venue name + address (editable, auto-filled from location) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                   <input
                     value={eventForm.venue_name || ''}
@@ -1568,11 +1733,14 @@ The revised event should feel like a completely different experience from the si
                   />
                 </div>
 
-                {/* Scene set picker */}
+                {/* Scene set picker for visual representation */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <select value={eventForm.scene_set_id || ''} onChange={e => setEventForm(p => ({ ...p, scene_set_id: e.target.value || null }))} style={{ ...S.sel, flex: 1, minWidth: 200 }}>
                     <option value="">— Scene Set (visual) —</option>
-                    {sceneSets.filter(ss => ss.scene_type === 'EVENT_LOCATION' || ss.base_still_url).map(ss => (
+                    {sceneSets.filter(ss => ss.scene_type === 'EVENT_LOCATION').map(ss => (
+                      <option key={ss.id} value={ss.id}>🎬 {ss.name} (EVENT)</option>
+                    ))}
+                    {sceneSets.filter(ss => ss.scene_type !== 'EVENT_LOCATION' && ss.base_still_url).map(ss => (
                       <option key={ss.id} value={ss.id}>📍 {ss.name} ({ss.scene_type?.replace(/_/g, ' ')})</option>
                     ))}
                   </select>

@@ -282,38 +282,57 @@ async function buildInvitationContent(event) {
     : null;
 
   // Claude writes the invitation prose
+  // Pull automation data if available (from auto-spawn)
+  const automation = event.canon_consequences?.automation || {};
+  const hostHandle = automation.host_handle || '';
+  const hostDisplayName = automation.host_display_name || event.host || 'The Host';
+  const venueName = event.venue_name || automation.venue_name || '';
+  const venueAddress = event.venue_address || automation.venue_address || event.location_hint || 'an exclusive venue';
+  const eventDate = event.event_date || '';
+  const eventTime = event.event_time || '';
+  const guestProfiles = automation.guest_profiles || [];
+  const guestNames = guestProfiles.slice(0, 3).map(g => g.display_name || g.handle).join(', ');
+
   const prompt = `You are writing a luxury invitation letter for a fashion life simulator show.
 
 The invitation will be printed on a beautiful card and shown on screen. It must read like a real, elegant letter written by a person — not a form, not a template, not labeled fields.
 
 EVENT DETAILS:
 Name: ${event.name}
-Host: ${event.host || 'The Host'}
+Host: ${hostDisplayName}${hostHandle ? ` (${hostHandle})` : ''}
 Brand: ${event.host_brand || ''}
-Location: ${event.location_hint || 'an exclusive venue'}
+Venue: ${venueName || 'an exclusive venue'}
+Address: ${venueAddress}
+Date: ${eventDate || 'TBD'}
+Time: ${eventTime || 'Evening'}
 Dress Code: ${event.dress_code || 'elegant'}
 Style Keywords: ${(event.dress_code_keywords || []).join(', ')}
 Investment: ${investmentText}
 Guest: ${allowsGuest ? 'Plus one is welcome' : 'Lala only — no guests'}
 ${deliverableText ? `Deliverable: ${deliverableText}` : ''}
+Notable Guests: ${guestNames || 'select attendees'}
 Atmosphere/Description: ${event.description || event.narrative_stakes || ''}
 Prestige Level: ${event.prestige || 5}/10
 Mood: ${event.mood || 'aspirational'}
 
-Write the invitation as THREE parts. Return ONLY these three parts, nothing else:
+Write the invitation as FOUR parts. Return ONLY these parts, nothing else:
 
 PART 1 — OPENING (1-2 sentences, 20-35 words):
 A beautiful, evocative opening that sets the scene and makes Lala feel chosen and special. No "You are cordially invited" cliché. Make it feel personal and specific to this event's atmosphere.
 
-PART 2 — BODY (2-4 sentences, 40-70 words):
-Written as flowing prose — weave in the location, what to expect, the dress code, the investment, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. Mention the cost naturally ("Your investment for the afternoon is X coins" or "This gathering is complimentary"). If a guest is allowed, mention it warmly. If there's a deliverable, hint at it elegantly.
+PART 2 — BODY (3-5 sentences, 50-80 words):
+Written as flowing prose — weave in the venue name and address, the date and time, what to expect, the dress code, the investment, and the guest policy as natural sentences. Do NOT use labels or bullet points. It should read like a person wrote it. Mention the cost naturally. If a guest is allowed, mention it warmly. If there's a deliverable, hint at it elegantly. If notable guests are attending, mention 1-2 names casually.
 
-PART 3 — CLOSING LINE (1 sentence, under 15 words):
+PART 3 — SOCIAL CTA (1 sentence, under 20 words):
+A social media call-to-action: what hashtag to use, tagging the host, sharing expectations. Keep it stylish.
+
+PART 4 — CLOSING LINE (1 sentence, under 15 words):
 An elegant closing that feels warm and anticipatory.
 
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS (include the labels so I can parse):
 OPENING: [your opening text]
 BODY: [your body text]
+SOCIAL: [your social CTA]
 CLOSING: [your closing line]`;
 
   let opening = '';
@@ -331,11 +350,14 @@ CLOSING: [your closing line]`;
     const text = response.content[0]?.text || '';
 
     const openingMatch = text.match(/OPENING:\s*(.+?)(?=BODY:|$)/s);
-    const bodyMatch    = text.match(/BODY:\s*(.+?)(?=CLOSING:|$)/s);
+    const bodyMatch    = text.match(/BODY:\s*(.+?)(?=SOCIAL:|CLOSING:|$)/s);
+    const socialMatch  = text.match(/SOCIAL:\s*(.+?)(?=CLOSING:|$)/s);
     const closingMatch = text.match(/CLOSING:\s*(.+?)$/s);
 
     opening = openingMatch?.[1]?.trim() || '';
     body    = bodyMatch?.[1]?.trim()    || '';
+    const socialCta = socialMatch?.[1]?.trim() || '';
+    if (socialCta) body = body + '\n\n' + socialCta;
     closing = closingMatch?.[1]?.trim() || closing;
 
     console.log(`[InviteComposite] Claude wrote invitation prose for: ${event.name}`);
