@@ -3120,7 +3120,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
     try {
       response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 32000,
+        max_tokens: 16000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       });
@@ -3131,7 +3131,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
         await new Promise(r => setTimeout(r, 2000));
         response = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
-          max_tokens: 32000,
+          max_tokens: 16000,
           system: systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
         });
@@ -3369,7 +3369,7 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
     try {
       const stream = anthropic.messages.stream({
         model: 'claude-sonnet-4-6',
-        max_tokens: 32000,
+        max_tokens: 16000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       });
@@ -3389,7 +3389,7 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
 
         const retryStream = anthropic.messages.stream({
           model: 'claude-sonnet-4-6',
-          max_tokens: 32000,
+          max_tokens: 16000,
           system: systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
         });

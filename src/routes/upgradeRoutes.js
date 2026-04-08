@@ -585,7 +585,7 @@ router.post('/tech-knowledge/ingest-document', optionalAuth, async (req, res) =>
 
   try {
     const response = await client.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: TECH_EXTRACTION_SYSTEM,
       messages: [{
@@ -625,7 +625,7 @@ router.post('/tech-knowledge/extract-conversation', optionalAuth, async (req, re
 
   try {
     const response = await client.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3000,
       system: TECH_EXTRACTION_SYSTEM,
       messages: [{
