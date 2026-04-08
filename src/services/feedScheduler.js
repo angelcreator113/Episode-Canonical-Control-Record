@@ -488,11 +488,9 @@ function sanitizeEnum(value, validSet, fallback) {
 
 /**
  * Call Claude to generate a full profile from a spark, then save it.
+ * Uses a compact prompt optimized for batch generation speed.
  */
 async function generateAndSaveProfile(db, spark, layer) {
-  // Build the generation prompt (importing the shared builder)
-  const { buildGenerationPrompt } = require('../routes/socialProfileRoutes');
-
   const characterContext = layer === 'lalaverse'
     ? {
         name: 'Lala',
@@ -511,22 +509,55 @@ async function generateAndSaveProfile(db, spark, layer) {
         detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
       };
 
-  let prompt = buildGenerationPrompt(
-    spark.handle, spark.platform, spark.vibe_sentence,
-    characterContext, spark.advanced_context || null,
-  );
+  // Compact prompt for batch generation — ~60% smaller than the full buildGenerationPrompt
+  const ctx = characterContext;
+  const adv = spark.advanced_context || {};
+  const advHints = Object.entries(adv).filter(([,v])=>v).map(([k,v])=>`${k.replace('_hint','')}: ${v}`).join(', ');
 
-  if (layer === 'lalaverse' && spark.city) {
-    prompt += `\n\nLALAVERSE CONTEXT:
-This creator lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}
-Generate a profile that feels native to that city's creator culture.
-Lala's relationship to this creator: ${spark.lala_relationship || 'mutual_unaware'}.
-Career position relative to Lala: ${spark.career_pressure || 'level'}.
-Do not reference JustAWoman or the real world in any generated content.
-Lala does not know she was built. The world she lives in feels complete and self-contained.`;
-  }
+  let prompt = `Generate a social media creator profile as JSON for a literary fiction novel.
 
-  const response = await callClaude(prompt, { maxTokens: 6000 });
+PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
+
+CREATOR: ${spark.handle} on ${spark.platform}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
+${layer === 'lalaverse' && spark.city ? `\nLALAVERSE: Lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}
+
+Return ONLY valid JSON with these fields:
+{
+  "display_name": "name on platform",
+  "follower_tier": "micro|mid|macro|mega",
+  "follower_count_approx": "e.g. 47k",
+  "content_category": "primary category",
+  "archetype": "polished_curator|messy_transparent|soft_life|explicitly_paid|overnight_rise|cautionary|the_peer|the_watcher|chaos_creator|community_builder",
+  "content_persona": "2 sentences: what they show the world",
+  "real_signal": "2 sentences: what leaks through the performance",
+  "posting_voice": "How they write. Give 1 example caption.",
+  "comment_energy": "What their comments feel like",
+  "parasocial_function": "What watching this creator does to ${ctx.name}",
+  "emotional_activation": "One phrase: the emotional cocktail",
+  "watch_reason": "Why ${ctx.name} can't stop watching",
+  "what_it_costs_her": "What watching takes from ${ctx.name}",
+  "current_trajectory": "rising|plateauing|unraveling|pivoting|silent|viral_moment",
+  "trajectory_detail": "What's happening now — be specific",
+  "geographic_base": "City, State/Region",
+  "geographic_cluster": "e.g. Atlanta beauty scene",
+  "age_range": "e.g. mid-20s",
+  "relationship_status": "Be specific and messy",
+  "post_frequency": "e.g. 3-4x/day",
+  "engagement_rate": "e.g. 4.2%",
+  "platform_metrics": { "avg_views": "", "avg_likes": "", "avg_comments": "" },
+  "aesthetic_dna": { "visual_style": "", "vibe_tags": ["tag1","tag2"] },
+  "revenue_streams": ["source1","source2"],
+  "known_associates": [{"handle":"@someone","relationship_type":"collab|rival|ex","drama_level":5,"description":"brief"}],
+  "adult_content_present": false,
+  "pinned_post": "Their most visible post — write the actual text",
+  "sample_captions": ["caption1","caption2","caption3"],
+  "sample_comments": ["fan comment","critic comment"],
+  "moment_log": [{"moment_type":"post|live|controversy","description":"what happened","protagonist_reaction":"internal response","lala_seed":false}],
+  "lala_relevance_score": 0-10,
+  "lala_relevance_reason": "Why they matter to ${ctx.name}"
+}`;
+
+  const response = await callClaude(prompt, { maxTokens: 3000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
