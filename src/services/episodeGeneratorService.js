@@ -222,10 +222,11 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
       const row = await ScenePlan.create({
         episode_id: episode.id,
         beat_number: beat.beat,
-        beat_label: beat.label,
+        beat_name: beat.label,
         emotional_intent: beat.emotional_intent,
         scene_set_id: sceneSetId,
-        description: beat.description,
+        scene_context: beat.description,
+        sort_order: beat.beat,
         locked: false,
         ai_suggested: true,
       });
