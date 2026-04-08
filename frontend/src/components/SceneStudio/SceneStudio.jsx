@@ -1099,6 +1099,15 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     return state.depthMapUrl;
   }, [state.depthMapUrl, state.contextType, state.contextId, state.activeAngleId]);
 
+  // Filter objects by active angle for scene sets.
+  // Show objects that are global (no angle) OR belong to the active angle.
+  const angleFilteredObjects = useMemo(() => {
+    if (state.contextType !== 'sceneSet' || !state.activeAngleId) return state.objects;
+    return state.objects.filter(
+      (o) => !o.sceneAngleId || o.sceneAngleId === state.activeAngleId
+    );
+  }, [state.objects, state.contextType, state.activeAngleId]);
+
   const rawTitle = state.contextType === 'scene'
     ? state.sceneData?.title || ''
     : state.sceneSetData?.name || '';
@@ -1873,7 +1882,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               canvasHeight={canvasHeight}
               onAddAsset={state.addObject}
               onAddObject={state.addObject}
-              objects={state.objects}
+              objects={angleFilteredObjects}
               selectedIds={state.selectedIds}
               onSelect={state.selectObject}
               onToggleVisibility={state.toggleVisibility}
@@ -1913,7 +1922,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
             backgroundUrl={backgroundUrl}
-            objects={state.objects}
+            objects={angleFilteredObjects}
             selectedIds={state.selectedIds}
             activeTool={state.activeTool}
             zoom={state.canvasSettings.zoom}
@@ -2012,7 +2021,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         {/* Right Panel */}
         <div className={`scene-studio-right-panel ${mobilePanel === 'right' ? 'mobile-open' : ''}`}>
           <InspectorPanel
-            objects={state.objects}
+            objects={angleFilteredObjects}
             selectedIds={state.selectedIds}
             canvasSettings={state.canvasSettings}
             variantGroups={state.variantGroups}

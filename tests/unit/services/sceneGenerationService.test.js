@@ -142,12 +142,12 @@ describe('SceneGenerationService', () => {
   describe('buildPrompt', () => {
     it('should include the LALAVERSE visual anchor', () => {
       const result = buildPrompt(makeSceneSet());
-      expect(result).toContain('Final Fantasy softness');
+      expect(result).toContain('Pinterest-worthy feminine aesthetic');
     });
 
     it('should include the scene set name as LOCATION', () => {
       const result = buildPrompt(makeSceneSet({ name: 'Grand Foyer' }));
-      expect(result).toContain('LOCATION: Grand Foyer.');
+      expect(result).toContain('Grand Foyer');
     });
 
     it('should include the canonical description', () => {
@@ -162,20 +162,20 @@ describe('SceneGenerationService', () => {
 
     it('should default to WIDE when no angle label provided', () => {
       const result = buildPrompt(makeSceneSet({ canonical_description: '' }));
-      expect(result).toContain('CAMERA:');
+      expect(result).toContain('Wide establishing shot');
       expect(result).toContain('Wide establishing shot');
     });
 
     it('should default to WIDE for unknown angle labels', () => {
       const result = buildPrompt(makeSceneSet({ canonical_description: '' }), 'NONEXISTENT');
-      expect(result).toContain('CAMERA:');
+      expect(result).toContain('Wide establishing shot');
       expect(result).toContain('Wide establishing shot');
     });
 
     it('should use customCameraDirection when provided', () => {
       const custom = 'Low angle looking up at chandelier, dramatic perspective.';
       const result = buildPrompt(makeSceneSet(), 'WIDE', custom);
-      expect(result).toContain(`CAMERA: ${custom}`);
+      expect(result).toContain(custom);
       expect(result).not.toContain(ANGLE_MODIFIERS.WIDE);
     });
 
@@ -183,7 +183,7 @@ describe('SceneGenerationService', () => {
       // Use short description to avoid 1000 char truncation cutting off the suffix
       const result = buildPrompt(makeSceneSet({ canonical_description: '' }));
       expect(result).toContain('Photorealistic cinematic quality');
-      expect(result).toContain('No text');
+      expect(result).toContain('no text');
     });
 
     it('should collapse whitespace and newlines', () => {
@@ -195,12 +195,12 @@ describe('SceneGenerationService', () => {
       expect(result).not.toMatch(/\s{2,}/);
     });
 
-    it('should enforce 1000 character limit', () => {
+    it('should enforce 3500 character limit', () => {
       const sceneSet = makeSceneSet({
         canonical_description: 'A'.repeat(500),
       });
       const result = buildPrompt(sceneSet);
-      expect(result.length).toBeLessThanOrEqual(1000);
+      expect(result.length).toBeLessThanOrEqual(3500);
     });
 
     it('should append ellipsis when truncated', () => {
@@ -208,19 +208,17 @@ describe('SceneGenerationService', () => {
         canonical_description: 'A'.repeat(500),
       });
       const result = buildPrompt(sceneSet);
-      if (result.length === 1000) {
+      if (result.length === 3500) {
         expect(result).toMatch(/\.\.\.$/);
       }
     });
 
-    it('should truncate canonical_description to 350 chars', () => {
+    it('should include the full description', () => {
       const longDesc = 'B'.repeat(600);
       const sceneSet = makeSceneSet({ canonical_description: longDesc });
       const result = buildPrompt(sceneSet);
-      // The full 600-char description should not appear
-      expect(result).not.toContain(longDesc);
-      // But the first 350 chars should be present (before overall 1000 char truncation)
-      expect(result).toContain('B'.repeat(200));
+      // Full description should be present (no more 350 char slice)
+      expect(result).toContain(longDesc);
     });
 
     it('should handle missing canonical_description gracefully', () => {
@@ -234,17 +232,17 @@ describe('SceneGenerationService', () => {
       const sceneSet = makeSceneSet({ canonical_description: '' });
       const result = buildPrompt(sceneSet);
       expect(typeof result).toBe('string');
-      expect(result).toContain('LOCATION:');
+      expect(result).toContain('Empty room');
     });
 
     it('should produce valid prompts for every angle label', () => {
       const labels = Object.keys(ANGLE_MODIFIERS);
       labels.forEach((label) => {
         const result = buildPrompt(makeSceneSet(), label);
-        expect(result.length).toBeLessThanOrEqual(1000);
+        expect(result.length).toBeLessThanOrEqual(3500);
         expect(result.length).toBeGreaterThan(0);
-        // CAMERA section should start (may be truncated at 1000 char limit for long angle descriptions)
-        expect(result).toContain('CAMERA:');
+        // Each angle's modifier text should appear in the prompt
+        expect(result).toContain(ANGLE_MODIFIERS[label].slice(0, 20));
       });
     });
   });

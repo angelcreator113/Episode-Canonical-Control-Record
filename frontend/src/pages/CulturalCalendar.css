@@ -861,3 +861,20 @@
   .cc-hierarchy-grid { grid-template-columns: 1fr; }
   .cc-famous-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Create Event button in event cards */
+.cc-event-create-btn {
+  margin-top: 10px;
+  padding: 7px 14px;
+  background: #B8962E;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cc-event-create-btn:hover {
+  background: #9a7d26;
+}

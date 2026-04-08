@@ -281,19 +281,31 @@ module.exports = {
       const [sortField, sortDirection] = sort.split(':');
       const order = [[sortField || 'created_at', sortDirection || 'DESC']];
 
-      const { count, rows } = await WardrobeLibrary.findAndCountAll({
-        where,
-        limit: parseInt(limit),
-        offset,
-        order,
-        include: [
-          {
-            model: Show,
-            as: 'show',
-            attributes: ['id', 'name', 'icon', 'color'],
-          },
-        ],
-      });
+      let count, rows;
+      try {
+        ({ count, rows } = await WardrobeLibrary.findAndCountAll({
+          where,
+          limit: parseInt(limit),
+          offset,
+          order,
+          include: [
+            {
+              model: Show,
+              as: 'show',
+              attributes: ['id', 'name', 'icon', 'color'],
+              required: false,
+            },
+          ],
+        }));
+      } catch (includeErr) {
+        console.warn('Wardrobe library query with Show include failed, retrying without:', includeErr.message);
+        ({ count, rows } = await WardrobeLibrary.findAndCountAll({
+          where,
+          limit: parseInt(limit),
+          offset,
+          order,
+        }));
+      }
 
       res.json({
         success: true,

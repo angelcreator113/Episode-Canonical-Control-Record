@@ -205,6 +205,213 @@
   padding: 2px 7px;
 }
 
+/* ── Toolbar ─────────────────────────────────────── */
+.wl-toolbar {
+  margin-bottom: 20px;
+}
+
+.wl-search-wrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+.wl-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #999;
+}
+.wl-search {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 9px 12px 9px 34px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background: #fff;
+  outline: none;
+  box-sizing: border-box;
+}
+.wl-search:focus { border-color: #d4789a; }
+
+.wl-filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wl-filter-chip {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 4px 10px;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 20px;
+  background: #fff;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.wl-filter-chip:hover { border-color: #d4789a; color: #d4789a; }
+.wl-filter-chip.active { background: #d4789a; color: #fff; border-color: #d4789a; }
+
+/* ── Form extras ────────────────────────────────── */
+.wl-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.wl-form-section-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #B8962E;
+  margin: 12px 0 6px;
+}
+
+/* ── Card enhancements ──────────────────────────── */
+.wl-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #FAF7F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #B8962E;
+  flex-shrink: 0;
+}
+
+.wl-card-address {
+  font-size: 11px;
+  color: #888;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+}
+
+.wl-card-venue-details {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wl-tag {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  color: #666;
+}
+.wl-tag-vibe { background: #ede7f6; color: #5c3d8f; }
+.wl-tag-scene { background: #e8f5e9; color: #2e7d32; }
+.wl-tag-calendar { background: #fff3e0; color: #e65100; }
+.wl-tag-child { background: #e3f2fd; color: #1565c0; display: inline-flex; align-items: center; gap: 3px; }
+
+/* ── Sensory details (improved) ─────────────────── */
+.wl-card-sensory {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wl-sensory-item {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.wl-sensory-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #B8962E;
+  text-transform: uppercase;
+  min-width: 65px;
+  flex-shrink: 0;
+}
+.wl-sensory-value {
+  color: #666;
+}
+
+/* ── Scene set thumbnails ───────────────────────── */
+.wl-card-scenes { margin-top: 8px; }
+.wl-scene-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.wl-scene-thumb {
+  width: 48px;
+  height: 30px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #eee;
+}
+.wl-scene-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* ── Events ─────────────────────────────────────── */
+.wl-card-events, .wl-card-children {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+.wl-card-sub-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  color: #B8962E;
+  margin-bottom: 4px;
+}
+.wl-event-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.wl-event-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: #333;
+}
+.wl-event-date {
+  font-size: 10px;
+  color: #999;
+  font-family: 'DM Mono', monospace;
+}
+
+/* ── Sections ───────────────────────────────────── */
+.wl-section {
+  margin-bottom: 24px;
+}
+.wl-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee;
+}
+.wl-section-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #999;
+  background: #f0f0f0;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
 /* ── States ──────────────────────────────────────── */
 .wl-loading, .wl-empty {
   text-align: center;

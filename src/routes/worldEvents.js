@@ -44,6 +44,71 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
+    // Use WorldEvent model if available, fall back to raw SQL
+    if (models.WorldEvent) {
+      const where = { show_id: showId };
+      if (status) where.status = status;
+      if (event_type) where.event_type = event_type;
+
+      const validSorts = ['created_at', 'name', 'prestige', 'cost_coins', 'status'];
+      const sortCol = validSorts.includes(sort) ? sort : 'created_at';
+      const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+      const include = [];
+      // Include invitation asset URL
+      if (models.Asset) {
+        include.push({
+          model: models.Asset,
+          as: 'invitationAsset',
+          attributes: ['id', 's3_url_processed', 's3_url_raw'],
+          required: false,
+        });
+      }
+      // Include venue location
+      if (models.WorldLocation) {
+        include.push({
+          model: models.WorldLocation,
+          as: 'venue',
+          attributes: ['id', 'name', 'street_address', 'city', 'district', 'venue_type', 'location_type'],
+          required: false,
+        });
+      }
+      // Include scene set basic info
+      if (models.SceneSet) {
+        include.push({
+          model: models.SceneSet,
+          as: 'sceneSet',
+          attributes: ['id', 'name', 'base_still_url', 'scene_type'],
+          required: false,
+        });
+      }
+      // Include source calendar event
+      if (models.StoryCalendarEvent) {
+        include.push({
+          model: models.StoryCalendarEvent,
+          as: 'sourceCalendarEvent',
+          attributes: ['id', 'title', 'event_type', 'cultural_category', 'start_datetime'],
+          required: false,
+        });
+      }
+
+      const events = await models.WorldEvent.findAll({
+        where,
+        include,
+        order: [[sortCol, sortOrder]],
+      });
+
+      // Map invitation_url for backward compatibility
+      const mapped = events.map(e => {
+        const json = e.toJSON();
+        json.invitation_url = json.invitationAsset?.s3_url_processed || null;
+        return json;
+      });
+
+      return res.json({ success: true, events: mapped });
+    }
+
+    // Fallback: raw SQL (original behavior)
     let query = `SELECT e.*, a.s3_url_processed as invitation_url
       FROM world_events e
       LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
@@ -68,6 +133,9 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
 
     return res.json({ success: true, events });
   } catch (error) {
+    if (error.message?.includes('does not exist')) {
+      return res.json({ success: true, events: [], note: 'Table not yet created. Run migrations.' });
+    }
     console.error('List events error:', error);
     return res.status(500).json({ error: 'Failed to load events', message: error.message });
   }
@@ -96,6 +164,9 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
       is_paid = false, payment_amount = 0,
       requirements = {}, career_tier = 1,
       career_milestone, fail_consequence, success_unlock,
+      // New venue fields (stored in event even pre-migration)
+      venue_location_id, venue_name, venue_address, event_date, event_time,
+      guest_list, invitation_details, scene_set_id,
     } = req.body;
 
     if (!name) return res.status(400).json({ error: 'Event name is required' });
@@ -103,9 +174,66 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
+    // If venue_location_id provided, auto-populate venue details from WorldLocation
+    let resolvedVenueName = venue_name || null;
+    let resolvedVenueAddress = venue_address || null;
+    let resolvedSceneSetId = scene_set_id || null;
+    if (venue_location_id && models.WorldLocation) {
+      try {
+        const venue = await models.WorldLocation.findByPk(venue_location_id);
+        if (venue) {
+          if (!resolvedVenueName) resolvedVenueName = venue.name;
+          if (!resolvedVenueAddress) {
+            const parts = [venue.street_address, venue.district, venue.city].filter(Boolean);
+            resolvedVenueAddress = parts.length > 0 ? parts.join(', ') : null;
+          }
+          // Auto-link scene set from venue if not specified
+          if (!resolvedSceneSetId && models.SceneSet) {
+            const venueSceneSet = await models.SceneSet.findOne({
+              where: { world_location_id: venue_location_id },
+              attributes: ['id'],
+            });
+            if (venueSceneSet) resolvedSceneSetId = venueSceneSet.id;
+          }
+        }
+      } catch { /* non-blocking */ }
+    }
+
+    if (models.WorldEvent) {
+      const event = await models.WorldEvent.create({
+        show_id: showId,
+        season_id: season_id || null,
+        arc_id: arc_id || null,
+        name, event_type,
+        host: host || null,
+        host_brand: host_brand || null,
+        description: description || null,
+        prestige, cost_coins, strictness,
+        deadline_type, deadline_minutes: deadline_minutes || null,
+        dress_code: dress_code || null,
+        dress_code_keywords,
+        location_hint: location_hint || resolvedVenueAddress || null,
+        narrative_stakes: narrative_stakes || null,
+        canon_consequences, seeds_future_events,
+        overlay_template, required_ui_overlays,
+        browse_pool_bias, browse_pool_size,
+        rewards,
+        is_paid, payment_amount,
+        requirements, career_tier,
+        career_milestone: career_milestone || null,
+        fail_consequence: fail_consequence || null,
+        success_unlock: success_unlock || null,
+        scene_set_id: resolvedSceneSetId,
+        status: 'draft',
+      });
+
+      return res.status(201).json({ success: true, event: event.toJSON() });
+    }
+
+    // Fallback: raw SQL
     const id = uuidv4();
     await models.sequelize.query(
-      `INSERT INTO world_events 
+      `INSERT INTO world_events
         (id, show_id, season_id, arc_id, name, event_type, host, host_brand, description,
         prestige, cost_coins, strictness, deadline_type, deadline_minutes,
         dress_code, dress_code_keywords, location_hint, narrative_stakes,
@@ -113,7 +241,7 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
         overlay_template, required_ui_overlays, browse_pool_bias, browse_pool_size,
         rewards, is_paid, payment_amount, requirements, career_tier,
         career_milestone, fail_consequence, success_unlock,
-        status, created_at, updated_at)
+        scene_set_id, status, created_at, updated_at)
        VALUES
       (:id, :showId, :season_id, :arc_id, :name, :event_type, :host, :host_brand, :description,
         :prestige, :cost_coins, :strictness, :deadline_type, :deadline_minutes,
@@ -122,7 +250,7 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
         :overlay_template, :required_ui_overlays, :browse_pool_bias, :browse_pool_size,
         :rewards, :is_paid, :payment_amount, :requirements, :career_tier,
         :career_milestone, :fail_consequence, :success_unlock,
-        'draft', NOW(), NOW())`,
+        :scene_set_id, 'draft', NOW(), NOW())`,
       {
         replacements: {
           id, showId,
@@ -136,21 +264,21 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
           deadline_type, deadline_minutes: deadline_minutes || null,
           dress_code: dress_code || null,
           dress_code_keywords: JSON.stringify(dress_code_keywords),
-          location_hint: location_hint || null,
+          location_hint: location_hint || resolvedVenueAddress || null,
           narrative_stakes: narrative_stakes || null,
           canon_consequences: JSON.stringify(canon_consequences),
           seeds_future_events: JSON.stringify(seeds_future_events),
-          overlay_template, 
+          overlay_template,
           required_ui_overlays: JSON.stringify(required_ui_overlays),
           browse_pool_bias, browse_pool_size,
           rewards: JSON.stringify(rewards),
-          is_paid: is_paid,
-          payment_amount: payment_amount,
+          is_paid, payment_amount,
           requirements: JSON.stringify(requirements),
-          career_tier: career_tier,
+          career_tier,
           career_milestone: career_milestone || null,
           fail_consequence: fail_consequence || null,
           success_unlock: success_unlock || null,
+          scene_set_id: resolvedSceneSetId,
         },
       }
     );
@@ -198,7 +326,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'season_id', 'arc_id',
       'is_paid', 'payment_amount', 'requirements', 'career_tier',
       'career_milestone', 'fail_consequence', 'success_unlock',
-      'scene_set_id',
+      'scene_set_id', 'source_calendar_event_id',
+      'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
+      'guest_list', 'invitation_details',
       'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
     ];
     const requiredStringFields = new Set(['name', 'event_type', 'status']);
@@ -427,7 +557,6 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
     );
 
     // If this event has an approved invitation, stamp the episode_id on the asset
-    // so it appears in the episode's Assets tab
     if (event.invitation_asset_id) {
       await models.sequelize.query(
         `UPDATE assets SET episode_id = :episodeId, asset_scope = 'EPISODE', updated_at = NOW()
@@ -436,12 +565,58 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
       );
     }
 
+    // Auto-link episode to event's scene set if the event has one
+    let sceneSetLinked = false;
+    if (event.scene_set_id) {
+      try {
+        // Link the scene set to this episode via scene_set_episodes junction table
+        await models.sequelize.query(
+          `INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, created_at, updated_at)
+           VALUES (gen_random_uuid(), :sceneSetId, :episodeId, NOW(), NOW())
+           ON CONFLICT (scene_set_id, episode_id) WHERE deleted_at IS NULL DO NOTHING`,
+          { replacements: { sceneSetId: event.scene_set_id, episodeId: episode_id } }
+        );
+        sceneSetLinked = true;
+      } catch (ssErr) {
+        console.warn('Failed to auto-link scene set to episode:', ssErr.message);
+      }
+    }
+
+    // Auto-match scene set from location_hint via world_locations if no scene_set_id
+    if (!event.scene_set_id && event.location_hint) {
+      try {
+        const [matchingSets] = await models.sequelize.query(
+          `SELECT ss.id FROM scene_sets ss
+           JOIN world_locations wl ON wl.id = ss.world_location_id
+           WHERE wl.name ILIKE :hint AND wl.deleted_at IS NULL AND ss.deleted_at IS NULL
+           LIMIT 1`,
+          { replacements: { hint: `%${event.location_hint.split(',')[0].trim()}%` } }
+        );
+        if (matchingSets.length > 0) {
+          await models.sequelize.query(
+            `UPDATE world_events SET scene_set_id = :ssId, updated_at = NOW() WHERE id = :eventId`,
+            { replacements: { ssId: matchingSets[0].id, eventId } }
+          );
+          await models.sequelize.query(
+            `INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, created_at, updated_at)
+             VALUES (gen_random_uuid(), :sceneSetId, :episodeId, NOW(), NOW())
+             ON CONFLICT (scene_set_id, episode_id) WHERE deleted_at IS NULL DO NOTHING`,
+            { replacements: { sceneSetId: matchingSets[0].id, episodeId: episode_id } }
+          );
+          sceneSetLinked = true;
+        }
+      } catch (locErr) {
+        console.warn('Failed to auto-match scene set from location:', locErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       event_tag: eventTag,
       location_tag: locationTag || null,
+      scene_set_linked: sceneSetLinked,
       episode_id,
-      message: `Event "${event.name}" injected into episode script.`,
+      message: `Event "${event.name}" injected into episode script.${sceneSetLinked ? ' Scene set auto-linked.' : ''}`,
     });
   } catch (error) {
     console.error('Inject event error:', error);
@@ -649,7 +824,17 @@ router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), opti
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
-      system: `You are a TV show producer for "Before Lala", a memoir-style fashion reality show. You help diversify events across episodes to create compelling variety and narrative tension.
+      system: `You are a TV show producer for "Styling Adventures with Lala", a narrative-driven luxury fashion life simulator set in the LalaVerse.
+
+SHOW CONTEXT:
+- Lala is a luxury fashion creator and social media influencer building her career
+- She navigates industry events, brand collaborations, fashion shows, and creator culture
+- The show is about building a social media fashion career — NOT family drama
+- Lala does NOT have a sister. She is a solo creator
+- Event types: industry galas, press days, brand collaborations, fashion shows, cocktail evenings, editorial shoots, awards ceremonies, charity galas, launch events
+- 4 event categories: industry (primary), dating, family, social_drama
+- Industry events should dominate (at least 50% of all events)
+- Family/dating events should create tension WITH her career, not replace it
 
 Return ONLY valid JSON - an array of suggestion objects.`,
       messages: [{

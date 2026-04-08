@@ -8,124 +8,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
-
-const API = '/api/v1/social-profiles';
-
-// ── Prime Studios Design Tokens ────────────────────────────────────────
-const C = {
-  pink:       '#d4789a',
-  pinkLight:  '#fce8f0',
-  pinkMid:    '#f0b8cc',
-  blue:       '#7ab3d4',
-  blueLight:  '#e8f3fa',
-  lavender:   '#a889c8',
-  lavLight:   '#ede6f7',
-  ink:        '#1a1625',
-  inkMid:     '#4a3f5c',
-  inkLight:   '#7a6e8a',
-  surface:    '#ffffff',
-  surfaceAlt: '#faf8fc',
-  border:     '#ede8f5',
-  shadow:     '0 2px 16px rgba(168,137,200,0.10)',
-  shadowMd:   '0 6px 32px rgba(168,137,200,0.15)',
-  radius:     '12px',
-  radiusSm:   '8px',
-  font:       "'DM Sans', 'Segoe UI', sans-serif",
-};
-
-const PLATFORMS = [
-  { value:'instagram', label:'Instagram' },
-  { value:'tiktok',   label:'TikTok' },
-  { value:'youtube',  label:'YouTube' },
-  { value:'twitter',  label:'Twitter / X' },
-  { value:'onlyfans', label:'OnlyFans' },
-  { value:'twitch',   label:'Twitch' },
-  { value:'substack', label:'Substack' },
-  { value:'multi',    label:'Multi-Platform' },
-];
-
-const ARCHETYPE_LABELS = {
-  polished_curator:  'Polished Curator',
-  messy_transparent: 'Messy Transparent',
-  soft_life:         'Soft Life',
-  explicitly_paid:   'Explicitly Paid',
-  overnight_rise:    'Overnight Rise',
-  cautionary:        'Cautionary',
-  the_peer:          'The Peer',
-  the_watcher:       'The Watcher',
-  chaos_creator:     'Chaos Creator',
-  community_builder: 'Community Builder',
-};
-
-const STATUS_LABELS = {
-  draft:'Draft', generated:'Generated', finalized:'Finalized', crossed:'Crossed', archived:'Archived',
-};
-
-const STATUS_COLORS = {
-  draft:     { bg:'#f0f0f5',     color:'#6b6a80' },
-  generated: { bg:C.blueLight,  color:'#1e4a7a' },
-  finalized: { bg:'#e8f5ee',    color:'#2d7a50' },
-  crossed:   { bg:C.lavLight,   color:'#5c2d8a' },
-  archived:  { bg:'#f0ede6',    color:'#6b6560' },
-};
-
-const FEED_STATE_CONFIG = {
-  rising:        { label:'Rising',        color:'#4a8a3c', bg:'#eef7ec' },
-  peaking:       { label:'Peaking',       color:'#8a6010', bg:'#fdf8e8' },
-  plateauing:    { label:'Plateauing',    color:'#6b6a80', bg:'#f0f0f5' },
-  controversial: { label:'Controversial', color:'#8a4410', bg:'#fdf0e8' },
-  cancelled:     { label:'Cancelled',     color:'#8a2020', bg:'#fde8e8' },
-  gone_dark:     { label:'Gone Dark',     color:'#444',    bg:'#eee' },
-  rebuilding:    { label:'Rebuilding',    color:'#1e4a7a', bg:C.blueLight },
-  crossed:       { label:'Crossed',       color:'#5c2d8a', bg:C.lavLight },
-};
-
-const LALAVERSE_CITIES = [
-  { value:'nova_prime',  label:'Nova Prime', desc:'Fashion & Aspiration' },
-  { value:'velour_city', label:'Velour City', desc:'Music & Culture' },
-  { value:'the_drift',   label:'The Drift', desc:'Underground & Anti-Algorithm' },
-  { value:'solenne',     label:'Solenne', desc:'Luxury & Soft Life' },
-  { value:'cascade_row', label:'Cascade Row', desc:'Commerce & Hustle' },
-];
-
-const LALA_RELATIONSHIPS = [
-  { value:'mutual_unaware', label:'Mutual Unaware' },
-  { value:'one_sided',      label:'Lala watches them' },
-  { value:'aware',          label:'Both aware' },
-  { value:'direct',         label:'Know each other' },
-  { value:'competitive',    label:'Active competition' },
-];
-
-const CAREER_PRESSURES = [
-  { value:'ahead',          label:'Ahead of Lala' },
-  { value:'level',          label:'Level with Lala' },
-  { value:'behind',         label:'Behind Lala' },
-  { value:'different_lane', label:'Different lane' },
-];
-
-const PROTAGONISTS = [
-  {
-    key:'justawoman', label:'Book 1 · JustAWoman', icon:'◈',
-    context: {
-      name:'JustAWoman',
-      description:'A Black woman, mother, wife, content creator in fashion/beauty/lifestyle.',
-      wound:'She does everything right and the right room has not found her yet.',
-      goal:'To be legendary.', audience:'Besties',
-      detail:'She posts for women. Men show up with their wallets and something in her responds.',
-    },
-  },
-  {
-    key:'lala', label:'Book 2 · Lala', icon:'✦',
-    context: {
-      name:'Lala',
-      description:'Born from JustAWoman\'s world but building her own. Young, sharp, digitally native.',
-      wound:'She inherited her mother\'s ambition but not her patience.',
-      goal:'To become something that can\'t be copied.',
-      audience:'The generation that learned to perform before they learned to feel',
-      detail:'The line between consuming and creating dissolved before she noticed.',
-    },
-  },
-];
+import ProfileCard from './feed/ProfileCard';
+import { DetailPanel, FeedStatePicker } from './feed/ProfileDetailPanel';
+import FeedViewContent, { Spinner } from './feed/FeedViews';
+import {
+  API, SCHED_API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
+  FEED_STATE_CONFIG, LALAVERSE_CITIES, LALA_RELATIONSHIPS, CAREER_PRESSURES,
+  PROTAGONISTS, lalaClass, fp, authHeaders,
+} from './feed/feedConstants';
 
 function FeedPagination({ page, totalPages, loading, setPage }) {
   if(loading||totalPages<=1)return null;
@@ -164,12 +54,10 @@ function ExportDropdown({ exporting, onExport }) {
   );
 }
 
-function lalaClass(score) { return score>=7?'high':score>=4?'mid':'low'; }
-function getToken() { return localStorage.getItem('authToken')||localStorage.getItem('token')||sessionStorage.getItem('token'); }
-function authHeaders() { const t=getToken(); return t?{Authorization:`Bearer ${t}`,'Content-Type':'application/json'}:{'Content-Type':'application/json'}; }
+// lalaClass, authHeaders imported from ./feed/feedConstants
 
 // ══════════════════════════════════════════════════════════════════════
-export default function SocialProfileGenerator({ embedded=false, worldTag }) {
+export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId }) {
   const [profiles,setProfiles]   = useState([]);
   const [selected,setSelected]   = useState(null);
   const [loading,setLoading]     = useState(false);
@@ -177,7 +65,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [error,setError]         = useState(null);
   const [filterStatus,setFilterStatus] = useState(null);
   const [view,setView]           = useState('feed');
-  const [protagonist,setProtagonist] = useState(PROTAGONISTS[0]);
+  const [protagonist,setProtagonist] = useState(defaultFeedLayer === 'lalaverse' ? PROTAGONISTS[1] : PROTAGONISTS[0]);
   const [page,setPage]           = useState(1);
   const [totalPages,setTotalPages] = useState(1);
   const [totalCount,setTotalCount] = useState(0);
@@ -216,8 +104,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   // Auto-Generate state
   const [autoGenCount,setAutoGenCount] = useState(5);
   const [autoGenRunning,setAutoGenRunning] = useState(false);
-  const [autoGenProgress,setAutoGenProgress] = useState(null);
+  // autoGenProgress removed — job banner handles all progress display via SSE
   const [showManualSpark,setShowManualSpark] = useState(false);
+  const [showAutoGenBar,setShowAutoGenBar] = useState(false);
   const [previewSparks,setPreviewSparks] = useState(null);
   const [previewLoading,setPreviewLoading] = useState(false);
   // Advanced Filters
@@ -241,7 +130,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   const [templates,setTemplates] = useState([]);
   const [templateName,setTemplateName] = useState('');
   // LalaVerse Feed layer
-  const [feedLayer,setFeedLayer] = useState('real_world');
+  const [feedLayer,setFeedLayer] = useState(defaultFeedLayer || 'real_world');
   const [lvCity,setLvCity]       = useState('');
   const [lvRelationship,setLvRelationship] = useState('mutual_unaware');
   const [lvPressure,setLvPressure] = useState('level');
@@ -298,22 +187,39 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     const es=new EventSource(`${API}/bulk/jobs/${jobId}/stream`);
     sseRef.current=es;
     es.addEventListener('connected',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,id:jobId}));}catch{}});
-    es.addEventListener('status',e=>{try{const d=JSON.parse(e.data);const job=d.job||d;const s=job.status||'pending';setActiveJob(p=>({...p,id:jobId,status:s,completed:job.completed??p?.completed??0,failed:job.failed??p?.failed??0,total:job.total??p?.total??0}));if(['completed','failed','cancelled'].includes(s)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}catch{}});
+    es.addEventListener('status',e=>{try{const d=JSON.parse(e.data);const job=d.job||d;let s=job.status||'pending';
+      // Detect stuck jobs: if status is still processing but error_message is set and no progress made, treat as failed
+      if(s==='processing'&&job.error_message&&(job.completed||0)===0&&(job.failed||0)===0){s='failed';}
+      setActiveJob(p=>({...p,id:jobId,status:s,completed:job.completed??p?.completed??0,failed:job.failed??p?.failed??0,total:job.total??p?.total??0,error_message:job.error_message||p?.error_message}));if(['completed','failed','cancelled'].includes(s)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}catch{}});
     es.addEventListener('started',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'processing'}));}catch{}});
     es.addEventListener('profile_generating',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,current:d.current,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('profile_complete',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,total:d.total,status:'processing'}));}catch{}});
     es.addEventListener('profile_failed',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing',lastError:d.error||p?.lastError}));}catch{}});
     es.addEventListener('cancelled',()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
     es.addEventListener('done',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch{}localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
-    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}}catch{}},3000);});
+    // Listen for job_error (custom named event from backend — NOT the built-in EventSource error)
+    es.addEventListener('job_error',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,status:'failed',error_message:d.error||'Unknown error'}));localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}catch{}});
+    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){
+      // Detect stuck: processing with error_message but 0 progress
+      const isStuck=d.job.status==='processing'&&d.job.error_message&&(d.job.completed||0)===0&&(d.job.failed||0)===0;
+      if(isStuck){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');loadProfiles();}
+      else{setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}
+    }}catch{}},3000);});
     // Safety-net: if still pending after 4s, poll REST to catch missed SSE events
     const pendingFallback=setTimeout(async()=>{try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job&&d.job.status!=='pending'){setActiveJob(prev=>{if(prev?.status==='pending')return{...prev,...d.job};return prev;});if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},4000);
-    const origClose=es.close.bind(es);es.close=()=>{clearTimeout(pendingFallback);origClose();};
+    // Safety-net: if stuck at 0 progress for 2 minutes, poll REST to detect dead jobs
+    const stuckFallback=setTimeout(async()=>{try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){if(['completed','failed','cancelled'].includes(d.job.status)){setActiveJob(d.job);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}else if((d.job.completed||0)===0&&(d.job.failed||0)===0&&d.job.error_message){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},120000);
+    const origClose=es.close.bind(es);es.close=()=>{clearTimeout(pendingFallback);clearTimeout(stuckFallback);origClose();};
   },[loadProfiles]);
 
   useEffect(()=>{
     const saved=localStorage.getItem('spg_active_job');
-    if(saved){fetch(`${API}/bulk/jobs/${saved}`,{headers:authHeaders()}).then(r=>r.json()).then(d=>{if(d.job){setActiveJob(d.job);if(!['completed','failed','cancelled'].includes(d.job.status))connectJobSSE(saved);else localStorage.removeItem('spg_active_job');}}).catch(()=>{});}
+    if(saved){fetch(`${API}/bulk/jobs/${saved}`,{headers:authHeaders()}).then(r=>r.json()).then(d=>{if(d.job){
+      // Detect stuck jobs on reconnect: processing with error_message but 0 progress
+      const isStuck=d.job.status==='processing'&&d.job.error_message&&(d.job.completed||0)===0&&(d.job.failed||0)===0;
+      if(isStuck){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');}
+      else{setActiveJob(d.job);if(!['completed','failed','cancelled'].includes(d.job.status))connectJobSSE(saved);else localStorage.removeItem('spg_active_job');}
+    }}).catch(()=>{});}
     return()=>{if(sseRef.current){sseRef.current.close();sseRef.current=null;}if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}if(searchTimer.current)clearTimeout(searchTimer.current);if(toastTimer.current)clearTimeout(toastTimer.current);};
   },[connectJobSSE]);
 
@@ -331,7 +237,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     try{
       const res=await fetch(`${API}/${profile.id}`,{headers:authHeaders()});
       if(res.ok){const d=await res.json();if(d.profile)setSelected(d.profile);}
-    }catch{}
+      else{showToast('Failed to load full profile details','error');}
+    }catch(err){showToast('Failed to load profile: '+err.message,'error');}
   };
 
   const changeFilter = s=>{setFilterStatus(s);setPage(1);setSelectedIds(new Set());};
@@ -348,7 +255,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     return allIds;
   };
   const runBulk = async(ids,endpoint)=>{const results=[];for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);const res=await fetch(`${API}/${endpoint}`,{method:'POST',headers:authHeaders(),body:JSON.stringify({ids:chunk})});const d=await res.json();if(!res.ok)throw new Error(d.error);results.push(d);}return results;};
-  const bulkOp = async(endpoint,confirmMsg,onDone)=>{const ids=await getBulkIds();if(!ids.length)return;if(!window.confirm(confirmMsg.replace('$n',selectAllPages?`all ${statusCounts.total}`:ids.length)))return;try{const r=await runBulk(ids,endpoint);onDone(r);setSelectedIds(new Set());setSelectAllPages(false);loadProfiles();}catch(err){setError(err.message);}};
+  const bulkOp = async(endpoint,confirmMsg,onDone)=>{const ids=await getBulkIds();if(!ids.length)return;if(!window.confirm(confirmMsg.replace('$n',selectAllPages?`all ${statusCounts.total}`:ids.length)))return;try{const r=await runBulk(ids,endpoint);onDone(r);setSelectedIds(new Set());setSelectAllPages(false);setPage(1);loadProfiles();}catch(err){setError(err.message);}};
 
   // ── Generate ───────────────────────────────────────────────────────
   const generateProfile = async()=>{
@@ -443,7 +350,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
   };
 
   // ── Feed Automation helpers ──────────────────────────────────────────
-  const SCHED_API = '/api/v1/feed-scheduler';
+  // SCHED_API imported from ./feed/feedConstants
   const schedSSERef = useRef(null);
 
   // Connect to scheduler SSE when automation tab is active
@@ -512,7 +419,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
   // ── Auto-Generate (background job — continues even if you leave the page) ──
   const runAutoGenerate = async ()=>{
-    setAutoGenRunning(true);setAutoGenProgress(null);setError(null);
+    setAutoGenRunning(true);setError(null);
     try{
       const res=await fetch(`${SCHED_API}/auto-generate-job`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:feedLayer,count:autoGenCount})});
       const data=await res.json();
@@ -620,7 +527,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
     }catch(err){setError(err.message);}
   };
 
-  const fp = p=>p?.full_profile||p||{};
+  // fp imported from ./feed/feedConstants
   const feedCap = feedLayer==='lalaverse'?200:443;
   // Use statusCounts.total (native layer only) for cap display; fallback to totalCount minus crossovers
   const nativeTotal = statusCounts.total != null ? statusCounts.total : Math.max(0, totalCount - crossoverCount);
@@ -657,8 +564,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </button>
           </div>
         </div>
-        {/* Feed layer switcher */}
-        <div className="spg-feed-switcher" style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
+        {/* Feed layer switcher — hidden when embedded with a locked layer */}
+        {!(embedded && defaultFeedLayer) && <div className="spg-feed-switcher" style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
           <button onClick={()=>{setFeedLayer('real_world');setPage(1);setProtagonist(PROTAGONISTS[0]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='real_world'?C.blue:'transparent',color:feedLayer==='real_world'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             JustAWoman's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='real_world'?`${stats.total}/${feedCap}`:''}</span>
@@ -667,7 +574,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             background:feedLayer==='lalaverse'?C.lavender:'transparent',color:feedLayer==='lalaverse'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             Lala's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='lalaverse'?`${nativeTotal}/${feedCap}`:''}</span>
           </button>
-        </div>
+        </div>}
 
         {/* Stats */}
         <div className="spg-stats-row" style={{display:'flex',gap:20,alignItems:'center',flexWrap:'wrap'}}>
@@ -740,12 +647,30 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 
       {/* ── Bulk Import View ─────────────────────────────────── */}
       {view==='bulk' && (
-        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);}} characterContext={protagonist.context} characterKey={protagonist.key} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
+        <FeedBulkImport onDone={()=>{setView('feed');setPage(1);}} characterContext={protagonist.context} characterKey={protagonist.key} feedLayer={feedLayer} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
       )}
 
       {view==='feed' && <>
         {/* ── Auto-Generate Bar ──────────────────────────────── */}
-        <div className="spg-autogen-bar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'16px 24px'}}>
+        <div className="spg-autogen-bar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:stats.total>0&&!activeJob?'0':'16px 24px'}}>
+          {/* Collapsed toggle when profiles exist and no active job */}
+          {stats.total>0&&!activeJob&&(
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 24px'}}>
+              <button onClick={()=>setShowAutoGenBar(s=>!s)} style={{background:'transparent',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:C.inkLight,padding:'4px 0'}}>
+                <span style={{transition:'transform 0.2s',display:'inline-block',transform:showAutoGenBar?'rotate(90deg)':'none'}}>▸</span>
+                {showAutoGenBar?'Hide':'More'} Options
+              </button>
+              {!showAutoGenBar&&<button onClick={()=>{setAutoGenCount(5);runAutoGenerate();}} disabled={autoGenRunning||!!activeJob||stats.total>=feedCap} style={{
+                padding:'6px 18px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,border:'none',
+                cursor:autoGenRunning||stats.total>=feedCap?'not-allowed':'pointer',
+                background:stats.total>=feedCap?C.border:C.lavender,color:stats.total>=feedCap?C.inkLight:'#fff',
+              }}>
+                {stats.total>=feedCap?'Cap Reached':'+ Generate 5'}
+              </button>}
+              <span style={{marginLeft:'auto',fontSize:11,color:stats.total>=feedCap?'#c0392b':C.inkLight}}>{stats.total}/{feedCap}</span>
+            </div>
+          )}
+          {(stats.total===0||activeJob||showAutoGenBar)&&<div style={{padding:stats.total>0&&!activeJob?'0 24px 16px':'0'}}>
           {/* Primary: Auto-Generate */}
           <div className="spg-autogen-row" style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
             <div style={{fontSize:12,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em'}}>
@@ -775,26 +700,6 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </button>
             <span style={{fontSize:11,color:C.inkLight,marginLeft:'auto'}}>AI generates handles, vibes, and full profiles automatically</span>
           </div>
-
-          {/* Auto-Gen Progress */}
-          {autoGenProgress && autoGenRunning && (
-            <div style={{marginTop:12,padding:14,background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                <span style={{fontSize:12,fontWeight:700,color:C.ink}}>Generating {autoGenProgress.current}/{autoGenProgress.total}…</span>
-                {autoGenProgress.spark?.handle && <span style={{fontSize:12,color:C.lavender,fontWeight:600}}>{autoGenProgress.spark.handle}</span>}
-              </div>
-              <div style={{height:6,borderRadius:3,background:C.border,overflow:'hidden'}}>
-                <div style={{height:'100%',borderRadius:3,background:`linear-gradient(90deg,${C.lavender},${C.pink})`,transition:'width 0.5s',width:`${autoGenProgress.total?(autoGenProgress.current/autoGenProgress.total)*100:0}%`}}/>
-              </div>
-              {autoGenProgress.created?.length>0&&(
-                <div style={{marginTop:8,display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {autoGenProgress.created.map((p,i)=>(
-                    <span key={i} style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#eef7ec',color:'#22c55e',fontWeight:600}}>{p.handle||p.display_name||`Profile #${i+1}`}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Spark Preview */}
           {previewSparks && !autoGenRunning && (
@@ -905,6 +810,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </div>
           )}
           {error && <div style={{color:C.pink,marginTop:8,fontSize:12}}>{error}</div>}
+        </div>}
         </div>
 
         {/* ── Content ─────────────────────────────────────────── */}
@@ -928,7 +834,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             </div>
             {/* View mode switcher */}
             <div className="spg-view-tabs" style={{display:'flex',gap:2,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:2,border:`1px solid ${C.border}`,marginLeft:8}}>
-              {[['grid','Grid'],['timeline','Timeline'],['follows','Follows'],['moments','Moments'],['dashboard','Dashboard'],['graph','Graph'],['templates','Templates'],['automation','Automation']].map(([k,l])=>(
+              {[['grid','Grid'],['timeline','Timeline'],['follows','Follows'],['moments','Moments'],['dashboard','Dashboard'],['graph','Graph'],['templates','Templates'],['automation','Automation']].filter(([k])=>{
+                // Progressive disclosure: hide advanced tabs until feed has enough profiles
+                if(stats.total<5&&['moments','dashboard','graph','templates'].includes(k))return false;
+                return true;
+              }).map(([k,l])=>(
                 <button key={k} onClick={()=>{setFeedView(k);if(k==='follows')loadFollowStats();if(k==='automation')loadAutoStatus();if(k==='dashboard')loadDiversity();if(k==='moments')loadMoments();if(k==='graph')loadSuggestions();if(k==='templates')loadTemplates();}} style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
                   background:feedView===k?C.lavender:'transparent',color:feedView===k?'#fff':C.inkLight,transition:'all 0.15s'}}>
                   {l}
@@ -1052,723 +962,63 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
             )}
             {loading && <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:40,gap:10,color:C.inkLight}}><Spinner/> Loading profiles…</div>}
             {!loading&&profiles.length===0 && (
-              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:60,gap:12,textAlign:'center'}}>
-                <div style={{fontSize:40,opacity:0.2}}>📱</div>
-                <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{search?'No matching creators':'No creators yet'}</div>
-                <div style={{fontSize:13,color:C.inkLight}}>{search?'Try a different search term':'Enter a handle, platform, and vibe above to generate a creator profile'}</div>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'60px 24px',gap:16,textAlign:'center',maxWidth:480,margin:'0 auto'}}>
+                <div style={{fontSize:48,opacity:0.15}}>📱</div>
+                {search ? (
+                  <>
+                    <div style={{fontSize:15,fontWeight:600,color:C.ink}}>No matching creators</div>
+                    <div style={{fontSize:13,color:C.inkLight}}>Try a different search term</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{fontSize:18,fontWeight:700,color:C.ink}}>
+                      {feedLayer==='lalaverse'?"Lala's Feed is empty":"JustAWoman's Feed is empty"}
+                    </div>
+                    <div style={{fontSize:13,color:C.inkMid,lineHeight:1.6}}>
+                      {feedLayer==='lalaverse'
+                        ?'Generate the parasocial creators that populate Lala\'s inherited digital world. The AI builds full profiles — handles, vibes, metrics, and narrative tension.'
+                        :'Generate the creators JustAWoman watches, follows, envies, and obsesses over. Each profile is a full parasocial character with metrics, voice, and story potential.'}
+                    </div>
+                    <button onClick={()=>{setAutoGenCount(5);runAutoGenerate();}} disabled={autoGenRunning||!!activeJob} style={{
+                      padding:'12px 32px',borderRadius:C.radiusSm,fontSize:14,fontWeight:700,border:'none',
+                      cursor:autoGenRunning||activeJob?'not-allowed':'pointer',
+                      background:autoGenRunning||activeJob?C.border:C.lavender,color:autoGenRunning||activeJob?C.inkLight:'#fff',
+                      display:'flex',alignItems:'center',gap:8,transition:'all 0.15s',
+                    }}>
+                      {autoGenRunning||activeJob?<><Spinner/> Generating…</>:'✦ Generate First 5 Creators'}
+                    </button>
+                    <div style={{fontSize:11,color:C.inkLight,marginTop:4}}>or use the Auto-Generate bar above for more options</div>
+                  </>
+                )}
               </div>
             )}
             {/* ── GRID VIEW ── */}
             {!loading&&profiles.length>0&&feedView==='grid' && (
               <div className="spg-card-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:16}}>
-                {profiles.map(p=>{
-                  const d=fp(p);
-                  const isChecked=selectAllPages||selectedIds.has(p.id);
-                  const isActive=selected?.id===p.id;
-                  const sc=p.current_state&&FEED_STATE_CONFIG[p.current_state];
-                  const stc=STATUS_COLORS[p.status]||STATUS_COLORS.draft;
-                  const score=p.lala_relevance_score??d.lala_relevance_score??0;
-                  const lc=lalaClass(score);
-                  return (
-                    <div key={p.id} onClick={()=>bulkMode?toggleSelect(p.id):selectProfile(selected?.id===p.id?null:p)}
-                      style={{background:C.surface,borderRadius:C.radius,border:`2px solid ${isActive?C.lavender:isChecked?C.lavender+'80':(feedLayer==='lalaverse'&&p.feed_layer==='real_world')?C.blue+'60':C.border}`,cursor:'pointer',overflow:'hidden',boxShadow:isActive?C.shadowMd:C.shadow,transition:'all 0.15s',position:'relative'}}>
-                      <div style={{height:3,background:(feedLayer==='lalaverse'&&p.feed_layer==='real_world')?`linear-gradient(90deg,${C.blue},${C.lavender})`:`linear-gradient(90deg,${C.pink},${C.lavender})`}}/>
-                      {bulkMode && (
-                        <div style={{position:'absolute',top:10,right:10,width:20,height:20,borderRadius:5,border:`2px solid ${isChecked?C.lavender:C.border}`,background:isChecked?C.lavender:C.surface,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700}}>
-                          {isChecked?'✓':''}
-                        </div>
-                      )}
-                      <div style={{padding:'12px 14px'}}>
-                        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:4,gap:6}}>
-                          <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{p.handle}</span>
-                          <div style={{display:'flex',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
-                            {sc&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10,background:sc.bg,color:sc.color}}>{sc.label}</span>}
-                            <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10,background:stc.bg,color:stc.color}}>{STATUS_LABELS[p.status]||p.status}</span>
-                          </div>
-                        </div>
-                        {(p.display_name||d.display_name)&&<div style={{fontSize:12,color:C.inkMid,marginBottom:2}}>{p.display_name||d.display_name}</div>}
-                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
-                          <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
-                          {(p.archetype||d.archetype)&&<span style={{fontSize:10,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
-                          {p.registry_character_id&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#eef0fb',color:'#6366f1'}} title="Linked to registry character">Registry</span>}
-                          {p.adult_content_present&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+</span>}
-                          {feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}} title="From JustAWoman's Feed — Lala follows this account">◈ Following</span>}
-                        </div>
-                        <div style={{fontSize:12,color:C.inkMid,lineHeight:1.5,marginBottom:8,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
-                          {p.content_persona||d.content_persona||p.vibe_sentence}
-                        </div>
-                        {(p.geographic_cluster||p.engagement_rate)&&(
-                          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
-                            {p.geographic_cluster&&<span style={{fontSize:10,color:C.inkLight}}>📍 {p.geographic_cluster}</span>}
-                            {p.engagement_rate&&<span style={{fontSize:10,color:C.inkLight}}>💬 {p.engagement_rate}</span>}
-                          </div>
-                        )}
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                          <span style={{fontSize:11,color:C.inkLight}}>{p.follower_count_approx||d.follower_count_approx||'—'}</span>
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            {p.followers?.length>0&&(
-                              <div style={{display:'flex',gap:3}}>
-                                {p.followers.map(f=>(
-                                  <span key={f.character_key} title={`${f.character_name} follows`} style={{fontSize:14,color:f.character_key==='justawoman'?C.blue:C.lavender}}>{f.character_key==='justawoman'?'◈':'✦'}</span>
-                                ))}
-                              </div>
-                            )}
-                            <div style={{display:'flex',alignItems:'center',gap:3}}>
-                              <div style={{width:40,height:3,borderRadius:2,background:C.border,overflow:'hidden'}}>
-                                <div style={{height:'100%',borderRadius:2,background:lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight,width:`${score*10}%`}}/>
-                              </div>
-                              <span style={{fontSize:10,fontWeight:700,color:lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight}}>✦{score}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {profiles.map(p=>(
+                  <ProfileCard key={p.id} profile={p} selected={selected} feedLayer={feedLayer}
+                    bulkMode={bulkMode} isChecked={selectAllPages||selectedIds.has(p.id)}
+                    onSelect={selectProfile} onToggle={toggleSelect}/>
+                ))}
               </div>
             )}
 
-            {/* ── TIMELINE VIEW — simulated social feed ── */}
-            {!loading&&profiles.length>0&&feedView==='timeline' && (
-              <div style={{maxWidth:560,margin:'0 auto',display:'flex',flexDirection:'column',gap:16,marginBottom:16}}>
-                {profiles.map(p=>{
-                  const d=fp(p);
-                  const captions=p.sample_captions||d.sample_captions||[];
-                  const comments=p.sample_comments||d.sample_comments||[];
-                  const pinned=p.pinned_post||d.pinned_post;
-                  const sc=p.current_state&&FEED_STATE_CONFIG[p.current_state];
-                  const score=p.lala_relevance_score??d.lala_relevance_score??0;
-                  return (
-                    <div key={p.id} style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,overflow:'hidden',boxShadow:C.shadow}}>
-                      {/* Post header */}
-                      <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,borderBottom:`1px solid ${C.border}`}}>
-                        <div style={{width:40,height:40,borderRadius:'50%',background:`linear-gradient(135deg,${C.pink},${C.lavender})`,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:14,fontWeight:700,flexShrink:0}}>
-                          {(p.handle||'').replace('@','').charAt(0).toUpperCase()}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>selectProfile(p)}>{p.display_name||d.display_name||p.handle}</span>
-                            {sc&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:sc.bg,color:sc.color}}>{sc.label}</span>}
-                          </div>
-                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {p.platform} · {p.follower_count_approx||d.follower_count_approx}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
-                        </div>
-                        <span style={{fontSize:10,fontWeight:700,color:score>=7?C.lavender:score>=4?C.blue:C.inkLight}}>✦{score}</span>
-                      </div>
-                      {/* Post body — pinned post or first caption */}
-                      <div style={{padding:'14px 16px'}}>
-                        <div style={{fontSize:13,color:C.ink,lineHeight:1.7,marginBottom:10,whiteSpace:'pre-wrap'}}>
-                          {pinned||captions[0]||p.vibe_sentence||''}
-                        </div>
-                        {/* Aesthetic tags */}
-                        {(d.aesthetic_dna?.vibe_tags||[]).length>0&&(
-                          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
-                            {(d.aesthetic_dna?.vibe_tags||[]).map((t,i)=>(
-                              <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:C.lavLight,color:C.lavender}}>#{t.replace(/\s/g,'')}</span>
-                            ))}
-                          </div>
-                        )}
-                        {/* Engagement mock */}
-                        <div style={{display:'flex',gap:16,fontSize:11,color:C.inkLight,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
-                          <span>{d.platform_metrics?.avg_likes||'—'} likes</span>
-                          <span>{d.platform_metrics?.avg_comments||'—'} comments</span>
-                          <span>{p.engagement_rate||d.engagement_rate||''}</span>
-                        </div>
-                      </div>
-                      {/* Comments preview */}
-                      {comments.length>0&&(
-                        <div style={{padding:'0 16px 12px'}}>
-                          {comments.slice(0,2).map((c,i)=>(
-                            <div key={i} style={{fontSize:12,color:C.inkMid,lineHeight:1.5,padding:'4px 0',borderTop:i===0?`1px solid ${C.border}`:'none'}}>
-                              <span style={{fontWeight:600,color:C.ink,marginRight:6}}>fan_{i+1}</span>{c}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {/* Additional captions (scrollable) */}
-                      {captions.length>1&&(
-                        <div style={{padding:'0 16px 8px'}}>
-                          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,marginBottom:4}}>More posts</div>
-                          {captions.slice(1,3).map((c,i)=>(
-                            <div key={i} style={{fontSize:12,color:C.inkMid,lineHeight:1.5,padding:'4px 0',borderTop:`1px solid ${C.border}`}}>{c}</div>
-                          ))}
-                        </div>
-                      )}
-                      {/* Moment log preview */}
-                      {(p.moment_log||d.moment_log||[]).length>0&&(
-                        <div style={{padding:'0 16px 8px'}}>
-                          <div style={{fontSize:10,fontWeight:700,color:C.inkLight,marginBottom:4}}>Key Moments</div>
-                          {(p.moment_log||d.moment_log||[]).slice(0,2).map((m,i)=>{
-                            const typeColors={controversy:'#ef4444',live:'#8b5cf6',post:'#3b82f6',collab:'#22c55e'};
-                            return(
-                              <div key={i} style={{fontSize:11,color:C.inkMid,padding:'3px 0',display:'flex',gap:6}}>
-                                <span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:`${typeColors[m.moment_type]||C.border}15`,color:typeColors[m.moment_type]||C.inkLight,flexShrink:0}}>{m.moment_type}</span>
-                                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.description}</span>
-                                {m.lala_seed&&<span style={{fontSize:8,fontWeight:700,color:C.lavender,flexShrink:0}}>SEED</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {/* Quick actions */}
-                      <div style={{padding:'8px 16px',borderTop:`1px solid ${C.border}`,display:'flex',gap:8}}>
-                        <button onClick={()=>selectProfile(p)} style={{fontSize:11,color:C.lavender,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>View Full Profile</button>
-                        <button onClick={()=>{loadSceneContext(p.id);selectProfile(p);setDetailTab('scene');}} style={{fontSize:11,color:C.blue,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Use in Scene</button>
-                        <button onClick={()=>saveAsTemplate(p.id)} style={{fontSize:11,color:C.pink,background:'none',border:'none',cursor:'pointer',fontWeight:600,marginLeft:'auto'}}>Save Template</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
 
-            {/* ── FOLLOWS VIEW — who follows whom and why ── */}
-            {!loading&&feedView==='follows' && (
-              <div style={{maxWidth:800,margin:'0 auto'}}>
-                <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
-                  <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Follow Engine Overview</div>
-                  {followStats?(
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12}}>
-                      <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:22,fontWeight:700,color:C.lavender}}>{followStats.total_profiles}</div>
-                        <div style={{fontSize:11,color:C.inkLight}}>Total Profiles</div>
-                      </div>
-                      <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:22,fontWeight:700,color:'#2d7a50'}}>{followStats.followed_profiles}</div>
-                        <div style={{fontSize:11,color:C.inkLight}}>Followed by Someone</div>
-                      </div>
-                      <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:22,fontWeight:700,color:C.pink}}>{followStats.unfollowed_profiles}</div>
-                        <div style={{fontSize:11,color:C.inkLight}}>Unfollowed</div>
-                      </div>
-                    </div>
-                  ):(
-                    <div style={{textAlign:'center',padding:20,color:C.inkLight,fontSize:13}}>Loading follow stats...</div>
-                  )}
-                  {followStats?.character_follows&&(
-                    <div style={{marginTop:16}}>
-                      <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Follows per Character</div>
-                      {followStats.character_follows.map(cf=>{
-                        const charProfile=followStats.character_profiles?.[cf.character_key];
-                        return (
-                          <div key={cf.character_key} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,marginBottom:6}}>
-                            <span style={{fontSize:18,color:cf.character_key==='justawoman'?C.blue:C.lavender}}>{cf.character_key==='justawoman'?'◈':'✦'}</span>
-                            <div style={{flex:1}}>
-                              <div style={{fontWeight:700,color:C.ink,fontSize:13}}>{charProfile?.name||cf.character_key}</div>
-                              <div style={{fontSize:11,color:C.inkLight}}>Threshold: {charProfile?.threshold}</div>
-                            </div>
-                            <span style={{fontSize:20,fontWeight:700,color:C.lavender}}>{cf.count}</span>
-                            <span style={{fontSize:11,color:C.inkLight}}>follows</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {followStats?.character_profiles&&(
-                    <div style={{marginTop:16}}>
-                      <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Follow Psychology & Affinities</div>
-                      {Object.entries(followStats.character_profiles).map(([key,cp])=>(
-                        <div key={key} style={{marginBottom:16,padding:'14px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                          <div style={{fontSize:13,fontWeight:700,color:C.ink,marginBottom:8}}>{cp.name}</div>
-                          {/* Category Affinities */}
-                          <div style={{marginBottom:8}}>
-                            <div style={{fontSize:10,fontWeight:600,color:C.inkLight,marginBottom:4}}>Category Affinity</div>
-                            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                              {cp.top_categories?.map(c=>(
-                                <div key={c.category} style={{display:'flex',alignItems:'center',gap:4}}>
-                                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{c.category}</span>
-                                  <div style={{width:40,height:4,borderRadius:2,background:C.border,overflow:'hidden'}}>
-                                    <div style={{height:'100%',background:C.blue,width:`${Math.round(c.weight*100)}%`}}/>
-                                  </div>
-                                  <span style={{fontSize:9,color:C.inkLight}}>{Math.round(c.weight*100)}%</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          {/* Archetype Affinities */}
-                          <div style={{marginBottom:8}}>
-                            <div style={{fontSize:10,fontWeight:600,color:C.inkLight,marginBottom:4}}>Archetype Affinity</div>
-                            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                              {cp.top_archetypes?.map(a=>(
-                                <div key={a.archetype} style={{display:'flex',alignItems:'center',gap:4}}>
-                                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{ARCHETYPE_LABELS[a.archetype]||a.archetype}</span>
-                                  <div style={{width:40,height:4,borderRadius:2,background:C.border,overflow:'hidden'}}>
-                                    <div style={{height:'100%',background:C.lavender,width:`${Math.round(a.weight*100)}%`}}/>
-                                  </div>
-                                  <span style={{fontSize:9,color:C.inkLight}}>{Math.round(a.weight*100)}%</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          {/* Motivation Weights */}
-                          {cp.motivation_weights&&Object.keys(cp.motivation_weights).length>0&&(
-                            <div>
-                              <div style={{fontSize:10,fontWeight:600,color:C.inkLight,marginBottom:4}}>Motivation Weights</div>
-                              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                                {Object.entries(cp.motivation_weights).sort((a,b)=>b[1]-a[1]).map(([mot,weight])=>(
-                                  <div key={mot} style={{display:'flex',alignItems:'center',gap:4}}>
-                                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{mot.replace(/_/g,' ')}</span>
-                                    <span style={{fontSize:9,color:C.inkLight}}>{Math.round(weight*100)}%</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {/* Behavioral Modifiers */}
-                          {cp.threshold!=null&&(
-                            <div style={{display:'flex',gap:12,marginTop:8,fontSize:10,color:C.inkLight}}>
-                              <span>Threshold: {cp.threshold}</span>
-                              {cp.drama_bonus!=null&&<span>Drama bonus: {cp.drama_bonus>0?'+':''}{cp.drama_bonus}</span>}
-                              {cp.adult_penalty!=null&&<span>Adult penalty: {cp.adult_penalty}</span>}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* Per-profile follow indicators */}
-                <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                  {profiles.map(p=>{
-                    const d=fp(p);
-                    const followers=p.followers||[];
-                    return (
-                      <div key={p.id} onClick={()=>selectProfile(p)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',background:C.surface,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,cursor:'pointer'}}>
-                        <span style={{fontSize:13,fontWeight:700,color:C.ink,minWidth:120}}>{p.handle}</span>
-                        <span style={{fontSize:11,color:C.inkLight,flex:1}}>{p.display_name||d.display_name||''}</span>
-                        <div style={{display:'flex',gap:4}}>
-                          {PROTAGONISTS.map(pr=>{
-                            const f=followers.find(fl=>fl.character_key===pr.key);
-                            return (
-                              <span key={pr.key} style={{fontSize:13,padding:'2px 8px',borderRadius:8,
-                                background:f?pr.key==='justawoman'?C.blueLight:C.lavLight:C.surfaceAlt,
-                                color:f?pr.key==='justawoman'?C.blue:C.lavender:C.border,
-                                fontWeight:f?700:400}}>
-                                {pr.icon} {f?'follows':'—'}
-                                {f?.follow_probability!=null&&<span style={{fontSize:9,marginLeft:3}}>{Math.round(f.follow_probability*100)}%</span>}
-                              </span>
-                            );
-                          })}
-                          {/* Show count of additional dynamic character followers */}
-                          {(()=>{const protagonistKeys=new Set(PROTAGONISTS.map(p=>p.key));const dynFollowers=followers.filter(f=>!protagonistKeys.has(f.character_key));return dynFollowers.length>0?(
-                            <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#e8f5e9',color:'#2e7d32',fontWeight:600}}>+{dynFollowers.length} more</span>
-                          ):null;})()}
-                        </div>
-                        <span style={{fontSize:10,fontWeight:700,color:C.lavender}}>✦{p.lala_relevance_score??0}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {/* ── MOMENTS VIEW — aggregated moment timeline across profiles ── */}
-            {!loading&&feedView==='moments' && (
-              <div style={{maxWidth:700,margin:'0 auto'}}>
-                {momentsLoading&&<div style={{textAlign:'center',padding:30,color:C.inkLight}}><Spinner/> Loading moments…</div>}
-                {momentsData&&!momentsLoading&&(
-                  <>
-                    <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
-                      <div style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surface,border:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:18,fontWeight:700,color:C.lavender}}>{momentsData.total}</div>
-                        <div style={{fontSize:10,color:C.inkLight}}>Total Moments</div>
-                      </div>
-                      <div style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surface,border:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:18,fontWeight:700,color:C.blue}}>{momentsData.profiles_with_moments}</div>
-                        <div style={{fontSize:10,color:C.inkLight}}>Profiles</div>
-                      </div>
-                      {momentsData.type_counts&&Object.entries(momentsData.type_counts).map(([type,count])=>(
-                        <div key={type} style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surface,border:`1px solid ${C.border}`}}>
-                          <div style={{fontSize:16,fontWeight:700,color:C.pink}}>{count}</div>
-                          <div style={{fontSize:10,color:C.inkLight,textTransform:'capitalize'}}>{type}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                      {(momentsData.moments||[]).map((m,i)=>{
-                        const typeColors={controversy:'#ef4444',live:'#8b5cf6',post:'#3b82f6',collab:'#22c55e',comment:'#f59e0b',dm:'#ec4899',disappearance:'#6b7280'};
-                        const tc=typeColors[m.moment_type]||C.inkMid;
-                        return(
-                          <div key={i} style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,overflow:'hidden',boxShadow:C.shadow}}>
-                            <div style={{height:3,background:tc}}/>
-                            <div style={{padding:'12px 16px'}}>
-                              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                                <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:`${tc}15`,color:tc,textTransform:'uppercase'}}>{m.moment_type}</span>
-                                {m.platform_format&&<span style={{fontSize:10,color:C.inkLight}}>{m.platform_format}</span>}
-                                <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>{const pr=profiles.find(p=>p.id===m.profile_id);if(pr)setSelected(pr);}}>{m.handle}</span>
-                                <span style={{fontSize:10,color:C.inkLight}}>{m.platform}</span>
-                                {m.lala_seed&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:6,background:C.lavLight,color:C.lavender}}>Lala Seed</span>}
-                              </div>
-                              <div style={{fontSize:13,color:C.ink,lineHeight:1.6,marginBottom:6}}>{m.description}</div>
-                              {m.protagonist_reaction&&<div style={{fontSize:12,color:C.inkMid,fontStyle:'italic',lineHeight:1.5}}>{m.protagonist_reaction}</div>}
-                              {m.lala_seed_reason&&<div style={{fontSize:11,color:C.lavender,marginTop:4}}>Seed: {m.lala_seed_reason}</div>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {momentsData.moments?.length===0&&<div style={{textAlign:'center',padding:40,color:C.inkLight}}>No moments logged yet. Generate profiles to populate the moment timeline.</div>}
-                  </>
-                )}
-              </div>
-            )}
+            {/* ── View tabs (Timeline, Follows, Moments, etc.) ── */}
+            <FeedViewContent
+              feedView={feedView} loading={loading} profiles={profiles} feedLayer={feedLayer}
+              selected={selected} setSelected={setSelected} selectProfile={selectProfile} setDetailTab={setDetailTab}
+              followStats={followStats} momentsData={momentsData} momentsLoading={momentsLoading}
+              diversityData={diversityData} diversityLoading={diversityLoading}
+              suggestions={suggestions} suggestionsLoading={suggestionsLoading}
+              loadSuggestions={loadSuggestions} acceptSuggestion={acceptSuggestion}
+              templates={templates} deleteTemplate={deleteTemplate} saveAsTemplate={saveAsTemplate}
+              loadSceneContext={loadSceneContext}
+              autoStatus={autoStatus} autoRunning={autoRunning} autoHistory={autoHistory}
+              layerStatus={layerStatus} toggleScheduler={toggleScheduler} runAutoNow={runAutoNow}
+              updateAutoConfig={updateAutoConfig} showToast={showToast} setAutoRunning={setAutoRunning}
+            />
 
-            {/* ── DASHBOARD VIEW — diversity/composition analytics ── */}
-            {feedView==='dashboard' && (
-              <div style={{maxWidth:900,margin:'0 auto'}}>
-                {diversityLoading&&<div style={{textAlign:'center',padding:30,color:C.inkLight}}><Spinner/> Loading analytics…</div>}
-                {diversityData&&!diversityLoading&&(
-                  <>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10,marginBottom:20}}>
-                      <div style={{padding:'14px 16px',borderRadius:C.radius,background:C.surface,border:`1px solid ${C.border}`,textAlign:'center'}}>
-                        <div style={{fontSize:28,fontWeight:700,color:C.lavender}}>{diversityData.total}</div>
-                        <div style={{fontSize:11,color:C.inkLight}}>Total Profiles</div>
-                      </div>
-                      <div style={{padding:'14px 16px',borderRadius:C.radius,background:C.surface,border:`1px solid ${C.border}`,textAlign:'center'}}>
-                        <div style={{fontSize:28,fontWeight:700,color:C.blue}}>{Object.keys(diversityData.archetypes||{}).length}</div>
-                        <div style={{fontSize:11,color:C.inkLight}}>Archetypes Used</div>
-                      </div>
-                      <div style={{padding:'14px 16px',borderRadius:C.radius,background:C.surface,border:`1px solid ${C.border}`,textAlign:'center'}}>
-                        <div style={{fontSize:28,fontWeight:700,color:C.pink}}>{Object.keys(diversityData.platforms||{}).length}</div>
-                        <div style={{fontSize:11,color:C.inkLight}}>Platforms</div>
-                      </div>
-                      <div style={{padding:'14px 16px',borderRadius:C.radius,background:C.surface,border:`1px solid ${C.border}`,textAlign:'center'}}>
-                        <div style={{fontSize:28,fontWeight:700,color:'#2d7a50'}}>{diversityData.adult_content?.ratio||'0%'}</div>
-                        <div style={{fontSize:11,color:C.inkLight}}>Adult Content</div>
-                      </div>
-                    </div>
-
-                    {/* Archetype Distribution */}
-                    <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
-                      <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Archetype Distribution</div>
-                      <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                        {Object.entries(diversityData.archetypes||{}).sort((a,b)=>b[1]-a[1]).map(([arch,count])=>(
-                          <div key={arch} style={{display:'flex',alignItems:'center',gap:10}}>
-                            <span style={{fontSize:11,fontWeight:600,color:C.ink,minWidth:130}}>{ARCHETYPE_LABELS[arch]||arch}</span>
-                            <div style={{flex:1,height:16,background:C.surfaceAlt,borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`}}>
-                              <div style={{height:'100%',background:`linear-gradient(90deg,${C.lavender},${C.pink})`,borderRadius:8,width:`${diversityData.total>0?(count/diversityData.total)*100:0}%`,transition:'width 0.3s'}}/>
-                            </div>
-                            <span style={{fontSize:12,fontWeight:700,color:C.inkMid,minWidth:30,textAlign:'right'}}>{count}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Platform + Tier side by side */}
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
-                      <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
-                        <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Platforms</div>
-                        {Object.entries(diversityData.platforms||{}).sort((a,b)=>b[1]-a[1]).map(([plat,count])=>(
-                          <div key={plat} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
-                            <span style={{fontSize:12,fontWeight:600,color:C.ink,textTransform:'capitalize'}}>{plat}</span>
-                            <span style={{fontSize:12,fontWeight:700,color:C.blue}}>{count}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
-                        <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Follower Tiers</div>
-                        {Object.entries(diversityData.follower_tiers||{}).sort((a,b)=>b[1]-a[1]).map(([tier,count])=>(
-                          <div key={tier} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${C.border}`}}>
-                            <span style={{fontSize:12,fontWeight:600,color:C.ink,textTransform:'capitalize'}}>{tier}</span>
-                            <span style={{fontSize:12,fontWeight:700,color:C.lavender}}>{count}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Relevance Score Distribution */}
-                    <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
-                      <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Relevance Score Distribution</div>
-                      <div style={{display:'flex',gap:8,alignItems:'flex-end',height:100}}>
-                        {Object.entries(diversityData.relevance_buckets||{}).map(([bucket,count])=>{
-                          const maxCount=Math.max(...Object.values(diversityData.relevance_buckets||{}),1);
-                          const height=Math.max(8,(count/maxCount)*80);
-                          const colors={'0-2':C.border,'3-4':C.inkLight,'5-6':C.blue,'7-8':C.lavender,'9-10':C.pink};
-                          return(
-                            <div key={bucket} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
-                              <span style={{fontSize:10,fontWeight:700,color:C.ink}}>{count}</span>
-                              <div style={{width:'100%',height,background:colors[bucket]||C.border,borderRadius:4}}/>
-                              <span style={{fontSize:9,color:C.inkLight}}>{bucket}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Content Categories + Geographic Clusters */}
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
-                      {(diversityData.categories||[]).length>0&&(
-                        <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
-                          <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Top Content Categories</div>
-                          {diversityData.categories.map(c=>(
-                            <div key={c.category} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:`1px solid ${C.border}`,fontSize:12}}>
-                              <span style={{color:C.ink}}>{c.category}</span>
-                              <span style={{fontWeight:700,color:C.lavender}}>{c.count}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {(diversityData.geographic_clusters||[]).length>0&&(
-                        <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
-                          <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Top Geographic Clusters</div>
-                          {diversityData.geographic_clusters.map(g=>(
-                            <div key={g.cluster} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:`1px solid ${C.border}`,fontSize:12}}>
-                              <span style={{color:C.ink}}>{g.cluster}</span>
-                              <span style={{fontWeight:700,color:C.blue}}>{g.count}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* City Distribution (Lalaverse) */}
-                    {Object.keys(diversityData.cities||{}).length>0&&(
-                      <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
-                        <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>LalaVerse City Distribution</div>
-                        <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-                          {Object.entries(diversityData.cities).map(([city,count])=>(
-                            <div key={city} style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`,textAlign:'center'}}>
-                              <div style={{fontSize:18,fontWeight:700,color:C.lavender}}>{count}</div>
-                              <div style={{fontSize:10,color:C.inkMid}}>{city.replace(/_/g,' ')}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* ── GRAPH VIEW — relationship suggestions and network ── */}
-            {feedView==='graph' && (
-              <div style={{maxWidth:900,margin:'0 auto'}}>
-                <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-                    <div style={{fontSize:16,fontWeight:700,color:C.ink}}>Relationship Discovery</div>
-                    <button onClick={loadSuggestions} disabled={suggestionsLoading} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.lavender}`,background:'transparent',color:C.lavender}}>
-                      {suggestionsLoading?'Scanning…':'Rescan'}
-                    </button>
-                  </div>
-                  {suggestionsLoading&&<div style={{textAlign:'center',padding:20,color:C.inkLight}}><Spinner/> Analyzing profiles for connections…</div>}
-                  {suggestions&&!suggestionsLoading&&(
-                    <>
-                      <div style={{display:'flex',gap:12,marginBottom:16}}>
-                        <div style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                          <div style={{fontSize:18,fontWeight:700,color:C.lavender}}>{suggestions.total_suggestions}</div>
-                          <div style={{fontSize:10,color:C.inkLight}}>Potential Connections</div>
-                        </div>
-                        <div style={{padding:'10px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                          <div style={{fontSize:18,fontWeight:700,color:C.blue}}>{suggestions.total_analyzed}</div>
-                          <div style={{fontSize:10,color:C.inkLight}}>Profiles Analyzed</div>
-                        </div>
-                      </div>
-                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                        {(suggestions.suggestions||[]).map((s,i)=>{
-                          const typeColors={competitors:'#ef4444',collab:'#22c55e',orbit:'#9ca3af',beef:'#f59e0b'};
-                          return(
-                            <div key={i} style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:12}}>
-                              <div style={{flex:1}}>
-                                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                                  <span style={{fontSize:13,fontWeight:700,color:C.ink}}>{s.profile_a.handle}</span>
-                                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${typeColors[s.suggested_type]||C.border}20`,color:typeColors[s.suggested_type]||C.inkMid,fontWeight:700}}>{s.suggested_type}</span>
-                                  <span style={{fontSize:13,fontWeight:700,color:C.ink}}>{s.profile_b.handle}</span>
-                                </div>
-                                <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                                  {s.reasons.map((r,j)=>(
-                                    <span key={j} style={{fontSize:10,padding:'1px 6px',borderRadius:6,background:C.blueLight,color:C.blue}}>{r}</span>
-                                  ))}
-                                  <span style={{fontSize:10,color:C.inkLight,marginLeft:4}}>Score: {s.score}</span>
-                                </div>
-                              </div>
-                              <button onClick={()=>acceptSuggestion(s.profile_a.id,s.profile_b.id,s.suggested_type)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:11,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>
-                                + Accept
-                              </button>
-                            </div>
-                          );
-                        })}
-                        {(suggestions.suggestions||[]).length===0&&<div style={{textAlign:'center',padding:30,color:C.inkLight}}>No new relationship suggestions. Try generating more profiles first.</div>}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ── TEMPLATES VIEW — saved profile templates ── */}
-            {feedView==='templates' && (
-              <div style={{maxWidth:700,margin:'0 auto'}}>
-                <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
-                  <div style={{fontSize:16,fontWeight:700,color:C.ink,marginBottom:16}}>Profile Templates</div>
-                  <div style={{fontSize:12,color:C.inkLight,marginBottom:16}}>Save profiles as templates to quickly generate similar creators. Templates preserve platform, archetype, tier, and aesthetic settings.</div>
-                  {templates.length===0&&<div style={{textAlign:'center',padding:30,color:C.inkLight}}>No templates saved yet. Open a profile and use "Save as Template" to create one.</div>}
-                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                    {templates.map(t=>(
-                      <div key={t.id} style={{padding:'14px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                          <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{t.name}</span>
-                          <div style={{display:'flex',gap:6}}>
-                            <span style={{fontSize:10,color:C.inkLight}}>Used {t.usage_count}x</span>
-                            <button onClick={()=>deleteTemplate(t.id)} style={{fontSize:11,color:C.pink,background:'none',border:'none',cursor:'pointer'}}>Delete</button>
-                          </div>
-                        </div>
-                        {t.description&&<div style={{fontSize:12,color:C.inkMid,marginBottom:6}}>{t.description}</div>}
-                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                          {t.template_data?.platform&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{t.template_data.platform}</span>}
-                          {t.template_data?.archetype&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{(ARCHETYPE_LABELS[t.template_data.archetype]||t.template_data.archetype)}</span>}
-                          {t.template_data?.follower_tier&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{t.template_data.follower_tier}</span>}
-                          {t.template_data?.content_category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.surfaceAlt,color:C.inkMid}}>{t.template_data.content_category}</span>}
-                          {t.template_data?.feed_layer&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:t.template_data.feed_layer==='lalaverse'?C.lavLight:C.blueLight,color:t.template_data.feed_layer==='lalaverse'?C.lavender:C.blue}}>{t.template_data.feed_layer==='lalaverse'?"Lala's Feed":"JustAWoman's Feed"}</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── AUTOMATION VIEW — scheduler controls ── */}
-            {feedView==='automation' && (
-              <div style={{maxWidth:900,margin:'0 auto'}}>
-                {/* Scheduler Status */}
-                <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20,marginBottom:16}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-                    <div style={{fontSize:16,fontWeight:700,color:C.ink}}>Feed Automation</div>
-                    <div style={{display:'flex',gap:8}}>
-                      <button onClick={()=>toggleScheduler(autoStatus?.running?'stop':'start')} style={{padding:'6px 16px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',border:'none',background:autoStatus?.running?'#ef4444':'#22c55e',color:'#fff'}}>
-                        {autoStatus?.running?'Stop Scheduler':'Start Scheduler'}
-                      </button>
-                      <button onClick={runAutoNow} disabled={autoRunning} style={{padding:'6px 16px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px solid ${C.lavender}`,background:'transparent',color:C.lavender,opacity:autoRunning?0.5:1}}>
-                        {autoRunning?'Running…':'Run Cycle Now'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Status indicators */}
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginBottom:16}}>
-                    <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:autoStatus?.running?'#eef7ec':'#fde8e8',border:`1px solid ${autoStatus?.running?'#c3e6cb':'#f5c6cb'}`}}>
-                      <div style={{fontSize:18,fontWeight:700,color:autoStatus?.running?'#22c55e':'#ef4444'}}>{autoStatus?.running?'Active':'Stopped'}</div>
-                      <div style={{fontSize:11,color:C.inkLight}}>Scheduler</div>
-                    </div>
-                    <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                      <div style={{fontSize:18,fontWeight:700,color:C.lavender}}>{autoStatus?.interval_hours||4}h</div>
-                      <div style={{fontSize:11,color:C.inkLight}}>Interval</div>
-                    </div>
-                    <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                      <div style={{fontSize:18,fontWeight:700,color:C.blue}}>{autoStatus?.history_count||0}</div>
-                      <div style={{fontSize:11,color:C.inkLight}}>Runs Logged</div>
-                    </div>
-                    {autoStatus?.last_run&&(
-                      <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                        <div style={{fontSize:12,fontWeight:700,color:C.ink}}>{new Date(autoStatus.last_run).toLocaleString()}</div>
-                        <div style={{fontSize:11,color:C.inkLight}}>Last Run</div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Layer fill status */}
-                  {layerStatus&&(
-                    <div style={{marginBottom:16}}>
-                      <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Layer Fill Status</div>
-                      {Object.entries(layerStatus).map(([layer,ls])=>(
-                        <div key={layer} style={{marginBottom:10}}>
-                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                            <span style={{fontSize:12,fontWeight:700,color:C.ink}}>{layer==='real_world'?"JustAWoman's Feed":"Lala's Feed"}</span>
-                            <span style={{fontSize:12,color:C.inkLight}}>{ls.total}/{ls.cap} ({ls.fill_pct}%)</span>
-                          </div>
-                          <div style={{height:8,borderRadius:4,background:C.surfaceAlt,border:`1px solid ${C.border}`,overflow:'hidden'}}>
-                            <div style={{height:'100%',borderRadius:4,background:layer==='real_world'?C.blue:C.lavender,width:`${ls.fill_pct}%`,transition:'width 0.3s'}}/>
-                          </div>
-                          <div style={{display:'flex',gap:12,marginTop:4}}>
-                            <span style={{fontSize:10,color:C.inkLight}}>Generated: {ls.breakdown?.generated||0}</span>
-                            <span style={{fontSize:10,color:C.inkLight}}>Finalized: {ls.breakdown?.finalized||0}</span>
-                            <span style={{fontSize:10,color:C.inkLight}}>Crossed: {ls.breakdown?.crossed||0}</span>
-                            <button onClick={()=>fillOneProfile(layer)} disabled={autoRunning||ls.remaining<=0} style={{fontSize:10,color:C.lavender,background:'transparent',border:'none',cursor:'pointer',fontWeight:700,marginLeft:'auto',opacity:autoRunning?0.5:1}}>
-                              + Fill One
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Sub-agent toggles */}
-                  <div style={{marginBottom:16}}>
-                    <div style={{fontSize:11,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Sub-Agents</div>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
-                      {[
-                        {key:'auto_fill_enabled',label:'Auto-Fill',desc:'Generate profiles to fill caps'},
-                        {key:'auto_finalize_enabled',label:'Auto-Finalize',desc:'Lock high-relevance profiles'},
-                        {key:'auto_relate_enabled',label:'Auto-Relate',desc:'Link relationships automatically'},
-                        {key:'auto_follow_enabled',label:'Auto-Follow',desc:'Assign followers to new profiles'},
-                        {key:'auto_cross_enabled',label:'Auto-Cross',desc:'Flag profiles ready for crossing'},
-                        {key:'auto_discover_enabled',label:'Auto-Discover',desc:'Find potential relationships between profiles'},
-                      ].map(a=>{
-                        const enabled=autoStatus?.config?.[a.key]!==false;
-                        return (
-                          <div key={a.key} onClick={()=>updateAutoConfig({[a.key]:!enabled})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:C.radiusSm,background:enabled?'#eef7ec':C.surfaceAlt,border:`1px solid ${enabled?'#c3e6cb':C.border}`,cursor:'pointer',transition:'all 0.15s'}}>
-                            <div style={{width:14,height:14,borderRadius:3,background:enabled?'#22c55e':C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff'}}>{enabled?'✓':''}</div>
-                            <div>
-                              <div style={{fontSize:12,fontWeight:700,color:C.ink}}>{a.label}</div>
-                              <div style={{fontSize:10,color:C.inkLight}}>{a.desc}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Config sliders */}
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:12}}>
-                    <div>
-                      <label style={{fontSize:11,fontWeight:700,color:C.inkLight}}>Batch Size (per run)</label>
-                      <select value={autoStatus?.config?.batch_size||5} onChange={e=>updateAutoConfig({batch_size:Number(e.target.value)})} style={{width:'100%',padding:'6px 10px',marginTop:4,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}}>
-                        {[1,2,3,5,8,10,15,20].map(n=><option key={n} value={n}>{n} profiles</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{fontSize:11,fontWeight:700,color:C.inkLight}}>Finalize Threshold</label>
-                      <select value={autoStatus?.config?.finalize_threshold||7} onChange={e=>updateAutoConfig({finalize_threshold:Number(e.target.value)})} style={{width:'100%',padding:'6px 10px',marginTop:4,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}}>
-                        {[5,6,7,8,9,10].map(n=><option key={n} value={n}>Relevance &ge; {n}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{fontSize:11,fontWeight:700,color:C.inkLight}}>Cross Threshold</label>
-                      <select value={autoStatus?.config?.cross_threshold||9} onChange={e=>updateAutoConfig({cross_threshold:Number(e.target.value)})} style={{width:'100%',padding:'6px 10px',marginTop:4,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}}>
-                        {[7,8,9,10].map(n=><option key={n} value={n}>Relevance &ge; {n}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Run History */}
-                {autoHistory.length>0&&(
-                  <div style={{background:C.surface,borderRadius:C.radius,border:`1px solid ${C.border}`,padding:20}}>
-                    <div style={{fontSize:14,fontWeight:700,color:C.ink,marginBottom:12}}>Recent Runs</div>
-                    {autoHistory.map((run,i)=>(
-                      <div key={i} style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,marginBottom:8}}>
-                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-                          <span style={{fontSize:12,fontWeight:700,color:C.ink}}>{new Date(run.ran_at).toLocaleString()}</span>
-                          <span style={{fontSize:11,color:C.inkLight}}>{run.duration_ms}ms</span>
-                        </div>
-                        <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-                          <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#eef7ec',color:'#22c55e'}}>+{run.summary?.profiles_created||0} created</span>
-                          <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{run.summary?.profiles_finalized||0} finalized</span>
-                          <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>{run.summary?.relationships_created||0} linked</span>
-                          <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:C.pinkLight,color:C.pink}}>{run.summary?.profiles_flagged||0} crossing-ready</span>
-                          {(run.summary?.relationships_discovered||0)>0&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#e8f5e9',color:'#2e7d32'}}>{run.summary.relationships_discovered} discovered</span>}
-                          {run.errors>0&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:'#fde8e8',color:'#ef4444'}}>{run.errors} errors</span>}
-                        </div>
-                        {run.layer_status&&(
-                          <div style={{display:'flex',gap:16,marginTop:6}}>
-                            <span style={{fontSize:10,color:C.inkLight}}>Real World: {run.layer_status.real_world?.count}/{run.layer_status.real_world?.cap}</span>
-                            <span style={{fontSize:10,color:C.inkLight}}>LalaVerse: {run.layer_status.lalaverse?.count}/{run.layer_status.lalaverse?.cap}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
             <FeedPagination {...paginationProps}/>
           </div>
         </div>
@@ -1812,585 +1062,12 @@ export default function SocialProfileGenerator({ embedded=false, worldTag }) {
 // ── Shared button style for bulk bar ──────────────────────────────────
 const sBtnSm = { padding:'5px 12px', borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', border:`1px solid ${C.border}`, background:'transparent', color:C.inkMid };
 
-// ── Spinner ───────────────────────────────────────────────────────────
-function Spinner() {
-  return <span style={{width:14,height:14,border:`2px solid ${C.lavender}40`,borderTopColor:C.lavender,borderRadius:'50%',display:'inline-block',animation:'spin 0.8s linear infinite'}}/>;
-}
+// Spinner imported from ./feed/FeedViews
 
 // ── Page button ───────────────────────────────────────────────────────
 function PageBtn({ children, disabled, onClick }) {
   return <button disabled={disabled} onClick={onClick} style={{padding:'5px 10px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,background:'transparent',color:disabled?C.border:C.inkMid,cursor:disabled?'not-allowed':'pointer'}}>{children}</button>;
 }
 
-// ── Feed State Picker ─────────────────────────────────────────────────
-function FeedStatePicker({ profile, onStateChange }) {
-  const [open,setOpen]   = useState(false);
-  const [saving,setSaving] = useState(false);
-  const current = profile.current_state;
-  const cfg     = current?FEED_STATE_CONFIG[current]:null;
-  const changeState = async newState=>{
-    if(newState===current||saving)return;
-    setSaving(true);
-    try{
-      const res=await fetch(`${API}/${profile.id}`,{method:'PATCH',headers:authHeaders(),body:JSON.stringify({current_state:newState})});
-      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||'State change failed');}
-      onStateChange?.(newState);
-    }
-    catch(err){console.error('State change failed:',err);alert('State change failed: '+(err.message||'Unknown error'));}
-    finally{setSaving(false);setOpen(false);}
-  };
-  return (
-    <div style={{position:'relative'}}>
-      <button onClick={e=>{e.stopPropagation();setOpen(!open);}} style={{padding:'4px 12px',borderRadius:12,fontSize:11,fontWeight:700,cursor:'pointer',border:'none',
-        background:cfg?cfg.bg:C.border,color:cfg?cfg.color:C.inkLight}}>
-        {cfg?cfg.label:'Set State'} ▾
-      </button>
-      {open && (
-        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,background:C.surface,border:`1px solid ${C.border}`,borderRadius:C.radiusSm,boxShadow:C.shadowMd,zIndex:100,minWidth:140,overflow:'hidden'}}>
-          {Object.entries(FEED_STATE_CONFIG).map(([s,sc])=>(
-            <button key={s} onClick={e=>{e.stopPropagation();changeState(s);}} disabled={saving} style={{width:'100%',padding:'7px 12px',textAlign:'left',fontSize:12,fontWeight:600,cursor:'pointer',border:'none',background:s===current?sc.bg:'transparent',color:sc.color,display:'block'}}>{sc.label}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════
-// DETAIL PANEL
-// ══════════════════════════════════════════════════════════════════════
-function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh,
-  onRegenerate, regenerating, onLoadCrossingPreview, crossingPreview, setCrossingPreview,
-  onLoadSceneContext, sceneContext, setSceneContext, onCopySceneContext, detailTab, setDetailTab,
-  onApprove, onRejectCrossing, onSaveAsTemplate }) {
-  const p = profile;
-  const [editing,setEditing] = useState(false);
-  const [draft,setDraft]     = useState({});
-  const [followers,setFollowers] = useState(p.followers||[]);
-  const [followLoading,setFollowLoading] = useState(null);
-
-  useEffect(()=>{setFollowers(p.followers||[]);setSceneContext(null);setCrossingPreview(null);},[profile?.id]);
-
-  const score = p.lala_relevance_score??d.lala_relevance_score??0;
-  const lc    = lalaClass(score);
-  const lColor = lc==='high'?C.lavender:lc==='mid'?C.blue:C.inkLight;
-
-  const startEdit = ()=>{
-    setDraft({ handle:p.handle||'', display_name:p.display_name||d.display_name||'', platform:p.platform||'', vibe_sentence:p.vibe_sentence||'', content_persona:p.content_persona||d.content_persona||'', real_signal:p.real_signal||d.real_signal||'', posting_voice:p.posting_voice||d.posting_voice||'', comment_energy:p.comment_energy||d.comment_energy||'', parasocial_function:p.parasocial_function||d.parasocial_function||'', emotional_activation:d.emotional_activation||p.emotional_activation||'', watch_reason:d.watch_reason||p.watch_reason||'', what_it_costs_her:d.what_it_costs_her||p.what_it_costs_her||'', current_trajectory:p.current_trajectory||d.current_trajectory||'', pinned_post:p.pinned_post||d.pinned_post||'' });
-    setEditing(true);
-  };
-
-  const toggleFollow = async protag=>{
-    setFollowLoading(protag.key);
-    try{
-      const isF=followers.some(f=>f.character_key===protag.key);
-      if(isF){await fetch(`${API}/${p.id}/followers/${protag.key}`,{method:'DELETE',headers:authHeaders()});setFollowers(prev=>prev.filter(f=>f.character_key!==protag.key));}
-      else{const res=await fetch(`${API}/${p.id}/followers`,{method:'POST',headers:authHeaders(),body:JSON.stringify({character_key:protag.key,character_name:protag.context.name})});const dt=await res.json();if(dt.follower)setFollowers(prev=>[...prev,dt.follower]);}
-      if(onRefresh)onRefresh();
-    }catch(err){console.error('Follow toggle error:',err);}
-    finally{setFollowLoading(null);}
-  };
-
-  const Section = ({title,children})=>(
-    <div style={{marginBottom:16}}>
-      <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${C.border}`}}>{title}</div>
-      {children}
-    </div>
-  );
-  const Field = ({label,value})=>value?(<div style={{marginBottom:6}}><div style={{fontSize:10,fontWeight:600,color:C.inkLight,marginBottom:2}}>{label}</div><div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{value}</div></div>):null;
-  const inp=(label,key,multi)=>(
-    <div style={{marginBottom:8}}>
-      <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>{label}</div>
-      {multi?<textarea value={draft[key]||''} onChange={e=>setDraft(f=>({...f,[key]:e.target.value}))} rows={3} style={{width:'100%',padding:'7px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,resize:'vertical',fontFamily:C.font,boxSizing:'border-box'}}/>
-            :<input value={draft[key]||''} onChange={e=>setDraft(f=>({...f,[key]:e.target.value}))} style={{width:'100%',padding:'7px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,boxSizing:'border-box'}}/>}
-    </div>
-  );
-
-  return (
-    <div style={{minHeight:'100%'}}>
-      {/* Accent bar */}
-      <div style={{height:4,background:`linear-gradient(90deg,${C.pink},${C.lavender},${C.blue})`}}/>
-      {/* Header */}
-      <div style={{padding:'16px 20px',borderBottom:`1px solid ${C.border}`}}>
-        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
-          <div>
-            <div style={{fontSize:20,fontWeight:700,color:C.ink,marginBottom:2}}>{p.handle}</div>
-            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-              {(p.display_name||d.display_name)&&<span style={{fontSize:13,color:C.inkMid}}>{p.display_name||d.display_name}</span>}
-              <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{p.platform}</span>
-              {(p.archetype||d.archetype)&&<span style={{fontSize:11,color:C.inkLight}}>{ARCHETYPE_LABELS[p.archetype||d.archetype]||p.archetype||d.archetype}</span>}
-              {p.adult_content_present&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:'#fde8e8',color:C.pink}}>18+ Content</span>}
-              {p.feed_layer==='real_world'&&followers.some(f=>f.character_key==='lala')&&<span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ From JustAWoman's Feed — Lala follows</span>}
-            </div>
-          </div>
-          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:C.inkLight,lineHeight:1,flexShrink:0}}>×</button>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-          <FeedStatePicker profile={p} onStateChange={(newState)=>{p.current_state=newState;onRefresh();}}/>
-          {editing?(
-            <>
-              <button onClick={()=>{onEdit(p.id,draft);setEditing(false);}} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:'none',cursor:'pointer'}}>✓ Save</button>
-              <button onClick={()=>setEditing(false)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Cancel</button>
-            </>
-          ):(
-            <>
-              {p.status==='generated'&&<button onClick={()=>onFinalize(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:'none',cursor:'pointer'}}>✓ Finalize</button>}
-              {p.status==='finalized'&&<button onClick={()=>{onLoadCrossingPreview(p.id);setDetailTab('crossing');}} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,background:C.lavLight,color:C.lavender,border:'none',cursor:'pointer'}}>⚡ Cross Into World</button>}
-              {p.status==='crossed'&&<span style={{fontSize:11,color:C.lavender,fontWeight:600}}>✦ Crossed {p.crossed_at?`on ${new Date(p.crossed_at).toLocaleDateString()}`:''}</span>}
-              <button onClick={()=>onRegenerate(p.id)} disabled={regenerating} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:regenerating?'not-allowed':'pointer'}}>
-                {regenerating?'Regenerating…':'↻ Regenerate'}
-              </button>
-              <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>✎ Edit</button>
-              {onSaveAsTemplate&&<button onClick={()=>onSaveAsTemplate(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:'pointer'}}>⊞ Template</button>}
-              <button onClick={()=>onDelete(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.pink,border:`1px solid ${C.pinkMid}`,cursor:'pointer'}}>✕ Delete</button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Detail tabs */}
-      <div style={{display:'flex',gap:2,padding:'12px 20px 0',borderBottom:`1px solid ${C.border}`,background:C.surfaceAlt}}>
-        {[['profile','Profile'],['intel','Intel'],['network','Network'],['scene','Scene'],['crossing','Crossing']].map(([k,l])=>(
-          <button key={k} onClick={()=>{setDetailTab(k);if(k==='scene'&&!sceneContext)onLoadSceneContext(p.id);if(k==='crossing'&&!crossingPreview&&p.status!=='crossed')onLoadCrossingPreview(p.id);}} style={{
-            padding:'8px 14px',fontSize:12,fontWeight:detailTab===k?700:500,cursor:'pointer',border:'none',borderBottom:`2px solid ${detailTab===k?C.lavender:'transparent'}`,
-            background:'transparent',color:detailTab===k?C.lavender:C.inkLight,marginBottom:-1,transition:'all 0.15s'}}>
-            {l}
-          </button>
-        ))}
-      </div>
-
-      {/* ── PROFILE TAB ── */}
-      {(detailTab==='profile') && (
-        <>
-          <div style={{padding:'16px 20px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
-            {editing ? (
-              <div style={{gridColumn:'1/-1'}}>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
-                  {inp('Handle','handle')}{inp('Display Name','display_name')}{inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
-                </div>
-                {inp('Content Persona','content_persona',true)}{inp('Real Signal','real_signal',true)}{inp('Posting Voice','posting_voice',true)}{inp('Comment Energy','comment_energy',true)}{inp('Parasocial Function','parasocial_function',true)}{inp('Emotional Activation','emotional_activation',true)}{inp('Why She Watches','watch_reason',true)}{inp('What It Costs Her','what_it_costs_her',true)}{inp('Trajectory','current_trajectory')}{inp('Pinned Post','pinned_post',true)}
-              </div>
-            ) : (
-              <>
-                <div>
-                  <Section title="Content Persona"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.content_persona||d.content_persona}</div></Section>
-                  <Section title="Real Signal"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.real_signal||d.real_signal}</div></Section>
-                  <Section title="Posting Voice"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.posting_voice||d.posting_voice}</div></Section>
-                  <Section title="Comment Energy"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.comment_energy||d.comment_energy}</div></Section>
-                  {p.adult_content_present&&<Section title="Adult Content"><Field label="Type" value={p.adult_content_type||d.adult_content_type}/><Field label="Framing" value={p.adult_content_framing||d.adult_content_framing}/></Section>}
-                </div>
-                <div>
-                  <Section title="Parasocial Function">
-                    <div style={{fontSize:13,color:C.inkMid,lineHeight:1.7,marginBottom:8}}>{p.parasocial_function||d.parasocial_function}</div>
-                    <Field label="Emotional Activation" value={d.emotional_activation||p.emotional_activation}/>
-                    <Field label="Why She Watches" value={d.watch_reason||p.watch_reason}/>
-                    <Field label="What It Costs Her" value={d.what_it_costs_her||p.what_it_costs_her}/>
-                  </Section>
-                  <Section title="Trajectory">
-                    <div style={{fontSize:11,fontWeight:700,color:C.inkMid,marginBottom:4}}>{p.current_trajectory||d.current_trajectory}</div>
-                    <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.trajectory_detail||d.trajectory_detail}</div>
-                  </Section>
-                  <Section title="Lala Relevance">
-                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
-                      <div style={{flex:1,height:6,borderRadius:3,background:C.border,overflow:'hidden'}}>
-                        <div style={{height:'100%',borderRadius:3,background:lColor,width:`${score*10}%`,transition:'width 0.5s'}}/>
-                      </div>
-                      <span style={{fontSize:13,fontWeight:700,color:lColor,flexShrink:0}}>{score}/10</span>
-                    </div>
-                    <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.lala_relevance_reason||d.lala_relevance_reason}</div>
-                  </Section>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Followers */}
-          <div style={{padding:'0 20px 16px'}}>
-            <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Character Followers</div>
-            <div style={{display:'flex',gap:8,marginBottom:10}}>
-              {PROTAGONISTS.map(protag=>{
-                const isF=followers.some(f=>f.character_key===protag.key);
-                const fd=followers.find(f=>f.character_key===protag.key);
-                const isL=followLoading===protag.key;
-                return (
-                  <button key={protag.key} onClick={()=>toggleFollow(protag)} disabled={isL} style={{
-                    padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:700,cursor:'pointer',border:`1.5px solid ${isF?C.lavender:C.border}`,
-                    background:isF?C.lavLight:'transparent',color:isF?C.lavender:C.inkMid,display:'flex',alignItems:'center',gap:6}}>
-                    <span style={{fontSize:16}}>{protag.icon}</span>
-                    {isL?'…':isF?`${protag.context.name} follows`:`Add ${protag.context.name}`}
-                    {fd?.follow_probability!=null&&<span style={{fontSize:10,opacity:0.7}}>{Math.round(fd.follow_probability*100)}%</span>}
-                  </button>
-                );
-              })}
-              {/* Dynamic character followers (not protagonists) */}
-              {(()=>{const protagonistKeys=new Set(PROTAGONISTS.map(p=>p.key));const dynFollowers=followers.filter(f=>!protagonistKeys.has(f.character_key));return dynFollowers.map(f=>(
-                <span key={f.character_key} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,
-                  border:`1.5px solid ${C.border}`,background:'#e8f5e9',color:'#2e7d32',display:'inline-flex',alignItems:'center',gap:6}}>
-                  <span style={{fontSize:14}}>👤</span> {f.character_name||f.character_key} follows
-                  {f.follow_probability!=null&&<span style={{fontSize:10,opacity:0.7}}>{Math.round(f.follow_probability*100)}%</span>}
-                </span>
-              ));})()}
-            </div>
-            {followers.length>0&&(
-              <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                {followers.map(f=>(
-                  <div key={f.character_key} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:f.follow_context?4:0}}>
-                      <span style={{fontSize:15,color:f.character_key==='justawoman'?C.blue:C.lavender}}>{f.character_key==='justawoman'?'◈':'✦'}</span>
-                      <span style={{fontWeight:700,color:C.ink}}>{f.character_name}</span>
-                      {f.auto_generated&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:4,background:C.blueLight,color:C.blue}}>auto</span>}
-                      {f.follow_motivation&&<span style={{fontSize:10,color:C.inkLight,marginLeft:'auto'}}>{f.follow_motivation.replace('_',' ')}</span>}
-                    </div>
-                    {f.follow_context&&<div style={{color:C.inkMid,lineHeight:1.5,paddingLeft:22}}>{f.follow_context}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Pinned post */}
-          {(p.pinned_post||d.pinned_post)&&(
-            <div style={{padding:'0 20px 16px'}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>Pinned Post</div>
-              <div style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.pink}`,fontSize:13,color:C.inkMid,lineHeight:1.6}}>
-                <span style={{fontSize:11,fontWeight:700,color:C.pink,marginRight:6}}>📌</span>{p.pinned_post||d.pinned_post}
-              </div>
-            </div>
-          )}
-
-          {/* Sample captions */}
-          {((p.sample_captions||d.sample_captions)||[]).length>0&&(
-            <div style={{padding:'0 20px 16px'}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Sample Captions</div>
-              <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                {(p.sample_captions||d.sample_captions||[]).map((c,i)=>(
-                  <div key={i} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,borderLeft:`3px solid ${C.lavender}`,fontSize:12,color:C.inkMid,lineHeight:1.6}}>{c}</div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Moment log */}
-          {((p.moment_log||d.moment_log)||[]).length>0&&(
-            <div style={{padding:'0 20px 16px'}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Moment Log</div>
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {(p.moment_log||d.moment_log||[]).map((m,i)=>(
-                  <div key={i} style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                    <div style={{fontSize:10,fontWeight:700,color:C.lavender,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:4}}>{m.moment_type} · {m.platform_format}</div>
-                    <div style={{fontSize:12,color:C.ink,marginBottom:4}}>{m.description}</div>
-                    <div style={{fontSize:11,color:C.inkMid,fontStyle:'italic',marginBottom:m.lala_seed?4:0}}>{m.protagonist_reaction||m.justawoman_reaction}</div>
-                    {m.lala_seed&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:C.lavLight,color:C.lavender}}>✦ Lala Seed — {m.lala_seed_reason}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ── INTEL TAB — creator intel, aesthetic, revenue, known associates, controversies ── */}
-      {detailTab==='intel' && (
-        <div style={{padding:'16px 20px'}}>
-          {/* Creator Intel Grid */}
-          <Section title="Creator Intel">
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
-              {[
-                ['📊','Post Frequency',p.post_frequency||d.post_frequency],
-                ['💬','Engagement Rate',p.engagement_rate||d.engagement_rate],
-                ['📍','Location',p.geographic_base||d.geographic_base],
-                ['🎂','Age Range',p.age_range||d.age_range],
-                ['💍','Relationship',p.relationship_status||d.relationship_status],
-                ['🤝','Collab Style',p.collab_style||d.collab_style],
-                ['📈','Tier Detail',p.influencer_tier_detail||d.influencer_tier_detail],
-              ].filter(([,,v])=>v).map(([icon,label,val])=>(
-                <div key={label} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}>
-                  <div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>{icon} {label}</div>
-                  <div style={{fontSize:12,fontWeight:600,color:C.ink}}>{val}</div>
-                </div>
-              ))}
-            </div>
-          </Section>
-
-          {/* Aesthetic DNA */}
-          {(d.aesthetic_dna&&Object.keys(d.aesthetic_dna).length>0)&&(
-            <Section title="Aesthetic DNA">
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                {d.aesthetic_dna.visual_style&&<div style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}><div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>Visual Style</div><div style={{fontSize:12,color:C.ink}}>{d.aesthetic_dna.visual_style}</div></div>}
-                {d.aesthetic_dna.color_palette&&<div style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`}}><div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>Color Palette</div><div style={{fontSize:12,color:C.ink}}>{d.aesthetic_dna.color_palette}</div></div>}
-                {d.aesthetic_dna.editing_style&&<div style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,gridColumn:'1/-1'}}><div style={{fontSize:10,color:C.inkLight,marginBottom:2}}>Editing Style</div><div style={{fontSize:12,color:C.ink}}>{d.aesthetic_dna.editing_style}</div></div>}
-              </div>
-              {(d.aesthetic_dna.vibe_tags||[]).length>0&&(
-                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:8}}>
-                  {d.aesthetic_dna.vibe_tags.map((t,i)=>(
-                    <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:C.lavLight,color:C.lavender}}>#{t.replace(/\s/g,'')}</span>
-                  ))}
-                </div>
-              )}
-            </Section>
-          )}
-
-          {/* Revenue Streams */}
-          {(p.revenue_streams||d.revenue_streams||[]).length>0&&(
-            <Section title="Revenue Streams">
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                {(p.revenue_streams||d.revenue_streams||[]).map((r,i)=>(
-                  <div key={i} style={{padding:'6px 10px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12,color:C.ink}}>{typeof r==='string'?r:r.source||JSON.stringify(r)}</div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Brand Partnerships */}
-          {(p.brand_partnerships||d.brand_partnerships||[]).length>0&&(
-            <Section title="Brand Partnerships">
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                {(p.brand_partnerships||d.brand_partnerships||[]).map((bp,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 10px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12}}>
-                    <span style={{fontWeight:600,color:C.ink}}>{bp.brand||'Unknown'}</span>
-                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                      <span style={{fontSize:10,color:C.inkLight}}>{bp.type}</span>
-                      {bp.visible===false&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:4,background:C.pinkLight,color:C.pink}}>hidden</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Audience Demographics */}
-          {(d.audience_demographics&&Object.keys(d.audience_demographics).length>0)&&(
-            <Section title="Audience Demographics">
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                {d.audience_demographics.primary_age&&<Field label="Primary Age" value={d.audience_demographics.primary_age}/>}
-                {d.audience_demographics.gender_split&&<Field label="Gender Split" value={d.audience_demographics.gender_split}/>}
-                {d.audience_demographics.psychographic&&<div style={{gridColumn:'1/-1'}}><Field label="Psychographic" value={d.audience_demographics.psychographic}/></div>}
-              </div>
-              {(d.audience_demographics.top_audience_locations||[]).length>0&&(
-                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
-                  {d.audience_demographics.top_audience_locations.map((loc,i)=>(
-                    <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>📍 {loc}</span>
-                  ))}
-                </div>
-              )}
-            </Section>
-          )}
-
-          {/* Controversy History */}
-          {(p.controversy_history||d.controversy_history||[]).length>0&&(
-            <Section title="Controversy History">
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {(p.controversy_history||d.controversy_history||[]).map((ch,i)=>{
-                  const sevColor={minor:'#2d7a50',moderate:'#8a6010',major:'#c45858',career_threatening:'#8a2020'}[ch.severity]||C.inkMid;
-                  return (
-                    <div key={i} style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,borderLeft:`3px solid ${sevColor}`}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                        <span style={{fontSize:10,fontWeight:700,color:sevColor,textTransform:'uppercase'}}>{ch.severity}</span>
-                        {ch.date_approx&&<span style={{fontSize:10,color:C.inkLight}}>{ch.date_approx}</span>}
-                        <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:ch.resolved?'#e8f5ee':'#fde8e8',color:ch.resolved?'#2d7a50':'#8a2020',marginLeft:'auto'}}>{ch.resolved?'resolved':'ongoing'}</span>
-                      </div>
-                      <div style={{fontSize:12,color:C.ink,marginBottom:4}}>{ch.event}</div>
-                      {ch.narrative_potential&&<div style={{fontSize:11,color:C.lavender,fontStyle:'italic'}}>{ch.narrative_potential}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            </Section>
-          )}
-
-          {/* Mirror Fields (JustAWoman) */}
-          {d.justawoman_mirror&&Object.keys(d.justawoman_mirror).length>0&&(
-            <Section title="JustAWoman Mirror">
-              <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.pinkLight,border:`1px solid ${C.pink}40`}}>
-                {Object.entries(d.justawoman_mirror).filter(([,v])=>v).map(([k,v])=>(
-                  <div key={k} style={{marginBottom:6}}>
-                    <div style={{fontSize:10,fontWeight:700,color:C.pink,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2}}>{k.replace(/_/g,' ')}</div>
-                    <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{v}</div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-        </div>
-      )}
-
-      {/* ── NETWORK TAB — known associates and relationships ── */}
-      {detailTab==='network' && (
-        <div style={{padding:'16px 20px'}}>
-          {/* Known Associates */}
-          {(p.known_associates||d.known_associates||[]).length>0&&(
-            <Section title="Known Associates">
-              <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                {(p.known_associates||d.known_associates||[]).map((a,i)=>(
-                  <div key={i} style={{padding:'10px 14px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:700,color:C.ink}}>{a.handle}</div>
-                      <div style={{fontSize:11,color:C.inkMid}}>{a.description}</div>
-                    </div>
-                    <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
-                      <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:8,background:C.blueLight,color:C.blue}}>{(a.relationship_type||'').replace(/_/g,' ')}</span>
-                      {a.drama_level!=null&&<span style={{fontSize:10,color:a.drama_level>=7?C.pink:a.drama_level>=4?'#e67e22':C.inkLight}}>Drama: {a.drama_level}/10</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Sample Comments */}
-          {((p.sample_comments||d.sample_comments)||[]).length>0&&(
-            <Section title="Comment Section">
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                {(p.sample_comments||d.sample_comments||[]).map((c,i)=>(
-                  <div key={i} style={{padding:'8px 12px',borderRadius:C.radiusSm,background:C.surfaceAlt,border:`1px solid ${C.border}`,fontSize:12,color:C.inkMid,lineHeight:1.5}}>
-                    <span style={{fontWeight:600,color:C.ink,marginRight:6}}>@user_{i+1}</span>{c}
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Book Relevance */}
-          {(p.book_relevance||d.book_relevance||[]).length>0&&(
-            <Section title="Book Relevance">
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                {(p.book_relevance||d.book_relevance||[]).map((r,i)=>(
-                  <div key={i} style={{padding:'6px 10px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`,fontSize:12,color:C.inkMid}}>✦ {r}</div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {(p.known_associates||d.known_associates||[]).length===0&&(p.sample_comments||d.sample_comments||[]).length===0&&(
-            <div style={{textAlign:'center',padding:40,color:C.inkLight,fontSize:13}}>No network data available for this profile.</div>
-          )}
-        </div>
-      )}
-
-      {/* ── SCENE TAB — scene context for story engine injection ── */}
-      {detailTab==='scene' && (
-        <div style={{padding:'16px 20px'}}>
-          <Section title="Scene Context">
-            <div style={{fontSize:12,color:C.inkLight,marginBottom:12}}>Voice-safe formatted context for story engine injection. Author-knowledge fields are withheld.</div>
-            {sceneContext?(
-              <>
-                <div style={{padding:'14px 16px',borderRadius:C.radiusSm,background:'#1a1625',color:'#d4d0e0',fontFamily:"'DM Mono', monospace",fontSize:11,lineHeight:1.7,whiteSpace:'pre-wrap',overflowX:'auto',maxHeight:400,overflowY:'auto',marginBottom:12}}>
-                  {sceneContext}
-                </div>
-                <button onClick={onCopySceneContext} style={{padding:'8px 18px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,background:C.lavender,color:'#fff',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-                  Copy to Clipboard
-                </button>
-              </>
-            ):(
-              <div style={{textAlign:'center',padding:30,color:C.inkLight}}><Spinner/> Loading scene context...</div>
-            )}
-          </Section>
-        </div>
-      )}
-
-      {/* ── CROSSING TAB — preview what crossing creates ── */}
-      {detailTab==='crossing' && (
-        <div style={{padding:'16px 20px'}}>
-          {p.status==='crossed'?(
-            <div style={{textAlign:'center',padding:30}}>
-              <div style={{fontSize:18,fontWeight:700,color:C.lavender,marginBottom:8}}>✦ Already Crossed</div>
-              <div style={{fontSize:13,color:C.inkMid}}>This profile was crossed into the story world{p.crossed_at?` on ${new Date(p.crossed_at).toLocaleDateString()}`:''}</div>
-            </div>
-          ):crossingPreview?(
-            <>
-              <Section title="Crossing Preview">
-                <div style={{fontSize:12,color:C.inkLight,marginBottom:12}}>This is what will be created in the Character Registry when you cross this profile.</div>
-                <div style={{padding:'16px',borderRadius:C.radius,background:C.surfaceAlt,border:`2px dashed ${C.lavender}40`}}>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-                    <Field label="Character Key" value={crossingPreview.character_key}/>
-                    <Field label="Display Name" value={crossingPreview.display_name}/>
-                    <Field label="Role Type" value={crossingPreview.role_type}/>
-                    <Field label="Status" value={crossingPreview.status}/>
-                    <div style={{gridColumn:'1/-1'}}><Field label="Description" value={crossingPreview.description}/></div>
-                    <div style={{gridColumn:'1/-1'}}><Field label="Core Desire" value={crossingPreview.core_desire}/></div>
-                    <div style={{gridColumn:'1/-1'}}><Field label="Core Wound" value={crossingPreview.core_wound}/></div>
-                    <div style={{gridColumn:'1/-1'}}><Field label="Personality" value={crossingPreview.personality}/></div>
-                  </div>
-                </div>
-              </Section>
-
-              {crossingPreview.timeline_event&&(
-                <Section title="Timeline Event">
-                  <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.ink,marginBottom:4}}>{crossingPreview.timeline_event.event_name}</div>
-                    <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6,marginBottom:4}}>{crossingPreview.timeline_event.event_description}</div>
-                    <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:8,background:crossingPreview.timeline_event.impact_level==='major'?C.pinkLight:C.blueLight,color:crossingPreview.timeline_event.impact_level==='major'?C.pink:C.blue}}>
-                      {crossingPreview.timeline_event.impact_level} impact
-                    </span>
-                  </div>
-                </Section>
-              )}
-
-              {p.status==='finalized'&&(
-                <>
-                  {/* Crossing Approval Gate */}
-                  {(()=>{
-                    const approval=(p.full_profile||{})?._approval;
-                    if(approval?.approved){
-                      return(
-                        <>
-                          <div style={{padding:'10px 14px',borderRadius:C.radiusSm,background:'#e8f5ee',border:`1px solid #c3e6cb`,marginBottom:8,fontSize:12}}>
-                            <span style={{fontWeight:700,color:'#2d7a50'}}>Approved for crossing</span>
-                            {approval.approved_at&&<span style={{color:'#6b8a6b',marginLeft:8}}>{new Date(approval.approved_at).toLocaleDateString()}</span>}
-                            {approval.approval_notes&&<div style={{color:'#4a6a4a',marginTop:4}}>{approval.approval_notes}</div>}
-                          </div>
-                          <button onClick={()=>onCross(p.id)} style={{width:'100%',padding:'12px',borderRadius:C.radiusSm,fontSize:14,fontWeight:700,background:C.lavender,color:'#fff',border:'none',cursor:'pointer'}}>
-                            ⚡ Confirm Crossing Into World
-                          </button>
-                        </>
-                      );
-                    }
-                    if(approval&&!approval.approved){
-                      return(
-                        <div style={{padding:'10px 14px',borderRadius:C.radiusSm,background:'#fde8e8',border:`1px solid #f5c6cb`,marginBottom:8,fontSize:12}}>
-                          <span style={{fontWeight:700,color:'#8a2020'}}>Crossing rejected</span>
-                          {approval.rejection_reason&&<div style={{color:'#6a3030',marginTop:4}}>{approval.rejection_reason}</div>}
-                          <button onClick={()=>{const notes=prompt('Approval notes (optional):');if(notes!==null)onApprove(p.id,notes);}} style={{marginTop:8,padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:'#2d7a50',border:`1px solid #c3e6cb`,cursor:'pointer'}}>Re-approve</button>
-                        </div>
-                      );
-                    }
-                    // No approval yet — show approve/reject buttons
-                    return(
-                      <div style={{display:'flex',gap:8,marginTop:8}}>
-                        <button onClick={()=>{const notes=prompt('Approval notes (optional):');if(notes!==null)onApprove(p.id,notes);}} style={{flex:1,padding:'10px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,background:'#e8f5ee',color:'#2d7a50',border:`1px solid #c3e6cb`,cursor:'pointer'}}>
-                          ✓ Approve for Crossing
-                        </button>
-                        <button onClick={()=>{const reason=prompt('Rejection reason:');if(reason!==null)onRejectCrossing(p.id,reason);}} style={{flex:1,padding:'10px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,background:'#fde8e8',color:'#8a2020',border:`1px solid #f5c6cb`,cursor:'pointer'}}>
-                          ✕ Reject
-                        </button>
-                      </div>
-                    );
-                  })()}
-                </>
-              )}
-              {p.status!=='finalized'&&p.status!=='crossed'&&(
-                <div style={{textAlign:'center',padding:12,fontSize:12,color:C.inkLight}}>Profile must be finalized before crossing.</div>
-              )}
-            </>
-          ):(
-            <div style={{textAlign:'center',padding:30,color:C.inkLight}}><Spinner/> Loading crossing preview...</div>
-          )}
-
-          {/* Crossing pathway info */}
-          {(p.crossing_trigger||d.crossing_trigger)&&(
-            <div style={{marginTop:16}}>
-              <Section title="Crossing Pathway">
-                <div style={{padding:'12px 16px',borderRadius:C.radiusSm,background:C.lavLight,border:`1px solid ${C.lavender}40`}}>
-                  <div style={{fontSize:11,fontWeight:700,color:C.lavender,marginBottom:4}}>Trigger</div>
-                  <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6,marginBottom:8}}>{p.crossing_trigger||d.crossing_trigger}</div>
-                  <div style={{fontSize:11,fontWeight:700,color:C.lavender,marginBottom:4}}>Mechanism</div>
-                  <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.crossing_mechanism||d.crossing_mechanism}</div>
-                </div>
-              </Section>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+// FeedStatePicker + DetailPanel extracted to ./feed/ProfileDetailPanel.jsx
+// (end of file)

@@ -21,11 +21,15 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const sharp = require('sharp');
 const artifactDetection = require('./artifactDetectionService');
+const sceneSpecService = require('./sceneSpecService');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const RUNWAY_API_BASE    = 'https://api.dev.runwayml.com/v1';
 const RUNWAY_API_KEY     = process.env.RUNWAY_ML_API_KEY;
 const RUNWAY_API_VERSION = '2024-11-06';
+const OPENAI_API_KEY     = process.env.OPENAI_API_KEY;
 const S3_BUCKET          = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION         = process.env.AWS_REGION || 'us-east-1';
 
@@ -33,7 +37,7 @@ const s3 = new S3Client({ region: AWS_REGION });
 
 // ─── LALAVERSE VISUAL ANCHOR (condensed ~590 chars) ─────────────────────────
 
-const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Colors: warm neutrals (cream, blush, beige), gold accents, pastel glow (lavender, peach, rose). Natural hero lighting. Materials: soft fabrics (linen, silk), light wood (oak, ash), glass, mirrors, shimmer. Tone: calm, intentional, beautiful, lived-in. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
+const LALAVERSE_VISUAL_ANCHOR = `Style: Final Fantasy softness, Pinterest-core femininity, magical realism. Natural hero lighting. Materials: soft fabrics, glass, mirrors, shimmer. Tone: calm, intentional, beautiful, lived-in. Quality: sharp edges on furniture, consistent hardware, correct chair/table legs, coherent reflections, clean fabric folds, precise floor patterns, minimal surface objects.`;
 
 // ─── NEGATIVE PROMPT (universal) ─────────────────────────────────────────────
 
@@ -42,16 +46,16 @@ const NEGATIVE_PROMPT = `person, people, human, figure, silhouette, body, face, 
 // ─── ANGLE MODIFIERS ──────────────────────────────────────────────────────────
 
 const ANGLE_MODIFIERS = {
-  WIDE:         'Wide establishing shot, full room visible, camera at medium height, balanced composition.',
-  CLOSET:       'Camera facing wardrobe wall, full-height racks or shelving visible, soft glow on fabric textures.',
-  VANITY:       'Camera at vanity mirror, close-to-medium shot, soft focus on reflection and surface details.',
-  WINDOW:       'Camera facing window, natural light streaming in, subject silhouette or three-quarter view.',
-  DOORWAY:      'Camera at doorway threshold, looking into the room, sense of arrival or departure.',
-  ESTABLISHING: 'Wide exterior or grand interior entrance, full prestige of the space visible.',
-  ACTION:       'Dynamic angle, sense of movement or event energy, slightly asymmetric composition.',
-  CLOSE:        'Close shot on a specific surface, object, or detail. Intimate and personal.',
-  OVERHEAD:     'High angle looking down, revealing the full layout and spatial relationships.',
-  OTHER:        'Unique compositional angle appropriate to this specific location.',
+  WIDE:         'Wide establishing shot showing the FULL room from corner to corner. Camera pulled back to maximum width. Include ceiling, floor, and all walls visible. Extended panoramic view revealing the complete space and all furniture.',
+  CLOSET:       'Camera facing the wardrobe/closet area. Extend the view to show full-height clothing racks, shelving, and organized accessories. Soft warm glow on fabric textures. Show the full depth of the closet space as if the wall has been extended back.',
+  VANITY:       'Camera at vanity/dressing table area. Show the full mirror, surface details, beauty products, and surrounding decor. Extend the view to include adjacent shelving or wall art. Soft glamour lighting.',
+  WINDOW:       'Camera facing the window wall. Extend the view to show the FULL window and surrounding wall space. Natural golden light streaming in. Include curtains, window seat, or plants near the window. Show what is visible beyond the glass.',
+  DOORWAY:      'Camera at the doorway threshold, looking into the room from outside. Wide enough to show the full door frame and hallway. Sense of arrival — revealing the room from an outsider perspective. Extended view showing the transition between spaces.',
+  ESTABLISHING: 'Grand wide exterior or entrance shot. Camera pulled far back. Show the full facade, entrance, or grand interior from maximum distance. Include architectural details, landscaping, or approach path. The most expansive possible view.',
+  ACTION:       'Dynamic angle with sense of movement or event energy. Slightly asymmetric composition. Show the space as if someone just walked through it. Extended view capturing the flow of the room.',
+  CLOSE:        'Close-up shot on a signature surface, object, or detail. Intimate and personal. Show texture, material quality, and craftsmanship. Extend focus to include nearby complementary details.',
+  OVERHEAD:     'High overhead angle looking straight down. Reveal the full room layout, furniture arrangement, and floor pattern. Bird\'s-eye view showing the complete spatial relationships.',
+  OTHER:        'Unique compositional angle appropriate to this specific location. Extend the visible space beyond what the reference image shows.',
 };
 
 // ─── CAMERA MOTION MAPPING (per angle type) ─────────────────────────────────
@@ -104,25 +108,82 @@ const ENVIRONMENT_ONLY_CONSTRAINT = 'Empty room. No people. No person. No human.
 
 // ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 
-function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null) {
+function buildPrompt(sceneSet, angleLabel = 'WIDE', customCameraDirection = null, eventContext = null) {
   const cameraText = customCameraDirection || ANGLE_MODIFIERS[angleLabel] || ANGLE_MODIFIERS.WIDE;
 
-  // Condensed anchor frees ~400 chars for description vs v1.1's ~200
-  const descriptionSlice = (sceneSet.canonical_description || '').slice(0, 350);
+  // User description is the MOST important part — use the full text
+  const description = (sceneSet.canonical_description || '').trim();
 
+  // Build prompt with description first, boilerplate minimal
+  // IMPORTANT: avoid label-like text (LOCATION:, CAMERA:, etc.) that DALL-E renders literally
   const parts = [
-    ENVIRONMENT_ONLY_CONSTRAINT,
-    LALAVERSE_VISUAL_ANCHOR,
-    `LOCATION: ${sceneSet.name}.`,
-    descriptionSlice,
-    `CAMERA: ${cameraText}`,
-    'Photorealistic cinematic quality. No text overlays. No watermarks.',
+    'Empty room, no people, no text, no labels, no annotations, no watermarks.',
+    `${sceneSet.name}.`,
+    description,
   ];
 
-  const full = parts.join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Time/season as natural descriptions, not labels
+  const timeOfDay = sceneSet.time_of_day;
+  const season = sceneSet.season;
+  if (timeOfDay) {
+    const timeDescriptions = {
+      morning: 'Soft golden morning light streaming through windows.',
+      afternoon: 'Bright natural daylight with even illumination.',
+      golden_hour: 'Warm golden-hour light casting long soft shadows.',
+      evening: 'Warm amber evening light with table lamps and soft glow.',
+      night: 'Nighttime lighting with accent lamps and city glow through windows.',
+    };
+    parts.push(timeDescriptions[timeOfDay] || '');
+  }
+  if (season) {
+    const seasonDescriptions = {
+      spring: 'Spring atmosphere with pastel accents and blooming flowers visible outside.',
+      summer: 'Summer atmosphere with golden light and open windows.',
+      fall: 'Autumn atmosphere with warm amber tones and rich textures.',
+      winter: 'Winter atmosphere with cool blue-white light and frosty windows.',
+    };
+    parts.push(seasonDescriptions[season] || '');
+  }
 
-  // Enforce 1000 char limit
-  return full.length > 1000 ? full.slice(0, 997) + '...' : full;
+  // Room properties affect spatial rendering
+  const rp = sceneSet.visual_language?.room_properties;
+  if (rp) {
+    const rpParts = [];
+    if (rp.room_size) {
+      const sizeDescriptions = {
+        compact: 'Compact cozy room with furniture close together.',
+        medium: 'Medium-sized room with moderate space between furniture.',
+        spacious: 'Spacious room with generous open floor space and wide sight lines.',
+        grand: 'Grand expansive space with high ceilings and vast floor area.',
+      };
+      rpParts.push(sizeDescriptions[rp.room_size] || '');
+    }
+    if (rp.ceiling_height && rp.ceiling_height !== 'standard') {
+      const ceilingDesc = { tall: 'Tall ceilings.', vaulted: 'Vaulted cathedral ceilings.', double_height: 'Double-height ceilings with dramatic vertical space.' };
+      rpParts.push(ceilingDesc[rp.ceiling_height] || '');
+    }
+    if (rp.room_shape && rp.room_shape !== 'rectangular') {
+      const shapeDesc = { square: 'Square room layout.', l_shaped: 'L-shaped room with two distinct areas.', open_plan: 'Open plan layout flowing into adjacent spaces.' };
+      rpParts.push(shapeDesc[rp.room_shape] || '');
+    }
+    const rpText = rpParts.filter(Boolean).join(' ');
+    if (rpText) parts.push(rpText);
+  }
+
+  // Camera direction as natural text
+  parts.push(cameraText);
+
+  // For non-WIDE angles
+  if (angleLabel !== 'WIDE' && angleLabel !== 'OTHER') {
+    parts.push('Same room as the reference image. Same wall colors, furniture, and decor. Only the camera position changed.');
+  }
+
+  parts.push('Photorealistic cinematic quality. Pinterest-worthy feminine aesthetic. Soft natural lighting.');
+
+  const full = parts.filter(Boolean).join(' ').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // DALL-E handles up to 4000 chars — give the description room to breathe
+  return full.length > 3500 ? full.slice(0, 3497) + '...' : full;
 }
 
 /**
@@ -236,6 +297,172 @@ async function startImageToVideo(prompt, imageUrl, options = {}) {
       await sleep(backoff);
     }
   }
+}
+
+// ─── DALL-E 3 STILL GENERATION ──────────────────────────────────────────────
+
+/**
+ * Generate a high-quality still image via DALL-E 3.
+ * Returns the image URL directly (no polling needed).
+ * Used as the default for scene stills — richer detail than Runway for static scenes.
+ */
+async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel = null, extras = {}) {
+  const apiKey = process.env.OPENAI_API_KEY || OPENAI_API_KEY;
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
+
+  const dallePrompt = prompt.length > 4000 ? prompt.slice(0, 3997) + '...' : prompt;
+  console.log(`[SceneGen] DALL-E prompt (${dallePrompt.length} chars): ${dallePrompt.slice(0, 100)}...`);
+
+  try {
+    // When a reference image exists, use gpt-image-1 edits endpoint
+    // to maintain visual consistency with the base image
+    if (referenceImageUrl) {
+      console.log(`[SceneGen] Using gpt-image-1 edit with base image reference`);
+      const imageRes = await axios.get(referenceImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const imageBuffer = Buffer.from(imageRes.data);
+
+      const FormData = (await import('form-data')).default;
+      const form = new FormData();
+      form.append('model', 'gpt-image-1');
+      form.append('image', imageBuffer, { filename: 'base.png', contentType: 'image/png' });
+
+      // Add cropped reference region as additional context if available
+      if (extras.croppedRefUrl) {
+        const croppedRefUrl = extras.croppedRefUrl;
+        try {
+          const cropRes = await axios.get(croppedRefUrl, { responseType: 'arraybuffer', timeout: 15000 });
+          form.append('image', Buffer.from(cropRes.data), { filename: 'crop-ref.png', contentType: 'image/png' });
+          console.log(`[SceneGen] Added cropped reference for ${angleLabel}`);
+        } catch { /* non-blocking */ }
+      }
+
+      // Build blueprint-driven constraints for the edit instruction
+      const { imageAnalysis, styleLock, regionHint, anchors } = extras;
+      let detailConstraints = '';
+
+      // Blueprint layout — tells the AI what's on each wall
+      const layoutMap = imageAnalysis?.layout_map;
+      if (layoutMap) {
+        const walls = [];
+        if (layoutMap.back_wall) walls.push(`Back wall: ${layoutMap.back_wall}`);
+        if (layoutMap.left_wall) walls.push(`Left wall: ${layoutMap.left_wall}`);
+        if (layoutMap.right_wall) walls.push(`Right wall: ${layoutMap.right_wall}`);
+        if (layoutMap.center) walls.push(`Center: ${layoutMap.center}`);
+        if (layoutMap.ceiling) walls.push(`Ceiling: ${layoutMap.ceiling}`);
+        if (walls.length) detailConstraints += ` Room blueprint: ${walls.join('. ')}.`;
+      }
+
+      // Anchor objects — things that MUST appear and never change
+      if (anchors?.length) {
+        detailConstraints += ` Fixed objects that must appear: ${anchors.join('; ')}.`;
+      }
+
+      // Wall color and window view
+      if (imageAnalysis?.wall_color) detailConstraints += ` Walls: ${imageAnalysis.wall_color}.`;
+      if (imageAnalysis?.visible_through_windows) detailConstraints += ` Outside windows: ${imageAnalysis.visible_through_windows}.`;
+
+      // Style lock
+      if (styleLock) {
+        const lockParts = [];
+        if (styleLock.color_palette) lockParts.push(`Colors: ${styleLock.color_palette.join(', ')}.`);
+        if (styleLock.lighting_type) lockParts.push(`Lighting: ${styleLock.lighting_type}.`);
+        if (lockParts.length) detailConstraints += ` ${lockParts.join(' ')}`;
+      }
+      if (regionHint) detailConstraints += ` ${regionHint}`;
+      const editInstruction = `Do not render any text, labels, or annotations on the image. This is a photograph of a built set. The room is FIXED — nothing moves, nothing changes. You are repositioning the camera inside this same room to get a different shot. Every wall color, piece of furniture, decor item, and lighting fixture stays identical.${detailConstraints} ${dallePrompt}`;
+      form.append('prompt', editInstruction);
+      form.append('n', '1');
+      form.append('size', '1536x1024');
+      form.append('quality', 'high');
+
+      const response = await axios.post(
+        'https://api.openai.com/v1/images/edits',
+        form,
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            ...form.getHeaders(),
+          },
+          timeout: 180000,
+        }
+      );
+
+      const b64 = response.data.data[0]?.b64_json;
+      if (b64) {
+        // Upload the base64 result to S3 and return URL
+        const imgBuf = Buffer.from(b64, 'base64');
+        const s3Key = `scenes/dalle-edit-${Date.now()}.png`;
+        await s3.send(new PutObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: s3Key,
+          Body: imgBuf,
+          ContentType: 'image/png',
+        }));
+        const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+        console.log(`[SceneGen] DALL-E edit success (b64→S3): ${url}`);
+        return url;
+      }
+
+      // Fallback: if response has a URL instead of b64, download and re-upload to S3
+      // OpenAI URLs expire after ~1 hour so we must persist to S3
+      const tempUrl = response.data.data[0]?.url;
+      if (tempUrl) {
+        const s3Key = `scenes/dalle-edit-${Date.now()}.png`;
+        const persistedUrl = await downloadAndUploadToS3(tempUrl, s3Key);
+        console.log(`[SceneGen] DALL-E edit success (url→S3): ${persistedUrl}`);
+        return persistedUrl;
+      }
+
+      console.warn('[SceneGen] DALL-E edit returned no image data');
+      return null;
+    }
+
+    // No reference image — standard dall-e-3 generation
+    const response = await axios.post(
+      'https://api.openai.com/v1/images/generations',
+      {
+        model: 'dall-e-3',
+        prompt: dallePrompt,
+        n: 1,
+        size: '1792x1024',
+        quality: 'hd',
+        style: 'natural',
+        response_format: 'url',
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 120000,
+      }
+    );
+
+    const url = response.data.data[0]?.url;
+    console.log(`[SceneGen] DALL-E success: ${url ? 'got URL' : 'no URL in response'}`);
+    return url;
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.response?.data || err.message;
+    console.error(`[SceneGen] DALL-E API error:`, detail);
+    throw new Error(`DALL-E generation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+  }
+}
+
+/**
+ * Download an image from URL, upload to S3, return the S3 URL.
+ */
+async function downloadAndUploadToS3(imageUrl, s3Key) {
+  const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
+  const buffer = Buffer.from(response.data);
+
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: s3Key,
+    Body: buffer,
+    ContentType: 'image/png',
+  }));
+
+  return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
 /**
@@ -413,12 +640,42 @@ async function deleteOldS3Asset(url) {
     console.warn(`[SceneGen] S3 cleanup failed (non-blocking): ${err.message}`);
   }
 }
+// ─── EVENT CONTEXT LOADER ────────────────────────────────────────────────────
+
+async function loadEventContext(sceneSet, models) {
+  try {
+    const sequelize = models.sequelize;
+    // Find events linked to this scene set
+    const [events] = await sequelize.query(
+      `SELECT location_hint, dress_code, prestige, name FROM world_events
+       WHERE scene_set_id = :sceneSetId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { sceneSetId: sceneSet.id } }
+    );
+    if (events.length > 0) return events[0];
+
+    // Fallback: find events linked to episodes that use this scene set
+    const [epEvents] = await sequelize.query(
+      `SELECT we.location_hint, we.dress_code, we.prestige, we.name
+       FROM world_events we
+       JOIN scene_set_episodes sse ON sse.episode_id = we.used_in_episode_id
+       WHERE sse.scene_set_id = :sceneSetId AND we.deleted_at IS NULL AND sse.deleted_at IS NULL
+       LIMIT 1`,
+      { replacements: { sceneSetId: sceneSet.id } }
+    );
+    if (epEvents.length > 0) return epEvents[0];
+  } catch (e) {
+    // Tables may not exist yet
+  }
+  return null;
+}
+
 // ─── HIGH-LEVEL: GENERATE BASE SCENE ─────────────────────────────────────────
 
 async function generateBaseScene(sceneSet, models) {
   const { SceneSet } = models;
 
-  const prompt = buildPrompt(sceneSet, 'WIDE');
+  const eventContext = await loadEventContext(sceneSet, models);
+  const prompt = buildPrompt(sceneSet, 'WIDE', null, eventContext);
 
   await SceneSet.update(
     { generation_status: 'generating', base_runway_prompt: prompt },
@@ -428,54 +685,125 @@ async function generateBaseScene(sceneSet, models) {
   try {
     console.log(`[SceneGen] Starting base still for: ${sceneSet.name}`);
 
-    // Build style reference if set has one
-    const styleReference = sceneSet.style_reference_url
-      ? { uri: sceneSet.style_reference_url, weight: 0.7 }
-      : undefined;
+    // Determine generation engine: DALL-E (default for stills) or Runway
+    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    let stillUrl, lockedSeed = null, stillCredits = 0;
 
-    // ── Step 1: Text → Still (with multi-variation if configured) ─────────
-    const numVariations = sceneSet.variation_count || 1;
-    let stillOutputUrl, stillSeed, stillCredits;
+    if (!useRunway && OPENAI_API_KEY) {
+      // ── DALL-E 3 path: richer detail for static scene stills ─────────
+      console.log(`[SceneGen] Using DALL-E 3 for richer scene still`);
+      try {
+        const dalleUrl = await generateDallEStill(prompt);
+        if (!dalleUrl) throw new Error('DALL-E 3 did not return an image URL');
 
-    if (numVariations > 1) {
-      const varResult = await generateBestVariation(prompt, numVariations, { styleReference });
-      if (!varResult.best) {
-        await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
-        throw new Error(`Base still multi-variation failed: ${varResult.error}`);
+        const s3Key = `scenes/${sceneSet.id}/base-still-${Date.now()}.png`;
+        stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+        console.log(`[SceneGen] DALL-E still complete, uploaded to S3`);
+      } catch (dalleErr) {
+        console.warn(`[SceneGen] DALL-E 3 failed, falling back to Runway:`, dalleErr.message);
+        // Fall through to Runway path
+        stillUrl = null;
       }
-      stillOutputUrl = varResult.best.url;
-      stillSeed = varResult.seed;
-      stillCredits = varResult.creditsUsed || 0;
-    } else {
-      const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference });
-      const stillResult = await pollTask(stillJobId);
-      if (stillResult.status !== 'SUCCEEDED') {
-        await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
-        throw new Error(`Base still failed: ${stillResult.error}`);
-      }
-      stillOutputUrl = stillResult.outputUrl;
-      stillSeed = stillResult.seed;
-      stillCredits = stillResult.creditsUsed || 0;
     }
 
-    const stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
-    const lockedSeed = stillSeed != null ? String(stillSeed) : null;
+    if (!stillUrl) {
+      // ── Runway path: used as fallback or when video is needed ─────────
+      console.log(`[SceneGen] Using Runway for scene still`);
+      const styleReference = sceneSet.style_reference_url
+        ? { uri: sceneSet.style_reference_url, weight: 0.7 }
+        : undefined;
+
+      const numVariations = sceneSet.variation_count || 1;
+      let stillOutputUrl, stillSeed;
+
+      if (numVariations > 1) {
+        const varResult = await generateBestVariation(prompt, numVariations, { styleReference });
+        if (!varResult.best) {
+          await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+          throw new Error(`Base still multi-variation failed: ${varResult.error}`);
+        }
+        stillOutputUrl = varResult.best.url;
+        stillSeed = varResult.seed;
+        stillCredits = varResult.creditsUsed || 0;
+      } else {
+        const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference });
+        const stillResult = await pollTask(stillJobId);
+        if (stillResult.status !== 'SUCCEEDED') {
+          await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
+          throw new Error(`Base still failed: ${stillResult.error}`);
+        }
+        stillOutputUrl = stillResult.outputUrl;
+        stillSeed = stillResult.seed;
+        stillCredits = stillResult.creditsUsed || 0;
+      }
+
+      stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
+      lockedSeed = stillSeed != null ? String(stillSeed) : null;
+    }
 
     // Clean up old base still from S3 (best-effort)
     if (sceneSet.base_still_url) {
       await deleteOldS3Asset(sceneSet.base_still_url);
     }
 
-    console.log(`[SceneGen] Still complete. Seed locked: ${lockedSeed}`);
+    console.log(`[SceneGen] Still complete.${lockedSeed ? ` Seed locked: ${lockedSeed}` : ' (DALL-E — no seed)'}`);
 
     // Lock the seed + base still URL — permanent
-    // Base video is generated on-demand only (use POST /:id/generate-video to produce it)
     await SceneSet.update({
       base_runway_seed: lockedSeed,
       base_still_url: stillUrl,
       generation_status: 'complete',
       generation_cost: parseFloat(sceneSet.generation_cost || 0) + stillCredits,
     }, { where: { id: sceneSet.id } });
+
+    // ── Feature 4: Auto-lock style DNA from the new base image ──
+    // Analyze the generated base image with Claude Vision and cache the
+    // visual inventory + style lock so all future angles have concrete
+    // details to preserve. Runs in background (non-blocking).
+    if (process.env.ANTHROPIC_API_KEY) {
+      const updatedSet = { ...sceneSet, base_still_url: stillUrl };
+      analyzeBaseImage(updatedSet, SceneSet).catch(err =>
+        console.warn(`[SceneGen] Auto image analysis failed (non-blocking): ${err.message}`)
+      );
+      // Also auto-lock style if not already locked
+      const vl = sceneSet.visual_language || {};
+      if (!vl.locked) {
+        try {
+          const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+          const response = await client.messages.create({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 500,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image', source: { type: 'url', url: stillUrl } },
+                { type: 'text', text: `Extract the visual style DNA of this room. Return JSON:
+{
+  "color_palette": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
+  "materials": ["material1", "material2", "material3"],
+  "lighting_type": "warm golden / cool daylight / dramatic / soft ambient",
+  "design_style": "modern minimalist / bohemian / etc.",
+  "key_textures": ["texture1", "texture2", "texture3"]
+}
+Return ONLY JSON.` },
+              ],
+            }],
+          });
+          const text = response.content?.[0]?.text || '';
+          const match = text.match(/\{[\s\S]*\}/);
+          if (match) {
+            const styleData = JSON.parse(match[0]);
+            await SceneSet.update(
+              { visual_language: { ...vl, ...styleData, locked: true } },
+              { where: { id: sceneSet.id } }
+            );
+            console.log(`[SceneGen] Auto-locked style DNA: ${styleData.design_style}`);
+          }
+        } catch (styleErr) {
+          console.warn(`[SceneGen] Auto style lock failed (non-blocking): ${styleErr.message}`);
+        }
+      }
+    }
 
     return { success: true, stillUrl, videoUrl: null, seed: lockedSeed };
   } catch (err) {
@@ -531,12 +859,694 @@ async function extractFirstFrame(videoUrl, setId, angleId) {
   }
 }
 
+// ─── CLAUDE VISION HELPERS ───────────────────────────────────────────────────
+
+/**
+ * Analyze a base image with Claude Vision to extract concrete visual details.
+ * Returns a structured description of exactly what's in the image — colors,
+ * furniture, decor, textures — so angle prompts can reference specifics.
+ * Results are cached in visual_language.image_analysis.
+ */
+async function analyzeBaseImage(sceneSet, SceneSetModel) {
+  if (!process.env.ANTHROPIC_API_KEY || !sceneSet.base_still_url) return null;
+
+  const IMAGE_ANALYSIS_VERSION = 7; // bump to invalidate cache when schema changes
+  // Check cache — skip if already analyzed for this base image with current version
+  const vl = sceneSet.visual_language || {};
+  if (vl.image_analysis?.source_url === sceneSet.base_still_url && vl.image_analysis?.version === IMAGE_ANALYSIS_VERSION) {
+    console.log(`[SceneGen] Using cached image analysis for ${sceneSet.name}`);
+    return vl.image_analysis;
+  }
+
+  try {
+    console.log(`[SceneGen] Analyzing base image with Claude Vision for ${sceneSet.name}`);
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2500,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: sceneSet.base_still_url } },
+          { type: 'text', text: `You are a virtual production designer creating a SCENE BLUEPRINT for this room. This blueprint will be used to generate consistent camera angles — the room is a fixed set, only the camera moves.
+
+Return JSON:
+{
+  "image_type": "room_photo | mood_board | collage | illustration | other",
+
+  "layout_map": {
+    "back_wall": "what is against the back wall (12 o'clock from camera)",
+    "left_wall": "what is on the left wall (9 o'clock)",
+    "right_wall": "what is on the right wall (3 o'clock)",
+    "front_wall": "what is behind the camera / entrance area (6 o'clock)",
+    "center": "what is in the center of the room",
+    "ceiling": "what is on/hanging from the ceiling"
+  },
+
+  "anchor_objects": [
+    {"name": "object name", "position": "which wall/area", "description": "exact appearance — color, material, size", "must_appear_in": ["which angles would see this object"]}
+  ],
+
+  "camera_regions": {
+    "center_crop": "what you'd see zooming into the center 60%",
+    "left_crop": "what you'd see looking at the left 40%",
+    "right_crop": "what you'd see looking at the right 40%",
+    "top_crop": "what you'd see looking at the upper 40%"
+  },
+
+  "wall_color": "exact wall color",
+  "flooring": "exact floor type and color",
+  "color_palette_hex": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
+  "visible_through_windows": "what is visible outside",
+  "atmosphere": "one sentence — mood, lighting quality, time of day",
+
+  "description": "Write a rich 2-3 sentence description of this room as if describing a film set. Include: room size, wall colors, key furniture with materials/colors and positions, lighting sources, signature decor, window views, flooring, and overall mood. Be specific enough that someone could recreate this exact room from your description alone.",
+
+  "room_properties": {
+    "room_size": "compact | medium | spacious | grand",
+    "ceiling_height": "standard | tall | vaulted | double_height",
+    "room_shape": "rectangular | square | l_shaped | open_plan"
+  }
+}
+
+CRITICAL: The layout_map and anchor_objects are the foundation. Be extremely specific about what is on each wall and which objects are signature (must never change between angles).
+Return ONLY JSON.` },
+        ],
+      }],
+    });
+
+    const text = response.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      console.warn(`[SceneGen] Image analysis returned no JSON. Response: ${text.slice(0, 200)}`);
+      return null;
+    }
+
+    let analysis;
+    try {
+      analysis = JSON.parse(match[0]);
+    } catch (parseErr) {
+      console.warn(`[SceneGen] Image analysis JSON parse failed: ${parseErr.message}. Raw: ${match[0].slice(0, 200)}`);
+      return null;
+    }
+    analysis.source_url = sceneSet.base_still_url;
+    analysis.version = IMAGE_ANALYSIS_VERSION;
+    analysis.analyzed_at = new Date().toISOString();
+
+    // Cache blueprint in visual_language + auto-fill description if empty
+    const updatedVl = { ...vl, image_analysis: analysis };
+    if (analysis.layout_map) updatedVl.layout_map = analysis.layout_map;
+    if (analysis.anchor_objects) updatedVl.anchor_objects = analysis.anchor_objects;
+    if (analysis.camera_regions) updatedVl.camera_regions = analysis.camera_regions;
+    if (analysis.room_properties && !vl.room_properties_manual) {
+      updatedVl.room_properties = analysis.room_properties;
+    }
+
+    // Auto-fill description from image analysis if the set has no description yet
+    const updateFields = { visual_language: updatedVl };
+    if (analysis.description && !sceneSet.canonical_description) {
+      updateFields.canonical_description = analysis.description;
+      // Also regenerate the prompt from the new description
+      const tempSet = { ...sceneSet, canonical_description: analysis.description, visual_language: updatedVl };
+      updateFields.base_runway_prompt = buildPrompt(tempSet);
+      console.log(`[SceneGen] Auto-filled description from image analysis`);
+    }
+
+    await SceneSetModel.update(
+      updateFields,
+      { where: { id: sceneSet.id } }
+    );
+
+    console.log(`[SceneGen] Image analysis complete: ${analysis.furniture?.length || 0} furniture, ${analysis.room_properties?.room_size || 'unknown'} room`);
+    return analysis;
+  } catch (err) {
+    console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Compare a generated angle image against the base image using Claude Vision.
+ * Returns a consistency score (0-100) and list of discrepancies.
+ * Used to auto-retry if the generated angle drifted too far from the base.
+ */
+async function checkAngleConsistency(baseImageUrl, angleImageUrl, angleName) {
+  if (!process.env.ANTHROPIC_API_KEY) return { score: 100, issues: [], pass: true };
+
+  try {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 400,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: baseImageUrl } },
+          { type: 'image', source: { type: 'url', url: angleImageUrl } },
+          { type: 'text', text: `These two images should be the SAME room photographed from different camera angles. Compare them and check if the second image preserved the room's identity.
+
+Return JSON:
+{
+  "score": <0-100, where 100 = identical room, 0 = completely different>,
+  "wall_color_match": <true/false>,
+  "furniture_match": <true/false>,
+  "layout_match": <true/false — are furniture positions consistent with being the same room?>,
+  "decor_match": <true/false>,
+  "window_view_match": <true/false — if windows visible, does the outside view match?>,
+  "issues": ["specific discrepancy 1", "specific discrepancy 2"]
+}
+Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drifts), below 70 = fail (different room). Pay special attention to whether furniture is in the CORRECT position — items should not teleport between walls. Return ONLY JSON.` },
+        ],
+      }],
+    });
+
+    const text = response.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return { score: 100, issues: [], pass: true };
+
+    const result = JSON.parse(match[0]);
+    result.pass = (result.score || 0) >= 70;
+    console.log(`[SceneGen] Consistency check for "${angleName}": score=${result.score}, pass=${result.pass}, issues=${result.issues?.length || 0}`);
+    return result;
+  } catch (err) {
+    console.warn(`[SceneGen] Consistency check failed (non-blocking): ${err.message}`);
+    return { score: 100, issues: [], pass: true };
+  }
+}
+
+
+// ─── MOOD VARIATION SYSTEM ───────────────────────────────────────────────────
+
+/**
+ * Mood presets — each defines color grading parameters for Sharp.
+ * Applied to the base image (or any angle) to create lighting/atmosphere variants
+ * WITHOUT regenerating the room. The furniture, layout, and decor stay pixel-perfect.
+ */
+const MOOD_PRESETS = {
+  morning: {
+    label: 'Morning',
+    description: 'Soft golden morning light streaming through windows',
+    tint: { r: 255, g: 230, b: 200 },  // warm golden
+    brightness: 1.15,
+    saturation: 1.05,
+    contrast: 0.95,
+  },
+  golden_hour: {
+    label: 'Golden Hour',
+    description: 'Rich amber golden-hour warmth with long shadows',
+    tint: { r: 255, g: 200, b: 140 },  // deep amber
+    brightness: 1.05,
+    saturation: 1.2,
+    contrast: 1.1,
+  },
+  night: {
+    label: 'Night',
+    description: 'Moody nighttime with neon and fairy light glow',
+    tint: { r: 180, g: 170, b: 255 },  // cool purple/blue
+    brightness: 0.7,
+    saturation: 1.15,
+    contrast: 1.2,
+  },
+  glam: {
+    label: 'Glam Mode',
+    description: 'Vanity lights bright, warm beauty lighting',
+    tint: { r: 255, g: 240, b: 230 },  // soft warm white
+    brightness: 1.2,
+    saturation: 0.95,
+    contrast: 0.9,
+  },
+  filming: {
+    label: 'Filming Mode',
+    description: 'Ring light active, even studio-like illumination',
+    tint: { r: 245, g: 245, b: 255 },  // neutral cool white
+    brightness: 1.25,
+    saturation: 0.9,
+    contrast: 1.05,
+  },
+  cozy: {
+    label: 'Cozy Evening',
+    description: 'Warm table lamps and fairy lights, intimate glow',
+    tint: { r: 255, g: 210, b: 170 },  // warm amber
+    brightness: 0.85,
+    saturation: 1.1,
+    contrast: 1.05,
+  },
+  dramatic: {
+    label: 'Dramatic',
+    description: 'High contrast with deep shadows and bright highlights',
+    tint: { r: 220, g: 200, b: 255 },  // slight purple
+    brightness: 0.9,
+    saturation: 1.3,
+    contrast: 1.4,
+  },
+};
+
+/**
+ * Apply a mood preset to an image using Sharp color grading.
+ * Returns the S3 URL of the mood-variant image.
+ * The original image is NOT modified — a new file is created.
+ */
+async function applyMoodVariant(sourceImageUrl, mood, setId, angleId = 'base') {
+  const preset = MOOD_PRESETS[mood];
+  if (!preset || !sourceImageUrl) return null;
+
+  try {
+    console.log(`[SceneGen] Applying mood "${mood}" to ${angleId}`);
+    const imageRes = await axios.get(sourceImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+
+    // Apply color grading with Sharp
+    let pipeline = sharp(imageRes.data);
+
+    // Brightness and contrast
+    pipeline = pipeline.modulate({
+      brightness: preset.brightness,
+      saturation: preset.saturation,
+    });
+
+    // Color tint via tint overlay
+    const metadata = await sharp(imageRes.data).metadata();
+    const w = metadata.width || 1920;
+    const h = metadata.height || 1080;
+
+    // Create a tint overlay
+    const tintOverlay = await sharp({
+      create: {
+        width: w,
+        height: h,
+        channels: 4,
+        background: { r: preset.tint.r, g: preset.tint.g, b: preset.tint.b, alpha: 0.15 },
+      },
+    }).png().toBuffer();
+
+    // Composite tint over the graded image
+    const gradedBuffer = await pipeline
+      .composite([{ input: tintOverlay, blend: 'over' }])
+      .png()
+      .toBuffer();
+
+    // Upload to S3
+    const s3Key = `scene-sets/${setId}/moods/${angleId}-${mood}-${Date.now()}.png`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: gradedBuffer,
+      ContentType: 'image/png',
+      CacheControl: 'max-age=31536000',
+    }));
+
+    const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    console.log(`[SceneGen] Mood variant "${mood}" created: ${url}`);
+    return url;
+  } catch (err) {
+    console.warn(`[SceneGen] Mood variant failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Generate all mood variants for a given image (base or angle).
+ * Returns an object mapping mood names to S3 URLs.
+ */
+async function generateMoodVariants(sourceImageUrl, setId, angleId = 'base', moods = null) {
+  const moodList = moods || Object.keys(MOOD_PRESETS);
+  const results = {};
+
+  for (const mood of moodList) {
+    const url = await applyMoodVariant(sourceImageUrl, mood, setId, angleId);
+    if (url) results[mood] = url;
+  }
+
+  return results;
+}
+
+// ─── REFERENCE REGION CROPPING ───────────────────────────────────────────────
+
+/**
+ * Maps angle labels to which region of the base image to crop as an
+ * additional reference. Returns { left, top, width, height } as fractions (0-1).
+ * For example, VANITY maps to the right 40% of the image.
+ */
+const ANGLE_CROP_REGIONS = {
+  BED:      { left: 0.2, top: 0.1, width: 0.6, height: 0.8 },   // center
+  VANITY:   { left: 0.6, top: 0.1, width: 0.4, height: 0.8 },   // right side
+  WINDOW:   { left: 0.0, top: 0.0, width: 0.4, height: 1.0 },   // left side
+  CLOSET:   { left: 0.0, top: 0.0, width: 0.35, height: 1.0 },  // far left
+  STAGE:    { left: 0.0, top: 0.2, width: 0.4, height: 0.8 },   // left mid
+  CLOSE:    { left: 0.3, top: 0.2, width: 0.4, height: 0.6 },   // center detail
+  OVERHEAD: { left: 0.1, top: 0.1, width: 0.8, height: 0.8 },   // full center
+  DOORWAY:  { left: 0.1, top: 0.0, width: 0.8, height: 1.0 },   // wide center
+  ACTION:   { left: 0.0, top: 0.1, width: 0.5, height: 0.8 },   // left half
+};
+
+/**
+ * Crop a region from the base image to use as additional context for angle generation.
+ * Downloads the base image, crops the relevant region, uploads to S3.
+ * Returns the S3 URL of the cropped reference, or null if not applicable.
+ */
+async function cropReferenceRegion(baseImageUrl, angleLabel, setId) {
+  const region = ANGLE_CROP_REGIONS[angleLabel];
+  if (!region || !baseImageUrl) return null;
+
+  try {
+    const imageRes = await axios.get(baseImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+    const metadata = await sharp(imageRes.data).metadata();
+    const w = metadata.width || 1920;
+    const h = metadata.height || 1080;
+
+    const cropLeft = Math.round(w * region.left);
+    const cropTop = Math.round(h * region.top);
+    const cropWidth = Math.min(Math.round(w * region.width), w - cropLeft);
+    const cropHeight = Math.min(Math.round(h * region.height), h - cropTop);
+
+    const croppedBuffer = await sharp(imageRes.data)
+      .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
+      .resize(768, 512, { fit: 'inside' })
+      .png()
+      .toBuffer();
+
+    const s3Key = `scene-sets/${setId}/ref-crops/${angleLabel.toLowerCase()}-${Date.now()}.png`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET, Key: s3Key, Body: croppedBuffer,
+      ContentType: 'image/png', CacheControl: 'max-age=3600',
+    }));
+
+    const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    console.log(`[SceneGen] Cropped ${angleLabel} reference region: ${cropWidth}x${cropHeight} → ${url}`);
+    return url;
+  } catch (err) {
+    console.warn(`[SceneGen] Reference crop failed (non-blocking): ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Returns a text hint about which part of the base image corresponds to this angle.
+ */
+function getReferenceRegionHint(angleLabel) {
+  const hints = {
+    BED:      'The bed area is in the CENTER of the base image.',
+    VANITY:   'The vanity/mirror area is on the RIGHT side of the base image.',
+    WINDOW:   'The window is on the LEFT side of the base image.',
+    CLOSET:   'The closet area would be on the FAR LEFT or behind the camera in the base image.',
+    STAGE:    'The music/performance corner is on the LEFT side of the base image.',
+    CLOSE:    'Zoom into the CENTER of the base image for surface details.',
+    OVERHEAD: 'Imagine looking straight DOWN at the center of the base image.',
+    DOORWAY:  'The door is BEHIND the camera position in the base image — turn around.',
+    ACTION:   'The action area spans the LEFT HALF of the base image.',
+  };
+  return hints[angleLabel] || '';
+}
+
+// ─── DEPTH MAP GENERATION ────────────────────────────────────────────────────
+
+/**
+ * Generate a depth map from the base image using Sharp edge detection.
+ * This gives angle generation spatial context about foreground vs background.
+ * Returns the S3 URL of the depth map, cached on the scene set.
+ */
+async function generateDepthMap(sceneSet, SceneSetModel) {
+  if (!sceneSet.base_still_url) return null;
+
+  // Check cache
+  const vl = sceneSet.visual_language || {};
+  if (vl.depth_map_url) return vl.depth_map_url;
+
+  try {
+    console.log(`[SceneGen] Generating depth map for ${sceneSet.name}`);
+    const imageRes = await axios.get(sceneSet.base_still_url, { responseType: 'arraybuffer', timeout: 30000 });
+
+    // Create a pseudo-depth map using luminance + blur gradient
+    // This approximates depth: brighter areas appear closer, darker areas farther
+    const depthBuffer = await sharp(imageRes.data)
+      .grayscale()
+      .blur(3)
+      .normalize()
+      .resize(768, 432, { fit: 'inside' })
+      .png()
+      .toBuffer();
+
+    const s3Key = `scene-sets/${sceneSet.id}/depth-map-${Date.now()}.png`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET, Key: s3Key, Body: depthBuffer,
+      ContentType: 'image/png', CacheControl: 'max-age=86400',
+    }));
+
+    const depthUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+
+    // Cache on scene set
+    await SceneSetModel.update(
+      { visual_language: { ...vl, depth_map_url: depthUrl } },
+      { where: { id: sceneSet.id } }
+    );
+
+    console.log(`[SceneGen] Depth map generated: ${depthUrl}`);
+    return depthUrl;
+  } catch (err) {
+    console.warn(`[SceneGen] Depth map failed (non-blocking): ${err.message}`);
+    return null;
+  }
+}
+
+// ─── CROP + OUTPAINT CAMERA SYSTEM ───────────────────────────────────────────
+
+/**
+ * Camera directions for crop-based angles.
+ * Each defines: which part of the base to keep, and which direction to extend.
+ * Coordinates are fractions (0-1) of the base image dimensions.
+ */
+const CAMERA_CROP_MAP = {
+  // Close-ups: crop a region, extend slightly
+  VANITY_CLOSEUP:     { crop: { left: 0.55, top: 0.1, width: 0.45, height: 0.9 }, extend: 'right', extendAmount: 0.5 },
+  VANITY:             { crop: { left: 0.55, top: 0.1, width: 0.45, height: 0.9 }, extend: 'right', extendAmount: 0.5 },
+  WINDOW_CITYVIEW:    { crop: { left: 0.0, top: 0.0, width: 0.45, height: 1.0 }, extend: 'left', extendAmount: 0.5 },
+  WINDOW:             { crop: { left: 0.0, top: 0.0, width: 0.45, height: 1.0 }, extend: 'left', extendAmount: 0.5 },
+  NEON_HEADBOARD:     { crop: { left: 0.2, top: 0.0, width: 0.6, height: 0.7 }, extend: 'up', extendAmount: 0.3 },
+  BED:                { crop: { left: 0.2, top: 0.1, width: 0.6, height: 0.9 }, extend: 'none', extendAmount: 0 },
+  OVERHEAD_BED:       null, // Can't crop — needs full regeneration
+  CHANDELIER_WORMS_EYE: null, // Can't crop — different perspective
+  DOORWAY_ESTABLISHING: null, // Can't crop — behind camera
+  TRIPOD_CONTENT_CREATOR: null, // Can't crop — different position
+  BALCONY_GOLDEN_HOUR: { crop: { left: 0.0, top: 0.0, width: 0.5, height: 1.0 }, extend: 'left', extendAmount: 0.6 },
+  DETAIL:             { crop: { left: 0.3, top: 0.3, width: 0.4, height: 0.4 }, extend: 'none', extendAmount: 0 },
+  CLOSE:              { crop: { left: 0.3, top: 0.3, width: 0.4, height: 0.4 }, extend: 'none', extendAmount: 0 },
+  WIDE:               null, // Base image IS the wide shot
+};
+
+/**
+ * Generate an angle by cropping the base image and optionally outpainting.
+ * Returns the S3 URL of the result, or null if this angle can't be cropped.
+ *
+ * For crop-only angles (BED, DETAIL): crops + upscales. Pixel-perfect.
+ * For crop+extend angles (VANITY, WINDOW): crops, extends canvas, uses
+ * gpt-image-1 to fill the new area while keeping original pixels.
+ */
+async function cropAndOutpaint(baseImageUrl, angleLabel, setId, angleId, prompt) {
+  const config = CAMERA_CROP_MAP[angleLabel];
+  if (!config || !baseImageUrl) return null;
+
+  try {
+    console.log(`[SceneGen] Crop+outpaint for ${angleLabel}: crop=${JSON.stringify(config.crop)}, extend=${config.extend}`);
+
+    // Download base image
+    const imageRes = await axios.get(baseImageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+    const metadata = await sharp(imageRes.data).metadata();
+    const w = metadata.width || 1920;
+    const h = metadata.height || 1080;
+
+    // Calculate crop region
+    const cropLeft = Math.round(w * config.crop.left);
+    const cropTop = Math.round(h * config.crop.top);
+    const cropWidth = Math.min(Math.round(w * config.crop.width), w - cropLeft);
+    const cropHeight = Math.min(Math.round(h * config.crop.height), h - cropTop);
+
+    // Crop the region
+    const croppedBuffer = await sharp(imageRes.data)
+      .extract({ left: cropLeft, top: cropTop, width: cropWidth, height: cropHeight })
+      .toBuffer();
+
+    if (config.extend === 'none' || config.extendAmount === 0) {
+      // Pure crop — just upscale to target resolution
+      const resultBuffer = await sharp(croppedBuffer)
+        .resize(1536, 1024, { fit: 'cover' })
+        .png()
+        .toBuffer();
+
+      const s3Key = `scene-sets/${setId}/angles/${angleId}/crop-${Date.now()}.png`;
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: resultBuffer,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+      console.log(`[SceneGen] Pure crop complete for ${angleLabel}: ${url}`);
+      return url;
+    }
+
+    // Crop + outpaint: extend the canvas and use gpt-image-1 to fill
+    // Target: 1536x1024 final image
+    const targetW = 1536;
+    const targetH = 1024;
+
+    // Scale cropped region to fit within the target, leaving room for extension
+    const scaleFactor = config.extend === 'right' || config.extend === 'left'
+      ? targetH / cropHeight
+      : targetW / cropWidth;
+    const scaledW = Math.round(cropWidth * scaleFactor);
+    const scaledH = Math.round(cropHeight * scaleFactor);
+
+    const scaledCrop = await sharp(croppedBuffer)
+      .resize(scaledW, scaledH, { fit: 'fill' })
+      .png()
+      .toBuffer();
+
+    // Create the extended canvas with the crop positioned on one side
+    let compositeLeft = 0;
+    let compositeTop = 0;
+    if (config.extend === 'right') compositeLeft = 0;
+    if (config.extend === 'left') compositeLeft = targetW - scaledW;
+    if (config.extend === 'up') compositeTop = targetH - scaledH;
+
+    const canvas = await sharp({
+      create: { width: targetW, height: targetH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([{ input: scaledCrop, left: compositeLeft, top: compositeTop }])
+      .png()
+      .toBuffer();
+
+    // Send to gpt-image-1 edits with the canvas as the image
+    // The transparent area is where the AI will generate new content
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.warn('[SceneGen] No OPENAI_API_KEY — returning crop without outpaint');
+      // Fall back to just the crop
+      const s3Key = `scene-sets/${setId}/angles/${angleId}/crop-${Date.now()}.png`;
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: canvas,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    }
+
+    const FormData = (await import('form-data')).default;
+    const form = new FormData();
+    form.append('model', 'gpt-image-1');
+    form.append('image', canvas, { filename: 'canvas.png', contentType: 'image/png' });
+    form.append('prompt', `Do not render any text or labels. Continue this room seamlessly — match the existing wall color, flooring, lighting, and style exactly. Fill the transparent area with a natural continuation of this room. ${prompt || ''}`);
+    form.append('size', '1536x1024');
+    form.append('quality', 'high');
+
+    const response = await axios.post(
+      'https://api.openai.com/v1/images/edits',
+      form,
+      {
+        headers: { 'Authorization': `Bearer ${apiKey}`, ...form.getHeaders() },
+        timeout: 180000,
+      }
+    );
+
+    // Get the result and upload to S3
+    const b64 = response.data.data[0]?.b64_json;
+    let resultUrl;
+    if (b64) {
+      const imgBuf = Buffer.from(b64, 'base64');
+      const s3Key = `scene-sets/${setId}/angles/${angleId}/outpaint-${Date.now()}.png`;
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: imgBuf,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      resultUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    } else {
+      const tempUrl = response.data.data[0]?.url;
+      if (tempUrl) {
+        const s3Key = `scene-sets/${setId}/angles/${angleId}/outpaint-${Date.now()}.png`;
+        resultUrl = await downloadAndUploadToS3(tempUrl, s3Key);
+      }
+    }
+
+    console.log(`[SceneGen] Crop+outpaint complete for ${angleLabel}: ${resultUrl}`);
+    return resultUrl;
+  } catch (err) {
+    console.warn(`[SceneGen] Crop+outpaint failed for ${angleLabel}: ${err.message}`);
+    return null;
+  }
+}
+
+// ─── ANGLE GENERATION ────────────────────────────────────────────────────────
+
 async function generateAngle(sceneAngle, sceneSet, models) {
   const { SceneAngle, SceneSet } = models;
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  // Use the full angle-specific prompt for text→image (cheap: ~1 credit via gen4_image)
-  const prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction);
+
+  // Analyze base image to get blueprint (cached)
+  let imageAnalysis = null;
+  if (sceneSet.base_still_url) {
+    try {
+      imageAnalysis = await analyzeBaseImage(sceneSet, SceneSet);
+    } catch (err) {
+      console.warn(`[SceneGen] Image analysis failed (non-blocking): ${err.message}`);
+    }
+
+    // Auto-build SceneSpec if not present
+    if (!sceneSet.scene_spec && imageAnalysis) {
+      try {
+        const spec = await sceneSpecService.buildSceneSpec(sceneSet, SceneSet);
+        if (spec) sceneSet.scene_spec = spec;
+      } catch (specErr) {
+        console.warn(`[SceneGen] SceneSpec build failed (non-blocking): ${specErr.message}`);
+      }
+    }
+  }
+
+  // Build blueprint-driven camera instruction
+  const vl = sceneSet.visual_language || {};
+  const layoutMap = vl.layout_map || imageAnalysis?.layout_map || {};
+  const anchorObjects = vl.anchor_objects || imageAnalysis?.anchor_objects || [];
+  const cameraRegions = vl.camera_regions || imageAnalysis?.camera_regions || {};
+
+  // Build the prompt using blueprint data
+  const eventContext = await loadEventContext(sceneSet, models);
+  let prompt = buildPrompt(sceneSet, angleLabel, sceneAngle.camera_direction, eventContext);
+
+  // Add camera direction
+  if (sceneAngle.camera_direction) {
+    prompt = `${sceneAngle.camera_direction}. ${prompt}`;
+  }
+
+  // ── SceneSpec camera contracts (preferred) or fallback to anchor_objects ──
+  const spec = sceneSet.scene_spec;
+  let specConstraints = '';
+  if (spec?.camera_contracts && spec?.objects) {
+    specConstraints = sceneSpecService.buildAngleConstraints(spec, angleLabel);
+
+    // Add state-driven ambient if time_of_day is set
+    const timeOfDay = sceneSet.time_of_day;
+    if (timeOfDay) {
+      const ambient = sceneSpecService.buildStateAmbient(spec, timeOfDay);
+      if (ambient) {
+        prompt = `${ambient} ${prompt}`;
+      }
+    }
+  }
+
+  // Build legacy anchors (used both as prompt fallback and as DALL-E hint)
+  const relevantAnchors = anchorObjects
+    .filter(a => !a.must_appear_in || a.must_appear_in.length === 0 || a.must_appear_in.some(label => angleLabel.includes(label)))
+    .map(a => `${a.name} (${a.position}): ${a.description}`)
+    .slice(0, 5);
+
+  if (specConstraints) {
+    prompt = `${specConstraints}\n\n${prompt}`;
+    console.log(`[SceneGen] Using SceneSpec camera contracts for ${angleLabel}`);
+  } else if (relevantAnchors.length > 0) {
+    // Fallback to legacy anchor_objects when no spec
+    prompt = `These objects MUST appear: ${relevantAnchors.join('; ')}. ${prompt}`;
+  }
+
+  // Determine if base is usable as reference
+  const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
+  const referenceImageForEdit = isMoodBoard ? null : sceneSet.base_still_url;
 
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt },
@@ -544,67 +1554,121 @@ async function generateAngle(sceneAngle, sceneSet, models) {
   );
 
   try {
-    console.log(`[SceneGen] Starting text-to-image still for angle: ${sceneAngle.angle_name}`);
+    console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
 
-    // Derive a seed variation from the parent set's locked seed so sibling angles
-    // share the same stylistic base while remaining visually distinct.
-    const numericSeed = sceneSet.base_runway_seed && !isNaN(Number(sceneSet.base_runway_seed))
-      ? Number(sceneSet.base_runway_seed)
-      : null;
-    const seedOpt = numericSeed !== null
-      ? String(numericSeed + (sceneAngle.generation_attempt || 0) + 1)
-      : undefined;
+    let stillUrl, totalCost = 0, generatedSeed = null;
 
-    const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
-      ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
-      : undefined;
-
-    // Anchor all angles to the base still so they show the same room from different cameras.
-    // Note: gen4_image uses 'weight' (0-1) not 'tag' for reference images
-    const referenceImages = sceneSet.base_still_url
-      ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
-      : undefined;
-
-    const { jobId } = await startTextToImage(prompt, { seed: seedOpt, styleReference, referenceImages });
-    const result = await pollTask(jobId);
-
-    if (result.status !== 'SUCCEEDED') {
-      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-      throw new Error(`Angle still failed: ${result.error}`);
+    // ── STEP 1: Try crop + outpaint (pixel-preserving) ──
+    // For angles where we can crop from the base image, this gives the best
+    // consistency because original pixels are kept untouched.
+    if (referenceImageForEdit && CAMERA_CROP_MAP[angleLabel] !== undefined) {
+      stillUrl = await cropAndOutpaint(
+        referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt
+      );
+      if (stillUrl) {
+        console.log(`[SceneGen] Crop+outpaint succeeded for ${angleLabel}`);
+      }
     }
 
-    // Clean up old assets from S3 (best-effort)
-    if (sceneAngle.still_image_url) await deleteOldS3Asset(sceneAngle.still_image_url);
-    if (sceneAngle.video_clip_url)  await deleteOldS3Asset(sceneAngle.video_clip_url);
+    // ── STEP 2: Fall back to full generation if crop failed or not applicable ──
+    if (!stillUrl) {
 
-    const stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
-    const totalCost = result.creditsUsed || 0;
+    // Try DALL-E first, fall back to Runway
+    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    if (!useRunway && OPENAI_API_KEY) {
+      try {
+        // Enhance prompt with style lock if available
+        let enhancedPrompt = prompt;
+        const style = sceneSet.visual_language;
+        if (style?.locked) {
+          const styleParts = [];
+          if (style.color_palette) styleParts.push(`Colors: ${style.color_palette.join(', ')}.`);
+          if (style.lighting_type) styleParts.push(`Lighting: ${style.lighting_type}.`);
+          if (style.design_style) styleParts.push(`Style: ${style.design_style}.`);
+          if (styleParts.length > 0) {
+            enhancedPrompt = `${styleParts.join(' ')} ${prompt}`;
+          }
+        }
+
+        const dalleUrl = await generateDallEStill(enhancedPrompt, referenceImageForEdit, angleLabel, {
+          imageAnalysis,
+          styleLock: style?.locked ? style : null,
+          regionHint: getReferenceRegionHint(angleLabel),
+          anchors: relevantAnchors,
+        });
+        if (dalleUrl) {
+          if (dalleUrl.includes(S3_BUCKET)) {
+            stillUrl = dalleUrl;
+          } else {
+            const s3Key = `scenes/${sceneSet.id}/angles/${sceneAngle.id}/still-${Date.now()}.png`;
+            stillUrl = await downloadAndUploadToS3(dalleUrl, s3Key);
+          }
+        }
+      } catch (dalleErr) {
+        console.warn(`[SceneGen] DALL-E failed for angle, falling back to Runway:`, dalleErr.message);
+      }
+    }
+
+    if (!stillUrl) {
+      // Runway fallback
+      const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
+        ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
+        : undefined;
+      const referenceImages = sceneSet.base_still_url
+        ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
+        : undefined;
+
+      const { jobId } = await startTextToImage(prompt, { styleReference, referenceImages });
+      const result = await pollTask(jobId);
+
+      if (result.status !== 'SUCCEEDED') {
+        await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
+        throw new Error(`Angle still failed: ${result.error}`);
+      }
+
+      stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
+      totalCost = result.creditsUsed || 0;
+      generatedSeed = result.seed ?? jobId;
+    }
+    } // end of fallback full-generation block
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
-    // Quality Analysis (non-blocking)
-    let qualityData = { qualityScore: null, flags: [] };
-    try {
-      qualityData = await artifactDetection.analyzeImageQuality(stillUrl);
-      console.log(`[SceneGen] Quality score: ${qualityData.qualityScore}/100, flags: ${qualityData.flags.length}`);
-    } catch (qaErr) {
-      console.warn(`[SceneGen] Quality analysis failed (non-blocking): ${qaErr.message}`);
+    // ── SceneSpec post-generation validation ──
+    let specValidation = null;
+    if (spec?.camera_contracts && stillUrl) {
+      try {
+        specValidation = await sceneSpecService.validateAngleAgainstSpec(stillUrl, spec, angleLabel);
+        console.log(`[SceneGen] Spec validation for ${angleLabel}: score=${specValidation.score}, missing=${specValidation.missing_required?.length || 0}`);
+      } catch (valErr) {
+        console.warn(`[SceneGen] Spec validation failed (non-blocking): ${valErr.message}`);
+      }
+    }
+
+    const qualityReview = sceneAngle.quality_review || {};
+    if (specValidation) {
+      qualityReview.spec_validation = {
+        score: specValidation.score,
+        pass: specValidation.pass,
+        missing_required: specValidation.missing_required,
+        issues: specValidation.issues,
+        validated_at: new Date().toISOString(),
+      };
     }
 
     await SceneAngle.update({
       still_image_url: stillUrl,
       video_clip_url: null,
-      runway_seed: String(result.seed ?? jobId),
+      runway_seed: generatedSeed ? String(generatedSeed) : null,
       generation_status: 'complete',
       generation_cost: totalCost,
-      quality_score: qualityData.qualityScore,
-      artifact_flags: qualityData.flags || [],
       generation_attempt: (sceneAngle.generation_attempt || 0) + 1,
+      quality_review: qualityReview,
     }, { where: { id: sceneAngle.id } });
 
     await SceneSet.increment('generation_cost', { by: totalCost, where: { id: sceneSet.id } });
 
-    return { success: true, stillUrl, videoUrl: null, seed: result.seed, qualityScore: qualityData.qualityScore };
+    return { success: true, stillUrl, seed: generatedSeed, specValidation };
   } catch (err) {
     await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
     throw err;
@@ -670,7 +1734,8 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
   }
 
   const angleLabel = sceneAngle.angle_label || 'WIDE';
-  const basePrompt = buildPrompt(sceneSet, angleLabel);
+  const eventContext = await loadEventContext(sceneSet, models);
+  const basePrompt = buildPrompt(sceneSet, angleLabel, null, eventContext);
   const refinedPrompt = artifactDetection.buildRefinedPrompt(basePrompt, artifactCategories);
 
   await SceneAngle.update(
@@ -772,6 +1837,13 @@ module.exports = {
   buildPrompt,
   buildVideoPrompt,
   generateBaseScene,
+  analyzeBaseImage,
+  checkAngleConsistency,
+  cropReferenceRegion,
+  generateDepthMap,
+  applyMoodVariant,
+  generateMoodVariants,
+  MOOD_PRESETS,
   generateAngle,
   generateAngleVideo,
   regenerateAngleRefined,

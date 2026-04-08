@@ -19,6 +19,18 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'source_line_id',
         as: 'sourceLine',
       });
+      if (models.WorldLocation) {
+        StoryCalendarEvent.belongsTo(models.WorldLocation, {
+          foreignKey: 'location_id',
+          as: 'location',
+        });
+      }
+      if (models.WorldEvent) {
+        StoryCalendarEvent.hasMany(models.WorldEvent, {
+          foreignKey: 'source_calendar_event_id',
+          as: 'spawnedEvents',
+        });
+      }
     }
   }
   StoryCalendarEvent.init({
@@ -49,6 +61,10 @@ module.exports = (sequelize, DataTypes) => {
     },
     recurrence_pattern: {
       type:      DataTypes.STRING(255),
+      allowNull: true,
+    },
+    location_id: {
+      type:      DataTypes.UUID,
       allowNull: true,
     },
     location_name: {

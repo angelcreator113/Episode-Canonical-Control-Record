@@ -41,6 +41,7 @@ const {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  validateClaudeAccess,
   setDb,
   addSSEClient,
 } = require('../services/feedScheduler');
@@ -240,6 +241,16 @@ router.post('/auto-generate-job', optionalAuth, async (req, res) => {
       });
     }
 
+    // Pre-flight: validate Claude API access before creating a job
+    const apiCheck = await validateClaudeAccess();
+    if (!apiCheck.ok) {
+      console.error(`[FeedScheduler] Pre-flight API check failed: ${apiCheck.error}`);
+      return res.status(503).json({
+        error: `AI service unavailable: ${apiCheck.error}`,
+        detail: 'The Claude API must be reachable to generate profiles. Check your ANTHROPIC_API_KEY.',
+      });
+    }
+
     // Create a job record so progress is persisted in the DB
     const job = await db.BulkImportJob.create({
       status: 'pending',
@@ -293,11 +304,13 @@ function processAutoGenInBackground(jobId, db, layer, count) {
 
       await job.update({ status: 'processing', started_at: new Date() });
       notifyJobSSE(jobId, 'started', { job_id: jobId, total: count });
+      console.log(`[FeedScheduler] Auto-gen job #${jobId} started: layer=${layer}, count=${count}`);
 
       const created = [];
       const errors = [];
 
       const result = await autoGenerateBatch(db, layer, count, async (progress) => {
+        console.log(`[FeedScheduler] Job #${jobId} progress: status=${progress.status}, current=${progress.current}/${progress.total}${progress.error ? ', error=' + progress.error : ''}`);
         // Update DB on each profile so progress survives page navigation
         if (progress.status === 'created' && progress.profile) {
           created.push({
@@ -313,11 +326,16 @@ function processAutoGenInBackground(jobId, db, layer, count) {
         const completedCount = created.length;
         const failedCount = errors.length;
 
-        await job.update({
-          completed: completedCount,
-          failed: failedCount,
-          total: progress.total || count,
-        });
+        // Wrap DB update in try/catch so a transient DB error doesn't crash the whole job
+        try {
+          await job.update({
+            completed: completedCount,
+            failed: failedCount,
+            total: progress.total || count,
+          });
+        } catch (dbErr) {
+          console.warn(`[FeedScheduler] Job #${jobId} progress DB update failed (non-fatal): ${dbErr.message}`);
+        }
 
         // Push SSE event (same format as bulk import)
         if (progress.status === 'created') {
@@ -369,7 +387,10 @@ function processAutoGenInBackground(jobId, db, layer, count) {
           completed_at: new Date(),
         }).catch(e => console.warn('[feed-scheduler] job status update error:', e?.message));
       }
-      notifyJobSSE(jobId, 'error', { job_id: jobId, error: err.message });
+      // Use 'job_error' instead of 'error' — SSE event named 'error' conflicts
+      // with EventSource's built-in error event, causing the browser to treat
+      // it as a connection failure instead of delivering the error data.
+      notifyJobSSE(jobId, 'job_error', { job_id: jobId, error: err.message });
     }
   });
 }
@@ -382,6 +403,10 @@ router.post('/preview-sparks', optionalAuth, async (req, res) => {
   const count = Math.min(parseInt(req.body.count) || 5, 20);
 
   try {
+    const apiCheck = await validateClaudeAccess();
+    if (!apiCheck.ok) {
+      return res.status(503).json({ error: `AI service unavailable: ${apiCheck.error}` });
+    }
     const sparks = await generateSmartSparks(db, layer, count);
     res.json({ sparks, layer, count: sparks.length });
   } catch (err) {

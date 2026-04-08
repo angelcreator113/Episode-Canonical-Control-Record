@@ -243,6 +243,9 @@ router.get('/characters/:key/state', optionalAuth, async (req, res) => {
       state_id: state.id,
     });
   } catch (error) {
+    if (error.message?.includes('does not exist')) {
+      return res.json({ success: true, character_key: req.params.key, state: { coins: 500, reputation: 1, brand_trust: 1, influence: 1, stress: 0 }, note: 'Table not yet created' });
+    }
     console.error('Get character state error:', error);
     return res.status(500).json({ error: 'Failed to get character state', message: error.message });
   }

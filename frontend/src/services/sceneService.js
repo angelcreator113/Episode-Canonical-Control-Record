@@ -472,6 +472,38 @@ const sceneService = {
     });
     return data;
   },
+
+  // ============================================================================
+  // Scene Spec
+  // ============================================================================
+
+  getSceneSpec: async (sceneSetId) => {
+    const { data } = await api.get(`/api/v1/scene-sets/${sceneSetId}/spec`);
+    return data;
+  },
+
+  generateSceneSpec: async (sceneSetId, force = false) => {
+    const { data } = await api.post(`/api/v1/scene-sets/${sceneSetId}/spec/generate`, { force });
+    return data;
+  },
+
+  updateSceneSpec: async (sceneSetId, spec) => {
+    const { data } = await api.put(`/api/v1/scene-sets/${sceneSetId}/spec`, { spec });
+    return data;
+  },
+
+  patchSceneSpec: async (sceneSetId, edits) => {
+    const { data } = await api.patch(`/api/v1/scene-sets/${sceneSetId}/spec`, edits);
+    return data;
+  },
+
+  validateAngleAgainstSpec: async (sceneSetId, imageUrl, angleLabel) => {
+    const { data } = await api.post(`/api/v1/scene-sets/${sceneSetId}/spec/validate-angle`, {
+      image_url: imageUrl,
+      angle_label: angleLabel,
+    });
+    return data;
+  },
 };
 
 export default sceneService;

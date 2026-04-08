@@ -22,9 +22,39 @@ const Anthropic = require('@anthropic-ai/sdk');
 // const { generateHandleFromCharacter, inferArchetypeFromRole, inferLalaRelationship, inferCareerPressure, inferFollowerTier } = require('../utils/feedProfileUtils');
 
 const AI_MODEL = 'claude-sonnet-4-6';
-const AI_FALLBACK_MODEL = 'claude-sonnet-4-20250514';
-const AI_TIMEOUT_MS = 120000; // 120s timeout matching bulk routes
-const AI_MAX_RETRIES = 1;
+const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
+const AI_TIMEOUT_MS = 60000; // 60s timeout — enough for large profile generation prompts
+const AI_MAX_RETRIES = 0;   // No retries — fail fast, let the batch loop handle partial success
+
+/**
+ * Quick pre-flight check — validates API key + model access with a tiny call.
+ * Returns { ok: true } or { ok: false, error: string }.
+ */
+async function validateClaudeAccess() {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return { ok: false, error: 'ANTHROPIC_API_KEY environment variable is not set' };
+    const client = new Anthropic({ apiKey });
+    const response = await Promise.race([
+      client.messages.create({
+        model: AI_MODEL,
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Say "ok"' }],
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('API validation timed out (10s)')), 10000)),
+    ]);
+    if (!response?.content?.length) return { ok: false, error: 'AI returned empty response during validation' };
+    return { ok: true };
+  } catch (err) {
+    const msg = err.status === 401 ? 'Invalid API key (401 Unauthorized)'
+      : err.status === 403 ? 'API key lacks permission for this model (403 Forbidden)'
+      : err.status === 404 ? `Model "${AI_MODEL}" not found (404)`
+      : err.status === 429 ? 'Rate limited — try again in a moment (429)'
+      : err.status === 529 ? 'Anthropic API overloaded (529) — try again shortly'
+      : err.message || 'Unknown API error';
+    return { ok: false, error: msg };
+  }
+}
 
 /**
  * Call Claude with timeout, retry, and model fallback logic.
@@ -32,7 +62,8 @@ const AI_MAX_RETRIES = 1;
 async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES } = {}) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   let lastErr;
-  const models = [AI_MODEL, AI_FALLBACK_MODEL];
+  // Deduplicate — don't retry the same model twice
+  const models = AI_MODEL === AI_FALLBACK_MODEL ? [AI_MODEL] : [AI_MODEL, AI_FALLBACK_MODEL];
 
   for (const model of models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -45,7 +76,7 @@ async function callClaude(prompt, { maxTokens = 4000, retries = AI_MAX_RETRIES }
             messages: [{ role: 'user', content: prompt }],
           }),
           new Promise((_, reject) => {
-            timer = setTimeout(() => reject(new Error('AI call timed out after 120s')), AI_TIMEOUT_MS);
+            timer = setTimeout(() => reject(new Error(`AI call timed out after ${AI_TIMEOUT_MS / 1000}s`)), AI_TIMEOUT_MS);
           }),
         ]);
         clearTimeout(timer);
@@ -82,7 +113,26 @@ function parseAIJson(text) {
   if (!jsonMatch) throw new Error('AI did not return valid JSON');
   // Fix trailing commas before } or ]
   const fixed = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
-  return JSON.parse(fixed);
+  try { return JSON.parse(fixed); } catch { /* try truncation repair */ }
+
+  // JSON may be truncated — try to close unclosed braces/brackets
+  let truncated = fixed;
+  // Remove trailing partial key-value or string
+  truncated = truncated.replace(/,?\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+  const opens = (truncated.match(/\{/g) || []).length;
+  const closes = (truncated.match(/\}/g) || []).length;
+  const openBrackets = (truncated.match(/\[/g) || []).length;
+  const closeBrackets = (truncated.match(/\]/g) || []).length;
+  for (let i = 0; i < openBrackets - closeBrackets; i++) truncated += ']';
+  for (let i = 0; i < opens - closes; i++) truncated += '}';
+  truncated = truncated.replace(/,\s*([\]}])/g, '$1');
+  try {
+    const result = JSON.parse(truncated);
+    console.warn(`[FeedScheduler] Repaired truncated JSON (closed ${opens - closes} braces, ${openBrackets - closeBrackets} brackets)`);
+    return result;
+  } catch {
+    throw new Error('AI did not return valid JSON (truncation repair also failed)');
+  }
 }
 
 /**
@@ -320,7 +370,11 @@ Return a JSON array of exactly ${count} objects:
 
 Return ONLY the JSON array. No markdown, no explanation.`;
 
+  console.log(`[FeedScheduler] Calling Claude for ${count} sparks (layer=${layer})...`);
+  const sparkStart = Date.now();
+  // Sparks are small objects (~200 tokens each) — 4000 is plenty for up to 20 sparks
   const response = await callClaude(prompt, { maxTokens: 4000 });
+  console.log(`[FeedScheduler] Claude spark response received in ${((Date.now() - sparkStart) / 1000).toFixed(1)}s`);
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error('AI returned empty response for spark generation');
@@ -364,7 +418,12 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   // Generate smart sparks
   let sparks;
   try {
+    console.log(`[FeedScheduler] Generating ${toCreate} smart sparks for layer=${layer}...`);
+    if (progressCallback) {
+      await progressCallback({ current: 0, total: toCreate, status: 'generating', spark: { handle: 'Planning creators...' } });
+    }
     sparks = await generateSmartSparks(db, layer, toCreate);
+    console.log(`[FeedScheduler] Generated ${sparks.length} sparks successfully`);
   } catch (err) {
     // Fallback to random sparks if AI generation fails
     console.log(`[FeedScheduler] Smart spark generation failed, using fallback: ${err.message}`);
@@ -375,7 +434,7 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   }
 
   // Generate full profiles from sparks (batch 3 at a time for speed)
-  const BATCH_CONCURRENCY = 3;
+  const BATCH_CONCURRENCY = 2; // 2 parallel calls to avoid rate limits and timeouts
   for (let i = 0; i < sparks.length; i += BATCH_CONCURRENCY) {
     const batch = sparks.slice(i, i + BATCH_CONCURRENCY);
     if (progressCallback) {
@@ -429,11 +488,9 @@ function sanitizeEnum(value, validSet, fallback) {
 
 /**
  * Call Claude to generate a full profile from a spark, then save it.
+ * Uses a compact prompt optimized for batch generation speed.
  */
 async function generateAndSaveProfile(db, spark, layer) {
-  // Build the generation prompt (importing the shared builder)
-  const { buildGenerationPrompt } = require('../routes/socialProfileRoutes');
-
   const characterContext = layer === 'lalaverse'
     ? {
         name: 'Lala',
@@ -452,22 +509,55 @@ async function generateAndSaveProfile(db, spark, layer) {
         detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
       };
 
-  let prompt = buildGenerationPrompt(
-    spark.handle, spark.platform, spark.vibe_sentence,
-    characterContext, spark.advanced_context || null,
-  );
+  // Compact prompt for batch generation — ~60% smaller than the full buildGenerationPrompt
+  const ctx = characterContext;
+  const adv = spark.advanced_context || {};
+  const advHints = Object.entries(adv).filter(([,v])=>v).map(([k,v])=>`${k.replace('_hint','')}: ${v}`).join(', ');
 
-  if (layer === 'lalaverse' && spark.city) {
-    prompt += `\n\nLALAVERSE CONTEXT:
-This creator lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}
-Generate a profile that feels native to that city's creator culture.
-Lala's relationship to this creator: ${spark.lala_relationship || 'mutual_unaware'}.
-Career position relative to Lala: ${spark.career_pressure || 'level'}.
-Do not reference JustAWoman or the real world in any generated content.
-Lala does not know she was built. The world she lives in feels complete and self-contained.`;
-  }
+  let prompt = `Generate a social media creator profile as JSON for a literary fiction novel.
 
-  const response = await callClaude(prompt, { maxTokens: 4000 });
+PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.goal}.
+
+CREATOR: ${spark.handle} on ${spark.platform}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
+${layer === 'lalaverse' && spark.city ? `\nLALAVERSE: Lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}
+
+Return ONLY valid JSON with these fields:
+{
+  "display_name": "name on platform",
+  "follower_tier": "micro|mid|macro|mega",
+  "follower_count_approx": "e.g. 47k",
+  "content_category": "primary category",
+  "archetype": "polished_curator|messy_transparent|soft_life|explicitly_paid|overnight_rise|cautionary|the_peer|the_watcher|chaos_creator|community_builder",
+  "content_persona": "2 sentences: what they show the world",
+  "real_signal": "2 sentences: what leaks through the performance",
+  "posting_voice": "How they write. Give 1 example caption.",
+  "comment_energy": "What their comments feel like",
+  "parasocial_function": "What watching this creator does to ${ctx.name}",
+  "emotional_activation": "One phrase: the emotional cocktail",
+  "watch_reason": "Why ${ctx.name} can't stop watching",
+  "what_it_costs_her": "What watching takes from ${ctx.name}",
+  "current_trajectory": "rising|plateauing|unraveling|pivoting|silent|viral_moment",
+  "trajectory_detail": "What's happening now — be specific",
+  "geographic_base": "City, State/Region",
+  "geographic_cluster": "e.g. Atlanta beauty scene",
+  "age_range": "e.g. mid-20s",
+  "relationship_status": "Be specific and messy",
+  "post_frequency": "e.g. 3-4x/day",
+  "engagement_rate": "e.g. 4.2%",
+  "platform_metrics": { "avg_views": "", "avg_likes": "", "avg_comments": "" },
+  "aesthetic_dna": { "visual_style": "", "vibe_tags": ["tag1","tag2"] },
+  "revenue_streams": ["source1","source2"],
+  "known_associates": [{"handle":"@someone","relationship_type":"collab|rival|ex","drama_level":5,"description":"brief"}],
+  "adult_content_present": false,
+  "pinned_post": "Their most visible post — write the actual text",
+  "sample_captions": ["caption1","caption2","caption3"],
+  "sample_comments": ["fan comment","critic comment"],
+  "moment_log": [{"moment_type":"post|live|controversy","description":"what happened","protagonist_reaction":"internal response","lala_seed":false}],
+  "lala_relevance_score": 0-10,
+  "lala_relevance_reason": "Why they matter to ${ctx.name}"
+}`;
+
+  const response = await callClaude(prompt, { maxTokens: 6000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
@@ -485,18 +575,29 @@ Lala does not know she was built. The world she lives in feels complete and self
   const safeArchetype = sanitizeEnum(generated.archetype || spark.archetype, VALID_ARCHETYPES, 'polished_curator');
   const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
+  // Re-check cap at insert time to prevent race conditions between concurrent jobs
+  const cap = FEED_CAPS[layer];
+  if (cap) {
+    const currentCount = await db.SocialProfile.count({
+      where: { feed_layer: layer, lalaverse_cap_exempt: false },
+    });
+    if (currentCount >= cap) {
+      throw new Error(`Feed cap reached (${currentCount}/${cap}) — skipping ${spark.handle}`);
+    }
+  }
+
   const profile = await db.SocialProfile.create({
     series_id:             null,
-    handle:                spark.handle.startsWith('@') ? spark.handle : `@${spark.handle}`,
+    handle:                (spark.handle.startsWith('@') ? spark.handle : `@${spark.handle}`).slice(0, 100),
     platform:              spark.platform,
     vibe_sentence:         spark.vibe_sentence,
     status:                'generated',
     generation_model:      AI_MODEL,
     full_profile:          generated,
-    display_name:          generated.display_name,
+    display_name:          (generated.display_name || '').slice(0, 200) || null,
     follower_tier:         safeFollowerTier,
-    follower_count_approx: generated.follower_count_approx,
-    content_category:      generated.content_category,
+    follower_count_approx: (generated.follower_count_approx || '').slice(0, 50) || null,
+    content_category:      (generated.content_category || '').slice(0, 100) || null,
     archetype:             safeArchetype,
     content_persona:       generated.content_persona,
     real_signal:           generated.real_signal,
@@ -506,7 +607,7 @@ Lala does not know she was built. The world she lives in feels complete and self
     adult_content_type:    generated.adult_content_type,
     adult_content_framing: generated.adult_content_framing,
     parasocial_function:   generated.parasocial_function,
-    emotional_activation:  generated.emotional_activation,
+    emotional_activation:  (generated.emotional_activation || '').slice(0, 200) || null,
     watch_reason:          generated.watch_reason,
     what_it_costs_her:     generated.what_it_costs_her,
     current_trajectory:    safeTrajectory,
@@ -521,8 +622,8 @@ Lala does not know she was built. The world she lives in feels complete and self
     world_exists:          generated.world_exists || false,
     crossing_trigger:      generated.crossing_trigger,
     crossing_mechanism:    generated.crossing_mechanism,
-    post_frequency:        generated.post_frequency,
-    engagement_rate:       generated.engagement_rate,
+    post_frequency:        (generated.post_frequency || '').slice(0, 100) || null,
+    engagement_rate:       (generated.engagement_rate || '').slice(0, 50) || null,
     platform_metrics:      generated.platform_metrics || {},
     geographic_base:       (generated.geographic_base || '').slice(0, 200) || null,
     geographic_cluster:    (generated.geographic_cluster || '').slice(0, 100) || null,
@@ -966,5 +1067,6 @@ module.exports = {
   generateSmartSparks,
   generateAndSaveProfile,
   autoGenerateBatch,
+  validateClaudeAccess,
   addSSEClient,
 };

@@ -74,20 +74,41 @@ exports.listLibraryScenes = async (req, res) => {
       where.processing_status = processingStatus;
     }
 
+    // Build include — make Show join optional so scene-library works even if shows table has issues
+    let include = [];
+    if (Show) {
+      include.push({
+        model: Show,
+        as: 'show',
+        attributes: ['id', 'name'],
+        required: false,
+      });
+    }
+
     // Fetch scenes
-    const { rows: scenes, count: total } = await SceneLibrary.findAndCountAll({
-      where,
-      include: [
-        {
-          model: Show,
-          as: 'show',
-          attributes: ['id', 'name'],
-        },
-      ],
-      order: [[sortBy, sortOrder]],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-    });
+    let scenes, total;
+    try {
+      const result = await SceneLibrary.findAndCountAll({
+        where,
+        include,
+        order: [[sortBy, sortOrder]],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      });
+      scenes = result.rows;
+      total = result.count;
+    } catch (includeErr) {
+      // If the join fails (e.g. shows table column mismatch), retry without the Show include
+      console.warn('Scene library query with Show include failed, retrying without:', includeErr.message);
+      const result = await SceneLibrary.findAndCountAll({
+        where,
+        order: [[sortBy, sortOrder]],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      });
+      scenes = result.rows;
+      total = result.count;
+    }
 
     res.status(200).json({
       success: true,

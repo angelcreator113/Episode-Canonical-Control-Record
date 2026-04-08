@@ -1,8 +1,82 @@
 /* ─── Scene Sets Tab ─────────────────────────────────────────────────────── */
 
+/* ── Design Tokens ──────────────────────────────────────────────────────── */
+:root {
+  --ss-parchment: #FAF7F0;
+  --ss-gold: #B8962E;
+  --ss-gold-light: rgba(184, 150, 46, 0.12);
+  --ss-ink: #2C2C2C;
+  --ss-muted: #94a3b8;
+  --ss-border: #e2e8f0;
+  --ss-surface: #f8fafc;
+  --ss-radius-sm: 6px;
+  --ss-radius-md: 8px;
+  --ss-radius-lg: 12px;
+  --ss-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --ss-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --ss-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --ss-transition: 0.15s ease;
+}
+
+/* ── Global interactive polish ──────────────────────────────────────────── */
+.scene-sets-container button {
+  transition: all var(--ss-transition);
+}
+
+.scene-sets-container button:focus-visible {
+  outline: 2px solid var(--ss-gold);
+  outline-offset: 2px;
+}
+
+.scene-sets-container select:focus-visible {
+  outline: 2px solid var(--ss-gold);
+  outline-offset: 2px;
+}
+
+.scene-sets-container input:focus-visible {
+  outline: 2px solid var(--ss-gold);
+  outline-offset: 2px;
+}
+
 .scene-sets-container {
   position: relative;
 }
+
+/* ── Loading skeleton ───────────────────────────────────────────────────── */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.scene-sets-skeleton-card {
+  border-radius: var(--ss-radius-lg);
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--ss-border);
+}
+
+.scene-sets-skeleton-image {
+  aspect-ratio: 16 / 10;
+  background: linear-gradient(135deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 200%;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+.scene-sets-skeleton-body {
+  padding: 16px;
+}
+
+.scene-sets-skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+  margin-bottom: 8px;
+}
+
+.scene-sets-skeleton-line.short { width: 60%; }
+.scene-sets-skeleton-line.medium { width: 80%; }
+.scene-sets-skeleton-line.wide { width: 100%; }
 
 /* ── Toast ─────────────────────────────────────────────────────────────── */
 
@@ -506,6 +580,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.scene-sets-card:hover .scene-sets-card-overlay-top-right {
+  opacity: 1;
 }
 
 .scene-sets-btn-kebab-hero {
@@ -629,22 +709,116 @@
 /* ── Card Body ─────────────────────────────────────────────────────────── */
 
 .scene-sets-card-body {
-  padding: 14px 16px 16px;
+  padding: 12px 16px 14px;
   overflow: hidden;
 }
 
 .scene-sets-card-header {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
-.scene-sets-card-header-row {
+.scene-sets-card-title {
+  transition: color var(--ss-transition);
+}
+
+.scene-sets-card-title:hover {
+  color: var(--ss-gold);
+}
+
+/* ── Compact meta chips ─────────────────────────────── */
+.scene-sets-card-meta-line {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.scene-sets-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ss-muted);
+  padding: 2px 6px;
+  background: var(--ss-surface);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ── Progress bar ───────────────────────────────────── */
+.scene-sets-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.scene-sets-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.scene-sets-progress-fill {
+  height: 100%;
+  background: var(--ss-gold);
+  border-radius: 2px;
+  transition: width 0.3s ease;
   min-width: 0;
-  gap: 10px;
+}
+
+.scene-sets-progress-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ss-muted);
+  flex-shrink: 0;
+}
+
+/* ── Hover-reveal actions ───────────────────────────── */
+.scene-sets-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.scene-sets-card:hover .scene-sets-card-actions,
+.scene-sets-card:focus-within .scene-sets-card-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Details button */
+.scene-sets-btn-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-ink);
+  cursor: pointer;
+}
+
+.scene-sets-btn-details:hover {
+  background: var(--ss-surface);
+  border-color: var(--ss-gold);
+  color: var(--ss-gold);
 }
 
 .scene-sets-angle-badge {
@@ -2664,8 +2838,8 @@
   background: #FAF7F0;
   border-radius: 16px;
   width: 90vw;
-  max-width: 560px;
-  max-height: 85vh;
+  max-width: 640px;
+  max-height: 80vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05);
@@ -2777,18 +2951,19 @@
 .scene-sets-modal-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 10px 16px;
+  gap: 4px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   color: #777;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: all 0.12s ease;
+  white-space: nowrap;
 }
 
 .scene-sets-modal-tab:hover {
@@ -2957,7 +3132,8 @@
 .scene-sets-modal-prompt-pre {
   margin: 6px 0 0;
   padding: 10px;
-  background: rgba(0, 0, 0, 0.03);
+  background: #f8f6f0;
+  border: 1px solid #e8e4da;
   border-radius: 6px;
   font-size: 10px;
   color: #555;
@@ -2965,6 +3141,7 @@
   word-break: break-word;
   max-height: 150px;
   overflow-y: auto;
+  color-scheme: light;
 }
 
 /* ── Modal actions ── */
@@ -2997,4 +3174,655 @@
     padding: 8px 10px;
     font-size: 10px;
   }
+}
+
+/* ── Consistency Score Badge ─────────────────────────────────────────────── */
+.scene-sets-consistency-badge {
+  position: absolute;
+  bottom: 16px;
+  right: 2px;
+  font-size: 7px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  padding: 1px 3px;
+  border-radius: 3px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.scene-sets-consistency-badge.high {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.scene-sets-consistency-badge.mid {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.scene-sets-consistency-badge.low {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+/* ── 480px Small Phone Breakpoint ────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .scene-sets-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .scene-sets-filters {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .scene-sets-filter-pill {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+}
+
+/* ── Clean Angle List (Detail Panel) ─────────────────────────────────────── */
+
+.scene-sets-angle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scene-sets-angle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--ss-radius-sm);
+  transition: background var(--ss-transition);
+}
+
+.scene-sets-angle-row:hover {
+  background: var(--ss-surface);
+}
+
+.scene-sets-angle-row.failed {
+  background: #fef2f2;
+}
+
+.scene-sets-angle-row-thumb {
+  flex-shrink: 0;
+  width: 56px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.scene-sets-angle-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+  transition: opacity var(--ss-transition);
+}
+
+.scene-sets-angle-row-thumb img:hover {
+  opacity: 0.85;
+}
+
+.scene-sets-angle-row-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+}
+
+.scene-sets-angle-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.scene-sets-angle-row-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ss-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.scene-sets-angle-row-name {
+  font-size: 11px;
+  color: var(--ss-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scene-sets-angle-row-status {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.scene-sets-angle-row-btn {
+  background: none;
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--ss-muted);
+  display: flex;
+  align-items: center;
+}
+
+.scene-sets-angle-row-btn:hover {
+  border-color: var(--ss-gold);
+  color: var(--ss-gold);
+}
+
+/* ── Card Thumbnail Strip ────────────────────────────────────────────────── */
+
+.scene-sets-card-thumbstrip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.scene-sets-card-thumb {
+  width: 28px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid var(--ss-border);
+  transition: border-color var(--ss-transition), transform var(--ss-transition);
+}
+
+.scene-sets-card-thumb:hover {
+  border-color: var(--ss-gold);
+  transform: scale(1.15);
+  z-index: 1;
+}
+
+.scene-sets-card-thumb-more {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--ss-muted);
+  padding: 0 2px;
+}
+
+.scene-sets-card-thumb-gallery {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ss-border);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ss-muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.scene-sets-card-thumb-gallery:hover {
+  border-color: var(--ss-gold);
+  color: var(--ss-gold);
+}
+
+/* ── Search Input ────────────────────────────────────────────────────────── */
+
+.scene-sets-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.scene-sets-search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--ss-muted);
+  pointer-events: none;
+}
+
+.scene-sets-search-input {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 6px 8px 6px 26px;
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+  background: #fff;
+  color: var(--ss-ink);
+  width: 160px;
+  transition: border-color var(--ss-transition), width var(--ss-transition);
+}
+
+.scene-sets-search-input:focus {
+  border-color: var(--ss-gold);
+  outline: none;
+  width: 200px;
+}
+
+.scene-sets-search-input::placeholder {
+  color: #cbd5e1;
+}
+
+/* ── Overview Tab Polish ─────────────────────────────────────────────────── */
+
+.scene-sets-overview-desc {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #374151;
+  margin: 0 0 12px;
+}
+
+.scene-sets-overview-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.scene-sets-overview-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 10px;
+}
+
+.scene-sets-overview-chip.mood {
+  background: #faf5ff;
+  color: #7c3aed;
+}
+
+.scene-sets-overview-chip.style {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+/* ── Room Properties ─────────────────────────────────────────────────────── */
+
+.scene-sets-field-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ss-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.scene-sets-select-sm {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-ink);
+  min-width: 120px;
+  cursor: pointer;
+  transition: border-color var(--ss-transition);
+}
+
+.scene-sets-select-sm:hover {
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-room-props-summary {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.scene-sets-room-props-summary span {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--ss-surface);
+  border-radius: 10px;
+  color: var(--ss-muted);
+  text-transform: capitalize;
+}
+
+/* ── Description Builder ─────────────────────────────────────────────────── */
+
+.scene-sets-desc-helper {
+  margin-bottom: 6px;
+}
+
+.scene-sets-desc-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ss-muted);
+  line-height: 1.5;
+}
+
+.scene-sets-desc-textarea {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.scene-sets-desc-textarea::placeholder {
+  font-family: 'Lora', serif;
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.scene-sets-ai-desc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px dashed var(--ss-gold);
+  background: var(--ss-gold-light);
+  color: var(--ss-gold);
+  cursor: pointer;
+}
+
+.scene-sets-ai-desc-btn:hover {
+  background: rgba(184, 150, 46, 0.2);
+  border-style: solid;
+}
+
+.scene-sets-ai-desc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Episode Checkboxes ──────────────────────────────────────────────────── */
+
+.scene-sets-episode-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--ss-surface);
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+}
+
+.scene-sets-episode-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--ss-ink);
+  transition: background var(--ss-transition);
+}
+
+.scene-sets-episode-checkbox:hover {
+  background: #fff;
+}
+
+.scene-sets-episode-checkbox input[type="checkbox"] {
+  accent-color: var(--ss-gold);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.scene-sets-episode-checkbox-title {
+  color: var(--ss-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Guided Description Builder ──────────────────────────────────────────── */
+
+.scene-sets-builder-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-gold);
+  cursor: pointer;
+}
+
+.scene-sets-builder-toggle:hover {
+  background: var(--ss-gold-light);
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-guided-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scene-sets-builder-step {
+  transition: opacity 0.2s ease, max-height 0.3s ease;
+  overflow: hidden;
+}
+
+.scene-sets-builder-step.visible {
+  opacity: 1;
+  max-height: 80px;
+}
+
+.scene-sets-builder-step.hidden {
+  opacity: 0.3;
+  max-height: 0;
+  pointer-events: none;
+}
+
+.scene-sets-builder-step.answered .scene-sets-builder-input {
+  border-color: var(--ss-gold);
+  background: rgba(184, 150, 46, 0.04);
+}
+
+.scene-sets-builder-question {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ss-ink);
+  margin-bottom: 4px;
+}
+
+.scene-sets-builder-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.scene-sets-builder-input {
+  width: 100%;
+  font-family: 'Lora', serif;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-sm);
+  background: #fff;
+  color: var(--ss-ink);
+  transition: border-color var(--ss-transition);
+  margin-bottom: 6px;
+}
+
+.scene-sets-builder-input:focus {
+  border-color: var(--ss-gold);
+  outline: none;
+}
+
+.scene-sets-builder-input::placeholder {
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+/* ── Safe Description Editor ─────────────────────────────────────────────── */
+
+.scene-sets-overview-desc-wrap {
+  position: relative;
+}
+
+.scene-sets-desc-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-muted);
+  cursor: pointer;
+}
+
+.scene-sets-desc-edit-btn:hover {
+  color: var(--ss-gold);
+  border-color: var(--ss-gold);
+}
+
+.scene-sets-desc-editor {
+  margin-bottom: 12px;
+}
+
+.scene-sets-desc-editor-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ss-gold);
+  background: var(--ss-gold-light);
+  padding: 6px 10px;
+  border-radius: var(--ss-radius-sm);
+  margin-bottom: 8px;
+}
+
+.scene-sets-desc-editor-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Tools Section Labels ────────────────────────────────────────────────── */
+
+.scene-sets-tools-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ss-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+/* ── Promote to Base Button ──────────────────────────────────────────────── */
+
+.scene-sets-promote-btn {
+  font-size: 10px !important;
+  gap: 3px;
+  color: var(--ss-gold) !important;
+  border-color: var(--ss-gold) !important;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--ss-transition);
+}
+
+.scene-sets-angle-row:hover .scene-sets-promote-btn {
+  opacity: 1;
+}
+
+.scene-sets-promote-btn:hover {
+  background: var(--ss-gold-light) !important;
+}
+
+/* ── Lightbox Promote Button ─────────────────────────────────────────────── */
+
+.scene-sets-lightbox-promote {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-gold);
+  background: var(--ss-gold-light);
+  color: var(--ss-gold);
+  cursor: pointer;
+}
+
+.scene-sets-lightbox-promote:hover {
+  background: var(--ss-gold);
+  color: #fff;
+}
+
+/* ── Base Ready Badge ────────────────────────────────────────────────────── */
+
+.scene-sets-base-ready-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(22, 163, 74, 0.85);
+  color: #fff;
+  backdrop-filter: blur(4px);
+}
+
+/* ── Mood Variant Buttons ────────────────────────────────────────────────── */
+
+.scene-sets-mood-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: var(--ss-radius-sm);
+  border: 1px solid var(--ss-border);
+  background: #fff;
+  color: var(--ss-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scene-sets-mood-btn:hover {
+  border-color: var(--ss-gold);
+  background: var(--ss-gold-light);
+}
+
+.scene-sets-mood-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

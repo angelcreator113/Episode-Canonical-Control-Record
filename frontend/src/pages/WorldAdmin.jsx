@@ -15,11 +15,13 @@
  * Location: frontend/src/pages/WorldAdmin.jsx
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
 import './WorldAdmin.css';
+
+const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
 const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
@@ -29,8 +31,8 @@ const EVENT_TYPES = ['invite', 'upgrade', 'guest', 'fail_test', 'deliverable', '
 const BIAS_OPTIONS = ['balanced', 'glam', 'cozy', 'couture', 'trendy', 'romantic'];
 const WARDROBE_TIER_COLORS = { basic: '#94a3b8', mid: '#6366f1', luxury: '#eab308', elite: '#ec4899' };
 const WARDROBE_TIER_ICONS = { basic: '👟', mid: '👠', luxury: '💎', elite: '👑' };
-const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessories', 'jewelry', 'perfume'];
-const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessories: '🎀', jewelry: '💍', perfume: '🌸' };
+const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear'];
+const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessory: '🎀', jewelry: '💍', bag: '👜', outerwear: '🧥' };
 
 const EMPTY_EVENT = {
   name: '', event_type: 'invite', host: '', host_brand: '', description: '',
@@ -40,6 +42,7 @@ const EMPTY_EVENT = {
   is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
   requirements: {}, scene_set_id: null,
+  venue_name: '', venue_address: '', event_date: '', event_time: '',
   theme: '', color_palette: [], mood: '', floral_style: '', border_style: '',
 };
 
@@ -73,6 +76,7 @@ const EVENT_STATUS_CONFIG = {
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
   { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
+  { key: 'feed', icon: '👥', label: "Lala's Feed" },
   { key: 'events', icon: '💌', label: 'Events Library' },
   { key: 'goals', icon: '🎯', label: 'Career Goals' },
   { key: 'wardrobe', icon: '👗', label: 'Wardrobe' },
@@ -128,6 +132,7 @@ function WorldAdmin() {
   const [aiRevising, setAiRevising] = useState(false);
   const [compareEvents, setCompareEvents] = useState(null); // [eventA, eventB]
   const [generating, setGenerating] = useState(false);
+  const [seedingEvents, setSeedingEvents] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
 
   // Character editor state
@@ -157,9 +162,9 @@ function WorldAdmin() {
   }, [successMsg]);
 
   const loadData = async () => {
-    setLoading(true);
+    setLoading(true); setError(null);
     try {
-      await Promise.allSettled([
+      const results = await Promise.allSettled([
         api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data)).catch(() => setShow({ id: showId, title: 'Show' })),
         api.get(`/api/v1/characters/lala/state?show_id=${showId}`).then(r => setCharState(r.data)).catch(() => {}),
         api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(r => {
@@ -171,8 +176,13 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(() => setWorldEvents([])),
         api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
-        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
+        api.get(`/api/v1/wardrobe-library?showId=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
       ]);
+      // Show error only if ALL calls failed (not just some timeouts)
+      const failures = results.filter(r => r.status === 'rejected');
+      if (failures.length === results.length) {
+        setError('Unable to connect to server. Please try refreshing.');
+      }
     } finally { setLoading(false); }
   };
 
@@ -209,6 +219,26 @@ function WorldAdmin() {
       }
     } catch (err) { setError(err.response?.data?.error || err.message); }
     finally { setSavingEvent(false); }
+  };
+
+  const seedEvents = async () => {
+    if (worldEvents.length >= 20 && !window.confirm(`You already have ${worldEvents.length} events. This will replace them all with 24 AI-generated events. Continue?`)) return;
+    setSeedingEvents(true);
+    setError(null);
+    try {
+      const res = await api.post('/api/v1/memories/generate-events', {
+        show_id: showId,
+        replace_existing: worldEvents.length > 0,
+      }, { timeout: 120000 });
+      const eventsRes = await api.get(`/api/v1/world/${showId}/events`);
+      setWorldEvents(eventsRes.data?.events || []);
+      setSuccessMsg(`Seeded ${res.data.generated} events (${Object.entries(res.data.breakdown || {}).map(([k, v]) => `${v} ${k}`).join(', ')})`);
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Unknown error';
+      setError(msg.includes('timeout') ? 'Event generation timed out. The AI may be slow — try again.' : msg);
+    } finally {
+      setSeedingEvents(false);
+    }
   };
 
   const deleteEvent = async (eventId) => {
@@ -681,7 +711,10 @@ The revised event should feel like a completely different experience from the si
         // Close inject panel after a brief delay so user sees the confirmation
         setTimeout(() => { setInjectTarget(null); setInjectSuccess(null); }, 2000);
         // Update local event status to 'used'
-        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'used', times_used: (ev.times_used || 0) + 1, used_in_episode_id: episodeId } : ev));
+        const updatedEvent = { ...worldEvents.find(ev => ev.id === eventId), status: 'used', times_used: ((worldEvents.find(ev => ev.id === eventId)?.times_used) || 0) + 1, used_in_episode_id: episodeId };
+        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? updatedEvent : ev));
+        // Also update the detail modal if it's showing this event
+        setEventDetailModal(prev => prev && prev.id === eventId ? { ...prev, status: 'used', used_in_episode_id: episodeId } : prev);
       } else {
         const msg = res.data?.error || res.data?.message || 'Inject returned unexpected response';
         setInjectError(msg); setError(msg);
@@ -1121,6 +1154,13 @@ The revised event should feel like a completely different experience from the si
         </div>
       )}
 
+      {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
+      {activeTab === 'feed' && (
+        <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
+          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" />
+        </Suspense>
+      )}
+
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
       {activeTab === 'events' && (
         <div style={S.content}>
@@ -1128,6 +1168,7 @@ The revised event should feel like a completely different experience from the si
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>💌 Events Library</h2>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={seedEvents} disabled={seedingEvents} style={{ ...S.smBtn, background: '#fefce8', color: '#a16207' }}>{seedingEvents ? '⏳ Seeding...' : '🌱 Seed 24 Events'}</button>
               <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S.smBtn, background: '#f0fdf4', color: '#16a34a' }}>📋 Templates</button>
               <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={{ ...S.smBtn, background: '#faf5ff', color: '#7c3aed' }}>{aiFixLoading ? '⏳...' : '✨ Enhance All'}</button>
               <button onClick={handleExportCSV} style={{ ...S.smBtn, background: '#f0f9ff', color: '#0284c7' }}>📥 Export</button>
@@ -1453,13 +1494,47 @@ The revised event should feel like a completely different experience from the si
                 </div>
               )}
 
-              {/* Location picker — prominent position */}
+              {/* Venue & Location — combined picker */}
               <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-                <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Location (Scene Set)</label>
+                <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>📍 Venue & Location</label>
+
+                {/* Venue name + address */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <input
+                    value={eventForm.venue_name || ''}
+                    onChange={e => setEventForm(p => ({ ...p, venue_name: e.target.value }))}
+                    placeholder="Venue Name (e.g. Club Noir)"
+                    style={S.sel}
+                  />
+                  <input
+                    value={eventForm.venue_address || ''}
+                    onChange={e => setEventForm(p => ({ ...p, venue_address: e.target.value }))}
+                    placeholder="Address (e.g. 742 Ocean Drive, South Beach, Miami)"
+                    style={S.sel}
+                  />
+                </div>
+
+                {/* Event date + time */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <input
+                    value={eventForm.event_date || ''}
+                    onChange={e => setEventForm(p => ({ ...p, event_date: e.target.value }))}
+                    placeholder="Event Date (e.g. Friday, March 15th)"
+                    style={S.sel}
+                  />
+                  <input
+                    value={eventForm.event_time || ''}
+                    onChange={e => setEventForm(p => ({ ...p, event_time: e.target.value }))}
+                    placeholder="Time (e.g. 9:00 PM - 2:00 AM)"
+                    style={S.sel}
+                  />
+                </div>
+
+                {/* Scene set picker */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <select value={eventForm.scene_set_id || ''} onChange={e => setEventForm(p => ({ ...p, scene_set_id: e.target.value || null }))} style={{ ...S.sel, flex: 1, minWidth: 200 }}>
-                    <option value="">— No location linked —</option>
-                    {sceneSets.map(ss => (
+                    <option value="">— Scene Set (visual) —</option>
+                    {sceneSets.filter(ss => ss.scene_type === 'EVENT_LOCATION' || ss.base_still_url).map(ss => (
                       <option key={ss.id} value={ss.id}>📍 {ss.name} ({ss.scene_type?.replace(/_/g, ' ')})</option>
                     ))}
                   </select>
@@ -1472,9 +1547,6 @@ The revised event should feel like a completely different experience from the si
                       </div>
                     ) : null;
                   })()}
-                  {!eventForm.scene_set_id && sceneSets.length === 0 && (
-                    <span style={{ fontSize: 10, color: '#94a3b8' }}>No scene sets found — create them in Scene Sets first</span>
-                  )}
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
@@ -2260,55 +2332,42 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
 
       {/* ════════════════════════ WARDROBE ════════════════════════ */}
       {activeTab === 'wardrobe' && (() => {
-        // Derived wardrobe data
-        const tierGroups = { basic: [], mid: [], luxury: [], elite: [] };
-        wardrobeItems.forEach(item => { if (tierGroups[item.tier]) tierGroups[item.tier].push(item); });
-
-        const filteredItems = wardrobeItems.filter(item => {
-          if (wardrobeFilter === 'owned' && !item.is_owned) return false;
-          if (wardrobeFilter === 'locked' && item.is_owned) return false;
-          if (wardrobeTierFilter !== 'all' && item.tier !== wardrobeTierFilter) return false;
-          if (wardrobeCatFilter !== 'all' && item.clothing_category !== wardrobeCatFilter) return false;
-          return true;
+        // Group items by type for summary
+        const typeGroups = {};
+        wardrobeItems.forEach(item => {
+          const t = item.itemType || item.item_type || 'other';
+          if (!typeGroups[t]) typeGroups[t] = [];
+          typeGroups[t].push(item);
         });
 
-        const seedWardrobe = async () => {
-          setSeedingWardrobe(true); setError(null);
-          try {
-            const res = await api.post(`/api/v1/wardrobe/seed`, { show_id: showId });
-            if (res.data.success) {
-              setSuccessMsg(`🌱 Seeded ${res.data.created} items! (${res.data.skipped} already existed) — ${res.data.owned} owned, ${res.data.total - res.data.owned} locked`);
-              setToast(`🌱 ${res.data.created} wardrobe items seeded!`);
-              setTimeout(() => setToast(null), 3000);
-              loadData();
-            }
-          } catch (err) { setError(err.response?.data?.error || err.message); }
-          finally { setSeedingWardrobe(false); }
-        };
+        const filteredItems = wardrobeItems.filter(item => {
+          const itemType = item.itemType || item.item_type || 'other';
+          if (wardrobeCatFilter !== 'all' && itemType !== wardrobeCatFilter) return false;
+          if (wardrobeFilter !== 'all') {
+            const searchTerm = wardrobeFilter.toLowerCase();
+            const nameMatch = (item.name || '').toLowerCase().includes(searchTerm);
+            const descMatch = (item.description || '').toLowerCase().includes(searchTerm);
+            const colorMatch = (item.color || '').toLowerCase().includes(searchTerm);
+            const vendorMatch = (item.vendor || '').toLowerCase().includes(searchTerm);
+            if (!nameMatch && !descMatch && !colorMatch && !vendorMatch) return false;
+          }
+          return true;
+        });
 
         const openEditItem = (item) => {
           setEditingWardrobeItem(item);
           setWardrobeForm({
             name: item.name || '',
-            clothing_category: item.clothing_category || '',
+            description: item.description || '',
+            itemType: item.itemType || item.item_type || '',
             color: item.color || '',
-            season: item.season || 'all-season',
-            brand: item.brand || '',
-            tier: item.tier || 'basic',
-            lock_type: item.lock_type || 'none',
-            is_owned: !!item.is_owned,
-            is_visible: item.is_visible !== false,
-            era_alignment: item.era_alignment || '',
-            coin_cost: item.coin_cost || 0,
-            reputation_required: item.reputation_required || 0,
-            influence_required: item.influence_required || 0,
-            outfit_match_weight: item.outfit_match_weight || 5,
-            season_unlock_episode: item.season_unlock_episode || '',
-            aesthetic_tags: Array.isArray(item.aesthetic_tags) ? item.aesthetic_tags.join(', ') : '',
-            event_types: Array.isArray(item.event_types) ? item.event_types.join(', ') : '',
-            lala_reaction_own: item.lala_reaction_own || '',
-            lala_reaction_locked: item.lala_reaction_locked || '',
-            lala_reaction_reject: item.lala_reaction_reject || '',
+            defaultSeason: item.defaultSeason || item.default_season || '',
+            defaultOccasion: item.defaultOccasion || item.default_occasion || '',
+            defaultCharacter: item.defaultCharacter || item.default_character || '',
+            vendor: item.vendor || '',
+            price: item.price || '',
+            website: item.website || '',
+            tags: Array.isArray(item.tags) ? item.tags.join(', ') : '',
           });
         };
 
@@ -2318,43 +2377,28 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
           try {
             const payload = {
               ...wardrobeForm,
-              aesthetic_tags: wardrobeForm.aesthetic_tags ? wardrobeForm.aesthetic_tags.split(',').map(s => s.trim()).filter(Boolean) : [],
-              event_types: wardrobeForm.event_types ? wardrobeForm.event_types.split(',').map(s => s.trim()).filter(Boolean) : [],
-              coin_cost: parseInt(wardrobeForm.coin_cost) || 0,
-              reputation_required: parseInt(wardrobeForm.reputation_required) || 0,
-              influence_required: parseInt(wardrobeForm.influence_required) || 0,
-              outfit_match_weight: parseInt(wardrobeForm.outfit_match_weight) || 5,
-              season_unlock_episode: wardrobeForm.season_unlock_episode ? parseInt(wardrobeForm.season_unlock_episode) : null,
+              tags: wardrobeForm.tags ? wardrobeForm.tags.split(',').map(s => s.trim()).filter(Boolean) : [],
+              price: wardrobeForm.price ? parseFloat(wardrobeForm.price) : null,
             };
-            const res = await api.put(`/api/v1/wardrobe/${editingWardrobeItem.id}`, payload);
+            const res = await api.put(`/api/v1/wardrobe-library/${editingWardrobeItem.id}`, payload);
             if (res.data.success) {
               setWardrobeItems(prev => prev.map(i => i.id === editingWardrobeItem.id ? { ...i, ...res.data.data } : i));
               setEditingWardrobeItem(null);
-              setSuccessMsg('✅ Wardrobe item updated!');
-              setToast('✅ Item saved!'); setTimeout(() => setToast(null), 2500);
+              setSuccessMsg('Wardrobe item updated!');
+              setToast('Item saved!'); setTimeout(() => setToast(null), 2500);
             }
           } catch (err) { setError(err.response?.data?.error || err.message); }
           finally { setSavingWardrobe(false); }
         };
 
-        const toggleOwnership = async (item) => {
-          try {
-            const res = await api.put(`/api/v1/wardrobe/${item.id}`, { is_owned: !item.is_owned });
-            if (res.data.success) {
-              setWardrobeItems(prev => prev.map(i => i.id === item.id ? { ...i, is_owned: !item.is_owned } : i));
-              setToast(item.is_owned ? '🔒 Item locked' : '✅ Item unlocked!'); setTimeout(() => setToast(null), 2500);
-            }
-          } catch (err) { setError(err.response?.data?.error || err.message); }
-        };
-
         const deleteWardrobeItem = async (item) => {
-          if (!window.confirm(`Delete "${item.name}"? This will soft-delete it.`)) return;
+          if (!window.confirm(`Delete "${item.name}"?`)) return;
           try {
-            const res = await api.delete(`/api/v1/wardrobe/${item.id}`);
+            const res = await api.delete(`/api/v1/wardrobe-library/${item.id}`);
             if (res.data.success) {
               setWardrobeItems(prev => prev.filter(i => i.id !== item.id));
               setEditingWardrobeItem(null);
-              setSuccessMsg('🗑️ Item deleted');
+              setSuccessMsg('Item deleted');
             }
           } catch (err) { setError(err.response?.data?.error || err.message); }
         };
@@ -2366,51 +2410,44 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
           <div style={S.content}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ ...S.cardTitle, margin: 0 }}>👗 Wardrobe</h2>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>{wardrobeItems.length} items</span>
-                <button onClick={seedWardrobe} disabled={seedingWardrobe} style={S.secBtn}>
-                  {seedingWardrobe ? '⏳ Seeding...' : '🌱 Seed 40 Items'}
-                </button>
+              <h2 style={{ ...S.cardTitle, margin: 0 }}>👗 Wardrobe Library</h2>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{wardrobeItems.length} items</span>
+                <button onClick={() => navigate('/wardrobe-library/upload')} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
-            {/* Tier Summary Cards */}
-            <div className="wa-grid wa-grid-4col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-              {['basic', 'mid', 'luxury', 'elite'].map(tier => {
-                const items = tierGroups[tier] || [];
-                const owned = items.filter(i => i.is_owned).length;
-                const isActive = wardrobeTierFilter === tier;
-                return (
-                  <div key={tier} onClick={() => setWardrobeTierFilter(isActive ? 'all' : tier)}
-                    style={{
-                      padding: 16, borderRadius: 12, textAlign: 'center', cursor: 'pointer',
-                      background: isActive ? WARDROBE_TIER_COLORS[tier] + '18' : '#fff',
-                      border: isActive ? `2px solid ${WARDROBE_TIER_COLORS[tier]}` : '1px solid #e2e8f0',
-                      transition: 'all 0.2s',
-                    }}>
-                    <div style={{ fontSize: 24 }}>{WARDROBE_TIER_ICONS[tier]}</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: WARDROBE_TIER_COLORS[tier] }}>{items.length}</div>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: WARDROBE_TIER_COLORS[tier] }}>{tier}</div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{owned} owned · {items.length - owned} locked</div>
-                  </div>
-                );
-              })}
-            </div>
+            {/* Type Summary Cards */}
+            {Object.keys(typeGroups).length > 0 && (
+              <div className="wa-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10, marginBottom: 16 }}>
+                {Object.entries(typeGroups).sort((a, b) => b[1].length - a[1].length).map(([type, items]) => {
+                  const isActive = wardrobeCatFilter === type;
+                  return (
+                    <div key={type} onClick={() => setWardrobeCatFilter(isActive ? 'all' : type)}
+                      style={{
+                        padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'pointer',
+                        background: isActive ? '#6366f118' : '#fff',
+                        border: isActive ? '2px solid #6366f1' : '1px solid #e2e8f0',
+                        transition: 'all 0.2s',
+                      }}>
+                      <div style={{ fontSize: 20 }}>{CAT_ICONS[type] || '🏷️'}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: isActive ? '#6366f1' : '#1a1a2e' }}>{items.length}</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>{type}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
-            {/* Filter Bar */}
+            {/* Search + Category Filter */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-              {['all', 'owned', 'locked'].map(f => (
-                <button key={f} onClick={() => setWardrobeFilter(f)}
-                  style={{
-                    padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    background: wardrobeFilter === f ? '#6366f1' : '#fff',
-                    color: wardrobeFilter === f ? '#fff' : '#64748b',
-                    border: wardrobeFilter === f ? '1px solid #6366f1' : '1px solid #e2e8f0',
-                  }}>
-                  {f === 'all' ? '🏷️ All' : f === 'owned' ? '✅ Owned' : '🔒 Locked'}
-                </button>
-              ))}
+              <input
+                type="text"
+                placeholder="Search by name, color, vendor..."
+                value={wardrobeFilter === 'all' ? '' : wardrobeFilter}
+                onChange={e => setWardrobeFilter(e.target.value || 'all')}
+                style={{ ...S.inp, flex: '1 1 200px', minWidth: 150, margin: 0 }}
+              />
               <div style={{ width: 1, height: 24, background: '#e2e8f0', alignSelf: 'center' }} />
               {WARDROBE_CATEGORIES.map(cat => (
                 <button key={cat} onClick={() => setWardrobeCatFilter(cat)}
@@ -2420,37 +2457,42 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                     color: wardrobeCatFilter === cat ? '#fff' : '#64748b',
                     border: wardrobeCatFilter === cat ? '1px solid #6366f1' : '1px solid #e2e8f0',
                   }}>
-                  {CAT_ICONS[cat]} {cat}
+                  {CAT_ICONS[cat] || '🏷️'} {cat}
                 </button>
               ))}
             </div>
 
-            {/* ─── Edit Panel (slide-in) ─── */}
+            {/* ─── Edit Panel ─── */}
             {editingWardrobeItem && (
               <div style={{
                 background: '#fff', border: '2px solid #6366f1', borderRadius: 14, padding: 24, marginBottom: 16,
                 boxShadow: '0 8px 32px rgba(99,102,241,0.15)',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
-                    ✏️ Editing: {editingWardrobeItem.name}
-                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {(editingWardrobeItem.thumbnailUrl || editingWardrobeItem.thumbnail_url || editingWardrobeItem.imageUrl || editingWardrobeItem.image_url) && (
+                      <img src={editingWardrobeItem.thumbnailUrl || editingWardrobeItem.thumbnail_url || editingWardrobeItem.imageUrl || editingWardrobeItem.image_url}
+                        alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+                    )}
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Editing: {editingWardrobeItem.name}</h3>
+                  </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => deleteWardrobeItem(editingWardrobeItem)} style={S.smBtnDanger}>🗑️ Delete</button>
-                    <button onClick={() => setEditingWardrobeItem(null)} style={S.smBtn}>✕ Close</button>
+                    <button onClick={() => deleteWardrobeItem(editingWardrobeItem)} style={S.smBtnDanger}>Delete</button>
+                    <button onClick={() => setEditingWardrobeItem(null)} style={S.smBtn}>Close</button>
                   </div>
                 </div>
 
-                {/* Row 1: Name, Category, Color, Season */}
+                {/* Row 1: Name, Type, Color, Character */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }} className="wa-grid wa-grid-4col">
                   <div>
                     <label style={S.fLabel}>Name</label>
                     <input value={wf.name} onChange={e => setWf('name', e.target.value)} style={S.inp} />
                   </div>
                   <div>
-                    <label style={S.fLabel}>Category</label>
-                    <select value={wf.clothing_category} onChange={e => setWf('clothing_category', e.target.value)} style={S.sel}>
-                      {['dress', 'top', 'bottom', 'shoes', 'accessories', 'jewelry', 'perfume'].map(c => (
+                    <label style={S.fLabel}>Type</label>
+                    <select value={wf.itemType} onChange={e => setWf('itemType', e.target.value)} style={S.sel}>
+                      <option value="">Select...</option>
+                      {['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear'].map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
@@ -2460,106 +2502,51 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                     <input value={wf.color} onChange={e => setWf('color', e.target.value)} style={S.inp} />
                   </div>
                   <div>
+                    <label style={S.fLabel}>Character</label>
+                    <input value={wf.defaultCharacter} onChange={e => setWf('defaultCharacter', e.target.value)} style={S.inp} placeholder="Lala, JustAWoman..." />
+                  </div>
+                </div>
+
+                {/* Row 2: Season, Occasion, Vendor, Price */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }} className="wa-grid wa-grid-4col">
+                  <div>
                     <label style={S.fLabel}>Season</label>
-                    <select value={wf.season} onChange={e => setWf('season', e.target.value)} style={S.sel}>
-                      {['all-season', 'spring', 'summer', 'fall', 'winter'].map(s => (
+                    <select value={wf.defaultSeason} onChange={e => setWf('defaultSeason', e.target.value)} style={S.sel}>
+                      <option value="">Any</option>
+                      {['spring', 'summer', 'fall', 'winter'].map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
                   </div>
-                </div>
-
-                {/* Row 2: Tier, Lock Type, Era, Brand */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }} className="wa-grid wa-grid-4col">
                   <div>
-                    <label style={S.fLabel}>Tier</label>
-                    <select value={wf.tier} onChange={e => setWf('tier', e.target.value)} style={S.sel}>
-                      {['basic', 'mid', 'luxury', 'elite'].map(t => (
-                        <option key={t} value={t}>{WARDROBE_TIER_ICONS[t]} {t}</option>
-                      ))}
-                    </select>
+                    <label style={S.fLabel}>Occasion</label>
+                    <input value={wf.defaultOccasion} onChange={e => setWf('defaultOccasion', e.target.value)} style={S.inp} placeholder="gala, casual, editorial..." />
                   </div>
                   <div>
-                    <label style={S.fLabel}>Lock Type</label>
-                    <select value={wf.lock_type} onChange={e => setWf('lock_type', e.target.value)} style={S.sel}>
-                      {['none', 'coin', 'reputation', 'influence', 'season_drop', 'brand_exclusive', 'story_unlock', 'achievement'].map(l => (
-                        <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>
-                      ))}
-                    </select>
+                    <label style={S.fLabel}>Vendor</label>
+                    <input value={wf.vendor} onChange={e => setWf('vendor', e.target.value)} style={S.inp} placeholder="Brand name..." />
                   </div>
                   <div>
-                    <label style={S.fLabel}>Era</label>
-                    <select value={wf.era_alignment} onChange={e => setWf('era_alignment', e.target.value)} style={S.sel}>
-                      {['foundation', 'glow_up', 'luxury', 'prime', 'legacy'].map(e => (
-                        <option key={e} value={e}>{e.replace(/_/g, ' ')}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={S.fLabel}>Brand</label>
-                    <input value={wf.brand} onChange={e => setWf('brand', e.target.value)} style={S.inp} placeholder="Maison Belle..." />
+                    <label style={S.fLabel}>Price</label>
+                    <input type="number" value={wf.price} onChange={e => setWf('price', e.target.value)} style={S.inp} min="0" step="0.01" placeholder="0.00" />
                   </div>
                 </div>
 
-                {/* Row 3: Ownership toggles + numeric costs */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 14 }} className="wa-grid wa-grid-6col">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label style={S.fLabel}>Owned</label>
-                    <button onClick={() => setWf('is_owned', !wf.is_owned)}
-                      style={{ ...S.smBtn, background: wf.is_owned ? '#f0fdf4' : '#fef2f2', borderColor: wf.is_owned ? '#bbf7d0' : '#fecaca', color: wf.is_owned ? '#16a34a' : '#dc2626', fontWeight: 700,  padding: '6px 10px' }}>
-                      {wf.is_owned ? '✅ Yes' : '🔒 No'}
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label style={S.fLabel}>Visible</label>
-                    <button onClick={() => setWf('is_visible', !wf.is_visible)}
-                      style={{ ...S.smBtn, background: wf.is_visible ? '#eef2ff' : '#f1f5f9', borderColor: wf.is_visible ? '#c7d2fe' : '#e2e8f0', color: wf.is_visible ? '#4338ca' : '#94a3b8', fontWeight: 700, padding: '6px 10px' }}>
-                      {wf.is_visible ? '👁️ Yes' : '🚫 No'}
-                    </button>
-                  </div>
-                  <div>
-                    <label style={S.fLabel}>🪙 Coin Cost</label>
-                    <input type="number" value={wf.coin_cost} onChange={e => setWf('coin_cost', e.target.value)} style={S.inp} min="0" />
-                  </div>
-                  <div>
-                    <label style={S.fLabel}>⭐ Rep Req</label>
-                    <input type="number" value={wf.reputation_required} onChange={e => setWf('reputation_required', e.target.value)} style={S.inp} min="0" max="10" />
-                  </div>
-                  <div>
-                    <label style={S.fLabel}>📣 Inf Req</label>
-                    <input type="number" value={wf.influence_required} onChange={e => setWf('influence_required', e.target.value)} style={S.inp} min="0" max="10" />
-                  </div>
-                  <div>
-                    <label style={S.fLabel}>🎯 Match Wt</label>
-                    <input type="number" value={wf.outfit_match_weight} onChange={e => setWf('outfit_match_weight', e.target.value)} style={S.inp} min="1" max="10" />
-                  </div>
+                {/* Row 3: Description */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={S.fLabel}>Description</label>
+                  <textarea value={wf.description} onChange={e => setWf('description', e.target.value)} style={{ ...S.tArea, minHeight: 60 }} placeholder="Describe the piece..." />
                 </div>
 
-                {/* Row 4: Tags & Events */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                {/* Row 4: Tags, Website */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                   <div>
-                    <label style={S.fLabel}>Aesthetic Tags <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated)</span></label>
-                    <input value={wf.aesthetic_tags} onChange={e => setWf('aesthetic_tags', e.target.value)} style={S.inp} placeholder="bold, elegant, modern" />
+                    <label style={S.fLabel}>Tags <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated)</span></label>
+                    <input value={wf.tags} onChange={e => setWf('tags', e.target.value)} style={S.inp} placeholder="elegant, evening, silk" />
                   </div>
                   <div>
-                    <label style={S.fLabel}>Event Types <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated)</span></label>
-                    <input value={wf.event_types} onChange={e => setWf('event_types', e.target.value)} style={S.inp} placeholder="gala, awards, brunch" />
-                  </div>
-                </div>
-
-                {/* Row 5: Lala Reactions */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }} className="wa-grid wa-grid-3col">
-                  <div>
-                    <label style={S.fLabel}>💬 Lala Reaction (Owned)</label>
-                    <textarea value={wf.lala_reaction_own} onChange={e => setWf('lala_reaction_own', e.target.value)} style={{ ...S.tArea, minHeight: 50 }} placeholder="Love this piece!" />
-                  </div>
-                  <div>
-                    <label style={S.fLabel}>🔒 Lala Reaction (Locked)</label>
-                    <textarea value={wf.lala_reaction_locked} onChange={e => setWf('lala_reaction_locked', e.target.value)} style={{ ...S.tArea, minHeight: 50 }} placeholder="One day..." />
-                  </div>
-                  <div>
-                    <label style={S.fLabel}>❌ Lala Reaction (Reject)</label>
-                    <textarea value={wf.lala_reaction_reject} onChange={e => setWf('lala_reaction_reject', e.target.value)} style={{ ...S.tArea, minHeight: 50 }} placeholder="Not today." />
+                    <label style={S.fLabel}>Website URL</label>
+                    <input value={wf.website} onChange={e => setWf('website', e.target.value)} style={S.inp} placeholder="https://..." />
                   </div>
                 </div>
 
@@ -2567,119 +2554,71 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                   <button onClick={() => setEditingWardrobeItem(null)} style={S.secBtn}>Cancel</button>
                   <button onClick={saveWardrobeItem} disabled={savingWardrobe} style={S.primaryBtn}>
-                    {savingWardrobe ? '⏳ Saving...' : '💾 Save Changes'}
+                    {savingWardrobe ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Item Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            {/* Item Grid — visual cards with thumbnails */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
               {filteredItems.map(item => {
-                const tierColor = WARDROBE_TIER_COLORS[item.tier] || '#94a3b8';
-                const tags = Array.isArray(item.aesthetic_tags) ? item.aesthetic_tags : [];
-                const events = Array.isArray(item.event_types) ? item.event_types : [];
-                const matchPct = Math.min(100, (item.outfit_match_weight || 5) * 10);
+                const imgUrl = item.thumbnailUrl || item.thumbnail_url || item.imageUrl || item.image_url;
+                const itemType = item.itemType || item.item_type || '';
+                const tags = Array.isArray(item.tags) ? item.tags : [];
                 const isSelected = editingWardrobeItem?.id === item.id;
 
                 return (
                   <div key={item.id} onClick={() => openEditItem(item)}
                     style={{
                       background: '#fff', border: isSelected ? '2px solid #6366f1' : '1px solid #e2e8f0', borderRadius: 12,
-                      padding: 16, position: 'relative', overflow: 'hidden', cursor: 'pointer',
-                      borderTop: `3px solid ${tierColor}`,
-                      opacity: item.is_owned ? 1 : 0.75,
-                      transition: 'all 0.2s', boxShadow: isSelected ? '0 4px 16px rgba(99,102,241,0.2)' : 'none',
+                      overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s',
+                      boxShadow: isSelected ? '0 4px 16px rgba(99,102,241,0.2)' : 'none',
                     }}
-                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)'; }}
-                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.boxShadow = 'none'; }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
                   >
-                    {/* Tier badge */}
-                    <div style={{
-                      position: 'absolute', top: 8, right: 8,
-                      padding: '2px 10px', borderRadius: 20,
-                      background: tierColor + '18', color: tierColor,
-                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-                    }}>
-                      {WARDROBE_TIER_ICONS[item.tier]} {item.tier}
-                    </div>
-
-                    {/* Name & Category */}
-                    <div style={{ marginBottom: 8, paddingRight: 70 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{item.name}</div>
-                      <div style={{ fontSize: 11, color: '#64748b' }}>
-                        {CAT_ICONS[item.clothing_category] || '🏷️'} {item.clothing_category}
-                        {item.color && <span style={{ marginLeft: 6 }}>· {item.color}</span>}
-                        {item.era_alignment && <span style={{ marginLeft: 6 }}>· {item.era_alignment}</span>}
+                    {/* Image */}
+                    <div style={{ width: '100%', aspectRatio: '1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                      {imgUrl ? (
+                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={e => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = 'flex'); }} />
+                      ) : null}
+                      <div style={{ display: imgUrl ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 48, color: '#cbd5e1' }}>
+                        {CAT_ICONS[itemType] || '👗'}
                       </div>
                     </div>
 
-                    {/* Aesthetic Tags */}
-                    {tags.length > 0 && (
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-                        {tags.map((tag, i) => (
-                          <span key={i} style={{ padding: '2px 8px', background: '#f3e8ff', borderRadius: 4, fontSize: 10, color: '#7c3aed' }}>{tag}</span>
-                        ))}
+                    {/* Info */}
+                    <div style={{ padding: '10px 12px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.name}
                       </div>
-                    )}
+                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+                        {CAT_ICONS[itemType] || '🏷️'} {itemType || 'item'}
+                        {item.color && <span> · {item.color}</span>}
+                        {item.vendor && <span> · {item.vendor}</span>}
+                      </div>
 
-                    {/* Event Compatibility */}
-                    {events.length > 0 && (
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-                        {events.slice(0, 4).map((ev, i) => (
-                          <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, color: '#4338ca' }}>{ev}</span>
-                        ))}
-                        {events.length > 4 && <span style={{ fontSize: 10, color: '#94a3b8' }}>+{events.length - 4}</span>}
-                      </div>
-                    )}
+                      {/* Tags */}
+                      {tags.length > 0 && (
+                        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
+                          {tags.slice(0, 3).map((tag, i) => (
+                            <span key={i} style={{ padding: '1px 6px', background: '#f3e8ff', borderRadius: 4, fontSize: 9, color: '#7c3aed' }}>{tag}</span>
+                          ))}
+                          {tags.length > 3 && <span style={{ fontSize: 9, color: '#94a3b8' }}>+{tags.length - 3}</span>}
+                        </div>
+                      )}
 
-                    {/* Match Weight Bar */}
-                    <div style={{ marginBottom: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 2 }}>
-                        <span>Match Weight</span>
-                        <span>{item.outfit_match_weight || 5}/10</span>
+                      {/* Bottom row: price + usage */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                        {item.price ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>${parseFloat(item.price).toFixed(0)}</span>
+                        ) : <span />}
+                        {(item.totalUsageCount || item.total_usage_count) > 0 && (
+                          <span style={{ fontSize: 9, color: '#94a3b8' }}>Used {item.totalUsageCount || item.total_usage_count}x</span>
+                        )}
                       </div>
-                      <div style={{ height: 5, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${matchPct}%`, background: tierColor, borderRadius: 3, transition: 'width 0.3s' }} />
-                      </div>
-                    </div>
-
-                    {/* Cost & Requirements */}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                      {item.coin_cost > 0 && <span style={{ padding: '2px 8px', background: '#fef3c7', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#92400e' }}>🪙 {item.coin_cost}</span>}
-                      {item.reputation_required > 0 && <span style={{ padding: '2px 8px', background: '#fef2f2', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626' }}>⭐ Rep {item.reputation_required}+</span>}
-                      {item.influence_required > 0 && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca' }}>📣 Inf {item.influence_required}+</span>}
-                    </div>
-
-                    {/* Lock Status + Quick Toggle + Lala Reaction */}
-                    <div style={{
-                      padding: '8px 12px', borderRadius: 8, fontSize: 12,
-                      background: item.is_owned ? '#f0fdf4' : '#fef2f2',
-                      border: item.is_owned ? '1px solid #bbf7d0' : '1px solid #fecaca',
-                      color: item.is_owned ? '#16a34a' : '#dc2626',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                        <span style={{ fontWeight: 700 }}>
-                          {item.is_owned ? '✅ Owned' : `🔒 ${(item.lock_type || 'locked').replace(/_/g, ' ')}`}
-                        </span>
-                        <button onClick={e => { e.stopPropagation(); toggleOwnership(item); }}
-                          style={{
-                            padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer',
-                            background: item.is_owned ? '#fef2f2' : '#f0fdf4',
-                            border: item.is_owned ? '1px solid #fecaca' : '1px solid #bbf7d0',
-                            color: item.is_owned ? '#dc2626' : '#16a34a',
-                          }}>
-                          {item.is_owned ? '🔒 Lock' : '🔓 Unlock'}
-                        </button>
-                      </div>
-                      <div style={{ fontSize: 11, fontStyle: 'italic', color: item.is_owned ? '#15803d' : '#b91c1c' }}>
-                        "{item.is_owned ? (item.lala_reaction_own || 'Love this piece!') : (item.lala_reaction_locked || 'One day this will be mine...')}"
-                      </div>
-                    </div>
-
-                    {/* Edit hint */}
-                    <div style={{ textAlign: 'center', marginTop: 8, fontSize: 10, color: '#94a3b8' }}>
-                      Click to edit
                     </div>
                   </div>
                 );
@@ -2688,19 +2627,19 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
 
             {/* Empty state */}
             {filteredItems.length === 0 && (
-              <div style={{ textAlign: 'center', padding: 40, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>👗</div>
+              <div style={{ textAlign: 'center', padding: 48, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>👗</div>
                 <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-                  {wardrobeItems.length === 0 ? 'No wardrobe items yet' : 'No items match your filters'}
+                  {wardrobeItems.length === 0 ? 'No wardrobe items yet' : 'No items match your search'}
                 </div>
                 <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
                   {wardrobeItems.length === 0
-                    ? 'Seed the wardrobe to populate Lala\'s closet with 40 starter items.'
-                    : 'Try changing your tier, category, or ownership filters.'}
+                    ? 'Upload your first wardrobe piece to start building the closet.'
+                    : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={seedWardrobe} disabled={seedingWardrobe} style={S.primaryBtn}>
-                    {seedingWardrobe ? '⏳ Seeding...' : '🌱 Seed 40 Items'}
+                  <button onClick={() => navigate('/wardrobe-library/upload')} style={S.primaryBtn}>
+                    + Upload First Item
                   </button>
                 )}
               </div>

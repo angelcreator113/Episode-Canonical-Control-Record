@@ -3138,20 +3138,86 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
       const rows = await Q(req, 'SELECT * FROM world_locations ORDER BY name ASC LIMIT 200');
       return res.json({ locations: rows });
     }
-    const rows = await WorldLocation.findAll({ order: [['name', 'ASC']], limit: 200 });
-    res.json({ locations: rows });
+
+    // Try rich query with includes, fall back to simple query if columns missing
+    try {
+      const include = [];
+      include.push({
+        model: WorldLocation,
+        as: 'childLocations',
+        attributes: ['id', 'name', 'location_type'],
+        required: false,
+      });
+      if (models.SceneSet) {
+        include.push({
+          model: models.SceneSet,
+          as: 'sceneSets',
+          attributes: ['id', 'name', 'scene_type', 'base_still_url', 'generation_status'],
+          required: false,
+        });
+      }
+      if (models.WorldEvent) {
+        try {
+          include.push({
+            model: models.WorldEvent,
+            as: 'events',
+            attributes: ['id', 'name', 'event_type', 'status'],
+            required: false,
+            limit: 5,
+          });
+        } catch { /* association may not exist */ }
+      }
+      if (models.StoryCalendarEvent) {
+        try {
+          include.push({
+            model: models.StoryCalendarEvent,
+            as: 'calendarEvents',
+            attributes: ['id', 'title', 'event_type', 'start_datetime'],
+            required: false,
+            limit: 5,
+          });
+        } catch { /* association may not exist */ }
+      }
+
+      const rows = await WorldLocation.findAll({
+        include,
+        order: [['name', 'ASC']],
+        limit: 200,
+      });
+      return res.json({ locations: rows });
+    } catch (richErr) {
+      // Fallback: simple query without includes
+      console.warn('WorldLocations rich query failed, falling back:', richErr.message);
+      const rows = await WorldLocation.findAll({ order: [['name', 'ASC']], limit: 200 });
+      return res.json({ locations: rows });
+    }
   } catch (err) { res.json({ locations: [] }); }
 });
 
 // POST /world/locations — create a location
 router.post('/world/locations', optionalAuth, async (req, res) => {
   try {
-    const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata } = req.body;
+    const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, street_address, city, district, coordinates, venue_type, venue_details, property_type, style_guide, floor_plan } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const WorldLocation = models.WorldLocation;
     if (WorldLocation) {
-      const loc = await WorldLocation.create({ name, slug, description, location_type: location_type || 'interior', sensory_details: sensory_details || {}, narrative_role, associated_characters: associated_characters || [], parent_location_id, metadata: metadata || {} });
+      const loc = await WorldLocation.create({
+        name, slug, description,
+        location_type: location_type || 'interior',
+        sensory_details: sensory_details || {},
+        narrative_role, associated_characters: associated_characters || [],
+        parent_location_id, metadata: metadata || {},
+        street_address: street_address || null,
+        city: city || null,
+        district: district || null,
+        coordinates: coordinates || null,
+        venue_type: venue_type || null,
+        venue_details: venue_details || null,
+        property_type: property_type || null,
+        style_guide: style_guide || null,
+        floor_plan: floor_plan || null,
+      });
       return res.json({ location: loc });
     }
     const id = require('uuid').v4();
@@ -3167,7 +3233,7 @@ router.post('/world/locations', optionalAuth, async (req, res) => {
 // PUT /world/locations/:id — update a location
 router.put('/world/locations/:id', optionalAuth, async (req, res) => {
   try {
-    const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata'];
+    const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata', 'street_address', 'city', 'district', 'coordinates', 'venue_type', 'venue_details', 'property_type', 'style_guide', 'floor_plan'];
     const WorldLocation = models.WorldLocation;
     if (WorldLocation) {
       const loc = await WorldLocation.findByPk(req.params.id);
@@ -3232,8 +3298,11 @@ router.post('/world/locations/seed-infrastructure', optionalAuth, async (req, re
       }
       created++;
     }
-    res.json({ seeded: created, total: INFRA.length, message: `Seeded ${created} new locations` });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json({ success: true, created, total: INFRA.length, message: `Seeded ${created} new locations` });
+  } catch (err) {
+    console.error('Seed infrastructure error:', err.message);
+    res.status(500).json({ error: err.message, hint: 'Check if migrations have been run — new columns may be missing' });
+  }
 });
 
 /* ═══════════════════════════════════════════════════════════
