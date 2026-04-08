@@ -34,6 +34,7 @@ class S3AIService {
       Key: s3Key,
       Body: fileBuffer,
       ContentType: contentType || this._getContentType(s3Key),
+      StorageClass: 'INTELLIGENT_TIERING',
     }));
     
     return { key: s3Key, bucket: this.buckets.rawFootage };
@@ -54,6 +55,7 @@ class S3AIService {
       Key: s3Key,
       Body: videoBuffer,
       ContentType: 'video/mp4',
+      StorageClass: 'INTELLIGENT_TIERING',
     }));
     
     // Generate presigned URL (valid for 7 days)
@@ -80,6 +82,7 @@ class S3AIService {
       Key: s3Key,
       Body: videoBuffer,
       ContentType: 'video/mp4',
+      StorageClass: 'INTELLIGENT_TIERING',
     }));
     
     return { s3Key, bucket: this.buckets.trainingData };
