@@ -268,8 +268,40 @@ export default function CulturalCalendar() {
   const [loading, setLoading]     = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [editItem, setEditItem]   = useState(null);
+  const [shows, setShows]         = useState([]);
+  const [spawning, setSpawning]   = useState(null);
+  const [spawnResult, setSpawnResult] = useState(null);
 
   const { data, updateItem, addItem, removeItem, saving } = usePageData('cultural_calendar', DEFAULTS);
+
+  // Fetch shows for event creation
+  useEffect(() => {
+    fetch('/api/v1/shows').then(r => r.json()).then(d => setShows(d.data || [])).catch(() => {});
+  }, []);
+
+  // Create world event from calendar event
+  const handleCreateEvent = async (calendarEvent) => {
+    const showId = shows[0]?.id;
+    if (!showId) { alert('No show found — create a show first'); return; }
+    setSpawning(calendarEvent.id);
+    setSpawnResult(null);
+    try {
+      const res = await fetch(`/api/v1/calendar/events/${calendarEvent.id}/auto-spawn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ show_id: showId, event_count: 1, max_guests: 6 }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSpawnResult({ type: 'success', message: `Created "${data.data.events[0]?.name}" with host and guest list — check Events Library` });
+      } else {
+        setSpawnResult({ type: 'error', message: data.error || 'Failed to create event' });
+      }
+    } catch (err) {
+      setSpawnResult({ type: 'error', message: err.message });
+    }
+    setSpawning(null);
+  };
 
   /* ── Fetch events from API ── */
   useEffect(() => {
@@ -333,12 +365,22 @@ export default function CulturalCalendar() {
       </header>
 
       <div className="cc-content">
+        {spawnResult && (
+          <div style={{ padding: '10px 16px', margin: '0 0 12px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            background: spawnResult.type === 'success' ? '#e8f5e9' : '#ffebee',
+            color: spawnResult.type === 'success' ? '#2e7d32' : '#c62828',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{spawnResult.message}</span>
+            <button onClick={() => setSpawnResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>×</button>
+          </div>
+        )}
         {loading && <div className="cc-loading">Loading cultural events…</div>}
 
         {!loading && tab === 'timeline' && (
           <TimelineView byMonth={byMonth()} toggle={toggle}
             expandedId={expandedId} majorCount={majorEvents.length}
-            microCount={microEvents.length} totalCount={events.length} data={data} />
+            microCount={microEvents.length} totalCount={events.length} data={data}
+            onCreateEvent={handleCreateEvent} spawning={spawning} />
         )}
         {!loading && tab === 'hierarchy' && <HierarchyView />}
         {!loading && tab === 'industries' && <IndustriesView />}
@@ -346,7 +388,8 @@ export default function CulturalCalendar() {
         {!loading && tab === 'media'      && <MediaView />}
         {!loading && tab === 'algorithm'  && <AlgorithmView />}
         {!loading && tab === 'micro'      && (
-          <MicroView events={microEvents} toggle={toggle} expandedId={expandedId} />
+          <MicroView events={microEvents} toggle={toggle} expandedId={expandedId}
+            onCreateEvent={handleCreateEvent} spawning={spawning} />
         )}
         {!loading && tab === 'famous'     && <FamousView />}
       </div>
@@ -381,7 +424,7 @@ function Stat({ n, label, color }) {
   );
 }
 
-function EventCard({ ev, expanded, toggle }) {
+function EventCard({ ev, expanded, toggle, onCreateEvent }) {
   const cat = CAT_COLORS[ev.cultural_category] || CAT_COLORS.community;
   const sev = SEVERITY_LABEL[ev.severity_level] || '';
   const activities = Array.isArray(ev.activities) ? ev.activities : [];
@@ -416,6 +459,14 @@ function EventCard({ ev, expanded, toggle }) {
               {phrases.map((p, i) => <span key={i} className="cc-phrase">{p}</span>)}
             </div>
           )}
+          {onCreateEvent && (
+            <button
+              className="cc-event-create-btn"
+              onClick={(e) => { e.stopPropagation(); onCreateEvent(ev); }}
+            >
+              🎉 Create Event from This
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -449,7 +500,7 @@ function TierPanel({ title, icon, tiers, constantKey }) {
    TIMELINE VIEW
    ═══════════════════════════════════════════════════════════════════════ */
 
-function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, totalCount, data }) {
+function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, totalCount, data, onCreateEvent, spawning }) {
   return (
     <>
       <div className="cc-stats">
@@ -466,7 +517,7 @@ function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, tot
             <div className="cc-month-events">
               {byMonth[i] && byMonth[i].length > 0 ? (
                 byMonth[i].map(ev => (
-                  <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} />
+                  <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} onCreateEvent={onCreateEvent} />
                 ))
               ) : (
                 <div className="cc-month-empty">No major events</div>
@@ -677,7 +728,7 @@ function AlgorithmView() {
    MICRO VIEW — Floating Events + Birthdays
    ═══════════════════════════════════════════════════════════════════════ */
 
-function MicroView({ events: microEvents, toggle, expandedId }) {
+function MicroView({ events: microEvents, toggle, expandedId, onCreateEvent, spawning }) {
   return (
     <>
       <h2 className="cc-section-title">Micro Events</h2>
@@ -688,7 +739,7 @@ function MicroView({ events: microEvents, toggle, expandedId }) {
       {microEvents.length > 0 ? (
         <div className="cc-micro-grid">
           {microEvents.map(ev => (
-            <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} />
+            <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} onCreateEvent={onCreateEvent} />
           ))}
         </div>
       ) : (
