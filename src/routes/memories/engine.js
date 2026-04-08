@@ -120,7 +120,7 @@ Return ONLY valid JSON. No markdown fences.`;
       : `No manuscript data found for ${characterName}. Generate plausible defaults based on their type (${characterType}) and role (${characterRole}).`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       messages: [{ role: 'user', content: userPrompt }],
       system: systemPrompt,
@@ -236,7 +236,7 @@ Return ONLY valid JSON. No markdown fences.`;
       : `No manuscript data found for ${characterName}. Generate a plausible 2-3 chapter arc skeleton for a ${characterType} character.`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       messages: [{ role: 'user', content: userPrompt }],
       system: systemPrompt,
@@ -712,7 +712,7 @@ router.post('/generate-relationship-web', optionalAuth, async (req, res) => {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       system: `You are analyzing a manuscript to identify how character relationships are expressed in the actual text.
 You have a baseline relationship graph. Your job is to identify any edges where the manuscript reveals something specific about the relationship that should update from_knows, to_knows, from_feels, or to_feels.
