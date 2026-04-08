@@ -1180,27 +1180,36 @@ The revised event should feel like a completely different experience from the si
                 try {
                   // Step 1: Generate seasonal calendar events
                   const month = new Date().getMonth();
+                  console.log('[AutoFill] Starting for month', month, 'show', showId);
                   const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
-                  if (!calRes.data.success) throw new Error(calRes.data.error);
-                  const seasonalCount = calRes.data.data.count;
+                  console.log('[AutoFill] Calendar response:', calRes.data);
+                  if (!calRes.data.success) throw new Error(calRes.data.error || 'Calendar generation failed');
+                  const seasonalCount = calRes.data.data?.count || 0;
                   setToast(`📅 ${seasonalCount} seasonal events created. Spawning world events...`);
 
                   // Step 2: Auto-spawn world events from each seasonal event
-                  const calEvents = calRes.data.data.created || [];
+                  const calEvents = calRes.data.data?.created || [];
                   let spawned = 0;
                   for (const ce of calEvents) {
                     try {
+                      console.log('[AutoFill] Spawning from calendar event:', ce.id, ce.title);
                       const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, {
                         show_id: showId, event_count: 1, max_guests: 6,
                       });
-                      if (spawnRes.data.success) spawned += spawnRes.data.data.events_created;
-                    } catch { /* continue */ }
+                      console.log('[AutoFill] Spawn result:', spawnRes.data);
+                      if (spawnRes.data.success) spawned += spawnRes.data.data?.events_created || 0;
+                    } catch (spawnErr) {
+                      console.error('[AutoFill] Spawn failed:', spawnErr.response?.data || spawnErr.message);
+                    }
                   }
                   setToast(`✅ Created ${seasonalCount} seasonal + ${spawned} world events with hosts & venues!`);
                   loadData();
-                } catch (err) { setToast('Auto-fill failed: ' + (err.response?.data?.error || err.message)); }
+                } catch (err) {
+                  console.error('[AutoFill] Error:', err.response?.data || err.message);
+                  setToast('❌ Auto-fill failed: ' + (err.response?.data?.error || err.message));
+                }
                 setAutoFilling(false);
-                setTimeout(() => setToast(null), 5000);
+                setTimeout(() => setToast(null), 6000);
               }} disabled={autoFilling} style={{ ...S.primaryBtn, background: '#B8962E' }}>
                 {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
               </button>
