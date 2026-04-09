@@ -2746,27 +2746,6 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           >
                             {checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist'}
                           </button>
-                          <button
-                            onClick={async (e) => {
-                              const btn = e.target;
-                              btn.disabled = true;
-                              btn.textContent = 'Generating venue...';
-                              try {
-                                const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
-                                if (res.data.success) {
-                                  setToast('Venue images + scene set created!');
-                                  loadData();
-                                }
-                              } catch (err) {
-                                setToast('Venue generation failed: ' + (err.response?.data?.error || err.message));
-                              }
-                              btn.disabled = false;
-                              btn.textContent = 'Generate Venue';
-                            }}
-                            style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #6366f1', background: '#eef2ff', color: '#6366f1', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
-                          >
-                            Generate Venue
-                          </button>
                         </div>
 
                         {/* Checklist image preview */}
