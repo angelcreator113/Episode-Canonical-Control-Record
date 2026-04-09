@@ -113,47 +113,35 @@ async function generateVenueImages(event, models) {
 
   console.log(`[VenueGen] Generating venue for: ${identity.venueName} (prestige ${identity.prestige}, ${identity.category})`);
 
-  // Build prompts that share the same architectural identity
+  // Build a single interior prompt — the event space is what matters for the show
   const sharedStyle = `Architectural style: ${identity.aesthetic}. Located in ${identity.neighborhood}. Mood: ${identity.mood}. Prestige level: ${identity.prestige}/10.`;
 
-  const exteriorPrompt = `Photorealistic exterior photograph of "${identity.venueName}", a ${identity.category} venue.
+  const venuePrompt = `Photorealistic interior photograph of "${identity.venueName}", a ${identity.category} venue.
 ${sharedStyle}
-Show the building facade, entrance, and street context during ${identity.timeOfDay}.
-The architecture should clearly communicate the venue's personality — this is where fashion creators and influencers gather.
-No text, no logos, no people. Clean architectural photography. Landscape orientation.`;
+Show the main event space decorated and ready for guests during ${identity.timeOfDay}.
+Include: ambient lighting, seating arrangement, decorative details, atmosphere that communicates the venue's personality.
+This is where fashion creators and influencers gather — make it feel alive and aspirational.
+No text, no logos, no people. Interior design photography. Landscape orientation.`;
 
-  const interiorPrompt = `Photorealistic interior photograph of "${identity.venueName}", the SAME ${identity.category} venue.
-${sharedStyle}
-Show the main event space decorated and ready for guests. The interior architecture MUST match the exterior style — same materials, same design language, same era.
-Include: ambient lighting set for evening event, seating arrangement, decorative details, atmosphere.
-No text, no people. Interior design photography. Landscape orientation.`;
+  // Generate single image
+  console.log('[VenueGen] Generating venue image...');
+  const imageUrl = await generateImage(venuePrompt);
 
-  // Generate both images
-  console.log('[VenueGen] Generating exterior...');
-  const exteriorUrl = await generateImage(exteriorPrompt);
-  console.log('[VenueGen] Generating interior...');
-  const interiorUrl = await generateImage(interiorPrompt);
-
-  if (!exteriorUrl || !interiorUrl) throw new Error('DALL-E did not return images');
+  if (!imageUrl) throw new Error('DALL-E did not return an image');
 
   // Download and upload to S3
-  const extBuffer = await downloadImage(exteriorUrl);
-  const intBuffer = await downloadImage(interiorUrl);
-
+  const buffer = await downloadImage(imageUrl);
   const eventFolder = event.id || 'unknown';
-  let extS3Url, intS3Url;
+  let s3Url;
 
   if (S3_BUCKET) {
-    extS3Url = await uploadToS3(extBuffer, eventFolder, 'exterior');
-    intS3Url = await uploadToS3(intBuffer, eventFolder, 'interior');
-    console.log(`[VenueGen] Uploaded: exterior + interior to S3`);
+    s3Url = await uploadToS3(buffer, eventFolder, 'venue');
+    console.log(`[VenueGen] Uploaded venue image to S3`);
   } else {
-    // No S3 — use DALL-E URLs directly (temporary, expire after ~1hr)
-    extS3Url = exteriorUrl;
-    intS3Url = interiorUrl;
+    s3Url = imageUrl;
   }
 
-  // Create Scene Set
+  // Create Scene Set with single angle
   let sceneSet = null;
   if (models.SceneSet) {
     try {
@@ -161,31 +149,20 @@ No text, no people. Interior design photography. Landscape orientation.`;
         name: identity.venueName,
         scene_type: 'EVENT_LOCATION',
         canonical_description: `${identity.venueName} — ${identity.aesthetic}. ${identity.neighborhood}.`,
-        base_still_url: intS3Url,
+        base_still_url: s3Url,
         show_id: event.show_id,
         generation_status: 'complete',
       });
 
-      // Create angles
       if (models.SceneAngle) {
-        await models.SceneAngle.bulkCreate([
-          {
-            scene_set_id: sceneSet.id,
-            angle_name: `${identity.venueName} — Exterior`,
-            angle_label: 'exterior',
-            still_image_url: extS3Url,
-            generation_status: 'complete',
-            sort_order: 1,
-          },
-          {
-            scene_set_id: sceneSet.id,
-            angle_name: `${identity.venueName} — Interior`,
-            angle_label: 'interior_wide',
-            still_image_url: intS3Url,
-            generation_status: 'complete',
-            sort_order: 2,
-          },
-        ]);
+        await models.SceneAngle.create({
+          scene_set_id: sceneSet.id,
+          angle_name: `${identity.venueName} — Event Space`,
+          angle_label: 'interior_wide',
+          still_image_url: s3Url,
+          generation_status: 'complete',
+          sort_order: 1,
+        });
       }
 
       console.log(`[VenueGen] Scene set created: ${sceneSet.id} — ${identity.venueName}`);
@@ -204,20 +181,19 @@ No text, no people. Interior design photography. Landscape orientation.`;
     } catch { /* non-blocking */ }
   }
 
-  // Update WorldLocation with images if it exists
+  // Update WorldLocation if it exists
   try {
     const auto = event.canon_consequences?.automation || {};
     if (auto.venue_location_id && models.WorldLocation) {
       await models.WorldLocation.update(
-        { style_guide: { exterior_url: extS3Url, interior_url: intS3Url, generated_for_event: event.id } },
+        { style_guide: { venue_url: s3Url, generated_for_event: event.id } },
         { where: { id: auto.venue_location_id } }
       ).catch(err => { console.warn('[VenueGen] WorldLocation style_guide update failed:', err?.message); });
     }
   } catch { /* non-blocking */ }
 
   return {
-    exterior_url: extS3Url,
-    interior_url: intS3Url,
+    venue_url: s3Url,
     scene_set_id: sceneSet?.id || null,
     venue_identity: identity,
   };

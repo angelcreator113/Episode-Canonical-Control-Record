@@ -196,7 +196,6 @@ router.post('/opportunities/:showId/:id/advance', optionalAuth, async (req, res)
     if (['booked', 'completed'].includes(to_status) && opp.prestige >= 7) {
       try {
         const { SocialProfile } = models;
-        // Find Lala's profile (is_justawoman_record or main character)
         const lala = await SocialProfile.findOne({ where: { is_justawoman_record: true } });
         if (lala && lala.current_state !== 'peaking') {
           await lala.update({ previous_state: lala.current_state, current_state: 'peaking', state_changed_at: new Date() });
@@ -204,7 +203,27 @@ router.post('/opportunities/:showId/:id/advance', optionalAuth, async (req, res)
       } catch { /* non-blocking */ }
     }
 
-    return res.json({ success: true, opportunity: opp.toJSON(), advanced: { from: history[history.length - 1].from, to: to_status } });
+    // Career pipeline: cascade to career goals on completion/payment
+    let pipelineResult = null;
+    if (['completed', 'paid'].includes(to_status)) {
+      try {
+        const { onOpportunityAdvanced } = require('../services/careerPipelineService');
+        pipelineResult = await onOpportunityAdvanced(id, to_status, models);
+        if (pipelineResult.goals_completed.length > 0) {
+          console.log(`[CareerPipeline] Goals completed: ${pipelineResult.goals_completed.map(g => g.title).join(', ')}`);
+        }
+        if (pipelineResult.unlocks.length > 0) {
+          console.log(`[CareerPipeline] Unlocked ${pipelineResult.unlocks.length} new opportunities`);
+        }
+      } catch (err) { console.warn('[CareerPipeline] Cascade failed:', err.message); }
+    }
+
+    return res.json({
+      success: true,
+      opportunity: opp.toJSON(),
+      advanced: { from: history[history.length - 1].from, to: to_status },
+      pipeline: pipelineResult,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -221,55 +240,10 @@ router.post('/opportunities/:showId/:id/to-event', optionalAuth, async (req, res
 
     if (!models.Opportunity) return res.status(500).json({ success: false, error: 'Model not loaded' });
 
-    const opp = await models.Opportunity.findByPk(id);
-    if (!opp) return res.status(404).json({ success: false, error: 'Opportunity not found' });
+    const { convertOpportunityToEvent } = require('../services/careerPipelineService');
+    const result = await convertOpportunityToEvent(id, showId, models);
 
-    // Create world event from opportunity
-    const eventData = {
-      id: uuidv4(),
-      show_id: showId,
-      name: opp.name,
-      event_type: opp.opportunity_type === 'brand_deal' ? 'brand_deal' : 'invite',
-      host: opp.brand_or_company || opp.contact_name || opp.name,
-      host_brand: opp.brand_or_company || null,
-      prestige: opp.prestige || 5,
-      description: opp.narrative_stakes || `${opp.opportunity_type} opportunity: ${opp.name}`,
-      narrative_stakes: opp.what_could_go_wrong || opp.narrative_stakes || null,
-      location_hint: opp.venue_name || null,
-      dress_code: opp.wardrobe_brief?.dress_code || null,
-      canon_consequences: {
-        automation: {
-          source: 'opportunity',
-          opportunity_id: opp.id,
-          opportunity_type: opp.opportunity_type,
-          brand: opp.brand_or_company,
-          connector_handle: opp.connector_handle,
-          wardrobe_brief: opp.wardrobe_brief,
-          payment_amount: opp.payment_amount,
-          career_milestone: opp.career_milestone,
-        },
-      },
-      status: 'ready', // Opportunities are pre-vetted, skip draft
-    };
-
-    let event;
-    if (models.WorldEvent) {
-      event = await models.WorldEvent.create(eventData);
-    } else {
-      await models.sequelize.query(
-        `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, prestige, description,
-         narrative_stakes, location_hint, canon_consequences, status, created_at, updated_at)
-         VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :prestige, :description,
-         :narrative_stakes, :location_hint, :canon_consequences, 'ready', NOW(), NOW())`,
-        { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
-      );
-      event = eventData;
-    }
-
-    // Link back
-    await opp.update({ event_id: event.id || eventData.id });
-
-    return res.json({ success: true, event: event.toJSON ? event.toJSON() : event, opportunity: opp.toJSON() });
+    return res.json({ success: true, event: result.event, opportunity: result.opportunity });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -323,6 +297,47 @@ router.get('/opportunities/:showId/stats', optionalAuth, async (req, res) => {
     return res.json({ success: true, stats });
   } catch (err) {
     if (err.message?.includes('does not exist')) return res.json({ success: true, stats: { pipeline: {}, total_opportunities: 0, total_value: 0, booked_value: 0 } });
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// POST /opportunities/:showId/episode-complete/:episodeId — Trigger career pipeline on episode completion
+// ═══════════════════════════════════════════
+
+router.post('/opportunities/:showId/episode-complete/:episodeId', optionalAuth, async (req, res) => {
+  try {
+    const { showId, episodeId } = req.params;
+    const models = await getModels(req);
+
+    const { onEpisodeCompleted } = require('../services/careerPipelineService');
+    const result = await onEpisodeCompleted(episodeId, showId, models);
+
+    return res.json({
+      success: true,
+      message: `Pipeline cascade complete.`,
+      data: result,
+    });
+  } catch (err) {
+    console.error('[CareerPipeline] Episode complete error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /opportunities/:showId/career-tier — Get accessible career tier
+// ═══════════════════════════════════════════
+
+router.get('/opportunities/:showId/career-tier', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const models = await getModels(req);
+
+    const { getAccessibleCareerTier } = require('../services/careerPipelineService');
+    const tier = await getAccessibleCareerTier(showId, models);
+
+    return res.json({ success: true, career_tier: tier });
+  } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
