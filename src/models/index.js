@@ -146,6 +146,7 @@ let GenerationJob; // Async job queue for scene generation
 let EpisodeScript; // Versioned AI-generated episode scripts
 let FeedPost; // Feed timeline posts after episodes
 let Opportunity; // Career opportunity pipeline
+let CareerGoal; // Multi-goal career tension system
 
 try {
   // Core models
@@ -400,6 +401,7 @@ try {
   EpisodeScript = require('./EpisodeScript')(sequelize);
   FeedPost = require('./FeedPost')(sequelize);
   Opportunity = require('./Opportunity')(sequelize, DataTypes);
+  CareerGoal = require('./CareerGoal')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -551,6 +553,7 @@ const requiredModels = {
   EpisodeScript,
   FeedPost,
   Opportunity,
+  CareerGoal,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -806,6 +809,9 @@ if (FeedPost && FeedPost.associate) {
 }
 if (Opportunity && Opportunity.associate) {
   Opportunity.associate(requiredModels);
+}
+if (CareerGoal && CareerGoal.associate) {
+  CareerGoal.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -2036,3 +2042,4 @@ module.exports.GenerationJob = GenerationJob;
 module.exports.EpisodeScript = EpisodeScript;
 module.exports.FeedPost = FeedPost;
 module.exports.Opportunity = Opportunity;
+module.exports.CareerGoal = CareerGoal;

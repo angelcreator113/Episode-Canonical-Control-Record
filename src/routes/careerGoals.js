@@ -288,6 +288,17 @@ router.post('/world/:showId/goals/sync', optionalAuth, async (req, res) => {
           { replacements: { id: goal.id } }
         );
         completed.push({ id: goal.id, title: goal.title, metric: goal.target_metric });
+
+        // Spawn unlock opportunities from completed goal
+        try {
+          const unlocks = typeof goal.unlocks_on_complete === 'string'
+            ? JSON.parse(goal.unlocks_on_complete)
+            : (goal.unlocks_on_complete || []);
+          if (unlocks.length > 0) {
+            const { spawnUnlockOpportunities } = require('../services/careerPipelineService');
+            await spawnUnlockOpportunities(showId, goal, unlocks, models);
+          }
+        } catch (err) { console.warn('[GoalSync] Unlock spawn failed:', err.message); }
       }
     }
 
@@ -327,10 +338,19 @@ router.get('/world/:showId/suggest-events', optionalAuth, async (req, res) => {
       if (states?.length) charState = states[0];
     } catch (e) { console.warn('[career-goals] character state query error:', e?.message); }
 
-    // Get available events (not used, or reusable)
+    // Determine accessible career tier
+    let careerTier = 5;
+    try {
+      const { getAccessibleCareerTier } = require('../services/careerPipelineService');
+      careerTier = await getAccessibleCareerTier(showId, models);
+    } catch { /* default to 5 — no gating */ }
+
+    // Get available events (not used, or reusable), filtered by career tier
     const [events] = await models.sequelize.query(
-      `SELECT * FROM world_events WHERE show_id = :showId AND status IN ('draft', 'ready') ORDER BY prestige ASC`,
-      { replacements: { showId } }
+      `SELECT * FROM world_events WHERE show_id = :showId AND status IN ('draft', 'ready')
+       AND (career_tier IS NULL OR career_tier <= :careerTier)
+       ORDER BY prestige ASC`,
+      { replacements: { showId, careerTier } }
     );
 
     if (!events.length) {
