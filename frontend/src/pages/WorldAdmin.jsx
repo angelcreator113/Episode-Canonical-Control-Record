@@ -127,6 +127,7 @@ function WorldAdmin() {
   const [eventSearch, setEventSearch] = useState('');
   const [eventStatusFilter, setEventStatusFilter] = useState('all');
   const [eventDetailModal, setEventDetailModal] = useState(null);
+  const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
   const [bulkMode, setBulkMode] = useState(false);
@@ -947,9 +948,38 @@ The revised event should feel like a completely different experience from the si
       {activeTab === 'episodes' && (
         <div style={S.content}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ ...S.cardTitle, margin: 0 }}>📋 Episode Ledger</h2>
+            <h2 style={{ ...S.cardTitle, margin: 0 }}>Episode Ledger</h2>
             <div style={{ fontSize: 12, color: '#94a3b8' }}>{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
           </div>
+
+          {/* Financial Summary */}
+          {(() => {
+            const totalIncome = episodes.reduce((s, e) => s + (parseFloat(e.total_income) || 0), 0);
+            const totalExpenses = episodes.reduce((s, e) => s + (parseFloat(e.total_expenses) || 0), 0);
+            const net = totalIncome - totalExpenses;
+            const epsWithFinancials = episodes.filter(e => e.total_income > 0 || e.total_expenses > 0).length;
+            if (epsWithFinancials === 0) return null;
+            return (
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a', marginBottom: 4 }}>Total Income</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>{totalIncome.toLocaleString()}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626', marginBottom: 4 }}>Total Expenses</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#dc2626' }}>{totalExpenses.toLocaleString()}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}`, borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626', marginBottom: 4 }}>Net P&L</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>Episodes with P&L</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{epsWithFinancials} / {episodes.length}</div>
+                </div>
+              </div>
+            );
+          })()}
 
           {episodes.map((ep, i) => {
             const ej = ep.evaluation_json;
@@ -1116,11 +1146,12 @@ The revised event should feel like a completely different experience from the si
                           if (btn.dataset.loaded) return;
                           btn.textContent = '⏳ Loading...';
                           try {
-                            const res = await api.get(`/api/v1/episodes/${ep.id}`);
-                            const todoRes = await fetch(`/api/v1/world/${showId}/events`).then(r => r.json()).catch(() => ({ events: [] }));
-                            const linkedEv = todoRes.events?.find(ev => ev.used_in_episode_id === ep.id);
-
-                            // Show social tasks from canon_consequences.automation
+                            // Fetch event details + real social tasks from todo list
+                            const [todoRes, eventsRes] = await Promise.all([
+                              fetch(`/api/v1/episodes/${ep.id}/todo/social`).then(r => r.json()).catch(() => ({})),
+                              fetch(`/api/v1/world/${showId}/events`).then(r => r.json()).catch(() => ({ events: [] })),
+                            ]);
+                            const linkedEv = (eventsRes.events || []).find(ev => ev.used_in_episode_id === ep.id);
                             const automation = linkedEv?.canon_consequences?.automation;
                             const guests = automation?.guest_profiles || [];
                             const host = automation?.host_display_name;
@@ -1130,11 +1161,21 @@ The revised event should feel like a completely different experience from the si
                             if (guests.length > 0) html += `<div style="margin-bottom:8px"><strong>Guest List:</strong> ${guests.map(g => g.display_name || g.handle).join(', ')}</div>`;
                             if (linkedEv?.venue_name) html += `<div style="margin-bottom:8px"><strong>Venue:</strong> ${linkedEv.venue_name}${linkedEv.venue_address ? ' — ' + linkedEv.venue_address : ''}</div>`;
 
+                            const socialTasks = todoRes.social_tasks || [];
                             html += '<div style="margin-top:12px;font-weight:600;color:#B8962E">📱 Social Media Tasks</div>';
-                            html += '<div style="margin-top:4px;display:grid;gap:4px">';
-                            const tasks = ['GRWM video', 'Outfit reveal to stories', 'Film arrival at venue', 'Photo with host', 'Go live from event', 'BTS stories', 'Post event recap', 'Thank host publicly', 'Engage with attendee posts'];
-                            tasks.forEach(t => { html += `<div style="font-size:12px;padding:4px 8px;background:#f8f8f8;border-radius:4px">☐ ${t}</div>`; });
-                            html += '</div>';
+                            if (socialTasks.length > 0) {
+                              html += '<div style="margin-top:4px;display:grid;gap:4px">';
+                              socialTasks.forEach(t => {
+                                const check = t.completed ? '☑' : '☐';
+                                const bg = t.source === 'platform' ? '#f0f7ff' : t.source === 'category' ? '#f0fdf4' : '#f8f8f8';
+                                const badge = t.source === 'platform' ? `<span style="font-size:8px;padding:1px 4px;background:#dbeafe;color:#1e40af;border-radius:3px;margin-left:4px">${t.platform}</span>` : t.source === 'category' ? '<span style="font-size:8px;padding:1px 4px;background:#d1fae5;color:#065f46;border-radius:3px;margin-left:4px">niche</span>' : '';
+                                const req = t.required ? '<span style="font-size:8px;padding:1px 4px;background:#fef2f2;color:#dc2626;border-radius:3px;margin-left:4px">required</span>' : '';
+                                html += `<div style="font-size:12px;padding:4px 8px;background:${bg};border-radius:4px">${check} <strong>${t.label}</strong>${req}${badge} <span style="color:#999;font-size:10px">· ${t.platform} · ${t.timing}</span></div>`;
+                              });
+                              html += '</div>';
+                            } else {
+                              html += '<div style="margin-top:4px;font-size:11px;color:#999">No social tasks generated yet</div>';
+                            }
 
                             const container = btn.parentNode.querySelector('.ep-tasks-content');
                             if (container) { container.innerHTML = html; container.style.display = 'block'; }
@@ -1209,8 +1250,9 @@ The revised event should feel like a completely different experience from the si
 
                     {/* ── Actions ── */}
                     <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
-                      <Link to={`/episodes/${ep.id}`} style={{ ...S.smBtn, textDecoration: 'none' }}>📝 Edit Episode</Link>
-                      <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca' }}>🏆 Evaluate</Link>
+                      <Link to={`/episodes/${ep.id}`} style={{ ...S.smBtn, textDecoration: 'none' }}>Edit Episode</Link>
+                      <Link to={`/episodes/${ep.id}/todo`} style={{ ...S.smBtn, textDecoration: 'none', background: '#FAF7F0', borderColor: '#e8e0d0', color: '#B8962E' }}>Todo List</Link>
+                      <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca' }}>Evaluate</Link>
                       {ep.script_content && <span style={{ ...S.smBtn, color: '#16a34a' }}>✅ Has Script ({(ep.script_content || '').split('\n').length} lines)</span>}
                     </div>
                   </div>
@@ -1232,7 +1274,7 @@ The revised event should feel like a completely different experience from the si
       {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
       {activeTab === 'feed' && (
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
-          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" />
+          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" onNavigateToTab={(tab, ev) => { setActiveTab(tab); if (ev) setEventDetailModal(ev); }} />
         </Suspense>
       )}
 
@@ -1242,17 +1284,70 @@ The revised event should feel like a completely different experience from the si
           <div style={{ marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Feed Events</h2>
             <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
-              Event templates that feed profiles can host. Pick a template → choose a host from Lala's Feed → choose a venue → create the event.
+              Create events from templates or profiles. Complete the details here, then mark ready to move to the Events Library.
             </p>
           </div>
+
+          {/* ── Draft Events Being Worked On ── */}
+          {(() => {
+            const draftEvents = worldEvents.filter(ev => ev.status === 'draft');
+            if (draftEvents.length === 0) return null;
+            return (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Draft Events ({draftEvents.length})</span>
+                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'none', fontFamily: 'inherit' }}>Complete details and mark ready to move to Events Library</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {draftEvents.map(ev => {
+                    const auto = ev.canon_consequences?.automation;
+                    const host = ev.host || auto?.host_display_name || '';
+                    const venue = ev.venue_name || auto?.venue_name || '';
+                    const guestCount = auto?.guest_profiles?.length || 0;
+                    // Check completeness
+                    const filled = [ev.host, ev.venue_name, ev.event_date, ev.dress_code, ev.description, ev.narrative_stakes].filter(Boolean).length;
+                    const total = 6;
+                    const pct = Math.round((filled / total) * 100);
+                    return (
+                      <div key={ev.id} onClick={() => setEventDetailModal(ev)} style={{ background: '#fff', border: '1px solid #e8e0d0', borderLeft: `4px solid ${pct === 100 ? '#22c55e' : '#f59e0b'}`, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'border-color 0.15s' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{ev.name}</div>
+                            <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {host && <span>👤 {host}</span>}
+                              {venue && <span>📍 {venue}</span>}
+                              {guestCount > 0 && <span>👥 {guestCount}</span>}
+                              {ev.event_date && <span>📅 {ev.event_date}</span>}
+                              <span>⭐ {ev.prestige || 5}</span>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: pct === 100 ? '#16a34a' : '#f59e0b', marginBottom: 4 }}>{pct}% complete</div>
+                            <div style={{ width: 80, height: 4, background: '#e8e0d0', borderRadius: 2, overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : '#f59e0b', borderRadius: 2 }} />
+                            </div>
+                          </div>
+                        </div>
+                        {pct === 100 && (
+                          <div style={{ marginTop: 8, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
+                            Ready to publish — open to mark as ready
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Current season context */}
           <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 6 }}>
-              Current Season: {['January','February','March','April','May','June','July','August','September','October','November','December'][new Date().getMonth()]}
+              Event Templates — {['January','February','March','April','May','June','July','August','September','October','November','December'][new Date().getMonth()]}
             </div>
             <div style={{ fontSize: 12, color: '#666' }}>
-              Feed events fire when the cultural moment is right. These templates match the current month's seasonal context.
+              Pick a template to create a new event. It will appear as a draft above until you mark it ready.
             </div>
           </div>
 
@@ -1282,9 +1377,14 @@ The revised event should feel like a completely different experience from the si
                 lifestyle: { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
               };
               const cc = catColors[template.category] || catColors.creator_economy;
+              // Check if an event already exists from this template
+              const existingEvent = worldEvents.find(ev =>
+                ev.name?.includes(template.name) ||
+                ev.canon_consequences?.automation?.source_calendar_title === template.name
+              );
 
               return (
-                <div key={template.name} style={{ background: '#fff', border: `1px solid ${cc.border}30`, borderLeft: `4px solid ${cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
+                <div key={template.name} style={{ background: existingEvent ? '#fafffe' : '#fff', border: `1px solid ${existingEvent ? '#a3cfbb' : cc.border + '30'}`, borderLeft: `4px solid ${existingEvent ? '#22c55e' : cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 20 }}>{template.icon}</span>
                     <div>
@@ -1296,43 +1396,66 @@ The revised event should feel like a completely different experience from the si
                   <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                     <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
                   </div>
-                  <button
-                    onClick={async () => {
-                      setToast(`🎭 Creating "${template.name}" — finding host and venue...`);
-                      try {
-                        // Create a calendar event from this template, then auto-spawn
-                        const calRes = await api.post('/api/v1/calendar/events', {
-                          title: template.name,
-                          event_type: 'lalaverse_cultural',
-                          cultural_category: template.category,
-                          severity_level: 5,
-                          what_world_knows: template.desc,
-                          is_micro_event: true,
-                          visibility: 'public',
-                          start_datetime: new Date().toISOString(),
-                        });
-                        const calEvent = calRes.data?.event || calRes.data;
-                        if (calEvent?.id) {
-                          const spawnRes = await api.post(`/api/v1/calendar/events/${calEvent.id}/auto-spawn`, {
-                            show_id: showId, event_count: 1, max_guests: 6,
+                  {(feedEventResults[template.name]?.status === 'created' || existingEvent) ? (() => {
+                    const created = feedEventResults[template.name]?.event || existingEvent;
+                    const host = created?.host || created?.canon_consequences?.automation?.host_display_name || '';
+                    return (
+                      <div style={{ background: '#d4edda', border: '1px solid #a3cfbb', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
+                        <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created</div>
+                        <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{created?.name || template.name}</div>
+                        <div style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>
+                          {host ? `Host: ${host} · ` : ''}Prestige: {created?.prestige || 5}{created?.status ? ` · ${created.status}` : ''}
+                        </div>
+                        <button
+                          onClick={() => { setEventDetailModal(created); }}
+                          style={{ marginTop: 6, padding: '4px 12px', borderRadius: 4, border: '1px solid #B8962E', background: '#fff', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
+                        >
+                          Edit Event Details
+                        </button>
+                      </div>
+                    );
+                  })() : (
+                    <button
+                      disabled={feedEventResults[template.name]?.status === 'creating'}
+                      onClick={async () => {
+                        setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'creating' } }));
+                        try {
+                          const calRes = await api.post('/api/v1/calendar/events', {
+                            title: template.name,
+                            event_type: 'lalaverse_cultural',
+                            cultural_category: template.category,
+                            severity_level: 5,
+                            what_world_knows: template.desc,
+                            is_micro_event: true,
+                            visibility: 'public',
+                            start_datetime: new Date().toISOString(),
                           });
-                          if (spawnRes.data.success) {
-                            const created = spawnRes.data.data.events?.[0];
-                            setToast(`✅ "${created?.name || template.name}" created with host and guest list! Check Events Library.`);
-                            loadData();
-                          } else {
-                            setToast('Event created but auto-spawn failed. Check Events Library.');
+                          const calEvent = calRes.data?.event || calRes.data;
+                          if (calEvent?.id) {
+                            const spawnRes = await api.post(`/api/v1/calendar/events/${calEvent.id}/auto-spawn`, {
+                              show_id: showId, event_count: 1, max_guests: 6,
+                            });
+                            if (spawnRes.data.success) {
+                              const created = spawnRes.data.data.events?.[0];
+                              const host = created?.canon_consequences?.automation?.host_display_name || created?.host || '';
+                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: { ...created, host_display: host } } }));
+                              loadData();
+                              showToast(`"${created?.name || template.name}" created!`);
+                            } else {
+                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
+                              showToast('Auto-spawn failed', 'error');
+                            }
                           }
+                        } catch (err) {
+                          setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
+                          showToast('Failed: ' + (err.response?.data?.error || err.message));
                         }
-                      } catch (err) {
-                        setToast('❌ Failed: ' + (err.response?.data?.error || err.message));
-                      }
-                      setTimeout(() => setToast(null), 5000);
-                    }}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
-                  >
-                    🎭 Create This Event
-                  </button>
+                      }}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
+                    >
+                      {feedEventResults[template.name]?.status === 'creating' ? 'Creating — finding host and venue...' : 'Create This Event'}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -1348,7 +1471,10 @@ The revised event should feel like a completely different experience from the si
             <div>
               <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events Library</h2>
               <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                {worldEvents.length} events · {worldEvents.filter(e => e.status === 'used').length} used · {worldEvents.filter(e => !e.used_in_episode_id && e.status !== 'used').length} available
+                {worldEvents.filter(e => e.status !== 'draft').length} events · {worldEvents.filter(e => e.status === 'used').length} used · {worldEvents.filter(e => e.status === 'ready').length} available
+                {worldEvents.filter(e => e.status === 'draft').length > 0 && (
+                  <span> · <button onClick={() => setActiveTab('feed-events')} style={{ background: 'none', border: 'none', color: '#B8962E', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}>{worldEvents.filter(e => e.status === 'draft').length} drafts in Feed Events</button></span>
+                )}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1668,10 +1794,10 @@ The revised event should feel like a completely different experience from the si
               style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
             <div style={{ display: 'flex', gap: 3, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
               {[
-                { key: 'all', label: 'All', count: worldEvents.length },
-                { key: 'used', label: 'Linked', count: worldEvents.filter(e => e.status === 'used').length },
-                { key: 'draft', label: 'Draft', count: worldEvents.filter(e => e.status !== 'used').length },
-                { key: 'unlinked', label: 'Unlinked', count: worldEvents.filter(e => !e.used_in_episode_id && e.status !== 'used').length },
+                { key: 'all', label: 'All', count: worldEvents.filter(e => e.status !== 'draft').length },
+                { key: 'ready', label: 'Ready', count: worldEvents.filter(e => e.status === 'ready').length },
+                { key: 'used', label: 'Linked', count: worldEvents.filter(e => e.status === 'used' || e.status === 'scripted' || e.status === 'filmed').length },
+                { key: 'unlinked', label: 'Available', count: worldEvents.filter(e => e.status === 'ready' && !e.used_in_episode_id).length },
               ].map(f => (
                 <button key={f.key} onClick={() => setEventStatusFilter(f.key)} style={{
                   padding: '4px 10px', border: 'none', borderRadius: 6,
@@ -1896,7 +2022,8 @@ The revised event should feel like a completely different experience from the si
             {worldEvents.filter(ev => {
               const q = eventSearch.toLowerCase();
               const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
-              const matchStatus = eventStatusFilter === 'all' || (eventStatusFilter === 'used' && ev.status === 'used') || (eventStatusFilter === 'draft' && ev.status !== 'used') || (eventStatusFilter === 'unlinked' && !ev.used_in_episode_id && ev.status !== 'used');
+              if (ev.status === 'draft') return false; // Drafts shown in Feed Events tab
+              const matchStatus = eventStatusFilter === 'all' || (eventStatusFilter === 'ready' && ev.status === 'ready') || (eventStatusFilter === 'used' && (ev.status === 'used' || ev.status === 'scripted' || ev.status === 'filmed')) || (eventStatusFilter === 'unlinked' && ev.status === 'ready' && !ev.used_in_episode_id);
               return matchSearch && matchStatus;
             }).sort((a, b) => {
               if (eventSort === 'prestige') return (b.prestige || 0) - (a.prestige || 0);
@@ -2037,7 +2164,7 @@ The revised event should feel like a completely different experience from the si
               </div>
               );
             })}
-            {worldEvents.length === 0 && !editingEvent && (
+            {worldEvents.filter(e => e.status !== 'draft').length === 0 && !editingEvent && (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 12 }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>🗓️</div>
                 <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#2C2C2C' }}>No events yet</div>
@@ -2142,6 +2269,35 @@ The revised event should feel like a completely different experience from the si
                     <div><label style={S.fLabel}>Brand</label><input value={md.host_brand || ''} onChange={e => setEventDetailModal({ ...md, host_brand: e.target.value })} onBlur={e => updateField('host_brand', e.target.value)} style={S.sel} /></div>
                     <div><label style={S.fLabel}>Dress Code</label><input value={md.dress_code || ''} onChange={e => setEventDetailModal({ ...md, dress_code: e.target.value })} onBlur={e => updateField('dress_code', e.target.value)} style={S.sel} /></div>
                   </div>
+
+                  {/* Venue & Date */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                    <div><label style={S.fLabel}>Venue Name</label><input value={md.venue_name || ''} onChange={e => setEventDetailModal({ ...md, venue_name: e.target.value })} onBlur={e => updateField('venue_name', e.target.value)} placeholder="The Velvet Room, SoHo Loft..." style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Venue Address</label><input value={md.venue_address || ''} onChange={e => setEventDetailModal({ ...md, venue_address: e.target.value })} onBlur={e => updateField('venue_address', e.target.value)} placeholder="123 Fashion Ave, Lower East Side" style={S.sel} /></div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                    <div><label style={S.fLabel}>Event Date</label><input type="date" value={md.event_date || ''} onChange={e => { setEventDetailModal({ ...md, event_date: e.target.value }); updateField('event_date', e.target.value); }} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Event Time</label><input type="time" value={md.event_time || ''} onChange={e => { setEventDetailModal({ ...md, event_time: e.target.value }); updateField('event_time', e.target.value); }} style={S.sel} /></div>
+                  </div>
+
+                  {/* Guest List */}
+                  {(() => {
+                    const automation = md.canon_consequences?.automation;
+                    const guests = automation?.guest_profiles || [];
+                    return guests.length > 0 ? (
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={S.fLabel}>Guest List ({guests.length})</label>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {guests.map((g, i) => (
+                            <span key={i} style={{ padding: '3px 8px', background: '#f0f0f0', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#333' }}>
+                              {g.display_name || g.handle}
+                              <span style={{ fontSize: 9, color: '#999', marginLeft: 4 }}>{g.relationship || ''}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
                     <div><label style={S.fLabel}>Prestige</label><input type="number" min={1} max={10} value={md.prestige} onChange={e => { setEventDetailModal({ ...md, prestige: parseInt(e.target.value) || 5 }); }} onBlur={e => updateField('prestige', parseInt(e.target.value) || 5)} style={S.sel} /></div>
@@ -2294,7 +2450,7 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
 
                             setEventDetailModal(merged);
                             // Batch save all changed fields in one PUT
-                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias'];
+                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','venue_name','venue_address','event_date','event_time'];
                             const toSave = {};
                             for (const key of saveable) {
                               if (merged[key] !== undefined && merged[key] !== md[key]) {
@@ -2421,10 +2577,28 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                 </div>
 
                 {/* Footer */}
-                <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>🗑️ Delete</button>
+                <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>Delete</button>
+                  {md.status === 'draft' && (
+                    <button onClick={async () => {
+                      try {
+                        const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { status: 'ready' });
+                        if (res.data.success) {
+                          const updated = { ...md, status: 'ready' };
+                          setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'ready' } : ev));
+                          setEventDetailModal(updated);
+                          showToast('Event marked ready — now in Events Library');
+                        }
+                      } catch (err) {
+                        showToast('Failed to mark ready: ' + (err.response?.data?.error || err.message));
+                      }
+                    }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid #22c55e', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      Mark Ready
+                    </button>
+                  )}
+                  <div style={{ flex: 1 }} />
                   <button onClick={async () => {
-                    const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id'];
+                    const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id','venue_name','venue_address','event_date','event_time'];
                     const toSave = {};
                     for (const key of saveable) {
                       if (md[key] !== undefined && md[key] !== null) toSave[key] = md[key];
@@ -2720,11 +2894,13 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>📱 Social Media Tasks ({episodeBlueprint.socialTasks.length})</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
                   {episodeBlueprint.socialTasks.map((task, i) => (
-                    <div key={i} style={{ padding: '6px 10px', background: '#f8f8f8', borderRadius: 6, fontSize: 11 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div key={i} style={{ padding: '6px 10px', background: task.source ? '#faf7f0' : '#f8f8f8', borderRadius: 6, fontSize: 11, borderLeft: task.source ? '3px solid #B8962E' : undefined }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                         <span style={{ color: '#999' }}>☐</span>
                         <span style={{ fontWeight: 600 }}>{task.label}</span>
                         {task.required && <span style={{ fontSize: 8, padding: '1px 4px', background: '#fef2f2', color: '#dc2626', borderRadius: 3 }}>required</span>}
+                        {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: 3 }}>{task.platform}</span>}
+                        {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#d1fae5', color: '#065f46', borderRadius: 3 }}>niche</span>}
                       </div>
                       <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{task.description}</div>
                       <div style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{task.platform} · {task.timing}</div>

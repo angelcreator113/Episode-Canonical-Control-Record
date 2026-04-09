@@ -590,31 +590,69 @@ router.post('/events/:id/auto-spawn', optionalAuth, async (req, res) => {
   try {
     const models = getModels(req);
     const { StoryCalendarEvent } = models;
-    if (!StoryCalendarEvent) return res.status(500).json({ error: 'Calendar model not loaded' });
+    if (!StoryCalendarEvent) return res.status(500).json({ success: false, error: 'Calendar model not loaded' });
 
     const calendarEvent = await StoryCalendarEvent.findByPk(req.params.id);
-    if (!calendarEvent) return res.status(404).json({ error: 'Calendar event not found' });
+    if (!calendarEvent) return res.status(404).json({ success: false, error: 'Calendar event not found' });
 
     const { show_id, event_count = 1, max_guests = 8 } = req.body;
-    if (!show_id) return res.status(400).json({ error: 'show_id is required' });
+    if (!show_id) return res.status(400).json({ success: false, error: 'show_id is required' });
 
     const eventAutomation = require('../services/eventAutomationService');
-    const events = await eventAutomation.spawnEventsFromCalendar(
-      calendarEvent, show_id, models,
-      { eventCount: Math.min(3, parseInt(event_count) || 1), maxGuests: parseInt(max_guests) || 8 }
-    );
+    const requestedCount = Math.min(3, parseInt(event_count) || 1);
+    const maxGuestsInt = parseInt(max_guests) || 8;
+
+    let events = [];
+    const warnings = [];
+
+    try {
+      events = await eventAutomation.spawnEventsFromCalendar(
+        calendarEvent, show_id, models,
+        { eventCount: requestedCount, maxGuests: maxGuestsInt }
+      );
+    } catch (spawnErr) {
+      // If some events were created before the error, return partial results
+      console.error('POST /events/:id/auto-spawn partial failure:', spawnErr.message);
+      warnings.push(`Spawn partially failed: ${spawnErr.message}`);
+    }
+
+    // Build detailed response about what was resolved
+    const details = events.map(ev => {
+      const auto = ev.canon_consequences?.automation || {};
+      return {
+        id: ev.id,
+        name: ev.name,
+        host: auto.host_display_name || ev.host || null,
+        host_handle: auto.host_handle || null,
+        venue: auto.venue_name || null,
+        guest_count: auto.guest_profiles?.length || 0,
+        prestige: ev.prestige,
+      };
+    });
+
+    if (events.length === 0 && warnings.length > 0) {
+      return res.status(500).json({
+        success: false,
+        error: 'Auto-spawn failed — no events created',
+        warnings,
+        source: { calendar_event_id: calendarEvent.id, title: calendarEvent.title },
+      });
+    }
 
     res.status(201).json({
       success: true,
       data: {
         events_created: events.length,
+        events_requested: requestedCount,
         events,
+        details,
         source: { calendar_event_id: calendarEvent.id, title: calendarEvent.title },
       },
+      ...(warnings.length > 0 ? { warnings } : {}),
     });
   } catch (err) {
     console.error('POST /events/:id/auto-spawn error:', err.message, err.stack?.slice(0, 300));
-    res.status(500).json({ error: `Auto-spawn failed: ${err.message}` });
+    res.status(500).json({ success: false, error: `Auto-spawn failed: ${err.message}` });
   }
 });
 
@@ -626,7 +664,7 @@ router.post('/events/generate-seasonal', optionalAuth, async (req, res) => {
   try {
     const { month, count = 4, year = 2026, show_id } = req.body;
     if (month === undefined || month < 0 || month > 11) {
-      return res.status(400).json({ error: 'month is required (0-11)' });
+      return res.status(400).json({ success: false, error: 'month is required (0-11)' });
     }
 
     const seasonalService = require('../services/seasonalEventService');
@@ -640,7 +678,7 @@ router.post('/events/generate-seasonal', optionalAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('POST /events/generate-seasonal error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: `Seasonal generation failed: ${err.message}` });
   }
 });
 

@@ -63,7 +63,7 @@ function ExportDropdown({ exporting, onExport }) {
 // lalaClass, authHeaders imported from ./feed/feedConstants
 
 // ══════════════════════════════════════════════════════════════════════
-export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId }) {
+export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId, onNavigateToTab }) {
   const [profiles,setProfiles]   = useState([]);
   const [selected,setSelected]   = useState(null);
   const [loading,setLoading]     = useState(false);
@@ -1058,13 +1058,17 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                   profileName={selected.display_name||selected.handle}
                   showId={showId}
                   showToast={showToast}
-                  onNavigateToEvents={()=>{
+                  onNavigateToEvent={(ev)=>{
                     setSelected(null);
-                    // Navigate to Events Library tab — update URL param
-                    const url = new URL(window.location);
-                    url.searchParams.set('tab', 'events');
-                    window.history.pushState({}, '', url);
-                    window.location.reload();
+                    if (onNavigateToTab) {
+                      onNavigateToTab('feed-events', ev);
+                    } else {
+                      const url = new URL(window.location);
+                      url.searchParams.set('tab', 'feed-events');
+                      if (ev?.id) url.searchParams.set('eventId', ev.id);
+                      window.history.pushState({}, '', url);
+                      window.location.reload();
+                    }
                   }}
                 />
               </div>
@@ -1101,7 +1105,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
 const sBtnSm = { padding:'5px 12px', borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', border:`1px solid ${C.border}`, background:'transparent', color:C.inkMid };
 
 // ── ProfileEventSection — shows existing events + create button ──
-function ProfileEventSection({ profileId, profileName, showId, showToast, onNavigateToEvents }) {
+function ProfileEventSection({ profileId, profileName, showId, showToast, onNavigateToEvent }) {
   const [events, setEvents] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
 
@@ -1130,7 +1134,9 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
       const d = await res.json();
       if (d.success) {
         setEvents(prev => [...(prev || []), d.event]);
-        showToast(`✅ Event created for ${profileName}`);
+        showToast(`Event created for ${profileName}`);
+        // Navigate directly to the event for editing
+        if (d.event && onNavigateToEvent) onNavigateToEvent(d.event);
       } else {
         showToast(d.error || 'Failed', 'error');
       }
@@ -1154,8 +1160,9 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
                 <span style={{ padding: '0 4px', borderRadius: 3, background: ev.status === 'used' ? '#d4edda' : '#fef3c7', fontSize: 9 }}>{ev.status}</span>
                 {ev.location_hint && <span>📍 {ev.location_hint.slice(0, 30)}</span>}
               </div>
-              <button onClick={onNavigateToEvents} style={{ marginTop: 4, padding: '3px 8px', borderRadius: 4, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
-                View in Events Library →
+              <button onClick={() => onNavigateToEvent(ev)} style={{ marginTop: 4, padding: '3px 8px', borderRadius: 4, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+              >
+                {ev.status === 'draft' ? 'Complete in Feed Events →' : 'View in Events Library →'}
               </button>
             </div>
           ))}

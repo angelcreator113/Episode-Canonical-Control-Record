@@ -403,7 +403,17 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       automated_at: new Date().toISOString(),
     };
 
-    // Create the world event using existing columns only
+    // Derive cost and strictness from prestige
+    const costCoins = prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50;
+    const strictness = Math.min(10, prestige + Math.floor(Math.random() * 2));
+    const deadlineType = prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low';
+
+    // Generate event date (next 1-3 weeks from now)
+    const eventDate = new Date();
+    eventDate.setDate(eventDate.getDate() + 7 + Math.floor(Math.random() * 14));
+    const eventDateStr = eventDate.toISOString().split('T')[0];
+    const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
+
     const eventData = {
       id: uuidv4(),
       show_id: showId,
@@ -413,11 +423,18 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       host_brand: host?.brand_partnerships?.[0]?.brand || null,
       description: `${calendarEvent.title} — ${calendarEvent.what_world_knows || eventName}`,
       prestige,
+      cost_coins: costCoins,
+      strictness,
+      deadline_type: deadlineType,
       location_hint: venueAddress || calendarEvent.location_name || venueName || null,
+      venue_name: venueName || null,
+      venue_address: venueAddress || null,
+      event_date: eventDateStr,
+      event_time: eventTimeStr,
       dress_code: calendarEvent.activities?.dress_code || null,
       narrative_stakes: calendarEvent.what_only_we_know || null,
       canon_consequences: { automation: automationData },
-      status: 'draft',
+      status: 'ready',
     };
 
     // Use WorldEvent model if available, fall back to raw SQL
@@ -428,9 +445,11 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       } else {
         await models.sequelize.query(
           `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
-           prestige, location_hint, dress_code, narrative_stakes, canon_consequences, status, created_at, updated_at)
+           prestige, cost_coins, strictness, deadline_type, location_hint, venue_name, venue_address,
+           event_date, event_time, dress_code, narrative_stakes, canon_consequences, status, created_at, updated_at)
            VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
-           :prestige, :location_hint, :dress_code, :narrative_stakes, :canon_consequences, :status, NOW(), NOW())`,
+           :prestige, :cost_coins, :strictness, :deadline_type, :location_hint, :venue_name, :venue_address,
+           :event_date, :event_time, :dress_code, :narrative_stakes, :canon_consequences, :status, NOW(), NOW())`,
           {
             replacements: {
               ...eventData,
@@ -442,17 +461,22 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       }
     } catch (createErr) {
       console.error(`[EventAutomation] Failed to create event "${eventName}":`, createErr.message);
-      // Try raw SQL as last resort
+      // Try raw SQL as last resort — minimal columns
       try {
         await models.sequelize.query(
-          `INSERT INTO world_events (id, show_id, name, event_type, host, description, prestige, location_hint, canon_consequences, status, created_at, updated_at)
-           VALUES (:id, :show_id, :name, :event_type, :host, :description, :prestige, :location_hint, :canon_consequences, 'draft', NOW(), NOW())`,
+          `INSERT INTO world_events (id, show_id, name, event_type, host, description, prestige, cost_coins, strictness,
+           location_hint, venue_name, venue_address, event_date, event_time, canon_consequences, status, created_at, updated_at)
+           VALUES (:id, :show_id, :name, :event_type, :host, :description, :prestige, :cost_coins, :strictness,
+           :location_hint, :venue_name, :venue_address, :event_date, :event_time, :canon_consequences, 'draft', NOW(), NOW())`,
           {
             replacements: {
               id: eventData.id, show_id: showId, name: eventName,
               event_type: eventData.event_type, host: hostName || null,
               description: eventData.description || eventName,
-              prestige: prestige, location_hint: eventData.location_hint || null,
+              prestige, cost_coins: eventData.cost_coins || 100, strictness: eventData.strictness || 5,
+              location_hint: eventData.location_hint || null,
+              venue_name: eventData.venue_name || null, venue_address: eventData.venue_address || null,
+              event_date: eventData.event_date || null, event_time: eventData.event_time || null,
               canon_consequences: JSON.stringify(eventData.canon_consequences),
             },
           }
