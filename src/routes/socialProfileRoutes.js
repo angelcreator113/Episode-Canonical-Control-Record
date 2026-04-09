@@ -1384,6 +1384,9 @@ router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
       'front_platform', 'real_platform', 'celebrity_tier',
       'primary_income_source', 'income_breakdown', 'monthly_earnings_range',
       'clout_score', 'drama_magnet', 'secret_connections', 'rebrand_history',
+      'follow_motivation', 'follow_emotion', 'follow_trigger', 'event_excitement',
+      'lifestyle_claim', 'lifestyle_reality', 'lifestyle_gap',
+      'beauty_factor', 'beauty_description', 'aesthetic_power',
     ];
     const updates = {};
     for (const key of allowed) {
