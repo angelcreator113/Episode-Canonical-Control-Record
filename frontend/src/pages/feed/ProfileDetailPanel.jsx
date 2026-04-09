@@ -153,6 +153,53 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
               </div>
             ) : (
               <>
+                {/* Platform Presence + Behind the Scenes */}
+                {(p.platform_presences && Object.keys(p.platform_presences).length > 0) || p.public_persona || p.private_reality ? (
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                    {p.platform_presences && Object.keys(p.platform_presences).length > 0 && (
+                      <Section title="Platform Presences">
+                        <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                          {Object.entries(p.platform_presences).map(([plat, info]) => (
+                            <div key={plat} style={{padding:'6px 8px',background:plat===p.platform?'#eef2ff':'#f8f8f8',borderRadius:6,borderLeft:`3px solid ${plat==='onlyfans'?C.pink:plat===p.platform?C.lavender:'#ddd'}`}}>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <span style={{fontSize:11,fontWeight:700,color:C.ink}}>{plat}{info.is_primary?' ★':''}</span>
+                                <span style={{fontSize:9,color:C.inkLight}}>{info.followers||''}</span>
+                              </div>
+                              {info.handle && <div style={{fontSize:10,color:C.inkMid}}>{info.handle}</div>}
+                              <div style={{fontSize:10,color:C.inkLight,fontStyle:'italic'}}>{info.persona||info.content_style||''}</div>
+                              {info.visibility==='discreet'&&<span style={{fontSize:8,fontWeight:700,padding:'1px 4px',borderRadius:3,background:'#fef3c7',color:'#92400e'}}>discreet</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </Section>
+                    )}
+                    <div>
+                      {p.public_persona && <Section title="Public Persona"><div style={{fontSize:12,color:C.inkMid,lineHeight:1.6,fontStyle:'italic'}}>"{p.public_persona}"</div></Section>}
+                      {p.private_reality && <Section title="Private Reality"><div style={{fontSize:12,color:C.pink,lineHeight:1.6}}>{p.private_reality}</div></Section>}
+                      {p.front_platform && p.real_platform && p.front_platform !== p.real_platform && (
+                        <div style={{fontSize:10,color:C.inkLight,padding:'4px 8px',background:'#fef2f2',borderRadius:6,marginTop:4}}>
+                          Front: {p.front_platform} → Real: {p.real_platform}
+                        </div>
+                      )}
+                      {p.celebrity_tier && p.celebrity_tier !== 'accessible' && (
+                        <div style={{fontSize:10,fontWeight:700,color:p.celebrity_tier==='untouchable'?'#92400e':C.lavender,padding:'4px 8px',background:p.celebrity_tier==='untouchable'?'#fef3c7':'#eef2ff',borderRadius:6,marginTop:4}}>
+                          {p.celebrity_tier==='untouchable'?'Cultural icon — never attends events':p.celebrity_tier==='exclusive'?'Exclusive — prestige 8+ events only':'Selective — prestige 5+ events'}
+                        </div>
+                      )}
+                      {p.income_breakdown && Object.keys(p.income_breakdown).length > 0 && (
+                        <Section title="Income Breakdown">
+                          <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                            {Object.entries(p.income_breakdown).map(([src,pct])=>(
+                              <span key={src} style={{fontSize:9,padding:'2px 6px',borderRadius:4,background:'#f0f0f0',color:C.inkMid}}>{src}: {pct}%</span>
+                            ))}
+                          </div>
+                          {p.monthly_earnings_range && <div style={{fontSize:10,color:C.inkLight,marginTop:4}}>{p.monthly_earnings_range}/mo</div>}
+                        </Section>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div>
                   <Section title="Content Persona"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.content_persona||d.content_persona}</div></Section>
                   <Section title="Real Signal"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.real_signal||d.real_signal}</div></Section>

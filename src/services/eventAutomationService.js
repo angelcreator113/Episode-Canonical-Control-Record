@@ -122,14 +122,36 @@ async function findHostProfile(calendarEvent, models, options = {}) {
   }
 
   // Get candidate profiles — broader search, then rank
-  const candidates = await SocialProfile.findAll({
-    where,
-    order: [['lala_relevance_score', 'DESC']],
-    limit: 20,
-    attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype',
-      'follower_tier', 'lala_relevance_score', 'geographic_base', 'brand_partnerships',
-      'registry_character_id', 'revenue_streams'],
-  });
+  // Filter by celebrity_tier: untouchable never hosts, exclusive only for prestige 8+
+  let candidates;
+  try {
+    candidates = await SocialProfile.findAll({
+      where: {
+        ...where,
+        [Op.or]: [
+          { celebrity_tier: null },
+          { celebrity_tier: 'accessible' },
+          ...(severity >= 5 ? [{ celebrity_tier: 'selective' }] : []),
+          ...(severity >= 8 ? [{ celebrity_tier: 'exclusive' }] : []),
+        ],
+      },
+      order: [['lala_relevance_score', 'DESC']],
+      limit: 20,
+      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype',
+        'follower_tier', 'lala_relevance_score', 'geographic_base', 'brand_partnerships',
+        'registry_character_id', 'revenue_streams', 'celebrity_tier', 'platform'],
+    });
+  } catch {
+    // Fallback if celebrity_tier column doesn't exist yet
+    candidates = await SocialProfile.findAll({
+      where,
+      order: [['lala_relevance_score', 'DESC']],
+      limit: 20,
+      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype',
+        'follower_tier', 'lala_relevance_score', 'geographic_base', 'brand_partnerships',
+        'registry_character_id', 'revenue_streams'],
+    });
+  }
 
   if (candidates.length === 0) return null;
 
@@ -276,12 +298,17 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
     const excludeIds = [hostProfile?.id, ...guests.map(g => g.profile_id)].filter(Boolean);
 
     // Get more candidates than needed, then diversify
+    // Exclude untouchable profiles from guest lists
+    let guestWhere = {
+      status: { [Op.in]: ['finalized', 'generated'] },
+      feed_layer: 'lalaverse',
+      ...(excludeIds.length > 0 ? { id: { [Op.notIn]: excludeIds } } : {}),
+    };
+    try {
+      guestWhere[Op.or] = [{ celebrity_tier: null }, { celebrity_tier: 'accessible' }, { celebrity_tier: 'selective' }];
+    } catch { /* column may not exist */ }
     const candidatePool = await SocialProfile.findAll({
-      where: {
-        status: { [Op.in]: ['finalized', 'generated'] },
-        feed_layer: 'lalaverse',
-        ...(excludeIds.length > 0 ? { id: { [Op.notIn]: excludeIds } } : {}),
-      },
+      where: guestWhere,
       order: [['lala_relevance_score', 'DESC']],
       limit: Math.max(20, maxGuests * 3),
       attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'lala_relationship'],
