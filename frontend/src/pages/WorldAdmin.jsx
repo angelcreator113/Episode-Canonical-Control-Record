@@ -69,6 +69,7 @@ const EVENT_STATUSES = ['draft', 'ready', 'used', 'scripted', 'filmed'];
 const EVENT_STATUS_CONFIG = {
   draft:    { label: 'Draft', color: '#94a3b8', bg: '#f1f5f9', icon: '○' },
   ready:    { label: 'Ready', color: '#b45309', bg: '#fef3c7', icon: '◎' },
+  declined: { label: 'Declined', color: '#dc2626', bg: '#fef2f2', icon: '✗' },
   used:     { label: 'Injected', color: '#6366f1', bg: '#eef2ff', icon: '◉' },
   scripted: { label: 'Scripted', color: '#16a34a', bg: '#f0fdf4', icon: '✓' },
   filmed:   { label: 'Filmed', color: '#0284c7', bg: '#f0f9ff', icon: '★' },
@@ -2757,6 +2758,20 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {/* Footer */}
                 <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>Delete</button>
+                  {md.status === 'ready' && (
+                    <button onClick={async () => {
+                      const reason = window.prompt('Why is Lala declining? (e.g. "can\'t afford it", "schedule conflict", "not worth the drama")');
+                      if (!reason) return;
+                      try {
+                        await api.post(`/api/v1/world/${showId}/events/${md.id}/decline`, { reason });
+                        setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'declined' } : ev));
+                        setEventDetailModal({ ...md, status: 'declined' });
+                        setToast(`"${md.name}" declined — tracked for future callbacks`);
+                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                    }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #f59e0b', background: '#fef3c7', color: '#92400e', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                      Decline Invite
+                    </button>
+                  )}
                   {md.status === 'draft' && (
                     <button onClick={async () => {
                       // Validate required fields
@@ -3245,16 +3260,30 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             </div>
                             <div style={{ fontSize: 11, color: '#1a1a2e', lineHeight: 1.4 }}>{(fm.on_screen || fm.phone_screen)?.content}</div>
                           </div>
-                          {/* Script Line (what Lala says — voice) */}
+                          {/* Script Lines — Both Voices */}
                           {(fm.script_lines || fm.lala_dialogue) && (
                             <div style={{ flex: 1, padding: '6px 10px', background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                              <span style={{ fontSize: 8, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase' }}>Script · Lala's Voice</span>
-                              <div style={{ fontSize: 11, color: '#1a1a2e', marginTop: 2, fontFamily: "'Lora', serif" }}>
+                              {/* JustAWoman — player voice */}
+                              {fm.script_lines?.justawoman_line && (
+                                <div style={{ marginBottom: 4 }}>
+                                  <span style={{ fontSize: 8, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase' }}>JustAWoman</span>
+                                  <div style={{ fontSize: 11, color: '#92400e', marginTop: 1 }}>"{fm.script_lines.justawoman_line}"</div>
+                                </div>
+                              )}
+                              {/* Lala — character voice */}
+                              <span style={{ fontSize: 8, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase' }}>Lala</span>
+                              <div style={{ fontSize: 11, color: '#1a1a2e', marginTop: 1, fontFamily: "'Lora', serif" }}>
                                 "{fm.script_lines?.lala_line || fm.lala_dialogue}"
                               </div>
                               {(fm.script_lines?.lala_internal || fm.lala_internal) && (
                                 <div style={{ fontSize: 10, color: '#6366f1', fontStyle: 'italic', marginTop: 2 }}>
                                   [{fm.script_lines?.lala_internal || fm.lala_internal}]
+                                </div>
+                              )}
+                              {/* Financial indicator */}
+                              {fm.financial && (
+                                <div style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, marginTop: 3, display: 'inline-block', background: fm.financial.affordable ? '#f0fdf4' : '#fef2f2', color: fm.financial.affordable ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+                                  Bank: {fm.financial.balance} → {fm.financial.affordable ? `-${fm.financial.outfit_cost} = ${fm.financial.remaining}` : `Need ${fm.financial.outfit_cost} (short ${fm.financial.outfit_cost - fm.financial.balance})`}
                                 </div>
                               )}
                               {(fm.script_lines?.direction || fm.behavior_shift) && (

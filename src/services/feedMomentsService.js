@@ -92,6 +92,17 @@ async function generateFeedMoments(event, beats, guestProfiles, models, options 
   const hostName = auto.host_display_name || event.host || 'the host';
   const guests = guestProfiles || auto.guest_profiles || [];
 
+  // Get Lala's balance for purchase decisions
+  let balance = 500;
+  try {
+    const [state] = await models.sequelize.query(
+      `SELECT state_json FROM character_state_history WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
+      { replacements: { showId: event.show_id }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    const sj = typeof state?.state_json === 'string' ? JSON.parse(state.state_json) : state?.state_json;
+    balance = sj?.coins ?? 500;
+  } catch { /* use default */ }
+
   // Pick which beats get feed moments (based on likelihood)
   const moments = {};
 
@@ -122,6 +133,48 @@ async function generateFeedMoments(event, beats, guestProfiles, models, options 
     // Generate the moment content based on beat + lens
     const moment = generateMomentContent(beat, config, lens, event, hostName, triggerHandle, triggerProfile, guests);
     moments[beat.beat] = moment;
+  }
+
+  // ── Special: Purchase Decision Moment (Beat 3 — The Closet) ──
+  // JustAWoman checks the bank, picks an outfit, Lala reacts
+  const prestige = event.prestige || 5;
+  const outfitCost = prestige >= 8 ? 400 : prestige >= 6 ? 250 : prestige >= 4 ? 120 : 50;
+  const canAfford = balance >= outfitCost;
+  const afterPurchase = balance - outfitCost;
+
+  if (!moments[3]) {
+    moments[3] = {
+      trigger_profile: 'SYSTEM',
+      trigger_action: 'wardrobe_purchase',
+      on_screen: {
+        type: 'ui_interaction',
+        content: canAfford
+          ? `[Bank: ${balance} coins] → Purchase outfit (${outfitCost} coins) → [Remaining: ${afterPurchase} coins]`
+          : `[Bank: ${balance} coins] → Outfit costs ${outfitCost} coins → NOT ENOUGH`,
+        image_desc: canAfford ? 'Bank screen showing balance, purchase confirmation' : 'Bank screen showing insufficient funds, red warning',
+        asset_type: 'NOTIFICATION_OVERLAY',
+        asset_role: 'UI.OVERLAY.BANK',
+      },
+      script_lines: {
+        justawoman_line: canAfford
+          ? (afterPurchase < 100
+            ? `Oh this is so cute! But let me check the bank first... okay we have ${balance} coins, this outfit is ${outfitCost}... that leaves us with ${afterPurchase}. Cutting it close but she needs to look good tonight.`
+            : `Oh this is so freaking cute! Let me check the bank... we have ${balance} coins. This is ${outfitCost} — we can definitely do this! Adding it to Lala's closet.`)
+          : `Oh no... this outfit is perfect but it's ${outfitCost} coins and we only have ${balance}. We need to book more work before we can afford this. Let me see what opportunities are available...`,
+        lala_line: canAfford
+          ? (afterPurchase < 100
+            ? `This is worth it. But I'm going to need to hustle after this event. Can't keep spending like this.`
+            : `This is so cute, so worth the coins! If I wanna spend hard, I gotta work hard. I'm going to kill this event today.`)
+          : `I can't afford this. I literally cannot afford the outfit I need for this event. Something has to change.`,
+        lala_internal: canAfford
+          ? `The outfit makes me feel like I belong. For one night, the price tag doesn't matter.`
+          : `Everyone else will show up looking perfect. And I'll be the one who couldn't afford to play the part.`,
+        justawoman_action: canAfford ? 'purchases outfit, adds to closet' : 'closes bank, looks at opportunities',
+        direction: canAfford ? 'Lala puts on the outfit, confidence builds' : 'Lala stares at her closet, nothing feels right',
+      },
+      beat_context: 'The Closet — outfit selection driven by financial reality',
+      financial: { balance, outfit_cost: outfitCost, affordable: canAfford, remaining: afterPurchase },
+    };
   }
 
   return moments;
@@ -266,10 +319,32 @@ function generateMomentContent(beat, config, lens, event, hostName, triggerHandl
       asset_type: 'NOTIFICATION_OVERLAY',
       asset_role: 'UI.OVERLAY.NOTIFICATION',
     },
-    // Script lines — what Lala SAYS (voice, not on screen)
+    // Script lines — TWO VOICES
     script_lines: {
-      lala_line: dialogue,           // spoken dialogue (voice actor)
-      lala_internal: internal,       // inner narration (voiceover)
+      justawoman_line: (() => {
+        // JustAWoman is the player — she narrates decisions, strategy, UI actions
+        const JW = {
+          before: [
+            `Let me see what ${triggerHandle} is wearing before we pick Lala's outfit...`,
+            `Oh this is cute! Let me check if we can afford something similar.`,
+            `Okay ${triggerHandle} posted — let's see what we're working with.`,
+          ],
+          during: [
+            `${triggerHandle} just tagged us — let me check this real quick.`,
+            `Ooh she's going live! Should we watch or stay focused?`,
+            `Look at this notification — something's happening.`,
+          ],
+          after: [
+            `Let me see how everyone's posts are doing. Check the engagement...`,
+            `Okay the event is over — time to post Lala's recap before everyone else.`,
+            `${triggerHandle} posted already?! We need to get our content up.`,
+          ],
+        };
+        const p = beat.beat <= 5 ? 'before' : beat.beat <= 12 ? 'during' : 'after';
+        return JW[p][Math.floor(Math.random() * JW[p].length)];
+      })(),
+      lala_line: dialogue,              // spoken dialogue (character voice)
+      lala_internal: internal,          // inner narration (voiceover)
       justawoman_action: config.type === 'notification' ? 'taps notification' : 'scrolls',
       direction: shift,              // camera/behavior direction
     },

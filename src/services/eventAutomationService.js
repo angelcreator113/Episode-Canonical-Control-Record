@@ -115,6 +115,7 @@ async function findHostProfile(calendarEvent, models, options = {}) {
   const where = {
     status: { [Op.in]: ['finalized', 'generated'] },
     feed_layer: 'lalaverse',
+    is_justawoman_record: { [Op.ne]: true },  // Never pick JustAWoman as host
   };
 
   if (options.excludeIds?.length) {
@@ -302,6 +303,7 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
     let guestWhere = {
       status: { [Op.in]: ['finalized', 'generated'] },
       feed_layer: 'lalaverse',
+      is_justawoman_record: { [Op.ne]: true },  // Never include JustAWoman as guest
       ...(excludeIds.length > 0 ? { id: { [Op.notIn]: excludeIds } } : {}),
     };
     try {
