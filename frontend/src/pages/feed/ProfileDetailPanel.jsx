@@ -150,6 +150,33 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                   {inp('Handle','handle')}{inp('Display Name','display_name')}{inp('Platform','platform')}{inp('Vibe Sentence','vibe_sentence')}
                 </div>
                 {inp('Content Persona','content_persona',true)}{inp('Real Signal','real_signal',true)}{inp('Posting Voice','posting_voice',true)}{inp('Comment Energy','comment_energy',true)}{inp('Parasocial Function','parasocial_function',true)}{inp('Emotional Activation','emotional_activation',true)}{inp('Why She Watches','watch_reason',true)}{inp('What It Costs Her','what_it_costs_her',true)}{inp('Trajectory','current_trajectory')}{inp('Pinned Post','pinned_post',true)}
+                {/* Social Intelligence */}
+                <div style={{borderTop:`1px solid ${C.border}`,marginTop:12,paddingTop:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Social Intelligence</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
+                    {inp('Public Persona','public_persona')}{inp('Private Reality','private_reality')}
+                    {inp('Front Platform','front_platform')}{inp('Real Platform','real_platform')}
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:C.inkLight,display:'block',marginBottom:2}}>Celebrity Tier</label>
+                      <select value={draft.celebrity_tier||''} onChange={e=>setDraft(d=>({...d,celebrity_tier:e.target.value}))} style={{width:'100%',padding:'6px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,background:C.surface}}>
+                        <option value="accessible">Accessible</option>
+                        <option value="selective">Selective (5+ prestige)</option>
+                        <option value="exclusive">Exclusive (8+ prestige)</option>
+                        <option value="untouchable">Untouchable (never attends)</option>
+                      </select>
+                    </div>
+                    {inp('Primary Income Source','primary_income_source')}
+                    {inp('Monthly Earnings','monthly_earnings_range')}
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:C.inkLight,display:'block',marginBottom:2}}>Clout Score (0-100)</label>
+                      <input type="number" min={0} max={100} value={draft.clout_score||0} onChange={e=>setDraft(d=>({...d,clout_score:parseInt(e.target.value)||0}))} style={{width:'100%',padding:'6px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}} />
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <label style={{fontSize:10,fontWeight:600,color:C.inkLight}}>Drama Magnet</label>
+                      <input type="checkbox" checked={draft.drama_magnet||false} onChange={e=>setDraft(d=>({...d,drama_magnet:e.target.checked}))} />
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <>

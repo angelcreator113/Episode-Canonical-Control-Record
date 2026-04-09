@@ -3318,6 +3318,26 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EArea label="Demographic Voice Signature" value={form.demographic_voice_signature} onChange={v => F('demographic_voice_signature', v)} rows={2} placeholder="How demographics shape their speech patterns" />
               <EField label="Primary Platform" value={form.platform_primary} onChange={v => F('platform_primary', v)} placeholder="e.g. Instagram, Twitter" />
               <EField label="Follower Tier" value={form.follower_tier} onChange={v => F('follower_tier', v)} placeholder="e.g. Micro, Mid-tier, Mega" />
+              {/* Social Intelligence */}
+              <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12 }}>
+                <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Social Intelligence</span>
+              </div>
+              <div className="cr-dossier-edit-row">
+                <label className="cr-dossier-edit-label">Celebrity Tier</label>
+                <select value={form.celebrity_tier || 'accessible'} onChange={e => F('celebrity_tier', e.target.value)} className="cr-dossier-edit-input">
+                  <option value="accessible">Accessible</option>
+                  <option value="selective">Selective (5+ prestige)</option>
+                  <option value="exclusive">Exclusive (8+ prestige)</option>
+                  <option value="untouchable">Untouchable (never attends)</option>
+                </select>
+              </div>
+              <EField label="Content Category" value={form.content_category} onChange={v => F('content_category', v)} placeholder="fashion, beauty, creator_economy" />
+              <EArea label="Public Persona" value={form.public_persona} onChange={v => F('public_persona', v)} rows={2} placeholder="What audiences believe this person does" />
+              <EArea label="Private Reality" value={form.private_reality} onChange={v => F('private_reality', v)} rows={2} placeholder="What's actually true about their income/motivations" />
+              <EArea label="Social Leverage" value={form.social_leverage} onChange={v => F('social_leverage', v)} rows={2} placeholder="Why this character has power (auto-generated on sync)" />
+              <EField label="Primary Income Source" value={form.primary_income_source} onChange={v => F('primary_income_source', v)} placeholder="brand deals, subscriptions, merch" />
+              <EField label="Monthly Earnings Range" value={form.monthly_earnings_range} onChange={v => F('monthly_earnings_range', v)} placeholder="$5K-$15K" />
+              <EField label="Clout Score (0-100)" value={form.clout_score} onChange={v => F('clout_score', v)} placeholder="0" />
             </>
           ) : (c.gender || c.age || c.ethnicity || c.nationality || c.hometown || c.current_city || c.family_structure) ? (
             <>
@@ -5465,6 +5485,14 @@ function buildFormForTab(tabKey, c) {
         demographic_voice_signature: c.demographic_voice_signature || '',
         platform_primary:          c.platform_primary || '',
         follower_tier:             c.follower_tier || '',
+        celebrity_tier:            c.celebrity_tier || 'accessible',
+        content_category:          c.content_category || '',
+        public_persona:            c.public_persona || '',
+        private_reality:           c.private_reality || '',
+        social_leverage:           c.social_leverage || '',
+        primary_income_source:     c.primary_income_source || '',
+        monthly_earnings_range:    c.monthly_earnings_range || '',
+        clout_score:               c.clout_score || 0,
       };
     case 'death':
       return {
@@ -5644,6 +5672,14 @@ function buildPayloadForTab(tabKey, form) {
         demographic_voice_signature: form.demographic_voice_signature || null,
         platform_primary:          form.platform_primary || null,
         follower_tier:             form.follower_tier || null,
+        celebrity_tier:            form.celebrity_tier || null,
+        content_category:          form.content_category || null,
+        public_persona:            form.public_persona || null,
+        private_reality:           form.private_reality || null,
+        social_leverage:           form.social_leverage || null,
+        primary_income_source:     form.primary_income_source || null,
+        monthly_earnings_range:    form.monthly_earnings_range || null,
+        clout_score:               parseInt(form.clout_score) || null,
       };
     case 'death':
       return {
