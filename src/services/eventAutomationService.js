@@ -419,6 +419,14 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       strictness,
       deadline_type: deadlineType,
       dress_code: calendarEvent.activities?.dress_code || null,
+      // Auto-generated social tasks
+      social_tasks: (() => {
+        try {
+          const { buildSocialTasks } = require('./episodeGeneratorService');
+          const eventType = i === 0 ? 'invite' : (i === 1 ? 'guest' : 'upgrade');
+          return buildSocialTasks(eventType, host ? { platform: host.platform || 'instagram', content_category: host.content_category } : null);
+        } catch { return []; }
+      })(),
     };
 
     const eventData = {
