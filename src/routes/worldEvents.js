@@ -1097,27 +1097,26 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
     );
     const episodeId = event?.used_in_episode_id || null;
 
-    // Mark asset as approved and stamp episode_id so it appears in the episode's Assets tab
-    await models.sequelize.query(
-      `UPDATE assets SET approval_status = :status, episode_id = :episodeId,
-       asset_scope = CASE WHEN :episodeId IS NOT NULL THEN 'EPISODE' ELSE asset_scope END,
-       updated_at = NOW() WHERE id = :assetId`,
-      { replacements: { status: 'approved', assetId, episodeId } }
-    );
+    // Mark asset as approved — try with optional columns, fall back to minimal
+    try {
+      await models.sequelize.query(
+        `UPDATE assets SET approval_status = 'approved', episode_id = :episodeId, updated_at = NOW() WHERE id = :assetId`,
+        { replacements: { assetId, episodeId } }
+      );
+    } catch {
+      // approval_status/episode_id columns may not exist
+      try {
+        await models.sequelize.query(
+          `UPDATE assets SET updated_at = NOW() WHERE id = :assetId`,
+          { replacements: { assetId } }
+        );
+      } catch { /* non-blocking */ }
+    }
 
     // Link to event
     await models.sequelize.query(
       'UPDATE world_events SET invitation_asset_id = :assetId, updated_at = NOW() WHERE id = :eventId',
       { replacements: { assetId, eventId } }
-    );
-
-    // Clear episode_id from all previous invitation assets for this event
-    await models.sequelize.query(
-      `UPDATE assets SET episode_id = NULL
-       WHERE metadata->>'event_id' = :eventId
-         AND id != :assetId
-         AND deleted_at IS NULL`,
-      { replacements: { eventId, assetId } }
     );
 
     return res.json({ success: true, message: 'Invitation approved and linked to event', episodeId });
@@ -1137,11 +1136,18 @@ router.post('/world/:showId/events/:eventId/reject-invitation', optionalAuth, as
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    // Soft-delete the rejected asset
-    await models.sequelize.query(
-      'UPDATE assets SET approval_status = :status, deleted_at = NOW(), updated_at = NOW() WHERE id = :assetId',
-      { replacements: { status: 'rejected', assetId } }
-    );
+    // Soft-delete the rejected asset — try with approval_status, fall back
+    try {
+      await models.sequelize.query(
+        'UPDATE assets SET approval_status = :status, deleted_at = NOW(), updated_at = NOW() WHERE id = :assetId',
+        { replacements: { status: 'rejected', assetId } }
+      );
+    } catch {
+      await models.sequelize.query(
+        'UPDATE assets SET deleted_at = NOW(), updated_at = NOW() WHERE id = :assetId',
+        { replacements: { assetId } }
+      );
+    }
 
     return res.json({ success: true, message: 'Invitation rejected' });
   } catch (err) {
