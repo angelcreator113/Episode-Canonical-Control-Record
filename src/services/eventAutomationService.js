@@ -389,20 +389,6 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     const prestige = Math.min(10, (calendarEvent.severity_level || 5) + Math.floor(Math.random() * 3));
 
     // Store automation data in canon_consequences (existing JSONB field)
-    const automationData = {
-      host_profile_id: host?.id || null,
-      host_handle: host?.handle || null,
-      host_display_name: hostName,
-      host_registry_character_id: host?.registry_character_id || null,
-      venue_location_id: venue?.id || null,
-      venue_name: venueName,
-      venue_address: venueAddress,
-      guest_profiles: guestList,
-      source_calendar_event_id: calendarEvent.id,
-      source_calendar_title: calendarEvent.title,
-      automated_at: new Date().toISOString(),
-    };
-
     // Derive cost and strictness from prestige
     const costCoins = prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50;
     const strictness = Math.min(10, prestige + Math.floor(Math.random() * 2));
@@ -413,6 +399,27 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     eventDate.setDate(eventDate.getDate() + 7 + Math.floor(Math.random() * 14));
     const eventDateStr = eventDate.toISOString().split('T')[0];
     const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
+
+    const automationData = {
+      host_profile_id: host?.id || null,
+      host_handle: host?.handle || null,
+      host_display_name: hostName,
+      host_registry_character_id: host?.registry_character_id || null,
+      host_brand: host?.brand_partnerships?.[0]?.brand || null,
+      venue_location_id: venue?.id || null,
+      venue_name: venueName,
+      venue_address: venueAddress,
+      guest_profiles: guestList,
+      source_calendar_event_id: calendarEvent.id,
+      source_calendar_title: calendarEvent.title,
+      automated_at: new Date().toISOString(),
+      event_date: eventDateStr,
+      event_time: eventTimeStr,
+      cost_coins: costCoins,
+      strictness,
+      deadline_type: deadlineType,
+      dress_code: calendarEvent.activities?.dress_code || null,
+    };
 
     const eventData = {
       id: uuidv4(),
