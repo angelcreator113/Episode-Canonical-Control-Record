@@ -215,16 +215,14 @@ export function InvitationButton({ event, showId, onGenerated }) {
               {isPending && (
                 <div style={{ padding: '4px 12px', background: '#FEF3C7', color: '#92400E', borderRadius: 8, fontSize: 11, fontWeight: 600, marginBottom: 10, display: 'inline-block' }}>Pending your approval</div>
               )}
-              {!isPending && (
-                <div style={{ display: 'flex', gap: 0 }}>
-                  {[{ key: 'preview', label: 'Preview' }, { key: 'edit', label: 'Edit Text' }, { key: 'history', label: 'History' }].map(tab => (
-                    <button key={tab.key} onClick={() => { setModalTab(tab.key); if (tab.key === 'history') fetchVersions(); if (tab.key === 'edit') loadInvitationText(); }}
-                      style={{ background: 'none', border: 'none', borderBottom: modalTab === tab.key ? '2px solid #B8962E' : '2px solid transparent', padding: '6px 16px', fontSize: 13, fontWeight: modalTab === tab.key ? 700 : 400, color: modalTab === tab.key ? '#B8962E' : '#888', cursor: 'pointer' }}>
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div style={{ display: 'flex', gap: 0 }}>
+                {[{ key: 'preview', label: 'Preview' }, { key: 'edit', label: 'Edit Text' }, { key: 'history', label: 'History' }].map(tab => (
+                  <button key={tab.key} onClick={() => { setModalTab(tab.key); if (tab.key === 'history') fetchVersions(); if (tab.key === 'edit') loadInvitationText(); }}
+                    style={{ background: 'none', border: 'none', borderBottom: modalTab === tab.key ? '2px solid #B8962E' : '2px solid transparent', padding: '6px 16px', fontSize: 13, fontWeight: modalTab === tab.key ? 700 : 400, color: modalTab === tab.key ? '#B8962E' : '#888', cursor: 'pointer' }}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Content */}
@@ -325,9 +323,9 @@ export function InvitationButton({ event, showId, onGenerated }) {
       )}
 
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        {hasInvitation && <button onClick={() => { setModalTab('preview'); setShowPreview(true); }} style={goldBtn}>View</button>}
-        <button onClick={handleGenerate} disabled={generating} style={{ ...(hasInvitation ? goldBtn : goldFill), opacity: generating ? 0.6 : 1, cursor: generating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-          {generating ? 'Generating...' : hasInvitation ? 'Regenerate' : 'Generate Invite'}
+        {(hasInvitation || imageUrl) && <button onClick={() => { setModalTab('preview'); setShowPreview(true); }} style={goldBtn}>View</button>}
+        <button onClick={handleGenerate} disabled={generating} style={{ ...((hasInvitation || imageUrl) ? goldBtn : goldFill), opacity: generating ? 0.6 : 1, cursor: generating ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+          {generating ? 'Generating...' : (hasInvitation || imageUrl) ? 'Regenerate' : 'Generate Invite'}
         </button>
       </div>
 
