@@ -103,10 +103,9 @@ export function InvitationButton({ event, showId, onGenerated }) {
   };
 
   const handleRerender = async () => {
-    if (!currentAssetId) return;
     setRerendering(true);
     try {
-      const res = await api.post(`/api/v1/world/${showId}/events/${event.id}/edit-invitation-text`, { assetId: currentAssetId, ...editText });
+      const res = await api.post(`/api/v1/world/${showId}/events/${event.id}/re-render-invitation`, { invitation_text: editText });
       setImageUrl(res.data.imageUrl);
       setModalTab('preview');
       showToast('Invitation re-rendered with your text');
@@ -115,6 +114,16 @@ export function InvitationButton({ event, showId, onGenerated }) {
     } finally {
       setRerendering(false);
     }
+  };
+
+  // Load existing invitation text when edit tab opens
+  const loadInvitationText = async () => {
+    try {
+      const res = await api.get(`/api/v1/world/${showId}/events/${event.id}/invitation-text`);
+      if (res.data.invitation_text) {
+        setEditText(res.data.invitation_text);
+      }
+    } catch { /* use defaults */ }
   };
 
   const handleUnlink = async () => {
@@ -209,7 +218,7 @@ export function InvitationButton({ event, showId, onGenerated }) {
               {!isPending && (
                 <div style={{ display: 'flex', gap: 0 }}>
                   {[{ key: 'preview', label: 'Preview' }, { key: 'edit', label: 'Edit Text' }, { key: 'history', label: 'History' }].map(tab => (
-                    <button key={tab.key} onClick={() => { setModalTab(tab.key); if (tab.key === 'history') fetchVersions(); }}
+                    <button key={tab.key} onClick={() => { setModalTab(tab.key); if (tab.key === 'history') fetchVersions(); if (tab.key === 'edit') loadInvitationText(); }}
                       style={{ background: 'none', border: 'none', borderBottom: modalTab === tab.key ? '2px solid #B8962E' : '2px solid transparent', padding: '6px 16px', fontSize: 13, fontWeight: modalTab === tab.key ? 700 : 400, color: modalTab === tab.key ? '#B8962E' : '#888', cursor: 'pointer' }}>
                       {tab.label}
                     </button>
