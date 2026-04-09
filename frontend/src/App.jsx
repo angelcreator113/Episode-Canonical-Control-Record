@@ -43,6 +43,7 @@ const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
 const BeatGeneration = lazy(() => import('./pages/BeatGeneration'));
 const EpisodeReview = lazy(() => import('./pages/EpisodeReview'));
 const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
+const EpisodeTodoPage = lazy(() => import('./pages/EpisodeTodoPage'));
 const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
 const WorldStudio = lazy(() => import('./pages/WorldStudio'));
 const SceneStudio = lazy(() => import('./pages/SceneStudio'));
@@ -315,6 +316,7 @@ function AppContent() {
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
+          <Route path="/episodes/:episodeId/todo" element={<EpisodeTodoPage />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
           
           {/* Assets */}
