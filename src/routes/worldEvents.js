@@ -1550,6 +1550,13 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
           dress_code: dressCode,
           description: descriptionText,
           narrative_stakes: narrativeText,
+          // Auto-generated social tasks
+          social_tasks: (() => {
+            try {
+              const { buildSocialTasks } = require('../services/episodeGeneratorService');
+              return buildSocialTasks('invite', { platform: 'instagram', content_category: p.content_category || 'creator_economy' });
+            } catch { return []; }
+          })(),
         },
       },
       status: 'draft',
@@ -1605,6 +1612,47 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
   } catch (err) {
     console.error('POST /world/:showId/events/from-profile error:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /world/:showId/events/:eventId/generate-social-checklist
+router.post('/world/:showId/events/:eventId/generate-social-checklist', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    // Load event
+    let event;
+    if (models.WorldEvent) {
+      event = await models.WorldEvent.findByPk(eventId);
+      if (event) event = event.toJSON();
+    }
+    if (!event) {
+      const [rows] = await models.sequelize.query(
+        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId',
+        { replacements: { eventId, showId } }
+      );
+      event = rows?.[0];
+    }
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Parse canon_consequences if string
+    if (typeof event.canon_consequences === 'string') {
+      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+    }
+
+    const socialChecklistService = require('../services/socialChecklistService');
+    const result = await socialChecklistService.generateSocialChecklist(event, models);
+
+    return res.json({
+      success: true,
+      data: result,
+      message: `Social checklist generated with ${result.tasks.length} tasks`,
+    });
+  } catch (error) {
+    console.error('Generate social checklist error:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 

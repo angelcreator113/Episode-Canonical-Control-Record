@@ -2418,12 +2418,16 @@ The revised event should feel like a completely different experience from the si
                       try {
                         const emptyFields = [];
                         if (!md.host) emptyFields.push('host');
+                        if (!md.host_brand) emptyFields.push('host_brand');
                         if (!md.description) emptyFields.push('description');
                         if (!md.narrative_stakes) emptyFields.push('narrative_stakes');
                         if (!md.career_milestone) emptyFields.push('career_milestone');
                         if (!md.fail_consequence) emptyFields.push('fail_consequence');
                         if (!md.success_unlock) emptyFields.push('success_unlock');
                         if (!md.location_hint) emptyFields.push('location_hint');
+                        if (!md.venue_name) emptyFields.push('venue_name');
+                        if (!md.venue_address) emptyFields.push('venue_address');
+                        if (!md.dress_code) emptyFields.push('dress_code');
                         if (!(md.dress_code_keywords?.length > 0)) emptyFields.push('dress_code_keywords');
 
                         const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
@@ -2432,13 +2436,18 @@ The revised event should feel like a completely different experience from the si
 Event: "${md.name}" (${md.event_type}, prestige ${md.prestige})
 Brand: "${md.host_brand || 'not set'}"
 Host: "${md.host || 'EMPTY — MUST FILL THIS'}"
+Venue: "${md.venue_name || 'not set'}"
 
-IMPORTANT: The "host" field is the person or organization hosting this event. It MUST be filled. Example: "Velour Society Events Team", "Maison Belle Creative Director", "Fashion Week Committee". This is NOT the brand — it's WHO is hosting.
+IMPORTANT: The "host" field is the person or organization hosting this event. It MUST be filled.
+IMPORTANT: "venue_address" should be a specific fictional street address like "47 Rue de Rivoli, Le Marais" or "221 West 4th Street, SoHo". Not generic.
+IMPORTANT: "dress_code" should be specific like "cocktail chic", "black tie optional", "streetwear elevated". Not generic.
 
 Current values:
 - host="${md.host || ''}" ${!md.host ? '← EMPTY, MUST FILL' : ''}
 - host_brand="${md.host_brand || ''}"
-- dress_code="${md.dress_code || ''}"
+- venue_name="${md.venue_name || ''}"
+- venue_address="${md.venue_address || ''}" ${!md.venue_address ? '← EMPTY, MUST FILL with specific street address' : ''}
+- dress_code="${md.dress_code || ''}" ${!md.dress_code ? '← EMPTY, MUST FILL' : ''}
 - narrative_stakes="${md.narrative_stakes || ''}"
 - career_milestone="${md.career_milestone || ''}"
 - description="${md.description || ''}"
@@ -2450,7 +2459,7 @@ Empty fields to fill: ${emptyFields.join(', ') || 'none'}.
 
 ${md.narrative_stakes ? `Keep and expand: "${md.narrative_stakes}"` : 'Write compelling narrative stakes.'}
 
-Return action "enhance" with new_value as a JSON object. MUST include "host" field with a specific person or organization name.` }],
+Return action "enhance" with new_value as a JSON object containing ALL fields listed above. MUST include "host", "venue_address", and "dress_code".` }],
                           events: worldEvents.slice(0, 10),
                           episodes,
                         });
@@ -2582,9 +2591,93 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                     <div><label style={S.fLabel}>Success Unlock</label><input value={md.success_unlock || ''} onChange={e => setEventDetailModal({ ...md, success_unlock: e.target.value })} onBlur={e => updateField('success_unlock', e.target.value)} placeholder="Unlocks VIP access..." style={S.sel} /></div>
                   </div>
 
+                  {/* Social Tasks */}
+                  {(() => {
+                    const savedTasks = auto.social_tasks || [];
+                    const TIMING_COLORS = { before: '#f59e0b', during: '#6366f1', after: '#16a34a' };
+                    const TIMING_LABELS = { before: 'Before', during: 'During', after: 'After' };
+                    const checklistUrl = auto.social_checklist_url;
+                    const requiredCount = savedTasks.filter(t => t.required).length;
+
+                    // Group by timing
+                    const grouped = {};
+                    savedTasks.forEach(t => {
+                      const k = t.timing || 'during';
+                      if (!grouped[k]) grouped[k] = [];
+                      grouped[k].push(t);
+                    });
+
+                    return (
+                      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>
+                            Social Tasks {savedTasks.length > 0 ? `(${savedTasks.length} tasks, ${requiredCount} required)` : ''}
+                          </div>
+                          <button
+                            onClick={async (e) => {
+                              const btn = e.target;
+                              btn.disabled = true;
+                              btn.textContent = 'Generating...';
+                              try {
+                                const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-social-checklist`);
+                                if (res.data.success) {
+                                  // Update the event modal with new tasks + checklist URL
+                                  const newAuto = { ...auto, social_tasks: res.data.data.tasks, social_checklist_url: res.data.data.assetUrl };
+                                  const updated = { ...eventDetailModal, canon_consequences: { ...eventDetailModal.canon_consequences, automation: newAuto } };
+                                  setEventDetailModal(updated);
+                                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
+                                  showToast(`Checklist generated — ${res.data.data.tasks.length} tasks`);
+                                }
+                              } catch (err) {
+                                showToast('Failed: ' + (err.response?.data?.error || err.message));
+                              }
+                              btn.disabled = false;
+                              btn.textContent = checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist';
+                            }}
+                            style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+                          >
+                            {checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist'}
+                          </button>
+                        </div>
+
+                        {/* Checklist image preview */}
+                        {checklistUrl && (
+                          <div style={{ marginBottom: 10, textAlign: 'center' }}>
+                            <img src={checklistUrl} alt="Social Checklist" style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 10, border: '1px solid #e8e0d0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }} />
+                          </div>
+                        )}
+
+                        {/* Task list */}
+                        {savedTasks.length > 0 ? (
+                          <div>
+                            {['before', 'during', 'after'].filter(p => grouped[p]).map(phase => (
+                              <div key={phase} style={{ marginBottom: 6 }}>
+                                <div style={{ fontSize: 9, fontWeight: 700, color: TIMING_COLORS[phase], textTransform: 'uppercase', marginBottom: 3 }}>{TIMING_LABELS[phase]}</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 3 }}>
+                                  {grouped[phase].map(t => (
+                                    <div key={t.slot} style={{ padding: '3px 8px', background: '#f8f8f8', borderRadius: 5, borderLeft: `3px solid ${TIMING_COLORS[phase]}`, fontSize: 10 }}>
+                                      <span style={{ fontWeight: 600, color: '#333' }}>{t.label}</span>
+                                      <span style={{ color: '#aaa', marginLeft: 4 }}>{t.platform}</span>
+                                      {t.required && <span style={{ color: TIMING_COLORS[phase], marginLeft: 4, fontSize: 8, fontWeight: 700 }}>req</span>}
+                                      {t.source && <span style={{ color: t.source === 'platform' ? '#6366f1' : '#16a34a', marginLeft: 4, fontSize: 8 }}>{t.source}</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                            No tasks generated yet. Click "Generate Checklist" to create tasks and a visual asset.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Episode linking */}
                   <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>💉 Link to Episode</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>Link to Episode</div>
                     {injectSuccess?.eventId === md.id ? (
                       <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 8, border: '2px solid #22c55e', textAlign: 'center', fontSize: 13, color: '#16a34a', fontWeight: 700 }}>{injectSuccess.message}</div>
                     ) : (
@@ -2613,16 +2706,45 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                   <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>Delete</button>
                   {md.status === 'draft' && (
                     <button onClick={async () => {
+                      // Validate required fields
+                      const missing = [];
+                      if (!md.host) missing.push('Host');
+                      if (!md.venue_name) missing.push('Venue Name');
+                      if (!md.event_date) missing.push('Event Date');
+                      if (!md.dress_code) missing.push('Dress Code');
+                      if (!md.description) missing.push('Description');
+                      if (missing.length > 0) {
+                        showToast(`Missing fields: ${missing.join(', ')}. Fill them or use AI Enhance first.`);
+                        return;
+                      }
                       try {
-                        const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { status: 'ready' });
+                        // Save all hydrated fields + status in one PUT
+                        const fieldsToSave = {
+                          status: 'ready',
+                          host: md.host, host_brand: md.host_brand, dress_code: md.dress_code,
+                          venue_name: md.venue_name, venue_address: md.venue_address,
+                          event_date: md.event_date, event_time: md.event_time,
+                          description: md.description, narrative_stakes: md.narrative_stakes,
+                          cost_coins: md.cost_coins, strictness: md.strictness,
+                          deadline_type: md.deadline_type,
+                        };
+                        const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, fieldsToSave);
                         if (res.data.success) {
-                          const updated = { ...md, status: 'ready' };
-                          setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'ready' } : ev));
+                          const updated = { ...md, ...fieldsToSave };
+                          setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...fieldsToSave } : ev));
                           setEventDetailModal(updated);
                           showToast('Event marked ready — now in Events Library');
                         }
                       } catch (err) {
-                        showToast('Failed to mark ready: ' + (err.response?.data?.error || err.message));
+                        // If full save fails (columns missing), at least save status
+                        try {
+                          await api.put(`/api/v1/world/${showId}/events/${md.id}`, { status: 'ready' });
+                          setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'ready' } : ev));
+                          setEventDetailModal({ ...md, status: 'ready' });
+                          showToast('Marked ready (some fields saved to automation only)');
+                        } catch (e2) {
+                          showToast('Failed: ' + (e2.response?.data?.error || err.message));
+                        }
                       }
                     }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid #22c55e', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                       Mark Ready
