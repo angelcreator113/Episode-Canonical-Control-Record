@@ -1618,7 +1618,19 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     // Find venue
     const eventAutomation = require('../services/eventAutomationService');
     const fakeCalEvent = { cultural_category: p.content_category || 'creator_economy' };
-    const venue = await eventAutomation.findVenue(fakeCalEvent, models);
+    let venue = await eventAutomation.findVenue(fakeCalEvent, models);
+
+    // Auto-create venue in WorldLocations if none exists
+    if (!venue) {
+      try {
+        venue = await eventAutomation.ensureVenueLocation(
+          `${p.display_name || p.handle}'s Venue`,
+          null,
+          p.content_category,
+          models
+        );
+      } catch { /* non-blocking */ }
+    }
     const venueAddress = venue ? [venue.street_address, venue.district, venue.city].filter(Boolean).join(', ') : null;
 
     // Assemble guest list

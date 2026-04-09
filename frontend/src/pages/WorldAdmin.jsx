@@ -126,6 +126,13 @@ function WorldAdmin() {
   const [injectError, setInjectError] = useState(null);
   const [injectSuccess, setInjectSuccess] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // Auto-dismiss toast after 5 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
   const [generateTarget, setGenerateTarget] = useState(null);
   const [eventSearch, setEventSearch] = useState('');
   const [eventStatusFilter, setEventStatusFilter] = useState('all');

@@ -239,6 +239,69 @@ async function findVenue(calendarEvent, models) {
 }
 
 /**
+ * Ensure a venue exists in WorldLocations. If the event has venue data
+ * but no matching location, auto-create one.
+ */
+async function ensureVenueLocation(venueName, venueAddress, category, models) {
+  const { WorldLocation } = models;
+  if (!WorldLocation || !venueName) return null;
+
+  const { Op } = require('sequelize');
+
+  // Check if a location with this name already exists
+  try {
+    const existing = await WorldLocation.findOne({
+      where: { name: { [Op.iLike]: venueName } },
+    });
+    if (existing) return existing;
+  } catch { /* iLike may not work on all DBs */ }
+
+  // Parse address parts
+  const addressParts = (venueAddress || '').split(',').map(s => s.trim());
+  const streetAddress = addressParts[0] || null;
+  const district = addressParts[1] || null;
+  const city = addressParts[2] || null;
+
+  // Map category to venue type
+  const CATEGORY_VENUE_TYPES = {
+    fashion: 'gallery', beauty: 'salon', lifestyle: 'restaurant',
+    music: 'club', food: 'restaurant', creator_economy: 'studio',
+    creative: 'gallery', drama: 'lounge',
+  };
+  const venueType = CATEGORY_VENUE_TYPES[(category || '').toLowerCase()] || 'venue';
+
+  // Create the location
+  try {
+    const { v4: uuidv4 } = require('uuid');
+    const location = await WorldLocation.create({
+      id: uuidv4(),
+      name: venueName,
+      location_type: 'venue',
+      street_address: streetAddress,
+      district,
+      city: city || 'Nova Prime',
+      venue_type: venueType,
+    });
+    console.log(`[EventAutomation] Auto-created venue: ${venueName} (${venueType})`);
+    return location;
+  } catch (err) {
+    // Try minimal create if some columns don't exist
+    try {
+      const { v4: uuidv4 } = require('uuid');
+      const location = await WorldLocation.create({
+        id: uuidv4(),
+        name: venueName,
+        location_type: 'venue',
+      });
+      return location;
+    } catch {
+      console.warn('[EventAutomation] Failed to auto-create venue:', err.message);
+      return null;
+    }
+  }
+}
+
+/**
  * Assemble a guest list from profiles related to the host.
  *
  * @param {object} hostProfile — SocialProfile of the host
@@ -399,7 +462,17 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     const hostName = host?.display_name || host?.handle || null;
 
     // Find venue
-    const venue = await findVenue(calendarEvent, models);
+    let venue = await findVenue(calendarEvent, models);
+
+    // Auto-create venue if none found
+    if (!venue && calendarEvent.title) {
+      venue = await ensureVenueLocation(
+        calendarEvent.location_name || `${calendarEvent.title} Venue`,
+        calendarEvent.location_address || null,
+        calendarEvent.cultural_category,
+        models
+      );
+    }
     const venueName = venue?.name || null;
     const venueAddress = venue
       ? [venue.street_address, venue.district, venue.city].filter(Boolean).join(', ')
@@ -539,6 +612,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
 module.exports = {
   findHostProfile,
   findVenue,
+  ensureVenueLocation,
   assembleGuestList,
   generateEventName,
   spawnEventsFromCalendar,
