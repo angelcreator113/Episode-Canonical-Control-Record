@@ -25,8 +25,7 @@ module.exports = (sequelize) => {
           as: 'show',
         });
       }
-      // WorldLocation association disabled — world_location_id may not exist (migration 20260704)
-      if (false && models.WorldLocation) {
+      if (models.WorldLocation) {
         SceneSet.belongsTo(models.WorldLocation, {
           foreignKey: 'world_location_id',
           as: 'worldLocation',
@@ -68,7 +67,7 @@ module.exports = (sequelize) => {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     universe_id: { type: DataTypes.UUID, allowNull: true },
     show_id: { type: DataTypes.UUID, allowNull: true },
-    // world_location_id — added by migration 20260704, may not exist
+    world_location_id: { type: DataTypes.UUID, allowNull: true },
     name: { type: DataTypes.STRING, allowNull: false },
     scene_type: {
       type: DataTypes.ENUM('HOME_BASE', 'CLOSET', 'EVENT_LOCATION', 'TRANSITION', 'OTHER'),
@@ -103,10 +102,9 @@ module.exports = (sequelize) => {
     intimacy_value: { type: DataTypes.INTEGER, allowNull: true },
     spectacle_value: { type: DataTypes.INTEGER, allowNull: true },
     cover_angle_id: { type: DataTypes.UUID, allowNull: true },
-    // time_of_day, season — added by migration 20260706, may not exist
-    // canvas_settings — added by migration 20260625, may not exist
-    // scene_spec — added by migration 20260707, may not exist yet
-    // scene_spec: { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
+    time_of_day: { type: DataTypes.STRING(20), allowNull: true },
+    season: { type: DataTypes.STRING(20), allowNull: true },
+    scene_spec: { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
   }, {
     sequelize,
     modelName: 'SceneSet',

@@ -54,27 +54,22 @@ module.exports = (sequelize) => {
     },
 
     // ── Venue & Location ──
-    // venue_location_id — added by migration 20260709, may not exist yet
-    // venue_name, venue_address — added by migration 20260709, may not exist yet
-    location_hint: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-    },
-    // source_calendar_event_id — added by migration 20260711, may not exist
-    scene_set_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
+    venue_location_id: { type: DataTypes.UUID, allowNull: true },
+    venue_name: { type: DataTypes.STRING(200), allowNull: true },
+    venue_address: { type: DataTypes.STRING(255), allowNull: true },
+    location_hint: { type: DataTypes.TEXT, allowNull: true },
+    source_calendar_event_id: { type: DataTypes.UUID, allowNull: true },
+    scene_set_id: { type: DataTypes.UUID, allowNull: true },
+    opportunity_id: { type: DataTypes.UUID, allowNull: true },
 
-    // event_date, event_time — added by migration 20260709, may not exist
-    // guest_list — added by migration 20260709, may not exist
+    // ── Timeline ──
+    event_date: { type: DataTypes.STRING(50), allowNull: true },
+    event_time: { type: DataTypes.STRING(50), allowNull: true },
+    guest_list: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
 
     // ── Invitation ──
-    invitation_asset_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
-    // invitation_details — added by migration 20260709, may not exist
+    invitation_asset_id: { type: DataTypes.UUID, allowNull: true },
+    invitation_details: { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
 
     // ── Scoring ──
     prestige: {
@@ -217,9 +212,20 @@ module.exports = (sequelize) => {
   });
 
   WorldEvent.associate = (models) => {
-    // WorldLocation venue — venue_location_id column may not exist yet (migration 20260709)
-    // Association disabled until migration runs
-
+    // WorldLocation venue
+    if (models.WorldLocation) {
+      WorldEvent.belongsTo(models.WorldLocation, {
+        foreignKey: 'venue_location_id',
+        as: 'venueLocation',
+      });
+    }
+    // Opportunity reverse link
+    if (models.Opportunity) {
+      WorldEvent.belongsTo(models.Opportunity, {
+        foreignKey: 'opportunity_id',
+        as: 'sourceOpportunity',
+      });
+    }
     // Visual scene set
     if (models.SceneSet) {
       WorldEvent.belongsTo(models.SceneSet, {
@@ -248,8 +254,13 @@ module.exports = (sequelize) => {
         as: 'usedInEpisode',
       });
     }
-    // Source calendar event — source_calendar_event_id may not exist (migration 20260711)
-    // Association disabled until migration runs
+    // Source calendar event
+    if (models.StoryCalendarEvent) {
+      WorldEvent.belongsTo(models.StoryCalendarEvent, {
+        foreignKey: 'source_calendar_event_id',
+        as: 'sourceCalendarEvent',
+      });
+    }
   };
 
   return WorldEvent;
