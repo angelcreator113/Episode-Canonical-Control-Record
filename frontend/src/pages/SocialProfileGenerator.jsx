@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
 import ProfileCard from './feed/ProfileCard';
 import { DetailPanel, FeedStatePicker } from './feed/ProfileDetailPanel';
+import { ProfileComparison, LalaReactions, FeedTimeline, RelationshipWeb } from './feed/FeedEnhancements';
 import FeedViewContent from './feed/FeedViews';
 
 // Local Spinner — avoid named import that fails during code-splitting
@@ -66,6 +67,7 @@ function ExportDropdown({ exporting, onExport }) {
 export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId, onNavigateToTab }) {
   const [profiles,setProfiles]   = useState([]);
   const [selected,setSelected]   = useState(null);
+  const [reactionsProfile,setReactionsProfile] = useState(null);
   const [loading,setLoading]     = useState(false);
   const [generating,setGenerating] = useState(false);
   const [error,setError]         = useState(null);
@@ -568,6 +570,13 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
             <button onClick={()=>setView(view==='feed'?'bulk':'feed')} style={{padding:'7px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>
               {view==='feed'?'⊞ Bulk Import':'← Back to Feed'}
             </button>
+            {view==='feed' && (
+              <div style={{display:'flex',gap:4}}>
+                <button onClick={()=>setView('timeline')} style={{padding:'5px 10px',borderRadius:C.radiusSm,fontSize:10,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Story Mode</button>
+                <button onClick={()=>setView('compare')} style={{padding:'5px 10px',borderRadius:C.radiusSm,fontSize:10,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Compare</button>
+                <button onClick={()=>setView('web')} style={{padding:'5px 10px',borderRadius:C.radiusSm,fontSize:10,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Web</button>
+              </div>
+            )}
           </div>
         </div>
         {/* Feed layer switcher — hidden when embedded with a locked layer */}
@@ -654,6 +663,23 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       {/* ── Bulk Import View ─────────────────────────────────── */}
       {view==='bulk' && (
         <FeedBulkImport onDone={()=>{setView('feed');setPage(1);}} characterContext={protagonist.context} characterKey={protagonist.key} feedLayer={feedLayer} onJobStarted={jobId=>{setView('feed');startJobPolling(jobId);}}/>
+      )}
+
+      {/* ── Enhanced Views ───────────────────────────────── */}
+      {view==='timeline' && (
+        <div>
+          <button onClick={()=>setView('feed')} style={{margin:'12px 16px',padding:'5px 12px',borderRadius:C.radiusSm,fontSize:11,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>← Back to Feed</button>
+          <FeedTimeline profiles={profiles} onSelectProfile={p=>{ setSelected(p); setView('feed'); }} />
+        </div>
+      )}
+      {view==='compare' && (
+        <ProfileComparison profiles={profiles} onClose={()=>setView('feed')} />
+      )}
+      {view==='web' && (
+        <div>
+          <button onClick={()=>setView('feed')} style={{margin:'12px 16px',padding:'5px 12px',borderRadius:C.radiusSm,fontSize:11,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>← Back to Feed</button>
+          <RelationshipWeb profiles={profiles} onSelectProfile={p=>{ setSelected(p); setView('feed'); }} />
+        </div>
       )}
 
       {view==='feed' && <>
@@ -1079,7 +1105,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
               onLoadCrossingPreview={loadCrossingPreview} crossingPreview={crossingPreview} setCrossingPreview={setCrossingPreview}
               onLoadSceneContext={loadSceneContext} sceneContext={sceneContext} setSceneContext={setSceneContext} onCopySceneContext={copySceneContext}
               detailTab={detailTab} setDetailTab={setDetailTab}
-              onApprove={approveForCrossing} onRejectCrossing={rejectCrossing} onSaveAsTemplate={saveAsTemplate}/>
+              onApprove={approveForCrossing} onRejectCrossing={rejectCrossing} onSaveAsTemplate={saveAsTemplate}
+              onReactions={()=>setReactionsProfile(selected)}/>
           </div>
         </div>,
         document.body
@@ -1094,6 +1121,15 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
           {toast.message}
         </div>,
         document.body
+      )}
+
+      {/* Lala's Reactions Modal */}
+      {reactionsProfile && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}} onClick={()=>setReactionsProfile(null)}>
+          <div style={{background:'#fff',borderRadius:16,width:'90vw',maxWidth:560,maxHeight:'85vh',overflow:'auto',boxShadow:'0 16px 48px rgba(0,0,0,0.2)'}} onClick={e=>e.stopPropagation()}>
+            <LalaReactions profile={reactionsProfile} showId={showId} onClose={()=>setReactionsProfile(null)} />
+          </div>
+        </div>
       )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}#feed-export-menu.open{display:block!important}`}</style>
