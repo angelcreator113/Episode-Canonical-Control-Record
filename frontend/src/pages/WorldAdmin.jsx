@@ -80,6 +80,7 @@ const TABS = [
   { key: 'feed', icon: '👥', label: "Lala's Feed" },
   { key: 'feed-events', icon: '🎭', label: 'Feed Events' },
   { key: 'events', icon: '💌', label: 'Events Library' },
+  { key: 'opportunities', icon: '💼', label: 'Opportunities' },
   { key: 'goals', icon: '🎯', label: 'Career Goals' },
   { key: 'wardrobe', icon: '👗', label: 'Wardrobe' },
   { key: 'characters', icon: '👑', label: 'Characters' },
@@ -2892,6 +2893,136 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           </div>
         </div>
       )}
+
+      {/* ════════════════════════ OPPORTUNITIES ════════════════════════ */}
+      {activeTab === 'opportunities' && (() => {
+        const [opps, setOpps] = React.useState([]);
+        const [oppLoading, setOppLoading] = React.useState(true);
+        const [oppForm, setOppForm] = React.useState(null);
+        const OPP_TYPES = ['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'podcast', 'interview', 'award_show'];
+        const OPP_STATUS_COLORS = { offered: '#f59e0b', considering: '#6366f1', negotiating: '#8b5cf6', booked: '#22c55e', preparing: '#3b82f6', active: '#16a34a', completed: '#059669', paid: '#0d9488', declined: '#94a3b8', cancelled: '#dc2626', archived: '#666' };
+
+        React.useEffect(() => {
+          api.get(`/api/v1/opportunities/${showId}`).then(r => { setOpps(r.data.opportunities || []); setOppLoading(false); }).catch(() => setOppLoading(false));
+        }, []);
+
+        const createOpp = async () => {
+          if (!oppForm?.name) return;
+          try {
+            const res = await api.post(`/api/v1/opportunities/${showId}`, oppForm);
+            if (res.data.success) { setOpps(prev => [res.data.opportunity, ...prev]); setOppForm(null); setToast('Opportunity created'); }
+          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+        };
+
+        const advanceOpp = async (opp, toStatus) => {
+          try {
+            const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/advance`, { to_status: toStatus });
+            if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? res.data.opportunity : o)); setToast(`${opp.name} → ${toStatus}`); }
+          } catch (err) { setToast(err.response?.data?.error || 'Failed'); }
+        };
+
+        const toEvent = async (opp) => {
+          try {
+            const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/to-event`);
+            if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, event_id: res.data.event.id, status: 'booked' } : o)); loadData(); setToast(`Event created from "${opp.name}"`); }
+          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+        };
+
+        const pipeline = {};
+        opps.forEach(o => { const s = o.status || 'offered'; if (!pipeline[s]) pipeline[s] = []; pipeline[s].push(o); });
+        const totalValue = opps.reduce((s, o) => s + (parseFloat(o.payment_amount) || 0), 0);
+        const bookedValue = opps.filter(o => ['booked','preparing','active','completed','paid'].includes(o.status)).reduce((s, o) => s + (parseFloat(o.payment_amount) || 0), 0);
+
+        return (
+          <div style={S.content}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Opportunities</h2>
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>{opps.length} total · ${bookedValue.toLocaleString()} booked · ${totalValue.toLocaleString()} pipeline</div>
+              </div>
+              <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ New Opportunity</button>
+            </div>
+
+            {/* Pipeline summary */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+              {['offered','considering','negotiating','booked','preparing','active','completed','paid'].map(s => {
+                const count = pipeline[s]?.length || 0;
+                if (!count) return null;
+                return <span key={s} style={{ padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: OPP_STATUS_COLORS[s] + '20', color: OPP_STATUS_COLORS[s] }}>{s}: {count}</span>;
+              })}
+            </div>
+
+            {/* Create form */}
+            {oppForm && (
+              <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 12px' }}>New Opportunity</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div><label style={S.fLabel}>Name</label><input value={oppForm.name} onChange={e => setOppForm({ ...oppForm, name: e.target.value })} placeholder="Velour Magazine Cover" style={S.sel} /></div>
+                  <div><label style={S.fLabel}>Type</label><select value={oppForm.opportunity_type} onChange={e => setOppForm({ ...oppForm, opportunity_type: e.target.value })} style={S.sel}>{OPP_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}</select></div>
+                  <div><label style={S.fLabel}>Category</label><select value={oppForm.category} onChange={e => setOppForm({ ...oppForm, category: e.target.value })} style={S.sel}>{['fashion','beauty','lifestyle','luxury','entertainment','media'].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div><label style={S.fLabel}>Brand/Company</label><input value={oppForm.brand_or_company || ''} onChange={e => setOppForm({ ...oppForm, brand_or_company: e.target.value })} style={S.sel} /></div>
+                  <div><label style={S.fLabel}>Payment</label><input type="number" value={oppForm.payment_amount || 0} onChange={e => setOppForm({ ...oppForm, payment_amount: parseInt(e.target.value) || 0 })} style={S.sel} /></div>
+                  <div><label style={S.fLabel}>Prestige</label><input type="number" min={1} max={10} value={oppForm.prestige || 5} onChange={e => setOppForm({ ...oppForm, prestige: parseInt(e.target.value) || 5 })} style={S.sel} /></div>
+                  <div><label style={S.fLabel}>Season</label><input value={oppForm.season || ''} onChange={e => setOppForm({ ...oppForm, season: e.target.value })} placeholder="FW26" style={S.sel} /></div>
+                </div>
+                <div style={{ marginBottom: 8 }}><label style={S.fLabel}>Narrative Stakes</label><textarea value={oppForm.narrative_stakes || ''} onChange={e => setOppForm({ ...oppForm, narrative_stakes: e.target.value })} rows={2} placeholder="Why this matters for Lala's career..." style={{ ...S.sel, resize: 'vertical', fontFamily: 'inherit' }} /></div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={createOpp} style={S.primaryBtn}>Create</button>
+                  <button onClick={() => setOppForm(null)} style={S.smBtn}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {/* Opportunity cards */}
+            {oppLoading ? <div style={{ padding: 20, textAlign: 'center', color: '#999' }}>Loading...</div> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {opps.map(opp => {
+                  const sc = OPP_STATUS_COLORS[opp.status] || '#999';
+                  const NEXT = { offered: 'considering', considering: 'negotiating', negotiating: 'booked', booked: 'preparing', preparing: 'active', active: 'completed', completed: 'paid' };
+                  const next = NEXT[opp.status];
+                  return (
+                    <div key={opp.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: `4px solid ${sc}`, borderRadius: 10, padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{opp.name}</div>
+                          <div style={{ fontSize: 11, color: '#666', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                            <span style={{ padding: '1px 6px', borderRadius: 4, background: sc + '20', color: sc, fontWeight: 600, fontSize: 10 }}>{opp.status}</span>
+                            <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
+                            {opp.brand_or_company && <span>{opp.brand_or_company}</span>}
+                            {opp.prestige && <span>Prestige {opp.prestige}</span>}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          {parseFloat(opp.payment_amount) > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: '#16a34a' }}>${parseFloat(opp.payment_amount).toLocaleString()}</div>}
+                          {opp.season && <div style={{ fontSize: 10, color: '#94a3b8' }}>{opp.season}</div>}
+                        </div>
+                      </div>
+                      {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6, lineHeight: 1.4 }}>{opp.narrative_stakes}</div>}
+                      {opp.career_milestone && <div style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, background: '#fef3c7', color: '#92400e', display: 'inline-block', marginBottom: 6 }}>{opp.career_milestone}</div>}
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {next && <button onClick={() => advanceOpp(opp, next)} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Advance to {next}</button>}
+                        {opp.status === 'offered' && <button onClick={() => advanceOpp(opp, 'declined')} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #dc2626', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Decline</button>}
+                        {['booked','preparing','active'].includes(opp.status) && !opp.event_id && <button onClick={() => toEvent(opp)} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Create Event</button>}
+                        {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4 }}>Event linked</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {opps.length === 0 && !oppForm && (
+                  <div style={{ textAlign: 'center', padding: 30, background: '#FAF7F0', borderRadius: 12, border: '1px solid #e8e0d0' }}>
+                    <div style={{ fontSize: 30, marginBottom: 8 }}>💼</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#2C2C2C', marginBottom: 4 }}>No opportunities yet</div>
+                    <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>Modeling gigs, runway shows, magazine covers, brand campaigns — they all start here.</div>
+                    <button onClick={() => setOppForm({ name: '', opportunity_type: 'modeling', category: 'fashion', prestige: 5, payment_amount: 0 })} style={S.primaryBtn}>+ Create First Opportunity</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ════════════════════════ CAREER GOALS ════════════════════════ */}
       {activeTab === 'goals' && (
