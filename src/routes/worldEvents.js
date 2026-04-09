@@ -1952,18 +1952,21 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', optional
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    // Load event
+    // Load event — raw SQL first (model may have unmigrated columns)
     let event;
-    if (models.WorldEvent) {
-      event = await models.WorldEvent.findByPk(eventId);
-      if (event) event = event.toJSON();
-    }
-    if (!event) {
+    try {
       const [rows] = await models.sequelize.query(
-        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId',
+        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
         { replacements: { eventId, showId } }
       );
       event = rows?.[0];
+    } catch {
+      if (models.WorldEvent) {
+        try {
+          event = await models.WorldEvent.findByPk(eventId);
+          if (event) event = event.toJSON();
+        } catch { /* model query failed too */ }
+      }
     }
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
