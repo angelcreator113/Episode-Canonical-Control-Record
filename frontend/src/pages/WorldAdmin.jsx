@@ -1440,15 +1440,15 @@ The revised event should feel like a completely different experience from the si
                               const host = created?.canon_consequences?.automation?.host_display_name || created?.host || '';
                               setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: { ...created, host_display: host } } }));
                               loadData();
-                              showToast(`"${created?.name || template.name}" created!`);
+                              setToast(`"${created?.name || template.name}" created!`);
                             } else {
                               setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
-                              showToast('Auto-spawn failed', 'error');
+                              setToast('Auto-spawn failed', 'error');
                             }
                           }
                         } catch (err) {
                           setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
-                          showToast('Failed: ' + (err.response?.data?.error || err.message));
+                          setToast('Failed: ' + (err.response?.data?.error || err.message));
                         }
                       }}
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
@@ -2665,10 +2665,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                   const updated = { ...eventDetailModal, canon_consequences: { ...eventDetailModal.canon_consequences, automation: newAuto } };
                                   setEventDetailModal(updated);
                                   setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
-                                  showToast(`Checklist generated — ${res.data.data.tasks.length} tasks`);
+                                  setToast(`Checklist generated — ${res.data.data.tasks.length} tasks`);
                                 }
                               } catch (err) {
-                                showToast('Failed: ' + (err.response?.data?.error || err.message));
+                                setToast('Failed: ' + (err.response?.data?.error || err.message));
                               }
                               btn.disabled = false;
                               btn.textContent = checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist';
@@ -2753,7 +2753,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       if (!md.dress_code) missing.push('Dress Code');
                       if (!md.description) missing.push('Description');
                       if (missing.length > 0) {
-                        showToast(`Missing fields: ${missing.join(', ')}. Fill them or use AI Enhance first.`);
+                        setToast(`Missing fields: ${missing.join(', ')}. Fill them or use AI Enhance first.`);
                         return;
                       }
                       try {
@@ -2772,7 +2772,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           const updated = { ...md, ...fieldsToSave };
                           setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...fieldsToSave } : ev));
                           setEventDetailModal(updated);
-                          showToast('Event marked ready — generating checklist...');
+                          setToast('Event marked ready — generating checklist...');
                           // Auto-generate social checklist
                           try {
                             const clRes = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-social-checklist`);
@@ -2781,7 +2781,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               const withChecklist = { ...updated, canon_consequences: { ...updated.canon_consequences, automation: newAuto } };
                               setEventDetailModal(withChecklist);
                               setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: withChecklist.canon_consequences } : ev));
-                              showToast(`Ready! Checklist generated with ${clRes.data.data.tasks.length} tasks`);
+                              setToast(`Ready! Checklist generated with ${clRes.data.data.tasks.length} tasks`);
                             }
                           } catch { /* non-blocking — checklist can be generated later */ }
                         }
@@ -2791,9 +2791,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           await api.put(`/api/v1/world/${showId}/events/${md.id}`, { status: 'ready' });
                           setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'ready' } : ev));
                           setEventDetailModal({ ...md, status: 'ready' });
-                          showToast('Marked ready (some fields saved to automation only)');
+                          setToast('Marked ready (some fields saved to automation only)');
                         } catch (e2) {
-                          showToast('Failed: ' + (e2.response?.data?.error || err.message));
+                          setToast('Failed: ' + (e2.response?.data?.error || err.message));
                         }
                       }
                     }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid #22c55e', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
