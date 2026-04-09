@@ -1117,11 +1117,12 @@ The revised event should feel like a completely different experience from the si
                           if (btn.dataset.loaded) return;
                           btn.textContent = '⏳ Loading...';
                           try {
-                            const res = await api.get(`/api/v1/episodes/${ep.id}`);
-                            const todoRes = await fetch(`/api/v1/world/${showId}/events`).then(r => r.json()).catch(() => ({ events: [] }));
-                            const linkedEv = todoRes.events?.find(ev => ev.used_in_episode_id === ep.id);
-
-                            // Show social tasks from canon_consequences.automation
+                            // Fetch event details + real social tasks from todo list
+                            const [todoRes, eventsRes] = await Promise.all([
+                              fetch(`/api/v1/episodes/${ep.id}/todo/social`).then(r => r.json()).catch(() => ({})),
+                              fetch(`/api/v1/world/${showId}/events`).then(r => r.json()).catch(() => ({ events: [] })),
+                            ]);
+                            const linkedEv = (eventsRes.events || []).find(ev => ev.used_in_episode_id === ep.id);
                             const automation = linkedEv?.canon_consequences?.automation;
                             const guests = automation?.guest_profiles || [];
                             const host = automation?.host_display_name;
@@ -1131,11 +1132,21 @@ The revised event should feel like a completely different experience from the si
                             if (guests.length > 0) html += `<div style="margin-bottom:8px"><strong>Guest List:</strong> ${guests.map(g => g.display_name || g.handle).join(', ')}</div>`;
                             if (linkedEv?.venue_name) html += `<div style="margin-bottom:8px"><strong>Venue:</strong> ${linkedEv.venue_name}${linkedEv.venue_address ? ' — ' + linkedEv.venue_address : ''}</div>`;
 
+                            const socialTasks = todoRes.social_tasks || [];
                             html += '<div style="margin-top:12px;font-weight:600;color:#B8962E">📱 Social Media Tasks</div>';
-                            html += '<div style="margin-top:4px;display:grid;gap:4px">';
-                            const tasks = ['GRWM video', 'Outfit reveal to stories', 'Film arrival at venue', 'Photo with host', 'Go live from event', 'BTS stories', 'Post event recap', 'Thank host publicly', 'Engage with attendee posts'];
-                            tasks.forEach(t => { html += `<div style="font-size:12px;padding:4px 8px;background:#f8f8f8;border-radius:4px">☐ ${t}</div>`; });
-                            html += '</div>';
+                            if (socialTasks.length > 0) {
+                              html += '<div style="margin-top:4px;display:grid;gap:4px">';
+                              socialTasks.forEach(t => {
+                                const check = t.completed ? '☑' : '☐';
+                                const bg = t.source === 'platform' ? '#f0f7ff' : t.source === 'category' ? '#f0fdf4' : '#f8f8f8';
+                                const badge = t.source === 'platform' ? `<span style="font-size:8px;padding:1px 4px;background:#dbeafe;color:#1e40af;border-radius:3px;margin-left:4px">${t.platform}</span>` : t.source === 'category' ? '<span style="font-size:8px;padding:1px 4px;background:#d1fae5;color:#065f46;border-radius:3px;margin-left:4px">niche</span>' : '';
+                                const req = t.required ? '<span style="font-size:8px;padding:1px 4px;background:#fef2f2;color:#dc2626;border-radius:3px;margin-left:4px">required</span>' : '';
+                                html += `<div style="font-size:12px;padding:4px 8px;background:${bg};border-radius:4px">${check} <strong>${t.label}</strong>${req}${badge} <span style="color:#999;font-size:10px">· ${t.platform} · ${t.timing}</span></div>`;
+                              });
+                              html += '</div>';
+                            } else {
+                              html += '<div style="margin-top:4px;font-size:11px;color:#999">No social tasks generated yet</div>';
+                            }
 
                             const container = btn.parentNode.querySelector('.ep-tasks-content');
                             if (container) { container.innerHTML = html; container.style.display = 'block'; }
@@ -2743,11 +2754,13 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>📱 Social Media Tasks ({episodeBlueprint.socialTasks.length})</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
                   {episodeBlueprint.socialTasks.map((task, i) => (
-                    <div key={i} style={{ padding: '6px 10px', background: '#f8f8f8', borderRadius: 6, fontSize: 11 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div key={i} style={{ padding: '6px 10px', background: task.source ? '#faf7f0' : '#f8f8f8', borderRadius: 6, fontSize: 11, borderLeft: task.source ? '3px solid #B8962E' : undefined }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                         <span style={{ color: '#999' }}>☐</span>
                         <span style={{ fontWeight: 600 }}>{task.label}</span>
                         {task.required && <span style={{ fontSize: 8, padding: '1px 4px', background: '#fef2f2', color: '#dc2626', borderRadius: 3 }}>required</span>}
+                        {task.source === 'platform' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: 3 }}>{task.platform}</span>}
+                        {task.source === 'category' && <span style={{ fontSize: 8, padding: '1px 4px', background: '#d1fae5', color: '#065f46', borderRadius: 3 }}>niche</span>}
                       </div>
                       <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{task.description}</div>
                       <div style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{task.platform} · {task.timing}</div>
