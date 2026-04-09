@@ -27,13 +27,22 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
           </div>
         </div>
         {(p.display_name || d.display_name) && <div style={{ fontSize: 12, color: C.inkMid, marginBottom: 2 }}>{p.display_name || d.display_name}</div>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 8, background: C.blueLight, color: C.blue }}>{p.platform}</span>
+          {/* Multi-platform badges */}
+          {p.platform_presences && Object.keys(p.platform_presences).filter(k => k !== p.platform).slice(0, 3).map(plat => (
+            <span key={plat} style={{ fontSize: 8, fontWeight: 600, padding: '1px 5px', borderRadius: 6, background: plat === 'onlyfans' ? '#fde8e8' : '#f0f0f0', color: plat === 'onlyfans' ? C.pink : C.inkLight }}>{p.platform_presences[plat]?.visibility === 'discreet' ? `${plat} ◇` : plat}</span>
+          ))}
           {(p.archetype || d.archetype) && <span style={{ fontSize: 10, color: C.inkLight }}>{ARCHETYPE_LABELS[p.archetype || d.archetype] || p.archetype || d.archetype}</span>}
+          {p.celebrity_tier && p.celebrity_tier !== 'accessible' && <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: p.celebrity_tier === 'untouchable' ? '#fef3c7' : p.celebrity_tier === 'exclusive' ? '#e0e7ff' : '#f0fdf4', color: p.celebrity_tier === 'untouchable' ? '#92400e' : p.celebrity_tier === 'exclusive' ? '#3730a3' : '#065f46' }}>{p.celebrity_tier}</span>}
           {p.registry_character_id && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: '#eef0fb', color: '#6366f1' }} title="Linked to registry character">Registry</span>}
           {p.adult_content_present && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: '#fde8e8', color: C.pink }}>18+</span>}
           {feedLayer === 'lalaverse' && p.feed_layer === 'real_world' && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: C.blueLight, color: C.blue }} title="From JustAWoman's Feed — Lala follows this account">◈ Following</span>}
         </div>
+        {/* Public persona — what audiences think they do */}
+        {p.public_persona && (
+          <div style={{ fontSize: 10, color: C.inkLight, marginBottom: 4, fontStyle: 'italic' }}>"{p.public_persona}"</div>
+        )}
         <div style={{ fontSize: 12, color: C.inkMid, lineHeight: 1.5, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {p.content_persona || d.content_persona || p.vibe_sentence}
         </div>

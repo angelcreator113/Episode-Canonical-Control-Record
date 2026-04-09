@@ -140,6 +140,41 @@ module.exports = (sequelize, DataTypes) => {
     mirror_profile_id: { type: DataTypes.INTEGER, allowNull: true },   // AUTHOR_ONLY — real_world counterpart
     is_justawoman_record: { type: DataTypes.BOOLEAN, defaultValue: false },
     lalaverse_cap_exempt:  { type: DataTypes.BOOLEAN, defaultValue: false },
+
+    // ── Multi-Platform Presence ──────────────────────────────────────────────
+    platform_presences: {
+      type: DataTypes.JSONB, defaultValue: {},
+      // { instagram: { handle, persona, followers, content_style, visibility },
+      //   tiktok: { ... }, onlyfans: { ..., visibility: 'discreet' }, ... }
+    },
+
+    // ── Public vs Private Persona ────────────────────────────────────────────
+    public_persona:  { type: DataTypes.TEXT, allowNull: true },  // what audiences see ("fashion & lifestyle creator")
+    private_reality: { type: DataTypes.TEXT, allowNull: true },  // what's actually true ("OF is 80% of income")
+    front_platform:  { type: DataTypes.STRING(50), allowNull: true },  // the platform they show publicly
+    real_platform:   { type: DataTypes.STRING(50), allowNull: true },  // where the real money/content is
+
+    // ── Celebrity Tier ───────────────────────────────────────────────────────
+    celebrity_tier: {
+      type: DataTypes.ENUM('accessible', 'selective', 'exclusive', 'untouchable'),
+      defaultValue: 'accessible',
+      // accessible: attends events freely
+      // selective: only prestige 5+ events
+      // exclusive: only prestige 8+ events, rarely
+      // untouchable: never attends, cultural reference only (JustAWoman)
+    },
+
+    // ── Revenue Intelligence ─────────────────────────────────────────────────
+    primary_income_source:  { type: DataTypes.STRING(100), allowNull: true },  // "brand deals", "subscriptions", "merch"
+    income_breakdown:       { type: DataTypes.JSONB, defaultValue: {} },       // { brand_deals: 40, subscriptions: 50, merch: 10 }
+    monthly_earnings_range: { type: DataTypes.STRING(50), allowNull: true },   // "$5K-$15K", "$50K+"
+
+    // ── Social Dynamics ──────────────────────────────────────────────────────
+    clout_score:          { type: DataTypes.INTEGER, defaultValue: 0 },        // 0-100 composite influence metric
+    drama_magnet:         { type: DataTypes.BOOLEAN, defaultValue: false },     // attracts controversy
+    secret_connections:   { type: DataTypes.JSONB, defaultValue: [] },          // [{handle, type, known_by}] — hidden relationships
+    platform_bans:        { type: DataTypes.JSONB, defaultValue: [] },          // [{platform, reason, date, reinstated}]
+    rebrand_history:      { type: DataTypes.JSONB, defaultValue: [] },          // [{old_handle, old_niche, date, reason}]
   }, {
     sequelize,
     modelName:  'SocialProfile',

@@ -3384,6 +3384,53 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   <DRow label="Follower Tier" value={c.follower_tier} />
                 </>
               )}
+              {/* Social Intelligence (synced from feed profile) */}
+              {(c.celebrity_tier || c.social_leverage || c.platform_presences) && (
+                <>
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Social Intelligence</span>
+                    {c.feed_profile_id && (
+                      <button onClick={async () => {
+                        try {
+                          await fetch(`/api/v1/character-registry/characters/${c.id}/sync-social`, { method: 'POST' });
+                          onRefresh();
+                        } catch {}
+                      }} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', cursor: 'pointer', fontWeight: 600 }}>Sync from Feed</button>
+                    )}
+                  </div>
+                  {c.celebrity_tier && <DRow label="Celebrity Tier" value={c.celebrity_tier === 'untouchable' ? 'Untouchable — cultural icon, never attends events' : c.celebrity_tier === 'exclusive' ? 'Exclusive — prestige 8+ events only' : c.celebrity_tier === 'selective' ? 'Selective — prestige 5+ events' : 'Accessible'} />}
+                  {c.clout_score > 0 && <DRow label="Clout Score" value={`${c.clout_score}/100${c.drama_magnet ? ' — drama magnet' : ''}`} />}
+                  {c.content_category && <DRow label="Content Category" value={c.content_category} />}
+                  {c.public_persona && <DRow label="Public Persona" value={c.public_persona} />}
+                  {c.private_reality && <DRow label="Private Reality" value={c.private_reality} />}
+                  {c.social_leverage && (
+                    <div style={{ margin: '8px 0', padding: '8px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0', fontSize: 12, color: '#666', lineHeight: 1.6, fontStyle: 'italic' }}>
+                      {c.social_leverage}
+                    </div>
+                  )}
+                  {c.primary_income_source && <DRow label="Primary Income" value={`${c.primary_income_source}${c.monthly_earnings_range ? ` (${c.monthly_earnings_range}/mo)` : ''}`} />}
+                  {c.income_breakdown && Object.keys(c.income_breakdown).length > 0 && (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '4px 0 8px' }}>
+                      {Object.entries(c.income_breakdown).map(([src, pct]) => (
+                        <span key={src} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666' }}>{src}: {pct}%</span>
+                      ))}
+                    </div>
+                  )}
+                  {c.platform_presences && Object.keys(c.platform_presences).length > 0 && (
+                    <div style={{ margin: '8px 0' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Platform Presences</div>
+                      {Object.entries(c.platform_presences).map(([plat, info]) => (
+                        <div key={plat} style={{ padding: '4px 8px', background: '#f8f8f8', borderRadius: 4, marginBottom: 3, fontSize: 11 }}>
+                          <strong>{plat}</strong>{info.handle ? ` (${info.handle})` : ''} — {info.persona || info.content_style || ''}
+                          {info.visibility === 'discreet' && <span style={{ fontSize: 9, marginLeft: 4, padding: '1px 4px', background: '#fef3c7', borderRadius: 3, color: '#92400e' }}>discreet</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {c.brand_partnerships?.length > 0 && <DRow label="Brand Partners" value={c.brand_partnerships.map(b => b.brand || b).join(', ')} />}
+                  {c.social_synced_at && <div style={{ fontSize: 9, color: '#ccc', marginTop: 4 }}>Last synced: {new Date(c.social_synced_at).toLocaleDateString()}</div>}
+                </>
+              )}
             </>
           ) : (
             <div className="cr-dossier-empty">

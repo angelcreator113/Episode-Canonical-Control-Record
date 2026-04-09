@@ -1504,7 +1504,7 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     if (!models?.SocialProfile) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const profile = await models.SocialProfile.findByPk(profile_id, {
-      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'brand_partnerships', 'registry_character_id', 'lala_relevance_score'],
+      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'brand_partnerships', 'registry_character_id', 'lala_relevance_score', 'aesthetic_dna'],
     });
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
 
@@ -1540,6 +1540,43 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     const dressCode = CATEGORY_DRESS_CODES[(p.content_category || '').toLowerCase()] || 'chic';
     const eventDateStr = eventDate.toISOString().split('T')[0];
     const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
+
+    // Invitation style derived from archetype + category + aesthetic_dna
+    const ARCHETYPE_STYLES = {
+      polished_curator:  { theme: 'refined editorial', mood: 'curated, intentional, elevated', color_palette: ['ivory', 'charcoal', 'gold leaf'], floral_style: 'single stem arrangement', border_style: 'embossed letterpress' },
+      messy_transparent: { theme: 'raw authentic', mood: 'unfiltered, confessional, real', color_palette: ['kraft brown', 'black ink', 'off-white'], floral_style: 'wildflowers, imperfect', border_style: 'torn edge, handwritten' },
+      soft_life:         { theme: 'dreamy luxury', mood: 'serene, aspirational, soft', color_palette: ['lavender', 'champagne', 'cloud white'], floral_style: 'cascading peonies', border_style: 'watercolor wash' },
+      explicitly_paid:   { theme: 'brand flex', mood: 'unapologetic, bold, sponsored', color_palette: ['hot pink', 'gold', 'white'], floral_style: 'none — logo placement', border_style: 'metallic foil' },
+      overnight_rise:    { theme: 'viral moment', mood: 'electric, urgent, now', color_palette: ['neon green', 'black', 'chrome'], floral_style: 'none', border_style: 'glitch effect' },
+      cautionary:        { theme: 'faded glamour', mood: 'nostalgic, bittersweet, warning', color_palette: ['dusty rose', 'faded gold', 'grey'], floral_style: 'dried flowers', border_style: 'vintage distressed' },
+      the_peer:          { theme: 'inclusive warmth', mood: 'welcoming, relatable, cozy', color_palette: ['warm terracotta', 'cream', 'sage'], floral_style: 'garden flowers', border_style: 'rounded, friendly' },
+      the_watcher:       { theme: 'mysterious observer', mood: 'understated, knowing, quiet power', color_palette: ['slate', 'navy', 'silver'], floral_style: 'single dark bloom', border_style: 'thin precise line' },
+      chaos_creator:     { theme: 'controlled chaos', mood: 'unpredictable, provocative, memorable', color_palette: ['electric red', 'acid yellow', 'black'], floral_style: 'none — graffiti texture', border_style: 'ripped, asymmetric' },
+      community_builder: { theme: 'gathering place', mood: 'collective, warm, purposeful', color_palette: ['sunset orange', 'deep teal', 'cream'], floral_style: 'abundant mixed arrangements', border_style: 'woven pattern' },
+    };
+    const CATEGORY_STYLE_TWEAKS = {
+      fashion:   { mood_add: 'fashion-forward', floral_tweak: 'fashion show florals' },
+      beauty:    { mood_add: 'luminous', floral_tweak: 'rose and peony' },
+      lifestyle: { mood_add: 'aspirational living', floral_tweak: 'eucalyptus accent' },
+      music:     { mood_add: 'rhythmic energy', color_swap: ['deep purple'] },
+      food:      { mood_add: 'indulgent', floral_tweak: 'herbs and citrus' },
+      drama:     { mood_add: 'tension-filled', color_swap: ['crimson'] },
+    };
+
+    const archStyle = ARCHETYPE_STYLES[p.archetype] || ARCHETYPE_STYLES.polished_curator;
+    const catTweak = CATEGORY_STYLE_TWEAKS[(p.content_category || '').toLowerCase()] || {};
+    const aestheticDna = p.aesthetic_dna || {};
+
+    // Merge: archetype base + category tweaks + profile aesthetic DNA
+    const invStyle = {
+      theme: aestheticDna.visual_style || archStyle.theme,
+      mood: [archStyle.mood, catTweak.mood_add].filter(Boolean).join(', '),
+      color_palette: aestheticDna.color_palette?.length > 0
+        ? aestheticDna.color_palette
+        : (catTweak.color_swap ? [...archStyle.color_palette.slice(0, -1), ...catTweak.color_swap] : archStyle.color_palette),
+      floral_style: catTweak.floral_tweak || archStyle.floral_style,
+      border_style: archStyle.border_style,
+    };
     const descriptionText = `${p.display_name || p.handle} is hosting an exclusive ${p.content_category || 'creator'} event${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
     const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${hostBrand ? `Brand opportunity with ${hostBrand}.` : ''}`;
 
@@ -1561,6 +1598,12 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
       event_time: eventTimeStr,
       description: descriptionText,
       narrative_stakes: narrativeText,
+      theme: invStyle.theme,
+      mood: invStyle.mood,
+      color_palette: invStyle.color_palette,
+      floral_style: invStyle.floral_style,
+      border_style: invStyle.border_style,
+      dress_code_keywords: dressCode.split(/[,\s]+/).filter(Boolean),
       canon_consequences: {
         automation: {
           host_profile_id: p.id,
@@ -1580,6 +1623,12 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
           dress_code: dressCode,
           description: descriptionText,
           narrative_stakes: narrativeText,
+          theme: invStyle.theme,
+          mood: invStyle.mood,
+          color_palette: invStyle.color_palette,
+          floral_style: invStyle.floral_style,
+          border_style: invStyle.border_style,
+          dress_code_keywords: dressCode.split(/[,\s]+/).filter(Boolean),
           // Auto-generated social tasks
           social_tasks: (() => {
             try {

@@ -528,15 +528,22 @@ PROTAGONIST: ${ctx.name} — ${ctx.description} Wound: ${ctx.wound} Goal: ${ctx.
 CREATOR: ${spark.handle} on ${spark.platform}. "${spark.vibe_sentence}"${advHints ? `\nHints: ${advHints}` : ''}
 ${layer === 'lalaverse' && spark.city ? `\nLALAVERSE: Lives in ${spark.city.replace(/_/g, ' ')} — ${CITY_CULTURE[spark.city] || ''}. Lala relationship: ${spark.lala_relationship || 'mutual_unaware'}. Career pressure: ${spark.career_pressure || 'level'}. Do not reference JustAWoman or the real world.` : ''}
 
+IMPORTANT RULES:
+- Creators exist across MULTIPLE platforms with DIFFERENT personas on each
+- An OnlyFans creator might present as a "fashion haul queen" on Instagram — the feed should show what they APPEAR to be, not just what they are
+- Revenue sources should be realistic — most creators have a "front" income and a real income
+- Some creators have secrets: hidden platforms, past rebrands, banned accounts
+- celebrity_tier determines event access: accessible (any event), selective (prestige 5+), exclusive (prestige 8+), untouchable (never attends — cultural icon only)
+
 Return ONLY valid JSON with these fields:
 {
   "display_name": "name on platform",
   "follower_tier": "micro|mid|macro|mega",
   "follower_count_approx": "e.g. 47k",
-  "content_category": "primary category",
+  "content_category": "primary PUBLIC-FACING category (what audience sees)",
   "archetype": "polished_curator|messy_transparent|soft_life|explicitly_paid|overnight_rise|cautionary|the_peer|the_watcher|chaos_creator|community_builder",
-  "content_persona": "2 sentences: what they show the world",
-  "real_signal": "2 sentences: what leaks through the performance",
+  "content_persona": "2 sentences: what they show the world — this is the PERFORMANCE",
+  "real_signal": "2 sentences: what leaks through — what's ACTUALLY going on behind the content",
   "posting_voice": "How they write. Give 1 example caption.",
   "comment_energy": "What their comments feel like",
   "parasocial_function": "What watching this creator does to ${ctx.name}",
@@ -552,7 +559,26 @@ Return ONLY valid JSON with these fields:
   "post_frequency": "e.g. 3-4x/day",
   "engagement_rate": "e.g. 4.2%",
   "platform_metrics": { "avg_views": "", "avg_likes": "", "avg_comments": "" },
-  "aesthetic_dna": { "visual_style": "", "vibe_tags": ["tag1","tag2"] },
+  "aesthetic_dna": { "visual_style": "", "color_palette": ["color1","color2","color3"], "vibe_tags": ["tag1","tag2"] },
+
+  "platform_presences": {
+    "${spark.platform}": { "handle": "${spark.handle}", "persona": "what they appear to be HERE", "followers": "count", "content_style": "brief style", "is_primary": true },
+    "SECOND_PLATFORM": { "handle": "@alt_handle", "persona": "different persona here", "followers": "count", "content_style": "style", "visibility": "public|discreet" }
+  },
+  "public_persona": "What the general audience believes this person does for a living — 1 sentence",
+  "private_reality": "What's actually true about their income, motivations, or secrets — 1 sentence",
+  "front_platform": "the platform they promote publicly",
+  "real_platform": "where the real money or real content lives (may differ from front)",
+  "celebrity_tier": "accessible|selective|exclusive|untouchable",
+  "primary_income_source": "e.g. brand deals, subscriptions, merch, affiliate",
+  "income_breakdown": { "brand_deals": 40, "subscriptions": 30, "content_creation": 20, "other": 10 },
+  "monthly_earnings_range": "$5K-$15K",
+  "clout_score": 0-100,
+  "drama_magnet": false,
+  "secret_connections": [{"handle":"@someone","type":"hidden collab|secret rivalry|past relationship","known_by":"few|rumored|nobody"}],
+  "platform_bans": [],
+  "rebrand_history": [],
+
   "revenue_streams": ["source1","source2"],
   "known_associates": [{"handle":"@someone","relationship_type":"collab|rival|ex","drama_level":5,"description":"brief"}],
   "adult_content_present": false,
@@ -650,6 +676,21 @@ Return ONLY valid JSON with these fields:
     career_pressure:       layer === 'lalaverse' ? (spark.career_pressure || 'level') : null,
     is_justawoman_record:  false,
     lalaverse_cap_exempt:  false,
+    // New multi-platform + persona fields
+    platform_presences:    generated.platform_presences || {},
+    public_persona:        generated.public_persona || null,
+    private_reality:       generated.private_reality || null,
+    front_platform:        (generated.front_platform || '').slice(0, 50) || null,
+    real_platform:         (generated.real_platform || '').slice(0, 50) || null,
+    celebrity_tier:        (['accessible','selective','exclusive','untouchable'].includes(generated.celebrity_tier) ? generated.celebrity_tier : 'accessible'),
+    primary_income_source: (generated.primary_income_source || '').slice(0, 100) || null,
+    income_breakdown:      generated.income_breakdown || {},
+    monthly_earnings_range:(generated.monthly_earnings_range || '').slice(0, 50) || null,
+    clout_score:           Math.min(100, Math.max(0, parseInt(generated.clout_score) || 0)),
+    drama_magnet:          generated.drama_magnet || false,
+    secret_connections:    generated.secret_connections || [],
+    platform_bans:         generated.platform_bans || [],
+    rebrand_history:       generated.rebrand_history || [],
   });
 
   // Auto-assign followers
