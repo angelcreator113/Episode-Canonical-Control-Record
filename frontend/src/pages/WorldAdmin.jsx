@@ -948,9 +948,38 @@ The revised event should feel like a completely different experience from the si
       {activeTab === 'episodes' && (
         <div style={S.content}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ ...S.cardTitle, margin: 0 }}>📋 Episode Ledger</h2>
+            <h2 style={{ ...S.cardTitle, margin: 0 }}>Episode Ledger</h2>
             <div style={{ fontSize: 12, color: '#94a3b8' }}>{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
           </div>
+
+          {/* Financial Summary */}
+          {(() => {
+            const totalIncome = episodes.reduce((s, e) => s + (parseFloat(e.total_income) || 0), 0);
+            const totalExpenses = episodes.reduce((s, e) => s + (parseFloat(e.total_expenses) || 0), 0);
+            const net = totalIncome - totalExpenses;
+            const epsWithFinancials = episodes.filter(e => e.total_income > 0 || e.total_expenses > 0).length;
+            if (epsWithFinancials === 0) return null;
+            return (
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a', marginBottom: 4 }}>Total Income</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>{totalIncome.toLocaleString()}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626', marginBottom: 4 }}>Total Expenses</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#dc2626' }}>{totalExpenses.toLocaleString()}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}`, borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626', marginBottom: 4 }}>Net P&L</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>Episodes with P&L</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{epsWithFinancials} / {episodes.length}</div>
+                </div>
+              </div>
+            );
+          })()}
 
           {episodes.map((ep, i) => {
             const ej = ep.evaluation_json;
@@ -1294,9 +1323,14 @@ The revised event should feel like a completely different experience from the si
                 lifestyle: { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
               };
               const cc = catColors[template.category] || catColors.creator_economy;
+              // Check if an event already exists from this template
+              const existingEvent = worldEvents.find(ev =>
+                ev.name?.includes(template.name) ||
+                ev.canon_consequences?.automation?.source_calendar_title === template.name
+              );
 
               return (
-                <div key={template.name} style={{ background: '#fff', border: `1px solid ${cc.border}30`, borderLeft: `4px solid ${cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
+                <div key={template.name} style={{ background: existingEvent ? '#fafffe' : '#fff', border: `1px solid ${existingEvent ? '#a3cfbb' : cc.border + '30'}`, borderLeft: `4px solid ${existingEvent ? '#22c55e' : cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 20 }}>{template.icon}</span>
                     <div>
@@ -1308,14 +1342,15 @@ The revised event should feel like a completely different experience from the si
                   <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                     <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
                   </div>
-                  {feedEventResults[template.name]?.status === 'created' ? (() => {
-                    const created = feedEventResults[template.name].event;
+                  {(feedEventResults[template.name]?.status === 'created' || existingEvent) ? (() => {
+                    const created = feedEventResults[template.name]?.event || existingEvent;
+                    const host = created?.host || created?.canon_consequences?.automation?.host_display_name || '';
                     return (
                       <div style={{ background: '#d4edda', border: '1px solid #a3cfbb', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
-                        <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created!</div>
+                        <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created</div>
                         <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{created?.name || template.name}</div>
                         <div style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>
-                          Host: {created?.host_display || created?.host || 'TBD'} · Prestige: {created?.prestige || 5}
+                          {host ? `Host: ${host} · ` : ''}Prestige: {created?.prestige || 5}{created?.status ? ` · ${created.status}` : ''}
                         </div>
                         <button
                           onClick={() => { setActiveTab('events'); setEventDetailModal(created); }}
@@ -2177,6 +2212,35 @@ The revised event should feel like a completely different experience from the si
                     <div><label style={S.fLabel}>Dress Code</label><input value={md.dress_code || ''} onChange={e => setEventDetailModal({ ...md, dress_code: e.target.value })} onBlur={e => updateField('dress_code', e.target.value)} style={S.sel} /></div>
                   </div>
 
+                  {/* Venue & Date */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                    <div><label style={S.fLabel}>Venue Name</label><input value={md.venue_name || ''} onChange={e => setEventDetailModal({ ...md, venue_name: e.target.value })} onBlur={e => updateField('venue_name', e.target.value)} placeholder="The Velvet Room, SoHo Loft..." style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Venue Address</label><input value={md.venue_address || ''} onChange={e => setEventDetailModal({ ...md, venue_address: e.target.value })} onBlur={e => updateField('venue_address', e.target.value)} placeholder="123 Fashion Ave, Lower East Side" style={S.sel} /></div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                    <div><label style={S.fLabel}>Event Date</label><input type="date" value={md.event_date || ''} onChange={e => { setEventDetailModal({ ...md, event_date: e.target.value }); updateField('event_date', e.target.value); }} style={S.sel} /></div>
+                    <div><label style={S.fLabel}>Event Time</label><input type="time" value={md.event_time || ''} onChange={e => { setEventDetailModal({ ...md, event_time: e.target.value }); updateField('event_time', e.target.value); }} style={S.sel} /></div>
+                  </div>
+
+                  {/* Guest List */}
+                  {(() => {
+                    const automation = md.canon_consequences?.automation;
+                    const guests = automation?.guest_profiles || [];
+                    return guests.length > 0 ? (
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={S.fLabel}>Guest List ({guests.length})</label>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {guests.map((g, i) => (
+                            <span key={i} style={{ padding: '3px 8px', background: '#f0f0f0', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#333' }}>
+                              {g.display_name || g.handle}
+                              <span style={{ fontSize: 9, color: '#999', marginLeft: 4 }}>{g.relationship || ''}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
                     <div><label style={S.fLabel}>Prestige</label><input type="number" min={1} max={10} value={md.prestige} onChange={e => { setEventDetailModal({ ...md, prestige: parseInt(e.target.value) || 5 }); }} onBlur={e => updateField('prestige', parseInt(e.target.value) || 5)} style={S.sel} /></div>
                     <div><label style={S.fLabel}>Cost 🪙</label><input type="number" min={0} value={md.cost_coins} onChange={e => { setEventDetailModal({ ...md, cost_coins: parseInt(e.target.value) || 0 }); }} onBlur={e => updateField('cost_coins', parseInt(e.target.value) || 0)} style={S.sel} /></div>
@@ -2328,7 +2392,7 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
 
                             setEventDetailModal(merged);
                             // Batch save all changed fields in one PUT
-                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias'];
+                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','venue_name','venue_address','event_date','event_time'];
                             const toSave = {};
                             for (const key of saveable) {
                               if (merged[key] !== undefined && merged[key] !== md[key]) {
@@ -2458,7 +2522,7 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                 <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>🗑️ Delete</button>
                   <button onClick={async () => {
-                    const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id'];
+                    const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id','venue_name','venue_address','event_date','event_time'];
                     const toSave = {};
                     for (const key of saveable) {
                       if (md[key] !== undefined && md[key] !== null) toSave[key] = md[key];
