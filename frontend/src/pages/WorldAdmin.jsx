@@ -2416,7 +2416,34 @@ The revised event should feel like a completely different experience from the si
                         </div>
                       )}
                       {!md.scene_set_id && sceneSets.length === 0 && (
-                        <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No scene sets — create them in Scene Sets first</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No scene sets yet. Generate venue images or create one in Scene Library.</div>
+                      )}
+                      {/* Generate Venue button — creates exterior + interior + scene set */}
+                      {!linkedScene && (
+                        <button
+                          onClick={async (e) => {
+                            const btn = e.target;
+                            btn.disabled = true;
+                            btn.textContent = 'Generating exterior + interior...';
+                            try {
+                              const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
+                              if (res.data.success) {
+                                setToast('Venue images created! Scene set linked.');
+                                if (res.data.data?.scene_set_id) {
+                                  setEventDetailModal({ ...md, scene_set_id: res.data.data.scene_set_id });
+                                }
+                                loadData();
+                              }
+                            } catch (err) {
+                              setToast('Venue generation failed: ' + (err.response?.data?.error || err.message));
+                            }
+                            btn.disabled = false;
+                            btn.textContent = 'Generate Venue Images';
+                          }}
+                          style={{ marginTop: 6, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px dashed #6366f1', background: '#eef2ff', color: '#6366f1', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
+                        >
+                          Generate Venue Images
+                        </button>
                       )}
                     </div>
                     <div>

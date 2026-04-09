@@ -895,7 +895,7 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
 router.get('/', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { Op } = require('sequelize');
-  const { series_id, archetype, status, platform, page, limit, search, sort, feed_layer, content_category, relevance_min, relevance_max, adult_content } = req.query;
+  const { series_id, archetype, status, platform, page, limit, search, sort, feed_layer, content_category, relevance_min, relevance_max, adult_content, celebrity_tier, follow_motivation } = req.query;
   try {
     const where = {};
     if (series_id)  where.series_id  = series_id;
@@ -920,6 +920,12 @@ router.get('/', optionalAuth, async (req, res) => {
     }
     if (adult_content !== undefined && adult_content !== '') {
       where.adult_content_present = adult_content === 'true';
+    }
+    if (celebrity_tier) {
+      where.celebrity_tier = celebrity_tier;
+    }
+    if (follow_motivation) {
+      where.follow_motivation = follow_motivation;
     }
     // Track crossover IDs for lalaverse feeds (real_world profiles Lala follows)
     let crossoverIds = [];
