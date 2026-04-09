@@ -2202,9 +2202,26 @@ The revised event should feel like a completely different experience from the si
             )}
           </div>
 
-          {/* ── Event Detail / Edit Modal ── */}
+        </div>
+      )}
           {eventDetailModal && (() => {
-            const md = eventDetailModal;
+            // Hydrate missing fields from automation data (columns may not exist in DB yet)
+            const auto = eventDetailModal.canon_consequences?.automation || {};
+            const md = {
+              ...eventDetailModal,
+              host: eventDetailModal.host || auto.host_display_name || auto.host_handle || '',
+              host_brand: eventDetailModal.host_brand || auto.host_brand || '',
+              venue_name: eventDetailModal.venue_name || auto.venue_name || '',
+              venue_address: eventDetailModal.venue_address || auto.venue_address || '',
+              event_date: eventDetailModal.event_date || auto.event_date || '',
+              event_time: eventDetailModal.event_time || auto.event_time || '',
+              dress_code: eventDetailModal.dress_code || auto.dress_code || '',
+              description: eventDetailModal.description || auto.description || '',
+              narrative_stakes: eventDetailModal.narrative_stakes || auto.narrative_stakes || '',
+              cost_coins: eventDetailModal.cost_coins ?? auto.cost_coins ?? 100,
+              strictness: eventDetailModal.strictness ?? auto.strictness ?? 5,
+              deadline_type: eventDetailModal.deadline_type || auto.deadline_type || 'medium',
+            };
             const updateField = async (field, value) => {
               try {
                 const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [field]: value });
@@ -2644,8 +2661,6 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
             </div>
             );
           })()}
-        </div>
-      )}
 
       {/* ── Event Comparison Modal ── */}
       {compareEvents && compareEvents.length === 2 && (
