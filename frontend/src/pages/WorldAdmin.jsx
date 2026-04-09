@@ -2925,8 +2925,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
                     // Always save hydrated fields into canon_consequences.automation
                     // This persists data even when DB columns don't exist yet
-                    const updatedAuto = { ...(md.canon_consequences?.automation || {}), ...auto };
-                    const hydratedFields = ['host', 'host_brand', 'venue_name', 'venue_address', 'event_date', 'event_time', 'dress_code', 'cost_coins', 'strictness', 'deadline_type', 'description', 'narrative_stakes', 'theme', 'mood', 'color_palette', 'floral_style', 'border_style'];
+                    const updatedAuto = { ...(md.canon_consequences?.automation || {}) };
+                    const hydratedFields = ['host', 'host_brand', 'venue_name', 'venue_address', 'event_date', 'event_time', 'dress_code', 'cost_coins', 'strictness', 'deadline_type', 'description', 'narrative_stakes', 'theme', 'mood', 'color_palette', 'floral_style', 'border_style', 'dress_code_keywords'];
                     for (const key of hydratedFields) {
                       if (md[key] !== undefined && md[key] !== null && md[key] !== '') updatedAuto[key] = md[key];
                     }
