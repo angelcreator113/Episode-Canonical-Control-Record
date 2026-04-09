@@ -1508,6 +1508,10 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
       creator_economy: 'influencer chic', drama: 'camera-ready',
     };
     const dressCode = CATEGORY_DRESS_CODES[(p.content_category || '').toLowerCase()] || 'chic';
+    const eventDateStr = eventDate.toISOString().split('T')[0];
+    const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
+    const descriptionText = `${p.display_name || p.handle} is hosting an exclusive ${p.content_category || 'creator'} event${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
+    const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${hostBrand ? `Brand opportunity with ${hostBrand}.` : ''}`;
 
     const eventData = {
       show_id: showId,
@@ -1523,20 +1527,29 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
       location_hint: venueAddress || null,
       venue_name: venue?.name || null,
       venue_address: venueAddress || null,
-      event_date: eventDate.toISOString().split('T')[0],
-      event_time: prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00',
-      description: `${p.display_name || p.handle} is hosting an exclusive ${p.content_category || 'creator'} event${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`,
-      narrative_stakes: `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${hostBrand ? `Brand opportunity with ${hostBrand}.` : ''}`,
+      event_date: eventDateStr,
+      event_time: eventTimeStr,
+      description: descriptionText,
+      narrative_stakes: narrativeText,
       canon_consequences: {
         automation: {
           host_profile_id: p.id,
           host_handle: p.handle,
           host_display_name: p.display_name,
           host_registry_character_id: p.registry_character_id,
+          host_brand: hostBrand,
           venue_location_id: venue?.id,
           venue_name: venue?.name,
           venue_address: venueAddress,
           guest_profiles: guestList,
+          event_date: eventDateStr,
+          event_time: eventTimeStr,
+          cost_coins: costCoins,
+          strictness,
+          deadline_type: deadlineType,
+          dress_code: dressCode,
+          description: descriptionText,
+          narrative_stakes: narrativeText,
         },
       },
       status: 'draft',
