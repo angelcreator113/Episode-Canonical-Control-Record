@@ -267,45 +267,44 @@ async function generateSocialChecklist(event, models) {
     tasks = buildSocialTasks(eventType, hostProfile);
   }
 
-  const buffer = renderSocialChecklist(tasks, event);
+  // Render checklist image (optional — may fail if canvas not available)
+  let buffer = null;
+  try {
+    buffer = renderSocialChecklist(tasks, event);
+  } catch (renderErr) {
+    console.warn('[SocialChecklist] Render failed (non-blocking):', renderErr.message);
+  }
 
-  // Upload to S3 (optional — skip if no bucket configured)
+  // Upload to S3 (optional — skip if no bucket or render failed)
   let assetUrl = null;
   try {
-    if (S3_BUCKET) {
+    if (S3_BUCKET && buffer) {
       assetUrl = await uploadChecklist(buffer, event.id);
     }
   } catch (uploadErr) {
     console.warn('[SocialChecklist] S3 upload failed (non-blocking):', uploadErr.message);
   }
 
-  // Create Asset record (optional)
+  // Create Asset record (optional — skip if S3 failed or Asset model issues)
   const { Asset } = models;
   let asset = null;
   if (Asset && assetUrl) {
     try {
       asset = await Asset.create({
-      id: uuidv4(),
-      name: `${event.name} — Social Checklist`,
-      asset_type: 'SOCIAL_CHECKLIST',
-      asset_role: 'UI.OVERLAY.SOCIAL_CHECKLIST',
-      asset_group: 'SHOW',
-      asset_scope: 'SHOW',
-      category: 'overlay',
-      s3_url_raw: assetUrl,
-      s3_url_processed: assetUrl,
-      // processing_status: 'none', — column may not exist
-      show_id: event.show_id,
-      approval_status: 'approved',
-      metadata: {
-        source: 'social-checklist-generator',
-        event_id: event.id,
-        event_name: event.name,
-        task_count: tasks.length,
-        required_count: tasks.filter(t => t.required).length,
-        generated_at: new Date().toISOString(),
-      },
-    });
+        id: uuidv4(),
+        name: `${event.name} — Social Checklist`,
+        asset_type: 'SOCIAL_CHECKLIST',
+        s3_url_raw: assetUrl,
+        s3_url_processed: assetUrl,
+        show_id: event.show_id,
+        metadata: {
+          source: 'social-checklist-generator',
+          event_id: event.id,
+          event_name: event.name,
+          task_count: tasks.length,
+          generated_at: new Date().toISOString(),
+        },
+      });
     } catch (assetErr) {
       console.warn('[SocialChecklist] Asset.create failed (non-blocking):', assetErr.message);
     }
