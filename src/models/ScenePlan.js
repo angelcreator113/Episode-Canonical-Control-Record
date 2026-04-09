@@ -31,6 +31,13 @@ module.exports = (sequelize) => {
     sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     ai_suggested: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     ai_confidence: { type: DataTypes.FLOAT, allowNull: true },
+    // Feed moment — phone screen content that appears during this beat
+    feed_moment: { type: DataTypes.JSONB, allowNull: true },
+    // { trigger_profile: "@handle", trigger_action: "posted outfit",
+    //   phone_screen: { type: "post"|"story"|"dm"|"notification"|"live", content: "...", image_desc: "..." },
+    //   lala_dialogue: "what she says out loud", lala_internal: "inner monologue",
+    //   behavior_shift: "how this changes what she does next",
+    //   visual_asset_url: "rendered phone screen PNG" }
   }, {
     tableName: 'scene_plans',
     timestamps: true,
