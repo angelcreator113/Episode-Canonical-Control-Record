@@ -42,7 +42,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
     const { showId } = req.params;
     const { status, event_type, sort = 'created_at', order = 'DESC' } = req.query;
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Use WorldEvent model if available, fall back to raw SQL
     if (models.WorldEvent) {
@@ -108,7 +108,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
       return res.json({ success: true, events: [], note: 'Table not yet created. Run migrations.' });
     }
     console.error('List events error:', error);
-    return res.status(500).json({ error: 'Failed to load events', message: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to load events', message: error.message });
   }
 });
 
@@ -140,10 +140,10 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
       guest_list: _guest_list, invitation_details: _invitation_details, scene_set_id,
     } = req.body;
 
-    if (!name) return res.status(400).json({ error: 'Event name is required' });
+    if (!name) return res.status(400).json({ success: false, error: 'Event name is required' });
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // If venue_location_id provided, auto-populate venue details from WorldLocation
     let resolvedVenueName = venue_name || null;
@@ -261,7 +261,7 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
     return res.status(201).json({ success: true, event: created[0] });
   } catch (error) {
     console.error('Create event error:', error);
-    return res.status(500).json({ error: 'Failed to create event', message: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to create event', message: error.message });
   }
 });
 
@@ -283,7 +283,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     const updates = req.body;
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Build dynamic SET clause
     const allowedFields = [
@@ -393,7 +393,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     if (setClauses.length === 0) {
       console.warn('[WorldEvents] PUT 400 — no valid fields. Received keys:', Object.keys(updates).join(', '));
-      return res.status(400).json({ error: 'No valid fields to update', received: Object.keys(updates) });
+      return res.status(400).json({ success: false, error: 'No valid fields to update', received: Object.keys(updates) });
     }
 
     setClauses.push('updated_at = NOW()');
@@ -411,7 +411,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
   } catch (error) {
     console.error('Update event error:', error);
     if (String(error.message || '').includes('does not exist')) {
-      return res.status(400).json({ error: 'Invalid update field', message: error.message });
+      return res.status(400).json({ success: false, error: 'Invalid update field', message: error.message });
     }
     if (error.name === 'SequelizeForeignKeyConstraintError') {
       return res.status(400).json({
@@ -420,7 +420,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
         code: 'INVALID_SCENE_SET_ID',
       });
     }
-    return res.status(500).json({ error: 'Failed to update event', message: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to update event', message: error.message });
   }
 });
 
@@ -433,7 +433,7 @@ router.delete('/world/:showId/events/:eventId', optionalAuth, async (req, res) =
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Soft-delete (paranoid mode) — try UPDATE first, hard delete as fallback
     try {
@@ -451,7 +451,7 @@ router.delete('/world/:showId/events/:eventId', optionalAuth, async (req, res) =
     return res.json({ success: true, deleted: eventId });
   } catch (error) {
     console.error('Delete event error:', error);
-    return res.status(500).json({ error: 'Failed to delete event', message: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to delete event', message: error.message });
   }
 });
 
@@ -466,10 +466,10 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
     const { showId, eventId } = req.params;
     const { episode_id } = req.body;
 
-    if (!episode_id) return res.status(400).json({ error: 'episode_id is required' });
+    if (!episode_id) return res.status(400).json({ success: false, error: 'episode_id is required' });
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Get event
     const [events] = await models.sequelize.query(
@@ -478,14 +478,14 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
     );
 
     if (!events || events.length === 0) {
-      return res.status(404).json({ error: 'Event not found' });
+      return res.status(404).json({ success: false, error: 'Event not found' });
     }
 
     const event = events[0];
 
     // Get episode
     const episode = await models.Episode.findByPk(episode_id);
-    if (!episode) return res.status(404).json({ error: 'Episode not found' });
+    if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
 
     // Build [EVENT:] tag
     const parts = [`name="${event.name}"`];
@@ -599,7 +599,7 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
     });
   } catch (error) {
     console.error('Inject event error:', error);
-    return res.status(500).json({ error: 'Failed to inject event', message: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to inject event', message: error.message });
   }
 });
 
@@ -623,18 +623,18 @@ router.post('/world/:showId/events/:eventId/generate-script', optionalAuth, asyn
     } = req.body;
 
     if (!scriptSkeletonGenerator) {
-      return res.status(500).json({ error: 'Script skeleton generator not loaded' });
+      return res.status(500).json({ success: false, error: 'Script skeleton generator not loaded' });
     }
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Get event
     const [events] = await models.sequelize.query(
       `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId`,
       { replacements: { eventId, showId } }
     );
-    if (!events || events.length === 0) return res.status(404).json({ error: 'Event not found' });
+    if (!events || events.length === 0) return res.status(404).json({ success: false, error: 'Event not found' });
     const event = events[0];
 
     // Get character state for context-aware generation
@@ -682,7 +682,7 @@ router.post('/world/:showId/events/:eventId/generate-script', optionalAuth, asyn
     });
   } catch (error) {
     console.error('Generate script error:', error);
-    return res.status(500).json({ error: 'Script generation failed', message: error.message });
+    return res.status(500).json({ success: false, error: 'Script generation failed', message: error.message });
   }
 });
 
@@ -698,11 +698,11 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
     const { events } = req.body;
 
     if (!events || !Array.isArray(events) || events.length === 0) {
-      return res.status(400).json({ error: 'events array is required' });
+      return res.status(400).json({ success: false, error: 'events array is required' });
     }
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const created = [];
     for (const ev of events) {
@@ -757,7 +757,7 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
     return res.status(201).json({ success: true, created_count: created.length, events: created });
   } catch (error) {
     console.error('Bulk seed error:', error);
-    return res.status(500).json({ error: 'Bulk seed failed', message: error.message });
+    return res.status(500).json({ success: false, error: 'Bulk seed failed', message: error.message });
   }
 });
 
@@ -903,7 +903,7 @@ router.post('/world/:showId/events/:eventId/generate-invitation', optionalAuth, 
     console.log(`[InviteGen] Request for event: ${eventId}, show: ${showId}`);
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const { generateInvitation } = require('../services/invitationGeneratorService');
     const result = await generateInvitation(eventId, models, showId);
@@ -920,7 +920,7 @@ router.post('/world/:showId/events/:eventId/generate-invitation', optionalAuth, 
     });
   } catch (err) {
     console.error('[InviteGen] Error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -928,7 +928,7 @@ router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req
   try {
     const { eventId } = req.params;
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const [event] = await models.sequelize.query(
       `SELECT e.id, e.name, e.invitation_asset_id,
@@ -939,7 +939,7 @@ router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req
       { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
     );
 
-    if (!event) return res.status(404).json({ error: 'Event not found' });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     return res.json({
       data: {
@@ -950,7 +950,7 @@ router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req
       },
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -960,10 +960,10 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
   try {
     const { eventId } = req.params;
     const { assetId } = req.body;
-    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+    if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Look up which episode this event is linked to
     const [event] = await models.sequelize.query(
@@ -998,7 +998,7 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
     return res.json({ success: true, message: 'Invitation approved and linked to event', episodeId });
   } catch (err) {
     console.error('[InviteGen] Approve error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1007,10 +1007,10 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
 router.post('/world/:showId/events/:eventId/reject-invitation', optionalAuth, async (req, res) => {
   try {
     const { assetId } = req.body;
-    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+    if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Soft-delete the rejected asset
     await models.sequelize.query(
@@ -1021,7 +1021,7 @@ router.post('/world/:showId/events/:eventId/reject-invitation', optionalAuth, as
     return res.json({ success: true, message: 'Invitation rejected' });
   } catch (err) {
     console.error('[InviteGen] Reject error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1031,7 +1031,7 @@ router.get('/world/:showId/events/:eventId/invitation-history', optionalAuth, as
   try {
     const { eventId } = req.params;
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const versions = await models.sequelize.query(
       `SELECT id, name, s3_url_processed as image_url, approval_status,
@@ -1050,7 +1050,7 @@ router.get('/world/:showId/events/:eventId/invitation-history', optionalAuth, as
 
     return res.json({ data: versions, count: versions.length });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1062,11 +1062,11 @@ router.post('/world/:showId/events/batch-generate-invitations', optionalAuth, as
     const { eventIds } = req.body;
 
     if (!process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ error: 'OPENAI_API_KEY not configured' });
+      return res.status(503).json({ success: false, error: 'OPENAI_API_KEY not configured' });
     }
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // If no specific IDs, get all events without invitations
     let targetIds = eventIds;
@@ -1110,7 +1110,7 @@ router.post('/world/:showId/events/batch-generate-invitations', optionalAuth, as
     });
   } catch (err) {
     console.error('[InviteGen] Batch error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1120,7 +1120,7 @@ router.get('/world/:showId/events/:eventId/invitation-pdf', optionalAuth, async 
   try {
     const { eventId } = req.params;
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const { exportInvitationPDF } = require('../services/invitationGeneratorService');
     const pdfBuffer = await exportInvitationPDF(eventId, models);
@@ -1130,7 +1130,7 @@ router.get('/world/:showId/events/:eventId/invitation-pdf', optionalAuth, async 
     return res.send(pdfBuffer);
   } catch (err) {
     console.error('[InviteGen] PDF export error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1141,11 +1141,11 @@ router.post('/world/:showId/events/:eventId/animate-invitation', optionalAuth, a
     const { eventId } = req.params;
 
     if (!process.env.RUNWAY_ML_API_KEY) {
-      return res.status(503).json({ error: 'RUNWAY_ML_API_KEY not configured' });
+      return res.status(503).json({ success: false, error: 'RUNWAY_ML_API_KEY not configured' });
     }
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Get the approved invitation image
     const [event] = await models.sequelize.query(
@@ -1153,7 +1153,7 @@ router.post('/world/:showId/events/:eventId/animate-invitation', optionalAuth, a
       { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
     );
     if (!event?.invitation_asset_id) {
-      return res.status(400).json({ error: 'No approved invitation to animate. Generate and approve one first.' });
+      return res.status(400).json({ success: false, error: 'No approved invitation to animate. Generate and approve one first.' });
     }
 
     const [asset] = await models.sequelize.query(
@@ -1161,7 +1161,7 @@ router.post('/world/:showId/events/:eventId/animate-invitation', optionalAuth, a
       { replacements: { id: event.invitation_asset_id }, type: models.sequelize.QueryTypes.SELECT }
     );
     if (!asset?.s3_url_processed) {
-      return res.status(404).json({ error: 'Invitation asset not found' });
+      return res.status(404).json({ success: false, error: 'Invitation asset not found' });
     }
 
     // Use Runway image_to_video (same pattern as sceneGenerationService)
@@ -1196,7 +1196,7 @@ router.post('/world/:showId/events/:eventId/animate-invitation', optionalAuth, a
     });
   } catch (err) {
     console.error('[InviteGen] Animation error:', err.response?.data || err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1229,7 +1229,7 @@ router.get('/world/:showId/events/:eventId/animate-invitation/:jobId', optionalA
     }
     return res.json({ status: task.status });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1240,22 +1240,22 @@ router.post('/world/:showId/events/:eventId/edit-invitation-text', optionalAuth,
     const { eventId } = req.params;
     const { assetId, opening, body, closing } = req.body;
 
-    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+    if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const [asset] = await models.sequelize.query(
       'SELECT * FROM assets WHERE id = :assetId AND deleted_at IS NULL LIMIT 1',
       { replacements: { assetId }, type: models.sequelize.QueryTypes.SELECT }
     );
-    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
 
     const [event] = await models.sequelize.query(
       'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
       { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
     );
-    if (!event) return res.status(404).json({ error: 'Event not found' });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // Download existing background
     const axios = require('axios');
@@ -1280,7 +1280,7 @@ router.post('/world/:showId/events/:eventId/edit-invitation-text', optionalAuth,
     // Re-composite with custom text
     const { compositeInvitation } = require('../services/invitationCompositingService');
     const finalBuffer = await compositeInvitation(bgBuffer, event, customContent);
-    if (!finalBuffer) return res.status(500).json({ error: 'Compositing failed — fonts not available' });
+    if (!finalBuffer) return res.status(500).json({ success: false, error: 'Compositing failed — fonts not available' });
 
     // Upload new version to S3
     const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -1324,7 +1324,7 @@ router.post('/world/:showId/events/:eventId/edit-invitation-text', optionalAuth,
     return res.json({ success: true, imageUrl: newUrl, message: 'Invitation text updated and re-rendered.' });
   } catch (err) {
     console.error('[InviteEdit] Error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1333,10 +1333,10 @@ router.post('/world/:showId/events/:eventId/edit-invitation-text', optionalAuth,
 router.post('/world/:showId/events/:eventId/unlink-invitation', optionalAuth, async (req, res) => {
   try {
     const { assetId } = req.body;
-    if (!assetId) return res.status(400).json({ error: 'assetId is required' });
+    if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     await models.sequelize.query(
       'UPDATE assets SET episode_id = NULL, updated_at = NOW() WHERE id = :assetId',
@@ -1346,7 +1346,7 @@ router.post('/world/:showId/events/:eventId/unlink-invitation', optionalAuth, as
     return res.json({ success: true, message: 'Invitation unlinked from episode. Asset remains in show library.' });
   } catch (err) {
     console.error('[InviteUnlink] Error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1356,13 +1356,13 @@ router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth
   try {
     const { eventId, assetId } = req.params;
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const [asset] = await models.sequelize.query(
       'SELECT s3_url_processed, s3_url_raw FROM assets WHERE id = :assetId AND deleted_at IS NULL LIMIT 1',
       { replacements: { assetId }, type: models.sequelize.QueryTypes.SELECT }
     );
-    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
 
     // Delete from S3 (best effort)
     const s3Url = asset.s3_url_processed || asset.s3_url_raw;
@@ -1403,7 +1403,7 @@ router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth
     return res.json({ success: true, message: 'Invitation deleted from system.' });
   } catch (err) {
     console.error('[InviteDelete] Error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1416,7 +1416,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Load event
     let event;
@@ -1430,7 +1430,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
       );
       event = rows?.[0];
     }
-    if (!event) return res.status(404).json({ error: 'Event not found' });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // Pull existing wardrobe items for financial calculation
     let wardrobeItems = [];
@@ -1455,7 +1455,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
     });
   } catch (error) {
     console.error('Generate episode error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -1465,12 +1465,12 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     const { showId } = req.params;
     const { profile_id, event_template } = req.body;
     const models = await getModels();
-    if (!models?.SocialProfile) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models?.SocialProfile) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const profile = await models.SocialProfile.findByPk(profile_id, {
       attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'brand_partnerships', 'registry_character_id', 'lala_relevance_score'],
     });
-    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
 
     const p = profile.toJSON();
     const prestige = p.follower_tier === 'mega' ? 8 : p.follower_tier === 'macro' ? 6 : p.follower_tier === 'mid' ? 4 : 3;
@@ -1529,7 +1529,7 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     res.status(201).json({ success: true, event: event.toJSON ? event.toJSON() : event });
   } catch (err) {
     console.error('POST /world/:showId/events/from-profile error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1547,7 +1547,7 @@ router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (
       const [rows] = await models.sequelize.query('SELECT id, name, canon_consequences FROM world_events WHERE id = :id', { replacements: { id: eventId } });
       event = rows?.[0];
     }
-    if (!event) return res.status(404).json({ error: 'Event not found' });
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     const cc = typeof event.canon_consequences === 'string' ? JSON.parse(event.canon_consequences) : (event.canon_consequences || {});
     const posts = cc.feed_activity || [];
@@ -1566,7 +1566,7 @@ router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (
 
     return res.json({ success: true, posts });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
