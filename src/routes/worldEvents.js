@@ -1599,6 +1599,48 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
   }
 });
 
+// POST /world/:showId/events/bulk-delete — Delete multiple events at once
+router.post('/world/:showId/events/bulk-delete', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { ids, delete_all_drafts, delete_all } = req.body;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    let deleted = 0;
+    if (delete_all) {
+      // Delete ALL events for this show
+      const [result] = await models.sequelize.query(
+        'DELETE FROM world_events WHERE show_id = :showId',
+        { replacements: { showId } }
+      );
+      deleted = result?.rowCount || 0;
+    } else if (delete_all_drafts) {
+      // Delete all draft events
+      const [result] = await models.sequelize.query(
+        "DELETE FROM world_events WHERE show_id = :showId AND status = 'draft'",
+        { replacements: { showId } }
+      );
+      deleted = result?.rowCount || 0;
+    } else if (ids && Array.isArray(ids)) {
+      // Delete specific IDs
+      for (const id of ids) {
+        try {
+          await models.sequelize.query(
+            'DELETE FROM world_events WHERE id = :id AND show_id = :showId',
+            { replacements: { id, showId } }
+          );
+          deleted++;
+        } catch { /* skip */ }
+      }
+    }
+
+    return res.json({ success: true, deleted });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/from-profile — Create event from a feed profile
 router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res) => {
   try {

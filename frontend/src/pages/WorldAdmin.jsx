@@ -1530,6 +1530,23 @@ The revised event should feel like a completely different experience from the si
               <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
               <button onClick={() => setShowTemplates(!showTemplates)} style={S.smBtn}>📋 Templates</button>
               <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={S.smBtn}>{aiFixLoading ? '⏳...' : '✨ Enhance'}</button>
+              <button onClick={async () => {
+                if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
+                try {
+                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
+                  setToast(`Deleted ${res.data.deleted} draft events`);
+                  loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete Drafts</button>
+              <button onClick={async () => {
+                if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
+                if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
+                try {
+                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
+                  setToast(`Deleted ${res.data.deleted} events`);
+                  loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete All</button>
             </div>
           </div>
 
