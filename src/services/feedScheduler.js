@@ -24,7 +24,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const AI_MODEL = 'claude-sonnet-4-6';           // Full profile generation (complex, rich output)
 const AI_MODEL_SIMPLE = 'claude-haiku-4-5-20251001';  // Spark generation (simple JSON, ~4x cheaper)
 const AI_FALLBACK_MODEL = 'claude-sonnet-4-6';
-const AI_TIMEOUT_MS = 60000; // 60s timeout — enough for large profile generation prompts
+const AI_TIMEOUT_MS = 90000; // 90s timeout — expanded prompt needs more time
 const AI_MAX_RETRIES = 0;   // No retries — fail fast, let the batch loop handle partial success
 
 /**
@@ -441,7 +441,7 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   }
 
   // Generate full profiles from sparks (batch 3 at a time for speed)
-  const BATCH_CONCURRENCY = 2; // 2 parallel calls to avoid rate limits and timeouts
+  const BATCH_CONCURRENCY = 1; // Sequential — expanded prompts need more time per call
   for (let i = 0; i < sparks.length; i += BATCH_CONCURRENCY) {
     const batch = sparks.slice(i, i + BATCH_CONCURRENCY);
     if (progressCallback) {
@@ -603,7 +603,7 @@ Return ONLY valid JSON with these fields:
   "aesthetic_power": "How their appearance translates to social influence — 1 sentence about the power their look gives them"
 }`;
 
-  const response = await callClaude(prompt, { maxTokens: 6000 });
+  const response = await callClaude(prompt, { maxTokens: 8000 });
 
   const rawText = response?.content?.[0]?.text;
   if (!rawText) throw new Error(`AI returned empty response for ${spark.handle}`);
