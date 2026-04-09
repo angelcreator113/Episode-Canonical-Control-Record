@@ -2209,7 +2209,6 @@ The revised event should feel like a completely different experience from the si
             const auto = eventDetailModal.canon_consequences?.automation || {};
             const prestige = eventDetailModal.prestige || 5;
 
-            // Derive dress code from host content category if available
             const categoryDressCodes = {
               fashion: 'runway-ready', beauty: 'glam chic', lifestyle: 'smart casual',
               fitness: 'athleisure luxe', food: 'cocktail', music: 'streetwear elevated',
@@ -2218,7 +2217,6 @@ The revised event should feel like a completely different experience from the si
             const hostCategory = auto.content_category || '';
             const derivedDressCode = categoryDressCodes[hostCategory.toLowerCase()] || 'chic';
 
-            // Derive date if missing (2 weeks from now)
             const derivedDate = (() => {
               const d = new Date(); d.setDate(d.getDate() + 14);
               return d.toISOString().split('T')[0];
