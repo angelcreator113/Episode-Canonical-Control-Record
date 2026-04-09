@@ -344,7 +344,7 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
     entity_type: 'prop',
     s3_url_raw: assetUrl,
     s3_url_processed: assetUrl,
-    processing_status: 'none',
+    // processing_status: 'none', — column may not exist
     episode_id: episodeId,
     show_id: showId,
     approval_status: 'approved',

@@ -271,7 +271,6 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
       asset_type: 'INVITATION_LETTER',
       s3_url_raw: s3Url,
       s3_url_processed: s3Url,
-      processing_status: 'none',
       show_id: showId || null,
       metadata: {
         source: 'invitation-generator-v2',
@@ -282,12 +281,12 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
         generated_at: new Date().toISOString(),
       },
     }).catch(async (err2) => {
-      // Last resort: raw SQL
+      // Last resort: raw SQL with only guaranteed columns
       console.warn('[InviteGen] Asset.create minimal failed, using raw SQL:', err2.message);
       const assetId = uuidv4();
       await models.sequelize.query(
-        `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, processing_status, show_id, metadata, created_at, updated_at)
-         VALUES (:id, :name, 'INVITATION_LETTER', :url, :url, 'none', :showId, :metadata, NOW(), NOW())`,
+        `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
+         VALUES (:id, :name, 'INVITATION_LETTER', :url, :url, :showId, :metadata, NOW(), NOW())`,
         { replacements: {
           id: assetId, name: `${event.name} — Invitation v${version}`,
           url: s3Url, showId: showId || null,
