@@ -2202,7 +2202,8 @@ The revised event should feel like a completely different experience from the si
             )}
           </div>
 
-          {/* ── Event Detail / Edit Modal ── */}
+        </div>
+      )}
           {eventDetailModal && (() => {
             const md = eventDetailModal;
             const updateField = async (field, value) => {
@@ -2644,8 +2645,6 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
             </div>
             );
           })()}
-        </div>
-      )}
 
       {/* ── Event Comparison Modal ── */}
       {compareEvents && compareEvents.length === 2 && (
