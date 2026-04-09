@@ -1124,12 +1124,13 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       )}
 
       {/* Lala's Reactions Modal */}
-      {reactionsProfile && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}} onClick={()=>setReactionsProfile(null)}>
+      {reactionsProfile && createPortal(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000}} onClick={()=>setReactionsProfile(null)}>
           <div style={{background:'#fff',borderRadius:16,width:'90vw',maxWidth:560,maxHeight:'85vh',overflow:'auto',boxShadow:'0 16px 48px rgba(0,0,0,0.2)'}} onClick={e=>e.stopPropagation()}>
             <LalaReactions profile={reactionsProfile} showId={showId} onClose={()=>setReactionsProfile(null)} />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}#feed-export-menu.open{display:block!important}`}</style>
