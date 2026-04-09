@@ -719,6 +719,15 @@ Return ONLY valid JSON with these fields:
     aesthetic_power:      generated.aesthetic_power || null,
   });
 
+  // Auto-set initial state based on trajectory + clout
+  try {
+    const { calculateInitialState } = require('./characterSyncService');
+    const initialState = calculateInitialState(profile);
+    if (initialState) {
+      await profile.update({ current_state: initialState });
+    }
+  } catch { /* non-blocking */ }
+
   // Auto-assign followers
   try {
     const { autoAssignAllFollowers, autoLinkRelationships } = require('../routes/socialProfileRoutes');
