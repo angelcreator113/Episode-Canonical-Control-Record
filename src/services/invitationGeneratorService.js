@@ -20,7 +20,7 @@
 const axios = require('axios');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
-const { compositeInvitation, compositeInvitationPDF, detectTheme } = require('./invitationCompositingService');
+const { compositeInvitation, compositeInvitationPDF, detectTheme, buildInvitationContent } = require('./invitationCompositingService');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
@@ -353,13 +353,33 @@ async function generateInvitation(eventId, models, showId) {
 
   // Step 2: Composite text (or fall back to DALL-E-only image)
   let finalBuffer;
-  const composited = await compositeInvitation(bgBuffer, event);
+  // Generate the text content (store for editing later)
+  let invitationText = null;
+  try {
+    invitationText = await buildInvitationContent(event);
+  } catch { /* will use default in compositeInvitation */ }
+
+  const composited = await compositeInvitation(bgBuffer, event, invitationText);
   if (composited) {
     console.log('[InviteGen] Text composited successfully (v2 pipeline)');
     finalBuffer = composited;
   } else {
     console.warn('[InviteGen] Fonts not available — using DALL-E background as-is (v1 fallback)');
     finalBuffer = bgBuffer;
+  }
+
+  // Store invitation text on the event for editing
+  if (invitationText) {
+    try {
+      await sequelize.query(
+        `UPDATE world_events SET canon_consequences = jsonb_set(
+          COALESCE(canon_consequences, '{}'),
+          '{invitation_text}',
+          :textJson::jsonb
+        ), updated_at = NOW() WHERE id = :eventId`,
+        { replacements: { textJson: JSON.stringify(invitationText), eventId } }
+      );
+    } catch { /* non-blocking — jsonb_set may not work on all setups */ }
   }
 
   // Step 3: Upload final to S3
@@ -423,4 +443,4 @@ async function exportInvitationPDF(eventId, models) {
   return pdfBuffer;
 }
 
-module.exports = { generateInvitation, exportInvitationPDF, buildBackgroundPrompt };
+module.exports = { generateInvitation, exportInvitationPDF, buildBackgroundPrompt, uploadToS3 };
