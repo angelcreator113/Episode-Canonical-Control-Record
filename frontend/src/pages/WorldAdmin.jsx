@@ -2205,22 +2205,37 @@ The revised event should feel like a completely different experience from the si
         </div>
       )}
           {eventDetailModal && (() => {
-            // Hydrate missing fields from automation data (columns may not exist in DB yet)
+            // Hydrate missing fields from automation data + derive from context
             const auto = eventDetailModal.canon_consequences?.automation || {};
+            const prestige = eventDetailModal.prestige || 5;
+
+            const categoryDressCodes = {
+              fashion: 'runway-ready', beauty: 'glam chic', lifestyle: 'smart casual',
+              fitness: 'athleisure luxe', food: 'cocktail', music: 'streetwear elevated',
+              creator_economy: 'influencer chic', drama: 'camera-ready',
+            };
+            const hostCategory = auto.content_category || '';
+            const derivedDressCode = categoryDressCodes[hostCategory.toLowerCase()] || 'chic';
+
+            const derivedDate = (() => {
+              const d = new Date(); d.setDate(d.getDate() + 14);
+              return d.toISOString().split('T')[0];
+            })();
+
             const md = {
               ...eventDetailModal,
               host: eventDetailModal.host || auto.host_display_name || auto.host_handle || '',
               host_brand: eventDetailModal.host_brand || auto.host_brand || '',
               venue_name: eventDetailModal.venue_name || auto.venue_name || '',
               venue_address: eventDetailModal.venue_address || auto.venue_address || '',
-              event_date: eventDetailModal.event_date || auto.event_date || '',
-              event_time: eventDetailModal.event_time || auto.event_time || '',
-              dress_code: eventDetailModal.dress_code || auto.dress_code || '',
+              event_date: eventDetailModal.event_date || auto.event_date || derivedDate,
+              event_time: eventDetailModal.event_time || auto.event_time || (prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00'),
+              dress_code: eventDetailModal.dress_code || auto.dress_code || derivedDressCode,
               description: eventDetailModal.description || auto.description || '',
               narrative_stakes: eventDetailModal.narrative_stakes || auto.narrative_stakes || '',
-              cost_coins: eventDetailModal.cost_coins ?? auto.cost_coins ?? 100,
-              strictness: eventDetailModal.strictness ?? auto.strictness ?? 5,
-              deadline_type: eventDetailModal.deadline_type || auto.deadline_type || 'medium',
+              cost_coins: eventDetailModal.cost_coins ?? auto.cost_coins ?? (prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50),
+              strictness: eventDetailModal.strictness ?? auto.strictness ?? Math.min(10, prestige + 1),
+              deadline_type: eventDetailModal.deadline_type || auto.deadline_type || (prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low'),
             };
             const updateField = async (field, value) => {
               try {
