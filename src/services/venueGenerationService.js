@@ -160,8 +160,10 @@ No text, no people. Interior design photography. Landscape orientation.`;
       sceneSet = await models.SceneSet.create({
         name: identity.venueName,
         scene_type: 'EVENT_LOCATION',
+        canonical_description: `${identity.venueName} — ${identity.aesthetic}. ${identity.neighborhood}.`,
         base_still_url: intS3Url,
         show_id: event.show_id,
+        generation_status: 'complete',
       });
 
       // Create angles
@@ -169,14 +171,18 @@ No text, no people. Interior design photography. Landscape orientation.`;
         await models.SceneAngle.bulkCreate([
           {
             scene_set_id: sceneSet.id,
+            angle_name: `${identity.venueName} — Exterior`,
             angle_label: 'exterior',
             still_image_url: extS3Url,
+            generation_status: 'complete',
             sort_order: 1,
           },
           {
             scene_set_id: sceneSet.id,
+            angle_name: `${identity.venueName} — Interior`,
             angle_label: 'interior_wide',
             still_image_url: intS3Url,
+            generation_status: 'complete',
             sort_order: 2,
           },
         ]);
