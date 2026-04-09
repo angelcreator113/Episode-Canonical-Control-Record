@@ -55,7 +55,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
         const sortCol = validSorts.includes(sort) ? sort : 'created_at';
         const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-        // Try with includes first, fallback to no includes
+        // Try with includes, then without, then without paranoid
         let events;
         try {
           const include = [];
@@ -64,26 +64,32 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
           events = await models.WorldEvent.findAll({ where, include, order: [[sortCol, sortOrder]] });
         } catch (includeErr) {
           console.warn('[WorldEvents] Includes failed, trying without:', includeErr.message);
-          events = await models.WorldEvent.findAll({ where, order: [[sortCol, sortOrder]] });
+          try {
+            events = await models.WorldEvent.findAll({ where, order: [[sortCol, sortOrder]] });
+          } catch (basicErr) {
+            console.warn('[WorldEvents] Model query failed (paranoid/deleted_at?):', basicErr.message);
+            events = null; // fall through to raw SQL
+          }
         }
 
-        const mapped = events.map(e => {
-          const json = e.toJSON();
-          json.invitation_url = json.invitationAsset?.s3_url_processed || null;
-          return json;
-        });
-
-        return res.json({ success: true, events: mapped });
+        if (events) {
+          const mapped = events.map(e => {
+            const json = e.toJSON();
+            json.invitation_url = json.invitationAsset?.s3_url_processed || null;
+            return json;
+          });
+          return res.json({ success: true, events: mapped });
+        }
       } catch (modelErr) {
         console.warn('[WorldEvents] Model query failed, falling back to raw SQL:', modelErr.message);
       }
     }
 
-    // Fallback: raw SQL (original behavior)
+    // Fallback: raw SQL
     let query = `SELECT e.*, a.s3_url_processed as invitation_url
       FROM world_events e
       LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
-      WHERE e.show_id = :showId AND e.deleted_at IS NULL`;
+      WHERE e.show_id = :showId`;
     const replacements = { showId };
 
     if (status) {
@@ -1549,6 +1555,7 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     if (!event) {
       const { v4: uuidv4 } = require('uuid');
       eventData.id = uuidv4();
+      // Try full insert first, then minimal fallback
       try {
         await models.sequelize.query(
           `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, prestige, cost_coins,
@@ -1560,7 +1567,23 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
           { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
         );
       } catch (sqlErr) {
-        return res.status(500).json({ success: false, error: `Event creation failed: ${sqlErr.message}` });
+        console.warn('Full SQL insert failed, trying minimal:', sqlErr.message);
+        // Minimal fallback — only guaranteed columns
+        try {
+          await models.sequelize.query(
+            `INSERT INTO world_events (id, show_id, name, event_type, host, description, prestige, location_hint, canon_consequences, status, created_at, updated_at)
+             VALUES (:id, :show_id, :name, :event_type, :host, :description, :prestige, :location_hint, :canon_consequences, 'draft', NOW(), NOW())`,
+            { replacements: {
+              id: eventData.id, show_id: showId, name: eventData.name,
+              event_type: eventData.event_type, host: eventData.host,
+              description: eventData.description, prestige: eventData.prestige,
+              location_hint: eventData.location_hint,
+              canon_consequences: JSON.stringify(eventData.canon_consequences),
+            } }
+          );
+        } catch (minErr) {
+          return res.status(500).json({ success: false, error: `Event creation failed: ${minErr.message}` });
+        }
       }
       event = eventData;
     }
