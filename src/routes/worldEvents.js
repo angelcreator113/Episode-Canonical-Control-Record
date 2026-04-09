@@ -83,7 +83,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
     let query = `SELECT e.*, a.s3_url_processed as invitation_url
       FROM world_events e
       LEFT JOIN assets a ON a.id = e.invitation_asset_id AND a.deleted_at IS NULL
-      WHERE e.show_id = :showId`;
+      WHERE e.show_id = :showId AND e.deleted_at IS NULL`;
     const replacements = { showId };
 
     if (status) {
@@ -435,10 +435,18 @@ router.delete('/world/:showId/events/:eventId', optionalAuth, async (req, res) =
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    await models.sequelize.query(
-      `DELETE FROM world_events WHERE id = :eventId AND show_id = :showId`,
-      { replacements: { showId, eventId } }
-    );
+    // Soft-delete (paranoid mode) — try UPDATE first, hard delete as fallback
+    try {
+      await models.sequelize.query(
+        `UPDATE world_events SET deleted_at = NOW() WHERE id = :eventId AND show_id = :showId`,
+        { replacements: { showId, eventId } }
+      );
+    } catch {
+      await models.sequelize.query(
+        `DELETE FROM world_events WHERE id = :eventId AND show_id = :showId`,
+        { replacements: { showId, eventId } }
+      );
+    }
 
     return res.json({ success: true, deleted: eventId });
   } catch (error) {
@@ -1424,10 +1432,20 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
     }
     if (!event) return res.status(404).json({ error: 'Event not found' });
 
+    // Pull existing wardrobe items for financial calculation
+    let wardrobeItems = [];
+    try {
+      const [rows] = await models.sequelize.query(
+        `SELECT id, name, coin_cost, price, acquisition_type FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL`,
+        { replacements: { showId } }
+      );
+      wardrobeItems = rows || [];
+    } catch { /* wardrobe table may not exist yet */ }
+
     const episodeGenerator = require('../services/episodeGeneratorService');
     const result = await episodeGenerator.generateEpisodeFromEvent(event, models, {
       showId,
-      wardrobeItems: [], // can be populated from selected wardrobe later
+      wardrobeItems,
     });
 
     return res.status(201).json({
