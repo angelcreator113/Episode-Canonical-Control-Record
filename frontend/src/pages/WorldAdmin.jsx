@@ -2425,7 +2425,7 @@ The revised event should feel like a completely different experience from the si
                           onClick={async (e) => {
                             const btn = e.target;
                             btn.disabled = true;
-                            btn.textContent = 'Generating exterior + interior...';
+                            btn.textContent = 'Generating exterior... (this takes ~2 min)';
                             try {
                               const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
                               if (res.data.success) {
@@ -2436,7 +2436,7 @@ The revised event should feel like a completely different experience from the si
                                 loadData();
                               }
                             } catch (err) {
-                              setToast('Venue generation failed: ' + (err.response?.data?.error || err.message));
+                              setToast('Venue generation failed: ' + (err.response?.data?.error || err.message || 'Request timed out — try again'));
                             }
                             btn.disabled = false;
                             btn.textContent = 'Generate Venue Images';
