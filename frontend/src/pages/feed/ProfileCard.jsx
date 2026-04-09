@@ -46,6 +46,14 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
         <div style={{ fontSize: 12, color: C.inkMid, lineHeight: 1.5, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {p.content_persona || d.content_persona || p.vibe_sentence}
         </div>
+        {/* Follow motivation + beauty */}
+        {(p.follow_motivation || p.beauty_factor > 0 || p.event_excitement > 0) && (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+            {p.follow_motivation && <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 8, background: p.follow_motivation === 'aspiration' ? '#fef3c7' : p.follow_motivation === 'envy' ? '#fde8e8' : p.follow_motivation === 'competition' ? '#e0e7ff' : '#f0f0f0', color: p.follow_motivation === 'aspiration' ? '#92400e' : p.follow_motivation === 'envy' ? '#9d174d' : p.follow_motivation === 'competition' ? '#3730a3' : C.inkLight }}>{p.follow_motivation.replace('_', ' ')}</span>}
+            {p.beauty_factor >= 7 && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 6, background: '#fce7f3', color: '#9d174d' }}>✧ {p.beauty_factor}/10</span>}
+            {p.event_excitement >= 7 && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 6, background: '#fef3c7', color: '#92400e' }}>🔥 {p.event_excitement}</span>}
+          </div>
+        )}
         {(p.geographic_cluster || p.engagement_rate) && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
             {p.geographic_cluster && <span style={{ fontSize: 10, color: C.inkLight }}>📍 {p.geographic_cluster}</span>}

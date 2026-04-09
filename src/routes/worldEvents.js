@@ -1629,6 +1629,18 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
           floral_style: invStyle.floral_style,
           border_style: invStyle.border_style,
           dress_code_keywords: dressCode.split(/[,\s]+/).filter(Boolean),
+          // Follow psychology — drives Lala's emotional arc in episodes
+          follow_motivation: p.follow_motivation || null,
+          follow_emotion: p.follow_emotion || null,
+          follow_trigger: p.follow_trigger || null,
+          event_excitement: p.event_excitement || 5,
+          lifestyle_claim: p.lifestyle_claim || null,
+          lifestyle_reality: p.lifestyle_reality || null,
+          lifestyle_gap: p.lifestyle_gap || null,
+          beauty_factor: p.beauty_factor || 0,
+          beauty_description: p.beauty_description || null,
+          aesthetic_power: p.aesthetic_power || null,
+          content_category: p.content_category || null,
           // Auto-generated social tasks
           social_tasks: (() => {
             try {
