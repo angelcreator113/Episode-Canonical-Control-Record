@@ -3103,26 +3103,33 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         </div>
                         {fm && <span style={{ fontSize: 8, padding: '2px 6px', borderRadius: 4, background: '#1a1a1a', color: '#B8962E', fontWeight: 700, flexShrink: 0 }}>📱</span>}
                       </div>
-                      {/* Feed Moment */}
+                      {/* Feed Moment — On-Screen Visual + Script Lines */}
                       {fm && (
-                        <div style={{ marginTop: 6, marginLeft: 34, padding: '6px 10px', background: '#1a1a2e', borderRadius: 8, border: '1px solid #333' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase' }}>Phone Screen · {fm.phone_screen?.type || 'notification'}</span>
-                            <span style={{ fontSize: 8, color: '#666' }}>{fm.trigger_profile}</span>
+                        <div style={{ marginTop: 6, marginLeft: 34, display: 'flex', gap: 6 }}>
+                          {/* On-Screen Overlay (bright — what viewer sees) */}
+                          <div style={{ flex: 1, padding: '6px 10px', background: 'linear-gradient(135deg, #FAF7F0, #fff8e7)', borderRadius: 8, border: '1px solid #B8962E30' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                              <span style={{ fontSize: 8, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase' }}>On Screen · {(fm.on_screen || fm.phone_screen)?.type || 'notification'}</span>
+                              <span style={{ fontSize: 8, color: '#94a3b8' }}>{fm.trigger_profile}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#1a1a2e', lineHeight: 1.4 }}>{(fm.on_screen || fm.phone_screen)?.content}</div>
                           </div>
-                          <div style={{ fontSize: 11, color: '#ddd', marginBottom: 4, lineHeight: 1.4 }}>{fm.phone_screen?.content}</div>
-                          {fm.lala_dialogue && (
-                            <div style={{ fontSize: 10, color: '#fff', marginBottom: 2 }}>
-                              <span style={{ color: '#B8962E', fontWeight: 600 }}>Lala:</span> "{fm.lala_dialogue}"
+                          {/* Script Line (what Lala says — voice) */}
+                          {(fm.script_lines || fm.lala_dialogue) && (
+                            <div style={{ flex: 1, padding: '6px 10px', background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                              <span style={{ fontSize: 8, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase' }}>Script · Lala's Voice</span>
+                              <div style={{ fontSize: 11, color: '#1a1a2e', marginTop: 2, fontFamily: "'Lora', serif" }}>
+                                "{fm.script_lines?.lala_line || fm.lala_dialogue}"
+                              </div>
+                              {(fm.script_lines?.lala_internal || fm.lala_internal) && (
+                                <div style={{ fontSize: 10, color: '#6366f1', fontStyle: 'italic', marginTop: 2 }}>
+                                  [{fm.script_lines?.lala_internal || fm.lala_internal}]
+                                </div>
+                              )}
+                              {(fm.script_lines?.direction || fm.behavior_shift) && (
+                                <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 2 }}>→ {fm.script_lines?.direction || fm.behavior_shift}</div>
+                              )}
                             </div>
-                          )}
-                          {fm.lala_internal && (
-                            <div style={{ fontSize: 10, color: '#B8962E', fontStyle: 'italic' }}>
-                              [{fm.lala_internal}]
-                            </div>
-                          )}
-                          {fm.behavior_shift && (
-                            <div style={{ fontSize: 9, color: '#666', marginTop: 2 }}>→ {fm.behavior_shift}</div>
                           )}
                         </div>
                       )}

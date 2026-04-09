@@ -200,53 +200,79 @@ export function EventInvitePreview({ event, hostProfile }) {
   const host = hostProfile || {};
   const excitement = auto.event_excitement || host.event_excitement || 5;
   const motivation = auto.follow_motivation || host.follow_motivation;
-  const emotion = auto.follow_emotion || host.follow_emotion;
-  const now = new Date();
-  const timeStr = `${now.getHours() % 12 || 12}:${String(now.getMinutes()).padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
+  const hostName = auto.host_display_name || event.host || 'Someone';
+  const venueName = auto.venue_name || event.venue_name || '';
+
+  // Script lines based on excitement — these go to the voice actor, not on screen
+  const SCRIPT_LINES = {
+    high: [
+      `Oh my god. ${hostName} just invited ME? I need to figure out what to wear immediately.`,
+      `Wait — this is real? ${hostName} wants ME there? Everything just changed.`,
+      `I literally just screamed. ${hostName}'s event. I'm going. I'm GOING.`,
+    ],
+    mid: [
+      `Hmm, ${hostName}'s hosting something. Could be good. Let me see who else is going.`,
+      `Okay, this is interesting. ${hostName} always has decent events. I should go.`,
+      `New invite from ${hostName}. Not bad. Let me check my schedule.`,
+    ],
+    low: [
+      `Another invite. I'll think about it. Could be useful for content, or I could rest.`,
+      `${hostName} is hosting? I mean... sure. If nothing better comes up.`,
+      `Do I even want to go? Let me see what the dress code is first.`,
+    ],
+  };
+  const tier = excitement >= 8 ? 'high' : excitement >= 5 ? 'mid' : 'low';
+  const lines = SCRIPT_LINES[tier];
+  const scriptLine = lines[Math.floor(Date.now() / 60000) % lines.length]; // deterministic pick
 
   return (
-    <div style={{ maxWidth: 320, margin: '0 auto' }}>
-      {/* Phone notification mockup */}
-      <div style={{ background: '#1a1a1a', borderRadius: 20, padding: '12px 16px', marginBottom: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontSize: 10, color: '#999' }}>{timeStr}</span>
-          <div style={{ display: 'flex', gap: 3 }}>
-            <span style={{ fontSize: 8, color: '#999' }}>5G</span>
-            <span style={{ fontSize: 8, color: '#999' }}>🔋</span>
+    <div style={{ maxWidth: 380, margin: '0 auto' }}>
+      {/* On-Screen Notification Overlay — bright, branded, what the viewer sees */}
+      <div style={{ background: 'linear-gradient(135deg, #FAF7F0, #fff8e7)', borderRadius: 16, padding: '14px 18px', marginBottom: 12, boxShadow: '0 4px 20px rgba(184, 150, 46, 0.15)', border: '2px solid #B8962E30' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #B8962E, #daa520)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, boxShadow: '0 2px 8px rgba(184, 150, 46, 0.3)' }}>💌</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>New Invitation</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.3, marginBottom: 4 }}>{event.name}</div>
+            <div style={{ fontSize: 12, color: '#666', lineHeight: 1.4 }}>
+              Hosted by <strong style={{ color: '#1a1a2e' }}>{hostName}</strong>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              {event.event_date && <span style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>{event.event_date}</span>}
+              {venueName && <span style={{ fontSize: 10, color: '#94a3b8' }}>{venueName}</span>}
+              {event.prestige && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>Prestige {event.prestige}</span>}
+            </div>
           </div>
         </div>
-        <div style={{ background: '#2a2a2a', borderRadius: 14, padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #B8962E, #daa520)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>💌</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', marginBottom: 2 }}>New Invite</div>
-            <div style={{ fontSize: 11, color: '#ccc', lineHeight: 1.4 }}>
-              {auto.host_display_name || event.host || 'Someone'} invited you to <strong>{event.name}</strong>
-            </div>
-            <div style={{ fontSize: 9, color: '#888', marginTop: 4 }}>{event.event_date || 'Date TBD'} · {auto.venue_name || event.venue_name || 'Venue TBD'}</div>
-          </div>
+        {/* Tap hint */}
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <span style={{ fontSize: 9, color: '#B8962E80', fontStyle: 'italic' }}>JustAWoman taps to open invitation</span>
         </div>
       </div>
 
-      {/* Lala's internal reaction */}
-      <div style={{ background: C.surfaceAlt, border: `1px solid #e8e0d0`, borderRadius: 12, padding: '12px 14px' }}>
-        <div style={{ fontSize: 9, fontWeight: 700, color: C.gold, textTransform: 'uppercase', marginBottom: 6 }}>Lala's Reaction</div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-          {excitement >= 8 && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>Heart racing</span>}
-          {excitement >= 5 && excitement < 8 && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>Interested</span>}
-          {excitement < 5 && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#f0f0f0', color: '#666' }}>Meh</span>}
-          {motivation && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, ...(MOTIVATION_COLORS[motivation] || {}), fontWeight: 600 }}>{MOTIVATION_COLORS[motivation]?.label || motivation}</span>}
-          {emotion && <span style={{ fontSize: 10, color: C.inkLight }}>feels {emotion}</span>}
+      {/* Script Line — Lala's voice reaction (not shown on screen, spoken by voice actor) */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Script Line — Lala's Voice</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {excitement >= 7 && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>excited</span>}
+            {excitement >= 4 && excitement < 7 && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>interested</span>}
+            {excitement < 4 && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666' }}>indifferent</span>}
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: C.ink, lineHeight: 1.6, fontStyle: 'italic' }}>
-          {excitement >= 8 && `"Oh my god. ${auto.host_display_name || 'They'} just invited ME? I need to figure out what to wear immediately. This could change everything."`}
-          {excitement >= 5 && excitement < 8 && `"Okay, this could be good. ${auto.host_display_name || 'They'} throw decent events. Let me see who else is going."`}
-          {excitement < 5 && `"Another invite. I'll think about it. Could be useful for content, or I could stay home and actually rest."`}
+        <div style={{ fontSize: 13, color: '#1a1a2e', lineHeight: 1.6, fontFamily: "'Lora', serif" }}>
+          "{scriptLine}"
         </div>
-        <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-          <div style={{ width: `${excitement * 10}%`, height: 3, background: excitement >= 7 ? '#B8962E' : excitement >= 4 ? '#6366f1' : '#94a3b8', borderRadius: 2 }} />
-          <div style={{ flex: 1, height: 3, background: C.border, borderRadius: 2 }} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, fontSize: 9, color: '#94a3b8' }}>
+          <span>Excitement: {excitement}/10</span>
+          {motivation && <span>Follow: {MOTIVATION_COLORS[motivation]?.label || motivation}</span>}
+          <span>Asset: UI.OVERLAY.NOTIFICATION</span>
         </div>
-        <div style={{ fontSize: 9, color: C.inkLight, marginTop: 4 }}>Excitement: {excitement}/10</div>
+      </div>
+
+      {/* Flow indicator */}
+      <div style={{ textAlign: 'center', padding: '8px 0', color: '#B8962E', fontSize: 11 }}>
+        Notification → <strong>Voice Icon</strong> (Lala speaks) → <strong>Tap</strong> → Invitation Opens
       </div>
     </div>
   );

@@ -357,7 +357,10 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
       const beatNum = row.beat_number || row.dataValues?.beat_number;
       if (feedMoments[beatNum]) {
         try {
-          await row.update({ feed_moment: feedMoments[beatNum] });
+          const moment = feedMoments[beatNum];
+          const updates = { feed_moment: moment };
+          if (moment.script_lines) updates.script_lines = moment.script_lines;
+          await row.update(updates);
         } catch { /* feed_moment column may not exist yet */ }
       }
     }
