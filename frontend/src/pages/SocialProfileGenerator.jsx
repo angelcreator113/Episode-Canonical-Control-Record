@@ -1061,10 +1061,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                   onNavigateToEvent={(ev)=>{
                     setSelected(null);
                     if (onNavigateToTab) {
-                      onNavigateToTab('events', ev);
+                      onNavigateToTab('feed-events', ev);
                     } else {
                       const url = new URL(window.location);
-                      url.searchParams.set('tab', 'events');
+                      url.searchParams.set('tab', 'feed-events');
                       if (ev?.id) url.searchParams.set('eventId', ev.id);
                       window.history.pushState({}, '', url);
                       window.location.reload();
@@ -1160,8 +1160,9 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
                 <span style={{ padding: '0 4px', borderRadius: 3, background: ev.status === 'used' ? '#d4edda' : '#fef3c7', fontSize: 9 }}>{ev.status}</span>
                 {ev.location_hint && <span>📍 {ev.location_hint.slice(0, 30)}</span>}
               </div>
-              <button onClick={() => onNavigateToEvent(ev)} style={{ marginTop: 4, padding: '3px 8px', borderRadius: 4, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
-                View & Edit Event →
+              <button onClick={() => onNavigateToEvent(ev)} style={{ marginTop: 4, padding: '3px 8px', borderRadius: 4, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+              >
+                {ev.status === 'draft' ? 'Complete in Feed Events →' : 'View in Events Library →'}
               </button>
             </div>
           ))}

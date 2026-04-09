@@ -434,7 +434,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       dress_code: calendarEvent.activities?.dress_code || null,
       narrative_stakes: calendarEvent.what_only_we_know || null,
       canon_consequences: { automation: automationData },
-      status: 'draft',
+      status: 'ready',
     };
 
     // Use WorldEvent model if available, fall back to raw SQL
