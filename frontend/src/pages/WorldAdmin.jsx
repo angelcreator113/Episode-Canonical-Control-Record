@@ -2378,13 +2378,37 @@ The revised event should feel like a completely different experience from the si
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={S.fLabel}>Location (Scene Set)</label>
                       {linkedScene && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6 }}>
-                            {!linkedScene.base_still_url && <div style={{ width: 60, height: 40, background: '#f8fafc', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>📍</div>}
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {linkedScene.name}</div>
-                              <div style={{ fontSize: 10, color: '#64748b' }}>{linkedScene.scene_type?.replace(/_/g, ' ')}</div>
+                          <div style={{ background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6, overflow: 'hidden' }}>
+                            {linkedScene.base_still_url && (
+                              <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: '100%', height: 80, objectFit: 'cover' }} />
+                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {linkedScene.name}</div>
+                                <div style={{ fontSize: 10, color: '#64748b' }}>{linkedScene.scene_type?.replace(/_/g, ' ')}</div>
+                              </div>
+                              <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
                             </div>
-                            <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
+                            {!linkedScene.base_still_url && (
+                              <div style={{ padding: '0 10px 8px' }}>
+                                <button
+                                  onClick={async (e) => {
+                                    const btn = e.target;
+                                    btn.disabled = true;
+                                    btn.textContent = 'Generating... (~2 min)';
+                                    try {
+                                      const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
+                                      if (res.data.success) { setToast('Venue images generated!'); loadData(); }
+                                    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                                    btn.disabled = false;
+                                    btn.textContent = 'Generate Venue Images';
+                                  }}
+                                  style={{ width: '100%', padding: '5px 10px', borderRadius: 6, border: '1px dashed #22c55e', background: 'transparent', color: '#16a34a', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+                                >
+                                  Generate Venue Images
+                                </button>
+                              </div>
+                            )}
                           </div>
                       )}
                       {hasInvalidSceneLink && (
