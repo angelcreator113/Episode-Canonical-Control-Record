@@ -2706,16 +2706,45 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>Delete</button>
                   {md.status === 'draft' && (
                     <button onClick={async () => {
+                      // Validate required fields
+                      const missing = [];
+                      if (!md.host) missing.push('Host');
+                      if (!md.venue_name) missing.push('Venue Name');
+                      if (!md.event_date) missing.push('Event Date');
+                      if (!md.dress_code) missing.push('Dress Code');
+                      if (!md.description) missing.push('Description');
+                      if (missing.length > 0) {
+                        showToast(`Missing fields: ${missing.join(', ')}. Fill them or use AI Enhance first.`);
+                        return;
+                      }
                       try {
-                        const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { status: 'ready' });
+                        // Save all hydrated fields + status in one PUT
+                        const fieldsToSave = {
+                          status: 'ready',
+                          host: md.host, host_brand: md.host_brand, dress_code: md.dress_code,
+                          venue_name: md.venue_name, venue_address: md.venue_address,
+                          event_date: md.event_date, event_time: md.event_time,
+                          description: md.description, narrative_stakes: md.narrative_stakes,
+                          cost_coins: md.cost_coins, strictness: md.strictness,
+                          deadline_type: md.deadline_type,
+                        };
+                        const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, fieldsToSave);
                         if (res.data.success) {
-                          const updated = { ...md, status: 'ready' };
-                          setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'ready' } : ev));
+                          const updated = { ...md, ...fieldsToSave };
+                          setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...fieldsToSave } : ev));
                           setEventDetailModal(updated);
                           showToast('Event marked ready — now in Events Library');
                         }
                       } catch (err) {
-                        showToast('Failed to mark ready: ' + (err.response?.data?.error || err.message));
+                        // If full save fails (columns missing), at least save status
+                        try {
+                          await api.put(`/api/v1/world/${showId}/events/${md.id}`, { status: 'ready' });
+                          setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'ready' } : ev));
+                          setEventDetailModal({ ...md, status: 'ready' });
+                          showToast('Marked ready (some fields saved to automation only)');
+                        } catch (e2) {
+                          showToast('Failed: ' + (e2.response?.data?.error || err.message));
+                        }
                       }
                     }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid #22c55e', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                       Mark Ready

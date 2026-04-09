@@ -533,10 +533,16 @@ const EpisodeDetail = () => {
         </div>
         <div className="ed-header-actions">
           <Link
+            to={`/episodes/${episode.id}/todo`}
+            style={{padding:'5px 10px', background:'#FAF7F0', border:'1px solid #e8e0d0', borderRadius:6, color:'#B8962E', fontSize:12, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'4px'}}
+          >
+            Todo List
+          </Link>
+          <Link
             to={`/episodes/${episode.id}/evaluate`}
             style={{padding:'5px 10px', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', borderRadius:6, color:'#fff', fontSize:12, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'4px'}}
           >
-            🎯 Evaluate
+            Evaluate
           </Link>
           <div className="ed-more-menu">
             <button

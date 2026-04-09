@@ -348,21 +348,25 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   // ── 4. Create Todo List (wardrobe + social tasks) ──
   const eventType = event.event_type || 'invite';
 
-  // Fetch host profile for platform-aware task generation
-  let hostProfile = null;
-  try {
-    const automation = event.canon_consequences?.automation || {};
-    const hostProfileId = automation.host_profile_id;
-    if (hostProfileId) {
-      const [rows] = await models.sequelize.query(
-        'SELECT platform, content_category, archetype, follower_tier FROM social_profiles WHERE id = :id LIMIT 1',
-        { replacements: { id: hostProfileId } }
-      );
-      hostProfile = rows?.[0] || null;
-    }
-  } catch { /* non-blocking — fall back to generic tasks */ }
-
-  const socialTasks = buildSocialTasks(eventType, hostProfile);
+  // Use event's saved social tasks if available, otherwise generate fresh
+  const automation = (typeof event.canon_consequences === 'string'
+    ? JSON.parse(event.canon_consequences)
+    : event.canon_consequences)?.automation || {};
+  let socialTasks = automation.social_tasks;
+  if (!Array.isArray(socialTasks) || socialTasks.length === 0) {
+    let hostProfile = null;
+    try {
+      const hostProfileId = automation.host_profile_id;
+      if (hostProfileId) {
+        const [rows] = await models.sequelize.query(
+          'SELECT platform, content_category, archetype, follower_tier FROM social_profiles WHERE id = :id LIMIT 1',
+          { replacements: { id: hostProfileId } }
+        );
+        hostProfile = rows?.[0] || null;
+      }
+    } catch { /* non-blocking */ }
+    socialTasks = buildSocialTasks(eventType, hostProfile);
+  }
 
   // Wardrobe tasks (the standard 7 slots)
   const wardrobeTasks = [
