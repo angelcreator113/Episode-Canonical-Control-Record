@@ -1479,14 +1479,48 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     const eventAutomation = require('../services/eventAutomationService');
     const fakeCalEvent = { cultural_category: p.content_category || 'creator_economy' };
     const venue = await eventAutomation.findVenue(fakeCalEvent, models);
+    const venueAddress = venue ? [venue.street_address, venue.district, venue.city].filter(Boolean).join(', ') : null;
+
+    // Assemble guest list
+    let guestList = [];
+    try {
+      guestList = await eventAutomation.assembleGuestList(profile, fakeCalEvent, models, 6);
+    } catch { /* non-blocking */ }
+
+    // Derive fields from prestige/profile
+    const costCoins = prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50;
+    const strictness = Math.min(10, prestige + Math.floor(Math.random() * 2));
+    const deadlineType = prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low';
+    const eventDate = new Date();
+    eventDate.setDate(eventDate.getDate() + 7 + Math.floor(Math.random() * 14));
+    const hostBrand = p.brand_partnerships?.[0]?.brand || null;
+
+    // Category-aware dress code defaults
+    const CATEGORY_DRESS_CODES = {
+      fashion: 'runway-ready', beauty: 'glam chic', lifestyle: 'smart casual',
+      fitness: 'athleisure luxe', food: 'cocktail', music: 'streetwear elevated',
+      creator_economy: 'influencer chic', drama: 'camera-ready',
+    };
+    const dressCode = CATEGORY_DRESS_CODES[(p.content_category || '').toLowerCase()] || 'chic';
 
     const eventData = {
       show_id: showId,
       name: event_template ? `${p.display_name || p.handle}'s ${event_template}` : `${p.display_name || p.handle} Hosts`,
       event_type: 'invite',
       host: p.display_name || p.handle,
+      host_brand: hostBrand,
       prestige,
-      location_hint: venue ? [venue.street_address, venue.district, venue.city].filter(Boolean).join(', ') : null,
+      cost_coins: costCoins,
+      strictness,
+      deadline_type: deadlineType,
+      dress_code: dressCode,
+      location_hint: venueAddress || null,
+      venue_name: venue?.name || null,
+      venue_address: venueAddress || null,
+      event_date: eventDate.toISOString().split('T')[0],
+      event_time: prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00',
+      description: `${p.display_name || p.handle} is hosting an exclusive ${p.content_category || 'creator'} event${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`,
+      narrative_stakes: `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${hostBrand ? `Brand opportunity with ${hostBrand}.` : ''}`,
       canon_consequences: {
         automation: {
           host_profile_id: p.id,
@@ -1495,7 +1529,8 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
           host_registry_character_id: p.registry_character_id,
           venue_location_id: venue?.id,
           venue_name: venue?.name,
-          guest_profiles: [],
+          venue_address: venueAddress,
+          guest_profiles: guestList,
         },
       },
       status: 'draft',
@@ -1516,12 +1551,16 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
       eventData.id = uuidv4();
       try {
         await models.sequelize.query(
-          `INSERT INTO world_events (id, show_id, name, event_type, host, prestige, location_hint, canon_consequences, status, created_at, updated_at)
-           VALUES (:id, :show_id, :name, :event_type, :host, :prestige, :location_hint, :canon_consequences, 'draft', NOW(), NOW())`,
+          `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, prestige, cost_coins,
+           strictness, deadline_type, dress_code, description, narrative_stakes, location_hint, venue_name,
+           venue_address, event_date, event_time, canon_consequences, status, created_at, updated_at)
+           VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :prestige, :cost_coins,
+           :strictness, :deadline_type, :dress_code, :description, :narrative_stakes, :location_hint, :venue_name,
+           :venue_address, :event_date, :event_time, :canon_consequences, 'draft', NOW(), NOW())`,
           { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
         );
       } catch (sqlErr) {
-        return res.status(500).json({ error: `Event creation failed: ${sqlErr.message}` });
+        return res.status(500).json({ success: false, error: `Event creation failed: ${sqlErr.message}` });
       }
       event = eventData;
     }
