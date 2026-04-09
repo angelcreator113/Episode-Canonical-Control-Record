@@ -262,18 +262,13 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
       generated_at: new Date().toISOString(),
     },
     approval_status: 'pending_review',
-  }).catch(async () => {
-    // Retry without approval_status if column doesn't exist
+  }).catch(async (err) => {
+    // Retry without columns that may not exist
+    console.warn('[InviteGen] Asset.create failed, retrying minimal:', err.message);
     return Asset.create({
       id: uuidv4(),
       name: `${event.name} — Invitation v${version}`,
       asset_type: 'INVITATION_LETTER',
-      asset_role: 'UI.OVERLAY.INVITATION',
-      asset_group: 'SHOW',
-      asset_scope: 'SHOW',
-      purpose: 'MAIN',
-      category: 'overlay',
-      entity_type: 'prop',
       s3_url_raw: s3Url,
       s3_url_processed: s3Url,
       processing_status: 'none',
@@ -286,6 +281,20 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
         version,
         generated_at: new Date().toISOString(),
       },
+    }).catch(async (err2) => {
+      // Last resort: raw SQL
+      console.warn('[InviteGen] Asset.create minimal failed, using raw SQL:', err2.message);
+      const assetId = uuidv4();
+      await models.sequelize.query(
+        `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, processing_status, show_id, metadata, created_at, updated_at)
+         VALUES (:id, :name, 'INVITATION_LETTER', :url, :url, 'none', :showId, :metadata, NOW(), NOW())`,
+        { replacements: {
+          id: assetId, name: `${event.name} — Invitation v${version}`,
+          url: s3Url, showId: showId || null,
+          metadata: JSON.stringify({ source: 'invitation-generator-v2', event_id: event.id, theme: resolvedTheme, version }),
+        } }
+      );
+      return { id: assetId, s3_url_processed: s3Url };
     });
   });
 

@@ -1540,6 +1540,19 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
     const dressCode = CATEGORY_DRESS_CODES[(p.content_category || '').toLowerCase()] || 'chic';
     const eventDateStr = eventDate.toISOString().split('T')[0];
     const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
+
+    // Invitation style derived from category + prestige
+    const CATEGORY_INVITATION_STYLES = {
+      fashion: { theme: 'luxury editorial', mood: 'aspirational, sleek', color_palette: ['champagne', 'black', 'gold'], floral_style: 'minimal orchids', border_style: 'thin gold line' },
+      beauty: { theme: 'soft glam', mood: 'romantic, luminous', color_palette: ['blush', 'rose gold', 'cream'], floral_style: 'peonies and roses', border_style: 'ornate floral' },
+      lifestyle: { theme: 'modern minimal', mood: 'warm, inviting', color_palette: ['sage', 'cream', 'honey'], floral_style: 'eucalyptus and wildflower', border_style: 'clean lines' },
+      fitness: { theme: 'bold energy', mood: 'dynamic, powerful', color_palette: ['electric blue', 'white', 'charcoal'], floral_style: 'none', border_style: 'geometric' },
+      food: { theme: 'rustic elegance', mood: 'warm, indulgent', color_palette: ['terracotta', 'olive', 'cream'], floral_style: 'herbs and citrus', border_style: 'hand-drawn' },
+      music: { theme: 'electric night', mood: 'electric, mysterious', color_palette: ['deep purple', 'neon pink', 'black'], floral_style: 'none', border_style: 'neon glow' },
+      creator_economy: { theme: 'creator luxe', mood: 'aspirational, exclusive', color_palette: ['ivory', 'gold', 'deep navy'], floral_style: 'subtle greenery', border_style: 'embossed' },
+      drama: { theme: 'avant-garde', mood: 'mysterious, dramatic', color_palette: ['crimson', 'black', 'silver'], floral_style: 'dark florals', border_style: 'dramatic frame' },
+    };
+    const invStyle = CATEGORY_INVITATION_STYLES[(p.content_category || '').toLowerCase()] || CATEGORY_INVITATION_STYLES.creator_economy;
     const descriptionText = `${p.display_name || p.handle} is hosting an exclusive ${p.content_category || 'creator'} event${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
     const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${hostBrand ? `Brand opportunity with ${hostBrand}.` : ''}`;
 
@@ -1561,6 +1574,12 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
       event_time: eventTimeStr,
       description: descriptionText,
       narrative_stakes: narrativeText,
+      theme: invStyle.theme,
+      mood: invStyle.mood,
+      color_palette: invStyle.color_palette,
+      floral_style: invStyle.floral_style,
+      border_style: invStyle.border_style,
+      dress_code_keywords: dressCode.split(/[,\s]+/).filter(Boolean),
       canon_consequences: {
         automation: {
           host_profile_id: p.id,
@@ -1580,6 +1599,12 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
           dress_code: dressCode,
           description: descriptionText,
           narrative_stakes: narrativeText,
+          theme: invStyle.theme,
+          mood: invStyle.mood,
+          color_palette: invStyle.color_palette,
+          floral_style: invStyle.floral_style,
+          border_style: invStyle.border_style,
+          dress_code_keywords: dressCode.split(/[,\s]+/).filter(Boolean),
           // Auto-generated social tasks
           social_tasks: (() => {
             try {

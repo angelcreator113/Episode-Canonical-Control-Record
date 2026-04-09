@@ -2236,6 +2236,12 @@ The revised event should feel like a completely different experience from the si
               cost_coins: eventDetailModal.cost_coins ?? auto.cost_coins ?? (prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50),
               strictness: eventDetailModal.strictness ?? auto.strictness ?? Math.min(10, prestige + 1),
               deadline_type: eventDetailModal.deadline_type || auto.deadline_type || (prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low'),
+              theme: eventDetailModal.theme || auto.theme || '',
+              mood: eventDetailModal.mood || auto.mood || '',
+              color_palette: eventDetailModal.color_palette?.length > 0 ? eventDetailModal.color_palette : (auto.color_palette || []),
+              floral_style: eventDetailModal.floral_style || auto.floral_style || '',
+              border_style: eventDetailModal.border_style || auto.border_style || '',
+              dress_code_keywords: eventDetailModal.dress_code_keywords?.length > 0 ? eventDetailModal.dress_code_keywords : (auto.dress_code_keywords || []),
             };
             const updateField = async (field, value) => {
               try {
