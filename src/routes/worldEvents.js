@@ -404,10 +404,40 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
     setClauses.push('updated_at = NOW()');
 
-    await models.sequelize.query(
-      `UPDATE world_events SET ${setClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`,
-      { replacements }
-    );
+    // Try full update, if columns don't exist, retry without them
+    try {
+      await models.sequelize.query(
+        `UPDATE world_events SET ${setClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`,
+        { replacements }
+      );
+    } catch (updateErr) {
+      if (String(updateErr.message || '').includes('does not exist')) {
+        // Strip fields that may not exist in DB yet and retry
+        const safeFields = new Set([
+          'name', 'event_type', 'host', 'host_brand', 'description',
+          'prestige', 'cost_coins', 'strictness', 'deadline_type',
+          'dress_code', 'dress_code_keywords', 'location_hint',
+          'narrative_stakes', 'canon_consequences', 'status',
+          'browse_pool_bias', 'browse_pool_size', 'scene_set_id',
+          'is_paid', 'payment_amount', 'career_tier',
+          'career_milestone', 'fail_consequence', 'success_unlock',
+          'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
+          'updated_at',
+        ]);
+        const safeClauses = setClauses.filter(c => {
+          const field = c.split(' = ')[0].trim();
+          return safeFields.has(field) || field === 'updated_at';
+        });
+        if (safeClauses.length > 1) {
+          await models.sequelize.query(
+            `UPDATE world_events SET ${safeClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`,
+            { replacements }
+          );
+        }
+      } else {
+        throw updateErr;
+      }
+    }
 
     const [updated] = await models.sequelize.query(
       `SELECT * FROM world_events WHERE id = :eventId`, { replacements: { eventId } }
