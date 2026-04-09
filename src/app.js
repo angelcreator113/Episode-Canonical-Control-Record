@@ -1547,6 +1547,14 @@ try {
   console.error('✗ Failed to load Property routes:', e.message);
 }
 
+try {
+  const opportunityRoutes = require('./routes/opportunityRoutes');
+  app.use('/api/v1', opportunityRoutes);
+  console.log('✓ Opportunities loaded at /api/v1/opportunities');
+} catch (e) {
+  console.error('✗ Failed to load Opportunity routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
