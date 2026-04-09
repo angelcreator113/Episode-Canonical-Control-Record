@@ -9,9 +9,16 @@ module.exports = {
         allowNull: true,
       });
     }
+    if (!desc.script_lines) {
+      await queryInterface.addColumn('scene_plans', 'script_lines', {
+        type: Sequelize.JSONB,
+        allowNull: true,
+      });
+    }
   },
 
   async down(queryInterface) {
     try { await queryInterface.removeColumn('scene_plans', 'feed_moment'); } catch {}
+    try { await queryInterface.removeColumn('scene_plans', 'script_lines'); } catch {}
   },
 };
