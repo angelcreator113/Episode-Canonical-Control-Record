@@ -2591,65 +2591,86 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <div><label style={S.fLabel}>Success Unlock</label><input value={md.success_unlock || ''} onChange={e => setEventDetailModal({ ...md, success_unlock: e.target.value })} onBlur={e => updateField('success_unlock', e.target.value)} placeholder="Unlocks VIP access..." style={S.sel} /></div>
                   </div>
 
-                  {/* Social Tasks Preview */}
+                  {/* Social Tasks */}
                   {(() => {
-                    const eventType = md.event_type || 'invite';
-                    const hostPlatform = auto.host_platform || '';
-                    const hostCategory = (auto.content_category || '').toLowerCase();
-                    // Base tasks by event type
-                    const BASE = {
-                      invite: [
-                        { slot: 'grwm', label: 'Get Ready With Me', platform: 'tiktok', timing: 'before', required: true },
-                        { slot: 'outfit_reveal', label: 'Outfit Reveal', platform: 'instagram', timing: 'before', required: true },
-                        { slot: 'arrival', label: 'Arrival Content', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'host_photo', label: 'Photo with Host', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'go_live', label: 'Go Live', platform: 'tiktok', timing: 'during', required: false },
-                        { slot: 'bts_stories', label: 'Behind the Scenes', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'recap', label: 'Event Recap', platform: 'instagram', timing: 'after', required: true },
-                        { slot: 'thank_host', label: 'Thank the Host', platform: 'instagram', timing: 'after', required: false },
-                        { slot: 'engage', label: 'Engage with Attendees', platform: 'instagram', timing: 'after', required: false },
-                      ],
-                      brand_deal: [
-                        { slot: 'teaser', label: 'Brand Teaser', platform: 'instagram', timing: 'before', required: false },
-                        { slot: 'brand_post_1', label: 'Sponsored Post 1', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'brand_post_2', label: 'Sponsored Post 2', platform: 'tiktok', timing: 'during', required: true },
-                        { slot: 'brand_stories', label: 'Brand Stories', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'engagement_check', label: 'Check Engagement', platform: 'instagram', timing: 'after', required: true },
-                      ],
-                      guest: [
-                        { slot: 'grwm', label: 'Get Ready', platform: 'tiktok', timing: 'before', required: false },
-                        { slot: 'presence', label: 'Show Presence', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'network', label: 'Network Content', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'recap', label: 'Recap', platform: 'tiktok', timing: 'after', required: false },
-                      ],
-                      upgrade: [
-                        { slot: 'grwm', label: 'Elevated GRWM', platform: 'tiktok', timing: 'before', required: true },
-                        { slot: 'arrival', label: 'Grand Arrival', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'experience', label: 'VIP Experience', platform: 'instagram', timing: 'during', required: true },
-                        { slot: 'recap', label: 'Experience Recap', platform: 'instagram', timing: 'after', required: true },
-                      ],
-                    };
-                    const tasks = BASE[eventType] || BASE.invite;
+                    const savedTasks = auto.social_tasks || [];
                     const TIMING_COLORS = { before: '#f59e0b', during: '#6366f1', after: '#16a34a' };
-                    const requiredCount = tasks.filter(t => t.required).length;
+                    const TIMING_LABELS = { before: 'Before', during: 'During', after: 'After' };
+                    const checklistUrl = auto.social_checklist_url;
+                    const requiredCount = savedTasks.filter(t => t.required).length;
+
+                    // Group by timing
+                    const grouped = {};
+                    savedTasks.forEach(t => {
+                      const k = t.timing || 'during';
+                      if (!grouped[k]) grouped[k] = [];
+                      grouped[k].push(t);
+                    });
+
                     return (
                       <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>
-                          Social Tasks Preview ({tasks.length} tasks, {requiredCount} required)
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>
+                            Social Tasks {savedTasks.length > 0 ? `(${savedTasks.length} tasks, ${requiredCount} required)` : ''}
+                          </div>
+                          <button
+                            onClick={async (e) => {
+                              const btn = e.target;
+                              btn.disabled = true;
+                              btn.textContent = 'Generating...';
+                              try {
+                                const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-social-checklist`);
+                                if (res.data.success) {
+                                  // Update the event modal with new tasks + checklist URL
+                                  const newAuto = { ...auto, social_tasks: res.data.data.tasks, social_checklist_url: res.data.data.assetUrl };
+                                  const updated = { ...eventDetailModal, canon_consequences: { ...eventDetailModal.canon_consequences, automation: newAuto } };
+                                  setEventDetailModal(updated);
+                                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
+                                  showToast(`Checklist generated — ${res.data.data.tasks.length} tasks`);
+                                }
+                              } catch (err) {
+                                showToast('Failed: ' + (err.response?.data?.error || err.message));
+                              }
+                              btn.disabled = false;
+                              btn.textContent = checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist';
+                            }}
+                            style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+                          >
+                            {checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist'}
+                          </button>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 4 }}>
-                          {tasks.map(t => (
-                            <div key={t.slot} style={{ padding: '4px 8px', background: '#f8f8f8', borderRadius: 6, borderLeft: `3px solid ${TIMING_COLORS[t.timing] || '#999'}`, fontSize: 10 }}>
-                              <div style={{ fontWeight: 600, color: '#333' }}>{t.label}</div>
-                              <div style={{ color: '#999', fontSize: 9 }}>{t.platform} · {t.timing}{t.required ? ' · required' : ''}</div>
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
-                          These tasks will be generated when an episode is created from this event.
-                          {hostPlatform ? ` Extra ${hostPlatform} tasks will be added based on the host's platform.` : ''}
-                          {hostCategory ? ` Bonus ${hostCategory} niche tasks included.` : ''}
-                        </div>
+
+                        {/* Checklist image preview */}
+                        {checklistUrl && (
+                          <div style={{ marginBottom: 10, textAlign: 'center' }}>
+                            <img src={checklistUrl} alt="Social Checklist" style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 10, border: '1px solid #e8e0d0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }} />
+                          </div>
+                        )}
+
+                        {/* Task list */}
+                        {savedTasks.length > 0 ? (
+                          <div>
+                            {['before', 'during', 'after'].filter(p => grouped[p]).map(phase => (
+                              <div key={phase} style={{ marginBottom: 6 }}>
+                                <div style={{ fontSize: 9, fontWeight: 700, color: TIMING_COLORS[phase], textTransform: 'uppercase', marginBottom: 3 }}>{TIMING_LABELS[phase]}</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 3 }}>
+                                  {grouped[phase].map(t => (
+                                    <div key={t.slot} style={{ padding: '3px 8px', background: '#f8f8f8', borderRadius: 5, borderLeft: `3px solid ${TIMING_COLORS[phase]}`, fontSize: 10 }}>
+                                      <span style={{ fontWeight: 600, color: '#333' }}>{t.label}</span>
+                                      <span style={{ color: '#aaa', marginLeft: 4 }}>{t.platform}</span>
+                                      {t.required && <span style={{ color: TIMING_COLORS[phase], marginLeft: 4, fontSize: 8, fontWeight: 700 }}>req</span>}
+                                      {t.source && <span style={{ color: t.source === 'platform' ? '#6366f1' : '#16a34a', marginLeft: 4, fontSize: 8 }}>{t.source}</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                            No tasks generated yet. Click "Generate Checklist" to create tasks and a visual asset.
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
