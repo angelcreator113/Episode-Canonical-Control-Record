@@ -2376,16 +2376,39 @@ The revised event should feel like a completely different experience from the si
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
                     <div><label style={S.fLabel}>Career Tier</label><input type="number" min={1} max={5} value={md.career_tier || 1} onChange={e => { setEventDetailModal({ ...md, career_tier: parseInt(e.target.value) || 1 }); }} onBlur={e => updateField('career_tier', parseInt(e.target.value) || 1)} style={S.sel} /></div>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      {/* Only show full Location section when no banner image at top */}
-                      {!linkedScene?.base_still_url && <label style={S.fLabel}>Location (Scene Set)</label>}
-                      {linkedScene && !linkedScene.base_still_url && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6 }}>
-                            {linkedScene.base_still_url && <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {linkedScene.name}</div>
-                              <div style={{ fontSize: 10, color: '#64748b' }}>{linkedScene.scene_type?.replace(/_/g, ' ')}</div>
+                      <label style={S.fLabel}>Location (Scene Set)</label>
+                      {linkedScene && (
+                          <div style={{ background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6, overflow: 'hidden' }}>
+                            {linkedScene.base_still_url && (
+                              <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: '100%', height: 80, objectFit: 'cover' }} />
+                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {linkedScene.name}</div>
+                                <div style={{ fontSize: 10, color: '#64748b' }}>{linkedScene.scene_type?.replace(/_/g, ' ')}</div>
+                              </div>
+                              <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
                             </div>
-                            <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
+                            {!linkedScene.base_still_url && (
+                              <div style={{ padding: '0 10px 8px' }}>
+                                <button
+                                  onClick={async (e) => {
+                                    const btn = e.target;
+                                    btn.disabled = true;
+                                    btn.textContent = 'Generating... (~2 min)';
+                                    try {
+                                      const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
+                                      if (res.data.success) { setToast('Venue images generated!'); loadData(); }
+                                    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                                    btn.disabled = false;
+                                    btn.textContent = 'Generate Venue Images';
+                                  }}
+                                  style={{ width: '100%', padding: '5px 10px', borderRadius: 6, border: '1px dashed #22c55e', background: 'transparent', color: '#16a34a', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+                                >
+                                  Generate Venue Images
+                                </button>
+                              </div>
+                            )}
                           </div>
                       )}
                       {hasInvalidSceneLink && (

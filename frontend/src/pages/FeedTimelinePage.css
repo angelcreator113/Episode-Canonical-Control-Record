@@ -1,0 +1,394 @@
+/* ═══ Feed Timeline Page ═══ */
+
+.feed-timeline-page {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 24px;
+  font-family: 'Lora', serif;
+}
+
+.feed-timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.feed-timeline-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: #2C2C2C;
+}
+
+.feed-timeline-title {
+  flex: 1;
+}
+
+.feed-timeline-title h1 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #2C2C2C;
+  margin: 0;
+}
+
+.feed-timeline-subtitle {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #888;
+  margin: 2px 0 0;
+}
+
+.feed-timeline-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.feed-timeline-btn.generate {
+  background: #B8962E;
+  color: white;
+}
+
+.feed-timeline-btn.generate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.feed-timeline-error {
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+}
+
+.feed-timeline-stats {
+  display: flex;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #FAF7F0;
+  border: 1px solid #e8e0d0;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #666;
+  flex-wrap: wrap;
+}
+
+.feed-timeline-stats span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Filters ── */
+.feed-timeline-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.feed-timeline-filters button {
+  padding: 5px 12px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  background: white;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.feed-timeline-filters button:hover {
+  border-color: #B8962E;
+}
+
+.feed-timeline-filters button.active {
+  background: #2C2C2C;
+  color: white;
+  border-color: #2C2C2C;
+}
+
+.feed-timeline-divider {
+  color: #ddd;
+  font-size: 14px;
+}
+
+/* ── Timeline Groups ── */
+.feed-timeline-group {
+  margin-bottom: 24px;
+}
+
+.feed-timeline-group-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e8e0d0;
+}
+
+/* ── Post Card ── */
+.feed-post-card {
+  background: white;
+  border: 1px solid #e8e0d0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  position: relative;
+  transition: box-shadow 0.2s;
+}
+
+.feed-post-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.feed-post-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.feed-post-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #B8962E, #d4af37);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.feed-post-user {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed-post-display-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.feed-post-handle {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #888;
+}
+
+.feed-post-platform {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #aaa;
+}
+
+.feed-post-function {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.feed-post-content {
+  margin-bottom: 10px;
+}
+
+.feed-post-text {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #2C2C2C;
+  margin: 0;
+}
+
+.feed-post-image-desc {
+  margin-top: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.feed-post-image-desc img {
+  width: 100%;
+  display: block;
+}
+
+.feed-post-image-placeholder {
+  background: #f9fafb;
+  border: 1px dashed #ddd;
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #888;
+}
+
+.feed-post-engagement {
+  display: flex;
+  gap: 16px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #666;
+  padding-top: 8px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.feed-post-engagement span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.feed-post-type {
+  margin-left: auto;
+  color: #aaa;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Lala's reaction ── */
+.feed-post-lala {
+  margin-top: 10px;
+  padding: 10px;
+  background: #FAF7F0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.feed-post-lala-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+}
+
+.feed-post-lala-body {
+  margin-top: 8px;
+}
+
+.feed-post-lala-says {
+  font-size: 14px;
+  color: #2C2C2C;
+  margin: 0 0 4px;
+}
+
+.feed-post-lala-thinks {
+  font-size: 13px;
+  color: #8b5cf6;
+  margin: 0;
+}
+
+/* ── Comments ── */
+.feed-post-comments {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.feed-comment {
+  display: flex;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.feed-comment.lala-comment {
+  background: #faf5ea;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.feed-comment-handle {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #B8962E;
+  font-weight: 600;
+}
+
+.feed-comment-text { color: #2C2C2C; }
+
+.feed-comment-likes {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #aaa;
+  margin-left: auto;
+}
+
+/* ── Delete ── */
+.feed-post-delete {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.feed-post-card:hover .feed-post-delete {
+  opacity: 1;
+}
+
+.feed-post-delete:hover {
+  color: #ef4444;
+}
+
+/* ── Empty State ── */
+.feed-timeline-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #aaa;
+}
+
+.feed-timeline-empty p {
+  margin: 8px 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .feed-timeline-page {
+    padding: 16px;
+  }
+
+  .feed-timeline-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .feed-post-engagement {
+    gap: 10px;
+  }
+}

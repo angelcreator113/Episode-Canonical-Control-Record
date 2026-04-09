@@ -143,6 +143,9 @@ let SceneSetEpisode; // Join table: many-to-many between scene sets and episodes
 let EpisodeBrief; // Episode planning briefs
 let ScenePlan; // Beat-by-beat scene plan
 let GenerationJob; // Async job queue for scene generation
+let EpisodeScript; // Versioned AI-generated episode scripts
+let FeedPost; // Feed timeline posts after episodes
+let Opportunity; // Career opportunity pipeline
 
 try {
   // Core models
@@ -393,6 +396,11 @@ try {
   EpisodeBrief = require('./EpisodeBrief')(sequelize);
   ScenePlan = require('./ScenePlan')(sequelize);
 
+  // Episode Script Writer + Feed Posts + Opportunities
+  EpisodeScript = require('./EpisodeScript')(sequelize);
+  FeedPost = require('./FeedPost')(sequelize);
+  Opportunity = require('./Opportunity')(sequelize, DataTypes);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -540,6 +548,9 @@ const requiredModels = {
   SceneAngle,
   SceneSetEpisode,
   GenerationJob,
+  EpisodeScript,
+  FeedPost,
+  Opportunity,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -784,6 +795,17 @@ if (ScenePlan && ScenePlan.associate) {
 }
 if (GenerationJob && GenerationJob.associate) {
   GenerationJob.associate(requiredModels);
+}
+
+// Episode Script Writer + Feed Posts + Opportunities
+if (EpisodeScript && EpisodeScript.associate) {
+  EpisodeScript.associate(requiredModels);
+}
+if (FeedPost && FeedPost.associate) {
+  FeedPost.associate(requiredModels);
+}
+if (Opportunity && Opportunity.associate) {
+  Opportunity.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -2011,3 +2033,6 @@ module.exports.SceneSetEpisode = SceneSetEpisode;
 module.exports.EpisodeBrief = EpisodeBrief;
 module.exports.ScenePlan = ScenePlan;
 module.exports.GenerationJob = GenerationJob;
+module.exports.EpisodeScript = EpisodeScript;
+module.exports.FeedPost = FeedPost;
+module.exports.Opportunity = Opportunity;
