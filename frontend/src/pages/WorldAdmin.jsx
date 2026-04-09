@@ -69,6 +69,7 @@ const EVENT_STATUSES = ['draft', 'ready', 'used', 'scripted', 'filmed'];
 const EVENT_STATUS_CONFIG = {
   draft:    { label: 'Draft', color: '#94a3b8', bg: '#f1f5f9', icon: '○' },
   ready:    { label: 'Ready', color: '#b45309', bg: '#fef3c7', icon: '◎' },
+  declined: { label: 'Declined', color: '#dc2626', bg: '#fef2f2', icon: '✗' },
   used:     { label: 'Injected', color: '#6366f1', bg: '#eef2ff', icon: '◉' },
   scripted: { label: 'Scripted', color: '#16a34a', bg: '#f0fdf4', icon: '✓' },
   filmed:   { label: 'Filmed', color: '#0284c7', bg: '#f0f9ff', icon: '★' },
@@ -2757,6 +2758,20 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {/* Footer */}
                 <div style={{ padding: '10px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   <button onClick={() => deleteEvent(md.id).then(() => setEventDetailModal(null))} style={S.smBtnDanger}>Delete</button>
+                  {md.status === 'ready' && (
+                    <button onClick={async () => {
+                      const reason = window.prompt('Why is Lala declining? (e.g. "can\'t afford it", "schedule conflict", "not worth the drama")');
+                      if (!reason) return;
+                      try {
+                        await api.post(`/api/v1/world/${showId}/events/${md.id}/decline`, { reason });
+                        setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'declined' } : ev));
+                        setEventDetailModal({ ...md, status: 'declined' });
+                        setToast(`"${md.name}" declined — tracked for future callbacks`);
+                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                    }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #f59e0b', background: '#fef3c7', color: '#92400e', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                      Decline Invite
+                    </button>
+                  )}
                   {md.status === 'draft' && (
                     <button onClick={async () => {
                       // Validate required fields

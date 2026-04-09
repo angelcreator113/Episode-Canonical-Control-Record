@@ -1801,6 +1801,129 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
   }
 });
 
+// ─── FINANCIAL PRESSURE ENDPOINTS ────────────────────────────────────────────
+
+// GET /world/:showId/events/:eventId/affordability — Can Lala afford this event?
+router.get('/world/:showId/events/:eventId/affordability', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+
+    // Load event
+    const [event] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Get Lala's current balance
+    let balance = 500; // default
+    try {
+      const [state] = await models.sequelize.query(
+        `SELECT state_json FROM character_state_history WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
+        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
+      );
+      const stateJson = typeof state?.state_json === 'string' ? JSON.parse(state.state_json) : state?.state_json;
+      balance = stateJson?.coins ?? 500;
+    } catch { /* use default */ }
+
+    const { checkAffordability } = require('../services/financialPressureService');
+    const result = checkAffordability(event, balance);
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /world/:showId/events/:eventId/decline — Decline event and track as missed opportunity
+router.post('/world/:showId/events/:eventId/decline', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const { reason } = req.body;
+    const models = await getModels();
+
+    const [event] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    if (typeof event.canon_consequences === 'string') {
+      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+    }
+
+    const { recordDeclinedInvite } = require('../services/financialPressureService');
+    const declined = await recordDeclinedInvite(event, reason || 'not specified', models);
+
+    return res.json({ success: true, declined, message: `"${event.name}" declined — tracked for future callbacks` });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/:showId/financial-pressure — Get financial pressure context for script writing
+router.get('/world/:showId/financial-pressure', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const models = await getModels();
+
+    // Get Lala's balance
+    let balance = 500;
+    try {
+      const [state] = await models.sequelize.query(
+        `SELECT state_json FROM character_state_history WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
+        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
+      );
+      const stateJson = typeof state?.state_json === 'string' ? JSON.parse(state.state_json) : state?.state_json;
+      balance = stateJson?.coins ?? 500;
+    } catch { /* use default */ }
+
+    // Get declined invites
+    let declinedInvites = [];
+    try {
+      const [rows] = await models.sequelize.query(
+        `SELECT name, canon_consequences FROM world_events WHERE show_id = :showId AND status = 'declined' AND deleted_at IS NULL`,
+        { replacements: { showId } }
+      );
+      declinedInvites = rows.map(r => {
+        const cc = typeof r.canon_consequences === 'string' ? JSON.parse(r.canon_consequences) : r.canon_consequences;
+        return cc?.declined || { event_name: r.name };
+      });
+    } catch { /* table may not have status=declined */ }
+
+    // Get pending opportunities
+    let pendingOpps = [];
+    try {
+      const [rows] = await models.sequelize.query(
+        `SELECT name, status, payment_amount FROM opportunities WHERE show_id = :showId AND deleted_at IS NULL AND status IN ('booked','preparing','active','completed')`,
+        { replacements: { showId } }
+      );
+      pendingOpps = rows;
+    } catch { /* table may not exist */ }
+
+    // Get recent transactions (from episode financials)
+    let transactions = [];
+    try {
+      const [rows] = await models.sequelize.query(
+        `SELECT total_income, total_expenses, title FROM episodes WHERE show_id = :showId AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 10`,
+        { replacements: { showId } }
+      );
+      transactions = rows.flatMap(r => [
+        ...(parseFloat(r.total_income) > 0 ? [{ type: 'income', amount: parseFloat(r.total_income), source: r.title }] : []),
+        ...(parseFloat(r.total_expenses) > 0 ? [{ type: 'expense', amount: parseFloat(r.total_expenses), source: r.title }] : []),
+      ]);
+    } catch { /* columns may not exist */ }
+
+    const { buildFinancialPressureContext } = require('../services/financialPressureService');
+    const context = buildFinancialPressureContext(balance, transactions, declinedInvites, pendingOpps);
+
+    return res.json({ success: true, ...context });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/:eventId/generate-social-checklist
 router.post('/world/:showId/events/:eventId/generate-social-checklist', optionalAuth, async (req, res) => {
   try {
