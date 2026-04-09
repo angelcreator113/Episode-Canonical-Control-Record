@@ -1,0 +1,430 @@
+/* ═══ Episode Script Writer ═══ */
+
+.script-writer-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+  font-family: 'Lora', serif;
+}
+
+.script-writer-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.script-writer-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: #2C2C2C;
+}
+
+.script-writer-title {
+  flex: 1;
+}
+
+.script-writer-title h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #2C2C2C;
+  margin: 0;
+}
+
+.script-writer-episode-name {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: #888;
+  margin: 4px 0 0;
+}
+
+.script-writer-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.script-writer-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.script-writer-btn.generate {
+  background: #B8962E;
+  color: white;
+}
+
+.script-writer-btn.generate:hover:not(:disabled) {
+  background: #9a7d26;
+}
+
+.script-writer-btn.generate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.script-writer-btn.lock {
+  background: #2C2C2C;
+  color: white;
+}
+
+.script-writer-locked-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #B8962E;
+  padding: 8px 14px;
+  border: 1px solid #B8962E;
+  border-radius: 8px;
+}
+
+.script-writer-error {
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+}
+
+/* ── Context Panel ── */
+.script-writer-context {
+  background: #FAF7F0;
+  border: 1px solid #e8e0d0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.script-writer-context h3 {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+  margin: 0 0 12px;
+}
+
+.script-writer-context-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.context-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+}
+
+.context-chip.ready {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.context-chip.missing {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* ── Layout ── */
+.script-writer-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 20px;
+  min-height: 600px;
+}
+
+@media (max-width: 768px) {
+  .script-writer-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Sidebar ── */
+.script-writer-sidebar {
+  background: #FAF7F0;
+  border: 1px solid #e8e0d0;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.script-writer-sidebar h3 {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #888;
+  margin: 0 0 12px;
+}
+
+.script-writer-empty {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #aaa;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.script-version-item {
+  padding: 10px 12px;
+  border: 1px solid #e8e0d0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.script-version-item:hover {
+  border-color: #B8962E;
+}
+
+.script-version-item.active {
+  border-color: #B8962E;
+  background: #faf5ea;
+}
+
+.script-version-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.script-version-num {
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.script-version-status {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.status-draft { background: #f3f4f6; color: #6b7280; }
+.status-review { background: #fef3c7; color: #92400e; }
+.status-approved { background: #d1fae5; color: #065f46; }
+.status-locked { background: #B8962E22; color: #B8962E; }
+
+.script-version-meta {
+  display: flex;
+  gap: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #888;
+}
+
+.pressure-desperate { color: #dc2626; }
+.pressure-tight { color: #f59e0b; }
+.pressure-comfortable { color: #22c55e; }
+.pressure-flush { color: #B8962E; }
+
+.script-version-date {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 2px;
+}
+
+/* ── Main ── */
+.script-writer-main {
+  background: white;
+  border: 1px solid #e8e0d0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.script-writer-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #aaa;
+  text-align: center;
+}
+
+.script-writer-empty-state p {
+  margin: 8px 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+}
+
+.script-writer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e8e0d0;
+  background: #FAF7F0;
+}
+
+.script-writer-view-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.script-writer-view-toggle button {
+  padding: 6px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.script-writer-view-toggle button.active {
+  background: #2C2C2C;
+  color: white;
+  border-color: #2C2C2C;
+}
+
+.script-writer-stats {
+  display: flex;
+  gap: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #888;
+}
+
+/* ── Beats ── */
+.script-writer-beats {
+  padding: 16px;
+}
+
+.script-beat {
+  border: 1px solid #e8e0d0;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.script-beat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  background: #FAF7F0;
+  transition: background 0.2s;
+}
+
+.script-beat-header:hover {
+  background: #f5efe3;
+}
+
+.script-beat-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #B8962E;
+  color: white;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.script-beat-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: #2C2C2C;
+}
+
+.script-beat-location {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #888;
+  padding: 2px 8px;
+  background: #f3f4f6;
+  border-radius: 10px;
+}
+
+.script-beat-lines {
+  padding: 12px 16px 16px;
+}
+
+.script-line {
+  padding: 4px 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.script-line-speaker {
+  font-weight: 600;
+  color: #B8962E;
+  margin-right: 6px;
+}
+
+.script-line-dialogue .script-line-text { color: #2C2C2C; }
+.script-line-action { color: #666; font-style: italic; }
+.script-line-direction { color: #6366f1; font-family: 'DM Mono', monospace; font-size: 13px; }
+.script-line-stat { color: #059669; font-family: 'DM Mono', monospace; font-size: 13px; }
+.script-line-internal { color: #8b5cf6; font-style: italic; }
+.script-line-feed_moment { color: #0ea5e9; }
+
+/* ── Raw text ── */
+.script-writer-raw {
+  padding: 20px;
+  font-family: 'Lora', serif;
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  max-height: 800px;
+  overflow-y: auto;
+  color: #2C2C2C;
+}
+
+/* ── Links ── */
+.script-writer-links {
+  display: flex;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e8e0d0;
+}
+
+.script-writer-links a {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: #B8962E;
+  text-decoration: none;
+}
+
+.script-writer-links a:hover {
+  text-decoration: underline;
+}

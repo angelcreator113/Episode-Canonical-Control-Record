@@ -1555,6 +1555,42 @@ try {
   console.error('✗ Failed to load Opportunity routes:', e.message);
 }
 
+// Episode Script Writer — AI writes full scripts from beats + feed moments + financial pressure
+try {
+  const episodeScriptWriterRoutes = require('./routes/episodeScriptWriterRoutes');
+  app.use('/api/v1/episode-scripts', episodeScriptWriterRoutes);
+  console.log('✓ Episode Script Writer loaded at /api/v1/episode-scripts');
+} catch (e) {
+  console.error('✗ Failed to load Episode Script Writer routes:', e.message);
+}
+
+// Wardrobe Event Integration — filter outfits by dress code + affordability
+try {
+  const wardrobeEventRoutes = require('./routes/wardrobeEventRoutes');
+  app.use('/api/v1/wardrobe-events', wardrobeEventRoutes);
+  console.log('✓ Wardrobe Events loaded at /api/v1/wardrobe-events');
+} catch (e) {
+  console.error('✗ Failed to load Wardrobe Event routes:', e.message);
+}
+
+// Scene Studio ↔ Episode connection — venue images with editable angles
+try {
+  const sceneStudioEpisodeRoutes = require('./routes/sceneStudioEpisodeRoutes');
+  app.use('/api/v1/scene-studio-episodes', sceneStudioEpisodeRoutes);
+  console.log('✓ Scene Studio Episodes loaded at /api/v1/scene-studio-episodes');
+} catch (e) {
+  console.error('✗ Failed to load Scene Studio Episode routes:', e.message);
+}
+
+// Feed Posts — timeline activity after episodes
+try {
+  const feedPostRoutes = require('./routes/feedPostRoutes');
+  app.use('/api/v1/feed-posts', feedPostRoutes);
+  console.log('✓ Feed Posts loaded at /api/v1/feed-posts');
+} catch (e) {
+  console.error('✗ Failed to load Feed Post routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
