@@ -69,9 +69,9 @@ export const FEED_STATE_CONFIG = {
   plateauing:    { label:'Plateauing',    color:'#6b6a80', bg:'#f0f0f5' },
   controversial: { label:'Controversial', color:'#8a4410', bg:'#fdf0e8' },
   cancelled:     { label:'Cancelled',     color:'#8a2020', bg:'#fde8e8' },
+  reinventing:   { label:'Reinventing',   color:'#1e4a7a', bg:C.blueLight },
   gone_dark:     { label:'Gone Dark',     color:'#444',    bg:'#eee' },
-  rebuilding:    { label:'Rebuilding',    color:'#1e4a7a', bg:C.blueLight },
-  crossed:       { label:'Crossed',       color:'#5c2d8a', bg:C.lavLight },
+  posthumous:    { label:'Posthumous',    color:'#555',    bg:'#e8e8e8' },
 };
 
 export const LALAVERSE_CITIES = [
