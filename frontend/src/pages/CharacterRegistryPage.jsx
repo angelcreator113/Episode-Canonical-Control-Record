@@ -3410,11 +3410,17 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0', paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span className="cr-dossier-section-title" style={{ fontSize: 13 }}>Social Intelligence</span>
                     {c.feed_profile_id && (
-                      <button onClick={async () => {
+                      <button onClick={async (e) => {
+                        const btn = e.target;
+                        btn.disabled = true;
+                        btn.textContent = 'Syncing...';
                         try {
-                          await fetch(`/api/v1/character-registry/characters/${c.id}/sync-social`, { method: 'POST' });
+                          const res = await fetch(`/api/v1/character-registry/characters/${c.id}/sync-social`, { method: 'POST' });
+                          const d = await res.json();
+                          btn.textContent = d.synced ? `Synced ${d.fieldsUpdated} fields` : 'Sync failed';
                           onRefresh();
-                        } catch {}
+                          setTimeout(() => { btn.textContent = 'Sync from Feed'; btn.disabled = false; }, 3000);
+                        } catch { btn.textContent = 'Sync failed'; setTimeout(() => { btn.textContent = 'Sync from Feed'; btn.disabled = false; }, 2000); }
                       }} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', cursor: 'pointer', fontWeight: 600 }}>Sync from Feed</button>
                     )}
                   </div>

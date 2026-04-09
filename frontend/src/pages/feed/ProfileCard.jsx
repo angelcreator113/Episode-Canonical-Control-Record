@@ -35,7 +35,7 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
           ))}
           {(p.archetype || d.archetype) && <span style={{ fontSize: 10, color: C.inkLight }}>{ARCHETYPE_LABELS[p.archetype || d.archetype] || p.archetype || d.archetype}</span>}
           {p.celebrity_tier && p.celebrity_tier !== 'accessible' && <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: p.celebrity_tier === 'untouchable' ? '#fef3c7' : p.celebrity_tier === 'exclusive' ? '#e0e7ff' : '#f0fdf4', color: p.celebrity_tier === 'untouchable' ? '#92400e' : p.celebrity_tier === 'exclusive' ? '#3730a3' : '#065f46' }}>{p.celebrity_tier}</span>}
-          {p.registry_character_id && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: '#eef0fb', color: '#6366f1' }} title="Linked to registry character">Registry</span>}
+          {p.registry_character_id && <a href={`/character-registry?view=world&character=${p.registry_character_id}`} onClick={e => e.stopPropagation()} style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: '#eef0fb', color: '#6366f1', textDecoration: 'none' }} title="View in Character Registry">Registry →</a>}
           {p.adult_content_present && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: '#fde8e8', color: C.pink }}>18+</span>}
           {feedLayer === 'lalaverse' && p.feed_layer === 'real_world' && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: C.blueLight, color: C.blue }} title="From JustAWoman's Feed — Lala follows this account">◈ Following</span>}
         </div>
