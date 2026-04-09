@@ -1338,10 +1338,24 @@ router.post('/:id/cross', optionalAuth, guardJustAWomanRecord, async (req, res) 
       });
     } catch { /* WorldTimelineEvent table may not exist yet */ }
 
+    // Sync social intelligence into registry character
+    let syncResult = null;
+    if (profile.registry_character_id) {
+      try {
+        const registrySync = require('../services/registrySyncService');
+        const refreshed = await db.SocialProfile.findByPk(profile.id);
+        syncResult = await registrySync.syncProfileToRegistry(refreshed, db);
+        console.log(`[Cross] Registry sync: ${syncResult.synced ? 'OK' : syncResult.reason}`);
+      } catch (syncErr) {
+        console.warn('[Cross] Registry sync failed (non-blocking):', syncErr.message);
+      }
+    }
+
     return res.json({
       profile,
       registry_character: registryCharacter,
       crossed: true,
+      social_leverage: syncResult?.socialLeverage || null,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -1366,6 +1380,10 @@ router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
       'crossing_trigger', 'crossing_mechanism', 'archetype',
       'follower_count_approx', 'sample_captions', 'sample_comments',
       'book_relevance', 'status', 'current_state',
+      'platform_presences', 'public_persona', 'private_reality',
+      'front_platform', 'real_platform', 'celebrity_tier',
+      'primary_income_source', 'income_breakdown', 'monthly_earnings_range',
+      'clout_score', 'drama_magnet', 'secret_connections', 'rebrand_history',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -1373,6 +1391,15 @@ router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
     }
 
     await profile.update(updates);
+
+    // Live sync to registry character if linked
+    if (profile.registry_character_id) {
+      try {
+        const registrySync = require('../services/registrySyncService');
+        await registrySync.syncProfileToRegistry(await db.SocialProfile.findByPk(profile.id), db);
+      } catch { /* non-blocking */ }
+    }
+
     return res.json({ profile });
   } catch (err) {
     return res.status(500).json({ error: err.message });
