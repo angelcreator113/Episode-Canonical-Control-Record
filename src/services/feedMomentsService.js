@@ -256,16 +256,23 @@ function generateMomentContent(beat, config, lens, event, hostName, triggerHandl
   const shift = SHIFTS[phase][Math.floor(Math.random() * SHIFTS[phase].length)];
 
   return {
+    // On-screen visual — what the VIEWER sees (bright notification overlay)
     trigger_profile: triggerHandle,
     trigger_action: template.action,
-    phone_screen: {
+    on_screen: {
       type: config.type,
       content: template.content,
       image_desc: template.image_desc || null,
+      asset_type: 'NOTIFICATION_OVERLAY',
+      asset_role: 'UI.OVERLAY.NOTIFICATION',
     },
-    lala_dialogue: dialogue,
-    lala_internal: internal,
-    behavior_shift: shift,
+    // Script lines — what Lala SAYS (voice, not on screen)
+    script_lines: {
+      lala_line: dialogue,           // spoken dialogue (voice actor)
+      lala_internal: internal,       // inner narration (voiceover)
+      justawoman_action: config.type === 'notification' ? 'taps notification' : 'scrolls',
+      direction: shift,              // camera/behavior direction
+    },
     beat_context: beat.description || config.context,
   };
 }
