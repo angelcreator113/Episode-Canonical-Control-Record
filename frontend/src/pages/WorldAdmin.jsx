@@ -2314,6 +2314,7 @@ The revised event should feel like a completely different experience from the si
                   <div style={{ height: 140, overflow: 'hidden', position: 'relative', borderRadius: '16px 16px 0 0' }}>
                     <img src={linkedScene.base_still_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <div style={{ position: 'absolute', bottom: 8, left: 12, fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '3px 10px', borderRadius: 6 }}>📍 {linkedScene.name}</div>
+                    <button onClick={() => updateField('scene_set_id', null)} style={{ position: 'absolute', bottom: 8, right: 12, fontSize: 9, color: '#fff', background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Change</button>
                   </div>
                 )}
 
@@ -2375,8 +2376,9 @@ The revised event should feel like a completely different experience from the si
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
                     <div><label style={S.fLabel}>Career Tier</label><input type="number" min={1} max={5} value={md.career_tier || 1} onChange={e => { setEventDetailModal({ ...md, career_tier: parseInt(e.target.value) || 1 }); }} onBlur={e => updateField('career_tier', parseInt(e.target.value) || 1)} style={S.sel} /></div>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={S.fLabel}>📍 Location (Scene Set)</label>
-                      {linkedScene && (
+                      {/* Only show full Location section when no banner image at top */}
+                      {!linkedScene?.base_still_url && <label style={S.fLabel}>Location (Scene Set)</label>}
+                      {linkedScene && !linkedScene.base_still_url && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6 }}>
                             {linkedScene.base_still_url && <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: 6 }} />}
                             <div style={{ flex: 1 }}>
