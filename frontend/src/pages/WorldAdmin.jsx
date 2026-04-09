@@ -2920,38 +2920,39 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     for (const key of saveable) {
                       if (md[key] !== undefined && md[key] !== null) toSave[key] = md[key];
                     }
+
+                    // Always save hydrated fields into canon_consequences.automation
+                    // This persists data even when DB columns don't exist yet
+                    const updatedAuto = { ...(md.canon_consequences?.automation || {}), ...auto };
+                    const hydratedFields = ['host', 'host_brand', 'venue_name', 'venue_address', 'event_date', 'event_time', 'dress_code', 'cost_coins', 'strictness', 'deadline_type', 'description', 'narrative_stakes', 'theme', 'mood', 'color_palette', 'floral_style', 'border_style'];
+                    for (const key of hydratedFields) {
+                      if (md[key] !== undefined && md[key] !== null && md[key] !== '') updatedAuto[key] = md[key];
+                    }
+                    toSave.canon_consequences = { ...(md.canon_consequences || {}), automation: updatedAuto };
+
                     // Try batch save first
                     try {
                       const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
                       if (res.data.success) {
                         setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event, ...md } : ev));
-                        setToast('✅ Event saved');
-                        setTimeout(() => setToast(null), 3000);
+                        setToast('Event saved');
                         return;
                       }
                     } catch (batchErr) {
-                      console.warn('[Event] Batch save failed, trying per-field:', batchErr.response?.data?.error);
+                      console.warn('[Event] Batch save failed, trying safe fields:', batchErr.response?.data?.error);
                     }
-                    // Fallback: save fields one by one
-                    let savedCount = 0;
-                    let failedFields = [];
-                    for (const [key, val] of Object.entries(toSave)) {
-                      try {
-                        await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [key]: val });
-                        savedCount++;
-                      } catch {
-                        failedFields.push(key);
-                      }
-                    }
-                    if (savedCount > 0) {
+                    // Fallback: save only canon_consequences (always works) + safe DB fields
+                    try {
+                      await api.put(`/api/v1/world/${showId}/events/${md.id}`, {
+                        canon_consequences: toSave.canon_consequences,
+                        name: md.name, host: md.host, description: md.description,
+                        prestige: md.prestige, status: md.status,
+                      });
                       setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...md } : ev));
+                      setToast('Event saved (some fields in automation data)');
+                    } catch (err) {
+                      setToast('Save failed: ' + (err.response?.data?.error || err.message));
                     }
-                    if (failedFields.length > 0) {
-                      setToast(`⚠️ Saved ${savedCount} fields. Failed: ${failedFields.join(', ')} — run migrations`);
-                    } else {
-                      setToast('✅ Event saved');
-                    }
-                    setTimeout(() => setToast(null), 5000);
                   }} style={{ ...S.primaryBtn, padding: '6px 20px', fontSize: 13 }}>
                     💾 Save
                   </button>
