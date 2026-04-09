@@ -2418,12 +2418,16 @@ The revised event should feel like a completely different experience from the si
                       try {
                         const emptyFields = [];
                         if (!md.host) emptyFields.push('host');
+                        if (!md.host_brand) emptyFields.push('host_brand');
                         if (!md.description) emptyFields.push('description');
                         if (!md.narrative_stakes) emptyFields.push('narrative_stakes');
                         if (!md.career_milestone) emptyFields.push('career_milestone');
                         if (!md.fail_consequence) emptyFields.push('fail_consequence');
                         if (!md.success_unlock) emptyFields.push('success_unlock');
                         if (!md.location_hint) emptyFields.push('location_hint');
+                        if (!md.venue_name) emptyFields.push('venue_name');
+                        if (!md.venue_address) emptyFields.push('venue_address');
+                        if (!md.dress_code) emptyFields.push('dress_code');
                         if (!(md.dress_code_keywords?.length > 0)) emptyFields.push('dress_code_keywords');
 
                         const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
@@ -2432,13 +2436,18 @@ The revised event should feel like a completely different experience from the si
 Event: "${md.name}" (${md.event_type}, prestige ${md.prestige})
 Brand: "${md.host_brand || 'not set'}"
 Host: "${md.host || 'EMPTY — MUST FILL THIS'}"
+Venue: "${md.venue_name || 'not set'}"
 
-IMPORTANT: The "host" field is the person or organization hosting this event. It MUST be filled. Example: "Velour Society Events Team", "Maison Belle Creative Director", "Fashion Week Committee". This is NOT the brand — it's WHO is hosting.
+IMPORTANT: The "host" field is the person or organization hosting this event. It MUST be filled.
+IMPORTANT: "venue_address" should be a specific fictional street address like "47 Rue de Rivoli, Le Marais" or "221 West 4th Street, SoHo". Not generic.
+IMPORTANT: "dress_code" should be specific like "cocktail chic", "black tie optional", "streetwear elevated". Not generic.
 
 Current values:
 - host="${md.host || ''}" ${!md.host ? '← EMPTY, MUST FILL' : ''}
 - host_brand="${md.host_brand || ''}"
-- dress_code="${md.dress_code || ''}"
+- venue_name="${md.venue_name || ''}"
+- venue_address="${md.venue_address || ''}" ${!md.venue_address ? '← EMPTY, MUST FILL with specific street address' : ''}
+- dress_code="${md.dress_code || ''}" ${!md.dress_code ? '← EMPTY, MUST FILL' : ''}
 - narrative_stakes="${md.narrative_stakes || ''}"
 - career_milestone="${md.career_milestone || ''}"
 - description="${md.description || ''}"
@@ -2450,7 +2459,7 @@ Empty fields to fill: ${emptyFields.join(', ') || 'none'}.
 
 ${md.narrative_stakes ? `Keep and expand: "${md.narrative_stakes}"` : 'Write compelling narrative stakes.'}
 
-Return action "enhance" with new_value as a JSON object. MUST include "host" field with a specific person or organization name.` }],
+Return action "enhance" with new_value as a JSON object containing ALL fields listed above. MUST include "host", "venue_address", and "dress_code".` }],
                           events: worldEvents.slice(0, 10),
                           episodes,
                         });
@@ -2582,9 +2591,72 @@ Return action "enhance" with new_value as a JSON object. MUST include "host" fie
                     <div><label style={S.fLabel}>Success Unlock</label><input value={md.success_unlock || ''} onChange={e => setEventDetailModal({ ...md, success_unlock: e.target.value })} onBlur={e => updateField('success_unlock', e.target.value)} placeholder="Unlocks VIP access..." style={S.sel} /></div>
                   </div>
 
+                  {/* Social Tasks Preview */}
+                  {(() => {
+                    const eventType = md.event_type || 'invite';
+                    const hostPlatform = auto.host_platform || '';
+                    const hostCategory = (auto.content_category || '').toLowerCase();
+                    // Base tasks by event type
+                    const BASE = {
+                      invite: [
+                        { slot: 'grwm', label: 'Get Ready With Me', platform: 'tiktok', timing: 'before', required: true },
+                        { slot: 'outfit_reveal', label: 'Outfit Reveal', platform: 'instagram', timing: 'before', required: true },
+                        { slot: 'arrival', label: 'Arrival Content', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'host_photo', label: 'Photo with Host', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'go_live', label: 'Go Live', platform: 'tiktok', timing: 'during', required: false },
+                        { slot: 'bts_stories', label: 'Behind the Scenes', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'recap', label: 'Event Recap', platform: 'instagram', timing: 'after', required: true },
+                        { slot: 'thank_host', label: 'Thank the Host', platform: 'instagram', timing: 'after', required: false },
+                        { slot: 'engage', label: 'Engage with Attendees', platform: 'instagram', timing: 'after', required: false },
+                      ],
+                      brand_deal: [
+                        { slot: 'teaser', label: 'Brand Teaser', platform: 'instagram', timing: 'before', required: false },
+                        { slot: 'brand_post_1', label: 'Sponsored Post 1', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'brand_post_2', label: 'Sponsored Post 2', platform: 'tiktok', timing: 'during', required: true },
+                        { slot: 'brand_stories', label: 'Brand Stories', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'engagement_check', label: 'Check Engagement', platform: 'instagram', timing: 'after', required: true },
+                      ],
+                      guest: [
+                        { slot: 'grwm', label: 'Get Ready', platform: 'tiktok', timing: 'before', required: false },
+                        { slot: 'presence', label: 'Show Presence', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'network', label: 'Network Content', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'recap', label: 'Recap', platform: 'tiktok', timing: 'after', required: false },
+                      ],
+                      upgrade: [
+                        { slot: 'grwm', label: 'Elevated GRWM', platform: 'tiktok', timing: 'before', required: true },
+                        { slot: 'arrival', label: 'Grand Arrival', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'experience', label: 'VIP Experience', platform: 'instagram', timing: 'during', required: true },
+                        { slot: 'recap', label: 'Experience Recap', platform: 'instagram', timing: 'after', required: true },
+                      ],
+                    };
+                    const tasks = BASE[eventType] || BASE.invite;
+                    const TIMING_COLORS = { before: '#f59e0b', during: '#6366f1', after: '#16a34a' };
+                    const requiredCount = tasks.filter(t => t.required).length;
+                    return (
+                      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>
+                          Social Tasks Preview ({tasks.length} tasks, {requiredCount} required)
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 4 }}>
+                          {tasks.map(t => (
+                            <div key={t.slot} style={{ padding: '4px 8px', background: '#f8f8f8', borderRadius: 6, borderLeft: `3px solid ${TIMING_COLORS[t.timing] || '#999'}`, fontSize: 10 }}>
+                              <div style={{ fontWeight: 600, color: '#333' }}>{t.label}</div>
+                              <div style={{ color: '#999', fontSize: 9 }}>{t.platform} · {t.timing}{t.required ? ' · required' : ''}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
+                          These tasks will be generated when an episode is created from this event.
+                          {hostPlatform ? ` Extra ${hostPlatform} tasks will be added based on the host's platform.` : ''}
+                          {hostCategory ? ` Bonus ${hostCategory} niche tasks included.` : ''}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Episode linking */}
                   <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>💉 Link to Episode</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>Link to Episode</div>
                     {injectSuccess?.eventId === md.id ? (
                       <div style={{ padding: 10, background: '#f0fdf4', borderRadius: 8, border: '2px solid #22c55e', textAlign: 'center', fontSize: 13, color: '#16a34a', fontWeight: 700 }}>{injectSuccess.message}</div>
                     ) : (
