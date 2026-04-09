@@ -246,7 +246,9 @@ async function uploadChecklist(buffer, eventId) {
 // ─── MAIN: GENERATE SOCIAL CHECKLIST ────────────────────────────────────────
 
 async function generateSocialChecklist(event, models) {
-  const tasks = event.canon_consequences?.automation?.social_tasks || [];
+  let tasks = event.canon_consequences?.automation?.social_tasks || [];
+  if (!Array.isArray(tasks)) tasks = [];
+
   if (tasks.length === 0) {
     // Generate tasks on the fly
     const { buildSocialTasks } = require('./episodeGeneratorService');
@@ -262,18 +264,27 @@ async function generateSocialChecklist(event, models) {
         hostProfile = rows?.[0] || null;
       } catch { /* non-blocking */ }
     }
-    const generated = buildSocialTasks(eventType, hostProfile);
-    tasks.push(...generated);
+    tasks = buildSocialTasks(eventType, hostProfile);
   }
 
   const buffer = renderSocialChecklist(tasks, event);
-  const assetUrl = await uploadChecklist(buffer, event.id);
 
-  // Create Asset record
+  // Upload to S3 (optional — skip if no bucket configured)
+  let assetUrl = null;
+  try {
+    if (S3_BUCKET) {
+      assetUrl = await uploadChecklist(buffer, event.id);
+    }
+  } catch (uploadErr) {
+    console.warn('[SocialChecklist] S3 upload failed (non-blocking):', uploadErr.message);
+  }
+
+  // Create Asset record (optional)
   const { Asset } = models;
   let asset = null;
-  if (Asset) {
-    asset = await Asset.create({
+  if (Asset && assetUrl) {
+    try {
+      asset = await Asset.create({
       id: uuidv4(),
       name: `${event.name} — Social Checklist`,
       asset_type: 'SOCIAL_CHECKLIST',
@@ -297,13 +308,17 @@ async function generateSocialChecklist(event, models) {
         generated_at: new Date().toISOString(),
       },
     });
+    } catch (assetErr) {
+      console.warn('[SocialChecklist] Asset.create failed (non-blocking):', assetErr.message);
+    }
   }
 
-  // Store checklist URL back on the event automation data
+  // Store tasks + checklist URL back on the event automation data
   try {
     const auto = event.canon_consequences?.automation || {};
-    auto.social_checklist_url = assetUrl;
-    auto.social_checklist_asset_id = asset?.id || null;
+    auto.social_tasks = tasks;
+    if (assetUrl) auto.social_checklist_url = assetUrl;
+    if (asset?.id) auto.social_checklist_asset_id = asset.id;
     await models.sequelize.query(
       'UPDATE world_events SET canon_consequences = :cc, updated_at = NOW() WHERE id = :id',
       { replacements: { cc: JSON.stringify({ ...event.canon_consequences, automation: auto }), id: event.id } }
