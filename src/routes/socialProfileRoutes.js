@@ -1426,6 +1426,13 @@ router.patch('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
       'crossing_trigger', 'crossing_mechanism', 'archetype',
       'follower_count_approx', 'sample_captions', 'sample_comments',
       'book_relevance', 'status', 'current_state',
+      'platform_presences', 'public_persona', 'private_reality',
+      'front_platform', 'real_platform', 'celebrity_tier',
+      'primary_income_source', 'income_breakdown', 'monthly_earnings_range',
+      'clout_score', 'drama_magnet', 'secret_connections', 'rebrand_history',
+      'follow_motivation', 'follow_emotion', 'follow_trigger', 'event_excitement',
+      'lifestyle_claim', 'lifestyle_reality', 'lifestyle_gap',
+      'beauty_factor', 'beauty_description', 'aesthetic_power',
     ];
     const updates = {};
     for (const key of allowed) {
@@ -1433,6 +1440,15 @@ router.patch('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
     }
 
     await profile.update(updates);
+
+    // Live sync to registry if linked
+    if (profile.registry_character_id) {
+      try {
+        const registrySync = require('../services/registrySyncService');
+        await registrySync.syncProfileToRegistry(await db.SocialProfile.findByPk(profile.id), db);
+      } catch { /* non-blocking */ }
+    }
+
     return res.json({ profile });
   } catch (err) {
     return res.status(500).json({ error: err.message });
