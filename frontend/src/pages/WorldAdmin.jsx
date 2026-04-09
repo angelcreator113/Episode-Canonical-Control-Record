@@ -2591,6 +2591,45 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <div><label style={S.fLabel}>Success Unlock</label><input value={md.success_unlock || ''} onChange={e => setEventDetailModal({ ...md, success_unlock: e.target.value })} onBlur={e => updateField('success_unlock', e.target.value)} placeholder="Unlocks VIP access..." style={S.sel} /></div>
                   </div>
 
+                  {/* Financial Preview */}
+                  {(() => {
+                    const p = md.prestige || 5;
+                    const eventIncome = md.is_paid ? (parseFloat(md.payment_amount) || 0) : 0;
+                    const eventExpense = parseFloat(md.cost_coins) || 0;
+                    // Estimate content revenue from social tasks
+                    const contentRevenue = md.event_type === 'brand_deal' ? eventIncome * 0.1 : 0;
+                    // Estimate outfit cost from prestige tier
+                    const estOutfitCost = p >= 8 ? 400 : p >= 6 ? 250 : p >= 4 ? 120 : 50;
+                    const totalIn = eventIncome + contentRevenue;
+                    const totalOut = eventExpense + estOutfitCost;
+                    const net = totalIn - totalOut;
+                    return (
+                      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>Financial Preview</div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a' }}>Income</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: '#16a34a' }}>{totalIn.toLocaleString()}</div>
+                            {eventIncome > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Payment: {eventIncome}</div>}
+                            {contentRevenue > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content: +{contentRevenue}</div>}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626' }}>Expenses</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: '#dc2626' }}>{totalOut.toLocaleString()}</div>
+                            {eventExpense > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Event: {eventExpense}</div>}
+                            <div style={{ fontSize: 9, color: '#dc262680' }}>Outfit (est): ~{estOutfitCost}</div>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
+                            <div style={{ fontSize: 9, color: '#94a3b8' }}>{net >= 0 ? 'Profitable' : 'Costs more than earns'}</div>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 4 }}>Estimates based on prestige {p} tier. Actual costs depend on wardrobe selection.</div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Social Tasks */}
                   {(() => {
                     const savedTasks = auto.social_tasks || [];
@@ -2733,7 +2772,18 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           const updated = { ...md, ...fieldsToSave };
                           setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...fieldsToSave } : ev));
                           setEventDetailModal(updated);
-                          showToast('Event marked ready — now in Events Library');
+                          showToast('Event marked ready — generating checklist...');
+                          // Auto-generate social checklist
+                          try {
+                            const clRes = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-social-checklist`);
+                            if (clRes.data.success) {
+                              const newAuto = { ...auto, social_tasks: clRes.data.data.tasks, social_checklist_url: clRes.data.data.assetUrl };
+                              const withChecklist = { ...updated, canon_consequences: { ...updated.canon_consequences, automation: newAuto } };
+                              setEventDetailModal(withChecklist);
+                              setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: withChecklist.canon_consequences } : ev));
+                              showToast(`Ready! Checklist generated with ${clRes.data.data.tasks.length} tasks`);
+                            }
+                          } catch { /* non-blocking — checklist can be generated later */ }
                         }
                       } catch (err) {
                         // If full save fails (columns missing), at least save status
