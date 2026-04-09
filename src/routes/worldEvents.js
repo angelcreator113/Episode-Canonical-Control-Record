@@ -1599,6 +1599,48 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
   }
 });
 
+// POST /world/:showId/events/bulk-delete — Delete multiple events at once
+router.post('/world/:showId/events/bulk-delete', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { ids, delete_all_drafts, delete_all } = req.body;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    let deleted = 0;
+    if (delete_all) {
+      // Delete ALL events for this show
+      const [result] = await models.sequelize.query(
+        'DELETE FROM world_events WHERE show_id = :showId',
+        { replacements: { showId } }
+      );
+      deleted = result?.rowCount || 0;
+    } else if (delete_all_drafts) {
+      // Delete all draft events
+      const [result] = await models.sequelize.query(
+        "DELETE FROM world_events WHERE show_id = :showId AND status = 'draft'",
+        { replacements: { showId } }
+      );
+      deleted = result?.rowCount || 0;
+    } else if (ids && Array.isArray(ids)) {
+      // Delete specific IDs
+      for (const id of ids) {
+        try {
+          await models.sequelize.query(
+            'DELETE FROM world_events WHERE id = :id AND show_id = :showId',
+            { replacements: { id, showId } }
+          );
+          deleted++;
+        } catch { /* skip */ }
+      }
+    }
+
+    return res.json({ success: true, deleted });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/from-profile — Create event from a feed profile
 router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res) => {
   try {
@@ -1945,6 +1987,40 @@ router.get('/world/:showId/financial-pressure', optionalAuth, async (req, res) =
   }
 });
 
+// POST /world/:showId/events/:eventId/generate-venue — Generate venue exterior + interior images
+router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    // Load event via raw SQL
+    const [rows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    const event = rows?.[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    if (typeof event.canon_consequences === 'string') {
+      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+    }
+    event.show_id = showId;
+
+    const { generateVenueImages } = require('../services/venueGenerationService');
+    const result = await generateVenueImages(event, models);
+
+    return res.json({
+      success: true,
+      data: result,
+      message: `Venue images generated for "${event.name}" — scene set created`,
+    });
+  } catch (err) {
+    console.error('[VenueGen] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/:eventId/generate-social-checklist
 router.post('/world/:showId/events/:eventId/generate-social-checklist', optionalAuth, async (req, res) => {
   try {
@@ -1952,18 +2028,21 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', optional
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    // Load event
+    // Load event — raw SQL first (model may have unmigrated columns)
     let event;
-    if (models.WorldEvent) {
-      event = await models.WorldEvent.findByPk(eventId);
-      if (event) event = event.toJSON();
-    }
-    if (!event) {
+    try {
       const [rows] = await models.sequelize.query(
-        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId',
+        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
         { replacements: { eventId, showId } }
       );
       event = rows?.[0];
+    } catch {
+      if (models.WorldEvent) {
+        try {
+          event = await models.WorldEvent.findByPk(eventId);
+          if (event) event = event.toJSON();
+        } catch { /* model query failed too */ }
+      }
     }
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 

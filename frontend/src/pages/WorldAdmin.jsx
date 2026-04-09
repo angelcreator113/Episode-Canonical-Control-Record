@@ -1530,6 +1530,23 @@ The revised event should feel like a completely different experience from the si
               <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
               <button onClick={() => setShowTemplates(!showTemplates)} style={S.smBtn}>📋 Templates</button>
               <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={S.smBtn}>{aiFixLoading ? '⏳...' : '✨ Enhance'}</button>
+              <button onClick={async () => {
+                if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
+                try {
+                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
+                  setToast(`Deleted ${res.data.deleted} draft events`);
+                  loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete Drafts</button>
+              <button onClick={async () => {
+                if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
+                if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
+                try {
+                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
+                  setToast(`Deleted ${res.data.deleted} events`);
+                  loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete All</button>
             </div>
           </div>
 
@@ -2699,6 +2716,27 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           >
                             {checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist'}
                           </button>
+                          <button
+                            onClick={async (e) => {
+                              const btn = e.target;
+                              btn.disabled = true;
+                              btn.textContent = 'Generating venue...';
+                              try {
+                                const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
+                                if (res.data.success) {
+                                  setToast('Venue images + scene set created!');
+                                  loadData();
+                                }
+                              } catch (err) {
+                                setToast('Venue generation failed: ' + (err.response?.data?.error || err.message));
+                              }
+                              btn.disabled = false;
+                              btn.textContent = 'Generate Venue';
+                            }}
+                            style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #6366f1', background: '#eef2ff', color: '#6366f1', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+                          >
+                            Generate Venue
+                          </button>
                         </div>
 
                         {/* Checklist image preview */}
@@ -2817,7 +2855,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               const withChecklist = { ...updated, canon_consequences: { ...updated.canon_consequences, automation: newAuto } };
                               setEventDetailModal(withChecklist);
                               setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: withChecklist.canon_consequences } : ev));
-                              setToast(`Ready! Checklist generated with ${clRes.data.data.tasks.length} tasks`);
+                              setToast(`Ready! Checklist done. Generating venue images...`);
+                              // Auto-generate venue images
+                              try {
+                                const venueRes = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
+                                if (venueRes.data.success) {
+                                  setToast(`Venue images + scene set created!`);
+                                  loadData();
+                                }
+                              } catch { setToast('Ready! (venue generation skipped — no OPENAI_API_KEY or error)'); }
                             }
                           } catch { /* non-blocking — checklist can be generated later */ }
                         }
