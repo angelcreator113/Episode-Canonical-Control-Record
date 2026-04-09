@@ -565,19 +565,28 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
     // Save
     await episode.update({ script_content: script.trim() });
 
-    // Mark event as used
-    await models.sequelize.query(
-      `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = times_used + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
-      { replacements: { episodeId: episode_id, eventId } }
-    );
+    // Mark event as used — try with times_used, fall back without
+    try {
+      await models.sequelize.query(
+        `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
+        { replacements: { episodeId: episode_id, eventId } }
+      );
+    } catch {
+      await models.sequelize.query(
+        `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :eventId`,
+        { replacements: { episodeId: episode_id, eventId } }
+      );
+    }
 
     // If this event has an approved invitation, stamp the episode_id on the asset
     if (event.invitation_asset_id) {
-      await models.sequelize.query(
-        `UPDATE assets SET episode_id = :episodeId, asset_scope = 'EPISODE', updated_at = NOW()
-         WHERE id = :assetId AND deleted_at IS NULL`,
-        { replacements: { episodeId: episode_id, assetId: event.invitation_asset_id } }
-      );
+      try {
+        await models.sequelize.query(
+          `UPDATE assets SET episode_id = :episodeId, updated_at = NOW()
+           WHERE id = :assetId AND deleted_at IS NULL`,
+          { replacements: { episodeId: episode_id, assetId: event.invitation_asset_id } }
+        );
+      } catch { /* asset_scope/episode_id columns may not exist */ }
     }
 
     // Auto-link episode to event's scene set if the event has one

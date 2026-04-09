@@ -289,11 +289,9 @@ async function generateSocialChecklist(event, models) {
       name: `${event.name} — Social Checklist`,
       asset_type: 'SOCIAL_CHECKLIST',
       asset_role: 'UI.OVERLAY.SOCIAL_CHECKLIST',
-      asset_group: 'EVENT',
-      asset_scope: 'EVENT',
-      purpose: 'MAIN',
+      asset_group: 'SHOW',
+      asset_scope: 'SHOW',
       category: 'overlay',
-      entity_type: 'prop',
       s3_url_raw: assetUrl,
       s3_url_processed: assetUrl,
       // processing_status: 'none', — column may not exist
