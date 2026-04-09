@@ -140,14 +140,39 @@ function buildSpecPrompt(sceneSet) {
   const typeHint = sceneSet.scene_type ? `Scene type: ${sceneSet.scene_type}.` : '';
   const descHint = sceneSet.canonical_description ? `Existing description: ${sceneSet.canonical_description}` : '';
 
-  return `You are a luxury production designer creating a SCENE SPEC for this room.
+  const isEvent = sceneSet.scene_type === 'EVENT_LOCATION';
+  const isTransition = sceneSet.scene_type === 'TRANSITION';
+  const isHome = sceneSet.scene_type === 'HOME_BASE' || sceneSet.scene_type === 'CLOSET';
+
+  // Adapt camera contract count by scene type
+  let angleRule, stateRule, scaleNote;
+  if (isEvent) {
+    angleRule = 'Create exactly 1-2 camera angles. One establishing exterior/entrance shot is required. One interior wide shot is optional.';
+    stateRule = 'Create 1-2 room states (evening event and one other).';
+    scaleNote = 'This is an EVENT VENUE — focus on the entrance, facade, and main event space. Do NOT over-detail interior furniture.';
+  } else if (isTransition) {
+    angleRule = 'Create 1-2 camera angles — the transition moment only.';
+    stateRule = 'Create 1-2 room states.';
+    scaleNote = 'This is a TRANSITION space — hallway, elevator, car, street. Keep it focused.';
+  } else if (isHome) {
+    angleRule = 'Create 4-8 camera angles covering different parts of the room.';
+    stateRule = 'Create at least 3 room states (morning, evening, night minimum).';
+    scaleNote = 'This is a RECURRING location — Lala lives here. Every detail matters for continuity across episodes.';
+  } else {
+    angleRule = 'Create 2-4 camera angles for the key perspectives.';
+    stateRule = 'Create 2-3 room states.';
+    scaleNote = '';
+  }
+
+  return `You are a luxury production designer creating a SCENE SPEC for this location.
 This spec will be the source of truth for generating consistent AI camera angles.
 Every detail matters — objects that appear in this spec MUST appear in generated images.
 
 ${nameHint} ${typeHint}
 ${descHint}
+${scaleNote}
 
-Analyze this room image and return a complete JSON SceneSpec:
+Analyze this image and return a complete JSON SceneSpec:
 
 {
   "room": {
@@ -230,8 +255,8 @@ RULES:
 3. Object categories: "signature" = must be correct in every visible angle. "anchor" = large furniture defining layout. "character" = personal items revealing who lives here. Others are descriptive.
 4. Continuity rules: only include locked_ fields that matter for that object. Don't force-fill all fields.
 5. Camera contracts: "required" = generation FAILS without these. "expected" = should appear, warning if missing. "out_of_frame" = should NOT appear (prevents hallucination).
-6. Create at least 6 camera angles covering different parts of the room.
-7. Create at least 3 room states (morning, evening, night minimum).
+6. ${angleRule}
+7. ${stateRule}
 8. List EVERY visible object — furniture, decor, lighting, architecture. Don't skip small items.
 9. If there is text/signage visible, the exact text is CRITICAL for continuity.
 10. This should be luxury-scale. Describe materials at their highest plausible tier.

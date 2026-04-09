@@ -912,15 +912,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   </div>
                   <button onClick={async () => {
                     setSeeding(true);
+                    showToast('Creating camera angles from spec...');
                     try {
                       const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
                       const d = await r.json();
-                      if (d.success) showToast(`${d.data?.angles_created || 0} angles created!`);
-                      else showToast(d.error || 'Failed', 'error');
+                      if (d.success) {
+                        showToast(`${d.data?.angles_created || 0} camera angles created — ready to generate images`);
+                        if (onRefresh) await onRefresh();
+                      } else showToast(d.error || 'Failed', 'error');
                     } catch (e) { showToast(e.message, 'error'); }
                     setSeeding(false);
                   }} disabled={seeding} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                    {seeding ? <><Loader size={12} className="spin" /> Creating...</> : <><Camera size={12} /> Create {set.scene_spec?.camera_contracts?.length || 0} Camera Angles</>}
+                    {seeding ? <><Loader size={12} className="spin" /> Creating {set.scene_spec?.camera_contracts?.length || 0} angles...</> : <><Camera size={12} /> Create {set.scene_spec?.camera_contracts?.length || 0} Camera Angles</>}
                   </button>
                 </>
               )}
