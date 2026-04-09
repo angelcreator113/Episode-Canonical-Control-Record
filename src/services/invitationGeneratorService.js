@@ -206,19 +206,22 @@ async function getNextVersion(sequelize, eventId) {
 
 async function findBrandStyleReference(sequelize, event) {
   if (!event.host_brand) return null;
-  // Find the most recent approved invitation from the same host_brand
-  const [prev] = await sequelize.query(
-    `SELECT a.s3_url_processed FROM assets a
-     JOIN world_events e ON a.metadata->>'event_id' = e.id::text
-     WHERE e.host_brand = :brand
-       AND e.id != :eventId
-       AND a.asset_type = 'INVITATION_LETTER'
-       AND a.approval_status = 'approved'
-       AND a.deleted_at IS NULL
-     ORDER BY a.created_at DESC LIMIT 1`,
-    { replacements: { brand: event.host_brand, eventId: event.id }, type: sequelize.QueryTypes.SELECT }
-  );
-  return prev?.s3_url_processed || null;
+  try {
+    // Find the most recent invitation from the same host_brand
+    const [prev] = await sequelize.query(
+      `SELECT a.s3_url_processed FROM assets a
+       JOIN world_events e ON a.metadata->>'event_id' = e.id::text
+       WHERE e.host_brand = :brand
+         AND e.id != :eventId
+         AND a.asset_type = 'INVITATION_LETTER'
+         AND a.deleted_at IS NULL
+       ORDER BY a.created_at DESC LIMIT 1`,
+      { replacements: { brand: event.host_brand, eventId: event.id }, type: sequelize.QueryTypes.SELECT }
+    );
+    return prev?.s3_url_processed || null;
+  } catch {
+    return null; // approval_status column may not exist yet
+  }
 }
 
 // ─── ASSET RECORD ─────────────────────────────────────────────────────────────
@@ -259,6 +262,31 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
       generated_at: new Date().toISOString(),
     },
     approval_status: 'pending_review',
+  }).catch(async () => {
+    // Retry without approval_status if column doesn't exist
+    return Asset.create({
+      id: uuidv4(),
+      name: `${event.name} — Invitation v${version}`,
+      asset_type: 'INVITATION_LETTER',
+      asset_role: 'UI.OVERLAY.INVITATION',
+      asset_group: 'SHOW',
+      asset_scope: 'SHOW',
+      purpose: 'MAIN',
+      category: 'overlay',
+      entity_type: 'prop',
+      s3_url_raw: s3Url,
+      s3_url_processed: s3Url,
+      processing_status: 'none',
+      show_id: showId || null,
+      metadata: {
+        source: 'invitation-generator-v2',
+        event_id: event.id,
+        event_name: event.name,
+        theme: resolvedTheme,
+        version,
+        generated_at: new Date().toISOString(),
+      },
+    });
   });
 
   return asset;
