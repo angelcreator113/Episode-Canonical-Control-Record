@@ -159,8 +159,8 @@ No text, no people. Interior design photography. Landscape orientation.`;
     try {
       sceneSet = await models.SceneSet.create({
         name: identity.venueName,
-        scene_type: 'EVENT_VENUE',
-        base_still_url: intS3Url, // Interior as the main scene
+        scene_type: 'EVENT_LOCATION',
+        base_still_url: intS3Url,
         show_id: event.show_id,
       });
 
@@ -170,14 +170,12 @@ No text, no people. Interior design photography. Landscape orientation.`;
           {
             scene_set_id: sceneSet.id,
             angle_label: 'exterior',
-            angle_type: 'establishing',
             still_image_url: extS3Url,
             sort_order: 1,
           },
           {
             scene_set_id: sceneSet.id,
             angle_label: 'interior_wide',
-            angle_type: 'wide',
             still_image_url: intS3Url,
             sort_order: 2,
           },

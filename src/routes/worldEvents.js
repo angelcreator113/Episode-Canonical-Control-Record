@@ -2005,6 +2005,10 @@ router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async
     if (typeof event.canon_consequences === 'string') {
       try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
     }
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ success: false, error: 'OPENAI_API_KEY not configured. Add it to your .env file to generate venue images.' });
+    }
+
     event.show_id = showId;
 
     const { generateVenueImages } = require('../services/venueGenerationService');
