@@ -455,6 +455,13 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     const characterSync = require('./characterSyncService');
     const syncResult = await characterSync.syncAfterEvent(event, episode, models);
     console.log(`[EpisodeGenerator] Character sync: ${syncResult.updated} profiles updated`);
+    // Auto-generate opportunities from event performance
+    try {
+      const newOpps = await characterSync.generatePostEventOpportunities(event, episode, models);
+      if (newOpps.length > 0) console.log(`[EpisodeGenerator] ${newOpps.length} opportunities generated from event`);
+    } catch (oppErr) {
+      console.warn('[EpisodeGenerator] Opportunity generation failed (non-blocking):', oppErr.message);
+    }
   } catch (syncErr) {
     console.warn('[EpisodeGenerator] Character sync failed (non-blocking):', syncErr.message);
   }

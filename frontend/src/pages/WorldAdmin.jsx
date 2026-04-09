@@ -2858,6 +2858,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         setToast(`Missing fields: ${missing.join(', ')}. Fill them or use AI Enhance first.`);
                         return;
                       }
+                      // Confirmation summary
+                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Save all fields\n• Generate social checklist\n• Generate venue images\n• Move to Events Library`;
+                      if (!window.confirm(summary)) return;
                       try {
                         // Save all hydrated fields + status in one PUT
                         const fieldsToSave = {

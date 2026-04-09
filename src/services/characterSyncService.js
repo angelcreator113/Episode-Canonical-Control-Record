@@ -186,4 +186,95 @@ async function syncAfterEvent(event, episode, models) {
   return { updated, host_id: automation.host_profile_id, guests_updated: guests.length };
 }
 
-module.exports = { syncAfterEvent, calculateAutoState, calculateInitialState };
+// ─── POST-EVENT OPPORTUNITY GENERATOR ────────────────────────────────────────
+// Events lead to opportunities based on performance + guest connections
+
+const OPPORTUNITY_TEMPLATES = {
+  slay: [
+    { type: 'modeling', name: '{brand} Campaign Shoot', payment: [3000, 8000], prestige: [7, 9] },
+    { type: 'editorial', name: '{brand} Magazine Feature', payment: [2000, 5000], prestige: [7, 9] },
+    { type: 'ambassador', name: '{brand} Brand Ambassador Offer', payment: [5000, 15000], prestige: [8, 10] },
+    { type: 'runway', name: 'Fashion Week Casting — {brand}', payment: [1000, 3000], prestige: [8, 10] },
+  ],
+  pass: [
+    { type: 'brand_deal', name: '{brand} Sponsored Post', payment: [500, 2000], prestige: [4, 6] },
+    { type: 'podcast', name: 'Podcast Guest — Creator Spotlight', payment: [200, 500], prestige: [4, 6] },
+    { type: 'campaign', name: '{brand} Content Collaboration', payment: [1000, 3000], prestige: [5, 7] },
+  ],
+  safe: [
+    { type: 'brand_deal', name: '{brand} PR Gifting', payment: [0, 200], prestige: [3, 5] },
+    { type: 'interview', name: 'Quick Q&A — {brand} Blog', payment: [100, 300], prestige: [3, 4] },
+  ],
+  fail: [], // No opportunities from failed events
+};
+
+async function generatePostEventOpportunities(event, episode, models) {
+  const tier = episode.evaluation_json?.tier_final || 'safe';
+  const templates = OPPORTUNITY_TEMPLATES[tier] || OPPORTUNITY_TEMPLATES.safe;
+  if (templates.length === 0) return [];
+
+  const auto = event.canon_consequences?.automation || {};
+  const guests = auto.guest_profiles || [];
+  const prestige = event.prestige || 5;
+
+  // Pick 1-2 opportunities based on prestige
+  const count = prestige >= 8 ? 2 : prestige >= 5 ? 1 : (Math.random() > 0.5 ? 1 : 0);
+  if (count === 0) return [];
+
+  // Get brand names from guest list or event
+  const brandSources = [
+    event.host_brand,
+    ...guests.filter(g => g.relationship === 'industry').map(g => g.display_name || g.handle),
+    ...(auto.brand_partnerships || []).map(b => b.brand),
+  ].filter(Boolean);
+
+  const { v4: uuidv4 } = require('uuid');
+  const created = [];
+
+  for (let i = 0; i < Math.min(count, templates.length); i++) {
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    const brand = brandSources[Math.floor(Math.random() * brandSources.length)] || event.host || 'Industry Contact';
+    const payment = template.payment[0] + Math.floor(Math.random() * (template.payment[1] - template.payment[0]));
+    const oppPrestige = template.prestige[0] + Math.floor(Math.random() * (template.prestige[1] - template.prestige[0]));
+
+    const oppData = {
+      id: uuidv4(),
+      show_id: event.show_id,
+      name: template.name.replace('{brand}', brand),
+      opportunity_type: template.type,
+      category: auto.content_category || 'fashion',
+      status: 'offered',
+      brand_or_company: brand,
+      connector_handle: auto.host_handle || null,
+      connection_story: `Met at ${event.name}. ${tier === 'slay' ? 'Lala crushed it and caught their attention.' : 'Made a connection during the event.'}`,
+      payment_amount: payment,
+      prestige: oppPrestige,
+      narrative_stakes: `This opportunity came from ${event.name}. ${tier === 'slay' ? 'Lala is in demand.' : 'A door opened — will she walk through?'}`,
+      career_impact: tier === 'slay' ? 'Career-defining moment if she lands this' : 'Good for the portfolio',
+      status_history: [{ status: 'offered', date: new Date().toISOString(), note: `From event: ${event.name}` }],
+    };
+
+    try {
+      if (models.Opportunity) {
+        const opp = await models.Opportunity.create(oppData);
+        created.push(opp.toJSON ? opp.toJSON() : opp);
+      } else {
+        await models.sequelize.query(
+          `INSERT INTO opportunities (id, show_id, name, opportunity_type, category, status, brand_or_company,
+           connector_handle, connection_story, payment_amount, prestige, narrative_stakes, status_history, created_at, updated_at)
+           VALUES (:id, :show_id, :name, :opportunity_type, :category, 'offered', :brand_or_company,
+           :connector_handle, :connection_story, :payment_amount, :prestige, :narrative_stakes, :status_history, NOW(), NOW())`,
+          { replacements: { ...oppData, status_history: JSON.stringify(oppData.status_history) } }
+        );
+        created.push(oppData);
+      }
+      console.log(`[CharSync] Opportunity created: ${oppData.name} ($${payment})`);
+    } catch (err) {
+      console.warn('[CharSync] Opportunity creation failed:', err.message);
+    }
+  }
+
+  return created;
+}
+
+module.exports = { syncAfterEvent, calculateAutoState, calculateInitialState, generatePostEventOpportunities };
