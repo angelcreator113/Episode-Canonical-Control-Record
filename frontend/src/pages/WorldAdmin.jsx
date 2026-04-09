@@ -1233,7 +1233,7 @@ The revised event should feel like a completely different experience from the si
       {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
       {activeTab === 'feed' && (
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
-          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" onNavigateToTab={setActiveTab} />
+          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" onNavigateToTab={(tab, ev) => { setActiveTab(tab); if (ev) setEventDetailModal(ev); }} />
         </Suspense>
       )}
 
@@ -1297,21 +1297,24 @@ The revised event should feel like a completely different experience from the si
                   <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                     <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
                   </div>
-                  {feedEventResults[template.name]?.status === 'created' ? (
-                    <div style={{ background: '#d4edda', border: '1px solid #a3cfbb', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
-                      <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created!</div>
-                      <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{feedEventResults[template.name].event?.name || template.name}</div>
-                      <div style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>
-                        Host: {feedEventResults[template.name].event?.host || 'TBD'} · Prestige: {feedEventResults[template.name].event?.prestige || 5}
+                  {feedEventResults[template.name]?.status === 'created' ? (() => {
+                    const created = feedEventResults[template.name].event;
+                    return (
+                      <div style={{ background: '#d4edda', border: '1px solid #a3cfbb', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
+                        <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created!</div>
+                        <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{created?.name || template.name}</div>
+                        <div style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>
+                          Host: {created?.host_display || created?.host || 'TBD'} · Prestige: {created?.prestige || 5}
+                        </div>
+                        <button
+                          onClick={() => { setActiveTab('events'); setEventDetailModal(created); }}
+                          style={{ marginTop: 6, padding: '4px 12px', borderRadius: 4, border: '1px solid #B8962E', background: '#fff', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
+                        >
+                          View & Edit Event
+                        </button>
                       </div>
-                      <button
-                        onClick={() => { setActiveTab('events'); }}
-                        style={{ marginTop: 6, padding: '4px 12px', borderRadius: 4, border: '1px solid #B8962E', background: '#fff', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
-                      >
-                        View in Events Library
-                      </button>
-                    </div>
-                  ) : (
+                    );
+                  })() : (
                     <button
                       disabled={feedEventResults[template.name]?.status === 'creating'}
                       onClick={async () => {
@@ -1335,7 +1338,7 @@ The revised event should feel like a completely different experience from the si
                             if (spawnRes.data.success) {
                               const created = spawnRes.data.data.events?.[0];
                               const host = created?.canon_consequences?.automation?.host_display_name || created?.host || '';
-                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: { name: created?.name || template.name, host, prestige: created?.prestige || 5 } } }));
+                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: { ...created, host_display: host } } }));
                               loadData();
                               showToast(`"${created?.name || template.name}" created!`);
                             } else {
