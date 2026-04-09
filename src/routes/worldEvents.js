@@ -1987,6 +1987,40 @@ router.get('/world/:showId/financial-pressure', optionalAuth, async (req, res) =
   }
 });
 
+// POST /world/:showId/events/:eventId/generate-venue — Generate venue exterior + interior images
+router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    // Load event via raw SQL
+    const [rows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    const event = rows?.[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    if (typeof event.canon_consequences === 'string') {
+      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+    }
+    event.show_id = showId;
+
+    const { generateVenueImages } = require('../services/venueGenerationService');
+    const result = await generateVenueImages(event, models);
+
+    return res.json({
+      success: true,
+      data: result,
+      message: `Venue images generated for "${event.name}" — scene set created`,
+    });
+  } catch (err) {
+    console.error('[VenueGen] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/:eventId/generate-social-checklist
 router.post('/world/:showId/events/:eventId/generate-social-checklist', optionalAuth, async (req, res) => {
   try {
