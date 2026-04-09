@@ -127,6 +127,7 @@ function WorldAdmin() {
   const [eventSearch, setEventSearch] = useState('');
   const [eventStatusFilter, setEventStatusFilter] = useState('all');
   const [eventDetailModal, setEventDetailModal] = useState(null);
+  const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
   const [bulkMode, setBulkMode] = useState(false);
@@ -1232,7 +1233,7 @@ The revised event should feel like a completely different experience from the si
       {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
       {activeTab === 'feed' && (
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
-          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" />
+          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" onNavigateToTab={setActiveTab} />
         </Suspense>
       )}
 
@@ -1296,43 +1297,62 @@ The revised event should feel like a completely different experience from the si
                   <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                     <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
                   </div>
-                  <button
-                    onClick={async () => {
-                      setToast(`🎭 Creating "${template.name}" — finding host and venue...`);
-                      try {
-                        // Create a calendar event from this template, then auto-spawn
-                        const calRes = await api.post('/api/v1/calendar/events', {
-                          title: template.name,
-                          event_type: 'lalaverse_cultural',
-                          cultural_category: template.category,
-                          severity_level: 5,
-                          what_world_knows: template.desc,
-                          is_micro_event: true,
-                          visibility: 'public',
-                          start_datetime: new Date().toISOString(),
-                        });
-                        const calEvent = calRes.data?.event || calRes.data;
-                        if (calEvent?.id) {
-                          const spawnRes = await api.post(`/api/v1/calendar/events/${calEvent.id}/auto-spawn`, {
-                            show_id: showId, event_count: 1, max_guests: 6,
+                  {feedEventResults[template.name]?.status === 'created' ? (
+                    <div style={{ background: '#d4edda', border: '1px solid #a3cfbb', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
+                      <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created!</div>
+                      <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{feedEventResults[template.name].event?.name || template.name}</div>
+                      <div style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>
+                        Host: {feedEventResults[template.name].event?.host || 'TBD'} · Prestige: {feedEventResults[template.name].event?.prestige || 5}
+                      </div>
+                      <button
+                        onClick={() => { setActiveTab('events'); }}
+                        style={{ marginTop: 6, padding: '4px 12px', borderRadius: 4, border: '1px solid #B8962E', background: '#fff', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
+                      >
+                        View in Events Library
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      disabled={feedEventResults[template.name]?.status === 'creating'}
+                      onClick={async () => {
+                        setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'creating' } }));
+                        try {
+                          const calRes = await api.post('/api/v1/calendar/events', {
+                            title: template.name,
+                            event_type: 'lalaverse_cultural',
+                            cultural_category: template.category,
+                            severity_level: 5,
+                            what_world_knows: template.desc,
+                            is_micro_event: true,
+                            visibility: 'public',
+                            start_datetime: new Date().toISOString(),
                           });
-                          if (spawnRes.data.success) {
-                            const created = spawnRes.data.data.events?.[0];
-                            setToast(`✅ "${created?.name || template.name}" created with host and guest list! Check Events Library.`);
-                            loadData();
-                          } else {
-                            setToast('Event created but auto-spawn failed. Check Events Library.');
+                          const calEvent = calRes.data?.event || calRes.data;
+                          if (calEvent?.id) {
+                            const spawnRes = await api.post(`/api/v1/calendar/events/${calEvent.id}/auto-spawn`, {
+                              show_id: showId, event_count: 1, max_guests: 6,
+                            });
+                            if (spawnRes.data.success) {
+                              const created = spawnRes.data.data.events?.[0];
+                              const host = created?.canon_consequences?.automation?.host_display_name || created?.host || '';
+                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: { name: created?.name || template.name, host, prestige: created?.prestige || 5 } } }));
+                              loadData();
+                              showToast(`"${created?.name || template.name}" created!`);
+                            } else {
+                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
+                              showToast('Auto-spawn failed', 'error');
+                            }
                           }
+                        } catch (err) {
+                          setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
+                          showToast('Failed: ' + (err.response?.data?.error || err.message));
                         }
-                      } catch (err) {
-                        setToast('❌ Failed: ' + (err.response?.data?.error || err.message));
-                      }
-                      setTimeout(() => setToast(null), 5000);
-                    }}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
-                  >
-                    🎭 Create This Event
-                  </button>
+                      }}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
+                    >
+                      {feedEventResults[template.name]?.status === 'creating' ? 'Creating — finding host and venue...' : 'Create This Event'}
+                    </button>
+                  )}
                 </div>
               );
             })}

@@ -63,7 +63,7 @@ function ExportDropdown({ exporting, onExport }) {
 // lalaClass, authHeaders imported from ./feed/feedConstants
 
 // ══════════════════════════════════════════════════════════════════════
-export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId }) {
+export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId, onNavigateToTab }) {
   const [profiles,setProfiles]   = useState([]);
   const [selected,setSelected]   = useState(null);
   const [loading,setLoading]     = useState(false);
@@ -1060,11 +1060,14 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                   showToast={showToast}
                   onNavigateToEvents={()=>{
                     setSelected(null);
-                    // Navigate to Events Library tab — update URL param
-                    const url = new URL(window.location);
-                    url.searchParams.set('tab', 'events');
-                    window.history.pushState({}, '', url);
-                    window.location.reload();
+                    if (onNavigateToTab) {
+                      onNavigateToTab('events');
+                    } else {
+                      const url = new URL(window.location);
+                      url.searchParams.set('tab', 'events');
+                      window.history.pushState({}, '', url);
+                      window.location.reload();
+                    }
                   }}
                 />
               </div>
