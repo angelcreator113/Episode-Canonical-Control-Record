@@ -207,7 +207,7 @@ No text, no people. Interior design photography. Landscape orientation.`;
       await models.WorldLocation.update(
         { style_guide: { exterior_url: extS3Url, interior_url: intS3Url, generated_for_event: event.id } },
         { where: { id: auto.venue_location_id } }
-      ).catch(() => {});
+      ).catch(err => { console.warn('[VenueGen] WorldLocation style_guide update failed:', err?.message); });
     }
   } catch { /* non-blocking */ }
 

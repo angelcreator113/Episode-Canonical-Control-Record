@@ -125,6 +125,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const [filterRelevanceMin,setFilterRelevanceMin] = useState('');
   const [filterRelevanceMax,setFilterRelevanceMax] = useState('');
   const [filterAdultContent,setFilterAdultContent] = useState(null);
+  const [filterCelebrityTier,setFilterCelebrityTier] = useState('');
+  const [filterFollowMotivation,setFilterFollowMotivation] = useState('');
   // Diversity Dashboard
   const [diversityData,setDiversityData] = useState(null);
   const [diversityLoading,setDiversityLoading] = useState(false);
@@ -160,6 +162,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       if(filterRelevanceMin!=='')qs.set('relevance_min',filterRelevanceMin);
       if(filterRelevanceMax!=='')qs.set('relevance_max',filterRelevanceMax);
       if(filterAdultContent!==null)qs.set('adult_content',filterAdultContent.toString());
+      if(filterCelebrityTier)qs.set('celebrity_tier',filterCelebrityTier);
+      if(filterFollowMotivation)qs.set('follow_motivation',filterFollowMotivation);
       const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});
       if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`Server error (${res.status})`);}
       const data=await res.json();
@@ -171,7 +175,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       setCrossoverCount(data.crossoverCount||0);
     } catch(err){setError(err.message);}
     finally{setLoading(false);}
-  },[filterStatus,debouncedSearch,sortBy,page,feedLayer,filterArchetypes,filterPlatforms,filterCategory,filterRelevanceMin,filterRelevanceMax,filterAdultContent]);
+  },[filterStatus,debouncedSearch,sortBy,page,feedLayer,filterArchetypes,filterPlatforms,filterCategory,filterRelevanceMin,filterRelevanceMax,filterAdultContent,filterCelebrityTier,filterFollowMotivation]);
 
   useEffect(()=>{loadProfiles();},[loadProfiles]);
 
@@ -807,7 +811,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
               </button>
               {showAdvanced && (
                 <div style={{marginTop:10,display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:10,padding:'14px',background:C.surface,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
-                  {[['Location','location_hint','e.g. Atlanta, London'],['Follower Range','follower_hint','e.g. 50K-100K'],['Relationship','relationship_hint','e.g. ex of @handle'],['Drama','drama_hint','e.g. cheating scandal'],['Aesthetic','aesthetic_hint','e.g. clean girl, y2k'],['Revenue','revenue_hint','e.g. brand deals only']].map(([label,key,ph])=>(
+                  {[['Location','location_hint','e.g. Atlanta, London'],['Follower Range','follower_hint','e.g. 50K-100K'],['Relationship','relationship_hint','e.g. ex of @handle'],['Drama','drama_hint','e.g. cheating scandal'],['Aesthetic','aesthetic_hint','e.g. clean girl, y2k'],['Revenue','revenue_hint','e.g. brand deals only'],['Celebrity Tier','celebrity_tier_hint','accessible, selective, exclusive, untouchable'],['Follow Motivation','follow_motivation_hint','aspiration, envy, competition, entertainment'],['Beauty Factor','beauty_hint','e.g. 8/10 — effortless LA pretty'],['Lifestyle','lifestyle_hint','e.g. claims luxury, actually broke']].map(([label,key,ph])=>(
                     <div key={key} style={{display:'flex',flexDirection:'column',gap:3}}>
                       <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>{label}</label>
                       <input value={advFields[key]} onChange={e=>setAdvFields(f=>({...f,[key]:e.target.value}))} disabled={generating} placeholder={ph} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font}}/>
@@ -946,7 +950,26 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                       ))}
                     </div>
                   </div>
-                  <button onClick={()=>{setFilterArchetypes([]);setFilterPlatforms([]);setFilterCategory('');setFilterRelevanceMin('');setFilterRelevanceMax('');setFilterAdultContent(null);}} style={{padding:'5px 12px',borderRadius:C.radiusSm,fontSize:11,fontWeight:600,cursor:'pointer',background:'transparent',color:C.pink,border:`1px solid ${C.pink}40`}}>Clear Filters</button>
+                  <button onClick={()=>{setFilterArchetypes([]);setFilterPlatforms([]);setFilterCategory('');setFilterRelevanceMin('');setFilterRelevanceMax('');setFilterAdultContent(null);setFilterCelebrityTier('');setFilterFollowMotivation('');}} style={{padding:'5px 12px',borderRadius:C.radiusSm,fontSize:11,fontWeight:600,cursor:'pointer',background:'transparent',color:C.pink,border:`1px solid ${C.pink}40`}}>Clear Filters</button>
+                </div>
+                {/* Celebrity Tier + Follow Motivation */}
+                <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-end'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                    <label style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:0.5}}>Celebrity Tier</label>
+                    <div style={{display:'flex',gap:2}}>
+                      {['','accessible','selective','exclusive','untouchable'].map(t=>(
+                        <button key={t} onClick={()=>setFilterCelebrityTier(t)} style={{padding:'4px 8px',borderRadius:12,fontSize:10,fontWeight:600,cursor:'pointer',background:filterCelebrityTier===t?(t==='untouchable'?'#fef3c7':C.lavLight):'transparent',color:filterCelebrityTier===t?(t==='untouchable'?'#92400e':C.lavender):C.inkLight,border:`1.5px solid ${filterCelebrityTier===t?C.lavender:C.border}`}}>{t||'All'}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                    <label style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:0.5}}>Follow Motivation</label>
+                    <div style={{display:'flex',gap:2,flexWrap:'wrap'}}>
+                      {['','aspiration','inspiration','entertainment','competition','envy','relatability','hate_follow'].map(m=>(
+                        <button key={m} onClick={()=>setFilterFollowMotivation(m)} style={{padding:'4px 8px',borderRadius:12,fontSize:10,fontWeight:600,cursor:'pointer',background:filterFollowMotivation===m?(m==='envy'?'#fde8e8':C.lavLight):'transparent',color:filterFollowMotivation===m?(m==='envy'?'#9d174d':C.lavender):C.inkLight,border:`1.5px solid ${filterFollowMotivation===m?C.lavender:C.border}`}}>{m?m.replace('_',' '):'All'}</button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
