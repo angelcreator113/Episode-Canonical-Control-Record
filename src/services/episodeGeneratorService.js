@@ -78,6 +78,117 @@ const SOCIAL_TASK_TEMPLATES = {
 // Default for unknown types
 SOCIAL_TASK_TEMPLATES.default = SOCIAL_TASK_TEMPLATES.invite;
 
+// ─── PLATFORM-SPECIFIC TASKS ────────────────────────────────────────────────
+// Extra tasks based on the host profile's primary platform
+
+const PLATFORM_TASKS = {
+  tiktok: [
+    { slot: 'tiktok_trend', label: 'TikTok Trend', description: 'Film a trending sound/format at the event', platform: 'tiktok', timing: 'during', required: false },
+    { slot: 'tiktok_duet', label: 'Duet Bait', description: 'Post something attendees will duet or stitch', platform: 'tiktok', timing: 'after', required: false },
+  ],
+  instagram: [
+    { slot: 'ig_carousel', label: 'Photo Carousel', description: 'Polished multi-image post — the grid matters', platform: 'instagram', timing: 'after', required: false },
+    { slot: 'ig_collab', label: 'Collab Post', description: 'Joint post with host or key attendee — shared audiences', platform: 'instagram', timing: 'after', required: false },
+  ],
+  youtube: [
+    { slot: 'yt_vlog', label: 'Vlog the Event', description: 'Film everything — this becomes a full video', platform: 'youtube', timing: 'during', required: true },
+    { slot: 'yt_broll', label: 'Capture B-Roll', description: 'Get cinematic shots for the edit — venue, crowd, details', platform: 'youtube', timing: 'during', required: true },
+    { slot: 'yt_thumbnail', label: 'Thumbnail Moment', description: 'Stage a thumbnail-worthy reaction shot', platform: 'youtube', timing: 'during', required: false },
+  ],
+  twitter: [
+    { slot: 'twitter_thread', label: 'Live Thread', description: 'Tweet play-by-play from the event — build narrative', platform: 'twitter', timing: 'during', required: true },
+    { slot: 'twitter_take', label: 'Hot Take', description: 'Post a spicy opinion about the event — drive engagement', platform: 'twitter', timing: 'after', required: false },
+  ],
+  onlyfans: [
+    { slot: 'of_exclusive', label: 'Exclusive BTS', description: 'Behind-the-scenes content only subscribers see', platform: 'onlyfans', timing: 'after', required: true },
+    { slot: 'of_tease', label: 'Free Tease', description: 'Post a teaser on main socials that drives to subscriber content', platform: 'onlyfans', timing: 'after', required: false },
+  ],
+  twitch: [
+    { slot: 'twitch_irl', label: 'IRL Stream', description: 'Live stream the event to your community', platform: 'twitch', timing: 'during', required: true },
+    { slot: 'twitch_react', label: 'Reaction Stream', description: 'React to the event content with your chat after', platform: 'twitch', timing: 'after', required: false },
+  ],
+  substack: [
+    { slot: 'substack_essay', label: 'Post-Event Essay', description: 'Long-form reflection on the event — the thoughtful angle', platform: 'substack', timing: 'after', required: true },
+  ],
+  multi: [], // multi-platform profiles use the event-type defaults + category bonuses
+};
+
+// ─── CONTENT CATEGORY BONUS TASKS ───────────────────────────────────────────
+// Extra tasks based on the host/attendee's content niche
+
+const CATEGORY_TASKS = {
+  fashion: [
+    { slot: 'outfit_breakdown', label: 'Outfit Breakdown', description: 'Detail every piece — brand, price, where to get it', platform: 'instagram', timing: 'after', required: false },
+    { slot: 'style_comparison', label: 'Style Comparison', description: 'Compare your look to other attendees — who wore it best?', platform: 'tiktok', timing: 'after', required: false },
+  ],
+  beauty: [
+    { slot: 'makeup_closeup', label: 'Makeup Close-Up', description: 'Film the makeup look in detail — products used', platform: 'tiktok', timing: 'before', required: false },
+    { slot: 'beauty_review', label: 'Event Glam Review', description: 'How did the look hold up? Honest review of products used', platform: 'instagram', timing: 'after', required: false },
+  ],
+  lifestyle: [
+    { slot: 'day_in_life', label: 'Day in the Life', description: 'Frame the event as part of a full day — morning to night', platform: 'tiktok', timing: 'before', required: false },
+    { slot: 'aesthetic_reel', label: 'Aesthetic Reel', description: 'Curated visuals — food, decor, vibes, no talking', platform: 'instagram', timing: 'during', required: false },
+  ],
+  fitness: [
+    { slot: 'pre_event_routine', label: 'Pre-Event Routine', description: 'Show the workout or prep that got you event-ready', platform: 'tiktok', timing: 'before', required: false },
+  ],
+  food: [
+    { slot: 'food_review', label: 'Food & Drink Review', description: 'Review everything served — the real content', platform: 'tiktok', timing: 'during', required: false },
+  ],
+  music: [
+    { slot: 'music_moment', label: 'Music Moment', description: 'Capture the DJ set, live performance, or playlist vibe', platform: 'tiktok', timing: 'during', required: false },
+  ],
+  creator_economy: [
+    { slot: 'collab_pitch', label: 'Collab Pitch', description: 'Use this event to set up a future collab — film the ask', platform: 'instagram', timing: 'during', required: false },
+    { slot: 'metrics_flex', label: 'Engagement Flex', description: 'Share the numbers this event content generated', platform: 'twitter', timing: 'after', required: false },
+  ],
+  drama: [
+    { slot: 'drama_recap', label: 'Drama Recap', description: 'Spill what really happened — the version people want', platform: 'tiktok', timing: 'after', required: false },
+  ],
+};
+
+// ─── BUILD SOCIAL TASKS (event type + platform + category) ──────────────────
+
+function buildSocialTasks(eventType, hostProfile = null) {
+  // 1. Start with event-type base tasks
+  const base = SOCIAL_TASK_TEMPLATES[eventType] || SOCIAL_TASK_TEMPLATES.default;
+  const tasks = [
+    ...base.before.map(t => ({ ...t, completed: false })),
+    ...base.during.map(t => ({ ...t, completed: false })),
+    ...base.after.map(t => ({ ...t, completed: false })),
+  ];
+
+  if (!hostProfile) return tasks;
+
+  const usedSlots = new Set(tasks.map(t => t.slot));
+
+  // 2. Add platform-specific tasks
+  const platform = hostProfile.platform || 'multi';
+  const platformTasks = PLATFORM_TASKS[platform] || [];
+  for (const pt of platformTasks) {
+    if (!usedSlots.has(pt.slot)) {
+      tasks.push({ ...pt, completed: false, source: 'platform' });
+      usedSlots.add(pt.slot);
+    }
+  }
+
+  // 3. Add content-category bonus tasks
+  const category = (hostProfile.content_category || '').toLowerCase().replace(/\s+/g, '_');
+  const categoryTasks = CATEGORY_TASKS[category] || [];
+  for (const ct of categoryTasks) {
+    if (!usedSlots.has(ct.slot)) {
+      tasks.push({ ...ct, completed: false, source: 'category' });
+      usedSlots.add(ct.slot);
+    }
+  }
+
+  // 4. Sort by timing phase: before → during → after
+  const order = { before: 0, during: 1, after: 2 };
+  tasks.sort((a, b) => (order[a.timing] || 1) - (order[b.timing] || 1));
+
+  return tasks;
+}
+
 // ─── EPISODE BEAT TEMPLATES ──────────────────────────────────────────────────
 // Maps event timeline to 14 episode beats
 
@@ -236,12 +347,22 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
 
   // ── 4. Create Todo List (wardrobe + social tasks) ──
   const eventType = event.event_type || 'invite';
-  const taskTemplates = SOCIAL_TASK_TEMPLATES[eventType] || SOCIAL_TASK_TEMPLATES.default;
-  const socialTasks = [
-    ...taskTemplates.before.map(t => ({ ...t, completed: false })),
-    ...taskTemplates.during.map(t => ({ ...t, completed: false })),
-    ...taskTemplates.after.map(t => ({ ...t, completed: false })),
-  ];
+
+  // Fetch host profile for platform-aware task generation
+  let hostProfile = null;
+  try {
+    const automation = event.canon_consequences?.automation || {};
+    const hostProfileId = automation.host_profile_id;
+    if (hostProfileId) {
+      const [rows] = await models.sequelize.query(
+        'SELECT platform, content_category, archetype, follower_tier FROM social_profiles WHERE id = :id LIMIT 1',
+        { replacements: { id: hostProfileId } }
+      );
+      hostProfile = rows?.[0] || null;
+    }
+  } catch { /* non-blocking — fall back to generic tasks */ }
+
+  const socialTasks = buildSocialTasks(eventType, hostProfile);
 
   // Wardrobe tasks (the standard 7 slots)
   const wardrobeTasks = [
@@ -335,9 +456,12 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
 
 module.exports = {
   generateEpisodeFromEvent,
+  buildSocialTasks,
   calculateFinancials,
   inferArchetype,
   inferIntent,
   SOCIAL_TASK_TEMPLATES,
+  PLATFORM_TASKS,
+  CATEGORY_TASKS,
   BEAT_TEMPLATES,
 };
