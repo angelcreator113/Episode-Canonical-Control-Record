@@ -3089,14 +3089,43 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {(episodeBlueprint.beats || []).map((beat, i) => {
                   const phaseColors = { before: '#fef3c7', during: '#dbeafe', after: '#f3e8ff' };
                   const phaseDots = { before: '#f59e0b', during: '#3b82f6', after: '#8b5cf6' };
+                  // Find feed moment for this beat from scene plan
+                  const sp = episodeBlueprint.scenePlan?.find(s => s.beat_number === beat.beat);
+                  const fm = sp?.feed_moment || episodeBlueprint.feedMoments?.[beat.beat];
                   return (
-                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 10px', background: phaseColors[beat.phase] || '#f8f8f8', borderRadius: 6 }}>
-                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: phaseDots[beat.phase] || '#999', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{beat.beat}</div>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{beat.label}</div>
-                        <div style={{ fontSize: 11, color: '#666' }}>{beat.description}</div>
-                        <div style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{beat.phase} · {beat.emotional_intent}</div>
+                    <div key={i} style={{ padding: '6px 10px', background: phaseColors[beat.phase] || '#f8f8f8', borderRadius: 6 }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: phaseDots[beat.phase] || '#999', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{beat.beat}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{beat.label}</div>
+                          <div style={{ fontSize: 11, color: '#666' }}>{beat.description}</div>
+                          <div style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{beat.phase} · {beat.emotional_intent}</div>
+                        </div>
+                        {fm && <span style={{ fontSize: 8, padding: '2px 6px', borderRadius: 4, background: '#1a1a1a', color: '#B8962E', fontWeight: 700, flexShrink: 0 }}>📱</span>}
                       </div>
+                      {/* Feed Moment */}
+                      {fm && (
+                        <div style={{ marginTop: 6, marginLeft: 34, padding: '6px 10px', background: '#1a1a2e', borderRadius: 8, border: '1px solid #333' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase' }}>Phone Screen · {fm.phone_screen?.type || 'notification'}</span>
+                            <span style={{ fontSize: 8, color: '#666' }}>{fm.trigger_profile}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: '#ddd', marginBottom: 4, lineHeight: 1.4 }}>{fm.phone_screen?.content}</div>
+                          {fm.lala_dialogue && (
+                            <div style={{ fontSize: 10, color: '#fff', marginBottom: 2 }}>
+                              <span style={{ color: '#B8962E', fontWeight: 600 }}>Lala:</span> "{fm.lala_dialogue}"
+                            </div>
+                          )}
+                          {fm.lala_internal && (
+                            <div style={{ fontSize: 10, color: '#B8962E', fontStyle: 'italic' }}>
+                              [{fm.lala_internal}]
+                            </div>
+                          )}
+                          {fm.behavior_shift && (
+                            <div style={{ fontSize: 9, color: '#666', marginTop: 2 }}>→ {fm.behavior_shift}</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
