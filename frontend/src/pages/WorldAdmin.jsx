@@ -19,6 +19,7 @@ import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
+import { EventInvitePreview } from './feed/FeedEnhancements';
 import './WorldAdmin.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
@@ -2551,6 +2552,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         {md.dress_code_keywords.map((kw, i) => <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 10, color: '#4338ca', fontWeight: 600 }}>{kw}</span>)}
                       </div>
                     )}
+                  </div>
+
+                  {/* Invite Preview — phone notification mockup */}
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>Invite Preview</div>
+                    <EventInvitePreview event={md} />
                   </div>
 
                   {/* Invitation Style */}

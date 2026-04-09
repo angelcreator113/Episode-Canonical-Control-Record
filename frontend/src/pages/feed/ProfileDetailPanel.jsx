@@ -43,7 +43,7 @@ function FeedStatePicker({ profile, onStateChange }) {
 function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh,
   onRegenerate, regenerating, onLoadCrossingPreview, crossingPreview, setCrossingPreview,
   onLoadSceneContext, sceneContext, setSceneContext, onCopySceneContext, detailTab, setDetailTab,
-  onApprove, onRejectCrossing, onSaveAsTemplate }) {
+  onApprove, onRejectCrossing, onSaveAsTemplate, onReactions }) {
   const p = profile;
   const [editing,setEditing] = useState(false);
   const [draft,setDraft]     = useState({});
@@ -121,8 +121,9 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
               <button onClick={()=>onRegenerate(p.id)} disabled={regenerating} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:regenerating?'not-allowed':'pointer'}}>
                 {regenerating?'Regenerating…':'↻ Regenerate'}
               </button>
-              <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>✎ Edit</button>
-              {onSaveAsTemplate&&<button onClick={()=>onSaveAsTemplate(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:'pointer'}}>⊞ Template</button>}
+              <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Edit</button>
+              {onReactions&&<button onClick={onReactions} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:C.surfaceAlt,color:C.gold,border:`1px solid #e8e0d0`,cursor:'pointer'}}>Reactions</button>}
+              {onSaveAsTemplate&&<button onClick={()=>onSaveAsTemplate(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:'pointer'}}>Template</button>}
               <button onClick={()=>onDelete(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.pink,border:`1px solid ${C.pinkMid}`,cursor:'pointer'}}>✕ Delete</button>
             </>
           )}
