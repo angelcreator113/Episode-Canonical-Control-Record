@@ -1802,20 +1802,25 @@ router.post('/:id/spec/create-angles', validateUUIDParam('id'), optionalAuth, as
 
     for (let i = 0; i < contracts.length; i++) {
       const c = contracts[i];
-      const label = (c.angle || `ANGLE_${i + 1}`).toUpperCase();
+      const rawLabel = (c.angle || `ANGLE_${i + 1}`).toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+      const label = rawLabel.slice(0, 50); // angle_label is STRING(50)
       if (existingLabels.has(label)) continue;
 
-      const angle = await SceneAngle.create({
-        scene_set_id: set.id,
-        angle_label: label,
-        angle_name: c.description || label,
-        angle_description: c.validation || c.description || '',
-        camera_direction: c.description || '',
-        sort_order: existing.length + i,
-        generation_status: 'pending',
-      });
-      created.push(angle);
-      existingLabels.add(label);
+      try {
+        const angle = await SceneAngle.create({
+          scene_set_id: set.id,
+          angle_label: label,
+          angle_name: (c.description || label).slice(0, 255),
+          angle_description: c.validation || c.description || '',
+          camera_direction: c.description || '',
+          sort_order: existing.length + i,
+          generation_status: 'pending',
+        });
+        created.push(angle);
+        existingLabels.add(label);
+      } catch (angleErr) {
+        console.warn(`[CreateAngles] Failed to create angle "${label}":`, angleErr.message);
+      }
     }
 
     res.json({

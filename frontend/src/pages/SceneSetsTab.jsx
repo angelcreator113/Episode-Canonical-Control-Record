@@ -378,7 +378,7 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
@@ -467,6 +467,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [descDraft, setDescDraft] = useState('');
   const [descRefining, setDescRefining] = useState(false);
   const [buildingSpec, setBuildingSpec] = useState(false);
+  const [specProgress, setSpecProgress] = useState(null); // null | 'sending' | 'analyzing' | 'parsing' | 'done' | 'error'
   const hasSpec = !!(set.scene_spec?.objects?.length);
   const showToast = onToast || (() => {});
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
@@ -863,16 +864,33 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   </div>
                   <button onClick={async () => {
                     setBuildingSpec(true);
+                    setSpecProgress('sending');
                     try {
+                      const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                      const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
                       const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                      clearTimeout(progressTimer);
+                      clearTimeout(parseTimer);
                       const d = await r.json();
-                      if (d.success) showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} contracts`);
-                      else showToast(d.error || 'Failed', 'error');
-                    } catch (e) { showToast(e.message, 'error'); }
+                      if (d.success) {
+                        setSpecProgress('done');
+                        showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.zones?.length || 0} zones, ${d.data?.camera_contracts?.length || 0} camera contracts`);
+                        if (onRefresh) await onRefresh();
+                      } else {
+                        setSpecProgress('error');
+                        showToast(d.error || 'Failed', 'error');
+                      }
+                    } catch (e) { setSpecProgress('error'); showToast(e.message, 'error'); }
                     setBuildingSpec(false);
+                    setTimeout(() => setSpecProgress(null), 2000);
                   }} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                    {buildingSpec ? <><Loader size={12} className="spin" /> Analyzing room...</> : <><FileText size={12} /> Build Scene Spec</>}
+                    {buildingSpec ? <><Loader size={12} className="spin" /> {specProgress === 'sending' ? 'Sending image to Claude...' : specProgress === 'analyzing' ? 'Claude is cataloging every object...' : specProgress === 'parsing' ? 'Building zones + camera contracts...' : 'Analyzing room...'}</> : <><FileText size={12} /> Build Scene Spec</>}
                   </button>
+                  {buildingSpec && (
+                    <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8f6f1', borderRadius: 6, fontSize: 10, color: '#666', lineHeight: 1.5 }}>
+                      Claude Vision is analyzing your image to identify every object, define spatial zones, set up continuity rules, and create camera contracts. This takes 15-30 seconds.
+                    </div>
+                  )}
                 </>
               )}
 
@@ -894,15 +912,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   </div>
                   <button onClick={async () => {
                     setSeeding(true);
+                    showToast('Creating camera angles from spec...');
                     try {
                       const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
                       const d = await r.json();
-                      if (d.success) showToast(`${d.data?.angles_created || 0} angles created!`);
-                      else showToast(d.error || 'Failed', 'error');
+                      if (d.success) {
+                        showToast(`${d.data?.angles_created || 0} camera angles created — ready to generate images`);
+                        if (onRefresh) await onRefresh();
+                      } else showToast(d.error || 'Failed', 'error');
                     } catch (e) { showToast(e.message, 'error'); }
                     setSeeding(false);
                   }} disabled={seeding} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                    {seeding ? <><Loader size={12} className="spin" /> Creating...</> : <><Camera size={12} /> Create {set.scene_spec?.camera_contracts?.length || 0} Camera Angles</>}
+                    {seeding ? <><Loader size={12} className="spin" /> Creating {set.scene_spec?.camera_contracts?.length || 0} angles...</> : <><Camera size={12} /> Create {set.scene_spec?.camera_contracts?.length || 0} Camera Angles</>}
                   </button>
                 </>
               )}
@@ -1447,18 +1468,46 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           disabled={buildingSpec}
                           onClick={async () => {
                             setBuildingSpec(true);
-                            showToast('Building scene spec...');
+                            setSpecProgress('sending');
                             try {
+                              const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                              const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
                               const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                              clearTimeout(progressTimer);
+                              clearTimeout(parseTimer);
                               const d = await r.json();
-                              if (d.success) showToast(`Spec built: ${d.data?.objects?.length || 0} objects`);
-                              else showToast(d.error || 'Failed', 'error');
-                            } catch (e) { showToast(e.message, 'error'); }
+                              if (d.success) {
+                                setSpecProgress('done');
+                                showToast(`Spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.zones?.length || 0} zones, ${d.data?.camera_contracts?.length || 0} camera contracts`);
+                                if (onRefresh) await onRefresh();
+                              } else {
+                                setSpecProgress('error');
+                                showToast(d.error || 'Failed', 'error');
+                              }
+                            } catch (e) { setSpecProgress('error'); showToast(e.message, 'error'); }
                             setBuildingSpec(false);
+                            setTimeout(() => setSpecProgress(null), 2000);
                           }}
                         >
-                          {buildingSpec ? <><Loader size={12} className="spin" /> Building...</> : <><Sparkles size={12} /> Build Scene Spec from Image</>}
+                          {buildingSpec ? <><Loader size={12} className="spin" /> {specProgress === 'sending' ? 'Sending image...' : specProgress === 'analyzing' ? 'Cataloging objects...' : specProgress === 'parsing' ? 'Building contracts...' : 'Building...'}</> : <><Sparkles size={12} /> Build Scene Spec from Image</>}
                         </button>
+                        {buildingSpec && (
+                          <div style={{ marginTop: 12, padding: 12, background: '#f8f6f1', borderRadius: 8, fontSize: 11, color: '#555', lineHeight: 1.6 }}>
+                            <div style={{ fontWeight: 600, color: '#2C2C2C', marginBottom: 6 }}>What's happening:</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, opacity: specProgress === 'sending' ? 1 : 0.4 }}>
+                              {specProgress === 'sending' ? <Loader size={10} className="spin" style={{ color: '#B8962E' }} /> : <CheckCircle2 size={10} style={{ color: '#16a34a' }} />}
+                              Sending image to Claude Vision
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, opacity: specProgress === 'analyzing' ? 1 : specProgress === 'parsing' || specProgress === 'done' ? 0.4 : 0.2 }}>
+                              {specProgress === 'analyzing' ? <Loader size={10} className="spin" style={{ color: '#B8962E' }} /> : specProgress === 'parsing' || specProgress === 'done' ? <CheckCircle2 size={10} style={{ color: '#16a34a' }} /> : <FileText size={10} style={{ color: '#ccc' }} />}
+                              Identifying objects, materials, textures, colors
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: specProgress === 'parsing' ? 1 : specProgress === 'done' ? 0.4 : 0.2 }}>
+                              {specProgress === 'parsing' ? <Loader size={10} className="spin" style={{ color: '#B8962E' }} /> : specProgress === 'done' ? <CheckCircle2 size={10} style={{ color: '#16a34a' }} /> : <Camera size={10} style={{ color: '#ccc' }} />}
+                              Building zones, walls, camera contracts, room states
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1471,11 +1520,46 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                             <div style={{ marginBottom: 16, padding: 12, background: '#FAF7F0', borderRadius: 8, border: '1px solid #eee' }}>
                               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 4 }}>Room</div>
                               <div style={{ fontSize: 14, fontWeight: 600, color: '#2C2C2C' }}>{spec.room.label || set.name}</div>
+                              {spec.room.narrative_role && <div style={{ fontSize: 12, color: '#2C2C2C', marginTop: 4 }}>{spec.room.narrative_role}</div>}
                               {spec.room.atmosphere && <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontStyle: 'italic' }}>{spec.room.atmosphere}</div>}
-                              <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: '#666', fontFamily: "'DM Mono', monospace" }}>
+                              <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: '#666', fontFamily: "'DM Mono', monospace", flexWrap: 'wrap' }}>
                                 {spec.room.approx_sq_ft && <span>{spec.room.approx_sq_ft} sq ft</span>}
-                                {spec.room.ceiling_height_ft && <span>{spec.room.ceiling_height_ft}ft ceilings</span>}
+                                {spec.room.ceiling_type && <span>{spec.room.ceiling_type} ceiling</span>}
+                                {spec.room.ceiling_height_ft && <span>{spec.room.ceiling_height_ft}ft</span>}
                                 {spec.room.shape && <span>{spec.room.shape}</span>}
+                                {spec.room.floor && <span>Floor: {spec.room.floor}</span>}
+                              </div>
+                              {spec.room.color_palette?.length > 0 && (
+                                <div style={{ display: 'flex', gap: 4, marginTop: 10, alignItems: 'center' }}>
+                                  <span style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace", marginRight: 4 }}>Palette:</span>
+                                  {spec.room.color_palette.map((c, i) => {
+                                    const hex = c.startsWith('#') ? c.split(' ')[0] : c;
+                                    const label = c.includes(' ') ? c.split(' ').slice(1).join(' ') : '';
+                                    return (
+                                      <div key={i} title={c} style={{ display: 'flex', alignItems: 'center', gap: 3, background: '#fff', border: '1px solid #eee', borderRadius: 4, padding: '2px 6px' }}>
+                                        <div style={{ width: 12, height: 12, borderRadius: 2, background: hex.startsWith('#') ? hex : '#888', border: '1px solid #ddd' }} />
+                                        {label && <span style={{ fontSize: 9, color: '#666' }}>{label}</span>}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Walls */}
+                          {spec.walls && Object.keys(spec.walls).length > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>
+                                Walls ({Object.keys(spec.walls).length})
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                {Object.entries(spec.walls).map(([dir, wall]) => (
+                                  <div key={dir} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
+                                    <div style={{ fontWeight: 600, color: '#2C2C2C', textTransform: 'capitalize' }}>{dir}: {wall.label}</div>
+                                    <div style={{ fontSize: 10, color: '#666', marginTop: 2, lineHeight: 1.4 }}>{wall.description}</div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}
@@ -1504,21 +1588,29 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <Box size={10} /> Objects ({spec.objects.length})
                               </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 6 }}>
                                 {spec.objects.map(obj => (
                                   <div key={obj.id} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: 6, padding: '8px 10px', fontSize: 11 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                       <span style={{
                                         width: 6, height: 6, borderRadius: '50%',
-                                        background: obj.category === 'signature' ? '#B8962E' : obj.category === 'anchor' ? '#2563eb' : obj.category === 'character' ? '#9333ea' : '#94a3b8',
+                                        background: obj.category === 'signature' ? '#B8962E' : obj.category === 'anchor' ? '#2563eb' : obj.category === 'character' ? '#9333ea' : obj.category === 'lighting' ? '#f59e0b' : '#94a3b8',
                                         flexShrink: 0,
                                       }} />
                                       <span style={{ fontWeight: 600, color: '#2C2C2C' }}>{obj.label}</span>
+                                      <span style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>{obj.category}</span>
                                     </div>
-                                    <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{obj.category} · {obj.wall || obj.zone}</div>
-                                    {obj.continuity?.locked_text && (
-                                      <div style={{ fontSize: 9, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginTop: 3 }}>
-                                        Text: "{obj.continuity.locked_text}"
+                                    <div style={{ fontSize: 10, color: '#666', marginTop: 3, lineHeight: 1.4 }}>{obj.description}</div>
+                                    <div style={{ fontSize: 9, color: '#999', marginTop: 3, fontFamily: "'DM Mono', monospace" }}>
+                                      {obj.zone && <span>zone: {obj.zone}</span>}
+                                      {obj.wall && <span> · wall: {obj.wall}</span>}
+                                    </div>
+                                    {obj.continuity && Object.keys(obj.continuity).filter(k => obj.continuity[k]).length > 0 && (
+                                      <div style={{ marginTop: 4, padding: '3px 6px', background: '#fef3c7', borderRadius: 4, fontSize: 9, fontFamily: "'DM Mono', monospace" }}>
+                                        {obj.continuity.locked_text && <div style={{ color: '#92400e' }}>text: &quot;{obj.continuity.locked_text}&quot;</div>}
+                                        {obj.continuity.locked_color && <div style={{ color: '#92400e', display: 'flex', alignItems: 'center', gap: 3 }}>color: <span style={{ width: 8, height: 8, borderRadius: 2, background: obj.continuity.locked_color, display: 'inline-block', border: '1px solid #ccc' }} /> {obj.continuity.locked_color}</div>}
+                                        {obj.continuity.locked_material && <div style={{ color: '#92400e' }}>material: {obj.continuity.locked_material}</div>}
+                                        {obj.continuity.locked_position && <div style={{ color: '#92400e' }}>position: {obj.continuity.locked_position}</div>}
                                       </div>
                                     )}
                                   </div>
@@ -1535,19 +1627,26 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               </div>
                               {spec.camera_contracts.map((c, i) => (
                                 <div key={i} style={{ marginBottom: 8, padding: 10, background: '#fafafa', border: '1px solid #eee', borderRadius: 6 }}>
-                                  <div style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{c.angle}</div>
-                                  {c.description && <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{c.description}</div>}
-                                  <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                    {(c.required || []).map(id => (
-                                      <span key={id} style={{ background: '#dcfce7', color: '#166534', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>✓ {id}</span>
-                                    ))}
-                                    {(c.expected || []).map(id => (
-                                      <span key={id} style={{ background: '#fef3c7', color: '#92400e', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>~ {id}</span>
-                                    ))}
-                                    {(c.out_of_frame || []).map(id => (
-                                      <span key={id} style={{ background: '#fecaca', color: '#991b1b', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace" }}>✗ {id}</span>
-                                    ))}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Camera size={12} style={{ color: '#B8962E' }} />
+                                    <span style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{c.angle}</span>
                                   </div>
+                                  {c.description && <div style={{ fontSize: 11, color: '#666', marginTop: 4, lineHeight: 1.4 }}>{c.description}</div>}
+                                  <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                    {(c.required || []).map(id => {
+                                      const obj = spec.objects?.find(o => o.id === id);
+                                      return <span key={id} title={obj?.description || id} style={{ background: '#dcfce7', color: '#166534', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>✓ {obj?.label || id}</span>;
+                                    })}
+                                    {(c.expected || []).map(id => {
+                                      const obj = spec.objects?.find(o => o.id === id);
+                                      return <span key={id} title={obj?.description || id} style={{ background: '#fef3c7', color: '#92400e', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>~ {obj?.label || id}</span>;
+                                    })}
+                                    {(c.out_of_frame || []).map(id => {
+                                      const obj = spec.objects?.find(o => o.id === id);
+                                      return <span key={id} title={obj?.description || id} style={{ background: '#fecaca', color: '#991b1b', fontSize: 9, padding: '2px 6px', borderRadius: 4, fontFamily: "'DM Mono', monospace", cursor: 'help' }}>✗ {obj?.label || id}</span>;
+                                    })}
+                                  </div>
+                                  {c.validation && <div style={{ fontSize: 10, color: '#888', marginTop: 6, fontStyle: 'italic', lineHeight: 1.4 }}>{c.validation}</div>}
                                 </div>
                               ))}
                             </div>
@@ -1575,14 +1674,25 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                             <button className="scene-sets-btn-details" disabled={buildingSpec} onClick={async () => {
                               setBuildingSpec(true);
-                              showToast('Rebuilding scene spec...');
+                              setSpecProgress('sending');
                               try {
+                                const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                                const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
                                 const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                                clearTimeout(progressTimer);
+                                clearTimeout(parseTimer);
                                 const d = await r.json();
-                                if (d.success) showToast(`Spec rebuilt: ${d.data?.objects?.length || 0} objects`);
-                                else showToast(d.error || 'Failed', 'error');
-                              } catch (e) { showToast(e.message, 'error'); }
+                                if (d.success) {
+                                  setSpecProgress('done');
+                                  showToast(`Spec rebuilt: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} contracts`);
+                                  if (onRefresh) await onRefresh();
+                                } else {
+                                  setSpecProgress('error');
+                                  showToast(d.error || 'Failed', 'error');
+                                }
+                              } catch (e) { setSpecProgress('error'); showToast(e.message, 'error'); }
                               setBuildingSpec(false);
+                              setTimeout(() => setSpecProgress(null), 2000);
                             }}>
                               {buildingSpec ? <Loader size={11} className="spin" /> : <RefreshCw size={11} />} Rebuild Spec
                             </button>
@@ -2849,6 +2959,7 @@ export default function SceneSetsTab() {
               allEpisodes={allEpisodes}
               onLoadEpisodes={loadEpisodesForShow}
               onToast={showToast}
+              onRefresh={fetchSets}
             />
           ))}
         </div>
