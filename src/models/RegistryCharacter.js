@@ -608,6 +608,24 @@ module.exports = (sequelize) => {
     // Online Presence
     platform_primary: { type: DataTypes.STRING, allowNull: true },
     follower_tier: { type: DataTypes.STRING, allowNull: true },
+
+    // ── Social Intelligence (synced from SocialProfile) ──────────────────────
+    celebrity_tier: { type: DataTypes.STRING(20), allowNull: true },       // accessible/selective/exclusive/untouchable
+    platform_presences: { type: DataTypes.JSONB, allowNull: true },        // multi-platform footprint
+    public_persona: { type: DataTypes.TEXT, allowNull: true },             // what audiences believe
+    private_reality: { type: DataTypes.TEXT, allowNull: true },            // what's actually true
+    primary_income_source: { type: DataTypes.STRING(100), allowNull: true },
+    income_breakdown: { type: DataTypes.JSONB, allowNull: true },          // { brand_deals: 40, subs: 50, ... }
+    monthly_earnings_range: { type: DataTypes.STRING(50), allowNull: true },
+    clout_score: { type: DataTypes.INTEGER, allowNull: true },             // 0-100
+    drama_magnet: { type: DataTypes.BOOLEAN, allowNull: true },
+    social_leverage: { type: DataTypes.TEXT, allowNull: true },            // narrative summary of their power
+    content_category: { type: DataTypes.STRING(100), allowNull: true },    // fashion, beauty, creator_economy
+    brand_partnerships: { type: DataTypes.JSONB, allowNull: true },        // [{brand, type, visible}]
+    controversy_history: { type: DataTypes.JSONB, allowNull: true },       // [{event, severity}]
+    secret_connections: { type: DataTypes.JSONB, allowNull: true },        // hidden relationships
+    rebrand_history: { type: DataTypes.JSONB, allowNull: true },           // past handles/niches
+    social_synced_at: { type: DataTypes.DATE, allowNull: true },           // last sync from feed profile
   }, {
     tableName: 'registry_characters',
     underscored: true,

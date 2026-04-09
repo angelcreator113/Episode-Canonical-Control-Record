@@ -2342,4 +2342,39 @@ Write a single flowing paragraph (200–400 words) capturing who this person IS 
   return res.json({ success: true, ...results });
 });
 
+// POST /characters/:id/sync-social — Sync social intelligence from linked feed profile
+router.post('/characters/:id/sync-social', optionalAuth, async (req, res) => {
+  try {
+    const models = req.app.get('models') || require('../models');
+    const character = await models.RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+
+    if (!character.feed_profile_id) {
+      return res.status(400).json({ error: 'No linked social profile. Cross a feed profile first.' });
+    }
+
+    const profile = await models.SocialProfile.findByPk(character.feed_profile_id);
+    if (!profile) return res.status(404).json({ error: 'Linked social profile not found' });
+
+    const registrySync = require('../services/registrySyncService');
+    const result = await registrySync.syncProfileToRegistry(profile, models);
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /characters/sync-all-social — Bulk sync all linked profiles
+router.post('/characters/sync-all-social', optionalAuth, async (req, res) => {
+  try {
+    const models = req.app.get('models') || require('../models');
+    const registrySync = require('../services/registrySyncService');
+    const result = await registrySync.syncAllLinkedProfiles(models);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
