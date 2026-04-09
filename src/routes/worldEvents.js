@@ -960,6 +960,95 @@ router.post('/world/:showId/events/:eventId/generate-invitation', optionalAuth, 
   }
 });
 
+// GET /world/:showId/events/:eventId/invitation-text — Get editable invitation text
+router.get('/world/:showId/events/:eventId/invitation-text', optionalAuth, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const models = await getModels();
+    const [event] = await models.sequelize.query(
+      'SELECT canon_consequences FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+    const cc = typeof event.canon_consequences === 'string' ? JSON.parse(event.canon_consequences) : event.canon_consequences;
+    return res.json({ success: true, invitation_text: cc?.invitation_text || null });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /world/:showId/events/:eventId/re-render-invitation — Re-render with edited text
+router.post('/world/:showId/events/:eventId/re-render-invitation', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const { invitation_text } = req.body;
+    if (!invitation_text) return res.status(400).json({ success: false, error: 'invitation_text is required' });
+
+    const models = await getModels();
+
+    // Load event
+    const [event] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Find the latest invitation asset to get the background
+    const [asset] = await models.sequelize.query(
+      `SELECT s3_url_raw FROM assets WHERE metadata->>'event_id' = :eventId AND asset_type = 'INVITATION_LETTER' ORDER BY created_at DESC LIMIT 1`,
+      { replacements: { eventId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+
+    if (!asset?.s3_url_raw) return res.status(400).json({ success: false, error: 'No existing invitation to re-render. Generate one first.' });
+
+    // Download the background
+    const axios = require('axios');
+    const bgResponse = await axios.get(asset.s3_url_raw, { responseType: 'arraybuffer', timeout: 30000 });
+    const bgBuffer = Buffer.from(bgResponse.data);
+
+    // Re-composite with edited text
+    const { compositeInvitation } = require('../services/invitationCompositingService');
+    const composited = await compositeInvitation(bgBuffer, event, invitation_text);
+    if (!composited) return res.status(500).json({ success: false, error: 'Re-render failed — fonts may not be available' });
+
+    // Upload new version
+    const { uploadToS3 } = require('../services/invitationGeneratorService');
+    const s3Url = await uploadToS3(composited, eventId, 'edited');
+
+    // Create new asset
+    const { Asset } = models;
+    let newAsset = null;
+    if (Asset) {
+      try {
+        newAsset = await Asset.create({
+          id: uuidv4(),
+          name: `${event.name} — Invitation (edited)`,
+          asset_type: 'INVITATION_LETTER',
+          s3_url_raw: asset.s3_url_raw,
+          s3_url_processed: s3Url,
+          show_id: showId,
+          metadata: { source: 'invitation-text-edit', event_id: eventId, edited_at: new Date().toISOString() },
+        });
+      } catch { /* non-blocking */ }
+    }
+
+    // Save edited text to event
+    try {
+      await models.sequelize.query(
+        `UPDATE world_events SET canon_consequences = jsonb_set(
+          COALESCE(canon_consequences, '{}'), '{invitation_text}', :textJson::jsonb
+        ), updated_at = NOW() WHERE id = :eventId`,
+        { replacements: { textJson: JSON.stringify(invitation_text), eventId } }
+      );
+    } catch { /* non-blocking */ }
+
+    return res.json({ success: true, imageUrl: s3Url, assetId: newAsset?.id });
+  } catch (err) {
+    console.error('[InviteGen] Re-render error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
