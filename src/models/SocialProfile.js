@@ -175,6 +175,40 @@ module.exports = (sequelize, DataTypes) => {
     secret_connections:   { type: DataTypes.JSONB, defaultValue: [] },          // [{handle, type, known_by}] — hidden relationships
     platform_bans:        { type: DataTypes.JSONB, defaultValue: [] },          // [{platform, reason, date, reinstated}]
     rebrand_history:      { type: DataTypes.JSONB, defaultValue: [] },          // [{old_handle, old_niche, date, reason}]
+
+    // ── Lala's Follow Psychology ─────────────────────────────────────────────
+    // WHY Lala follows this person — drives emotional reactions and script writing
+    follow_motivation: {
+      type: DataTypes.ENUM('aspiration','inspiration','entertainment','competition',
+        'relatability','envy','study','guilt_pleasure','hate_follow'),
+      allowNull: true,
+      // aspiration: wants to BE them (the baddies, lifestyle queens)
+      // inspiration: learns from their craft/content
+      // entertainment: watches for fun, drama, or spectacle
+      // competition: measures herself against them
+      // relatability: sees her own struggle reflected
+      // envy: covets their life (dangerous, feeds insecurity)
+      // study: cold analysis of their strategy
+      // guilt_pleasure: shouldn't care but can't look away
+      // hate_follow: watches to feel superior or see them fail
+    },
+    follow_emotion: {
+      type: DataTypes.ENUM('excitement','anxiety','motivation','jealousy','admiration','indifference','obsession','resentment'),
+      allowNull: true,
+      // What Lala FEELS when she sees their content or gets their invite
+    },
+    follow_trigger: { type: DataTypes.TEXT, allowNull: true },              // "When she posts her morning routine in that $4000 robe"
+    event_excitement: { type: DataTypes.INTEGER, allowNull: true },         // 0-10: how excited Lala is to get an invite from them
+
+    // ── Lifestyle Layer ──────────────────────────────────────────────────────
+    lifestyle_claim:    { type: DataTypes.TEXT, allowNull: true },           // What they PROJECT ("jet-setting luxury, designer everything")
+    lifestyle_reality:  { type: DataTypes.TEXT, allowNull: true },           // What's ACTUALLY true ("rented backdrops, borrowed clothes")
+    lifestyle_gap:      { type: DataTypes.STRING(100), allowNull: true },    // "massive", "slight", "authentic", "reversed" (richer than they show)
+
+    // ── Beauty & Influence Factor ────────────────────────────────────────────
+    beauty_factor:      { type: DataTypes.INTEGER, allowNull: true },        // 0-10: how much appearance drives their influence
+    beauty_description: { type: DataTypes.TEXT, allowNull: true },           // "Effortless LA sun-kissed, the kind of pretty that looks accidental"
+    aesthetic_power:    { type: DataTypes.TEXT, allowNull: true },           // How their look translates to social power
   }, {
     sequelize,
     modelName:  'SocialProfile',

@@ -43,7 +43,7 @@ function FeedStatePicker({ profile, onStateChange }) {
 function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh,
   onRegenerate, regenerating, onLoadCrossingPreview, crossingPreview, setCrossingPreview,
   onLoadSceneContext, sceneContext, setSceneContext, onCopySceneContext, detailTab, setDetailTab,
-  onApprove, onRejectCrossing, onSaveAsTemplate }) {
+  onApprove, onRejectCrossing, onSaveAsTemplate, onReactions }) {
   const p = profile;
   const [editing,setEditing] = useState(false);
   const [draft,setDraft]     = useState({});
@@ -121,8 +121,9 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
               <button onClick={()=>onRegenerate(p.id)} disabled={regenerating} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:regenerating?'not-allowed':'pointer'}}>
                 {regenerating?'Regenerating…':'↻ Regenerate'}
               </button>
-              <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>✎ Edit</button>
-              {onSaveAsTemplate&&<button onClick={()=>onSaveAsTemplate(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:'pointer'}}>⊞ Template</button>}
+              <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Edit</button>
+              {onReactions&&<button onClick={onReactions} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:C.surfaceAlt,color:C.gold,border:`1px solid #e8e0d0`,cursor:'pointer'}}>Reactions</button>}
+              {onSaveAsTemplate&&<button onClick={()=>onSaveAsTemplate(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.blue,border:`1px solid ${C.blue}40`,cursor:'pointer'}}>Template</button>}
               <button onClick={()=>onDelete(p.id)} style={{padding:'6px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.pink,border:`1px solid ${C.pinkMid}`,cursor:'pointer'}}>✕ Delete</button>
             </>
           )}
@@ -175,6 +176,48 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                       <label style={{fontSize:10,fontWeight:600,color:C.inkLight}}>Drama Magnet</label>
                       <input type="checkbox" checked={draft.drama_magnet||false} onChange={e=>setDraft(d=>({...d,drama_magnet:e.target.checked}))} />
                     </div>
+                  </div>
+                </div>
+                {/* Follow Psychology + Lifestyle + Beauty */}
+                <div style={{borderTop:`1px solid ${C.border}`,marginTop:12,paddingTop:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.inkLight,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Follow Psychology & Lifestyle</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:C.inkLight,display:'block',marginBottom:2}}>Follow Motivation</label>
+                      <select value={draft.follow_motivation||''} onChange={e=>setDraft(d=>({...d,follow_motivation:e.target.value||null}))} style={{width:'100%',padding:'6px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,background:C.surface}}>
+                        <option value="">Select...</option>
+                        <option value="aspiration">Aspiration — wants to be them</option>
+                        <option value="inspiration">Inspiration — learns from them</option>
+                        <option value="entertainment">Entertainment — watches for fun</option>
+                        <option value="competition">Competition — measures against them</option>
+                        <option value="relatability">Relatability — sees herself</option>
+                        <option value="envy">Envy — covets their life</option>
+                        <option value="study">Study — analyzing strategy</option>
+                        <option value="guilt_pleasure">Guilt pleasure — can't look away</option>
+                        <option value="hate_follow">Hate follow — watches to feel superior</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:C.inkLight,display:'block',marginBottom:2}}>Follow Emotion</label>
+                      <select value={draft.follow_emotion||''} onChange={e=>setDraft(d=>({...d,follow_emotion:e.target.value||null}))} style={{width:'100%',padding:'6px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12,background:C.surface}}>
+                        <option value="">Select...</option>
+                        {['excitement','anxiety','motivation','jealousy','admiration','indifference','obsession','resentment'].map(e=><option key={e} value={e}>{e}</option>)}
+                      </select>
+                    </div>
+                    {inp('Follow Trigger','follow_trigger',true)}
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:C.inkLight,display:'block',marginBottom:2}}>Event Excitement (0-10)</label>
+                      <input type="number" min={0} max={10} value={draft.event_excitement||0} onChange={e=>setDraft(d=>({...d,event_excitement:parseInt(e.target.value)||0}))} style={{width:'100%',padding:'6px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}} />
+                    </div>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px',marginTop:8}}>
+                    {inp('Lifestyle Claim','lifestyle_claim',true)}{inp('Lifestyle Reality','lifestyle_reality',true)}
+                    {inp('Lifestyle Gap','lifestyle_gap')}
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:C.inkLight,display:'block',marginBottom:2}}>Beauty Factor (0-10)</label>
+                      <input type="number" min={0} max={10} value={draft.beauty_factor||0} onChange={e=>setDraft(d=>({...d,beauty_factor:parseInt(e.target.value)||0}))} style={{width:'100%',padding:'6px 8px',borderRadius:C.radiusSm,border:`1px solid ${C.border}`,fontSize:12}} />
+                    </div>
+                    {inp('Beauty Description','beauty_description',true)}{inp('Aesthetic Power','aesthetic_power',true)}
                   </div>
                 </div>
               </div>
@@ -234,6 +277,42 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
                   <Section title="Comment Energy"><div style={{fontSize:13,color:C.inkMid,lineHeight:1.7}}>{p.comment_energy||d.comment_energy}</div></Section>
                   {p.adult_content_present&&<Section title="Adult Content"><Field label="Type" value={p.adult_content_type||d.adult_content_type}/><Field label="Framing" value={p.adult_content_framing||d.adult_content_framing}/></Section>}
                 </div>
+                {/* Follow Psychology + Lifestyle + Beauty */}
+                {(p.follow_motivation || p.lifestyle_claim || p.beauty_description) && (
+                  <div style={{gridColumn:'1/-1',display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                    {(p.follow_motivation || p.follow_trigger) && (
+                      <Section title="Why Lala Follows">
+                        {p.follow_motivation && (
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                            <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:8,
+                              background:p.follow_motivation==='aspiration'?'#fef3c7':p.follow_motivation==='envy'?'#fde8e8':p.follow_motivation==='competition'?'#e0e7ff':p.follow_motivation==='hate_follow'?'#fef2f2':'#f0f0f0',
+                              color:p.follow_motivation==='aspiration'?'#92400e':p.follow_motivation==='envy'?'#9d174d':p.follow_motivation==='competition'?'#3730a3':p.follow_motivation==='hate_follow'?'#dc2626':C.inkMid}}>{p.follow_motivation.replace('_',' ')}</span>
+                            {p.follow_emotion && <span style={{fontSize:10,color:C.inkLight}}>feels: {p.follow_emotion}</span>}
+                            {p.event_excitement > 0 && <span style={{fontSize:10,color:'#92400e'}}>excitement: {p.event_excitement}/10</span>}
+                          </div>
+                        )}
+                        {p.follow_trigger && <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6,fontStyle:'italic'}}>"{p.follow_trigger}"</div>}
+                      </Section>
+                    )}
+                    <div>
+                      {p.lifestyle_claim && (
+                        <Section title="Lifestyle">
+                          <Field label="Claims" value={p.lifestyle_claim}/>
+                          {p.lifestyle_reality && <Field label="Reality" value={p.lifestyle_reality}/>}
+                          {p.lifestyle_gap && <div style={{fontSize:10,fontWeight:700,color:p.lifestyle_gap==='massive'?C.pink:p.lifestyle_gap==='authentic'?'#16a34a':C.inkLight,marginTop:4}}>Gap: {p.lifestyle_gap}</div>}
+                        </Section>
+                      )}
+                      {p.beauty_description && (
+                        <Section title="Beauty & Aesthetic Power">
+                          {p.beauty_factor > 0 && <div style={{fontSize:11,fontWeight:700,color:C.pink,marginBottom:4}}>Beauty factor: {p.beauty_factor}/10</div>}
+                          <div style={{fontSize:12,color:C.inkMid,lineHeight:1.6}}>{p.beauty_description}</div>
+                          {p.aesthetic_power && <div style={{fontSize:11,color:C.inkLight,marginTop:4,fontStyle:'italic'}}>{p.aesthetic_power}</div>}
+                        </Section>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <Section title="Parasocial Function">
                     <div style={{fontSize:13,color:C.inkMid,lineHeight:1.7,marginBottom:8}}>{p.parasocial_function||d.parasocial_function}</div>

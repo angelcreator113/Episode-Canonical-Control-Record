@@ -587,7 +587,20 @@ Return ONLY valid JSON with these fields:
   "sample_comments": ["fan comment","critic comment"],
   "moment_log": [{"moment_type":"post|live|controversy","description":"what happened","protagonist_reaction":"internal response","lala_seed":false}],
   "lala_relevance_score": 0-10,
-  "lala_relevance_reason": "Why they matter to ${ctx.name}"
+  "lala_relevance_reason": "Why they matter to ${ctx.name}",
+
+  "follow_motivation": "aspiration|inspiration|entertainment|competition|relatability|envy|study|guilt_pleasure|hate_follow — WHY does ${ctx.name} follow this person?",
+  "follow_emotion": "excitement|anxiety|motivation|jealousy|admiration|indifference|obsession|resentment — what does ${ctx.name} FEEL when she sees their content?",
+  "follow_trigger": "The specific moment/content that hooks ${ctx.name} — e.g. 'When she posts her morning routine in that $4000 robe' or 'Every time she shows the view from her apartment'",
+  "event_excitement": 0-10,
+
+  "lifestyle_claim": "What they PROJECT to the world — the life they want you to believe they live. Be specific: brands, locations, habits.",
+  "lifestyle_reality": "What's ACTUALLY true — the gap between performance and reality. Could be better OR worse than the claim.",
+  "lifestyle_gap": "massive|significant|slight|authentic|reversed",
+
+  "beauty_factor": 0-10,
+  "beauty_description": "How they look — be literary, specific, visual. Not generic. What makes people stop scrolling?",
+  "aesthetic_power": "How their appearance translates to social influence — 1 sentence about the power their look gives them"
 }`;
 
   const response = await callClaude(prompt, { maxTokens: 6000 });
@@ -691,6 +704,19 @@ Return ONLY valid JSON with these fields:
     secret_connections:    generated.secret_connections || [],
     platform_bans:         generated.platform_bans || [],
     rebrand_history:       generated.rebrand_history || [],
+    // Follow psychology
+    follow_motivation:    (['aspiration','inspiration','entertainment','competition','relatability','envy','study','guilt_pleasure','hate_follow'].includes(generated.follow_motivation) ? generated.follow_motivation : null),
+    follow_emotion:       (['excitement','anxiety','motivation','jealousy','admiration','indifference','obsession','resentment'].includes(generated.follow_emotion) ? generated.follow_emotion : null),
+    follow_trigger:       generated.follow_trigger || null,
+    event_excitement:     Math.min(10, Math.max(0, parseInt(generated.event_excitement) || 0)),
+    // Lifestyle layer
+    lifestyle_claim:      generated.lifestyle_claim || null,
+    lifestyle_reality:    generated.lifestyle_reality || null,
+    lifestyle_gap:        (generated.lifestyle_gap || '').slice(0, 100) || null,
+    // Beauty & influence
+    beauty_factor:        Math.min(10, Math.max(0, parseInt(generated.beauty_factor) || 0)),
+    beauty_description:   generated.beauty_description || null,
+    aesthetic_power:      generated.aesthetic_power || null,
   });
 
   // Auto-assign followers

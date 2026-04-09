@@ -8,6 +8,14 @@
 
 const express = require('express');
 const router = express.Router();
+
+let optionalAuth;
+try {
+  const authModule = require('../middleware/auth');
+  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
+} catch {
+  optionalAuth = (req, res, next) => next();
+}
 const { Op } = require('sequelize');
 const { autoCreateFeedProfile } = require('../services/feedAutoGeneration');
 let createFollowProfileFromDNA;

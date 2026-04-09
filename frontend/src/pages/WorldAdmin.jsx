@@ -19,6 +19,7 @@ import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
+import { EventInvitePreview } from './feed/FeedEnhancements';
 import './WorldAdmin.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
@@ -2553,6 +2554,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     )}
                   </div>
 
+                  {/* Invite Preview — phone notification mockup */}
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>Invite Preview</div>
+                    <EventInvitePreview event={md} />
+                  </div>
+
                   {/* Invitation Style */}
                   <InvitationStyleFields
                     formData={md}
@@ -3082,14 +3089,50 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {(episodeBlueprint.beats || []).map((beat, i) => {
                   const phaseColors = { before: '#fef3c7', during: '#dbeafe', after: '#f3e8ff' };
                   const phaseDots = { before: '#f59e0b', during: '#3b82f6', after: '#8b5cf6' };
+                  // Find feed moment for this beat from scene plan
+                  const sp = episodeBlueprint.scenePlan?.find(s => s.beat_number === beat.beat);
+                  const fm = sp?.feed_moment || episodeBlueprint.feedMoments?.[beat.beat];
                   return (
-                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 10px', background: phaseColors[beat.phase] || '#f8f8f8', borderRadius: 6 }}>
-                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: phaseDots[beat.phase] || '#999', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{beat.beat}</div>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{beat.label}</div>
-                        <div style={{ fontSize: 11, color: '#666' }}>{beat.description}</div>
-                        <div style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{beat.phase} · {beat.emotional_intent}</div>
+                    <div key={i} style={{ padding: '6px 10px', background: phaseColors[beat.phase] || '#f8f8f8', borderRadius: 6 }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: phaseDots[beat.phase] || '#999', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{beat.beat}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: 12, color: '#2C2C2C' }}>{beat.label}</div>
+                          <div style={{ fontSize: 11, color: '#666' }}>{beat.description}</div>
+                          <div style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{beat.phase} · {beat.emotional_intent}</div>
+                        </div>
+                        {fm && <span style={{ fontSize: 8, padding: '2px 6px', borderRadius: 4, background: '#1a1a1a', color: '#B8962E', fontWeight: 700, flexShrink: 0 }}>📱</span>}
                       </div>
+                      {/* Feed Moment — On-Screen Visual + Script Lines */}
+                      {fm && (
+                        <div style={{ marginTop: 6, marginLeft: 34, display: 'flex', gap: 6 }}>
+                          {/* On-Screen Overlay (bright — what viewer sees) */}
+                          <div style={{ flex: 1, padding: '6px 10px', background: 'linear-gradient(135deg, #FAF7F0, #fff8e7)', borderRadius: 8, border: '1px solid #B8962E30' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                              <span style={{ fontSize: 8, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase' }}>On Screen · {(fm.on_screen || fm.phone_screen)?.type || 'notification'}</span>
+                              <span style={{ fontSize: 8, color: '#94a3b8' }}>{fm.trigger_profile}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#1a1a2e', lineHeight: 1.4 }}>{(fm.on_screen || fm.phone_screen)?.content}</div>
+                          </div>
+                          {/* Script Line (what Lala says — voice) */}
+                          {(fm.script_lines || fm.lala_dialogue) && (
+                            <div style={{ flex: 1, padding: '6px 10px', background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                              <span style={{ fontSize: 8, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase' }}>Script · Lala's Voice</span>
+                              <div style={{ fontSize: 11, color: '#1a1a2e', marginTop: 2, fontFamily: "'Lora', serif" }}>
+                                "{fm.script_lines?.lala_line || fm.lala_dialogue}"
+                              </div>
+                              {(fm.script_lines?.lala_internal || fm.lala_internal) && (
+                                <div style={{ fontSize: 10, color: '#6366f1', fontStyle: 'italic', marginTop: 2 }}>
+                                  [{fm.script_lines?.lala_internal || fm.lala_internal}]
+                                </div>
+                              )}
+                              {(fm.script_lines?.direction || fm.behavior_shift) && (
+                                <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 2 }}>→ {fm.script_lines?.direction || fm.behavior_shift}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

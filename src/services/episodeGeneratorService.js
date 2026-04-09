@@ -345,6 +345,29 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     }
   }
 
+  // ── 3b. Generate Feed Moments for each beat ──
+  let feedMoments = {};
+  try {
+    const { generateFeedMoments, generateBStoryActivity } = require('./feedMomentsService');
+    const guestProfiles = automation.guest_profiles || [];
+    feedMoments = await generateFeedMoments(event, BEAT_TEMPLATES, guestProfiles, models, { showType: 'styling_adventures' });
+
+    // Attach feed moments to scene plan rows
+    for (const row of scenePlanRows) {
+      const beatNum = row.beat_number || row.dataValues?.beat_number;
+      if (feedMoments[beatNum]) {
+        try {
+          const moment = feedMoments[beatNum];
+          const updates = { feed_moment: moment };
+          if (moment.script_lines) updates.script_lines = moment.script_lines;
+          await row.update(updates);
+        } catch { /* feed_moment column may not exist yet */ }
+      }
+    }
+  } catch (fmErr) {
+    console.warn('[EpisodeGenerator] Feed moments generation failed (non-blocking):', fmErr.message);
+  }
+
   // ── 4. Create Todo List (wardrobe + social tasks) ──
   const eventType = event.event_type || 'invite';
 
@@ -455,6 +478,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     socialTasks,
     beats: BEAT_TEMPLATES,
     feedPosts,
+    feedMoments,
   };
 }
 
