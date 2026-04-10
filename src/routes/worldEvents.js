@@ -2216,7 +2216,7 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', optionalAuth, asyn
       `SELECT id, name, clothing_category, brand, tier, price, color, is_owned,
               acquisition_type, aesthetic_tags, event_types, occasion, season,
               s3_url, s3_url_processed, times_worn, last_worn_date, coin_cost
-       FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL
+       FROM wardrobe WHERE (show_id = :showId OR show_id IS NULL) AND deleted_at IS NULL
        ORDER BY tier DESC, name ASC`,
       { replacements: { showId } }
     );
