@@ -191,7 +191,7 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/events`).then(r => { console.log('[LoadData] Events loaded:', r.data?.events?.length || 0); setWorldEvents(r.data?.events || []); }).catch(err => { console.error('[LoadData] Events load FAILED:', err.response?.status, err.response?.data || err.message); setWorldEvents([]); }),
         api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
-        api.get(`/api/v1/wardrobe-library?showId=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
+        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
         api.get('/api/v1/world/locations').then(r => setWorldLocations(r.data?.locations || [])).catch(() => setWorldLocations([])),
       ]);
       // Show error only if ALL calls failed (not just some timeouts)
@@ -3332,13 +3332,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         // Group items by type for summary
         const typeGroups = {};
         wardrobeItems.forEach(item => {
-          const t = item.itemType || item.item_type || 'other';
+          const t = item.clothing_category || item.itemType || item.item_type || 'other';
           if (!typeGroups[t]) typeGroups[t] = [];
           typeGroups[t].push(item);
         });
 
         const filteredItems = wardrobeItems.filter(item => {
-          const itemType = item.itemType || item.item_type || 'other';
+          const itemType = item.clothing_category || item.itemType || item.item_type || 'other';
           if (wardrobeCatFilter !== 'all' && itemType !== wardrobeCatFilter) return false;
           if (wardrobeFilter !== 'all') {
             const searchTerm = wardrobeFilter.toLowerCase();
@@ -3377,7 +3377,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               tags: wardrobeForm.tags ? wardrobeForm.tags.split(',').map(s => s.trim()).filter(Boolean) : [],
               price: wardrobeForm.price ? parseFloat(wardrobeForm.price) : null,
             };
-            const res = await api.put(`/api/v1/wardrobe-library/${editingWardrobeItem.id}`, payload);
+            const res = await api.put(`/api/v1/wardrobe/${editingWardrobeItem.id}`, payload);
             if (res.data.success) {
               setWardrobeItems(prev => prev.map(i => i.id === editingWardrobeItem.id ? { ...i, ...res.data.data } : i));
               setEditingWardrobeItem(null);
@@ -3391,7 +3391,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         const deleteWardrobeItem = async (item) => {
           if (!window.confirm(`Delete "${item.name}"?`)) return;
           try {
-            const res = await api.delete(`/api/v1/wardrobe-library/${item.id}`);
+            const res = await api.delete(`/api/v1/wardrobe/${item.id}`);
             if (res.data.success) {
               setWardrobeItems(prev => prev.filter(i => i.id !== item.id));
               setEditingWardrobeItem(null);
@@ -3467,8 +3467,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    {(editingWardrobeItem.thumbnailUrl || editingWardrobeItem.thumbnail_url || editingWardrobeItem.imageUrl || editingWardrobeItem.image_url) && (
-                      <img src={editingWardrobeItem.thumbnailUrl || editingWardrobeItem.thumbnail_url || editingWardrobeItem.imageUrl || editingWardrobeItem.image_url}
+                    {(editingWardrobeItem.s3_url_processed || editingWardrobeItem.s3_url || editingWardrobeItem.thumbnail_url || editingWardrobeItem.image_url) && (
+                      <img src={editingWardrobeItem.s3_url_processed || editingWardrobeItem.s3_url || editingWardrobeItem.thumbnail_url || editingWardrobeItem.image_url}
                         alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
                     )}
                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Editing: {editingWardrobeItem.name}</h3>
@@ -3560,8 +3560,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* Item Grid — visual cards with thumbnails */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
               {filteredItems.map(item => {
-                const imgUrl = item.thumbnailUrl || item.thumbnail_url || item.imageUrl || item.image_url;
-                const itemType = item.itemType || item.item_type || '';
+                const imgUrl = item.s3_url_processed || item.s3_url || item.thumbnail_url || item.image_url;
+                const itemType = item.clothing_category || item.itemType || item.item_type || '';
                 const tags = Array.isArray(item.tags) ? item.tags : [];
                 const isSelected = editingWardrobeItem?.id === item.id;
 
