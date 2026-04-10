@@ -362,7 +362,7 @@ function AppContent() {
           <Route path="/wardrobe/analytics" element={<Navigate to="/wardrobe-library" replace />} />
           <Route path="/wardrobe/outfits" element={<Navigate to="/wardrobe-library" replace />} />
           <Route path="/wardrobe-library" element={<WardrobeBrowser mode="library" />} />
-          <Route path="/wardrobe-library/upload" element={<WardrobeLibraryUpload />} />
+          <Route path="/wardrobe-library/upload" element={<Navigate to="/wardrobe-library" replace />} />
           <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />
           
           {/* Thumbnail Composer / Template Studio */}

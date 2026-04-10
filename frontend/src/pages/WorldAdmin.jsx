@@ -3410,7 +3410,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               <h2 style={{ ...S.cardTitle, margin: 0 }}>👗 Wardrobe Library</h2>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{wardrobeItems.length} items</span>
-                <button onClick={() => navigate('/wardrobe-library/upload')} style={S.primaryBtn}>+ Upload Item</button>
+                <button onClick={() => navigate('/wardrobe-library')} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
@@ -3635,7 +3635,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={() => navigate('/wardrobe-library/upload')} style={S.primaryBtn}>
+                  <button onClick={() => navigate('/wardrobe-library')} style={S.primaryBtn}>
                     + Upload First Item
                   </button>
                 )}
