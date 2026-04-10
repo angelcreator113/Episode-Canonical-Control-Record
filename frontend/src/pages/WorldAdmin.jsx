@@ -2144,6 +2144,22 @@ The revised event should feel like a completely different experience from the si
                 {ev.description && (
                   <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.description}</div>
                 )}
+                {/* Outfit preview */}
+                {(() => {
+                  const pieces = typeof ev.outfit_pieces === 'string' ? JSON.parse(ev.outfit_pieces || '[]') : (ev.outfit_pieces || []);
+                  const score = typeof ev.outfit_score === 'string' ? JSON.parse(ev.outfit_score || 'null') : (ev.outfit_score || null);
+                  if (pieces.length === 0) return null;
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, padding: '4px 8px', background: '#faf5ea', borderRadius: 6, border: '1px solid #e8d9b8' }}>
+                      <span style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>👗</span>
+                      {pieces.slice(0, 4).map((p, i) => (
+                        <img key={i} src={p.image_url} alt="" style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: 4, border: '1px solid #e8d9b8' }} title={p.name} />
+                      ))}
+                      {pieces.length > 4 && <span style={{ fontSize: 9, color: '#B8962E' }}>+{pieces.length - 4}</span>}
+                      {score && <span style={{ fontSize: 9, color: score.narrative_mood === 'confidence' ? '#16a34a' : score.narrative_mood === 'anxiety' ? '#dc2626' : '#B8962E', fontWeight: 600, marginLeft: 'auto' }}>{score.match_score}/100</span>}
+                    </div>
+                  );
+                })()}
                 {linkedEpisode ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#f0fdf4', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
                     ✓ Ep {linkedEpisode.episode_number}: {linkedEpisode.title}
