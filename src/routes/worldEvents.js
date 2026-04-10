@@ -411,9 +411,14 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
         { replacements }
       );
     } catch (updateErr) {
-      if (String(updateErr.message || '').includes('does not exist')) {
-        // Strip fields that may not exist in DB yet and retry
-        const safeFields = new Set([
+      const errMsg = String(updateErr.message || '');
+      if (errMsg.includes('does not exist') || errMsg.includes('column')) {
+        // Extract which column is missing from error message
+        const missingCol = errMsg.match(/column "([^"]+)"/)?.[1];
+        console.warn(`[WorldEvents] Column missing: ${missingCol || 'unknown'} — retrying without it`);
+
+        // Core fields that definitely exist on world_events (original table)
+        const coreFields = new Set([
           'name', 'event_type', 'host', 'host_brand', 'description',
           'prestige', 'cost_coins', 'strictness', 'deadline_type',
           'dress_code', 'dress_code_keywords', 'location_hint',
@@ -421,20 +426,53 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
           'browse_pool_bias', 'browse_pool_size', 'scene_set_id',
           'is_paid', 'payment_amount', 'career_tier',
           'career_milestone', 'fail_consequence', 'success_unlock',
-          'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
-          'venue_location_id', 'venue_name', 'venue_address',
-          'event_date', 'event_time', 'guest_list', 'invitation_details',
           'updated_at',
         ]);
-        const safeClauses = setClauses.filter(c => {
+
+        // Stash venue/event fields into canon_consequences.automation if columns don't exist
+        const venueFields = ['venue_name', 'venue_address', 'event_date', 'event_time', 'venue_location_id'];
+        const stashedData = {};
+        for (const vf of venueFields) {
+          if (replacements[vf] !== undefined && replacements[vf] !== null) {
+            stashedData[vf] = replacements[vf];
+          }
+        }
+
+        if (Object.keys(stashedData).length > 0) {
+          // Save venue data into canon_consequences.automation
+          try {
+            const [rows] = await models.sequelize.query(
+              'SELECT canon_consequences FROM world_events WHERE id = :eventId LIMIT 1',
+              { replacements: { eventId } }
+            );
+            const cc = typeof rows[0]?.canon_consequences === 'string'
+              ? JSON.parse(rows[0].canon_consequences) : (rows[0]?.canon_consequences || {});
+            cc.automation = { ...(cc.automation || {}), ...stashedData };
+
+            await models.sequelize.query(
+              `UPDATE world_events SET canon_consequences = :cc, updated_at = NOW() WHERE id = :eventId AND show_id = :showId`,
+              { replacements: { cc: JSON.stringify(cc), eventId, showId } }
+            );
+            console.log(`[WorldEvents] Stashed ${Object.keys(stashedData).join(', ')} into canon_consequences.automation`);
+          } catch (stashErr) {
+            console.warn('[WorldEvents] Failed to stash venue data:', stashErr.message);
+          }
+        }
+
+        // Retry with only core fields
+        const coreClauses = setClauses.filter(c => {
           const field = c.split(' = ')[0].trim();
-          return safeFields.has(field) || field === 'updated_at';
+          return coreFields.has(field);
         });
-        if (safeClauses.length > 1) {
-          await models.sequelize.query(
-            `UPDATE world_events SET ${safeClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`,
-            { replacements }
-          );
+        if (coreClauses.length > 1) {
+          try {
+            await models.sequelize.query(
+              `UPDATE world_events SET ${coreClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`,
+              { replacements }
+            );
+          } catch (retryErr) {
+            console.warn('[WorldEvents] Core-only retry also failed:', retryErr.message);
+          }
         }
       } else {
         throw updateErr;
@@ -1560,17 +1598,20 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
-    // Load event
+    // Load event — use raw SQL to avoid model column mismatch with unmigrated DB
     let event;
-    if (models.WorldEvent) {
-      event = await models.WorldEvent.findByPk(eventId);
-    }
-    if (!event) {
+    try {
       const [rows] = await models.sequelize.query(
-        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId',
+        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
         { replacements: { eventId, showId } }
       );
       event = rows?.[0];
+    } catch {
+      // Fallback to model if raw SQL fails
+      if (models.WorldEvent) {
+        event = await models.WorldEvent.findByPk(eventId);
+        if (event) event = event.toJSON();
+      }
     }
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
@@ -1597,7 +1638,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
     });
   } catch (error) {
     console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
-    return res.status(500).json({ success: false, error: error.message, stack: process.env.NODE_ENV === 'development' ? error.stack?.slice(0, 300) : undefined });
+    return res.status(500).json({ success: false, error: error.message, stack: error.stack?.slice(0, 500) });
   }
 });
 
@@ -2178,7 +2219,7 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', optionalAuth, asyn
       `SELECT id, name, clothing_category, brand, tier, price, color, is_owned,
               acquisition_type, aesthetic_tags, event_types, occasion, season,
               s3_url, s3_url_processed, times_worn, last_worn_date, coin_cost
-       FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL
+       FROM wardrobe WHERE (show_id = :showId OR show_id IS NULL) AND deleted_at IS NULL
        ORDER BY tier DESC, name ASC`,
       { replacements: { showId } }
     );
