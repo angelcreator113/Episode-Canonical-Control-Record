@@ -1325,8 +1325,15 @@ The revised event should feel like a completely different experience from the si
                     const host = ev.host || auto?.host_display_name || '';
                     const venue = ev.venue_name || auto?.venue_name || '';
                     const guestCount = auto?.guest_profiles?.length || 0;
-                    // Check completeness
-                    const filled = [ev.host, ev.venue_name, ev.event_date, ev.dress_code, ev.description, ev.narrative_stakes].filter(Boolean).length;
+                    // Check completeness — check both top-level and automation fields
+                    const filled = [
+                      ev.host || auto?.host_display_name,
+                      ev.venue_name || auto?.venue_name,
+                      ev.event_date || auto?.event_date,
+                      ev.dress_code || auto?.dress_code,
+                      ev.description,
+                      ev.narrative_stakes,
+                    ].filter(Boolean).length;
                     const total = 6;
                     const pct = Math.round((filled / total) * 100);
                     return (
