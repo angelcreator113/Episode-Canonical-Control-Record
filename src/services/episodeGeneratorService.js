@@ -345,10 +345,15 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     }
   }
 
+  // ── Parse automation data from event (used by feed moments + social tasks) ──
+  const automation = (typeof event.canon_consequences === 'string'
+    ? JSON.parse(event.canon_consequences)
+    : event.canon_consequences)?.automation || {};
+
   // ── 3b. Generate Feed Moments for each beat ──
   let feedMoments = {};
   try {
-    const { generateFeedMoments, generateBStoryActivity } = require('./feedMomentsService');
+    const { generateFeedMoments } = require('./feedMomentsService');
     const guestProfiles = automation.guest_profiles || [];
     feedMoments = await generateFeedMoments(event, BEAT_TEMPLATES, guestProfiles, models, { showType: 'styling_adventures' });
 
@@ -372,9 +377,6 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   const eventType = event.event_type || 'invite';
 
   // Use event's saved social tasks if available, otherwise generate fresh
-  const automation = (typeof event.canon_consequences === 'string'
-    ? JSON.parse(event.canon_consequences)
-    : event.canon_consequences)?.automation || {};
   let socialTasks = automation.social_tasks;
   if (!Array.isArray(socialTasks) || socialTasks.length === 0) {
     let hostProfile = null;
