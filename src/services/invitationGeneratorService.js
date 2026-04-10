@@ -22,7 +22,6 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const { v4: uuidv4 } = require('uuid');
 const { compositeInvitation, compositeInvitationPDF, detectTheme, buildInvitationContent } = require('./invitationCompositingService');
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
@@ -322,7 +321,7 @@ async function generateInvitation(eventId, models, showId) {
   console.log('[InviteGen] Calling DALL-E 3 for background...');
   const bgUrl = await callDallE3(bgPrompt);
 
-  if (!bgUrl) throw new Error('DALL-E 3 did not return an image URL');
+  if (!bgUrl) throw new Error('Image generation did not return a URL');
 
   // Download background
   const bgResponse = await axios.get(bgUrl, {
@@ -331,21 +330,23 @@ async function generateInvitation(eventId, models, showId) {
   });
   const bgBuffer = Buffer.from(bgResponse.data);
 
-  // Step 2: Composite text (or fall back to DALL-E-only image)
-  let finalBuffer;
-  // Generate the text content (store for editing later)
+  // Step 2: Composite text (or fall back to background-only image)
+  let finalBuffer = bgBuffer;
   let invitationText = null;
   try {
     invitationText = await buildInvitationContent(event);
   } catch { /* will use default in compositeInvitation */ }
 
-  const composited = await compositeInvitation(bgBuffer, event, invitationText);
-  if (composited) {
-    console.log('[InviteGen] Text composited successfully (v2 pipeline)');
-    finalBuffer = composited;
-  } else {
-    console.warn('[InviteGen] Fonts not available — using DALL-E background as-is (v1 fallback)');
-    finalBuffer = bgBuffer;
+  try {
+    const composited = await compositeInvitation(bgBuffer, event, invitationText);
+    if (composited) {
+      console.log('[InviteGen] Text composited successfully');
+      finalBuffer = composited;
+    } else {
+      console.warn('[InviteGen] Compositing returned null — using background as-is');
+    }
+  } catch (compErr) {
+    console.warn('[InviteGen] Compositing failed (canvas/sharp may not be installed) — using background as-is:', compErr.message);
   }
 
   // Store invitation text on the event for editing

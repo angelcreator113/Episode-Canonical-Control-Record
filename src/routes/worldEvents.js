@@ -939,9 +939,9 @@ router.post('/world/:showId/events/:eventId/generate-invitation', optionalAuth, 
   try {
     const { showId, eventId } = req.params;
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.FAL_KEY && !process.env.OPENAI_API_KEY) {
       return res.status(503).json({
-        error: 'OPENAI_API_KEY not configured. Add it to your .env file.',
+        error: 'No image generation API configured. Set FAL_KEY or OPENAI_API_KEY in .env.',
       });
     }
 
