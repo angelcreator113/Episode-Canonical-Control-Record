@@ -101,6 +101,9 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
   // Bulk selection (library mode only)
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [bulkMode, setBulkMode] = useState(false);
+  const [showCreateSet, setShowCreateSet] = useState(false);
+  const [setName, setSetName] = useState('');
+  const [creatingSets, setCreatingSets] = useState(false);
   
   // Usage tracking (gallery mode only)
   const [itemsWithUsage, setItemsWithUsage] = useState({});
@@ -1151,9 +1154,89 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
             <div className="bulk-actions-bar">
               <span>{selectedItems.size} items selected</span>
               <div className="bulk-actions">
+                {selectedItems.size >= 2 && (
+                  <button onClick={() => { setSetName(''); setShowCreateSet(true); }} style={{ background: '#B8962E', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>
+                    👔 Create Set ({selectedItems.size} pieces)
+                  </button>
+                )}
                 <button onClick={selectAll}>Select All</button>
                 <button onClick={deselectAll}>Deselect All</button>
                 <button className="btn-danger" onClick={handleBulkDelete}>Delete Selected</button>
+              </div>
+            </div>
+          )}
+
+          {/* Create Outfit Set Modal */}
+          {showCreateSet && (
+            <div className="modal-overlay" onClick={() => setShowCreateSet(false)}>
+              <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, padding: 24 }}>
+                <div className="modal-header">
+                  <h2 style={{ margin: 0, fontSize: 16 }}>Create Outfit Set</h2>
+                  <button className="modal-close" onClick={() => setShowCreateSet(false)}>×</button>
+                </div>
+                <div style={{ margin: '16px 0' }}>
+                  <div style={{ fontSize: 12, color: '#888', marginBottom: 12, fontFamily: "'DM Mono', monospace" }}>
+                    {selectedItems.size} pieces selected
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                    {Array.from(selectedItems).map(id => {
+                      const item = items.find(i => i.id === id);
+                      if (!item) return null;
+                      const img = item.s3_url_processed || item.s3_url || item.thumbnail_url;
+                      return (
+                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 6, padding: '4px 8px' }}>
+                          {img && <img src={img} alt="" style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} />}
+                          <span style={{ fontSize: 11, color: '#2C2C2C' }}>{item.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <label style={{ fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>set name</label>
+                  <input
+                    type="text"
+                    value={setName}
+                    onChange={e => setSetName(e.target.value)}
+                    placeholder="e.g., Floral Corset Set"
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 14, fontFamily: "'Lora', serif", marginTop: 4 }}
+                    autoFocus
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button onClick={() => setShowCreateSet(false)} style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
+                  <button
+                    disabled={!setName.trim() || creatingSets}
+                    onClick={async () => {
+                      setCreatingSets(true);
+                      try {
+                        const selectedArr = Array.from(selectedItems);
+                        const selectedData = selectedArr.map(id => {
+                          const item = items.find(i => i.id === id);
+                          return item ? { id: item.id, name: item.name, category: item.clothing_category, image: item.s3_url_processed || item.s3_url } : null;
+                        }).filter(Boolean);
+
+                        await fetch(`${API_URL}/outfit-sets`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            name: setName.trim(),
+                            character: 'Lala',
+                            items: selectedData,
+                          }),
+                        });
+                        alert(`Set "${setName}" created with ${selectedData.length} pieces`);
+                        setShowCreateSet(false);
+                        setSelectedItems(new Set());
+                        setBulkMode(false);
+                      } catch (err) {
+                        alert('Failed to create set: ' + err.message);
+                      }
+                      setCreatingSets(false);
+                    }}
+                    style={{ padding: '8px 20px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: !setName.trim() || creatingSets ? 0.4 : 1 }}
+                  >
+                    {creatingSets ? 'Creating...' : 'Create Set'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1334,7 +1417,7 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                         // Parse AI price — enforce $150 minimum (luxury world)
                         let aiPrice = '';
                         if (ai.price_estimate) {
-                          const num = parseFloat(ai.price_estimate.replace(/[^0-9.]/g, ''));
+                          const num = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, ''));
                           aiPrice = num && num >= 150 ? num.toFixed(2) : '150.00';
                         }
                         setFormData(prev => ({
