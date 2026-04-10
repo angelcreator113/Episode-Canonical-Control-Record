@@ -422,6 +422,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
           'is_paid', 'payment_amount', 'career_tier',
           'career_milestone', 'fail_consequence', 'success_unlock',
           'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
+          'venue_location_id', 'venue_name', 'venue_address',
+          'event_date', 'event_time', 'guest_list', 'invitation_details',
           'updated_at',
         ]);
         const safeClauses = setClauses.filter(c => {
