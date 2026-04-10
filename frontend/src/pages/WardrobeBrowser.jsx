@@ -1334,7 +1334,7 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                         // Parse AI price — enforce $150 minimum (luxury world)
                         let aiPrice = '';
                         if (ai.price_estimate) {
-                          const num = parseFloat(ai.price_estimate.replace(/[^0-9.]/g, ''));
+                          const num = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, ''));
                           aiPrice = num && num >= 150 ? num.toFixed(2) : '150.00';
                         }
                         setFormData(prev => ({
