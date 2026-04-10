@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
