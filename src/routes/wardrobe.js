@@ -133,7 +133,7 @@ router.get('/outfit-score/:episodeId', optionalAuth, async (req, res) => {
 router.get('/', asyncHandler(wardrobeController.listWardrobeItems));
 
 // Create new wardrobe item
-router.post('/', upload.single('file'), asyncHandler(wardrobeController.createWardrobeItem));
+router.post('/', upload.single('image'), asyncHandler(wardrobeController.createWardrobeItem));
 
 // Get item usage across shows/episodes
 router.get('/:id/usage', asyncHandler(wardrobeController.getItemUsage));
@@ -142,7 +142,7 @@ router.get('/:id/usage', asyncHandler(wardrobeController.getItemUsage));
 router.get('/:id', asyncHandler(wardrobeController.getWardrobeItem));
 
 // Update wardrobe item
-router.put('/:id', upload.single('file'), asyncHandler(wardrobeController.updateWardrobeItem));
+router.put('/:id', upload.single('image'), asyncHandler(wardrobeController.updateWardrobeItem));
 
 // Process background removal for wardrobe item
 router.post('/:id/process-background', asyncHandler(wardrobeController.processBackgroundRemoval));
