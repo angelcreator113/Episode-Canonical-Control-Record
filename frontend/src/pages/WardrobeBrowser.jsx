@@ -1324,15 +1324,20 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                       const data = await res.json();
                       if (data.success && data.data) {
                         const ai = data.data;
+                        // Map AI item_type (lowercase singular) to form categories (capitalized plural)
+                        const categoryMap = {
+                          dress: 'Dresses', top: 'Tops', bottom: 'Bottoms', bottoms: 'Bottoms',
+                          shoes: 'Shoes', accessory: 'Accessories', jewelry: 'Jewelry',
+                          bag: 'Accessories', outerwear: 'Outerwear', swimwear: 'Dresses',
+                          activewear: 'Tops', jacket: 'Outerwear', coat: 'Outerwear',
+                          skirt: 'Bottoms', pants: 'Bottoms', shirt: 'Tops', blouse: 'Tops',
+                        };
                         setFormData(prev => ({
                           ...prev,
                           name: ai.name || prev.name,
-                          clothingCategory: ai.item_type || prev.clothingCategory,
+                          clothingCategory: categoryMap[ai.item_type?.toLowerCase()] || prev.clothingCategory,
                           color: ai.color || prev.color,
                           brand: ai.brand_guess || prev.brand,
-                          season: ai.season || prev.season,
-                          occasion: ai.occasion || prev.occasion,
-                          price: ai.price_estimate ? ai.price_estimate.replace(/[^0-9.]/g, '').split('-')[0] || '' : prev.price,
                           character: prev.character || 'Lala',
                         }));
                       }
