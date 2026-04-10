@@ -1,9 +1,9 @@
 /* ═══ Wardrobe Library Upload ═══ */
 
 .wlu-page {
-  max-width: 900px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 24px 20px;
   font-family: 'Lora', serif;
 }
 
@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .wlu-header h1 {
@@ -26,43 +26,40 @@
   align-items: center;
   gap: 4px;
   background: none;
-  border: 1px solid #ddd;
+  border: 1px solid #e0d9cc;
   border-radius: 8px;
   padding: 6px 12px;
   cursor: pointer;
   font-family: 'DM Mono', monospace;
   font-size: 12px;
-  color: #666;
+  color: #888;
 }
 
 .wlu-error {
   background: #fef2f2;
-  color: #dc2626;
+  color: #b91c1c;
   padding: 10px 14px;
   border-radius: 8px;
   margin-bottom: 14px;
-  font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .wlu-form {
   background: white;
   border: 1px solid #e8e0d0;
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 14px;
+  padding: 24px;
 }
 
 /* ── Layout: image left, fields right ── */
 .wlu-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 24px;
+  grid-template-columns: 220px 1fr;
+  gap: 28px;
 }
 
 @media (max-width: 700px) {
-  .wlu-layout {
-    grid-template-columns: 1fr;
-  }
+  .wlu-layout { grid-template-columns: 1fr; }
 }
 
 /* ── Left: Image + AI ── */
@@ -73,9 +70,9 @@
 }
 
 .wlu-dropzone {
-  border: 2px dashed #d1d5db;
+  border: 1.5px dashed #d1ccc0;
   border-radius: 10px;
-  background: #fafafa;
+  background: #faf9f6;
   transition: all 0.2s;
   overflow: hidden;
 }
@@ -97,7 +94,7 @@
 
 .wlu-preview img {
   width: 100%;
-  max-height: 220px;
+  max-height: 200px;
   object-fit: contain;
   display: block;
   padding: 8px;
@@ -107,16 +104,21 @@
   position: absolute;
   top: 6px;
   right: 6px;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: rgba(220, 53, 69, 0.9);
+  background: rgba(0, 0, 0, 0.45);
   color: white;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.2s;
+}
+
+.wlu-remove:hover {
+  background: rgba(220, 53, 69, 0.9);
 }
 
 .wlu-placeholder {
@@ -124,9 +126,9 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 28px 16px;
+  padding: 32px 16px;
   cursor: pointer;
-  color: #999;
+  color: #bbb;
 }
 
 .wlu-placeholder span {
@@ -135,7 +137,7 @@
 }
 
 .wlu-hint {
-  color: #bbb !important;
+  color: #ccc !important;
   font-size: 10px !important;
 }
 
@@ -145,48 +147,43 @@
   justify-content: center;
   gap: 6px;
   width: 100%;
-  padding: 10px;
+  padding: 9px;
   border: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, #B8962E, #d4af37);
+  background: #B8962E;
   color: white;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
   transition: opacity 0.2s;
+  letter-spacing: 0.2px;
 }
 
-.wlu-analyze-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.wlu-analyze-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.wlu-analyze-btn:hover:not(:disabled) { opacity: 0.85; }
+.wlu-analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .wlu-ai-summary {
   background: #FAF7F0;
-  border: 1px solid #e8e0d0;
+  border: 1px solid #ece5d5;
   border-radius: 8px;
-  padding: 10px;
+  padding: 10px 12px;
 }
 
 .wlu-ai-label {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   color: #B8962E;
   margin-bottom: 4px;
+  text-transform: uppercase;
 }
 
 .wlu-ai-notes {
   font-size: 12px;
-  color: #555;
+  color: #666;
   margin: 0 0 8px;
-  line-height: 1.4;
+  line-height: 1.5;
   font-style: italic;
 }
 
@@ -201,45 +198,45 @@
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: #f3f4f6;
-  color: #555;
+  background: #f3f1ec;
+  color: #666;
 }
 
-.wlu-chip.tier-basic { background: #f3f4f6; color: #6b7280; }
-.wlu-chip.tier-mid { background: #dbeafe; color: #1e40af; }
+.wlu-chip.tier-basic  { background: #f3f1ec; color: #888; }
+.wlu-chip.tier-mid    { background: #e8f0fe; color: #3b6cb8; }
 .wlu-chip.tier-luxury { background: #fef3c7; color: #92400e; }
-.wlu-chip.tier-elite { background: #B8962E22; color: #B8962E; }
+.wlu-chip.tier-elite  { background: #f5efe3; color: #B8962E; }
 
 /* ── Right: Form Fields ── */
 .wlu-right {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .wlu-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .wlu-field label {
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  font-size: 10px;
+  color: #aaa;
+  letter-spacing: 0.2px;
 }
 
 .wlu-field input,
 .wlu-field select,
 .wlu-field textarea {
   padding: 8px 10px;
-  border: 1px solid #ddd;
+  border: 1px solid #e0d9cc;
   border-radius: 6px;
   font-family: 'Lora', serif;
   font-size: 14px;
   color: #2C2C2C;
+  background: #fdfcfa;
   transition: border-color 0.2s;
 }
 
@@ -248,17 +245,27 @@
 .wlu-field textarea:focus {
   outline: none;
   border-color: #B8962E;
+  background: #fff;
+}
+
+.wlu-field input::placeholder,
+.wlu-field textarea::placeholder {
+  color: #ccc;
 }
 
 .wlu-field textarea {
   resize: vertical;
-  min-height: 60px;
+  min-height: 56px;
+}
+
+.wlu-field select {
+  appearance: auto;
 }
 
 .wlu-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 14px;
 }
 
 /* ── Actions ── */
@@ -268,15 +275,15 @@
   gap: 10px;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #e8e0d0;
+  border-top: 1px solid #ece5d5;
 }
 
 .wlu-btn-cancel {
   padding: 8px 20px;
-  border: 1px solid #ddd;
+  border: 1px solid #e0d9cc;
   border-radius: 8px;
   background: white;
-  color: #666;
+  color: #888;
   font-family: 'DM Mono', monospace;
   font-size: 12px;
   cursor: pointer;
@@ -286,19 +293,18 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 24px;
+  padding: 8px 22px;
   border: none;
   border-radius: 8px;
   background: #2C2C2C;
   color: white;
   font-family: 'DM Mono', monospace;
   font-size: 12px;
-  font-weight: 600;
   cursor: pointer;
 }
 
 .wlu-btn-submit:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -313,34 +319,35 @@
 }
 
 .wlu-success-icon {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: #16a34a;
   color: white;
-  font-size: 28px;
+  font-size: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .wlu-success h2 {
   color: #16a34a;
-  margin: 0 0 8px;
+  font-size: 18px;
+  margin: 0 0 6px;
 }
 
 .wlu-success p {
-  color: #888;
+  color: #aaa;
   font-family: 'DM Mono', monospace;
-  font-size: 13px;
+  font-size: 12px;
 }
 
-/* ── Spin animation ── */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 1s linear infinite; }
 
 @media (max-width: 500px) {
+  .wlu-page { padding: 14px; }
   .wlu-row { grid-template-columns: 1fr; }
   .wlu-actions { flex-direction: column; }
   .wlu-actions button { width: 100%; }
