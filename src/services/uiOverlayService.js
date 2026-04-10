@@ -177,6 +177,30 @@ const OVERLAY_TYPES = [
     description: 'Minimize/collapse button — dash mark',
     prompt: 'A luxury gold minimize button icon, elegant thin horizontal line (dash). Gold metallic finish with subtle circle border. Minimal, clean, luxury app minimize button. Isolated on plain background.',
   },
+  {
+    id: 'headphones_icon',
+    name: 'Headphones Icon',
+    category: 'icon',
+    beat: 'Beat 1',
+    description: 'Opening Ritual — headphones on, sacred moment',
+    prompt: 'A luxury gold over-ear headphones icon, elegant silhouette with gold metallic finish. Premium audio headphones, sleek curves, minimal detail. The sacred opening ritual icon. Isolated on plain background. No text.',
+  },
+  {
+    id: 'brand_deal_icon',
+    name: 'Brand Deal Icon',
+    category: 'icon',
+    beat: 'Beat 7',
+    description: 'Brand deal / partnership notification — handshake',
+    prompt: 'A luxury gold handshake icon, two elegant hands meeting in a professional handshake. Gold metallic finish, minimal clean lines. Business partnership and brand collaboration aesthetic. Isolated on plain background. No text.',
+  },
+  {
+    id: 'deadline_icon',
+    name: 'Deadline Icon',
+    category: 'icon',
+    beat: 'Beat 9',
+    description: 'Final countdown — red urgency, maximum pressure',
+    prompt: 'A dramatic red and gold countdown timer icon, circular clock face with red accent glow and gold hands pointing to 12. Urgent pulse rings in red emanating outward. Maximum urgency aesthetic — the deadline is NOW. Isolated on plain background. No text.',
+  },
 ];
 
 // ── GENERATE SINGLE OVERLAY ──────────────────────────────────────────────────
