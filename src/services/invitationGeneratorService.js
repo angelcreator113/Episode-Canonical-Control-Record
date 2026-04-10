@@ -310,34 +310,48 @@ async function generateInvitation(eventId, models, showId) {
 
   console.log(`[InviteGen] Generating v${version} for: ${event.name} | Theme: ${resolvedTheme} | Prestige: ${event.prestige}`);
 
-  // Build invitation text content
+  // Step 1: Claude writes the invitation prose (formal, elegant, personal)
+  let invitationText = null;
+  try {
+    invitationText = await buildInvitationContent(event);
+    console.log(`[InviteGen] Claude wrote prose: ${invitationText.opening?.slice(0, 50)}...`);
+  } catch (proseErr) {
+    console.warn('[InviteGen] Claude prose failed, using structured fallback:', proseErr.message);
+  }
+
+  // Build the text that goes on the card
   const automation = typeof event.canon_consequences === 'string'
     ? JSON.parse(event.canon_consequences) : (event.canon_consequences || {});
   const auto = automation.automation || {};
-
   const hostName = auto.host_display_name || event.host || 'A Special Host';
-  const venueName = auto.venue_name || event.venue_name || event.location_hint || 'An Exclusive Venue';
-  const venueAddress = auto.venue_address || event.venue_address || '';
-  const eventDate = auto.event_date || event.event_date || 'This Friday';
+  const venueName = auto.venue_name || event.venue_name || event.location_hint || '';
+  const eventDate = auto.event_date || event.event_date || '';
   const eventTime = auto.event_time || event.event_time || 'Evening';
-  const dressCode = event.dress_code || 'Chic';
 
-  const invitationText = {
-    header: "YOU'RE INVITED",
-    event_name: event.name,
-    hosted_by: `Hosted by ${hostName}`,
-    venue: venueName,
-    address: venueAddress,
-    date: eventDate,
-    time: eventTime,
-    dress_code: `Dress Code: ${dressCode}`,
-    rsvp: 'RSVP Required',
-  };
+  // Use Claude's prose if available, otherwise structured text
+  let cardText;
+  if (invitationText?.opening && invitationText?.body) {
+    cardText = [
+      invitationText.opening,
+      '',
+      invitationText.body,
+      '',
+      invitationText.closing || 'We look forward to your presence.',
+    ].join('\n');
+  } else {
+    cardText = [
+      `You are invited to`,
+      `${event.name}`,
+      `Hosted by ${hostName}`,
+      venueName ? `at ${venueName}` : '',
+      eventDate ? `${eventDate} · ${eventTime}` : eventTime,
+      event.dress_code ? `Dress Code: ${event.dress_code}` : '',
+    ].filter(Boolean).join('\n');
+  }
 
-  // Build prompt with text rendered directly in the image
+  // Step 2: Generate invitation image with text baked in via Flux
   const prestige = event.prestige || 5;
-  const themeName = detectTheme(event) || 'default';
-  const themeConfig = (themeName && THEME_PRESETS[themeName]) || DEFAULT_THEME;
+  const themeConfig = (resolvedTheme && THEME_PRESETS[resolvedTheme]) || DEFAULT_THEME;
 
   const richness = prestige >= 8
     ? 'Maximum luxury — gold leaf, embossed textures, opulent'
@@ -354,35 +368,23 @@ CARD DESIGN:
 - ${themeConfig.atmosphere}
 - The card fills the entire image edge to edge
 
-TEXT ON THE CARD (render this text elegantly on the card):
+THE INVITATION TEXT TO RENDER ON THE CARD:
 
-"${invitationText.header}"
-
-"${invitationText.event_name}"
-
-"${invitationText.hosted_by}"
-
-"${invitationText.venue}"
-${venueAddress ? `"${invitationText.address}"` : ''}
-
-"${invitationText.date} · ${invitationText.time}"
-
-"${invitationText.dress_code}"
+${cardText}
 
 TYPOGRAPHY RULES:
-- "${invitationText.header}" in small elegant uppercase tracking at the top
-- "${invitationText.event_name}" as the largest, most prominent text — centered
-- Host, venue, date in smaller refined serif below
-- Dress code at the bottom in small italic
+- The event name "${event.name}" should be the largest, most prominent text — centered
+- The invitation prose should be in elegant serif font, well-spaced, perfectly readable
 - All text must be PERFECTLY LEGIBLE — sharp, high contrast against background
 - Use elegant serif fonts — think Vogue, Maison Belle, luxury fashion house
 - Gold or dark text depending on background lightness
-- Generous line spacing between sections
+- Generous line spacing between paragraphs
+- Text centered on the card with decorative elements framing the edges
 
-Style: Luxury fashion house invitation. Think Chanel, Dior, Valentino event cards.
+Style: Luxury fashion house invitation. Like a real Chanel or Dior event card.
 No photos, no people — pure typography + decorative design.`;
 
-  console.log(`[InviteGen] Generating invitation with text baked in...`);
+  console.log(`[InviteGen] Generating invitation with prose baked in...`);
   const imageUrl = await callDallE3(prompt);
 
   if (!imageUrl) throw new Error('Image generation did not return a URL');
