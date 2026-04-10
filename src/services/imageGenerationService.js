@@ -35,10 +35,10 @@ function getProvider() {
 // Normalize size names to provider-specific dimensions
 
 const FLUX_SIZES = {
-  landscape:  { width: 1360, height: 768 },
-  portrait:   { width: 768, height: 1360 },
-  square:     { width: 1024, height: 1024 },
-  wide:       { width: 1360, height: 768 },
+  landscape:  'landscape_16_9',
+  portrait:   'portrait_16_9',
+  square:     'square',
+  wide:       'landscape_16_9',
 };
 
 const DALLE_SIZES = {
@@ -66,21 +66,21 @@ async function generateFlux(prompt, options = {}) {
   if (!FAL_KEY) throw new Error('FAL_KEY not configured');
 
   const size = normalizeSize(options.size);
-  const dims = FLUX_SIZES[size] || FLUX_SIZES.landscape;
+  const imageSize = FLUX_SIZES[size] || FLUX_SIZES.landscape;
 
   // Use flux-pro for HD quality, flux-dev for standard
   const model = options.quality === 'standard'
     ? 'fal-ai/flux/dev'
     : 'fal-ai/flux-pro/v1.1';
 
-  console.log(`[ImageGen] Flux ${options.quality === 'standard' ? 'dev' : 'pro'} | ${dims.width}x${dims.height} | prompt: ${prompt.slice(0, 80)}...`);
+  console.log(`[ImageGen] Flux ${options.quality === 'standard' ? 'dev' : 'pro'} | ${imageSize} | prompt: ${prompt.slice(0, 80)}...`);
 
   // fal.ai synchronous endpoint — returns result directly
   const response = await axios.post(
     `https://fal.run/${model}`,
     {
       prompt: prompt.slice(0, 4000),
-      image_size: dims,
+      image_size: imageSize,
       num_images: 1,
       enable_safety_checker: false,
       output_format: 'jpeg',
@@ -97,7 +97,8 @@ async function generateFlux(prompt, options = {}) {
 
   const imageUrl = response.data?.images?.[0]?.url;
   if (!imageUrl) {
-    throw new Error(`Flux returned no image. Response: ${JSON.stringify(response.data).slice(0, 300)}`);
+    console.error('[ImageGen] Flux full response:', JSON.stringify(response.data).slice(0, 500));
+    throw new Error(`Flux returned no image. Status: ${response.status}. Keys: ${Object.keys(response.data || {}).join(',')}`);
   }
 
   console.log(`[ImageGen] Flux success: ${imageUrl.slice(0, 80)}...`);
@@ -182,7 +183,8 @@ async function generateImage(prompt, options = {}) {
     try {
       return await generateFlux(prompt, options);
     } catch (fluxErr) {
-      console.warn(`[ImageGen] Flux failed: ${fluxErr.message}`);
+      const detail = fluxErr.response?.data ? JSON.stringify(fluxErr.response.data).slice(0, 300) : fluxErr.message;
+      console.warn(`[ImageGen] Flux failed: ${detail}`);
       if (process.env.OPENAI_API_KEY) {
         console.log('[ImageGen] Falling back to DALL-E...');
         return await generateDallE(prompt, options);
