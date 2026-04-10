@@ -17,8 +17,15 @@
  * Install: node scripts/install-invitation-fonts.js
  */
 
-const { createCanvas, registerFont } = require('canvas');
-const sharp = require('sharp');
+// canvas and sharp are optional native dependencies — lazy-loaded to avoid crashing
+// the process if they're not installed
+let createCanvas, registerFont, sharp;
+try {
+  ({ createCanvas, registerFont } = require('canvas'));
+  sharp = require('sharp');
+} catch (err) {
+  console.warn('[InvitationCompositing] canvas/sharp not available — compositing disabled:', err.message);
+}
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -556,6 +563,7 @@ function renderTextLayer(content, width = 1024, height = 1792) {
  * Returns null if fonts are not available (caller should fall back to v1).
  */
 async function compositeInvitation(backgroundBuffer, event, customContent = null) {
+  if (!createCanvas || !sharp) return null;
   if (!(await checkFonts())) return null;
 
   const meta = await sharp(backgroundBuffer).metadata();
