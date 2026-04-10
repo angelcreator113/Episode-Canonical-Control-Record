@@ -150,6 +150,17 @@ async function loadScriptContext(episodeId, showId, models) {
     context.wardrobe = rows || [];
   } catch { /* non-blocking */ }
 
+  // 5b. Wardrobe Intelligence — repeat detection, brand loyalty, outfit scoring
+  context.wardrobeIntelligence = null;
+  if (context.wardrobe.length > 0 && context.event) {
+    try {
+      const { getWardrobeIntelligence } = require('./wardrobeIntelligenceService');
+      context.wardrobeIntelligence = await getWardrobeIntelligence(context.wardrobe, context.event, showId, models);
+    } catch (wiErr) {
+      console.warn('[ScriptWriter] Wardrobe intelligence failed (non-blocking):', wiErr.message);
+    }
+  }
+
   // 6. Show Brain franchise laws
   context.franchiseLaws = [];
   if (FranchiseKnowledge) {
@@ -279,6 +290,12 @@ function buildFullPrompt(context) {
     }
     wardrobeContext += `\n\nBeat 8 (Transformation): Reference EACH piece by name as Lala gets dressed.`;
     wardrobeContext += `\nBeat 11 (Event Outcome): Her outfit choice affects how the event goes.`;
+  }
+
+  // Wardrobe Intelligence (repeat detection, brand loyalty, match score, feed triggers)
+  const wi = context.wardrobeIntelligence;
+  if (wi?.script_context) {
+    wardrobeContext += `\n\n═══ WARDROBE INTELLIGENCE ═══\n${wi.script_context}`;
   }
 
   // Event context
