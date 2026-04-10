@@ -310,60 +310,100 @@ async function generateInvitation(eventId, models, showId) {
 
   console.log(`[InviteGen] Generating v${version} for: ${event.name} | Theme: ${resolvedTheme} | Prestige: ${event.prestige}`);
 
-  // Find style reference from same host_brand (visual consistency)
-  const brandStyleRef = await findBrandStyleReference(sequelize, event);
-  if (brandStyleRef) {
-    console.log(`[InviteGen] Using style reference from same brand: ${event.host_brand}`);
-  }
+  // Build invitation text content
+  const automation = typeof event.canon_consequences === 'string'
+    ? JSON.parse(event.canon_consequences) : (event.canon_consequences || {});
+  const auto = automation.automation || {};
 
-  // Step 1: Generate background (no text) via DALL-E 3
-  const bgPrompt = buildBackgroundPrompt(event);
-  console.log('[InviteGen] Calling DALL-E 3 for background...');
-  const bgUrl = await callDallE3(bgPrompt);
+  const hostName = auto.host_display_name || event.host || 'A Special Host';
+  const venueName = auto.venue_name || event.venue_name || event.location_hint || 'An Exclusive Venue';
+  const venueAddress = auto.venue_address || event.venue_address || '';
+  const eventDate = auto.event_date || event.event_date || 'This Friday';
+  const eventTime = auto.event_time || event.event_time || 'Evening';
+  const dressCode = event.dress_code || 'Chic';
 
-  if (!bgUrl) throw new Error('Image generation did not return a URL');
+  const invitationText = {
+    header: "YOU'RE INVITED",
+    event_name: event.name,
+    hosted_by: `Hosted by ${hostName}`,
+    venue: venueName,
+    address: venueAddress,
+    date: eventDate,
+    time: eventTime,
+    dress_code: `Dress Code: ${dressCode}`,
+    rsvp: 'RSVP Required',
+  };
 
-  // Download background
-  const bgResponse = await axios.get(bgUrl, {
-    responseType: 'arraybuffer',
-    timeout: 60000,
-  });
-  const bgBuffer = Buffer.from(bgResponse.data);
+  // Build prompt with text rendered directly in the image
+  const prestige = event.prestige || 5;
+  const themeName = detectTheme(event) || 'default';
+  const themeConfig = (themeName && THEME_PRESETS[themeName]) || DEFAULT_THEME;
 
-  // Step 2: Composite text (or fall back to background-only image)
-  let finalBuffer = bgBuffer;
-  let invitationText = null;
+  const richness = prestige >= 8
+    ? 'Maximum luxury — gold leaf, embossed textures, opulent'
+    : prestige >= 5
+      ? 'Refined elegance — tasteful gold accents, sophisticated'
+      : 'Clean and minimal — understated luxury';
+
+  const prompt = `Create a luxury event invitation card, portrait orientation, ready to share on Instagram.
+
+CARD DESIGN:
+- Background: ${themeConfig.background}
+- Border: ${themeConfig.border}
+- Richness level: ${richness}
+- ${themeConfig.atmosphere}
+- The card fills the entire image edge to edge
+
+TEXT ON THE CARD (render this text elegantly on the card):
+
+"${invitationText.header}"
+
+"${invitationText.event_name}"
+
+"${invitationText.hosted_by}"
+
+"${invitationText.venue}"
+${venueAddress ? `"${invitationText.address}"` : ''}
+
+"${invitationText.date} · ${invitationText.time}"
+
+"${invitationText.dress_code}"
+
+TYPOGRAPHY RULES:
+- "${invitationText.header}" in small elegant uppercase tracking at the top
+- "${invitationText.event_name}" as the largest, most prominent text — centered
+- Host, venue, date in smaller refined serif below
+- Dress code at the bottom in small italic
+- All text must be PERFECTLY LEGIBLE — sharp, high contrast against background
+- Use elegant serif fonts — think Vogue, Maison Belle, luxury fashion house
+- Gold or dark text depending on background lightness
+- Generous line spacing between sections
+
+Style: Luxury fashion house invitation. Think Chanel, Dior, Valentino event cards.
+No photos, no people — pure typography + decorative design.`;
+
+  console.log(`[InviteGen] Generating invitation with text baked in...`);
+  const imageUrl = await callDallE3(prompt);
+
+  if (!imageUrl) throw new Error('Image generation did not return a URL');
+
+  // Download and upload to S3
+  const imgResponse = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
+  const finalBuffer = Buffer.from(imgResponse.data);
+
+  // Store invitation text on the event for reference/editing
   try {
-    invitationText = await buildInvitationContent(event);
-  } catch { /* will use default in compositeInvitation */ }
+    await sequelize.query(
+      `UPDATE world_events SET canon_consequences = jsonb_set(
+        COALESCE(canon_consequences, '{}'),
+        '{invitation_text}',
+        :textJson::jsonb
+      ), updated_at = NOW() WHERE id = :eventId`,
+      { replacements: { textJson: JSON.stringify(invitationText), eventId } }
+    );
+  } catch { /* non-blocking */ }
 
-  try {
-    const composited = await compositeInvitation(bgBuffer, event, invitationText);
-    if (composited) {
-      console.log('[InviteGen] Text composited successfully');
-      finalBuffer = composited;
-    } else {
-      console.warn('[InviteGen] Compositing returned null — using background as-is');
-    }
-  } catch (compErr) {
-    console.warn('[InviteGen] Compositing failed (canvas/sharp may not be installed) — using background as-is:', compErr.message);
-  }
-
-  // Store invitation text on the event for editing
-  if (invitationText) {
-    try {
-      await sequelize.query(
-        `UPDATE world_events SET canon_consequences = jsonb_set(
-          COALESCE(canon_consequences, '{}'),
-          '{invitation_text}',
-          :textJson::jsonb
-        ), updated_at = NOW() WHERE id = :eventId`,
-        { replacements: { textJson: JSON.stringify(invitationText), eventId } }
-      );
-    } catch { /* non-blocking — jsonb_set may not work on all setups */ }
-  }
-
-  // Step 3: Upload final to S3
+  // Upload to S3
   const s3Url = await uploadToS3(finalBuffer, eventId, `v${version}`);
   console.log(`[InviteGen] Invitation v${version} stored: ${s3Url}`);
 
