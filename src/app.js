@@ -1591,6 +1591,15 @@ try {
   console.error('✗ Failed to load Feed Post routes:', e.message);
 }
 
+// UI Overlays — show-level UI overlay assets
+try {
+  const uiOverlayRoutes = require('./routes/uiOverlayRoutes');
+  app.use('/api/v1/ui-overlays', uiOverlayRoutes);
+  console.log('✓ UI Overlays loaded at /api/v1/ui-overlays');
+} catch (e) {
+  console.error('✗ Failed to load UI Overlay routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
