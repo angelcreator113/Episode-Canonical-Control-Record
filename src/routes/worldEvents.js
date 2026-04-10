@@ -2069,6 +2069,140 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', optional
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// OUTFIT PICKER — select wardrobe pieces for event + score the outfit
+// ═══════════════════════════════════════════════════════════════════════
+
+// GET /world/:showId/events/:eventId/outfit — get current outfit + score
+router.get('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+
+    const [rows] = await models.sequelize.query(
+      'SELECT outfit_pieces, outfit_score, name, prestige, event_type, host_brand, dress_code FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId } }
+    );
+    const event = rows?.[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    const pieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : (event.outfit_pieces || []);
+    const score = typeof event.outfit_score === 'string' ? JSON.parse(event.outfit_score) : (event.outfit_score || null);
+
+    return res.json({ success: true, pieces, score, event: { name: event.name, prestige: event.prestige, dress_code: event.dress_code } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /world/:showId/events/:eventId/outfit — save selected outfit pieces + auto-score
+router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const { wardrobe_ids } = req.body;
+    const models = await getModels();
+
+    if (!wardrobe_ids || !Array.isArray(wardrobe_ids)) {
+      return res.status(400).json({ success: false, error: 'wardrobe_ids array required' });
+    }
+
+    // Load event
+    const [eventRows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId } }
+    );
+    const event = eventRows?.[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Load wardrobe items
+    const [items] = await models.sequelize.query(
+      `SELECT id, name, clothing_category, brand, tier, price, color, is_owned,
+              acquisition_type, aesthetic_tags, s3_url, s3_url_processed, times_worn, last_worn_date
+       FROM wardrobe WHERE id IN (:ids) AND deleted_at IS NULL`,
+      { replacements: { ids: wardrobe_ids.length > 0 ? wardrobe_ids : ['00000000-0000-0000-0000-000000000000'] } }
+    );
+
+    // Build outfit pieces snapshot
+    const outfitPieces = items.map(i => ({
+      id: i.id, name: i.name, category: i.clothing_category, brand: i.brand,
+      tier: i.tier, price: parseFloat(i.price) || 0, color: i.color,
+      is_owned: i.is_owned, acquisition_type: i.acquisition_type,
+      image_url: i.s3_url_processed || i.s3_url,
+    }));
+
+    // Score the outfit
+    const { scoreOutfitForEvent, detectRepeats, getBrandRelationships, generateOutfitReactionTriggers } = require('../services/wardrobeIntelligenceService');
+    const outfitScore = scoreOutfitForEvent(items, event);
+    const repeats = await detectRepeats(items, showId, models);
+    const brandRels = await getBrandRelationships(showId, models);
+    const feedTriggers = generateOutfitReactionTriggers(outfitScore, repeats, brandRels);
+
+    const fullScore = {
+      ...outfitScore,
+      repeats: repeats.map(r => ({ name: r.name, times_worn: r.times_worn, narrative: r.narrative })),
+      feed_triggers: feedTriggers,
+      brand_loyalty: brandRels.filter(b => outfitPieces.some(p => p.brand === b.brand)),
+    };
+
+    // Save to event
+    await models.sequelize.query(
+      `UPDATE world_events SET outfit_pieces = :pieces, outfit_score = :score, updated_at = NOW() WHERE id = :eventId`,
+      { replacements: { pieces: JSON.stringify(outfitPieces), score: JSON.stringify(fullScore), eventId } }
+    );
+
+    return res.json({ success: true, pieces: outfitPieces, score: fullScore });
+  } catch (err) {
+    console.error('[Outfit] Save error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/:showId/events/:eventId/wardrobe-options — all closet pieces with match info
+router.get('/world/:showId/events/:eventId/wardrobe-options', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+
+    // Load event
+    const [eventRows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId LIMIT 1',
+      { replacements: { eventId } }
+    );
+    const event = eventRows?.[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Load all wardrobe items for this show
+    const [items] = await models.sequelize.query(
+      `SELECT id, name, clothing_category, brand, tier, price, color, is_owned,
+              acquisition_type, aesthetic_tags, event_types, occasion, season,
+              s3_url, s3_url_processed, times_worn, last_worn_date, coin_cost
+       FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL
+       ORDER BY tier DESC, name ASC`,
+      { replacements: { showId } }
+    );
+
+    // Score each item individually against the event
+    const { scoreOutfitForEvent } = require('../services/wardrobeIntelligenceService');
+    const scored = items.map(item => {
+      const singleScore = scoreOutfitForEvent([item], event);
+      return {
+        ...item,
+        image_url: item.s3_url_processed || item.s3_url,
+        event_match: singleScore?.match_score || 50,
+        event_signals: singleScore?.signals || [],
+        narrative_mood: singleScore?.narrative_mood || 'neutral',
+      };
+    });
+
+    // Sort by match score descending
+    scored.sort((a, b) => b.event_match - a.event_match);
+
+    return res.json({ success: true, items: scored, total: scored.length });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /world/:showId/events/:eventId/feed-activity — get post-event feed posts
 router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (req, res) => {
   try {
