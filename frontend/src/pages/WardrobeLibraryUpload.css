@@ -1,195 +1,354 @@
-/* Wardrobe Library Upload Styles */
+/* ═══ Wardrobe Library Upload ═══ */
 
-.wardrobe-library-upload {
-  max-width: 900px;
+.wlu-page {
+  max-width: 860px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 24px 20px;
+  font-family: 'Lora', serif;
 }
 
-.upload-header {
+.wlu-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
-.upload-header h1 {
+.wlu-header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #2C2C2C;
   margin: 0;
-  color: #2c3e50;
 }
 
-.upload-form {
+.wlu-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid #e0d9cc;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #888;
+}
+
+.wlu-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.wlu-form {
   background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border: 1px solid #e8e0d0;
+  border-radius: 14px;
+  padding: 24px;
 }
 
-.form-section:last-of-type {
-  border-bottom: none;
+/* ── Layout: image left, fields right ── */
+.wlu-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 28px;
 }
 
-.form-section h2 {
-  margin: 0 0 1.5rem 0;
-  color: #495057;
-  font-size: 1.3rem;
+@media (max-width: 700px) {
+  .wlu-layout { grid-template-columns: 1fr; }
 }
 
-.image-section {
-  margin-bottom: 2.5rem;
+/* ── Left: Image + AI ── */
+.wlu-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.image-upload-area {
-  border: 2px dashed #cbd5e0;
-  border-radius: 8px;
-  padding: 2rem;
-  text-align: center;
-  transition: all 0.3s ease;
-  background: #f8f9fa;
+.wlu-dropzone {
+  border: 1.5px dashed #d1ccc0;
+  border-radius: 10px;
+  background: #faf9f6;
+  transition: all 0.2s;
+  overflow: hidden;
 }
 
-.image-upload-area.drag-active {
-  border-color: #007bff;
-  background: #e7f3ff;
+.wlu-dropzone.drag-active {
+  border-color: #B8962E;
+  background: #faf5ea;
 }
 
-.image-upload-area.has-image {
-  padding: 0;
+.wlu-dropzone.has-image {
   border-style: solid;
-  border-color: #dee2e6;
+  border-color: #e8e0d0;
   background: white;
 }
 
-.image-preview {
+.wlu-preview {
   position: relative;
 }
 
-.image-preview img {
+.wlu-preview img {
   width: 100%;
-  max-height: 500px;
+  max-height: 200px;
   object-fit: contain;
-  border-radius: 6px;
+  display: block;
+  padding: 8px;
 }
 
-.btn-remove {
+.wlu-remove {
   position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: rgba(220, 53, 69, 0.9);
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
   cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.btn-remove:hover {
-  background: rgba(200, 35, 51, 1);
-}
-
-.upload-placeholder {
-  padding: 2rem;
-}
-
-.upload-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-}
-
-.upload-placeholder p {
-  margin: 0.5rem 0;
-  color: #6c757d;
-}
-
-.upload-or {
-  margin: 1rem 0;
-  font-weight: 600;
-  color: #adb5bd;
-}
-
-.upload-hint {
-  font-size: 0.9rem;
-  color: #adb5bd;
-  margin-top: 1rem;
-}
-
-.form-group textarea {
-  resize: vertical;
-  font-family: inherit;
-}
-
-.upload-success {
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: calc(100dvh - 200px);
+  justify-content: center;
+  transition: background 0.2s;
 }
 
-.success-message {
-  text-align: center;
-  padding: 3rem;
+.wlu-remove:hover {
+  background: rgba(220, 53, 69, 0.9);
+}
+
+.wlu-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 16px;
+  cursor: pointer;
+  color: #bbb;
+}
+
+.wlu-placeholder span {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+}
+
+.wlu-hint {
+  color: #ccc !important;
+  font-size: 10px !important;
+}
+
+.wlu-analyze-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px;
+  border: none;
+  border-radius: 8px;
+  background: #B8962E;
+  color: white;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  letter-spacing: 0.2px;
+}
+
+.wlu-analyze-btn:hover:not(:disabled) { opacity: 0.85; }
+.wlu-analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.wlu-ai-summary {
+  background: #FAF7F0;
+  border: 1px solid #ece5d5;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.wlu-ai-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  color: #B8962E;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.wlu-ai-notes {
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 8px;
+  line-height: 1.5;
+  font-style: italic;
+}
+
+.wlu-ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wlu-chip {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #f3f1ec;
+  color: #666;
+}
+
+.wlu-chip.tier-basic  { background: #f3f1ec; color: #888; }
+.wlu-chip.tier-mid    { background: #e8f0fe; color: #3b6cb8; }
+.wlu-chip.tier-luxury { background: #fef3c7; color: #92400e; }
+.wlu-chip.tier-elite  { background: #f5efe3; color: #B8962E; }
+
+/* ── Right: Form Fields ── */
+.wlu-right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wlu-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wlu-field label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #aaa;
+  letter-spacing: 0.2px;
+}
+
+.wlu-field input,
+.wlu-field select,
+.wlu-field textarea {
+  padding: 8px 10px;
+  border: 1px solid #e0d9cc;
+  border-radius: 6px;
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  color: #2C2C2C;
+  background: #fdfcfa;
+  transition: border-color 0.2s;
+}
+
+.wlu-field input:focus,
+.wlu-field select:focus,
+.wlu-field textarea:focus {
+  outline: none;
+  border-color: #B8962E;
+  background: #fff;
+}
+
+.wlu-field input::placeholder,
+.wlu-field textarea::placeholder {
+  color: #ccc;
+}
+
+.wlu-field textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.wlu-field select {
+  appearance: auto;
+}
+
+.wlu-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* ── Actions ── */
+.wlu-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #ece5d5;
+}
+
+.wlu-btn-cancel {
+  padding: 8px 20px;
+  border: 1px solid #e0d9cc;
+  border-radius: 8px;
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  color: #888;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.success-icon {
-  font-size: 4rem;
-  color: #28a745;
-  margin-bottom: 1rem;
-  animation: scaleIn 0.5s ease;
+.wlu-btn-submit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #2C2C2C;
+  color: white;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
 }
 
-@keyframes scaleIn {
-  from {
-    transform: scale(0);
-  }
-  to {
-    transform: scale(1);
-  }
+.wlu-btn-submit:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
-.success-message h2 {
-  color: #28a745;
-  margin: 1rem 0;
+/* ── Success ── */
+.wlu-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  text-align: center;
 }
 
-.success-message p {
-  color: #6c757d;
+.wlu-success-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: white;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .wardrobe-library-upload {
-    padding: 1rem;
-  }
-  
-  .upload-form {
-    padding: 1.5rem;
-  }
-  
-  .form-actions button {
-    width: 100%;
-  }
+.wlu-success h2 {
+  color: #16a34a;
+  font-size: 18px;
+  margin: 0 0 6px;
 }
 
-@media (max-width: 480px) {
-  .wardrobe-library-upload {
-    padding: 0.75rem;
-  }
+.wlu-success p {
+  color: #aaa;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+}
 
-  .upload-form {
-    padding: 1rem;
-  }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
 
-  .upload-header {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .upload-header h1 {
-    font-size: 1.25rem;
-  }
+@media (max-width: 500px) {
+  .wlu-page { padding: 14px; }
+  .wlu-row { grid-template-columns: 1fr; }
+  .wlu-actions { flex-direction: column; }
+  .wlu-actions button { width: 100%; }
 }

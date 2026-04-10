@@ -112,6 +112,62 @@ router.get('/for-chapter/:chapterId', optionalAuth, async (req, res) => {
   }
 });
 
+// ── POST /analyze-image — AI analyzes uploaded wardrobe image ─────────
+// Returns: name, item_type, color, description, season, occasion, tags, brand estimate
+router.post('/analyze-image', optionalAuth, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image provided' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    // Convert buffer to base64
+    const base64 = req.file.buffer.toString('base64');
+    const mediaType = req.file.mimetype || 'image/jpeg';
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: `You are a fashion stylist analyzing a clothing/accessory item for a wardrobe database.
+
+Analyze this image and return JSON:
+{
+  "name": "descriptive name (e.g. 'Floral Smocked Sundress')",
+  "item_type": "dress|top|bottom|shoes|accessory|jewelry|bag|outerwear|swimwear|activewear",
+  "color": "primary color name",
+  "colors": ["all colors present"],
+  "description": "2-3 sentences: material, style, fit, notable details",
+  "season": "spring|summer|fall|winter|all-season",
+  "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
+  "brand_guess": "brand name if identifiable, or null",
+  "price_estimate": "estimated retail price range like '$30-50' or '$200-400'",
+  "aesthetic_tags": ["tag1", "tag2", "tag3"],
+  "tier": "basic|mid|luxury|elite",
+  "style_notes": "one sentence about what kind of person wears this and when"
+}
+
+Return ONLY the JSON.` },
+        ],
+      }],
+    });
+
+    const text = response.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: 'AI analysis failed — no JSON returned' });
+
+    const analysis = JSON.parse(match[0]);
+    return res.json({ success: true, data: analysis });
+  } catch (err) {
+    console.error('[WardrobeAnalyze] Error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Library CRUD operations
 router.post('/', upload.single('image'), controller.uploadToLibrary);
 router.get('/', controller.listLibrary);

@@ -133,32 +133,12 @@ Style: High-end fashion editorial stationery. Think luxury wedding stationery me
 Output: Edge-to-edge card surface, no outer background, suitable for text overlay compositing.`;
 }
 
-// ─── DALL-E 3 API (raw axios — matches objectGenerationService pattern) ──────
+// ─── IMAGE GENERATION (via unified service) ────────────────────────────────
+
+const { generateImageUrl } = require('./imageGenerationService');
 
 async function callDallE3(prompt) {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured. Add it to your .env file.');
-
-  const response = await axios.post(
-    'https://api.openai.com/v1/images/generations',
-    {
-      model: 'dall-e-3',
-      prompt,
-      n: 1,
-      size: '1024x1792',
-      quality: 'hd',
-      style: 'vivid',
-      response_format: 'url',
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 120000,
-    }
-  );
-
-  return response.data.data[0]?.url;
+  return generateImageUrl(prompt, { size: 'portrait', quality: 'hd' });
 }
 
 // ─── S3 HELPERS ───────────────────────────────────────────────────────────────
