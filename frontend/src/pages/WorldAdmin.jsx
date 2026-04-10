@@ -111,6 +111,12 @@ function WorldAdmin() {
   const [editingWardrobeItem, setEditingWardrobeItem] = useState(null);   // item object or null
   const [wardrobeForm, setWardrobeForm] = useState({});
   const [savingWardrobe, setSavingWardrobe] = useState(false);
+  const [showWardrobeUpload, setShowWardrobeUpload] = useState(false);
+  const [wardrobeUploading, setWardrobeUploading] = useState(false);
+  const [wardrobeAnalyzing, setWardrobeAnalyzing] = useState(false);
+  const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
+  const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
+  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [expandedEpisode, setExpandedEpisode] = useState(null);
@@ -3410,7 +3416,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               <h2 style={{ ...S.cardTitle, margin: 0 }}>👗 Wardrobe Library</h2>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{wardrobeItems.length} items</span>
-                <button onClick={() => navigate('/wardrobe-library')} style={S.primaryBtn}>+ Upload Item</button>
+                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
@@ -3635,10 +3641,112 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={() => navigate('/wardrobe-library')} style={S.primaryBtn}>
+                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
                     + Upload First Item
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* ── Upload Modal ── */}
+            {showWardrobeUpload && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !wardrobeUploading && setShowWardrobeUpload(false)}>
+                <div style={{ background: '#fff', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#2C2C2C' }}>Add Wardrobe Item</h3>
+                    <button onClick={() => setShowWardrobeUpload(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                  </div>
+
+                  {/* Image drop zone */}
+                  <div
+                    style={{ border: '1.5px dashed #d1ccc0', borderRadius: 10, background: wardrobeUploadPreview ? '#fff' : '#faf9f6', marginBottom: 12, cursor: 'pointer', overflow: 'hidden' }}
+                    onClick={() => document.getElementById('wardrobe-upload-input')?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type.startsWith('image/')) { setWardrobeUploadFile(f); setWardrobeUploadPreview(URL.createObjectURL(f)); } }}
+                  >
+                    {wardrobeUploadPreview ? (
+                      <div style={{ position: 'relative' }}>
+                        <img src={wardrobeUploadPreview} alt="" style={{ width: '100%', maxHeight: 180, objectFit: 'contain', display: 'block', padding: 8 }} />
+                        <button type="button" onClick={e => { e.stopPropagation(); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); }} style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✕</button>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '28px 16px', textAlign: 'center', color: '#bbb' }}>
+                        <div style={{ fontSize: 24, marginBottom: 4 }}>📸</div>
+                        <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>Drop image or click to browse</div>
+                      </div>
+                    )}
+                    <input id="wardrobe-upload-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setWardrobeUploadFile(f); setWardrobeUploadPreview(URL.createObjectURL(f)); } }} />
+                  </div>
+
+                  {/* AI auto-fill */}
+                  {wardrobeUploadFile && (
+                    <button type="button" disabled={wardrobeAnalyzing} onClick={async () => {
+                      setWardrobeAnalyzing(true);
+                      try {
+                        const fd = new FormData(); fd.append('image', wardrobeUploadFile);
+                        const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+                        const res = await fetch(`/api/v1/wardrobe-library/analyze-image`, { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+                        const data = await res.json();
+                        if (data.success && data.data) {
+                          const ai = data.data;
+                          const catMap = { dress: 'Dresses', top: 'Tops', bottom: 'Bottoms', shoes: 'Shoes', accessory: 'Accessories', jewelry: 'Jewelry', bag: 'Accessories', outerwear: 'Outerwear', skirt: 'Bottoms', pants: 'Bottoms', shirt: 'Tops', blouse: 'Tops' };
+                          let aiPrice = '';
+                          if (ai.price_estimate) { const n = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')); aiPrice = n && n >= 150 ? n.toFixed(2) : '150.00'; }
+                          setWardrobeUploadForm(prev => ({ ...prev, name: ai.name || prev.name, clothingCategory: catMap[ai.item_type?.toLowerCase()] || prev.clothingCategory, color: ai.color || prev.color, brand: ai.brand_guess || prev.brand, price: aiPrice || prev.price }));
+                        }
+                      } catch (err) { console.error('Analyze failed:', err); }
+                      setWardrobeAnalyzing(false);
+                    }} style={{ width: '100%', padding: '8px 0', border: 'none', borderRadius: 6, background: '#B8962E', color: '#fff', cursor: wardrobeAnalyzing ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 11, opacity: wardrobeAnalyzing ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
+                      {wardrobeAnalyzing ? '⏳ Analyzing...' : '✨ Auto-fill from image'}
+                    </button>
+                  )}
+
+                  {/* Form fields */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>name *</label><input value={wardrobeUploadForm.name} onChange={e => setWardrobeUploadForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Floral Mini Dress" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label><input value={wardrobeUploadForm.brand} onChange={e => setWardrobeUploadForm(p => ({ ...p, brand: e.target.value }))} placeholder="e.g., Zara" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label><select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Select...</option>{['Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Accessories', 'Jewelry'].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>color</label><input value={wardrobeUploadForm.color} onChange={e => setWardrobeUploadForm(p => ({ ...p, color: e.target.value }))} placeholder="e.g., blush pink" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>price</label><input type="number" value={wardrobeUploadForm.price} onChange={e => setWardrobeUploadForm(p => ({ ...p, price: e.target.value }))} placeholder="650.00" step="0.01" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>size</label><input value={wardrobeUploadForm.size} onChange={e => setWardrobeUploadForm(p => ({ ...p, size: e.target.value }))} placeholder="M" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 14, borderTop: '1px solid #ece5d5' }}>
+                    <button onClick={() => setShowWardrobeUpload(false)} style={{ padding: '7px 18px', border: '1px solid #e0d9cc', borderRadius: 6, background: '#fff', color: '#888', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+                    <button disabled={wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory} onClick={async () => {
+                      setWardrobeUploading(true);
+                      try {
+                        const fd = new FormData();
+                        fd.append('image', wardrobeUploadFile);
+                        fd.append('name', wardrobeUploadForm.name);
+                        fd.append('character', wardrobeUploadForm.character || 'Lala');
+                        fd.append('clothingCategory', wardrobeUploadForm.clothingCategory);
+                        if (wardrobeUploadForm.brand) fd.append('brand', wardrobeUploadForm.brand);
+                        if (wardrobeUploadForm.price) fd.append('price', wardrobeUploadForm.price);
+                        if (wardrobeUploadForm.color) fd.append('color', wardrobeUploadForm.color);
+                        if (wardrobeUploadForm.size) fd.append('size', wardrobeUploadForm.size);
+                        fd.append('showId', showId);
+                        const res = await fetch('/api/v1/wardrobe', { method: 'POST', body: fd });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setWardrobeItems(prev => [data.data, ...prev]);
+                          setShowWardrobeUpload(false);
+                          setToast('Item uploaded!'); setTimeout(() => setToast(null), 2500);
+                        } else { const err = await res.json(); setToast(err.error || 'Upload failed'); }
+                      } catch (err) { setToast('Upload failed: ' + err.message); }
+                      setWardrobeUploading(false);
+                    }} style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory) ? 0.35 : 1 }}>
+                      {wardrobeUploading ? 'Uploading...' : 'Upload Item'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
