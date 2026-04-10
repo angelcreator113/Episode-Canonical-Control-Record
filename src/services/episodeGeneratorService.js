@@ -298,6 +298,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   if (EpisodeBrief) {
     brief = await EpisodeBrief.create({
       episode_id: episode.id,
+      show_id: showId,
       event_id: event.id,
       episode_archetype: inferArchetype(event),
       designed_intent: inferIntent(event),
@@ -410,8 +411,8 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     const [created] = await models.sequelize.query(
       `INSERT INTO episode_todo_lists (id, episode_id, show_id, event_id, tasks, social_tasks, financial_summary, status, created_at, updated_at)
        VALUES (:id, :episode_id, :show_id, :event_id, :tasks, :social_tasks, :financial_summary, 'generated', NOW(), NOW())
-       ON CONFLICT (episode_id) WHERE deleted_at IS NULL DO UPDATE SET
-         tasks = :tasks, social_tasks = :social_tasks, financial_summary = :financial_summary, event_id = :event_id, updated_at = NOW()
+       ON CONFLICT (episode_id) DO UPDATE SET
+         tasks = EXCLUDED.tasks, social_tasks = EXCLUDED.social_tasks, financial_summary = EXCLUDED.financial_summary, event_id = EXCLUDED.event_id, updated_at = NOW()
        RETURNING *`,
       {
         replacements: {
@@ -431,11 +432,15 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   }
 
   // Update episode financials
-  await episode.update({
-    total_income: financials.total_income,
-    total_expenses: financials.total_expenses,
-    financial_score: financials.net_profit >= 0 ? 7 : 4,
-  });
+  try {
+    await episode.update({
+      total_income: financials.total_income,
+      total_expenses: financials.total_expenses,
+      financial_score: financials.net_profit >= 0 ? 7 : 4,
+    });
+  } catch (finErr) {
+    console.warn('[EpisodeGenerator] Financial update failed:', finErr.message);
+  }
 
   // Mark event as used
   try {
