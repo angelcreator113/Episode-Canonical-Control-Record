@@ -15,7 +15,6 @@ const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const s3 = new S3Client({ region: AWS_REGION });
@@ -67,30 +66,9 @@ function buildVenueIdentity(event) {
   };
 }
 
-// ─── DALL-E CALLS ───────────────────────────────────────────────────────────
+// ─── IMAGE GENERATION (via unified service) ────────────────────────────────
 
-async function generateImage(prompt, size = '1792x1024') {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
-
-  const response = await axios.post(
-    'https://api.openai.com/v1/images/generations',
-    {
-      model: 'dall-e-3',
-      prompt,
-      n: 1,
-      size,
-      quality: 'hd',
-      style: 'vivid',
-      response_format: 'url',
-    },
-    {
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      timeout: 120000,
-    }
-  );
-
-  return response.data.data[0]?.url;
-}
+const { generateImageUrl } = require('./imageGenerationService');
 
 async function downloadImage(url) {
   const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 60000 });
@@ -125,9 +103,9 @@ No text, no logos, no people. Interior design photography. Landscape orientation
 
   // Generate single image
   console.log('[VenueGen] Generating venue image...');
-  const imageUrl = await generateImage(venuePrompt);
+  const imageUrl = await generateImageUrl(venuePrompt, { size: 'landscape', quality: 'hd' });
 
-  if (!imageUrl) throw new Error('DALL-E did not return an image');
+  if (!imageUrl) throw new Error('Image generation failed — no URL returned');
 
   // Download and upload to S3
   const buffer = await downloadImage(imageUrl);
