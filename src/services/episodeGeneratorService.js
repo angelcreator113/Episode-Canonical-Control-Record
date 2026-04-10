@@ -442,6 +442,22 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     console.warn('[EpisodeGenerator] Financial update failed:', finErr.message);
   }
 
+  // Link outfit pieces from event to episode (if outfit was picked before generating)
+  try {
+    const outfitPieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : (event.outfit_pieces || []);
+    if (outfitPieces.length > 0 && models.EpisodeWardrobe) {
+      for (const piece of outfitPieces) {
+        await models.EpisodeWardrobe.findOrCreate({
+          where: { episode_id: episode.id, wardrobe_id: piece.id },
+          defaults: { episode_id: episode.id, wardrobe_id: piece.id, approval_status: 'approved', worn_at: new Date() },
+        });
+      }
+      console.log(`[EpisodeGenerator] ${outfitPieces.length} outfit pieces linked from event`);
+    }
+  } catch (outfitErr) {
+    console.warn('[EpisodeGenerator] Outfit linking failed (non-blocking):', outfitErr.message);
+  }
+
   // Mark event as used
   try {
     if (models.WorldEvent) {
