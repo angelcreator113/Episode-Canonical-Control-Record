@@ -1436,31 +1436,25 @@ The revised event should feel like a completely different experience from the si
                       onClick={async () => {
                         setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'creating' } }));
                         try {
-                          const calRes = await api.post('/api/v1/calendar/events', {
-                            title: template.name,
-                            event_type: 'lalaverse_cultural',
-                            cultural_category: template.category,
-                            severity_level: 5,
-                            what_world_knows: template.desc,
-                            is_micro_event: true,
-                            visibility: 'public',
-                            start_datetime: new Date().toISOString(),
+                          // Create world event directly from template — no calendar middleware
+                          const res = await api.post(`/api/v1/world/${showId}/events`, {
+                            name: template.name,
+                            event_type: 'invite',
+                            description: template.desc,
+                            prestige: 5,
+                            cost_coins: 150,
+                            dress_code: null,
+                            narrative_stakes: template.desc,
+                            status: 'draft',
                           });
-                          const calEvent = calRes.data?.event || calRes.data;
-                          if (calEvent?.id) {
-                            const spawnRes = await api.post(`/api/v1/calendar/events/${calEvent.id}/auto-spawn`, {
-                              show_id: showId, event_count: 1, max_guests: 6,
-                            });
-                            if (spawnRes.data.success) {
-                              const created = spawnRes.data.data.events?.[0];
-                              const host = created?.canon_consequences?.automation?.host_display_name || created?.host || '';
-                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: { ...created, host_display: host } } }));
-                              loadData();
-                              setToast(`"${created?.name || template.name}" created!`);
-                            } else {
-                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
-                              setToast('Auto-spawn failed', 'error');
-                            }
+                          if (res.data.success || res.data.data) {
+                            const created = res.data.data || res.data;
+                            setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: created } }));
+                            loadData();
+                            setToast(`"${template.name}" created as draft — add host, venue, and details in Events Library`);
+                          } else {
+                            setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
+                            setToast(res.data.error || 'Failed to create event');
                           }
                         } catch (err) {
                           setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
@@ -1469,7 +1463,7 @@ The revised event should feel like a completely different experience from the si
                       }}
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
                     >
-                      {feedEventResults[template.name]?.status === 'creating' ? 'Creating — finding host and venue...' : 'Create This Event'}
+                      {feedEventResults[template.name]?.status === 'creating' ? 'Creating...' : 'Create This Event'}
                     </button>
                   )}
                 </div>
