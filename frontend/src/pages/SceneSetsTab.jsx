@@ -780,6 +780,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         <div className="scene-sets-card-header">
           <h3 className="scene-sets-card-title" onClick={() => setShowDetails(true)} style={{ cursor: 'pointer' }}>{set.name}</h3>
 
+          {/* Scene type badge */}
+          {set.scene_type && (
+            <div style={{ marginBottom: 4 }}>
+              <span style={{
+                fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.3px',
+                padding: '2px 7px', borderRadius: 4,
+                background: set.scene_type === 'EVENT_LOCATION' ? '#fef3c7' : set.scene_type === 'HOME_BASE' ? '#dbeafe' : set.scene_type === 'CLOSET' ? '#fce7f3' : set.scene_type === 'TRANSITION' ? '#e0e7ff' : '#f3f4f6',
+                color: set.scene_type === 'EVENT_LOCATION' ? '#92400e' : set.scene_type === 'HOME_BASE' ? '#1e40af' : set.scene_type === 'CLOSET' ? '#9d174d' : set.scene_type === 'TRANSITION' ? '#4338ca' : '#6b7280',
+              }}>{set.scene_type.replace('_', ' ')}</span>
+            </div>
+          )}
+
           {/* Compact metadata */}
           <div className="scene-sets-card-meta-line">
             {set.show && <span className="scene-sets-meta-chip"><Tv size={9} /> {set.show.name}</span>}
@@ -903,6 +915,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       Spec: {set.scene_spec.objects?.length || 0} objects · {set.scene_spec.zones?.length || 0} zones · {set.scene_spec.camera_contracts?.length || 0} contracts
                     </span>
                   </div>
+                  {set.scene_type === 'EVENT_LOCATION' && (set.scene_spec.camera_contracts?.length || 0) > 3 && (
+                    <div style={{ fontSize: 10, color: '#f59e0b', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                      This event venue has {set.scene_spec.camera_contracts.length} angles — events typically only need 1-2. Hit "Rebuild Spec" in the Spec tab to regenerate with fewer angles.
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 2: Create Camera Angles</span>
