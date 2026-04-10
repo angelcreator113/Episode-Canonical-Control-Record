@@ -274,13 +274,39 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   if (!showId) throw new Error('show_id is required');
   if (!Episode) throw new Error('Episode model not loaded');
 
-  // Get next episode number
-  const lastEpisode = await Episode.findOne({
-    where: { show_id: showId },
-    order: [['episode_number', 'DESC']],
-    attributes: ['episode_number'],
-  });
-  const nextNumber = (lastEpisode?.episode_number || 0) + 1;
+  // Check if event is already used — prevent double generation
+  const eventId = typeof event.id === 'string' ? event.id : String(event.id);
+  try {
+    const [usedCheck] = await models.sequelize.query(
+      `SELECT id, title FROM episodes WHERE id IN (
+        SELECT used_in_episode_id FROM world_events WHERE id = :eventId AND used_in_episode_id IS NOT NULL
+      ) AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { eventId } }
+    );
+    if (usedCheck?.length > 0) {
+      throw new Error(`Episode already exists for this event: "${usedCheck[0].title}". Delete it first to regenerate.`);
+    }
+  } catch (checkErr) {
+    if (checkErr.message.includes('already exists')) throw checkErr;
+    // Column may not exist, skip check
+  }
+
+  // Get next episode number (only count non-deleted episodes)
+  let nextNumber = 1;
+  try {
+    const [rows] = await models.sequelize.query(
+      `SELECT COALESCE(MAX(episode_number), 0) + 1 as next_num FROM episodes WHERE show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { showId } }
+    );
+    nextNumber = parseInt(rows?.[0]?.next_num) || 1;
+  } catch {
+    const lastEpisode = await Episode.findOne({
+      where: { show_id: showId },
+      order: [['episode_number', 'DESC']],
+      attributes: ['episode_number'],
+    });
+    nextNumber = (lastEpisode?.episode_number || 0) + 1;
+  }
 
   // ── 1. Generate Social-Media-Ready Title + Description ──
   const eventData = typeof event.toJSON === 'function' ? event.toJSON() : event;
