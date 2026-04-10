@@ -282,13 +282,71 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   });
   const nextNumber = (lastEpisode?.episode_number || 0) + 1;
 
-  // ── 1. Create Episode ──
+  // ── 1. Generate Social-Media-Ready Title + Description ──
+  const eventData = typeof event.toJSON === 'function' ? event.toJSON() : event;
+  const outfitPieces = typeof eventData.outfit_pieces === 'string' ? JSON.parse(eventData.outfit_pieces) : (eventData.outfit_pieces || []);
+  const outfitScore = typeof eventData.outfit_score === 'string' ? JSON.parse(eventData.outfit_score) : (eventData.outfit_score || null);
+
+  let episodeTitle = eventData.name || `Episode ${nextNumber}`;
+  let episodeDescription = eventData.description || `Based on: ${eventData.name}`;
+  let episodeTags = [];
+
+  try {
+    if (process.env.ANTHROPIC_API_KEY) {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+      const prestige = eventData.prestige || 5;
+      const outfitContext = outfitPieces.length > 0
+        ? `Outfit: ${outfitPieces.map(p => `${p.name} (${p.tier}, $${p.price})`).join(', ')}`
+        : 'No outfit picked yet';
+      const moodContext = outfitScore?.narrative_mood || 'neutral';
+      const financialContext = automation.payment_amount ? `Paid event: $${automation.payment_amount}` : `Costs ${eventData.cost_coins || 0} coins`;
+
+      const response = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: `Generate a social-media-ready episode title and description for "Styling Adventures with Lala."
+
+EVENT: ${eventData.name}
+Type: ${eventData.event_type} | Prestige: ${prestige}/10
+Host: ${eventData.host || 'Unknown'}
+${outfitContext}
+Outfit mood: ${moodContext}
+${financialContext}
+Stakes: ${eventData.narrative_stakes || 'None specified'}
+
+Return JSON:
+{
+  "title": "Clickable title (YouTube/TikTok style — curiosity gap, emotional hook, 60 chars max). Examples: 'I Wore a $200 Dress to a $10,000 Event', 'She Invited Me and THIS Happened', 'GRWM for the Most Important Night'",
+  "description": "2-3 sentence YouTube description with keywords. Mention the event, outfit, stakes. Make it searchable.",
+  "tags": ["5-8 hashtags without #, lowercase, searchable terms like 'fashion', 'grwm', 'luxury event', 'outfit challenge'"]
+}
+
+Return ONLY JSON.` }],
+      });
+
+      const text = response.content?.[0]?.text || '';
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        episodeTitle = parsed.title || episodeTitle;
+        episodeDescription = parsed.description || episodeDescription;
+        episodeTags = parsed.tags || [];
+      }
+    }
+  } catch (titleErr) {
+    console.warn('[EpisodeGenerator] AI title generation failed (using event name):', titleErr.message);
+  }
+
+  // ── 1b. Create Episode ──
   const episode = await Episode.create({
     show_id: showId,
-    title: event.name || `Episode ${nextNumber}`,
-    description: event.description || `Based on: ${event.name}`,
+    title: episodeTitle,
+    description: episodeDescription,
     episode_number: nextNumber,
     status: 'draft',
+    categories: episodeTags,
     total_income: 0,
     total_expenses: 0,
   });

@@ -34,7 +34,7 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
-const { optionalAuth, authenticateToken } = require('../middleware/auth');
+const { optionalAuth } = require('../middleware/auth');
 
 router.use(optionalAuth);
 
@@ -64,7 +64,7 @@ router.get('/markers', async (req, res) => {
 });
 
 // POST /markers
-router.post('/markers', authenticateToken, async (req, res) => {
+router.post('/markers', optionalAuth, async (req, res) => {
   const models = getModels(req);
   const { StoryClockMarker } = models;
   try {
@@ -100,7 +100,7 @@ router.post('/markers', authenticateToken, async (req, res) => {
 });
 
 // PUT /markers/:id/set-present
-router.put('/markers/:id/set-present', authenticateToken, async (req, res) => {
+router.put('/markers/:id/set-present', optionalAuth, async (req, res) => {
   const models = getModels(req);
   const { StoryClockMarker } = models;
   try {
@@ -160,7 +160,7 @@ router.get('/events', async (req, res) => {
 });
 
 // POST /events
-router.post('/events', authenticateToken, async (req, res) => {
+router.post('/events', optionalAuth, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const {
@@ -189,7 +189,7 @@ router.post('/events', authenticateToken, async (req, res) => {
 });
 
 // PUT /events/:id
-router.put('/events/:id', authenticateToken, async (req, res) => {
+router.put('/events/:id', optionalAuth, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -203,7 +203,7 @@ router.put('/events/:id', authenticateToken, async (req, res) => {
 });
 
 // DELETE /events/:id
-router.delete('/events/:id', authenticateToken, async (req, res) => {
+router.delete('/events/:id', optionalAuth, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -240,7 +240,7 @@ router.get('/events/:id/attendees', async (req, res) => {
 });
 
 // POST /events/:id/attendees
-router.post('/events/:id/attendees', authenticateToken, async (req, res) => {
+router.post('/events/:id/attendees', optionalAuth, async (req, res) => {
   const { CalendarEventAttendee, StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -267,7 +267,7 @@ router.post('/events/:id/attendees', authenticateToken, async (req, res) => {
 });
 
 // PUT /events/:id/attendees/:attendeeId
-router.put('/events/:id/attendees/:attendeeId', authenticateToken, async (req, res) => {
+router.put('/events/:id/attendees/:attendeeId', optionalAuth, async (req, res) => {
   const { CalendarEventAttendee } = getModels(req);
   try {
     const attendee = await CalendarEventAttendee.findOne({
@@ -287,7 +287,7 @@ router.put('/events/:id/attendees/:attendeeId', authenticateToken, async (req, r
 // ────────────────────────────────────────────────────────────────────────────
 
 // POST /events/:id/ripples/generate — Amber generates ripple threads via Claude
-router.post('/events/:id/ripples/generate', authenticateToken, async (req, res) => {
+router.post('/events/:id/ripples/generate', optionalAuth, async (req, res) => {
   const models = getModels(req);
   const { StoryCalendarEvent, CalendarEventAttendee, CalendarEventRipple, RegistryCharacter } = models;
   try {
@@ -367,7 +367,7 @@ Generate ripple proposals for characters who may be affected — consider who wa
 });
 
 // PUT /ripples/:id/confirm
-router.put('/ripples/:id/confirm', authenticateToken, async (req, res) => {
+router.put('/ripples/:id/confirm', optionalAuth, async (req, res) => {
   const { CalendarEventRipple } = getModels(req);
   try {
     const ripple = await CalendarEventRipple.findByPk(req.params.id);
@@ -418,7 +418,7 @@ router.get('/simultaneous', async (req, res) => {
 });
 
 // POST /auto-detect — Claude scans text for temporal markers, proposes event
-router.post('/auto-detect', authenticateToken, async (req, res) => {
+router.post('/auto-detect', optionalAuth, async (req, res) => {
   try {
     const { line_text, series_id } = req.body;
     if (!line_text) return res.status(400).json({ error: 'line_text required' });
