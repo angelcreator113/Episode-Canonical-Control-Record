@@ -14,14 +14,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Generate a token from GitHub App (never expires, unlike PATs)
+      # Setup: Create GitHub App with Contents:Read+Write permission
+      # Add APP_ID and APP_PRIVATE_KEY as repo secrets
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # PAT_TOKEN is required so the push to dev triggers deploy-dev.yml.
+          # App token is required so the push to dev triggers deploy-dev.yml.
           # GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security rule).
-          # Create a fine-grained PAT with Contents:Read+Write, add as repo secret PAT_TOKEN.
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git
         run: |
