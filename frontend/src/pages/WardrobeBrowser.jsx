@@ -52,6 +52,7 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
   });
   const [selectedFile, setSelectedFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
   
   // Modal states
   const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
@@ -1306,7 +1307,48 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                   />
                 </div>
               </div>
-              
+
+              {/* AI Auto-fill button */}
+              {selectedFile && (
+                <div style={{ marginBottom: 12 }}>
+                  <button type="button" disabled={analyzing} onClick={async () => {
+                    setAnalyzing(true);
+                    try {
+                      const fd = new FormData();
+                      fd.append('image', selectedFile);
+                      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+                      const res = await fetch(`${API_URL}/wardrobe-library/analyze-image`, {
+                        method: 'POST', body: fd,
+                        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                      });
+                      const data = await res.json();
+                      if (data.success && data.data) {
+                        const ai = data.data;
+                        setFormData(prev => ({
+                          ...prev,
+                          name: ai.name || prev.name,
+                          clothingCategory: ai.item_type || prev.clothingCategory,
+                          color: ai.color || prev.color,
+                          brand: ai.brand_guess || prev.brand,
+                          season: ai.season || prev.season,
+                          occasion: ai.occasion || prev.occasion,
+                          price: ai.price_estimate ? ai.price_estimate.replace(/[^0-9.]/g, '').split('-')[0] || '' : prev.price,
+                          character: prev.character || 'Lala',
+                        }));
+                      }
+                    } catch (err) { console.error('Analyze failed:', err); }
+                    setAnalyzing(false);
+                  }} style={{
+                    width: '100%', padding: '8px 0', border: 'none', borderRadius: 6,
+                    background: '#B8962E', color: 'white', cursor: analyzing ? 'not-allowed' : 'pointer',
+                    fontFamily: "'DM Mono', monospace", fontSize: 11, opacity: analyzing ? 0.6 : 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}>
+                    {analyzing ? '⏳ Analyzing image...' : '✨ Auto-fill from image'}
+                  </button>
+                </div>
+              )}
+
               <div className="form-row">
                 <div className="form-section">
                   <label>Name *</label>
