@@ -368,21 +368,27 @@ CARD DESIGN:
 - ${themeConfig.atmosphere}
 - The card fills the entire image edge to edge
 
-THE INVITATION TEXT TO RENDER ON THE CARD:
+THE INVITATION TEXT TO RENDER ON THE CARD (SPELL EVERY WORD EXACTLY AS WRITTEN):
 
 ${cardText}
 
+CRITICAL TEXT RULES:
+- SPELL EVERY WORD EXACTLY — do not change, abbreviate, or misspell any word
+- The event name "${event.name}" must be spelled EXACTLY as shown, letter by letter
+- If you cannot render text perfectly, use FEWER words rather than misspelled words
+
 TYPOGRAPHY RULES:
-- The event name "${event.name}" should be the largest, most prominent text — centered
-- The invitation prose should be in elegant serif font, well-spaced, perfectly readable
-- All text must be PERFECTLY LEGIBLE — sharp, high contrast against background
-- Use elegant serif fonts — think Vogue, Maison Belle, luxury fashion house
+- The event name should be the largest, most prominent text — centered
+- Invitation prose in elegant serif font, well-spaced, perfectly readable
+- All text PERFECTLY LEGIBLE — sharp, high contrast against background
+- Elegant serif fonts — Vogue, Maison Belle, luxury fashion house aesthetic
 - Gold or dark text depending on background lightness
 - Generous line spacing between paragraphs
-- Text centered on the card with decorative elements framing the edges
+- Text centered with decorative elements framing the edges only
 
-Style: Luxury fashion house invitation. Like a real Chanel or Dior event card.
-No photos, no people — pure typography + decorative design.`;
+Style: Luxury fashion house invitation card. Like Chanel or Dior event stationery.
+No photos, no people — pure typography + decorative design.
+The card should look like it was printed by a luxury stationer.`;
 
   console.log(`[InviteGen] Generating invitation with prose baked in...`);
   const imageUrl = await callDallE3(prompt);
