@@ -173,19 +173,33 @@ router.post('/events', optionalAuth, async (req, res) => {
     if (!title || !event_type || !start_datetime) {
       return res.status(400).json({ error: 'title, event_type, and start_datetime are required' });
     }
-    const event = await StoryCalendarEvent.create({
-      title, event_type, start_datetime, end_datetime,
-      is_recurring: is_recurring || false,
-      recurrence_pattern, location_name, location_address,
-      lalaverse_district, visibility: visibility || 'public',
-      what_world_knows, what_only_we_know,
-      logged_by: logged_by || 'evoni',
-      source_line_id, story_position, series_id,
-      cultural_category, severity_level, is_micro_event,
-    });
+    let event;
+    try {
+      event = await StoryCalendarEvent.create({
+        title, event_type, start_datetime, end_datetime,
+        is_recurring: is_recurring || false,
+        recurrence_pattern, location_name, location_address,
+        lalaverse_district, visibility: visibility || 'public',
+        what_world_knows, what_only_we_know,
+        logged_by: logged_by || 'evoni',
+        source_line_id, story_position, series_id,
+        cultural_category, severity_level: severity_level ? String(severity_level) : null, is_micro_event,
+      });
+    } catch (createErr) {
+      // Columns may not exist yet — try minimal create
+      console.warn('[Calendar] Full create failed, trying minimal:', createErr.message);
+      event = await StoryCalendarEvent.create({
+        title, event_type, start_datetime, end_datetime,
+        is_recurring: is_recurring || false,
+        location_name, location_address,
+        visibility: visibility || 'public',
+        what_world_knows, what_only_we_know,
+        logged_by: logged_by || 'evoni',
+      });
+    }
     res.status(201).json({ event });
   } catch (err) {
-    console.error('[Calendar] POST /events error:', err);
+    console.error('[Calendar] POST /events error:', err.message, err.stack?.slice(0, 300));
     res.status(500).json({ error: err.message });
   }
 });
