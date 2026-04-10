@@ -516,6 +516,50 @@ Return ONLY JSON.` }],
     console.warn('[EpisodeGenerator] Outfit linking failed (non-blocking):', outfitErr.message);
   }
 
+  // Auto-link all event assets (invitation, checklist, notification) to this episode
+  try {
+    const { Asset } = models;
+    if (Asset) {
+      const eventId = typeof event.id === 'string' ? event.id : String(event.id);
+      // Find all assets referencing this event via metadata.event_id
+      const eventAssets = await Asset.findAll({
+        where: {
+          [models.Sequelize.Op.or]: [
+            { '$metadata.event_id$': eventId },
+            models.sequelize.literal(`metadata->>'event_id' = '${eventId.replace(/'/g, "''")}'`),
+          ],
+        },
+      }).catch(() => []);
+
+      // Fallback: raw SQL if JSONB query fails
+      let assets = eventAssets;
+      if (!assets || assets.length === 0) {
+        try {
+          const [rows] = await models.sequelize.query(
+            `SELECT id FROM assets WHERE metadata->>'event_id' = :eventId AND deleted_at IS NULL`,
+            { replacements: { eventId } }
+          );
+          assets = rows || [];
+        } catch { /* skip */ }
+      }
+
+      let linked = 0;
+      for (const a of assets) {
+        const assetId = a.id;
+        try {
+          await models.sequelize.query(
+            `UPDATE assets SET episode_id = :episodeId WHERE id = :assetId`,
+            { replacements: { episodeId: episode.id, assetId } }
+          );
+          linked++;
+        } catch { /* skip individual failures */ }
+      }
+      if (linked > 0) console.log(`[EpisodeGenerator] ${linked} event assets linked to episode`);
+    }
+  } catch (assetErr) {
+    console.warn('[EpisodeGenerator] Asset linking failed (non-blocking):', assetErr.message);
+  }
+
   // Mark event as used
   try {
     if (models.WorldEvent) {

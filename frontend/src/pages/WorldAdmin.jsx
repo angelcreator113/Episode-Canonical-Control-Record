@@ -112,6 +112,11 @@ function WorldAdmin() {
   const [wardrobeForm, setWardrobeForm] = useState({});
   const [savingWardrobe, setSavingWardrobe] = useState(false);
   const [showWardrobeUpload, setShowWardrobeUpload] = useState(false);
+  const [outfitPickerEvent, setOutfitPickerEvent] = useState(null);
+  const [outfitOptions, setOutfitOptions] = useState([]);
+  const [outfitSelected, setOutfitSelected] = useState(new Set());
+  const [outfitSaving, setOutfitSaving] = useState(false);
+  const [outfitScore, setOutfitScore] = useState(null);
   const [wardrobeUploading, setWardrobeUploading] = useState(false);
   const [wardrobeAnalyzing, setWardrobeAnalyzing] = useState(false);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
@@ -2171,6 +2176,21 @@ The revised event should feel like a completely different experience from the si
                   <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>Edit</button>
                   <button onClick={() => copyEvent(ev)} style={S.smBtn}>Copy</button>
                   <InvitationButton event={ev} showId={showId} onGenerated={() => loadData()} />
+                  <button onClick={async () => {
+                    setOutfitPickerEvent(ev);
+                    setOutfitSelected(new Set());
+                    setOutfitScore(null);
+                    try {
+                      const res = await api.get(`/api/v1/world/${showId}/events/${ev.id}/wardrobe-options`);
+                      setOutfitOptions(res.data.items || []);
+                      // Load existing outfit
+                      const existing = await api.get(`/api/v1/world/${showId}/events/${ev.id}/outfit`);
+                      if (existing.data.pieces?.length > 0) {
+                        setOutfitSelected(new Set(existing.data.pieces.map(p => p.id)));
+                        setOutfitScore(existing.data.score);
+                      }
+                    } catch { setOutfitOptions([]); }
+                  }} style={{ ...S.smBtn, background: '#faf5ea', borderColor: '#e8d9b8', color: '#B8962E' }}>👗 Outfit</button>
                   {!linkedEpisode && (
                     <button onClick={async () => {
                       try {
@@ -3159,6 +3179,122 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             </div>
           )}
         </div>
+      )}
+
+      {/* ════════════════════════ OUTFIT PICKER MODAL ════════════════════════ */}
+      {outfitPickerEvent && createPortal(
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setOutfitPickerEvent(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>👗 Pick Outfit</h2>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>{outfitPickerEvent.name} · Prestige {outfitPickerEvent.prestige}/10</p>
+              </div>
+              <button onClick={() => setOutfitPickerEvent(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
+            </div>
+
+            {/* Score banner */}
+            {outfitScore && (
+              <div style={{ padding: '10px 14px', borderRadius: 10, marginBottom: 16, background: outfitScore.narrative_mood === 'confidence' ? '#f0fdf4' : outfitScore.narrative_mood === 'anxiety' ? '#fef2f2' : '#FAF7F0', border: '1px solid #e8e0d0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#2C2C2C' }}>Match: {outfitScore.match_score}/100</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: outfitScore.narrative_mood === 'confidence' ? '#16a34a' : outfitScore.narrative_mood === 'anxiety' ? '#dc2626' : '#B8962E' }}>
+                    {outfitScore.narrative_mood}
+                  </span>
+                </div>
+                {outfitScore.signals?.map((s, i) => (
+                  <div key={i} style={{ fontSize: 11, color: '#666', marginTop: 3 }}>{s.text}</div>
+                ))}
+                {outfitScore.repeats?.length > 0 && outfitScore.repeats.map((r, i) => (
+                  <div key={`r${i}`} style={{ fontSize: 11, color: '#8b5cf6', marginTop: 3 }}>{r.narrative?.text}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Selected pieces */}
+            {outfitSelected.size > 0 && (
+              <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
+                <div style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>SELECTED ({outfitSelected.size} pieces)</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {Array.from(outfitSelected).map(id => {
+                    const item = outfitOptions.find(i => i.id === id);
+                    if (!item) return null;
+                    return (
+                      <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #e8e0d0', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
+                           onClick={() => { const s = new Set(outfitSelected); s.delete(id); setOutfitSelected(s); setOutfitScore(null); }}>
+                        {item.image_url && <img src={item.image_url} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
+                        <span style={{ fontSize: 11 }}>{item.name}</span>
+                        <span style={{ fontSize: 10, color: '#ccc' }}>✕</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Save + Score button */}
+            {outfitSelected.size > 0 && (
+              <button disabled={outfitSaving} onClick={async () => {
+                setOutfitSaving(true);
+                try {
+                  const res = await api.put(`/api/v1/world/${showId}/events/${outfitPickerEvent.id}/outfit`, {
+                    wardrobe_ids: Array.from(outfitSelected),
+                  });
+                  setOutfitScore(res.data.score);
+                  setToast(`Outfit saved — match ${res.data.score?.match_score}/100 (${res.data.score?.narrative_mood})`);
+                  loadData();
+                } catch (err) { setToast('Save failed: ' + err.message); }
+                setOutfitSaving(false);
+              }} style={{ width: '100%', padding: '10px', marginBottom: 16, border: 'none', borderRadius: 8, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: outfitSaving ? 0.5 : 1 }}>
+                {outfitSaving ? 'Saving...' : outfitScore ? 'Update Outfit' : `Save Outfit (${outfitSelected.size} pieces)`}
+              </button>
+            )}
+
+            {/* Closet grid */}
+            <div style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>
+              {outfitOptions.length} pieces in closet — tap to select
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+              {outfitOptions.map(item => {
+                const selected = outfitSelected.has(item.id);
+                return (
+                  <div key={item.id} onClick={() => {
+                    const s = new Set(outfitSelected);
+                    if (selected) s.delete(item.id); else s.add(item.id);
+                    setOutfitSelected(s);
+                    setOutfitScore(null);
+                  }} style={{
+                    border: selected ? '2px solid #B8962E' : '1px solid #e8e0d0', borderRadius: 10,
+                    overflow: 'hidden', cursor: 'pointer', background: selected ? '#faf5ea' : '#fff',
+                    transition: 'all 0.15s',
+                  }}>
+                    <div style={{ aspectRatio: '1', background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: 32, color: '#ddd' }}>👗</span>
+                      )}
+                    </div>
+                    <div style={{ padding: '6px 8px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                      <div style={{ fontSize: 10, color: '#888' }}>{item.clothing_category} · {item.tier || 'basic'}</div>
+                      {item.brand && <div style={{ fontSize: 9, color: '#aaa' }}>{item.brand}</div>}
+                      {item.price > 0 && <div style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>${item.price}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {outfitOptions.length === 0 && (
+              <div style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>👗</div>
+                <p style={{ fontSize: 13 }}>No wardrobe pieces yet. Upload items in the Wardrobe tab first.</p>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ════════════════════════ EPISODE BLUEPRINT MODAL ════════════════════════ */}
