@@ -145,7 +145,7 @@ Analyze this image and return JSON:
   "season": "spring|summer|fall|winter|all-season",
   "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
   "brand_guess": "brand name if identifiable, or null",
-  "price_estimate": "estimated retail price range like '$30-50' or '$200-400'",
+  "price_estimate": "estimated retail price as a single number, minimum $150. This is a luxury fashion world — price as if sold at a high-end boutique. Examples: 250, 450, 1200",
   "aesthetic_tags": ["tag1", "tag2", "tag3"],
   "tier": "basic|mid|luxury|elite",
   "style_notes": "one sentence about what kind of person wears this and when"

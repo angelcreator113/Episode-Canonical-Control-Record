@@ -1324,15 +1324,26 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                       const data = await res.json();
                       if (data.success && data.data) {
                         const ai = data.data;
+                        const categoryMap = {
+                          dress: 'Dresses', top: 'Tops', bottom: 'Bottoms', bottoms: 'Bottoms',
+                          shoes: 'Shoes', accessory: 'Accessories', jewelry: 'Jewelry',
+                          bag: 'Accessories', outerwear: 'Outerwear', swimwear: 'Dresses',
+                          activewear: 'Tops', jacket: 'Outerwear', coat: 'Outerwear',
+                          skirt: 'Bottoms', pants: 'Bottoms', shirt: 'Tops', blouse: 'Tops',
+                        };
+                        // Parse AI price — enforce $150 minimum (luxury world)
+                        let aiPrice = '';
+                        if (ai.price_estimate) {
+                          const num = parseFloat(ai.price_estimate.replace(/[^0-9.]/g, ''));
+                          aiPrice = num && num >= 150 ? num.toFixed(2) : '150.00';
+                        }
                         setFormData(prev => ({
                           ...prev,
                           name: ai.name || prev.name,
-                          clothingCategory: ai.item_type || prev.clothingCategory,
+                          clothingCategory: categoryMap[ai.item_type?.toLowerCase()] || prev.clothingCategory,
                           color: ai.color || prev.color,
                           brand: ai.brand_guess || prev.brand,
-                          season: ai.season || prev.season,
-                          occasion: ai.occasion || prev.occasion,
-                          price: ai.price_estimate ? ai.price_estimate.replace(/[^0-9.]/g, '').split('-')[0] || '' : prev.price,
+                          price: aiPrice || prev.price,
                           character: prev.character || 'Lala',
                         }));
                       }

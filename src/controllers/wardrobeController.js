@@ -132,6 +132,46 @@ module.exports = {
         tags: tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : [],
       });
 
+      // Auto background removal — runs async, updates the record when done
+      if (s3Url && process.env.REMOVEBG_API_KEY) {
+        // Don't await — let it run in background so upload returns fast
+        (async () => {
+          try {
+            const axios = require('axios');
+            const { v4: bgUuid } = require('uuid');
+            console.log(`[Wardrobe] Auto-removing background for ${wardrobeItem.id}...`);
+
+            const bgRes = await axios.post(
+              'https://api.remove.bg/v1.0/removebg',
+              { image_url: s3Url, size: 'auto', format: 'png' },
+              {
+                headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY },
+                responseType: 'arraybuffer',
+                timeout: 45000,
+              }
+            );
+
+            const processedKey = `wardrobe/${character}/${bgUuid()}-nobg.png`;
+            await s3Client.send(new PutObjectCommand({
+              Bucket: BUCKET_NAME,
+              Key: processedKey,
+              Body: Buffer.from(bgRes.data),
+              ContentType: 'image/png',
+              CacheControl: 'max-age=31536000',
+            }));
+
+            const processedUrl = `https://${BUCKET_NAME}.s3.amazonaws.com/${processedKey}`;
+            await wardrobeItem.update({
+              s3_key_processed: processedKey,
+              s3_url_processed: processedUrl,
+            });
+            console.log(`[Wardrobe] Background removed: ${wardrobeItem.id}`);
+          } catch (bgErr) {
+            console.warn(`[Wardrobe] Background removal failed (non-blocking): ${bgErr.message}`);
+          }
+        })();
+      }
+
       res.status(201).json({
         success: true,
         data: wardrobeItem,
