@@ -284,8 +284,10 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
 
   // ── 1. Generate Social-Media-Ready Title + Description ──
   const eventData = typeof event.toJSON === 'function' ? event.toJSON() : event;
-  const outfitPieces = typeof eventData.outfit_pieces === 'string' ? JSON.parse(eventData.outfit_pieces) : (eventData.outfit_pieces || []);
-  const outfitScore = typeof eventData.outfit_score === 'string' ? JSON.parse(eventData.outfit_score) : (eventData.outfit_score || null);
+  const outfitPieces = typeof eventData.outfit_pieces === 'string' ? JSON.parse(eventData.outfit_pieces || '[]') : (eventData.outfit_pieces || []);
+  const outfitScore = typeof eventData.outfit_score === 'string' ? JSON.parse(eventData.outfit_score || 'null') : (eventData.outfit_score || null);
+  const autoData = (typeof eventData.canon_consequences === 'string'
+    ? JSON.parse(eventData.canon_consequences) : (eventData.canon_consequences || {}))?.automation || {};
 
   let episodeTitle = eventData.name || `Episode ${nextNumber}`;
   let episodeDescription = eventData.description || `Based on: ${eventData.name}`;
@@ -301,7 +303,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
         ? `Outfit: ${outfitPieces.map(p => `${p.name} (${p.tier}, $${p.price})`).join(', ')}`
         : 'No outfit picked yet';
       const moodContext = outfitScore?.narrative_mood || 'neutral';
-      const financialContext = automation.payment_amount ? `Paid event: $${automation.payment_amount}` : `Costs ${eventData.cost_coins || 0} coins`;
+      const financialContext = autoData.payment_amount ? `Paid event: $${autoData.payment_amount}` : `Costs ${eventData.cost_coins || 0} coins`;
 
       const response = await client.messages.create({
         model: 'claude-haiku-4-5-20251001',

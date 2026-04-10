@@ -1635,7 +1635,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
     });
   } catch (error) {
     console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
-    return res.status(500).json({ success: false, error: error.message, stack: process.env.NODE_ENV === 'development' ? error.stack?.slice(0, 300) : undefined });
+    return res.status(500).json({ success: false, error: error.message, stack: error.stack?.slice(0, 500) });
   }
 });
 
