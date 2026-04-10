@@ -429,7 +429,7 @@ No photos, no people — pure typography + decorative design.`;
     eventName: event.name,
     theme: resolvedTheme,
     version,
-    composited: !!composited,
+    composited: true,
   };
 }
 
