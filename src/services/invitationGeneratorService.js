@@ -389,27 +389,49 @@ No photos, no people — pure typography + decorative design.`;
 
   if (!imageUrl) throw new Error('Image generation did not return a URL');
 
-  // Download and upload to S3
+  // Download generated image
   const imgResponse = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
-  const finalBuffer = Buffer.from(imgResponse.data);
+  let finalBuffer = Buffer.from(imgResponse.data);
 
-  // Store invitation text on the event for reference/editing
-  try {
-    await sequelize.query(
-      `UPDATE world_events SET canon_consequences = jsonb_set(
-        COALESCE(canon_consequences, '{}'),
-        '{invitation_text}',
-        :textJson::jsonb
-      ), updated_at = NOW() WHERE id = :eventId`,
-      { replacements: { textJson: JSON.stringify(invitationText), eventId } }
-    );
-  } catch { /* non-blocking */ }
+  // Remove background → transparent PNG (if REMOVEBG_API_KEY configured)
+  let bgRemoved = false;
+  if (process.env.REMOVEBG_API_KEY) {
+    try {
+      console.log('[InviteGen] Removing background...');
+      const bgRes = await axios.post(
+        'https://api.remove.bg/v1.0/removebg',
+        { image_url: imageUrl, size: 'auto', format: 'png' },
+        { headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY }, responseType: 'arraybuffer', timeout: 45000 }
+      );
+      finalBuffer = Buffer.from(bgRes.data);
+      bgRemoved = true;
+      console.log('[InviteGen] Background removed → transparent PNG');
+    } catch (bgErr) {
+      console.warn('[InviteGen] Background removal failed (non-blocking):', bgErr.message);
+    }
+  }
 
   // Upload to S3
-  const s3Url = await uploadToS3(finalBuffer, eventId, `v${version}`);
+  const contentType = bgRemoved ? 'image/png' : 'image/jpeg';
+  const suffix = bgRemoved ? `v${version}-nobg` : `v${version}`;
+  const s3Url = await uploadToS3(finalBuffer, eventId, suffix, contentType);
   console.log(`[InviteGen] Invitation v${version} stored: ${s3Url}`);
 
-  // Step 4: Create Asset record (pending_review — not linked to event until approved)
+  // Store invitation text on the event for reference/editing
+  if (invitationText || cardText) {
+    try {
+      await sequelize.query(
+        `UPDATE world_events SET canon_consequences = jsonb_set(
+          COALESCE(canon_consequences, '{}'),
+          '{invitation_text}',
+          :textJson::jsonb
+        ), updated_at = NOW() WHERE id = :eventId`,
+        { replacements: { textJson: JSON.stringify(invitationText || { raw: cardText }), eventId } }
+      );
+    } catch { /* non-blocking */ }
+  }
+
+  // Create Asset record (pending_review — not linked to event until approved)
   // Previous versions are NOT deleted — kept for history
   const asset = await createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme);
 
@@ -429,7 +451,7 @@ No photos, no people — pure typography + decorative design.`;
     eventName: event.name,
     theme: resolvedTheme,
     version,
-    composited: !!composited,
+    composited: true,
   };
 }
 
