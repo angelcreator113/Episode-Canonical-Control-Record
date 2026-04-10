@@ -374,35 +374,37 @@ Return ONLY JSON.` }],
     let homeSceneSetId = null;
     let venueSceneSetId = null;
 
-    if (models.SceneSet) {
-      const homeSet = await models.SceneSet.findOne({
-        where: { scene_type: 'HOME_BASE' },
-        attributes: ['id'],
-      });
-      homeSceneSetId = homeSet?.id || null;
+    try {
+      const [homeSets] = await models.sequelize.query(
+        `SELECT id FROM scene_sets WHERE scene_type = 'HOME_BASE' AND deleted_at IS NULL LIMIT 1`
+      );
+      homeSceneSetId = homeSets?.[0]?.id || null;
 
       if (event.scene_set_id) {
         venueSceneSetId = event.scene_set_id;
       }
-    }
+    } catch { /* scene_sets query failed — no scene sets linked */ }
 
     for (const beat of BEAT_TEMPLATES) {
       const sceneSetId = beat.phase === 'before' || beat.phase === 'after'
         ? homeSceneSetId
         : venueSceneSetId;
 
-      const row = await ScenePlan.create({
-        episode_id: episode.id,
-        beat_number: beat.beat,
-        beat_name: beat.label,
-        emotional_intent: beat.emotional_intent,
-        scene_set_id: sceneSetId,
-        scene_context: beat.description,
-        sort_order: beat.beat,
-        locked: false,
-        ai_suggested: true,
-      });
-      scenePlanRows.push(row);
+      try {
+        const beatId = require('uuid').v4();
+        await models.sequelize.query(
+          `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
+           VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :scene_context, :sort_order, false, true, NOW(), NOW())`,
+          { replacements: {
+            id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
+            emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null,
+            scene_context: beat.description, sort_order: beat.beat,
+          } }
+        );
+        scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId });
+      } catch (beatErr) {
+        console.warn(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
+      }
     }
   }
 
