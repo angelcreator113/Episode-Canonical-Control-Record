@@ -54,22 +54,18 @@ module.exports = (sequelize) => {
     },
 
     // ── Venue & Location ──
-    venue_location_id: { type: DataTypes.UUID, allowNull: true },
-    venue_name: { type: DataTypes.STRING(200), allowNull: true },
-    venue_address: { type: DataTypes.STRING(255), allowNull: true },
+    // venue_location_id, venue_name, venue_address — migration 20260709 (may not exist)
+    // source_calendar_event_id — migration 20260711 (may not exist)
+    // opportunity_id — migration 20260719 (may not exist)
     location_hint: { type: DataTypes.TEXT, allowNull: true },
-    source_calendar_event_id: { type: DataTypes.UUID, allowNull: true },
     scene_set_id: { type: DataTypes.UUID, allowNull: true },
-    opportunity_id: { type: DataTypes.UUID, allowNull: true },
 
     // ── Timeline ──
-    event_date: { type: DataTypes.STRING(50), allowNull: true },
-    event_time: { type: DataTypes.STRING(50), allowNull: true },
-    guest_list: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
+    // event_date, event_time, guest_list — migration 20260709 (may not exist)
 
     // ── Invitation ──
     invitation_asset_id: { type: DataTypes.UUID, allowNull: true },
-    invitation_details: { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
+    // invitation_details — migration 20260709 (may not exist)
 
     // ── Scoring ──
     prestige: {
@@ -212,20 +208,10 @@ module.exports = (sequelize) => {
   });
 
   WorldEvent.associate = (models) => {
-    // WorldLocation venue
-    if (models.WorldLocation) {
-      WorldEvent.belongsTo(models.WorldLocation, {
-        foreignKey: 'venue_location_id',
-        as: 'venueLocation',
-      });
-    }
-    // Opportunity reverse link
-    if (models.Opportunity) {
-      WorldEvent.belongsTo(models.Opportunity, {
-        foreignKey: 'opportunity_id',
-        as: 'sourceOpportunity',
-      });
-    }
+    // WorldLocation venue — venue_location_id column may not exist (migration 20260709)
+    // Opportunity reverse link — opportunity_id column may not exist (migration 20260719)
+    // These associations are disabled until migrations run on the DB
+
     // Visual scene set
     if (models.SceneSet) {
       WorldEvent.belongsTo(models.SceneSet, {
@@ -254,13 +240,7 @@ module.exports = (sequelize) => {
         as: 'usedInEpisode',
       });
     }
-    // Source calendar event
-    if (models.StoryCalendarEvent) {
-      WorldEvent.belongsTo(models.StoryCalendarEvent, {
-        foreignKey: 'source_calendar_event_id',
-        as: 'sourceCalendarEvent',
-      });
-    }
+    // Source calendar event — source_calendar_event_id may not exist (migration 20260711)
   };
 
   return WorldEvent;
