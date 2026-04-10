@@ -1594,8 +1594,8 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
       message: `Episode "${result.episode.title}" created with ${result.scenePlan.length} beats, ${result.socialTasks.length} social tasks`,
     });
   } catch (error) {
-    console.error('Generate episode error:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
+    return res.status(500).json({ success: false, error: error.message, stack: process.env.NODE_ENV === 'development' ? error.stack?.slice(0, 300) : undefined });
   }
 });
 
@@ -2005,8 +2005,8 @@ router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async
     if (typeof event.canon_consequences === 'string') {
       try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
     }
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ success: false, error: 'OPENAI_API_KEY not configured. Add it to your .env file to generate venue images.' });
+    if (!process.env.FAL_KEY && !process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ success: false, error: 'No image generation API configured. Set FAL_KEY or OPENAI_API_KEY in .env.' });
     }
 
     event.show_id = showId;

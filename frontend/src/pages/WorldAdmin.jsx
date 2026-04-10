@@ -2178,7 +2178,8 @@ The revised event should feel like a completely different experience from the si
                         const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-episode`);
                         if (res.data.success) {
                           setEpisodeBlueprint(res.data.data);
-                          setToast(`✅ Episode created!`);
+                          const ep = res.data.data.episode;
+                          setToast(`✅ Episode ${ep?.episode_number || ''} "${ep?.title}" created — ${res.data.data.scenePlan?.length || 14} beats, ${res.data.data.socialTasks?.length || 0} social tasks`);
                           loadData();
                         } else {
                           setToast(res.data.error || 'Failed');
@@ -3303,10 +3304,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => { setActiveTab('episodes'); setEpisodeBlueprint(null); }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
-                View in Episode Ledger
+              <button onClick={() => {
+                const epId = episodeBlueprint.episode?.id;
+                if (epId) window.location.href = `/episodes/${epId}`;
+                else { setActiveTab('episodes'); setEpisodeBlueprint(null); }
+              }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                Open Episode →
               </button>
-              <button onClick={() => setEpisodeBlueprint(null)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+              <button onClick={() => {
+                const epId = episodeBlueprint.episode?.id;
+                if (epId) window.location.href = `/episodes/${epId}/script-writer`;
+                else setEpisodeBlueprint(null);
+              }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                Write Script
+              </button>
+              <button onClick={() => setEpisodeBlueprint(null)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #ddd', background: 'transparent', color: '#666', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                 Done
               </button>
             </div>

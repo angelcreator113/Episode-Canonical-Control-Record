@@ -113,31 +113,15 @@ function buildScenePrompt(userPrompt, styleHints) {
   return parts.join(' ').trim();
 }
 
-// ─── DALL-E 3 API ───────────────────────────────────────────────────────────
+// ─── IMAGE GENERATION (via unified service) ────────────────────────────────
+
+const { generateImage: generateImageUnified } = require('./imageGenerationService');
 
 async function callDallE3(prompt, size = '1024x1024') {
-  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
-
-  const response = await axios.post(
-    'https://api.openai.com/v1/images/generations',
-    {
-      model: 'dall-e-3',
-      prompt,
-      n: 1,
-      size,
-      quality: 'standard',
-      response_format: 'url',
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 60000,
-    }
-  );
-
-  return response.data.data[0];
+  const sizeKey = size === '1024x1024' ? 'square' : size === '1792x1024' ? 'landscape' : 'square';
+  const result = await generateImageUnified(prompt, { size: sizeKey, quality: 'standard' });
+  // Return in DALL-E response shape for backwards compat
+  return { url: result.url, revised_prompt: prompt };
 }
 
 // ─── BACKGROUND REMOVAL ─────────────────────────────────────────────────────

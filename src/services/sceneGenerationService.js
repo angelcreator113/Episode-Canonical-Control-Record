@@ -417,34 +417,15 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
       return null;
     }
 
-    // No reference image — standard dall-e-3 generation
-    const response = await axios.post(
-      'https://api.openai.com/v1/images/generations',
-      {
-        model: 'dall-e-3',
-        prompt: dallePrompt,
-        n: 1,
-        size: '1792x1024',
-        quality: 'hd',
-        style: 'natural',
-        response_format: 'url',
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 120000,
-      }
-    );
-
-    const url = response.data.data[0]?.url;
-    console.log(`[SceneGen] DALL-E success: ${url ? 'got URL' : 'no URL in response'}`);
+    // No reference image — use unified image generation service (Flux or DALL-E)
+    const { generateImageUrl } = require('./imageGenerationService');
+    const url = await generateImageUrl(dallePrompt, { size: 'landscape', quality: 'hd' });
+    console.log(`[SceneGen] Image generated: ${url ? 'got URL' : 'no URL'}`);
     return url;
   } catch (err) {
     const detail = err.response?.data?.error?.message || err.response?.data || err.message;
-    console.error(`[SceneGen] DALL-E API error:`, detail);
-    throw new Error(`DALL-E generation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    console.error(`[SceneGen] Image generation error:`, detail);
+    throw new Error(`Image generation failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
   }
 }
 

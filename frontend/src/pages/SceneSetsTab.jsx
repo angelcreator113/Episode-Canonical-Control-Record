@@ -954,6 +954,34 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       Spec: {set.scene_spec.objects?.length || 0} objects · {set.scene_spec.camera_contracts?.length || 0} contracts
                     </span>
                   </div>
+                  {set.scene_type === 'EVENT_LOCATION' && totalAngles > 3 && (
+                    <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                      This event venue has {totalAngles} angles — events only need 1-2.
+                      <button onClick={async () => {
+                        setBuildingSpec(true);
+                        setSpecProgress('sending');
+                        showToast('Rebuilding spec with fewer angles...');
+                        try {
+                          // Delete existing angles first
+                          await onDeleteAllAngles(set);
+                          const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                          const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
+                          const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                          clearTimeout(progressTimer);
+                          clearTimeout(parseTimer);
+                          const d = await r.json();
+                          if (d.success) {
+                            showToast(`Spec rebuilt: ${d.data?.camera_contracts?.length || 0} angles`);
+                            if (onRefresh) await onRefresh();
+                          } else showToast(d.error || 'Failed', 'error');
+                        } catch (e) { showToast(e.message, 'error'); }
+                        setBuildingSpec(false);
+                        setSpecProgress(null);
+                      }} disabled={buildingSpec} style={{ display: 'inline', background: 'none', border: 'none', color: '#B8962E', fontWeight: 600, cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0, marginLeft: 4 }}>
+                        {buildingSpec ? 'Rebuilding...' : 'Rebuild for 1-2 angles'}
+                      </button>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 3: Generate {generableAngles.length} Angle Images</span>
