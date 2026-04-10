@@ -1594,8 +1594,8 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
       message: `Episode "${result.episode.title}" created with ${result.scenePlan.length} beats, ${result.socialTasks.length} social tasks`,
     });
   } catch (error) {
-    console.error('Generate episode error:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
+    return res.status(500).json({ success: false, error: error.message, stack: process.env.NODE_ENV === 'development' ? error.stack?.slice(0, 300) : undefined });
   }
 });
 
