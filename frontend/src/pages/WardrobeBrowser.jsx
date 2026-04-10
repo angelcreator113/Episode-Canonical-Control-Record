@@ -162,28 +162,33 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
       setError(null);
       
       if (isLibraryMode) {
-        // Load from library API
-        const queryFilters = {
-          type: filters.type,
-          item_type: filters.item_type,
-          color: filters.color,
-          season: filters.season,
-          occasion: filters.occasion,
-          show_id: filters.show_id,
-          status: filters.status,
-          search: searchQuery,
-          sortBy
-        };
-        
-        // Remove empty filters
-        Object.keys(queryFilters).forEach(key => {
-          if (!queryFilters[key]) delete queryFilters[key];
-        });
-        
-        const result = await wardrobeLibraryService.getLibrary(queryFilters, currentPage, itemsPerPage);
-        setItems(result.data || []);
-        setTotalPages(result.pagination?.totalPages || 1);
-        setTotalItems(result.pagination?.total || 0);
+        // Load from wardrobe API (single source of truth)
+        const params = new URLSearchParams();
+        if (filters.color) params.append('category', filters.color); // category filter maps to color in old API
+        if (searchQuery) params.append('search', searchQuery);
+        if (filters.show_id) params.append('show_id', filters.show_id);
+        params.append('limit', String(itemsPerPage));
+        params.append('page', String(currentPage));
+        params.append('sortBy', sortBy === 'newest' ? 'created_at' : sortBy === 'name' ? 'name' : 'created_at');
+        params.append('sortOrder', 'DESC');
+
+        const response = await fetch(`${API_URL}/wardrobe?${params.toString()}`);
+        if (!response.ok) {
+          setItems([]);
+          return;
+        }
+        const data = await response.json();
+        let wardrobeItems = data.data || [];
+
+        // Client-side filters the API doesn't handle
+        if (filters.item_type) wardrobeItems = wardrobeItems.filter(i => i.clothing_category === filters.item_type);
+        if (filters.color) wardrobeItems = wardrobeItems.filter(i => i.color?.toLowerCase().includes(filters.color.toLowerCase()));
+        if (filters.season) wardrobeItems = wardrobeItems.filter(i => i.season === filters.season);
+        if (filters.occasion) wardrobeItems = wardrobeItems.filter(i => i.occasion === filters.occasion);
+
+        setItems(wardrobeItems);
+        setTotalPages(data.pagination?.totalPages || Math.ceil((data.total || wardrobeItems.length) / itemsPerPage));
+        setTotalItems(data.total || wardrobeItems.length);
       } else {
         // Load from wardrobe API (gallery mode)
         const response = await fetch(`${API_URL}/wardrobe?limit=1000`);
@@ -799,7 +804,7 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
   };
   
   const getImageUrl = (item) => {
-    const url = isLibraryMode ? item.image_url : item.s3_url;
+    const url = item.s3_url_processed || item.s3_url || item.image_url || item.thumbnail_url;
     if (url) {
       return url.startsWith('http') ? url : `${API_URL}${url}`;
     }
