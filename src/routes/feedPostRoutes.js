@@ -126,7 +126,9 @@ router.put('/:postId', optionalAuth, async (req, res) => {
     const updatable = ['content_text', 'image_description', 'image_url', 'likes',
                        'comments_count', 'shares', 'sample_comments', 'posted_at',
                        'timeline_position', 'narrative_function', 'lala_reaction',
-                       'lala_internal_thought', 'emotional_impact', 'sort_order'];
+                       'lala_internal_thought', 'emotional_impact', 'sort_order',
+                       'is_viral', 'viral_reach', 'engagement_velocity', 'trending_topic',
+                       'thread_id', 'parent_post_id', 'ripple_effect', 'audience_sentiment'];
     const updates = {};
     for (const field of updatable) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];

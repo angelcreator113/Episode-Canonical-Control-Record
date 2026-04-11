@@ -68,6 +68,287 @@ router.get('/world/:showId/goals', optionalAuth, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════
+// POST /api/v1/world/:showId/goals/seed
+// Seed 24 career goals from the show bible
+// ═══════════════════════════════════════════
+
+router.post('/world/:showId/goals/seed', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { activate_tier = 1 } = req.body;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Check for existing goals to avoid duplicates
+    let existingTitles = new Set();
+    try {
+      const [existing] = await models.sequelize.query(
+        'SELECT title FROM career_goals WHERE show_id = :showId',
+        { replacements: { showId } }
+      );
+      existingTitles = new Set((existing || []).map(g => g.title.toLowerCase().trim()));
+    } catch { /* table may not exist yet */ }
+
+    // ── LALA'S 24 CAREER GOALS ──────────────────────────────────────────
+    // Rooted in the show bible:
+    //   Wound: "She inherited her mother's ambition but not her patience."
+    //   Goal: "To become something that can't be copied."
+    //   World: Fashion is strategy. Reputation is currency.
+    //   Season 1: Soft Luxury Ascension — Lala earns her place
+    //
+    // 3 arcs of 8 episodes:
+    //   Arc 1 (Ep 1-8):  Foundation — proving she belongs
+    //   Arc 2 (Ep 9-16): Ascension — climbing the ladder
+    //   Arc 3 (Ep 17-24): Legacy — becoming uncopyable
+
+    const SEED_GOALS = [
+      // ── ARC 1: FOUNDATION (Ep 1-8) ──
+      {
+        title: 'Earn a seat at the table',
+        description: 'Reach reputation 5. The industry notices you. You\'re no longer scrolling from the outside.',
+        type: 'primary', target_metric: 'reputation', target_value: 5, current_value: 0, starting_value: 0,
+        priority: 1, icon: '⭐', color: '#B8962E',
+        episode_range: [1, 8],
+        unlocks_on_complete: [{ type: 'opportunity', name: 'First magazine feature offer' }],
+        fail_consequence: 'Lala starts questioning if she was built for this world.',
+      },
+      {
+        title: 'Build the war chest',
+        description: 'Save 2,000 coins. Can\'t play the game if you can\'t afford the outfit.',
+        type: 'secondary', target_metric: 'coins', target_value: 2000, current_value: 500, starting_value: 500,
+        priority: 2, icon: '💫', color: '#22c55e',
+        episode_range: [1, 8],
+        unlocks_on_complete: [{ type: 'opportunity', name: 'Luxury brand sampling invite' }],
+        fail_consequence: 'Lala starts cutting corners on wardrobe. People notice.',
+      },
+      {
+        title: 'Find your people',
+        description: 'Grow influence to 3. Build an audience that actually cares, not just numbers.',
+        type: 'secondary', target_metric: 'influence', target_value: 3, current_value: 0, starting_value: 0,
+        priority: 2, icon: '📈', color: '#6366f1',
+        episode_range: [1, 8],
+        unlocks_on_complete: [{ type: 'event', name: 'Creator meetup invitation' }],
+        fail_consequence: 'The algorithm buries her. She wonders if anyone is watching.',
+      },
+      {
+        title: 'Stay consistent',
+        description: 'Post content 3 episodes in a row without missing. The game rewards the ones who show up.',
+        type: 'passive', target_metric: 'consistency_streak', target_value: 3, current_value: 0, starting_value: 0,
+        priority: 4, icon: '🔥', color: '#f59e0b',
+        episode_range: [1, 8],
+      },
+      {
+        title: 'Don\'t go broke',
+        description: 'Never let coins drop below 100. Broke Lala is stressed Lala.',
+        type: 'passive', target_metric: 'coins', target_value: 100, current_value: 500, starting_value: 500,
+        priority: 5, icon: '🏦', color: '#ef4444',
+        episode_range: [1, 24],
+        fail_consequence: 'Financial stress affects outfit choices and event attendance.',
+      },
+      {
+        title: 'Study the competition',
+        description: 'Follow and analyze 10 creators in your lane. Know who you\'re up against.',
+        type: 'passive', target_metric: 'custom', target_value: 10, current_value: 0, starting_value: 0,
+        priority: 5, icon: '👀', color: '#8b5cf6',
+        episode_range: [1, 12],
+      },
+      {
+        title: 'Land your first brand deal',
+        description: 'Get brand trust to 3. Someone has to believe in you before you believe in yourself.',
+        type: 'secondary', target_metric: 'brand_trust', target_value: 3, current_value: 0, starting_value: 0,
+        priority: 3, icon: '🤝', color: '#0ea5e9',
+        episode_range: [1, 10],
+        unlocks_on_complete: [{ type: 'opportunity', name: 'Paid partnership offer' }],
+        fail_consequence: 'Brands pass on Lala. She wonders what they see that she doesn\'t.',
+      },
+      {
+        title: 'Survive your first public failure',
+        description: 'Fail at an event and recover. Reputation drops below 2 then climbs back to 3.',
+        type: 'passive', target_metric: 'reputation', target_value: 3, current_value: 0, starting_value: 0,
+        priority: 5, icon: '💪', color: '#ec4899',
+        episode_range: [3, 10],
+      },
+
+      // ── ARC 2: ASCENSION (Ep 9-16) ──
+      {
+        title: 'Become somebody they talk about',
+        description: 'Reach reputation 7. When you walk in, people already know your name.',
+        type: 'primary', target_metric: 'reputation', target_value: 7, current_value: 0, starting_value: 0,
+        priority: 1, icon: '👑', color: '#B8962E',
+        episode_range: [9, 16],
+        unlocks_on_complete: [{ type: 'opportunity', name: 'Award show nomination' }],
+        fail_consequence: 'Lala plateaus. The industry moves on without her.',
+      },
+      {
+        title: 'Build real influence',
+        description: 'Reach influence 6. Not just followers — people who move when you speak.',
+        type: 'secondary', target_metric: 'influence', target_value: 6, current_value: 0, starting_value: 0,
+        priority: 2, icon: '📈', color: '#6366f1',
+        episode_range: [9, 16],
+        unlocks_on_complete: [{ type: 'event', name: 'Podcast feature request' }],
+      },
+      {
+        title: 'Stack the coins',
+        description: 'Reach 5,000 coins. Luxury costs luxury money. No more budget compromises.',
+        type: 'secondary', target_metric: 'coins', target_value: 5000, current_value: 0, starting_value: 0,
+        priority: 2, icon: '💰', color: '#22c55e',
+        episode_range: [9, 16],
+        unlocks_on_complete: [{ type: 'opportunity', name: 'Designer wardrobe partnership' }],
+      },
+      {
+        title: 'Get the engagement rate up',
+        description: 'Reach 7% engagement rate. Quality over quantity — the algorithm rewards real connection.',
+        type: 'secondary', target_metric: 'engagement_rate', target_value: 7, current_value: 0, starting_value: 0,
+        priority: 3, icon: '💬', color: '#f59e0b',
+        episode_range: [9, 16],
+      },
+      {
+        title: 'Build a portfolio that speaks',
+        description: 'Portfolio strength to 5. When someone Googles you, what do they find?',
+        type: 'passive', target_metric: 'portfolio_strength', target_value: 5, current_value: 0, starting_value: 0,
+        priority: 4, icon: '📸', color: '#ec4899',
+        episode_range: [9, 20],
+      },
+      {
+        title: 'Make brands trust you with money',
+        description: 'Brand trust to 6. They stop sending free product. They start writing checks.',
+        type: 'secondary', target_metric: 'brand_trust', target_value: 6, current_value: 0, starting_value: 0,
+        priority: 3, icon: '💎', color: '#0ea5e9',
+        episode_range: [9, 16],
+        unlocks_on_complete: [{ type: 'opportunity', name: 'Ambassador role offer' }],
+        fail_consequence: 'A brand drops Lala for a competitor. The DM is devastating.',
+      },
+      {
+        title: 'Outlast someone who started with more',
+        description: 'Maintain momentum above 5 for 4 consecutive episodes while a competitor falls.',
+        type: 'passive', target_metric: 'custom', target_value: 4, current_value: 0, starting_value: 0,
+        priority: 5, icon: '🏁', color: '#8b5cf6',
+        episode_range: [9, 16],
+      },
+      {
+        title: 'Handle the drama without breaking',
+        description: 'Survive a controversy (reputation drops 2+ points) and recover within 3 episodes.',
+        type: 'passive', target_metric: 'custom', target_value: 1, current_value: 0, starting_value: 0,
+        priority: 5, icon: '🛡️', color: '#ef4444',
+        episode_range: [9, 20],
+      },
+
+      // ── ARC 3: LEGACY (Ep 17-24) ──
+      {
+        title: 'Become something that can\'t be copied',
+        description: 'Reach reputation 9. The room she built herself. The ceiling she was always reaching for.',
+        type: 'primary', target_metric: 'reputation', target_value: 9, current_value: 0, starting_value: 0,
+        priority: 1, icon: '✦', color: '#B8962E',
+        episode_range: [17, 24],
+        unlocks_on_complete: [{ type: 'event', name: 'Lala\'s own event — she hosts' }],
+        fail_consequence: 'She got close. Close enough to see what she could have been.',
+      },
+      {
+        title: 'Max influence',
+        description: 'Reach influence 9. When Lala moves, the culture moves with her.',
+        type: 'secondary', target_metric: 'influence', target_value: 9, current_value: 0, starting_value: 0,
+        priority: 2, icon: '🌟', color: '#6366f1',
+        episode_range: [17, 24],
+      },
+      {
+        title: 'Financial freedom',
+        description: 'Reach 10,000 coins. Never stress about an outfit again. Never compromise.',
+        type: 'secondary', target_metric: 'coins', target_value: 10000, current_value: 0, starting_value: 0,
+        priority: 2, icon: '🏆', color: '#22c55e',
+        episode_range: [17, 24],
+        unlocks_on_complete: [{ type: 'opportunity', name: 'Launch her own brand' }],
+      },
+      {
+        title: 'Build the room instead of entering it',
+        description: 'Host your own event with prestige 8+. Stop waiting for invitations.',
+        type: 'secondary', target_metric: 'custom', target_value: 1, current_value: 0, starting_value: 0,
+        priority: 3, icon: '🏛️', color: '#B8962E',
+        episode_range: [17, 24],
+        unlocks_on_complete: [{ type: 'event', name: 'The Lala Gala — her legacy event' }],
+      },
+      {
+        title: 'Brand trust at legendary',
+        description: 'Brand trust to 9. Brands don\'t approach you — they apply.',
+        type: 'secondary', target_metric: 'brand_trust', target_value: 9, current_value: 0, starting_value: 0,
+        priority: 3, icon: '💎', color: '#0ea5e9',
+        episode_range: [17, 24],
+      },
+      {
+        title: 'Perfect portfolio',
+        description: 'Portfolio strength to 8. Every piece tells a story. Every story is hers.',
+        type: 'passive', target_metric: 'portfolio_strength', target_value: 8, current_value: 0, starting_value: 0,
+        priority: 4, icon: '📸', color: '#ec4899',
+        episode_range: [17, 24],
+      },
+      {
+        title: 'The woman who builds rooms',
+        description: 'Complete 3 primary goals across all arcs. The full journey from nobody to uncopyable.',
+        type: 'passive', target_metric: 'custom', target_value: 3, current_value: 0, starting_value: 0,
+        priority: 5, icon: '🪞', color: '#8b5cf6',
+        episode_range: [1, 24],
+      },
+    ];
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const goal of SEED_GOALS) {
+      if (existingTitles.has(goal.title.toLowerCase().trim())) {
+        skipped++;
+        continue;
+      }
+
+      const arcStart = goal.episode_range?.[0] || 1;
+      const isActiveTier = arcStart <= (activate_tier === 1 ? 8 : activate_tier === 2 ? 16 : 24);
+
+      try {
+        await models.sequelize.query(
+          `INSERT INTO career_goals (id, show_id, title, description, type, target_metric,
+           target_value, current_value, starting_value, status, priority,
+           unlocks_on_complete, fail_consequence, episode_range, icon, color, created_at, updated_at)
+           VALUES (:id, :showId, :title, :description, :type, :target_metric,
+           :target_value, :current_value, :starting_value, :status, :priority,
+           :unlocks_on_complete, :fail_consequence, :episode_range, :icon, :color, NOW(), NOW())`,
+          { replacements: {
+            id: uuidv4(),
+            showId,
+            title: goal.title,
+            description: goal.description,
+            type: goal.type,
+            target_metric: goal.target_metric,
+            target_value: goal.target_value,
+            current_value: goal.current_value || 0,
+            starting_value: goal.starting_value || 0,
+            status: isActiveTier ? 'active' : 'paused',
+            priority: goal.priority,
+            unlocks_on_complete: JSON.stringify(goal.unlocks_on_complete || []),
+            fail_consequence: goal.fail_consequence || null,
+            episode_range: JSON.stringify(goal.episode_range || [1, 24]),
+            icon: goal.icon || '🎯',
+            color: goal.color || '#6366f1',
+          } }
+        );
+        created++;
+      } catch (err) {
+        console.warn(`[CareerGoals] Failed to seed "${goal.title}":`, err.message);
+        skipped++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      created,
+      skipped,
+      total: SEED_GOALS.length,
+      message: `Seeded ${created} career goals (${skipped} skipped). Arc 1 goals active, Arc 2-3 paused.`,
+    });
+  } catch (error) {
+    console.error('[CareerGoals] Seed error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // POST /api/v1/world/:showId/goals

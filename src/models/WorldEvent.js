@@ -197,6 +197,30 @@ module.exports = (sequelize) => {
       allowNull: true,
       defaultValue: 0,
     },
+
+    // ── Event chaining (added by migration 20260723000000) ──
+    parent_event_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Links to the event that spawned this one (event chaining)',
+    },
+    chain_position: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Position in event chain (0=origin, 1=first sequel, etc.)',
+    },
+    chain_reason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Narrative explanation of why this event was spawned',
+    },
+    momentum_score: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+      defaultValue: 0.0,
+      comment: 'Cumulative score from feed engagement that influenced this event',
+    },
   }, {
     tableName: 'world_events',
     timestamps: true,
@@ -241,6 +265,16 @@ module.exports = (sequelize) => {
       });
     }
     // Source calendar event — source_calendar_event_id may not exist (migration 20260711)
+
+    // Event chaining — self-referencing (migration 20260723)
+    WorldEvent.belongsTo(models.WorldEvent, {
+      foreignKey: 'parent_event_id',
+      as: 'parentEvent',
+    });
+    WorldEvent.hasMany(models.WorldEvent, {
+      foreignKey: 'parent_event_id',
+      as: 'childEvents',
+    });
   };
 
   return WorldEvent;

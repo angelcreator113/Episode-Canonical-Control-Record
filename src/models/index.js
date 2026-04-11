@@ -145,6 +145,8 @@ let ScenePlan; // Beat-by-beat scene plan
 let GenerationJob; // Async job queue for scene generation
 let EpisodeScript; // Versioned AI-generated episode scripts
 let FeedPost; // Feed timeline posts after episodes
+let FeedMoment; // Persisted phone-screen moments from episodes
+let ShowArc; // Narrative arc with phases, debt, progression
 let Opportunity; // Career opportunity pipeline
 let CareerGoal; // Multi-goal career tension system
 
@@ -400,6 +402,8 @@ try {
   // Episode Script Writer + Feed Posts + Opportunities
   EpisodeScript = require('./EpisodeScript')(sequelize);
   FeedPost = require('./FeedPost')(sequelize);
+  FeedMoment = require('./FeedMoment')(sequelize);
+  ShowArc = require('./ShowArc')(sequelize);
   Opportunity = require('./Opportunity')(sequelize, DataTypes);
   CareerGoal = require('./CareerGoal')(sequelize);
 
@@ -552,6 +556,8 @@ const requiredModels = {
   GenerationJob,
   EpisodeScript,
   FeedPost,
+  FeedMoment,
+  ShowArc,
   Opportunity,
   CareerGoal,
 };
@@ -806,6 +812,12 @@ if (EpisodeScript && EpisodeScript.associate) {
 }
 if (FeedPost && FeedPost.associate) {
   FeedPost.associate(requiredModels);
+}
+if (FeedMoment && FeedMoment.associate) {
+  FeedMoment.associate(requiredModels);
+}
+if (ShowArc && ShowArc.associate) {
+  ShowArc.associate(requiredModels);
 }
 if (Opportunity && Opportunity.associate) {
   Opportunity.associate(requiredModels);
@@ -2041,5 +2053,7 @@ module.exports.ScenePlan = ScenePlan;
 module.exports.GenerationJob = GenerationJob;
 module.exports.EpisodeScript = EpisodeScript;
 module.exports.FeedPost = FeedPost;
+module.exports.FeedMoment = FeedMoment;
+module.exports.ShowArc = ShowArc;
 module.exports.Opportunity = Opportunity;
 module.exports.CareerGoal = CareerGoal;
