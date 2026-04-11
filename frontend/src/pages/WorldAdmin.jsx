@@ -82,7 +82,7 @@ const TABS = [
   { key: 'feed', icon: '👥', label: "Lala's Feed" },
   { key: 'feed-events', icon: '🎭', label: 'Feed Events' },
   { key: 'events', icon: '💌', label: 'Events Library' },
-  { key: 'opportunities', icon: '💼', label: 'Opportunities' },
+  // Opportunities tab removed — managed from Feed Events now
   { key: 'goals', icon: '🎯', label: 'Career Goals' },
   { key: 'wardrobe', icon: '👗', label: 'Wardrobe' },
   { key: 'characters', icon: '👑', label: 'Characters' },
@@ -105,6 +105,7 @@ function WorldAdmin() {
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
+  const [oppQuickForm, setOppQuickForm] = useState(null);
   const [worldLocations, setWorldLocations] = useState([]);
   const [wardrobeFilter, setWardrobeFilter] = useState('all');       // all | owned | locked
   const [wardrobeTierFilter, setWardrobeTierFilter] = useState('all'); // all | basic | mid | luxury | elite
@@ -1378,24 +1379,69 @@ The revised event should feel like a completely different experience from the si
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E' }}>
                 Pipeline — Feed → Opportunities → Events
               </div>
-              <button onClick={async () => {
-                setToast('Scanning feed for opportunities...');
-                try {
-                  const res = await api.post(`/api/v1/feed-pipeline/${showId}/generate-opportunities`);
-                  if (res.data.success) {
-                    setToast(`${res.data.count} opportunities generated from feed profiles`);
-                    loadData();
-                  }
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                setTimeout(() => setToast(null), 3000);
-              }} style={{ ...S.smBtn, background: '#B8962E', color: '#fff', border: 'none', fontSize: 10 }}>
-                🔍 Scan Feed for Opportunities
-              </button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={async () => {
+                  setToast('Scanning feed for opportunities...');
+                  try {
+                    const res = await api.post(`/api/v1/feed-pipeline/${showId}/generate-opportunities`);
+                    if (res.data.success) {
+                      setToast(`${res.data.count} opportunities generated from feed profiles`);
+                      loadData();
+                    }
+                  } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                  setTimeout(() => setToast(null), 3000);
+                }} style={{ ...S.smBtn, background: '#B8962E', color: '#fff', border: 'none', fontSize: 10 }}>
+                  🔍 Scan Feed
+                </button>
+                <button onClick={() => setOppQuickForm({ name: '', opportunity_type: 'modeling', prestige: 5, narrative_stakes: '' })} style={{ ...S.smBtn, fontSize: 10 }}>
+                  + New Opportunity
+                </button>
+              </div>
             </div>
             <div style={{ fontSize: 12, color: '#666' }}>
               Scan Lala's feed for opportunities, or pick a template below.
             </div>
           </div>
+
+          {/* Pipeline stats */}
+          {opportunities.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+              {['offered','considering','booked','active','completed'].map(s => {
+                const count = opportunities.filter(o => o.status === s).length;
+                if (!count) return null;
+                const colors = { offered: '#f59e0b', considering: '#6366f1', booked: '#22c55e', active: '#16a34a', completed: '#059669' };
+                return <span key={s} style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 600, background: (colors[s] || '#999') + '18', color: colors[s] || '#999' }}>{s}: {count}</span>;
+              })}
+              <span style={{ fontSize: 9, color: '#888', padding: '2px 4px' }}>
+                ${opportunities.filter(o => ['booked','active','completed','paid'].includes(o.status)).reduce((s, o) => s + (parseFloat(o.payment_amount) || 0), 0).toLocaleString()} booked
+              </span>
+            </div>
+          )}
+
+          {/* Quick create opportunity form */}
+          {oppQuickForm && (
+            <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div><label style={{ fontSize: 10, color: '#aaa' }}>name</label><input value={oppQuickForm.name} onChange={e => setOppQuickForm(p => ({ ...p, name: e.target.value }))} placeholder="Velour Magazine Cover" style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
+                <div><label style={{ fontSize: 10, color: '#aaa' }}>type</label><select value={oppQuickForm.opportunity_type} onChange={e => setOppQuickForm(p => ({ ...p, opportunity_type: e.target.value }))} style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }}>
+                  {['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'casting_call', 'podcast', 'interview', 'award_show', 'social_event'].map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                </select></div>
+                <div><label style={{ fontSize: 10, color: '#aaa' }}>prestige</label><input type="number" value={oppQuickForm.prestige} onChange={e => setOppQuickForm(p => ({ ...p, prestige: parseInt(e.target.value) || 5 }))} min="1" max="10" style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
+              </div>
+              <div style={{ marginBottom: 8 }}><label style={{ fontSize: 10, color: '#aaa' }}>stakes</label><input value={oppQuickForm.narrative_stakes} onChange={e => setOppQuickForm(p => ({ ...p, narrative_stakes: e.target.value }))} placeholder="Why this matters for Lala..." style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button onClick={() => setOppQuickForm(null)} style={{ padding: '5px 14px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+                <button disabled={!oppQuickForm.name} onClick={async () => {
+                  try {
+                    await api.post(`/api/v1/opportunities/${showId}`, { ...oppQuickForm, category: 'fashion' });
+                    setOppQuickForm(null);
+                    setToast('Opportunity created');
+                    loadData();
+                  } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: !oppQuickForm.name ? 0.4 : 1 }}>Create</button>
+              </div>
+            </div>
+          )}
 
           {/* Active Opportunities ready to schedule */}
           {(() => {
