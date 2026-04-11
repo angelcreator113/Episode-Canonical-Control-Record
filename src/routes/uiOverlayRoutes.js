@@ -15,37 +15,61 @@ const generationStatus = {};
 router.get('/:showId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { getShowOverlays, getAllOverlayTypes } = require('../services/uiOverlayService');
+    const { getAllOverlayTypes } = require('../services/uiOverlayService');
     const showId = req.params.showId;
 
     // Merge hardcoded defaults + custom overlay types from DB
     const allTypes = await getAllOverlayTypes(showId, models);
-    const existing = await getShowOverlays(showId, models);
+
+    // Direct SQL query — cast metadata to text to avoid JSONB driver issues
+    // This is the same pattern used by the /debug endpoint which works reliably
+    let existing = [];
+    try {
+      const [rows] = await models.sequelize.query(
+        `SELECT id, name, asset_type, asset_role,
+                s3_url_processed, s3_url_raw,
+                metadata::text as metadata_text
+         FROM assets
+         WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL
+         ORDER BY created_at DESC`,
+        { replacements: { showId } }
+      );
+      existing = (rows || []).map(r => {
+        let meta = {};
+        try { meta = r.metadata_text ? JSON.parse(r.metadata_text) : {}; } catch { /* skip */ }
+        return {
+          id: r.id,
+          name: r.name,
+          metadata: meta,
+          overlay_type: meta.overlay_type || r.name,
+          url: r.s3_url_processed || r.s3_url_raw,
+          bg_removed: meta.bg_removed || false,
+          custom_prompt: meta.custom_prompt || null,
+        };
+      });
+    } catch (queryErr) {
+      console.error('[UIOverlay] Asset query failed:', queryErr.message);
+    }
 
     // Map all overlay types to show which are generated vs missing
-    // Use case-insensitive matching and check name patterns to handle
-    // assets stored with different naming conventions
     const status = allTypes.map(ot => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
       const found = existing.find(e => {
         const eType = (e.overlay_type || '').toLowerCase();
-        const eMeta = (e.metadata?.overlay_type || '').toLowerCase();
         const eName = (e.name || '').toLowerCase();
         return eType === otId
-          || eMeta === otId
           || eName === `ui overlay: ${otName}`
           || eName.includes(otId.replace(/_/g, ' '))
-          // Legacy: match old 'todo_checklist' to new 'wardrobe_list'
-          || (otId === 'wardrobe_list' && (eMeta === 'todo_checklist' || eType === 'todo_checklist'));
+          || (otId === 'wardrobe_list' && eType === 'todo_checklist');
       });
       return {
         ...ot,
         generated: !!found,
         url: found?.url || null,
         asset_id: found?.id || null,
-        bg_removed: found?.metadata?.bg_removed || false,
-        custom_prompt: found?.metadata?.custom_prompt || null,
+        bg_removed: found?.bg_removed || false,
+        custom_prompt: found?.custom_prompt || null,
       };
     });
 
