@@ -20,7 +20,7 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   if (!wardrobeItems?.length || !event) return null;
 
   const eventPrestige = event.prestige || 5;
-  const eventType = event.event_type || 'invite';
+  const _eventType = event.event_type || 'invite';
 
   // Calculate outfit tier (average of all pieces)
   const TIER_VALUES = { basic: 1, mid: 2, luxury: 3, elite: 4 };
@@ -67,7 +67,7 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   }
 
   // All owned vs borrowed/rented
-  const allOwned = wardrobeItems.every(i => i.is_owned || i.acquisition_type === 'purchased');
+  const _allOwned = wardrobeItems.every(i => i.is_owned || i.acquisition_type === 'purchased');
   const hasBorrowed = wardrobeItems.some(i => i.acquisition_type === 'borrowed' || i.acquisition_type === 'rented');
   if (hasBorrowed) {
     signals.push({ type: 'borrowed', text: 'Some pieces are borrowed — she\'s faking it', narrative: 'vulnerability' });

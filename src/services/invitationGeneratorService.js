@@ -20,7 +20,7 @@
 const axios = require('axios');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
-const { compositeInvitation, compositeInvitationPDF, detectTheme, buildInvitationContent } = require('./invitationCompositingService');
+const { detectTheme, buildInvitationContent, compositeInvitationPDF } = require('./invitationCompositingService');
 
 const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -183,7 +183,7 @@ async function getNextVersion(sequelize, eventId) {
 
 // ─── STYLE REFERENCE (host_brand consistency) ─────────────────────────────────
 
-async function findBrandStyleReference(sequelize, event) {
+async function findBrandStyleReference(sequelize, event) { // eslint-disable-line no-unused-vars
   if (!event.host_brand) return null;
   try {
     // Find the most recent invitation from the same host_brand

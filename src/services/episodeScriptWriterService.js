@@ -69,7 +69,7 @@ const BEAT_TEMPLATES = {
  */
 async function loadScriptContext(episodeId, showId, models) {
   const { EpisodeBrief, ScenePlan, SceneSet, SceneAngle, FranchiseKnowledge,
-          WorldEvent, WorldLocation, SocialProfile, Opportunity, sequelize } = models;
+          WorldEvent, WorldLocation, Opportunity, sequelize } = models;
 
   const context = {};
 
@@ -212,7 +212,7 @@ async function loadScriptContext(episodeId, showId, models) {
  * Build the full prompt for Claude
  */
 function buildFullPrompt(context) {
-  const { brief, scenePlan, event, financial, wardrobe, franchiseLaws, feedMoments, opportunities, worldState } = context;
+  const { brief, scenePlan, event, financial, wardrobe, franchiseLaws, opportunities, worldState } = context;
 
   // Scene plan with full context
   const beatContext = scenePlan.length > 0
