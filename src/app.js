@@ -30,6 +30,10 @@ console.log('📋 DB_SSL:', process.env.DB_SSL || 'NOT SET');
 
 const app = express();
 
+// Trust the first proxy (nginx) so X-Forwarded-For is used for rate limiting
+// Required for express-rate-limit behind reverse proxy
+app.set('trust proxy', 1);
+
 // ============================================================================
 // DATABASE INITIALIZATION
 // ============================================================================
