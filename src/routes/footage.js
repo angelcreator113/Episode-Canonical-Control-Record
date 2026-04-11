@@ -226,45 +226,26 @@ router.post('/episodes/:episodeId/assets', async (req, res) => {
 router.get('/episodes/:episodeId/assets', async (req, res) => {
   try {
     const { episodeId } = req.params;
-    const { Episode, Asset } = require('../models');
-    const { Op } = require('sequelize');
+    const { sequelize } = require('../models');
 
-    const episode = await Episode.findByPk(episodeId, {
-      include: [{
-        model: Asset,
-        as: 'assets',
-        through: { attributes: [] }
-      }]
-    });
-
-    if (!episode) {
-      return res.status(404).json({ error: 'Episode not found' });
-    }
-
-    // Get linked assets from junction table
-    const linkedAssets = episode.assets || [];
-    
-    // Get episode-only assets (those with episode_id set directly)
-    const episodeOnlyAssets = await Asset.findAll({
-      where: {
-        episode_id: episodeId,
-        deleted_at: null,
-        id: { [Op.notIn]: linkedAssets.map(a => a.id) } // Exclude already linked ones
-      }
-    });
-
-    // Combine both sets
-    const allAssets = [...linkedAssets, ...episodeOnlyAssets];
+    // Use raw SQL to avoid model column mismatch issues
+    const [assets] = await sequelize.query(
+      `SELECT a.* FROM assets a
+       LEFT JOIN episode_assets ea ON ea.asset_id = a.id AND ea.episode_id = :episodeId
+       WHERE (ea.episode_id = :episodeId OR a.episode_id = :episodeId)
+       AND a.deleted_at IS NULL
+       ORDER BY a.created_at DESC`,
+      { replacements: { episodeId } }
+    );
 
     res.json({
-      success: true,
-      assets: allAssets,
-      count: allAssets.length
+      assets: assets || [],
+      count: assets?.length || 0,
     });
 
   } catch (error) {
-    console.error('Get episode assets error:', error);
-    res.status(500).json({ error: 'Failed to get episode assets' });
+    console.error('Get episode assets error:', error.message);
+    res.status(500).json({ error: error.message, assets: [] });
   }
 });
 
