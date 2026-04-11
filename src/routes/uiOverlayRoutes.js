@@ -5,6 +5,8 @@ const router = express.Router();
 const multer = require('multer');
 const { optionalAuth } = require('../middleware/auth');
 
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
 // GET /api/v1/ui-overlays/:showId — list existing overlays
 router.get('/:showId', optionalAuth, async (req, res) => {
   try {
