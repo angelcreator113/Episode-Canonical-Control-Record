@@ -349,6 +349,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           </div>
         )}
 
+        {/* Quick Actions */}
+        <div className="cover-section" style={{ padding: '14px 16px', background: '#FAF7F0', borderRadius: 10, border: '1px solid #e8e0d0', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <a href={`/episodes/${episode.id}/script-writer`} style={{ padding: '6px 14px', borderRadius: 8, background: '#B8962E', color: '#fff', fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>✦ Script Writer</a>
+          <a href={`/episodes/${episode.id}/plan`} style={{ padding: '6px 14px', borderRadius: 8, background: '#fff', border: '1px solid #e0d9cc', color: '#666', fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>🎬 Scene Plan</a>
+          <a href={`/episodes/${episode.id}/todo`} style={{ padding: '6px 14px', borderRadius: 8, background: '#fff', border: '1px solid #e0d9cc', color: '#666', fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>✅ Todo List</a>
+          {episode.show_id && <a href={`/shows/${episode.show_id}/world?tab=events`} style={{ padding: '6px 14px', borderRadius: 8, background: '#fff', border: '1px solid #e0d9cc', color: '#666', fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>📅 Events</a>}
+        </div>
+
         {/* Script Status */}
         <div className="cover-section" style={{ padding: '14px 16px', background: '#fff', borderRadius: 10, border: '1px solid rgba(0,0,0,0.06)' }}>
           <h3 style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>📝 Script</h3>
