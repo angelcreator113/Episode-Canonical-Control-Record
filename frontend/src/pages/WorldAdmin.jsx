@@ -104,6 +104,7 @@ function WorldAdmin() {
   const [sceneSets, setSceneSets] = useState([]);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
+  const [opportunities, setOpportunities] = useState([]);
   const [worldLocations, setWorldLocations] = useState([]);
   const [wardrobeFilter, setWardrobeFilter] = useState('all');       // all | owned | locked
   const [wardrobeTierFilter, setWardrobeTierFilter] = useState('all'); // all | basic | mid | luxury | elite
@@ -204,6 +205,7 @@ function WorldAdmin() {
         api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
         api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
+        api.get(`/api/v1/opportunities/${showId}`).then(r => setOpportunities(r.data?.opportunities || [])).catch(() => setOpportunities([])),
         api.get('/api/v1/world/locations').then(r => setWorldLocations(r.data?.locations || [])).catch(() => setWorldLocations([])),
       ]);
       // Show error only if ALL calls failed (not just some timeouts)
@@ -1391,9 +1393,44 @@ The revised event should feel like a completely different experience from the si
               </button>
             </div>
             <div style={{ fontSize: 12, color: '#666' }}>
-              Pick a template to create a new event. It will appear as a draft above until you mark it ready.
+              Scan Lala's feed for opportunities, or pick a template below.
             </div>
           </div>
+
+          {/* Active Opportunities ready to schedule */}
+          {(() => {
+            const schedulable = (opportunities || []).filter(o => !o.event_id && ['offered','considering','negotiating','booked'].includes(o.status));
+            if (schedulable.length === 0) return null;
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>
+                  Active Opportunities — ready to schedule ({schedulable.length})
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                  {schedulable.map(opp => (
+                    <div key={opp.id} style={{ background: '#fff', border: '1px solid #e8e0d0', borderLeft: '4px solid #B8962E', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C', marginBottom: 2 }}>{opp.name}</div>
+                      <div style={{ fontSize: 10, color: '#888', marginBottom: 4, display: 'flex', gap: 6 }}>
+                        <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
+                        {opp.connector_handle && <span>via @{opp.connector_handle}</span>}
+                        {opp.prestige && <span>⭐ {opp.prestige}</span>}
+                      </div>
+                      {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6, lineHeight: 1.3 }}>{typeof opp.narrative_stakes === 'string' ? opp.narrative_stakes.slice(0, 100) : ''}</div>}
+                      <button onClick={async () => {
+                        setToast(`Scheduling "${opp.name}"...`);
+                        try {
+                          const res = await api.post(`/api/v1/feed-pipeline/${showId}/schedule/${opp.id}`);
+                          if (res.data.success) { setToast(`"${opp.name}" → Event created!`); loadData(); }
+                        } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                      }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 11, cursor: 'pointer', width: '100%' }}>
+                        📅 Schedule as Event
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Feed event templates grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
@@ -4177,8 +4214,13 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
 
   const toEvent = async (opp) => {
     try {
-      const res = await api.post(`/api/v1/opportunities/${showId}/${opp.id}/to-event`);
-      if (res.data.success) { setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, event_id: res.data.event.id } : o)); loadData(); setToast(`Event created from "${opp.name}"`); }
+      setToast(`Scheduling "${opp.name}" as event...`);
+      const res = await api.post(`/api/v1/feed-pipeline/${showId}/schedule/${opp.id}`);
+      if (res.data.success) {
+        setOpps(prev => prev.map(o => o.id === opp.id ? { ...o, event_id: res.data.data.event_id, status: 'booked' } : o));
+        loadData();
+        setToast(`"${opp.name}" scheduled — event created with ${res.data.data.guests || 0} guests`);
+      }
     } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
   };
 
@@ -4243,8 +4285,10 @@ function OpportunitiesTab({ showId, api, S, setToast, loadData }) {
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {NEXT[opp.status] && <button onClick={() => advanceOpp(opp, NEXT[opp.status])} style={{ padding: '3px 10px', borderRadius: 4, border: `1px solid ${sc}`, background: 'transparent', color: sc, fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Advance to {NEXT[opp.status]}</button>}
                   {opp.status === 'offered' && <button onClick={() => advanceOpp(opp, 'declined')} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #dc2626', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Decline</button>}
-                  {['booked','preparing','active'].includes(opp.status) && !opp.event_id && <button onClick={() => toEvent(opp)} style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>Create Event</button>}
-                  {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4 }}>Event linked</span>}
+                  {!opp.event_id && ['offered','considering','negotiating','booked','preparing','active'].includes(opp.status) && (
+                    <button onClick={() => toEvent(opp)} style={{ padding: '3px 10px', borderRadius: 4, border: 'none', background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>📅 Schedule as Event</button>
+                  )}
+                  {opp.event_id && <span style={{ fontSize: 9, color: '#16a34a', padding: '3px 8px', background: '#f0fdf4', borderRadius: 4, fontWeight: 600 }}>✓ Event scheduled</span>}
                 </div>
               </div>
             );
