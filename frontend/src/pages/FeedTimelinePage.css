@@ -378,6 +378,78 @@
   font-size: 13px;
 }
 
+/* ── Dashboard Button ── */
+.feed-timeline-btn.dashboard {
+  background: #2C2C2C;
+  color: white;
+}
+
+/* ── Viral & Trending Badges ── */
+.feed-post-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.feed-post-viral-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #ef4444;
+  background: #fef2f2;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.feed-post-trending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.feed-post-sentiment {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #f3f4f6;
+  color: #666;
+}
+
+.feed-post-sentiment.supportive { background: #f0fdf4; color: #22c55e; }
+.feed-post-sentiment.divided { background: #fffbeb; color: #f59e0b; }
+.feed-post-sentiment.hostile { background: #fef2f2; color: #ef4444; }
+.feed-post-sentiment.curious { background: #eef2ff; color: #6366f1; }
+
+.feed-post-velocity {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+/* ── Thread Indicator ── */
+.feed-post-thread {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #B8962E;
+  padding: 6px 10px;
+  background: #faf5ea;
+  border-radius: 6px;
+}
+
 @media (max-width: 600px) {
   .feed-timeline-page {
     padding: 16px;

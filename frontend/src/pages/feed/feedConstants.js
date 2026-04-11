@@ -121,6 +121,46 @@ export const PROTAGONISTS = [
   },
 ];
 
+// ── Enhanced Feed Constants ───────────────────────────────────────────
+
+export const VIRAL_TIERS = {
+  nano:  { label: 'Micro-viral', color: '#22c55e', threshold: 500 },
+  mid:   { label: 'Going Viral', color: '#f59e0b', threshold: 2000 },
+  mega:  { label: 'Viral Moment', color: '#ef4444', threshold: 10000 },
+  ultra: { label: 'Cultural Moment', color: '#8b5cf6', threshold: 50000 },
+};
+
+export const AUDIENCE_SENTIMENTS = {
+  supportive:  { label: 'Supportive', color: '#22c55e', bg: '#f0fdf4' },
+  divided:     { label: 'Divided', color: '#f59e0b', bg: '#fffbeb' },
+  hostile:     { label: 'Hostile', color: '#ef4444', bg: '#fef2f2' },
+  curious:     { label: 'Curious', color: '#6366f1', bg: '#eef2ff' },
+  indifferent: { label: 'Indifferent', color: '#9ca3af', bg: '#f9fafb' },
+};
+
+export const NARRATIVE_FUNCTIONS = {
+  reaction:      { label: 'Reaction', color: '#6366f1' },
+  bts:           { label: 'BTS', color: '#B8962E' },
+  flex:          { label: 'Flex', color: '#ec4899' },
+  shade:         { label: 'Shade', color: '#ef4444' },
+  support:       { label: 'Support', color: '#22c55e' },
+  comparison:    { label: 'Comparison', color: '#f59e0b' },
+  gossip:        { label: 'Gossip', color: '#8b5cf6' },
+  brand_content: { label: 'Brand Content', color: '#0ea5e9' },
+  callback:      { label: 'Callback', color: '#6b7280' },
+};
+
+export const EMOTIONAL_IMPACTS = {
+  confidence_boost: { label: 'Confidence Boost', color: '#B8962E' },
+  anxiety:          { label: 'Anxiety', color: '#f59e0b' },
+  jealousy:         { label: 'Jealousy', color: '#dc2626' },
+  validation:       { label: 'Validation', color: '#ec4899' },
+  indifference:     { label: 'Indifference', color: '#9ca3af' },
+  anger:            { label: 'Anger', color: '#ef4444' },
+};
+
+export const ENHANCED_API = '/api/v1/feed-enhanced';
+
 // ── Helpers ────────────────────────────────────────────────────────────
 export function lalaClass(score) { return score>=7?'high':score>=4?'mid':'low'; }
 export function fp(p) { return p?.full_profile||p||{}; }

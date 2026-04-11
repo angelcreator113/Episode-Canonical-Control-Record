@@ -51,6 +51,7 @@ const SceneStudioPage = lazy(() => import('./pages/SceneStudioPage'));
 const ScenePlannerPage = lazy(() => import('./pages/ScenePlannerPage'));
 const EpisodeScriptWriterPage = lazy(() => import('./pages/EpisodeScriptWriterPage'));
 const FeedTimelinePage = lazy(() => import('./pages/FeedTimelinePage'));
+const EventFeedDashboard = lazy(() => import('./pages/feed/EventFeedDashboard'));
 const ShowSettings = lazy(() => import('./pages/ShowSettings'));
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
@@ -344,6 +345,7 @@ function AppContent() {
           <Route path="/episodes/:episodeId/plan" element={<ScenePlannerPage />} />
           <Route path="/episodes/:episodeId/script-writer" element={<EpisodeScriptWriterPage />} />
           <Route path="/shows/:showId/feed-timeline" element={<FeedTimelinePage />} />
+          <Route path="/shows/:showId/feed-dashboard" element={<EventFeedDashboard />} />
           <Route path="/scene-library/:sceneId" element={<SceneDetail />} />
           
           {/* ===== ANIMATIC SYSTEM ROUTES ===== */}

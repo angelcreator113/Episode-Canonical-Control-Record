@@ -427,9 +427,196 @@ async function suggestNextEvents(showId, models) {
   return suggestions;
 }
 
+// ── EVENT CHAINING — SPAWN SEQUEL EVENTS FROM MOMENTUM ─────────────────────
+
+/**
+ * Chain a sequel event from a completed event based on feed engagement momentum.
+ *
+ * When an event generates strong feed engagement (viral posts, high momentum),
+ * this function creates a follow-up event that narratively flows from the original.
+ *
+ * @param {string} parentEventId - The completed event that spawns a sequel
+ * @param {object} chainConfig - { type, reason, suggested_prestige }
+ * @param {string} showId
+ * @param {object} models
+ * @returns {object} The new chained event
+ */
+async function chainEventFromMomentum(parentEventId, chainConfig, showId, models) {
+  const { sequelize } = models;
+
+  // Load parent event
+  const [parentRows] = await sequelize.query(
+    'SELECT * FROM world_events WHERE id = :id AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+    { replacements: { id: parentEventId, showId } }
+  );
+  const parent = parentRows?.[0];
+  if (!parent) throw new Error('Parent event not found');
+
+  const chainPosition = (parent.chain_position || 0) + 1;
+  if (chainPosition > 5) throw new Error('Maximum chain depth reached (5 events)');
+
+  const config = EVENT_TYPE_CONFIGS[chainConfig.type] || EVENT_TYPE_CONFIGS.social_event;
+  const prestige = chainConfig.suggested_prestige || Math.min(10, (parent.prestige || 5) + 1);
+
+  // Inherit and evolve guest list from parent
+  let parentAuto = {};
+  try {
+    parentAuto = typeof parent.canon_consequences === 'string'
+      ? JSON.parse(parent.canon_consequences)?.automation || {}
+      : parent.canon_consequences?.automation || {};
+  } catch { /* use empty */ }
+
+  const guestProfiles = parentAuto.guest_profiles || [];
+
+  // Create the chained event
+  const eventId = uuidv4();
+  const eventDate = new Date();
+  eventDate.setDate(eventDate.getDate() + 7 + Math.floor(Math.random() * 14));
+
+  const CHAIN_NARRATIVES = {
+    brand_deal: `After the buzz from "${parent.name}", a brand wants to capitalize on Lala's momentum.`,
+    interview: `Everyone's talking about "${parent.name}". An interviewer wants the real story.`,
+    award_show: `"${parent.name}" put Lala on the radar. Now comes the invitation she's been waiting for.`,
+    runway: `The fashion world noticed "${parent.name}". A designer wants Lala to walk.`,
+    podcast: `The conversation from "${parent.name}" isn't over. Someone wants it on record.`,
+    social_event: `The connections from "${parent.name}" led to a new circle. Time to show up again.`,
+    casting_call: `A casting director saw the content from "${parent.name}". Lala got the call.`,
+    campaign: `The viral moment from "${parent.name}" caught a creative director's eye.`,
+  };
+
+  const eventData = {
+    id: eventId,
+    show_id: showId,
+    name: `${chainConfig.type.replace(/_/g, ' ')} (from ${parent.name})`.slice(0, 200),
+    event_type: config.event_type,
+    host: parent.host_brand || parent.host || 'Industry Connection',
+    description: CHAIN_NARRATIVES[chainConfig.type] || `Follow-up to "${parent.name}" driven by feed momentum.`,
+    prestige,
+    cost_coins: prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50,
+    strictness: Math.min(10, prestige + 1),
+    deadline_type: prestige >= 8 ? 'urgent' : 'medium',
+    dress_code: config.dress_code,
+    location_hint: config.venue_theme,
+    narrative_stakes: chainConfig.reason || CHAIN_NARRATIVES[chainConfig.type],
+    canon_consequences: JSON.stringify({
+      automation: {
+        source: 'event_chain',
+        parent_event_id: parentEventId,
+        parent_event_name: parent.name,
+        chain_position: chainPosition,
+        host_handle: parentAuto.host_handle || null,
+        guest_profiles: guestProfiles.slice(0, 6),
+        momentum_driven: true,
+      },
+    }),
+    seeds_future_events: JSON.stringify([{
+      type: 'momentum_chain',
+      from_event: parent.name,
+      reason: chainConfig.reason,
+    }]),
+    parent_event_id: parentEventId,
+    chain_position: chainPosition,
+    chain_reason: chainConfig.reason,
+    momentum_score: 0,
+    status: 'ready',
+  };
+
+  await sequelize.query(
+    `INSERT INTO world_events (id, show_id, name, event_type, host, description,
+     prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
+     narrative_stakes, canon_consequences, seeds_future_events,
+     parent_event_id, chain_position, chain_reason, momentum_score,
+     status, created_at, updated_at)
+     VALUES (:id, :show_id, :name, :event_type, :host, :description,
+     :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
+     :narrative_stakes, :canon_consequences, :seeds_future_events,
+     :parent_event_id, :chain_position, :chain_reason, :momentum_score,
+     :status, NOW(), NOW())`,
+    { replacements: eventData }
+  );
+
+  // Update parent event's seeds_future_events
+  try {
+    const existingSeeds = typeof parent.seeds_future_events === 'string'
+      ? JSON.parse(parent.seeds_future_events) || []
+      : parent.seeds_future_events || [];
+    existingSeeds.push({ chained_event_id: eventId, type: chainConfig.type, reason: chainConfig.reason });
+    await sequelize.query(
+      'UPDATE world_events SET seeds_future_events = :seeds, updated_at = NOW() WHERE id = :id',
+      { replacements: { seeds: JSON.stringify(existingSeeds), id: parentEventId } }
+    );
+  } catch { /* non-critical */ }
+
+  console.log(`[EventChain] Chained "${eventData.name}" (position ${chainPosition}) from "${parent.name}"`);
+
+  return {
+    event_id: eventId,
+    name: eventData.name,
+    type: chainConfig.type,
+    prestige,
+    chain_position: chainPosition,
+    parent_event: parent.name,
+    reason: chainConfig.reason,
+  };
+}
+
+/**
+ * Get the full event chain for a given event — parent, siblings, and children.
+ */
+async function getEventChain(eventId, showId, models) {
+  const { sequelize } = models;
+
+  // Find the root of the chain
+  const [event] = await sequelize.query(
+    'SELECT id, parent_event_id, chain_position FROM world_events WHERE id = :id AND deleted_at IS NULL',
+    { replacements: { id: eventId } }
+  );
+  if (!event?.[0]) throw new Error('Event not found');
+
+  let rootId = event[0].id;
+  if (event[0].parent_event_id) {
+    // Walk up to root
+    let current = event[0];
+    while (current.parent_event_id) {
+      const [parent] = await sequelize.query(
+        'SELECT id, parent_event_id, chain_position FROM world_events WHERE id = :id AND deleted_at IS NULL',
+        { replacements: { id: current.parent_event_id } }
+      );
+      if (!parent?.[0]) break;
+      current = parent[0];
+    }
+    rootId = current.id;
+  }
+
+  // Get entire chain from root
+  const [chain] = await sequelize.query(
+    `WITH RECURSIVE event_chain AS (
+       SELECT id, name, event_type, prestige, status, chain_position, chain_reason,
+              parent_event_id, momentum_score, created_at
+       FROM world_events WHERE id = :rootId AND deleted_at IS NULL
+       UNION ALL
+       SELECT we.id, we.name, we.event_type, we.prestige, we.status, we.chain_position, we.chain_reason,
+              we.parent_event_id, we.momentum_score, we.created_at
+       FROM world_events we
+       INNER JOIN event_chain ec ON we.parent_event_id = ec.id
+       WHERE we.deleted_at IS NULL
+     )
+     SELECT * FROM event_chain ORDER BY chain_position ASC, created_at ASC`,
+    { replacements: { rootId } }
+  );
+
+  return {
+    root_event_id: rootId,
+    chain_length: chain.length,
+    events: chain,
+  };
+}
+
 module.exports = {
   EVENT_TYPE_CONFIGS,
   generateOpportunitiesFromFeed,
   scheduleOpportunityAsEvent,
   suggestNextEvents,
+  chainEventFromMomentum,
+  getEventChain,
 };
