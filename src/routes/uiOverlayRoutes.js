@@ -4,12 +4,17 @@ const express = require('express');
 const router = express.Router();
 const { optionalAuth } = require('../middleware/auth');
 
+// ── In-memory generation status tracking per show ──
+// Tracks progress/errors so the frontend can display feedback
+const generationStatus = {};
+
 // GET /api/v1/ui-overlays/:showId — list existing overlays
 router.get('/:showId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getShowOverlays, OVERLAY_TYPES } = require('../services/uiOverlayService');
-    const existing = await getShowOverlays(req.params.showId, models);
+    const showId = req.params.showId;
+    const existing = await getShowOverlays(showId, models);
 
     // Map overlay types to show which are generated vs missing
     const status = OVERLAY_TYPES.map(ot => {
@@ -22,11 +27,15 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       };
     });
 
+    // Include generation status if a generation job is active or recently finished
+    const genStatus = generationStatus[showId] || null;
+
     return res.json({
       success: true,
       data: status,
       generated_count: status.filter(s => s.generated).length,
       total: OVERLAY_TYPES.length,
+      generation_status: genStatus,
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -41,17 +50,51 @@ router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
     const showId = req.params.showId;
 
     if (!process.env.FAL_KEY && !process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ success: false, error: 'No image generation API configured' });
+      return res.status(503).json({ success: false, error: 'No image generation API configured. Set FAL_KEY or OPENAI_API_KEY in your environment.' });
     }
 
-    // Return immediately — run generation in background
-    res.json({ success: true, message: 'Generation started — refresh to see progress' });
+    // Check if generation is already running for this show
+    if (generationStatus[showId]?.status === 'generating') {
+      return res.json({ success: true, message: 'Generation already in progress' });
+    }
 
-    // Generate in background
-    generateAllOverlays(showId, models).then(results => {
-      console.log(`[UIOverlay] Background generation complete: ${results.filter(r => r.url).length} generated`);
+    // Initialize status tracking
+    generationStatus[showId] = {
+      status: 'generating',
+      started_at: new Date().toISOString(),
+      completed: 0,
+      failed: 0,
+      total: 0,
+      errors: [],
+    };
+
+    // Return immediately — run generation in background
+    res.json({ success: true, message: 'Generation started — polling for progress' });
+
+    // Generate in background with progress tracking
+    generateAllOverlays(showId, models, {
+      onProgress: (completed, failed, total, error) => {
+        generationStatus[showId].completed = completed;
+        generationStatus[showId].failed = failed;
+        generationStatus[showId].total = total;
+        if (error) generationStatus[showId].errors.push(error);
+      },
+    }).then(results => {
+      const successCount = results.filter(r => r.url).length;
+      const failCount = results.filter(r => r.error).length;
+      console.log(`[UIOverlay] Background generation complete: ${successCount} generated, ${failCount} failed`);
+      generationStatus[showId].status = failCount > 0 && successCount === 0 ? 'failed' : 'done';
+      generationStatus[showId].finished_at = new Date().toISOString();
+      generationStatus[showId].completed = successCount;
+      generationStatus[showId].failed = failCount;
+      // Clear status after 2 minutes so it doesn't persist forever
+      setTimeout(() => { delete generationStatus[showId]; }, 120000);
     }).catch(err => {
       console.error('[UIOverlay] Background generation failed:', err.message);
+      generationStatus[showId].status = 'failed';
+      generationStatus[showId].errors.push(err.message);
+      generationStatus[showId].finished_at = new Date().toISOString();
+      setTimeout(() => { delete generationStatus[showId]; }, 120000);
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

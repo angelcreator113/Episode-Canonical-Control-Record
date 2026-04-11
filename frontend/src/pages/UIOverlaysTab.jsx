@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Sparkles, Loader, CheckCircle2, Image, Layout } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Sparkles, Loader, CheckCircle2, Image, Layout, AlertTriangle, RefreshCw } from 'lucide-react';
 import api from '../services/api';
 
 export default function UIOverlaysTab() {
@@ -10,6 +10,8 @@ export default function UIOverlaysTab() {
   const [showId, setShowId] = useState(null);
   const [shows, setShows] = useState([]);
   const [filter, setFilter] = useState('all'); // all | frame | icon
+  const [genProgress, setGenProgress] = useState(null); // { status, completed, failed, total, errors }
+  const pollRef = useRef(null);
 
   // Load shows
   useEffect(() => {
@@ -25,36 +27,67 @@ export default function UIOverlaysTab() {
     if (!showId) return;
     setLoading(true);
     api.get(`/api/v1/ui-overlays/${showId}`)
-      .then(r => setOverlays(r.data?.data || []))
+      .then(r => {
+        setOverlays(r.data?.data || []);
+        // Check if generation status is present
+        if (r.data?.generation_status) {
+          setGenProgress(r.data.generation_status);
+        }
+      })
       .catch(() => setOverlays([]))
       .finally(() => setLoading(false));
   }, [showId]);
 
   useEffect(() => { loadOverlays(); }, [loadOverlays]);
 
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
   const handleGenerateAll = async () => {
     if (!showId) return;
     setGenerating(true);
+    setGenProgress(null);
     try {
-      await api.post(`/api/v1/ui-overlays/${showId}/generate-all`);
-      // Poll for progress every 8 seconds
-      const poll = setInterval(() => {
+      const postRes = await api.post(`/api/v1/ui-overlays/${showId}/generate-all`);
+      if (postRes.data?.error) {
+        setGenProgress({ status: 'failed', errors: [postRes.data.error] });
+        setGenerating(false);
+        return;
+      }
+      // Poll for progress every 5 seconds
+      pollRef.current = setInterval(() => {
         api.get(`/api/v1/ui-overlays/${showId}`)
           .then(r => {
             const data = r.data?.data || [];
             setOverlays(data);
+            const genStatus = r.data?.generation_status;
+            if (genStatus) setGenProgress(genStatus);
+
             const done = data.filter(o => o.generated).length;
-            if (done >= data.length) {
-              clearInterval(poll);
+            // Stop polling if all generated OR if generation is done/failed
+            if (done >= data.length || genStatus?.status === 'done' || genStatus?.status === 'failed') {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
               setGenerating(false);
             }
           })
           .catch(() => {});
-      }, 8000);
+      }, 5000);
       // Stop polling after 5 minutes max
-      setTimeout(() => { clearInterval(poll); setGenerating(false); }, 300000);
+      setTimeout(() => {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+        setGenerating(false);
+      }, 300000);
     } catch (err) {
-      alert('Generation failed: ' + (err.response?.data?.error || err.message));
+      const errMsg = err.response?.data?.error || err.message;
+      setGenProgress({ status: 'failed', errors: [errMsg] });
       setGenerating(false);
     }
   };
@@ -105,6 +138,54 @@ export default function UIOverlaysTab() {
           </button>
         </div>
       </div>
+
+      {/* Generation Progress / Error Banner */}
+      {genProgress && (genProgress.status === 'generating' || genProgress.status === 'failed' || genProgress.status === 'done') && (
+        <div style={{
+          marginBottom: 12, padding: '10px 14px', borderRadius: 8,
+          background: genProgress.status === 'failed' ? '#fef2f2' : genProgress.status === 'done' ? '#f0fdf4' : '#fffbeb',
+          border: `1px solid ${genProgress.status === 'failed' ? '#fecaca' : genProgress.status === 'done' ? '#bbf7d0' : '#fde68a'}`,
+          display: 'flex', alignItems: 'flex-start', gap: 8,
+        }}>
+          {genProgress.status === 'failed' ? (
+            <AlertTriangle size={16} style={{ color: '#dc2626', marginTop: 1, flexShrink: 0 }} />
+          ) : genProgress.status === 'done' ? (
+            <CheckCircle2 size={16} style={{ color: '#16a34a', marginTop: 1, flexShrink: 0 }} />
+          ) : (
+            <Loader size={16} className="spin" style={{ color: '#d97706', marginTop: 1, flexShrink: 0 }} />
+          )}
+          <div style={{ flex: 1, fontSize: 12 }}>
+            {genProgress.status === 'generating' && (
+              <span style={{ color: '#92400e' }}>
+                Generating: {genProgress.completed || 0} completed, {genProgress.failed || 0} failed of {genProgress.total || '...'} total
+              </span>
+            )}
+            {genProgress.status === 'done' && (
+              <span style={{ color: '#166534' }}>
+                Generation complete: {genProgress.completed || 0} generated{genProgress.failed > 0 ? `, ${genProgress.failed} failed` : ''}
+              </span>
+            )}
+            {genProgress.status === 'failed' && (
+              <span style={{ color: '#991b1b' }}>
+                Generation failed{genProgress.completed > 0 ? ` (${genProgress.completed} succeeded)` : ''}
+              </span>
+            )}
+            {genProgress.errors?.length > 0 && (
+              <div style={{ marginTop: 4, fontSize: 11, color: '#666', fontFamily: "'DM Mono', monospace" }}>
+                {genProgress.errors.slice(-3).map((e, i) => <div key={i}>{e}</div>)}
+              </div>
+            )}
+          </div>
+          {(genProgress.status === 'done' || genProgress.status === 'failed') && (
+            <button onClick={() => { setGenProgress(null); loadOverlays(); }} style={{
+              border: 'none', background: 'none', cursor: 'pointer', padding: 4,
+              color: '#666', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11,
+            }}>
+              <RefreshCw size={12} /> Refresh
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>

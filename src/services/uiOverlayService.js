@@ -248,8 +248,7 @@ async function generateOverlay(overlayType, showId) {
 // ── GENERATE ALL OVERLAYS FOR SHOW ───────────────────────────────────────────
 
 async function generateAllOverlays(showId, models, options = {}) {
-  const { Asset } = models;
-  const { skipExisting = true, batchSize = 3 } = options;
+  const { skipExisting = true, batchSize = 3, onProgress } = options;
   const results = [];
 
   // Check which overlays already exist
@@ -261,6 +260,9 @@ async function generateAllOverlays(showId, models, options = {}) {
 
   const toGenerate = OVERLAY_TYPES.filter(ot => !existingTypes.has(ot.id));
   console.log(`[UIOverlay] Generating ${toGenerate.length} overlays (${existingTypes.size} already exist, batch size ${batchSize})`);
+
+  // Report initial total to progress callback
+  if (onProgress) onProgress(0, 0, toGenerate.length, null);
 
   // Process in parallel batches
   for (let i = 0; i < toGenerate.length; i += batchSize) {
@@ -307,12 +309,19 @@ async function generateAllOverlays(showId, models, options = {}) {
         results.push(result.value);
       } else {
         const failedType = batch[batchResults.indexOf(result)];
-        console.error(`[UIOverlay] Failed: ${failedType?.name}:`, result.reason?.message);
-        results.push({ overlay_type: failedType?.id, name: failedType?.name, error: result.reason?.message });
+        const errorMsg = result.reason?.message || 'Unknown error';
+        console.error(`[UIOverlay] Failed: ${failedType?.name}:`, errorMsg);
+        results.push({ overlay_type: failedType?.id, name: failedType?.name, error: errorMsg });
       }
     }
 
-    console.log(`[UIOverlay] Batch ${Math.floor(i / batchSize) + 1} complete (${results.filter(r => r.url).length} total generated)`);
+    // Report progress after each batch
+    const successCount = results.filter(r => r.url).length;
+    const failCount = results.filter(r => r.error).length;
+    const lastError = results.filter(r => r.error).slice(-1)[0];
+    if (onProgress) onProgress(successCount, failCount, toGenerate.length, lastError ? `${lastError.name}: ${lastError.error}` : null);
+
+    console.log(`[UIOverlay] Batch ${Math.floor(i / batchSize) + 1} complete (${successCount} generated, ${failCount} failed)`);
   }
 
   console.log(`[UIOverlay] Done: ${results.filter(r => r.url).length}/${toGenerate.length} generated`);
@@ -339,7 +348,8 @@ async function getShowOverlays(showId, models) {
         url: r.s3_url_processed || r.s3_url_raw,
       };
     });
-  } catch {
+  } catch (err) {
+    console.error('[UIOverlay] getShowOverlays query failed:', err.message);
     return [];
   }
 }
