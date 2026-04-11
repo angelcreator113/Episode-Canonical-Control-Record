@@ -67,6 +67,7 @@ jobs:
 
   build:
     needs: test
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'failure')
     runs-on: ubuntu-latest
 
     steps:
