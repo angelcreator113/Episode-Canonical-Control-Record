@@ -1383,19 +1383,19 @@ The revised event should feel like a completely different experience from the si
           {/* Feed event templates grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
             {[
-              { name: 'Creator Roast Night', category: 'creator_economy', icon: '🔥', desc: 'Public roasting of creators by other creators. Everything is jokes until someone goes too far.', energy: 'chaotic' },
-              { name: 'Fashion Mystery Box', category: 'fashion', icon: '📦', desc: 'Style looks from a mystery selection. Constraint reveals true taste — or lack of it.', energy: 'creative' },
-              { name: 'Creator Speed Dating', category: 'creator_economy', icon: '⚡', desc: 'Rapid-fire collab pitches. Alliances form fast. Some are regretted faster.', energy: 'networking' },
-              { name: 'Street Style Marathon', category: 'fashion', icon: '👟', desc: 'Extended street style documentation — the week\'s best looks ranked publicly.', energy: 'competitive' },
-              { name: 'Beauty Battles', category: 'beauty', icon: '💄', desc: 'Head-to-head beauty challenges. The audience votes. The loser loses followers publicly.', energy: 'dramatic' },
-              { name: 'Design Lab Week', category: 'creative', icon: '🎨', desc: 'Experimental design projects and innovation challenges. Where new ideas are tested publicly.', energy: 'creative' },
-              { name: 'Community Build Week', category: 'creator_economy', icon: '🤝', desc: 'Collaborative content between otherwise competing creators. Forced proximity events.', energy: 'wholesome' },
-              { name: 'The Great Glow-Up Challenge', category: 'beauty', icon: '✨', desc: 'Dramatic transformation challenge. Before and after content that goes viral.', energy: 'aspirational' },
-              { name: 'Creator Charity Week', category: 'creator_economy', icon: '💝', desc: 'Creators raise money for causes. Reputation washing meets genuine impact.', energy: 'feel-good' },
-              { name: 'Midnight Music Festival', category: 'music', icon: '🎵', desc: 'Late-night music and performance event. Unexpected collabs happen after midnight.', energy: 'electric' },
-              { name: 'Virtual Travel Festival', category: 'lifestyle', icon: '✈️', desc: 'Digital travel content — who can make home feel like elsewhere.', energy: 'escapist' },
-              { name: 'Artist Residency Month', category: 'creative', icon: '🖼️', desc: 'Creators slow down and make something intentional. The antidote to the content grind.', energy: 'reflective' },
-              { name: 'Creator Talent Show', category: 'creator_economy', icon: '🎤', desc: 'Hidden talents revealed. Singers, dancers, comedians — the audience discovers new sides.', energy: 'surprising' },
+              { name: 'Creator Roast Night', category: 'creator_economy', icon: '🔥', desc: 'Public roasting of creators by other creators. Everything is jokes until someone goes too far.', energy: 'chaotic', venue_theme: 'Dark underground comedy club with exposed brick, dramatic red spotlights, leather booths, vintage microphone on stage' },
+              { name: 'Fashion Mystery Box', category: 'fashion', icon: '📦', desc: 'Style looks from a mystery selection. Constraint reveals true taste — or lack of it.', energy: 'creative', venue_theme: 'Sleek futuristic showroom with glass display cases, neon accents, mirrored walls, mystery boxes on pedestals' },
+              { name: 'Creator Speed Dating', category: 'creator_economy', icon: '⚡', desc: 'Rapid-fire collab pitches. Alliances form fast. Some are regretted faster.', energy: 'networking', venue_theme: 'Modern co-working lounge with round tables, warm lighting, exposed ceiling beams, cocktail bar in corner' },
+              { name: 'Street Style Marathon', category: 'fashion', icon: '👟', desc: 'Extended street style documentation — the week\'s best looks ranked publicly.', energy: 'competitive', venue_theme: 'Luxury outdoor fashion district — cobblestone streets, designer storefronts, fairy lights strung between buildings, photography wall' },
+              { name: 'Beauty Battles', category: 'beauty', icon: '💄', desc: 'Head-to-head beauty challenges. The audience votes. The loser loses followers publicly.', energy: 'dramatic', venue_theme: 'Glamorous beauty arena with vanity mirror stations, ring lights everywhere, judges panel, pink neon runway' },
+              { name: 'Design Lab Week', category: 'creative', icon: '🎨', desc: 'Experimental design projects and innovation challenges. Where new ideas are tested publicly.', energy: 'creative', venue_theme: 'Industrial creative studio with paint-splattered floors, large canvases, skylights, modern art installations' },
+              { name: 'Community Build Week', category: 'creator_economy', icon: '🤝', desc: 'Collaborative content between otherwise competing creators. Forced proximity events.', energy: 'wholesome', venue_theme: 'Warm communal space with long wooden tables, greenery, soft natural lighting, open kitchen, cozy seating nooks' },
+              { name: 'The Great Glow-Up Challenge', category: 'beauty', icon: '✨', desc: 'Dramatic transformation challenge. Before and after content that goes viral.', energy: 'aspirational', venue_theme: 'Luxury spa and transformation center with marble floors, gold mirrors, professional styling stations, crystal chandeliers' },
+              { name: 'Creator Charity Week', category: 'creator_economy', icon: '💝', desc: 'Creators raise money for causes. Reputation washing meets genuine impact.', energy: 'feel-good', venue_theme: 'Elegant charity gala ballroom with auction stage, flower arrangements, candlelit tables, donation display board' },
+              { name: 'Midnight Music Festival', category: 'music', icon: '🎵', desc: 'Late-night music and performance event. Unexpected collabs happen after midnight.', energy: 'electric', venue_theme: 'Rooftop music venue at night with city skyline, string lights, DJ booth, velvet lounge areas, starlit sky' },
+              { name: 'Virtual Travel Festival', category: 'lifestyle', icon: '✈️', desc: 'Digital travel content — who can make home feel like elsewhere.', energy: 'escapist', venue_theme: 'Tropical resort-style venue with palm trees, infinity pool edge, sunset views, bamboo furniture, exotic flowers' },
+              { name: 'Artist Residency Month', category: 'creative', icon: '🖼️', desc: 'Creators slow down and make something intentional. The antidote to the content grind.', energy: 'reflective', venue_theme: 'Serene gallery loft with white walls, natural wood floors, large windows with garden views, minimal sculptures' },
+              { name: 'Creator Talent Show', category: 'creator_economy', icon: '🎤', desc: 'Hidden talents revealed. Singers, dancers, comedians — the audience discovers new sides.', energy: 'surprising', venue_theme: 'Intimate theater with velvet curtains, spotlit stage, orchestra seating, gold balcony railings, dramatic drapes' },
             ].map(template => {
               const catColors = {
                 fashion: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
@@ -1458,6 +1458,14 @@ The revised event should feel like a completely different experience from the si
                             cost_coins: 150,
                             dress_code: null,
                             narrative_stakes: template.desc,
+                            location_hint: template.venue_theme || null,
+                            canon_consequences: {
+                              automation: {
+                                venue_theme: template.venue_theme,
+                                energy: template.energy,
+                                category: template.category,
+                              },
+                            },
                             status: 'draft',
                           });
                           if (res.data.success || res.data.data) {
