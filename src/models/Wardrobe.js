@@ -141,6 +141,30 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: false,
       },
+      // ═══════════════════════════════════════
+      // ATTACHMENT / SET FIELDS
+      // ═══════════════════════════════════════
+      parent_item_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Parent item this piece attaches to (null = standalone item)',
+      },
+      attachment_type: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'Type: belt, brooch, collar, sleeve, chain, earring, necklace, bracelet, ring, bag, scarf, pin',
+      },
+      is_set: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Whether this item is a matching set parent (jewelry set, dress ensemble)',
+      },
+      set_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Name of the matching set (e.g., Gold Filigree Collection)',
+      },
       library_item_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
@@ -361,6 +385,18 @@ module.exports = (sequelize) => {
     Wardrobe.belongsTo(models.Character, {
       foreignKey: 'character_id',
       as: 'characterModel',
+    });
+
+    // Self-referential: parent item has many attachment pieces
+    Wardrobe.hasMany(models.Wardrobe, {
+      foreignKey: 'parent_item_id',
+      as: 'attachmentPieces',
+    });
+
+    // Self-referential: attachment piece belongs to a parent item
+    Wardrobe.belongsTo(models.Wardrobe, {
+      foreignKey: 'parent_item_id',
+      as: 'parentItem',
     });
   };
 
