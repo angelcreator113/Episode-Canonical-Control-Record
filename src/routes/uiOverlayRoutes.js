@@ -2,7 +2,10 @@
 
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const { optionalAuth } = require('../middleware/auth');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // GET /api/v1/ui-overlays/:showId — list existing overlays
 router.get('/:showId', optionalAuth, async (req, res) => {
@@ -61,7 +64,6 @@ router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
 // POST /api/v1/ui-overlays/:showId/generate/:overlayType — generate single overlay
 router.post('/:showId/generate/:overlayType', optionalAuth, async (req, res) => {
   try {
-    const models = require('../models');
     const { generateOverlay, OVERLAY_TYPES } = require('../services/uiOverlayService');
     const { v4: uuidv4 } = require('uuid');
 

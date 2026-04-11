@@ -16,7 +16,7 @@
 const { v4: uuidv4 } = require('uuid');
 
 // ── METRIC → OPPORTUNITY TYPE MAPPING ────────────────────────────────────────
-const METRIC_OPP_TYPES = {
+const _METRIC_OPP_TYPES = { // eslint-disable-line no-unused-vars
   coins:              ['brand_deal', 'campaign', 'ambassador'],
   reputation:         ['editorial', 'award_show', 'interview'],
   brand_trust:        ['brand_deal', 'ambassador', 'campaign'],

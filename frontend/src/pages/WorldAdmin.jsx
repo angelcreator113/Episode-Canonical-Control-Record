@@ -923,11 +923,47 @@ The revised event should feel like a completely different experience from the si
             ) : <p style={S.muted}>No state yet. Evaluate an episode to initialize.</p>}
           </div>
 
-          <div className="wa-grid-4" style={S.qGrid}>
-            {[{ v: episodes.length, l: 'Episodes' }, { v: acceptedEpisodes.length, l: 'Evaluated' }, { v: overrideCount, l: 'Overrides' }, { v: worldEvents.length, l: 'Events' }].map((s, i) => (
-              <div key={i} style={S.qBox}><div style={S.qVal}>{s.v}</div><div style={S.qLbl}>{s.l}</div></div>
+          {/* Production Dashboard */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, marginBottom: 16 }}>
+            {[
+              { v: episodes.length, l: 'Episodes', icon: '📺', color: '#6366f1' },
+              { v: worldEvents.filter(e => e.status === 'ready').length, l: 'Events Ready', icon: '📅', color: '#22c55e' },
+              { v: worldEvents.filter(e => e.status === 'used').length, l: 'Events Used', icon: '✓', color: '#059669' },
+              { v: opportunities.filter(o => !['archived','declined','expired'].includes(o.status)).length, l: 'Active Opps', icon: '💼', color: '#B8962E' },
+              { v: wardrobeItems.length, l: 'Wardrobe', icon: '👗', color: '#ec4899' },
+              { v: sceneSets.length, l: 'Locations', icon: '📍', color: '#8b5cf6' },
+            ].map((s, i) => (
+              <div key={i} style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 10px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, marginBottom: 2 }}>{s.icon}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.v}</div>
+                <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>{s.l}</div>
+              </div>
             ))}
           </div>
+
+          {/* Next Steps */}
+          {(() => {
+            const noEvents = worldEvents.filter(e => e.status === 'ready').length === 0;
+            const noWardrobe = wardrobeItems.length === 0;
+            const noEpisodes = episodes.length === 0;
+            const steps = [];
+            if (noWardrobe) steps.push({ text: 'Upload wardrobe pieces', action: () => setActiveTab('wardrobe'), icon: '👗' });
+            if (noEvents) steps.push({ text: 'Create events from feed', action: () => setActiveTab('feed-events'), icon: '📅' });
+            if (!noEvents && noEpisodes) steps.push({ text: 'Generate first episode from an event', action: () => setActiveTab('events'), icon: '🎬' });
+            if (steps.length === 0) return null;
+            return (
+              <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>Next Steps</div>
+                {steps.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer' }} onClick={s.action}>
+                    <span style={{ fontSize: 16 }}>{s.icon}</span>
+                    <span style={{ fontSize: 13, color: '#2C2C2C', fontWeight: 500 }}>{s.text}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 10, color: '#B8962E', fontWeight: 600 }}>→</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {Object.keys(tierCounts).length > 0 && (
             <div style={S.card}>

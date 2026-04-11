@@ -80,7 +80,7 @@ const CHECKLIST_SECTIONS = [
   },
 ];
 
-function CheckItem({ item, checked, loading }) {
+function CheckItem({ item, checked, loading, onAction, actionLabel }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -96,7 +96,7 @@ function CheckItem({ item, checked, loading }) {
         {checked && <span style={{ color: '#FFF', fontSize: 11, fontWeight: 700 }}>✓</span>}
       </div>
       <span style={{
-        fontSize: 13,
+        fontSize: 13, flex: 1,
         color: checked ? '#555' : item.required ? '#C62828' : '#999',
         fontWeight: item.required && !checked ? 600 : 400,
         textDecoration: checked ? 'line-through' : 'none',
@@ -108,6 +108,13 @@ function CheckItem({ item, checked, loading }) {
           </span>
         )}
       </span>
+      {!checked && onAction && (
+        <button onClick={onAction} style={{
+          padding: '2px 8px', borderRadius: 4, border: 'none',
+          background: '#B8962E', color: '#fff', fontSize: 9,
+          fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+        }}>{actionLabel || 'Fix'}</button>
+      )}
     </div>
   );
 }
@@ -251,6 +258,21 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     }
   };
 
+  // Action handlers for checklist items
+  const actions = {
+    arc_position: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Set up' },
+    archetype: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Set up' },
+    designed_intent: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Set up' },
+    event_linked: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Events' },
+    venue_set: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Add venue' },
+    scene_sets: { action: () => window.location.href = `/scene-library`, label: 'Scene Library' },
+    scene_plan: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Generate' },
+    wardrobe_ready: { action: () => window.location.href = `/shows/${showId}/world?tab=wardrobe`, label: 'Upload' },
+    outfit_picked: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Pick outfit' },
+    overlays_generated: { action: () => window.location.href = `/scene-library?tab=overlays`, label: 'Generate' },
+    character_state: { action: () => window.location.href = `/shows/${showId}/world?tab=overview`, label: 'Set up' },
+  };
+
   const allRequired = CHECKLIST_SECTIONS
     .flatMap(s => s.items)
     .filter(i => i.required)
@@ -306,7 +328,8 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
             {section.icon} {section.label}
           </h4>
           {section.items.map(item => (
-            <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading} />
+            <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading}
+              onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label} />
           ))}
         </div>
       ))}
@@ -317,17 +340,24 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
             Complete all required items to unlock script generation.
           </p>
         )}
-        <button onClick={handleGenerateScript} disabled={!allRequired || generating} style={{
-          width: '100%',
-          background: allRequired && !generating ? 'linear-gradient(135deg, #C9A83A, #B8962E)' : '#e2e8f0',
-          color: allRequired && !generating ? '#fff' : '#94a3b8',
-          border: 'none', borderRadius: 10, padding: '12px 0',
-          fontSize: 14, fontWeight: 600, cursor: allRequired && !generating ? 'pointer' : 'not-allowed',
-          boxShadow: allRequired ? '0 2px 8px rgba(184,150,46,0.25)' : 'none',
-          transition: 'all 0.2s',
-        }}>
-          {generating ? '⏳ Generating Script...' : '✦ Generate Script'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => window.location.href = `/episodes/${episode.id}/script-writer`} style={{
+            flex: 1,
+            background: allRequired ? 'linear-gradient(135deg, #C9A83A, #B8962E)' : '#e2e8f0',
+            color: allRequired ? '#fff' : '#94a3b8',
+            border: 'none', borderRadius: 10, padding: '12px 0',
+            fontSize: 14, fontWeight: 600, cursor: allRequired ? 'pointer' : 'not-allowed',
+            boxShadow: allRequired ? '0 2px 8px rgba(184,150,46,0.25)' : 'none',
+          }}>
+            ✦ Write Script
+          </button>
+          <button onClick={() => window.location.href = `/episodes/${episode.id}/plan`} style={{
+            padding: '12px 16px', border: '1px solid #e0d9cc', borderRadius: 10,
+            background: '#fff', color: '#666', fontSize: 12, cursor: 'pointer',
+          }}>
+            🎬 Scene Plan
+          </button>
+        </div>
       </div>
     </div>
   );
