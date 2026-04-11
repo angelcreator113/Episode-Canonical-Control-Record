@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Film, Camera } from 'lucide-react';
+import { Film, Camera, Sparkles } from 'lucide-react';
 import sceneLibraryService from '../services/sceneLibraryService';
 import showService from '../services/showService';
 import { normalizeSceneThumbnail } from '../utils/urlUtils';
 import SceneSetsTab from './SceneSetsTab';
+import UIOverlaysTab from './UIOverlaysTab';
 import './SceneLibrary.css';
 
 const SceneLibrary = () => {
@@ -263,10 +264,19 @@ const SceneLibrary = () => {
         >
           <Camera size={15} /> Scene Sets
         </button>
+        <button
+          className={`scene-library-tab${activeTab === 'overlays' ? ' active' : ''}`}
+          onClick={() => setActiveTab('overlays')}
+        >
+          <Sparkles size={15} /> UI Overlays
+        </button>
       </div>
 
       {/* Scene Sets Tab */}
       {activeTab === 'sets' && <SceneSetsTab />}
+
+      {/* UI Overlays Tab */}
+      {activeTab === 'overlays' && <UIOverlaysTab />}
 
       {/* Clips Tab */}
       {activeTab === 'clips' && <>

@@ -31,12 +31,8 @@ module.exports = (sequelize) => {
     sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     ai_suggested: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     ai_confidence: { type: DataTypes.FLOAT, allowNull: true },
-    // Feed moment — on-screen notification content during this beat
-    feed_moment: { type: DataTypes.JSONB, allowNull: true },
-    // Script lines — character dialogue/narration for this beat
-    // { lala_line: "spoken dialogue", lala_internal: "inner narration",
-    //   justawoman_action: "clicks notification", direction: "camera holds on face" }
-    script_lines: { type: DataTypes.JSONB, allowNull: true },
+    // feed_moment — migration 20260716 (may not exist)
+    // script_lines — migration 20260716 (may not exist)
     // { trigger_profile: "@handle", trigger_action: "posted outfit",
     //   phone_screen: { type: "post"|"story"|"dm"|"notification"|"live", content: "...", image_desc: "..." },
     //   lala_dialogue: "what she says out loud", lala_internal: "inner monologue",

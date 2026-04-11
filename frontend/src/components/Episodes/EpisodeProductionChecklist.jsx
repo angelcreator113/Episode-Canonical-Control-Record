@@ -24,23 +24,49 @@ const CHECKLIST_SECTIONS = [
   },
   {
     id: 'world',
-    icon: '🎬',
-    label: 'World',
+    icon: '🌍',
+    label: 'Event & Venue',
     items: [
       { id: 'event_linked',      label: 'Event linked to episode',    required: true  },
-      { id: 'scene_sets',        label: 'Scene sets assigned',        required: true  },
-      { id: 'scene_plan',        label: 'Scene plan generated',       required: true  },
-      { id: 'scene_plan_locked', label: 'Scene plan locked',          required: false },
+      { id: 'venue_set',         label: 'Venue assigned',             required: false },
+      { id: 'venue_image',       label: 'Venue image generated',      required: false },
       { id: 'invitation_exists', label: 'Invitation generated',       required: false },
     ],
   },
   {
-    id: 'lala',
-    icon: '👗',
-    label: 'Lala',
+    id: 'scene',
+    icon: '🎬',
+    label: 'Scene Plan',
     items: [
-      { id: 'wardrobe_ready',    label: 'Wardrobe items available',        required: true  },
-      { id: 'character_state',   label: 'Character state loaded',          required: true  },
+      { id: 'scene_sets',        label: 'Scene sets assigned',        required: true  },
+      { id: 'scene_plan',        label: 'Scene plan generated (14 beats)', required: true  },
+      { id: 'scene_plan_locked', label: 'Scene plan locked',          required: false },
+    ],
+  },
+  {
+    id: 'wardrobe',
+    icon: '👗',
+    label: 'Wardrobe & Outfit',
+    items: [
+      { id: 'wardrobe_ready',    label: 'Wardrobe pieces uploaded',   required: true  },
+      { id: 'outfit_picked',     label: 'Outfit picked for event',    required: false },
+    ],
+  },
+  {
+    id: 'overlays',
+    icon: '✨',
+    label: 'UI Overlays',
+    items: [
+      { id: 'overlays_generated', label: 'UI overlays generated',     required: false },
+    ],
+  },
+  {
+    id: 'social',
+    icon: '📱',
+    label: 'Social & Content',
+    items: [
+      { id: 'social_checklist',  label: 'Social media checklist',     required: false },
+      { id: 'title_generated',   label: 'Episode title (AI-generated)', required: false },
     ],
   },
   {
@@ -48,6 +74,7 @@ const CHECKLIST_SECTIONS = [
     icon: '🧠',
     label: 'Intelligence',
     items: [
+      { id: 'character_state',   label: 'Character state loaded',     required: true  },
       { id: 'show_brain',        label: 'Show Brain accessible',      required: false },
     ],
   },
@@ -114,7 +141,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         Object.assign(results, { arc_position: false, archetype: false, designed_intent: false, narrative_purpose: false, forward_hook: false });
       }
 
-      // ── Check Event linked (via world_events.used_in_episode_id) ──
+      // ── Check Event, Venue, Invitation, Outfit ──
       try {
         if (showId) {
           const { data } = await api.get(`/api/v1/world/${showId}/events`);
@@ -122,6 +149,11 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
           const linkedEvent = events.find(ev => ev.used_in_episode_id === episode.id);
           results.event_linked = !!linkedEvent;
           results.invitation_exists = !!linkedEvent?.invitation_asset_id;
+          const auto = linkedEvent?.canon_consequences?.automation || {};
+          results.venue_set = !!(linkedEvent?.venue_name || auto.venue_name || linkedEvent?.scene_set_id);
+          results.venue_image = !!linkedEvent?.scene_set_id;
+          const outfit = typeof linkedEvent?.outfit_pieces === 'string' ? JSON.parse(linkedEvent.outfit_pieces || '[]') : (linkedEvent?.outfit_pieces || []);
+          results.outfit_picked = outfit.length > 0;
         } else {
           results.event_linked = false;
         }
@@ -164,6 +196,29 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       } catch {
         results.character_state = false;
       }
+
+      // ── Check UI Overlays ──
+      try {
+        if (showId) {
+          const { data } = await api.get(`/api/v1/ui-overlays/${showId}`);
+          results.overlays_generated = (data?.generated_count || 0) >= 5;
+        }
+      } catch {
+        results.overlays_generated = false;
+      }
+
+      // ── Check Social Checklist ──
+      try {
+        results.social_checklist = false;
+        // Check if episode has a social checklist asset
+        const { data } = await api.get(`/api/v1/assets?asset_type=SOCIAL_CHECKLIST&episode_id=${episode.id}&limit=1`);
+        results.social_checklist = (data?.data?.length || 0) > 0;
+      } catch {
+        results.social_checklist = false;
+      }
+
+      // ── Check Episode Title (AI-generated vs default) ──
+      results.title_generated = !!(episode.title && !episode.title.startsWith('Episode ') && episode.title !== episode.description?.split(' — ')?.[0]);
 
       // ── Check Show Brain ──
       try {
