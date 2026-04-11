@@ -76,12 +76,11 @@ router.post('/:showId/generate/:overlayType', optionalAuth, async (req, res) => 
       const assetUuid = uuidv4();
       const models2 = require('../models');
       await models2.sequelize.query(
-        `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, approval_status, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-         VALUES (:id, :name, 'UI_OVERLAY', :role, 'SHOW', 'SHOW', 'approved', :url, :url, :showId, :metadata, NOW(), NOW())`,
+        `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
+         VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :metadata, NOW(), NOW())`,
         { replacements: {
           id: assetUuid,
           name: `UI Overlay: ${overlayType.name}`,
-          role: `UI.OVERLAY.${overlayType.id.toUpperCase()}`,
           url,
           showId: req.params.showId,
           metadata: JSON.stringify({ source: 'ui-overlay-generator', overlay_type: overlayType.id, overlay_beat: overlayType.beat, overlay_category: overlayType.category, bg_removed, generated_at: new Date().toISOString() }),

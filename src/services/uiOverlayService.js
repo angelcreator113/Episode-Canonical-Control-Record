@@ -275,20 +275,20 @@ async function generateAllOverlays(showId, models, options = {}) {
         try {
           const assetUuid = uuidv4();
           await models.sequelize.query(
-            `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, approval_status, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-             VALUES (:id, :name, 'UI_OVERLAY', :role, 'SHOW', 'SHOW', 'approved', :url, :url, :showId, :metadata, NOW(), NOW())`,
+            `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
+             VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :metadata, NOW(), NOW())`,
             { replacements: {
               id: assetUuid,
               name: `UI Overlay: ${overlayType.name}`,
-              role: `UI.OVERLAY.${overlayType.id.toUpperCase()}`,
               url,
               showId,
               metadata: JSON.stringify({ source: 'ui-overlay-generator', overlay_type: overlayType.id, overlay_beat: overlayType.beat, overlay_category: overlayType.category, bg_removed, generated_at: new Date().toISOString() }),
             } }
           );
           assetId = assetUuid;
+          console.log(`[UIOverlay] Asset saved: ${overlayType.name} → ${assetUuid}`);
         } catch (assetErr) {
-          console.warn(`[UIOverlay] Asset save failed for ${overlayType.name}:`, assetErr.message);
+          console.error(`[UIOverlay] Asset save FAILED for ${overlayType.name}:`, assetErr.message);
         }
 
         return {
