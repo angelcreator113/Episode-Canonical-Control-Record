@@ -203,10 +203,13 @@ const OVERLAY_TYPES = [
   },
 ];
 
+// ── SHARED STYLE PREFIX ──────────────────────────────────────────────────────
+const STYLE_PREFIX = 'Luxury fashion app UI element. Gold (#B8962E) metallic finish, parchment (#FAF7F0) tones, dark ink (#2C2C2C) accents. Clean, minimal, high-end. Think Chanel meets Apple. ';
+
 // ── GENERATE SINGLE OVERLAY ──────────────────────────────────────────────────
 
 async function generateOverlay(overlayType, showId) {
-  const prompt = overlayType.prompt;
+  const prompt = STYLE_PREFIX + overlayType.prompt;
   const size = overlayType.size || (overlayType.category === 'icon' ? 'square' : 'portrait');
   const imageUrl = await generateImageUrl(prompt, { size, quality: 'hd' });
 
@@ -244,58 +247,82 @@ async function generateOverlay(overlayType, showId) {
 
 // ── GENERATE ALL OVERLAYS FOR SHOW ───────────────────────────────────────────
 
-async function generateAllOverlays(showId, models) {
+async function generateAllOverlays(showId, models, options = {}) {
   const { Asset } = models;
+  const { skipExisting = true, batchSize = 3 } = options;
   const results = [];
 
-  for (const overlayType of OVERLAY_TYPES) {
-    try {
-      console.log(`[UIOverlay] Generating: ${overlayType.name} (${overlayType.beat})...`);
-      const { url, bg_removed } = await generateOverlay(overlayType, showId);
-
-      // Create Asset record
-      let asset = null;
-      if (Asset) {
-        try {
-          asset = await Asset.create({
-            id: uuidv4(),
-            name: `UI Overlay: ${overlayType.name}`,
-            asset_type: 'UI_OVERLAY',
-            asset_role: `UI.OVERLAY.${overlayType.id.toUpperCase()}`,
-            asset_group: 'SHOW',
-            asset_scope: 'SHOW',
-            approval_status: 'approved',
-            s3_url_raw: url,
-            s3_url_processed: url,
-            show_id: showId,
-            metadata: {
-              source: 'ui-overlay-generator',
-              overlay_type: overlayType.id,
-              overlay_beat: overlayType.beat,
-              bg_removed,
-              generated_at: new Date().toISOString(),
-            },
-          });
-        } catch (assetErr) {
-          console.warn(`[UIOverlay] Asset creation failed for ${overlayType.name}:`, assetErr.message);
-        }
-      }
-
-      results.push({
-        overlay_type: overlayType.id,
-        name: overlayType.name,
-        beat: overlayType.beat,
-        url,
-        bg_removed,
-        asset_id: asset?.id || null,
-      });
-    } catch (err) {
-      console.error(`[UIOverlay] Failed to generate ${overlayType.name}:`, err.message);
-      results.push({ overlay_type: overlayType.id, name: overlayType.name, error: err.message });
-    }
+  // Check which overlays already exist
+  let existingTypes = new Set();
+  if (skipExisting) {
+    const existing = await getShowOverlays(showId, models);
+    existingTypes = new Set(existing.map(e => e.overlay_type));
   }
 
-  console.log(`[UIOverlay] Generated ${results.filter(r => r.url).length}/${OVERLAY_TYPES.length} overlays`);
+  const toGenerate = OVERLAY_TYPES.filter(ot => !existingTypes.has(ot.id));
+  console.log(`[UIOverlay] Generating ${toGenerate.length} overlays (${existingTypes.size} already exist, batch size ${batchSize})`);
+
+  // Process in parallel batches
+  for (let i = 0; i < toGenerate.length; i += batchSize) {
+    const batch = toGenerate.slice(i, i + batchSize);
+    const batchResults = await Promise.allSettled(
+      batch.map(async (overlayType) => {
+        console.log(`[UIOverlay] Generating: ${overlayType.name}...`);
+        const { url, bg_removed } = await generateOverlay(overlayType, showId);
+
+        let asset = null;
+        if (Asset) {
+          try {
+            asset = await Asset.create({
+              id: uuidv4(),
+              name: `UI Overlay: ${overlayType.name}`,
+              asset_type: 'UI_OVERLAY',
+              asset_role: `UI.OVERLAY.${overlayType.id.toUpperCase()}`,
+              asset_group: 'SHOW',
+              asset_scope: 'SHOW',
+              approval_status: 'approved',
+              s3_url_raw: url,
+              s3_url_processed: url,
+              show_id: showId,
+              metadata: {
+                source: 'ui-overlay-generator',
+                overlay_type: overlayType.id,
+                overlay_beat: overlayType.beat,
+                overlay_category: overlayType.category,
+                bg_removed,
+                generated_at: new Date().toISOString(),
+              },
+            });
+          } catch (assetErr) {
+            console.warn(`[UIOverlay] Asset creation failed for ${overlayType.name}:`, assetErr.message);
+          }
+        }
+
+        return {
+          overlay_type: overlayType.id,
+          name: overlayType.name,
+          beat: overlayType.beat,
+          url,
+          bg_removed,
+          asset_id: asset?.id || null,
+        };
+      })
+    );
+
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled') {
+        results.push(result.value);
+      } else {
+        const failedType = batch[batchResults.indexOf(result)];
+        console.error(`[UIOverlay] Failed: ${failedType?.name}:`, result.reason?.message);
+        results.push({ overlay_type: failedType?.id, name: failedType?.name, error: result.reason?.message });
+      }
+    }
+
+    console.log(`[UIOverlay] Batch ${Math.floor(i / batchSize) + 1} complete (${results.filter(r => r.url).length} total generated)`);
+  }
+
+  console.log(`[UIOverlay] Done: ${results.filter(r => r.url).length}/${toGenerate.length} generated`);
   return results;
 }
 
