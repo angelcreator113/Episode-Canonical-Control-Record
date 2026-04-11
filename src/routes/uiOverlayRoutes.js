@@ -70,33 +70,29 @@ router.post('/:showId/generate/:overlayType', optionalAuth, async (req, res) => 
 
     const { url, bg_removed } = await generateOverlay(overlayType, req.params.showId);
 
-    // Create Asset
-    let asset = null;
-    if (models.Asset) {
-      try {
-        asset = await models.Asset.create({
-          id: uuidv4(),
+    // Create Asset via raw SQL (avoid model column mismatch)
+    let assetId = null;
+    try {
+      const assetUuid = uuidv4();
+      const models2 = require('../models');
+      await models2.sequelize.query(
+        `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, approval_status, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
+         VALUES (:id, :name, 'UI_OVERLAY', :role, 'SHOW', 'SHOW', 'approved', :url, :url, :showId, :metadata, NOW(), NOW())`,
+        { replacements: {
+          id: assetUuid,
           name: `UI Overlay: ${overlayType.name}`,
-          asset_type: 'UI_OVERLAY',
-          asset_role: `UI.OVERLAY.${overlayType.id.toUpperCase()}`,
-          asset_group: 'SHOW',
-          asset_scope: 'SHOW',
-          approval_status: 'approved',
-          s3_url_raw: url,
-          s3_url_processed: url,
-          show_id: req.params.showId,
-          metadata: {
-            source: 'ui-overlay-generator',
-            overlay_type: overlayType.id,
-            overlay_beat: overlayType.beat,
-            bg_removed,
-            generated_at: new Date().toISOString(),
-          },
-        });
-      } catch { /* non-blocking */ }
+          role: `UI.OVERLAY.${overlayType.id.toUpperCase()}`,
+          url,
+          showId: req.params.showId,
+          metadata: JSON.stringify({ source: 'ui-overlay-generator', overlay_type: overlayType.id, overlay_beat: overlayType.beat, overlay_category: overlayType.category, bg_removed, generated_at: new Date().toISOString() }),
+        } }
+      );
+      assetId = assetUuid;
+    } catch (assetErr) {
+      console.warn('[UIOverlay] Asset save failed:', assetErr.message);
     }
 
-    return res.json({ success: true, data: { ...overlayType, url, bg_removed, asset_id: asset?.id } });
+    return res.json({ success: true, data: { ...overlayType, url, bg_removed, asset_id: assetId } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
