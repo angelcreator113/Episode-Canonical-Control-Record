@@ -49,46 +49,53 @@ const SLOTS = [
 // ─── CLAUDE TASK GENERATOR ────────────────────────────────────────────────────
 
 async function generateTasks(event) {
-  const prompt = `You are writing a to-do list for Lala, a fashion character in a luxury life simulator show.
+  const prestige = event.prestige || 5;
+  const dressCode = event.dress_code || 'chic';
+  const mood = event.mood || 'aspirational';
+  const stakes = event.narrative_stakes ? event.narrative_stakes.slice(0, 200) : '';
 
-The to-do list appears on screen as a checklist overlay that Lala works through while getting ready for an event.
-It must feel personal, specific to this event, and written in the show's warm voice — not generic.
+  const prompt = `You are writing Lala's wardrobe shopping list — a dreamy, specific to-do list she makes while getting ready for an event.
+
+This is NOT a boring checklist. Each item should have a cute, evocative name that captures the VIBE of what she's hunting for. Think of how a fashion-obsessed girl would describe what she wants to find:
+
+EXAMPLES of the tone we want:
+- Instead of "Find your dress" → "Find a showstopper that makes the room go quiet"
+- Instead of "Find shoes" → "Find heels that say 'I belong at the front row'"
+- Instead of "Find perfume" → "Find a floral scent that makes someone lean in close"
+- Instead of "Find accessories" → "Find a clutch that holds secrets and lipstick"
+- Instead of "Find jewelry" → "Find gold that catches the chandelier light"
 
 EVENT:
 Name: ${event.name}
 Theme: ${event.theme || 'not set'}
-Mood: ${event.mood || 'aspirational'}
-Dress Code: ${event.dress_code || 'chic'}
+Mood: ${mood}
+Dress Code: ${dressCode}
 Style Keywords: ${(event.dress_code_keywords || []).join(', ')}
 Location: ${event.location_hint || 'exclusive venue'}
-Prestige: ${event.prestige || 5}/10
-Guest allowed: ${(event.browse_pool_size || 1) >= 2 ? 'Yes — plus one welcome' : 'No'}
-${event.narrative_stakes ? `Stakes: ${event.narrative_stakes.slice(0, 200)}` : ''}
+Prestige: ${prestige}/10
+${stakes ? `Stakes: ${stakes}` : ''}
 
 Write exactly 7 tasks — one for each wardrobe slot below.
-Each task should feel like it was written specifically for THIS event, not a generic checklist.
-The description should be 1 short sentence that references the event's vibe.
+The "label" must be a CUTE, VIVID, VIBE-BASED name (7-15 words max) — never generic.
+The "description" is one whispered sentence about why this piece matters for tonight.
 Mark required: true for dress and shoes. Everything else required: false.
-
-Note: "dress" means either a dress OR a top+bottom combination.
-If generating tasks for top and bottom, treat them as one combined styling task.
 
 Slots (in order):
 1. dress — the main outfit (dress, or top + bottom combination)
 2. shoes — footwear
 3. accessories — bag, purse, clutch
-4. jewelry — earrings, necklace, rings
-5. perfume — fragrance
-6. top — alternative to dress (top half)
-7. bottom — alternative to dress (bottom half)
+4. jewelry — earrings, necklace, rings, bracelet
+5. perfume — fragrance, scent
+6. top — alternative to dress (top half only)
+7. bottom — alternative to dress (skirt, pants, bottom half)
 
 Respond ONLY with a JSON array. No preamble. No explanation.
 
 [
   {
     "slot": "dress",
-    "label": "Choose your main outfit",
-    "description": "One sentence specific to this event's vibe",
+    "label": "Find a showstopper that makes the room go quiet",
+    "description": "Tonight is ${prestige >= 8 ? 'the biggest stage yet' : prestige >= 5 ? 'about making an impression' : 'a chance to be seen'}",
     "required": true,
     "completed": false,
     "order": 1
@@ -116,11 +123,20 @@ Respond ONLY with a JSON array. No preamble. No explanation.
       order:       i + 1,
     }));
   } catch {
-    // Fallback — generic tasks
+    // Fallback — cute vibe-based defaults
+    const VIBE_FALLBACKS = {
+      dress:       { label: 'Find a look that says everything without a word',       desc: 'The outfit sets the tone for the whole night' },
+      shoes:       { label: 'Find heels that make every step count',                 desc: 'Confidence starts from the ground up' },
+      accessories: { label: 'Find a clutch that holds secrets and lipstick',          desc: 'The finishing touch that ties it together' },
+      jewelry:     { label: 'Find something gold that catches the light',             desc: 'A little sparkle goes a long way' },
+      perfume:     { label: 'Find a scent that makes someone lean in close',          desc: 'The invisible accessory they remember most' },
+      top:         { label: 'Find a top that turns heads on its own',                 desc: 'Sometimes the top half does all the talking' },
+      bottom:      { label: 'Find a bottom that moves like it was made for tonight',  desc: 'Pair it right and the outfit writes itself' },
+    };
     return SLOTS.map((s, i) => ({
       slot:        s.slot,
-      label:       s.label,
-      description: `Choose your ${s.label.toLowerCase()} for ${event.name}`,
+      label:       VIBE_FALLBACKS[s.slot]?.label || `Find your ${s.label.toLowerCase()}`,
+      description: VIBE_FALLBACKS[s.slot]?.desc || `Choose something perfect for ${event.name}`,
       required:    s.required,
       completed:   false,
       order:       i + 1,
@@ -150,9 +166,17 @@ function loadFonts() {
 
 // ─── CANVAS RENDERER ──────────────────────────────────────────────────────────
 
+/**
+ * Render a to-do list as a transparent PNG overlay for video compositing.
+ *
+ * @param {Array} tasks - Array of task objects
+ * @param {object} event - The world event
+ * @param {object} options - { width, listType: 'wardrobe' | 'career' }
+ */
 function renderTodoAsset(tasks, event, options = {}) {
   loadFonts();
 
+  const listType = options.listType || 'wardrobe';
   const W = options.width || 520;
   const PADDING = 28;
   const HEADER_H = 90;
@@ -163,18 +187,20 @@ function renderTodoAsset(tasks, event, options = {}) {
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
-  // Theme colors
+  // Theme colors — career list gets a slightly different palette
   const theme = event.theme || '';
-  let accentColor = '#B8962E';
-  let bgColor     = 'rgba(250,247,240,0.97)';
+  let accentColor = listType === 'career' ? '#6366f1' : '#B8962E';
+  let bgColor     = listType === 'career' ? 'rgba(238,242,255,0.97)' : 'rgba(250,247,240,0.97)';
   const checkColor  = '#1A7A40';
 
-  if (theme.includes('avant-garde')) {
-    accentColor = '#1A1A1A'; bgColor = 'rgba(245,245,245,0.97)';
-  } else if (theme.includes('soft glam') || theme.includes('romantic')) {
-    accentColor = '#C2185B'; bgColor = 'rgba(255,248,250,0.97)';
-  } else if (theme.includes('minimal')) {
-    accentColor = '#333'; bgColor = 'rgba(255,255,255,0.97)';
+  if (listType === 'wardrobe') {
+    if (theme.includes('avant-garde')) {
+      accentColor = '#1A1A1A'; bgColor = 'rgba(245,245,245,0.97)';
+    } else if (theme.includes('soft glam') || theme.includes('romantic')) {
+      accentColor = '#C2185B'; bgColor = 'rgba(255,248,250,0.97)';
+    } else if (theme.includes('minimal')) {
+      accentColor = '#333'; bgColor = 'rgba(255,255,255,0.97)';
+    }
   }
 
   // Card background with rounded corners
@@ -195,7 +221,7 @@ function renderTodoAsset(tasks, event, options = {}) {
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Header
+  // Header — different titles per list type
   let y = PADDING;
 
   ctx.font = `bold ${Math.round(W * 0.044)}px CormorantGaramond, serif`;
@@ -205,7 +231,8 @@ function renderTodoAsset(tasks, event, options = {}) {
 
   ctx.font = `italic ${Math.round(W * 0.028)}px CormorantGaramond, serif`;
   ctx.fillStyle = accentColor;
-  ctx.fillText('Getting Ready Checklist', W / 2, y + 56);
+  const subtitle = listType === 'career' ? 'Career Checklist' : 'Wardrobe Shopping List';
+  ctx.fillText(subtitle, W / 2, y + 56);
 
   // Header divider
   y = HEADER_H;
@@ -330,13 +357,13 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
   const assetUrl = await uploadTodoAsset(buffer, episodeId);
   console.log(`[TodoList] Asset stored: ${assetUrl.slice(-50)}`);
 
-  // Create Asset record
+  // Create Asset record — wardrobe shopping list overlay
   const { Asset } = models;
   const asset = await Asset.create({
     id: uuidv4(),
-    name: `${event.name} — To-Do List`,
+    name: `${event.name} — Wardrobe List`,
     asset_type: 'TODO_LIST',
-    asset_role: 'UI.OVERLAY.TODO_LIST',
+    asset_role: 'UI.OVERLAY.WARDROBE_LIST',
     asset_group: 'EPISODE',
     asset_scope: 'EPISODE',
     purpose: 'MAIN',
@@ -344,12 +371,12 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
     entity_type: 'prop',
     s3_url_raw: assetUrl,
     s3_url_processed: assetUrl,
-    // processing_status: 'none', — column may not exist
     episode_id: episodeId,
     show_id: showId,
     approval_status: 'approved',
     metadata: {
       source: 'todo-list-generator',
+      list_type: 'wardrobe',
       event_id: event.id,
       event_name: event.name,
       task_count: tasks.length,
@@ -470,9 +497,133 @@ async function getTodoList(episodeId, models) {
   };
 }
 
+// ─── CAREER LIST GENERATOR ───────────────────────────────────────────────────
+
+/**
+ * Generate a career task list for an event — the tasks Lala must complete
+ * during the event itself (deliverables, social posts, networking goals).
+ *
+ * This is To-Do List #2 (UI.OVERLAY.CAREER_LIST) — separate from the
+ * wardrobe shopping list (UI.OVERLAY.WARDROBE_LIST).
+ */
+async function generateCareerTasks(event) {
+  const prompt = `You are writing Lala's CAREER to-do list for an event in a luxury life simulator show.
+
+This is NOT the wardrobe checklist — this is about what she needs to ACCOMPLISH during the event:
+deliverables, content to create, people to network with, social media tasks, brand obligations.
+
+EVENT:
+Name: ${event.name}
+Type: ${event.event_type || 'invite'}
+Host: ${event.host || 'unknown'}
+Brand: ${event.host_brand || 'none'}
+Prestige: ${event.prestige || 5}/10
+Dress Code: ${event.dress_code || 'chic'}
+${event.narrative_stakes ? `Stakes: ${event.narrative_stakes.slice(0, 200)}` : ''}
+${event.is_paid ? `Payment: ${event.payment_amount} coins` : 'Unpaid event'}
+
+Write 4-6 career tasks. Each should feel specific to THIS event.
+Mix of:
+- Content creation (what to film, post, or capture)
+- Networking (who to connect with, impressions to make)
+- Brand deliverables (if brand_deal or paid event)
+- Social media (what to post and when)
+- Career positioning (what this event should do for her career)
+
+Respond ONLY with a JSON array:
+[
+  {
+    "slot": "content_main",
+    "label": "Film a 30-second venue walkthrough for Stories",
+    "description": "The algorithm rewards early-event content",
+    "required": true,
+    "completed": false,
+    "order": 1
+  }
+]`;
+
+  try {
+    const response = await getAnthropic().messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const raw = response.content[0]?.text || '[]';
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const tasks = JSON.parse(clean);
+    return tasks.map((t, i) => ({
+      slot:        t.slot        || `career_${i + 1}`,
+      label:       t.label       || 'Career task',
+      description: t.description || '',
+      required:    t.required    ?? (i < 2),
+      completed:   false,
+      order:       i + 1,
+    }));
+  } catch {
+    // Fallback career tasks
+    return [
+      { slot: 'content_main', label: 'Capture the moment everyone will talk about', description: 'The content that makes the event worth attending', required: true, completed: false, order: 1 },
+      { slot: 'network', label: 'Make one connection that changes everything', description: 'The right conversation at the right time', required: true, completed: false, order: 2 },
+      { slot: 'social_post', label: 'Post before the night ends', description: 'First to post sets the narrative', required: false, completed: false, order: 3 },
+      { slot: 'brand_moment', label: 'Give the brand their money shot', description: 'They invited you for a reason — deliver it', required: false, completed: false, order: 4 },
+    ];
+  }
+}
+
+/**
+ * Generate career list + render as overlay asset for video editing.
+ */
+async function generateCareerList(episodeId, showId, models) {
+  const { sequelize } = models;
+
+  const [event] = await sequelize.query(
+    'SELECT * FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1',
+    { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+  );
+
+  if (!event) throw new Error('No event linked to this episode.');
+
+  console.log(`[CareerList] Generating for: ${event.name}`);
+
+  const tasks = await generateCareerTasks(event);
+  const buffer = renderTodoAsset(tasks, event, { listType: 'career' });
+  const assetUrl = await uploadTodoAsset(buffer, episodeId);
+
+  const { Asset } = models;
+  const asset = await Asset.create({
+    id: uuidv4(),
+    name: `${event.name} — Career List`,
+    asset_type: 'TODO_LIST',
+    asset_role: 'UI.OVERLAY.CAREER_LIST',
+    asset_group: 'EPISODE',
+    asset_scope: 'EPISODE',
+    purpose: 'MAIN',
+    category: 'overlay',
+    entity_type: 'prop',
+    s3_url_raw: assetUrl,
+    s3_url_processed: assetUrl,
+    episode_id: episodeId,
+    show_id: showId,
+    approval_status: 'approved',
+    metadata: {
+      source: 'career-list-generator',
+      list_type: 'career',
+      event_id: event.id,
+      event_name: event.name,
+      task_count: tasks.length,
+      generated_at: new Date().toISOString(),
+    },
+  });
+
+  return { tasks, assetUrl, assetId: asset.id, eventName: event.name, listType: 'career' };
+}
+
 module.exports = {
   generateEpisodeTodoList,
+  generateCareerList,
   getTodoList,
   generateTasks,
+  generateCareerTasks,
   renderTodoAsset,
 };

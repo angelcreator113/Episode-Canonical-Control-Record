@@ -129,7 +129,7 @@ module.exports = (sequelize) => {
     required_ui_overlays: {
       type: DataTypes.JSONB,
       allowNull: true,
-      defaultValue: ['MailPanel', 'InviteLetterOverlay', 'ToDoList'],
+      defaultValue: ['MailPanel', 'InviteLetterOverlay', 'WardrobeList', 'CareerList'],
     },
     browse_pool_bias: {
       type: DataTypes.STRING(20),

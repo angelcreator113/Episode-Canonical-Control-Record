@@ -40,6 +40,27 @@ router.post('/episodes/:episodeId/todo/generate', optionalAuth, async (req, res)
   }
 });
 
+// POST /episodes/:episodeId/todo/generate-career — Generate career to-do list
+router.post('/episodes/:episodeId/todo/generate-career', optionalAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const { showId } = req.body;
+
+    const models = req.app.get('models') || require('../models');
+    const { generateCareerList } = require('../services/todoListService');
+    const result = await generateCareerList(episodeId, showId, models);
+
+    return res.json({
+      success: true,
+      message: `Career list generated — ${result.tasks.length} tasks for "${result.eventName}"`,
+      data: result,
+    });
+  } catch (err) {
+    console.error('[CareerList] Generate error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/episodes/:episodeId/todo', optionalAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
