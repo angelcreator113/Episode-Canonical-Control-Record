@@ -371,12 +371,10 @@ async function generateAllOverlays(showId, models, options = {}) {
   const toGenerate = allTypes.filter(ot => {
     const lifecycle = ot.lifecycle || 'permanent';
     if (existingTypes.has(ot.id)) {
-      // Already exists — only regenerate if per_episode with a specific episodeId
       return lifecycle === 'per_episode' && episodeId;
     }
-    // Doesn't exist yet — generate if permanent/variant, or per_episode with episodeId
     if (lifecycle === 'per_episode') return !!episodeId;
-    return true; // permanent and variant base frames
+    return true;
   });
   console.log(`[UIOverlay] Generating ${toGenerate.length} overlays (${existingTypes.size} already exist, batch size ${batchSize})`);
 

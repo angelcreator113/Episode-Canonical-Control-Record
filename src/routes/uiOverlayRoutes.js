@@ -52,6 +52,8 @@ router.get('/:showId', optionalAuth, async (req, res) => {
     }
 
     // Map all overlay types to show which are generated vs missing
+    // Use case-insensitive matching and check name patterns to handle
+    // assets stored with different naming conventions
     const status = allTypes.map(ot => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
