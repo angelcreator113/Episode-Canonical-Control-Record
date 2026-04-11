@@ -23,8 +23,22 @@ router.get('/:showId', optionalAuth, async (req, res) => {
     const existing = await getShowOverlays(showId, models);
 
     // Map all overlay types to show which are generated vs missing
+    // Use case-insensitive matching and check name patterns to handle
+    // assets stored with different naming conventions
     const status = allTypes.map(ot => {
-      const found = existing.find(e => e.overlay_type === ot.id || e.metadata?.overlay_type === ot.id);
+      const otId = ot.id.toLowerCase();
+      const otName = ot.name.toLowerCase();
+      const found = existing.find(e => {
+        const eType = (e.overlay_type || '').toLowerCase();
+        const eMeta = (e.metadata?.overlay_type || '').toLowerCase();
+        const eName = (e.name || '').toLowerCase();
+        return eType === otId
+          || eMeta === otId
+          || eName === `ui overlay: ${otName}`
+          || eName.includes(otId.replace(/_/g, ' '))
+          // Legacy: match old 'todo_checklist' to new 'wardrobe_list'
+          || (otId === 'wardrobe_list' && (eMeta === 'todo_checklist' || eType === 'todo_checklist'));
+      });
       return {
         ...ot,
         generated: !!found,
@@ -102,6 +116,77 @@ router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
       generationStatus[showId].errors.push(err.message);
       generationStatus[showId].finished_at = new Date().toISOString();
       setTimeout(() => { delete generationStatus[showId]; }, 120000);
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/v1/ui-overlays/:showId/debug — diagnose why overlays might not be showing
+router.get('/:showId/debug', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const showId = req.params.showId;
+
+    // Raw count of all overlay-related assets for this show
+    const [allAssets] = await models.sequelize.query(
+      `SELECT id, name, asset_type, asset_role, s3_url_processed, s3_url_raw,
+              CASE WHEN metadata IS NOT NULL THEN substring(metadata::text, 1, 200) ELSE NULL END as metadata_preview,
+              created_at
+       FROM assets
+       WHERE show_id = :showId AND deleted_at IS NULL
+       AND (asset_type IN ('UI_OVERLAY', 'ui_overlay') OR asset_role LIKE 'UI.OVERLAY.%' OR name LIKE 'UI Overlay:%')
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      { replacements: { showId } }
+    );
+
+    // Count by asset_type
+    const [typeCounts] = await models.sequelize.query(
+      `SELECT asset_type, COUNT(*) as count FROM assets
+       WHERE show_id = :showId AND deleted_at IS NULL
+       GROUP BY asset_type ORDER BY count DESC LIMIT 20`,
+      { replacements: { showId } }
+    );
+
+    // Also search across ALL shows for any overlay assets (in case show_id mismatch)
+    let globalOverlays = [];
+    if (allAssets.length === 0) {
+      const [global] = await models.sequelize.query(
+        `SELECT id, name, asset_type, asset_role, show_id, s3_url_processed, s3_url_raw,
+                CASE WHEN metadata IS NOT NULL THEN substring(metadata::text, 1, 200) ELSE NULL END as metadata_preview,
+                created_at
+         FROM assets
+         WHERE deleted_at IS NULL
+         AND (asset_type IN ('UI_OVERLAY', 'ui_overlay') OR asset_role LIKE 'UI.OVERLAY.%' OR name LIKE 'UI Overlay:%' OR name LIKE '%overlay%')
+         ORDER BY created_at DESC LIMIT 30`
+      );
+      globalOverlays = global || [];
+    }
+
+    // Check total asset count for this show to make sure show_id is valid
+    const [showAssetCount] = await models.sequelize.query(
+      'SELECT COUNT(*) as count FROM assets WHERE show_id = :showId AND deleted_at IS NULL',
+      { replacements: { showId } }
+    );
+
+    return res.json({
+      success: true,
+      show_id: showId,
+      total_assets_for_show: parseInt(showAssetCount?.[0]?.count || 0),
+      overlay_assets_found: allAssets.length,
+      assets: allAssets,
+      asset_type_counts: typeCounts,
+      global_overlay_search: globalOverlays.length > 0 ? {
+        found: globalOverlays.length,
+        assets: globalOverlays,
+        note: 'These overlay assets exist in OTHER shows — they may need to be re-linked to your current show_id',
+      } : null,
+      hint: allAssets.length === 0
+        ? globalOverlays.length > 0
+          ? `No overlay assets for this show_id, but found ${globalOverlays.length} in other shows. The show_id might be wrong.`
+          : 'No overlay assets found anywhere. They may need to be regenerated.'
+        : `Found ${allAssets.length} overlay assets. Check metadata.overlay_type values match the type definitions.`,
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

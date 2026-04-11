@@ -1613,6 +1613,14 @@ try {
   console.error('✗ Failed to load Feed Pipeline routes:', e.message);
 }
 
+try {
+  const feedEnhancedRoutes = require('./routes/feedEnhancedRoutes');
+  app.use('/api/v1/feed-enhanced', feedEnhancedRoutes);
+  console.log('✓ Feed Enhanced loaded at /api/v1/feed-enhanced');
+} catch (e) {
+  console.error('✗ Failed to load Feed Enhanced routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({

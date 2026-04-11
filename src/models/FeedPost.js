@@ -54,6 +54,20 @@ module.exports = (sequelize) => {
     ai_generated: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     generation_model: { type: DataTypes.STRING(60), allowNull: true },
 
+    // Trending & viral mechanics
+    is_viral: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    viral_reach: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
+    engagement_velocity: { type: DataTypes.FLOAT, allowNull: true, defaultValue: 0.0 },
+    trending_topic: { type: DataTypes.STRING(100), allowNull: true },
+
+    // Thread support
+    thread_id: { type: DataTypes.UUID, allowNull: true },
+    parent_post_id: { type: DataTypes.UUID, allowNull: true },
+
+    // Ripple & sentiment
+    ripple_effect: { type: DataTypes.JSONB, allowNull: true },
+    audience_sentiment: { type: DataTypes.STRING(30), allowNull: true },
+
     sort_order: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
   }, {
     tableName: 'feed_posts',

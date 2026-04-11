@@ -14,6 +14,8 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 
+const { calculateVelocity, detectViralTier, VIRAL_THRESHOLDS } = require('./feedEngagementService');
+
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;
 function getClient() {
@@ -121,13 +123,15 @@ ${profileContext}
 
 ${guestList.length > 0 ? `EVENT GUEST LIST: ${JSON.stringify(guestList)}` : ''}
 
-Generate 5-8 feed posts that appear in the timeline after this episode. Mix of:
+Generate 6-10 feed posts that appear in the timeline after this episode. Mix of:
 1. **Reaction posts** — characters who attended react to the event
 2. **BTS/Flex posts** — Lala or others share behind-the-scenes moments
 3. **Shade/Gossip** — subtle (or not subtle) commentary
 4. **Support** — friends hyping Lala up
 5. **Comparison** — other creators posting their own version
 6. **Brand content** — if there was a brand involved, they might post about it
+7. **Thread starters** — posts designed to spark reply chains and drama threads
+8. **Viral contenders** — at least one post with breakout potential (high engagement, shareable hook)
 
 For each post, return JSON array:
 [{
@@ -135,28 +139,36 @@ For each post, return JSON array:
   "poster_display_name": "Display Name",
   "poster_platform": "instagram",
   "post_type": "post",
-  "content_text": "caption text with hashtags",
+  "content_text": "caption text with hashtags (include 1-3 relevant hashtags)",
   "image_description": "what the photo/video shows",
   "likes": 1234,
   "comments_count": 56,
   "shares": 12,
   "sample_comments": [
-    { "handle": "@someone", "text": "comment text", "likes": 10, "is_lala": false }
+    { "handle": "@someone", "text": "comment text in their actual voice", "likes": 10, "is_lala": false }
   ],
   "timeline_position": "after_episode",
   "narrative_function": "reaction",
   "lala_reaction": "what Lala says when she sees this",
   "lala_internal_thought": "what Lala really thinks",
-  "emotional_impact": "confidence_boost"
+  "emotional_impact": "confidence_boost",
+  "trending_topic": "#EventName or null if not trending",
+  "audience_sentiment": "supportive | divided | hostile | curious | indifferent",
+  "viral_potential": "none | low | medium | high",
+  "spawns_thread": false
 }]
 
 RULES:
 - Each post must sound like the character's ACTUAL voice — match their posting_voice
 - Include at least one post where Lala herself posts
 - Include at least one subtle shade post
+- Include at least one post with high viral_potential (sharp take, relatable moment, or drama)
+- Include 2-4 sample_comments per post — each comment should sound like a distinct person
 - Engagement numbers should be realistic for each character's follower_tier
 - Lala's internal thoughts should reveal what she REALLY feels vs. what she shows
 - Timeline positions should vary: after_episode, next_day, week_later
+- Posts with spawns_thread=true should be provocative enough that other characters would reply
+- audience_sentiment reflects how THE AUDIENCE (not Lala) reacts
 
 Return ONLY the JSON array.`;
 
@@ -194,6 +206,14 @@ Return ONLY the JSON array.`;
     }
 
     try {
+      // Compute engagement velocity and viral status from AI-assigned metrics
+      const postLikes = post.likes || 0;
+      const postComments = post.comments_count || 0;
+      const postShares = post.shares || 0;
+      const simulatedVelocity = (postLikes + postComments * 3 + postShares * 5) / 6; // assume 6h window
+      const viralTier = detectViralTier(postLikes, simulatedVelocity);
+      const isViral = viralTier !== null || post.viral_potential === 'high';
+
       const feedPost = await FeedPost.create({
         show_id: showId,
         episode_id: episodeId,
@@ -205,9 +225,9 @@ Return ONLY the JSON array.`;
         post_type: post.post_type || 'post',
         content_text: post.content_text || '',
         image_description: post.image_description || null,
-        likes: post.likes || 0,
-        comments_count: post.comments_count || 0,
-        shares: post.shares || 0,
+        likes: postLikes,
+        comments_count: postComments,
+        shares: postShares,
         sample_comments: post.sample_comments || [],
         posted_at: new Date(),
         timeline_position: post.timeline_position || 'after_episode',
@@ -218,6 +238,13 @@ Return ONLY the JSON array.`;
         ai_generated: true,
         generation_model: CLAUDE_MODEL,
         sort_order: i,
+        // New enhanced fields
+        is_viral: isViral,
+        viral_reach: isViral ? Math.floor(postLikes * (viralTier === 'mega' ? 10 : viralTier === 'mid' ? 5 : 2)) : 0,
+        engagement_velocity: Math.round(simulatedVelocity * 100) / 100,
+        trending_topic: post.trending_topic || null,
+        thread_id: post.spawns_thread ? null : null, // thread_id assigned when replies arrive
+        audience_sentiment: post.audience_sentiment || null,
       });
       savedPosts.push(feedPost);
     } catch (err) {
@@ -229,4 +256,56 @@ Return ONLY the JSON array.`;
   return savedPosts;
 }
 
-module.exports = { generateEpisodeFeedPosts };
+/**
+ * Persist feed moments to database after generation.
+ * Bridges feedMomentsService (generates) → FeedMoment model (persists).
+ */
+async function persistFeedMoments(episodeId, showId, eventId, moments, models) {
+  const { FeedMoment } = models;
+  if (!FeedMoment) {
+    console.warn('[FeedPosts] FeedMoment model not available — skipping persistence');
+    return [];
+  }
+
+  const saved = [];
+  const beatNumbers = Object.keys(moments).map(Number).sort((a, b) => a - b);
+
+  for (let idx = 0; idx < beatNumbers.length; idx++) {
+    const beatNum = beatNumbers[idx];
+    const m = moments[beatNum];
+    if (!m) continue;
+
+    try {
+      const record = await FeedMoment.create({
+        show_id: showId,
+        episode_id: episodeId,
+        event_id: eventId || null,
+        beat_number: beatNum,
+        beat_context: m.beat_context || null,
+        trigger_handle: m.trigger_profile || null,
+        trigger_action: m.trigger_action || null,
+        phone_screen_type: m.on_screen?.type || null,
+        screen_content: m.on_screen?.content || null,
+        screen_image_desc: m.on_screen?.image_desc || null,
+        asset_type: m.on_screen?.asset_type || null,
+        asset_role: m.on_screen?.asset_role || null,
+        justawoman_line: m.script_lines?.justawoman_line || null,
+        justawoman_action: m.script_lines?.justawoman_action || null,
+        lala_line: m.script_lines?.lala_line || null,
+        lala_internal: m.script_lines?.lala_internal || null,
+        direction: m.script_lines?.direction || null,
+        financial_context: m.financial || null,
+        behavior_change: m.script_lines?.direction || null,
+        sort_order: idx,
+      });
+      saved.push(record);
+    } catch (err) {
+      console.warn(`[FeedPosts] Failed to persist moment for beat ${beatNum}:`, err.message);
+    }
+  }
+
+  console.log(`[FeedPosts] Persisted ${saved.length} feed moments for episode ${episodeId}`);
+  return saved;
+}
+
+module.exports = { generateEpisodeFeedPosts, persistFeedMoments };

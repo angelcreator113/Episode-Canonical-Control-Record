@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Heart, MessageCircle, Share2, Wand2, Trash2, ArrowLeft,
-  Clock, Smile, Frown, AlertTriangle, Star, Filter } from 'lucide-react';
+  Clock, Smile, Frown, AlertTriangle, Star, Filter, Flame, TrendingUp,
+  BarChart3, Eye, Activity, Link2 } from 'lucide-react';
 import api from '../services/api';
 import './FeedTimelinePage.css';
 
@@ -78,12 +79,47 @@ function FeedPostCard({ post, onDelete }) {
         )}
       </div>
 
+      {/* Viral / trending badges */}
+      {(post.is_viral || post.trending_topic) && (
+        <div className="feed-post-badges">
+          {post.is_viral && (
+            <span className="feed-post-viral-badge">
+              <Flame size={11} /> Viral
+              {post.viral_reach > 0 && <span> &middot; {post.viral_reach.toLocaleString()} reach</span>}
+            </span>
+          )}
+          {post.trending_topic && (
+            <span className="feed-post-trending-badge">
+              <TrendingUp size={11} /> {post.trending_topic}
+            </span>
+          )}
+          {post.audience_sentiment && (
+            <span className={`feed-post-sentiment ${post.audience_sentiment}`}>
+              {post.audience_sentiment}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="feed-post-engagement">
         <span><Heart size={14} /> {(post.likes || 0).toLocaleString()}</span>
         <span><MessageCircle size={14} /> {(post.comments_count || 0).toLocaleString()}</span>
         <span><Share2 size={14} /> {(post.shares || 0).toLocaleString()}</span>
+        {post.engagement_velocity > 0 && (
+          <span className="feed-post-velocity"><Activity size={12} /> {post.engagement_velocity}/hr</span>
+        )}
         <span className="feed-post-type">{post.post_type}</span>
       </div>
+
+      {/* Thread indicator */}
+      {post.thread_id && (
+        <div className="feed-post-thread">
+          <Link2 size={11} /> Part of a thread
+          {post.ripple_effect?.spawned_posts > 0 && (
+            <span> &middot; {post.ripple_effect.spawned_posts} replies</span>
+          )}
+        </div>
+      )}
 
       {/* Lala's reaction */}
       {(post.lala_reaction || post.lala_internal_thought) && (
@@ -212,6 +248,12 @@ export default function FeedTimelinePage() {
           {episodeId && <p className="feed-timeline-subtitle">Episode activity feed</p>}
         </div>
         <div className="feed-timeline-actions">
+          <button
+            className="feed-timeline-btn dashboard"
+            onClick={() => navigate(`/shows/${showId}/feed-dashboard`)}
+          >
+            <BarChart3 size={16} /> Dashboard
+          </button>
           {episodeId && (
             <button
               className="feed-timeline-btn generate"
