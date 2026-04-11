@@ -878,6 +878,15 @@ try {
   console.error('✗ Failed to load career goal routes:', e.message);
 }
 
+// Arc routes (arc CRUD + phase progression + context)
+try {
+  const arcRoutes = require('./routes/arcRoutes');
+  app.use('/api/v1', arcRoutes);
+  console.log('✓ Arc routes loaded at /api/v1/world/:showId/arc');
+} catch (e) {
+  console.error('✗ Failed to load arc routes:', e.message);
+}
+
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 
