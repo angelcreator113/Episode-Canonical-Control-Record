@@ -403,25 +403,46 @@ async function suggestNextEvents(showId, models) {
     }
   }
 
-  // 3. Narrative arc suggestions based on episode count
-  if (episodeCount <= 2) {
-    suggestions.push({
-      source: 'narrative',
-      type: 'social_event',
-      name: 'Introductory social gathering',
-      prestige: 3,
-      reason: 'Early episodes need low-stakes events to establish the world',
-      action: 'create',
-    });
-  } else if (episodeCount >= 5 && episodeCount <= 7) {
-    suggestions.push({
-      source: 'narrative',
-      type: 'casting_call',
-      name: 'First modeling audition',
-      prestige: 6,
-      reason: 'Mid-season — time to raise the stakes with a career-defining moment',
-      action: 'create',
-    });
+  // 3. Arc-aware narrative suggestions — phase determines event tier
+  let arcPhase = null;
+  let maxPrestige = 10;
+  try {
+    const { getArcContext } = require('./arcProgressionService');
+    const arc = await getArcContext(showId, { sequelize });
+    if (arc) {
+      arcPhase = arc.current_phase;
+      maxPrestige = arc.feed_behavior?.event_prestige_max || 10;
+    }
+  } catch { /* arc system not available */ }
+
+  const phaseNum = arcPhase?.number || (episodeCount <= 8 ? 1 : episodeCount <= 16 ? 2 : 3);
+
+  if (phaseNum === 1) {
+    // Foundation — low-stakes, prove you belong
+    if (episodeCount <= 2) {
+      suggestions.push({ source: 'narrative', type: 'social_event', name: 'Introductory social gathering', prestige: 3,
+        reason: 'Phase 1: Foundation — early episodes need low-stakes events to establish the world', action: 'create' });
+    }
+    if (episodeCount >= 3 && episodeCount <= 6) {
+      suggestions.push({ source: 'narrative', type: 'casting_call', name: 'First audition — prove you belong', prestige: Math.min(5, maxPrestige),
+        reason: `Phase 1: Foundation — time for Lala to test herself (max prestige ${maxPrestige})`, action: 'create' });
+    }
+    if (episodeCount >= 6) {
+      suggestions.push({ source: 'narrative', type: 'podcast', name: 'First interview — tell your story', prestige: Math.min(4, maxPrestige),
+        reason: 'Phase 1: Foundation — Lala needs to articulate who she is', action: 'create' });
+    }
+  } else if (phaseNum === 2) {
+    // Ascension — competitive, climbing
+    suggestions.push({ source: 'narrative', type: 'runway', name: 'Competitive runway — stakes are real now', prestige: Math.min(7, maxPrestige),
+      reason: 'Phase 2: Ascension — the competition is real and everyone is watching', action: 'create' });
+    suggestions.push({ source: 'narrative', type: 'campaign', name: 'Brand campaign — prove you can deliver', prestige: Math.min(6, maxPrestige),
+      reason: 'Phase 2: Ascension — brands are testing Lala with real money', action: 'create' });
+  } else {
+    // Legacy — prestige events, building her own room
+    suggestions.push({ source: 'narrative', type: 'award_show', name: 'Award show — the biggest stage', prestige: Math.min(9, maxPrestige),
+      reason: 'Phase 3: Legacy — this is what everything was building toward', action: 'create' });
+    suggestions.push({ source: 'narrative', type: 'social_event', name: 'Host your own event — build the room', prestige: Math.min(8, maxPrestige),
+      reason: 'Phase 3: Legacy — stop entering rooms, start building them', action: 'create' });
   }
 
   return suggestions;

@@ -329,10 +329,39 @@ For each spark, include: city (one of: ${LALAVERSE_CITIES.join(', ')}), lala_rel
 JustAWoman is a Black woman, mother, wife, content creator in fashion/beauty/lifestyle. She does everything right and the right room has not found her yet. She wants to be legendary.
 She posts for women. Men show up with their wallets and something in her responds. She watches certain creators alone, at night, and does not tell her husband.`;
 
+  // Inject arc context — current phase affects what kind of profiles to generate
+  let arcDirective = '';
+  try {
+    const { getArcContext } = require('./arcProgressionService');
+    // Get show_id from any existing profile
+    const anyProfile = existing[0];
+    if (anyProfile) {
+      const [showRows] = await db.sequelize.query(
+        'SELECT DISTINCT show_id FROM social_profiles WHERE show_id IS NOT NULL LIMIT 1'
+      );
+      const showId = showRows?.[0]?.show_id;
+      if (showId) {
+        const arc = await getArcContext(showId, { sequelize: db.sequelize });
+        if (arc) {
+          const bias = arc.feed_behavior?.follow_bias || 'balanced';
+          const tone = arc.feed_behavior?.feed_tone || '';
+          const emotions = arc.feed_behavior?.follow_emotions || [];
+          arcDirective = `\nCURRENT SEASON PHASE: "${arc.current_phase.title}" — "${arc.current_phase.tagline}"
+FEED DIRECTION: ${tone}
+FOLLOW BIAS: ${bias} — weight new profiles toward this energy
+${emotions.length > 0 ? `DOMINANT EMOTIONS: ${emotions.join(', ')} — creators should trigger these feelings in the protagonist` : ''}
+${arc.emotional_temperature ? `EMOTIONAL TEMPERATURE: ${arc.emotional_temperature} — the protagonist's current state affects what she seeks` : ''}
+${arc.narrative_debt?.length > 0 ? `NARRATIVE WEIGHT: ${arc.narrative_debt.map(d => d.weight).slice(0, 2).join(' ')}` : ''}`;
+        }
+      }
+    }
+  } catch { /* arc system not available */ }
+
   const prompt = `You are designing the social media feed for a novel. Generate exactly ${count} unique creator sparks — each one a seed for a full AI-generated social media profile.
 
 LAYER: ${layer === 'lalaverse' ? 'LalaVerse (Book 2)' : "JustAWoman's Feed (Book 1)"}
 ${layerContext}
+${arcDirective}
 
 EXISTING FEED COMPOSITION (${existing.length} profiles):
 - Handles already used: ${existingHandles || 'none yet'}
