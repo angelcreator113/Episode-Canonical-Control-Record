@@ -35,8 +35,8 @@ const SceneLibrary = () => {
   // Shows for filter
   const [shows, setShows] = useState([]);
 
-  // Tab
-  const [activeTab, setActiveTab] = useState('clips');
+  // Tab — read from URL if provided (e.g., /scene-library?tab=overlays)
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'sets');
 
   // Pagination
   const [pagination, setPagination] = useState({

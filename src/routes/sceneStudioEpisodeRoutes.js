@@ -11,7 +11,7 @@
 const express = require('express');
 const router = express.Router();
 const { optionalAuth } = require('../middleware/auth');
-const { ScenePlan, SceneSet, SceneAngle, SceneSetEpisode, Episode } = require('../models');
+const { ScenePlan, SceneSet, SceneAngle, SceneSetEpisode } = require('../models');
 
 // ── GET VISUAL SEQUENCE FOR EPISODE ──────────────────────────────────────────
 // Returns all 14 beats with their scene set images and angles

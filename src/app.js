@@ -30,6 +30,10 @@ console.log('📋 DB_SSL:', process.env.DB_SSL || 'NOT SET');
 
 const app = express();
 
+// Trust the first proxy (nginx) so X-Forwarded-For is used for rate limiting
+// Required for express-rate-limit behind reverse proxy
+app.set('trust proxy', 1);
+
 // ============================================================================
 // DATABASE INITIALIZATION
 // ============================================================================
@@ -1598,6 +1602,15 @@ try {
   console.log('✓ UI Overlays loaded at /api/v1/ui-overlays');
 } catch (e) {
   console.error('✗ Failed to load UI Overlay routes:', e.message);
+}
+
+// Feed-to-Event Pipeline — connects feed → opportunities → events
+try {
+  const feedPipelineRoutes = require('./routes/feedPipelineRoutes');
+  app.use('/api/v1/feed-pipeline', feedPipelineRoutes);
+  console.log('✓ Feed Pipeline loaded at /api/v1/feed-pipeline');
+} catch (e) {
+  console.error('✗ Failed to load Feed Pipeline routes:', e.message);
 }
 
 // API info endpoint

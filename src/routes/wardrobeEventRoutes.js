@@ -43,7 +43,7 @@ router.get('/:showId/filter', optionalAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { event_id, dress_code, budget, prestige, character } = req.query;
-    const { Wardrobe, WorldEvent, Episode, sequelize } = require('../models');
+    const { Wardrobe, WorldEvent, Episode } = require('../models');
 
     // Load event if provided
     let event = null;
@@ -87,7 +87,7 @@ router.get('/:showId/filter', optionalAuth, async (req, res) => {
     const scored = allItems.map(item => {
       const d = item.toJSON();
       let score = 0;
-      let reasons = [];
+      const reasons = [];
 
       // Aesthetic tag match
       const itemTags = [...(d.aesthetic_tags || []), ...(d.event_types || [])];
