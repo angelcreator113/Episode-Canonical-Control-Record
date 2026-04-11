@@ -201,6 +201,14 @@ const OVERLAY_TYPES = [
     description: 'Final countdown — red urgency, maximum pressure',
     prompt: 'A dramatic red and gold countdown timer icon, circular clock face with red accent glow and gold hands pointing to 12. Urgent pulse rings in red emanating outward. Maximum urgency aesthetic — the deadline is NOW. Isolated on plain background. No text.',
   },
+  {
+    id: 'phone_icon',
+    name: 'Phone Icon',
+    category: 'icon',
+    beat: 'Various',
+    description: 'Phone tap icon — opens phone screen overlay',
+    prompt: 'A luxury gold smartphone icon, elegant front-facing phone silhouette with thin gold bezels and rounded corners. Small notification dot in gold at top right. Minimal, clean lines, gold metallic finish. Luxury tech aesthetic — premium device icon. Isolated on plain background. No text.',
+  },
 ];
 
 // ── SHARED STYLE PREFIX ──────────────────────────────────────────────────────
@@ -208,9 +216,11 @@ const STYLE_PREFIX = 'Luxury fashion app UI element. Gold (#B8962E) metallic fin
 
 // ── GENERATE SINGLE OVERLAY ──────────────────────────────────────────────────
 
-async function generateOverlay(overlayType, showId) {
-  const prompt = STYLE_PREFIX + overlayType.prompt;
+async function generateOverlay(overlayType, showId, options = {}) {
+  const customPrompt = options.customPrompt || overlayType.prompt;
+  const prompt = STYLE_PREFIX + customPrompt;
   const size = overlayType.size || (overlayType.category === 'icon' ? 'square' : 'portrait');
+  const skipBgRemoval = options.skipBgRemoval || false;
   const imageUrl = await generateImageUrl(prompt, { size, quality: 'hd' });
 
   if (!imageUrl) throw new Error(`Failed to generate ${overlayType.name}`);
@@ -219,9 +229,9 @@ async function generateOverlay(overlayType, showId) {
   const imgResponse = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
   let buffer = Buffer.from(imgResponse.data);
 
-  // Remove background → transparent PNG
+  // Remove background → transparent PNG (unless skipped)
   let bgRemoved = false;
-  if (process.env.REMOVEBG_API_KEY) {
+  if (!skipBgRemoval && process.env.REMOVEBG_API_KEY) {
     try {
       const bgRes = await axios.post(
         'https://api.remove.bg/v1.0/removebg',
@@ -242,7 +252,68 @@ async function generateOverlay(overlayType, showId) {
   }));
   const s3Url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 
-  return { url: s3Url, bg_removed: bgRemoved };
+  return { url: s3Url, bg_removed: bgRemoved, prompt_used: customPrompt };
+}
+
+// ── REMOVE BACKGROUND FROM EXISTING ASSET ───────────────────────────────────
+
+async function removeBackgroundFromAsset(assetId, models) {
+  if (!process.env.REMOVEBG_API_KEY) {
+    throw new Error('REMOVEBG_API_KEY not configured');
+  }
+
+  // Get the asset
+  const [rows] = await models.sequelize.query(
+    `SELECT id, s3_url_raw, s3_url_processed, metadata FROM assets WHERE id = :assetId AND deleted_at IS NULL`,
+    { replacements: { assetId } }
+  );
+  if (!rows?.length) throw new Error('Asset not found');
+
+  const asset = rows[0];
+  const sourceUrl = asset.s3_url_processed || asset.s3_url_raw;
+  if (!sourceUrl) throw new Error('Asset has no image URL');
+
+  // Remove background via remove.bg
+  const bgRes = await axios.post(
+    'https://api.remove.bg/v1.0/removebg',
+    { image_url: sourceUrl, size: 'auto', format: 'png' },
+    { headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY }, responseType: 'arraybuffer', timeout: 45000 }
+  );
+  const buffer = Buffer.from(bgRes.data);
+
+  // Upload to S3 with -nobg suffix
+  const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});
+  const overlayType = meta.overlay_type || 'unknown';
+  const showId = meta.show_id || 'unknown';
+  const s3Key = `ui-overlays/${showId}/${overlayType}-nobg-${Date.now()}.png`;
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET, Key: s3Key, Body: buffer,
+    ContentType: 'image/png', CacheControl: 'max-age=31536000',
+  }));
+  const newUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+
+  // Update asset with new processed URL
+  meta.bg_removed = true;
+  meta.bg_removed_at = new Date().toISOString();
+  await models.sequelize.query(
+    `UPDATE assets SET s3_url_processed = :newUrl, metadata = CAST(:metadata AS jsonb), updated_at = NOW()
+     WHERE id = :assetId`,
+    { replacements: { newUrl, metadata: JSON.stringify(meta), assetId } }
+  );
+
+  return { url: newUrl, bg_removed: true };
+}
+
+// ── UPLOAD CUSTOM OVERLAY ───────────────────────────────────────────────────
+
+async function uploadOverlayToS3(buffer, overlayTypeId, showId, contentType) {
+  const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+  const s3Key = `ui-overlays/${showId}/${overlayTypeId}-custom-${Date.now()}.${ext}`;
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET, Key: s3Key, Body: buffer,
+    ContentType: contentType, CacheControl: 'max-age=31536000',
+  }));
+  return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
 // ── GENERATE ALL OVERLAYS FOR SHOW ───────────────────────────────────────────
@@ -328,6 +399,41 @@ async function generateAllOverlays(showId, models, options = {}) {
   return results;
 }
 
+// ── GET ALL OVERLAY TYPES (hardcoded + custom from DB) ──────────────────────
+
+async function getAllOverlayTypes(showId, models) {
+  const customTypes = await getCustomOverlayTypes(showId, models);
+  // Custom types override hardcoded ones with same id/type_key
+  const customKeys = new Set(customTypes.map(c => c.id));
+  const defaults = OVERLAY_TYPES.filter(ot => !customKeys.has(ot.id));
+  return [...defaults, ...customTypes];
+}
+
+async function getCustomOverlayTypes(showId, models) {
+  try {
+    const [rows] = await models.sequelize.query(
+      `SELECT id, type_key, name, category, beat, description, prompt, sort_order
+       FROM ui_overlay_types WHERE show_id = :showId AND deleted_at IS NULL
+       ORDER BY sort_order ASC, name ASC`,
+      { replacements: { showId } }
+    );
+    return (rows || []).map(r => ({
+      id: r.type_key,
+      name: r.name,
+      category: r.category || 'icon',
+      beat: r.beat || '',
+      description: r.description || '',
+      prompt: r.prompt,
+      sort_order: r.sort_order,
+      custom: true,
+      custom_id: r.id,
+    }));
+  } catch (err) {
+    console.error('[UIOverlay] getCustomOverlayTypes failed:', err.message);
+    return [];
+  }
+}
+
 // ── GET EXISTING OVERLAYS FOR SHOW ───────────────────────────────────────────
 
 async function getShowOverlays(showId, models) {
@@ -356,7 +462,12 @@ async function getShowOverlays(showId, models) {
 
 module.exports = {
   OVERLAY_TYPES,
+  STYLE_PREFIX,
   generateOverlay,
   generateAllOverlays,
+  getAllOverlayTypes,
+  getCustomOverlayTypes,
   getShowOverlays,
+  removeBackgroundFromAsset,
+  uploadOverlayToS3,
 };

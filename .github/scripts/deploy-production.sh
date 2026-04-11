@@ -103,15 +103,14 @@ else
   echo "📁 Using existing repository..."
   cd ~/episode-metadata
   # Reset any local changes
-  git reset --hard HEAD
+  git fetch origin
+  git reset --hard origin/main
   git clean -fd
-  echo "✓ Repository cleaned"
+  echo "✓ Repository cleaned and synced to origin/main"
 fi
 
 echo "📦 Fetching latest code..."
-git fetch origin
 git checkout main
-git pull origin main
 
 cd /home/ubuntu/episode-metadata
 
