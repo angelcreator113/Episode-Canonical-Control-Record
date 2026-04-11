@@ -109,11 +109,30 @@ async function generateOpportunitiesFromFeed(showId, models) {
 
   // Get existing opportunities to avoid duplicates
   const [existingOpps] = await sequelize.query(
-    `SELECT connector_handle, opportunity_type FROM opportunities
+    `SELECT connector_handle, opportunity_type, name FROM opportunities
      WHERE show_id = :showId AND status NOT IN ('archived', 'declined', 'expired') AND deleted_at IS NULL`,
     { replacements: { showId } }
   );
   const existingSet = new Set(existingOpps.map(o => `${o.connector_handle}:${o.opportunity_type}`));
+
+  // Also check existing events to avoid duplicate concepts
+  const [existingEvents] = await sequelize.query(
+    `SELECT name, host, event_type FROM world_events
+     WHERE show_id = :showId AND status NOT IN ('archived') AND deleted_at IS NULL`,
+    { replacements: { showId } }
+  );
+  const existingEventNames = new Set(existingEvents.map(e => e.name?.toLowerCase().trim()));
+  const existingEventTypes = {};
+  existingEvents.forEach(e => {
+    const t = e.event_type || 'invite';
+    existingEventTypes[t] = (existingEventTypes[t] || 0) + 1;
+  });
+
+  // Limit: max 2 of the same opportunity type active at once
+  const oppTypeCounts = {};
+  existingOpps.forEach(o => {
+    oppTypeCounts[o.opportunity_type] = (oppTypeCounts[o.opportunity_type] || 0) + 1;
+  });
 
   for (const profile of profiles) {
     const p = profile;
@@ -143,10 +162,17 @@ async function generateOpportunitiesFromFeed(showId, models) {
       oppTypes.push({ type: 'casting_call', reason: `Modeling agency noticed Lala through ${p.handle}'s network` });
     }
 
-    // Create opportunities (skip duplicates)
+    // Create opportunities (skip duplicates, limit per type)
     for (const opp of oppTypes.slice(0, 1)) { // 1 opportunity per profile
       const key = `${p.handle}:${opp.type}`;
       if (existingSet.has(key)) continue;
+
+      // Skip if already 2+ of this type active
+      if ((oppTypeCounts[opp.type] || 0) >= 2) continue;
+
+      // Skip if an event with similar name already exists
+      const proposedName = `${p.display_name || p.handle}'s ${opp.type.replace(/_/g, ' ')}`;
+      if (existingEventNames.has(proposedName.toLowerCase().trim())) continue;
 
       const config = EVENT_TYPE_CONFIGS[opp.type] || EVENT_TYPE_CONFIGS.social_event;
       const prestige = config.prestige_range[0] + Math.floor(Math.random() * (config.prestige_range[1] - config.prestige_range[0]));
@@ -208,6 +234,16 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
   );
   const opp = oppRows?.[0];
   if (!opp) throw new Error('Opportunity not found');
+
+  // Check if this opportunity already has an event
+  if (opp.event_id) throw new Error(`This opportunity already has an event scheduled`);
+
+  // Check if an event with the same name already exists
+  const [dupeCheck] = await sequelize.query(
+    `SELECT id, name FROM world_events WHERE show_id = :showId AND name = :name AND deleted_at IS NULL LIMIT 1`,
+    { replacements: { showId, name: opp.name } }
+  );
+  if (dupeCheck?.length > 0) throw new Error(`An event named "${opp.name}" already exists`);
 
   const config = EVENT_TYPE_CONFIGS[opp.opportunity_type] || EVENT_TYPE_CONFIGS.social_event;
   const wardrobe = typeof opp.wardrobe_brief === 'string' ? JSON.parse(opp.wardrobe_brief) : (opp.wardrobe_brief || {});
