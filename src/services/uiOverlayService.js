@@ -438,63 +438,73 @@ async function getCustomOverlayTypes(showId, models) {
 
 async function getShowOverlays(showId, models) {
   try {
-    // Primary query: look for overlay assets stored with asset_type = 'UI_OVERLAY'
+    // Cast metadata to text to avoid JSONB parsing issues in some Sequelize/pg versions
     const [rows] = await models.sequelize.query(
-      `SELECT id, name, s3_url_processed, s3_url_raw, metadata, approval_status
-       FROM assets WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL
+      `SELECT id, name, asset_type, asset_role,
+              s3_url_processed, s3_url_raw,
+              metadata::text as metadata_text,
+              approval_status
+       FROM assets
+       WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL
        ORDER BY name ASC`,
       { replacements: { showId } }
     );
 
-    // Fallback: also check for overlays stored with asset_role containing 'UI.OVERLAY'
-    // or name matching 'UI Overlay:' pattern (covers upload and manual creation variants)
-    let fallbackRows = [];
     if (!rows || rows.length === 0) {
+      // Fallback: also check for overlays stored with asset_role containing 'UI.OVERLAY'
       try {
         const [fb] = await models.sequelize.query(
-          `SELECT id, name, s3_url_processed, s3_url_raw, metadata, approval_status, asset_role
+          `SELECT id, name, asset_type, asset_role,
+                  s3_url_processed, s3_url_raw,
+                  metadata::text as metadata_text,
+                  approval_status
            FROM assets
            WHERE show_id = :showId AND deleted_at IS NULL
            AND (
              asset_role LIKE 'UI.OVERLAY.%'
-             OR asset_type = 'ui_overlay'
              OR LOWER(asset_type) = 'ui_overlay'
              OR name LIKE 'UI Overlay:%'
-             OR (metadata IS NOT NULL AND metadata::text LIKE '%overlay_type%')
            )
            ORDER BY name ASC`,
           { replacements: { showId } }
         );
-        fallbackRows = fb || [];
-        if (fallbackRows.length > 0) {
-          console.log(`[UIOverlay] Found ${fallbackRows.length} overlays via fallback query (asset_role/name match)`);
+        if (fb && fb.length > 0) {
+          console.log(`[UIOverlay] Found ${fb.length} overlays via fallback query`);
+          return mapOverlayRows(fb);
         }
       } catch (fbErr) {
         console.error('[UIOverlay] Fallback query failed:', fbErr.message);
       }
+      return [];
     }
 
-    const allRows = (rows && rows.length > 0) ? rows : fallbackRows;
-
-    return allRows.map(r => {
-      const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {});
-      // Derive overlay_type from multiple sources for resilient matching
-      const overlayType = meta.overlay_type
-        || (r.asset_role ? r.asset_role.replace('UI.OVERLAY.', '').toLowerCase() : null)
-        || (r.name ? r.name.replace('UI Overlay: ', '').toLowerCase().replace(/\s+/g, '_') : null)
-        || r.name;
-      return {
-        ...r,
-        metadata: meta,
-        overlay_type: overlayType,
-        beat: meta.overlay_beat || '',
-        url: r.s3_url_processed || r.s3_url_raw,
-      };
-    });
+    return mapOverlayRows(rows);
   } catch (err) {
     console.error('[UIOverlay] getShowOverlays failed:', err.message);
     return [];
   }
+}
+
+function mapOverlayRows(rows) {
+  return rows.map(r => {
+    let meta = {};
+    try {
+      meta = r.metadata_text ? JSON.parse(r.metadata_text) : {};
+    } catch { /* malformed JSON — use empty */ }
+
+    const overlayType = meta.overlay_type
+      || (r.asset_role ? r.asset_role.replace('UI.OVERLAY.', '').toLowerCase() : null)
+      || (r.name ? r.name.replace('UI Overlay: ', '').toLowerCase().replace(/\s+/g, '_') : null)
+      || r.name;
+
+    return {
+      ...r,
+      metadata: meta,
+      overlay_type: overlayType,
+      beat: meta.overlay_beat || '',
+      url: r.s3_url_processed || r.s3_url_raw,
+    };
+  });
 }
 
 module.exports = {
