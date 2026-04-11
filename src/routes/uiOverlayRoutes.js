@@ -55,6 +55,7 @@ router.get('/:showId', optionalAuth, async (req, res) => {
     const status = allTypes.map(ot => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
+      const lifecycle = ot.lifecycle || 'permanent';
       const found = existing.find(e => {
         const eType = (e.overlay_type || '').toLowerCase();
         const eName = (e.name || '').toLowerCase();
@@ -65,6 +66,7 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       });
       return {
         ...ot,
+        lifecycle,
         generated: !!found,
         url: found?.url || null,
         asset_id: found?.id || null,

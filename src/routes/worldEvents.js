@@ -2283,5 +2283,58 @@ router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (
   }
 });
 
+// POST /world/:showId/events/:eventId/generate-lists — generate wardrobe + career lists from event
+router.post('/world/:showId/events/:eventId/generate-lists', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const { listType = 'both' } = req.body; // 'wardrobe', 'career', or 'both'
+    const models = req.app?.get?.('models') || require('../models');
+    const { sequelize } = models;
+
+    // Find the episode linked to this event
+    const [event] = await sequelize.query(
+      'SELECT id, name, used_in_episode_id FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+    if (!event.used_in_episode_id) return res.status(400).json({ error: 'Event not injected into an episode yet. Inject the event first.' });
+
+    const episodeId = event.used_in_episode_id;
+    const results = {};
+
+    // Generate wardrobe shopping list
+    if (listType === 'wardrobe' || listType === 'both') {
+      try {
+        const { generateEpisodeTodoList } = require('../services/todoListService');
+        const wardrobeResult = await generateEpisodeTodoList(episodeId, showId, models);
+        results.wardrobe = { success: true, tasks: wardrobeResult.tasks.length, assetUrl: wardrobeResult.assetUrl };
+      } catch (err) {
+        results.wardrobe = { success: false, error: err.message };
+      }
+    }
+
+    // Generate career checklist
+    if (listType === 'career' || listType === 'both') {
+      try {
+        const { generateCareerList } = require('../services/todoListService');
+        const careerResult = await generateCareerList(episodeId, showId, models);
+        results.career = { success: true, tasks: careerResult.tasks.length, assetUrl: careerResult.assetUrl };
+      } catch (err) {
+        results.career = { success: false, error: err.message };
+      }
+    }
+
+    return res.json({
+      success: true,
+      event_name: event.name,
+      episode_id: episodeId,
+      lists: results,
+    });
+  } catch (err) {
+    console.error('[WorldEvents] Generate lists error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 

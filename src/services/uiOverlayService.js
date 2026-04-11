@@ -27,6 +27,7 @@ const OVERLAY_TYPES = [
     id: 'login_screen',
     name: 'Login Screen',
     category: 'frame',
+    lifecycle: 'permanent',
     beat: 'Beat 1-2',
     description: 'Login screen frame — no cursor, just the elegant entry portal',
     prompt: 'A luxury login screen UI frame. Dark elegant background with gold border. Center: an empty text input field with a golden line border. Below: a golden "Enter" button. Subtle gold particles around edges. The aesthetic of a luxury virtual world portal. Only the word "Enter" on the button. No cursor, no typing. Fashion tech aesthetic. Isolated on plain background.',
@@ -35,64 +36,72 @@ const OVERLAY_TYPES = [
     id: 'mail_panel',
     name: 'Mail Panel',
     category: 'frame',
+    lifecycle: 'variant',
     beat: 'Beat 3-4',
-    description: 'Opened mail panel frame — luxury letter display',
+    description: 'Opened mail panel frame — luxury letter display. Base frame is permanent, letter content changes per episode.',
     prompt: 'A luxury opened mail panel UI frame, portrait orientation. Elegant parchment paper with gold borders and decorative corners. Empty center area for letter content. Thin gold line frame with ornate corner flourishes. Cream/ivory background with subtle texture. No text, no writing — empty frame only. Luxury stationery aesthetic. Isolated on plain background.',
   },
   {
     id: 'wardrobe_list',
     name: 'Wardrobe Shopping List',
     category: 'frame',
+    lifecycle: 'per_episode',
     beat: 'Beat 5, 8',
-    description: 'Wardrobe shopping checklist — warm parchment with gold checkboxes. To-Do List #1: cute vibe-based names for each outfit piece Lala needs to find.',
+    description: 'Wardrobe shopping checklist — regenerated each episode with cute vibe-based names for each outfit piece.',
     prompt: 'A luxury wardrobe shopping list panel UI overlay. Warm parchment/cream background with gold border frame. 7 empty checkbox rows with thin gold lines and a tiny wardrobe icon (dress, shoe, perfume bottle) beside each row. Each row has an empty square checkbox on the left and a horizontal line for text. Gold decorative header reading "Wardrobe Shopping List". Small dress hanger icon at top. No actual text in rows — empty template only. Luxury fashion planner aesthetic. Isolated on plain background.',
   },
   {
     id: 'career_list',
     name: 'Career Checklist',
     category: 'frame',
+    lifecycle: 'per_episode',
     beat: 'Beat 9, 13',
-    description: 'Career task checklist — cool indigo tones with structured checkboxes. To-Do List #2: event deliverables, content goals, networking tasks.',
+    description: 'Career task checklist — regenerated each episode with event-specific deliverables and goals.',
     prompt: 'A luxury career checklist panel UI overlay. Soft lavender/cool white background with indigo border frame. 5 empty checkbox rows with thin indigo lines. Each row has an empty square checkbox on the left and a horizontal line for text. Indigo decorative header reading "Career Checklist" at top. Small star or briefcase icon at top. No actual text in rows — empty template only. Professional luxury planner aesthetic. Isolated on plain background.',
   },
   {
     id: 'closet_ui',
     name: 'Closet UI',
     category: 'frame',
+    lifecycle: 'variant',
     beat: 'Beat 8',
-    description: 'Wardrobe browser frame — clothing selection screen',
+    description: 'Wardrobe browser frame — base frame is permanent, items displayed inside change per episode.',
     prompt: 'A luxury wardrobe closet UI frame overlay. Elegant gold clothes hanger rack at the top with 4-5 empty hanger silhouettes. Below: a grid of 6 empty rounded rectangle slots for clothing items. Gold thin line borders. Cream/parchment background. Empty slots only — no actual clothes. Luxury fashion app aesthetic. Isolated on plain background.',
   },
   {
     id: 'stats_panel',
     name: 'Stats Panel',
     category: 'frame',
+    lifecycle: 'per_episode',
     beat: 'Beat 13',
-    description: 'Prime Bank display — coins, credits, scores',
+    description: 'Prime Bank display — regenerated each episode with current coins, credits, scores.',
     prompt: 'A luxury stats/score panel UI overlay. Parchment background with gold border frame. 4 rows showing currency categories with empty value areas: a coin icon row, a star icon row, a diamond icon row, and a heart icon row. Each row has a small icon on left and space for number on right. Gold line separators. No numbers — empty template. Luxury banking aesthetic. Isolated on plain background.',
   },
   {
     id: 'phone_screen',
     name: 'Phone Screen',
     category: 'frame',
+    lifecycle: 'permanent',
     beat: 'Feed moments',
-    description: 'Phone mockup frame for rendering feed posts inside',
+    description: 'Phone mockup frame for rendering feed posts inside — same frame, different content per episode.',
     prompt: 'A luxury smartphone frame mockup, front view. Thin gold bezels, rounded corners, notch at top. The screen area is completely empty white — blank canvas for content. Phone frame is elegant dark with gold edge accents. No UI inside screen — completely blank. Premium phone mockup. Isolated on plain background.',
   },
   {
     id: 'icon_holder',
     name: 'Icon Holder / Display',
     category: 'frame',
+    lifecycle: 'permanent',
     beat: 'Various',
-    description: 'Circular icon display mount — holds any icon',
+    description: 'Circular icon display mount — holds any icon. Reused across all episodes.',
     prompt: 'A luxury circular icon holder/mount. Elegant gold circle frame with soft inner glow, empty center for placing icons inside. Thin gold border ring with subtle ornate detailing. The center is transparent/empty. Think luxury app icon background. Isolated on plain background.',
   },
 
-  // ── UI ICONS ──
+  // ── UI ICONS (all permanent — generated once, reused forever) ──
   {
     id: 'cursor',
     name: 'Cursor',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 1-2',
     description: 'Elegant typing cursor — blinking line for login screen',
     prompt: 'A single elegant gold typing cursor line, vertical thin line with soft golden glow around it. Minimal, clean, just a blinking cursor indicator. Luxury tech aesthetic. Isolated on plain background.',
@@ -101,6 +110,7 @@ const OVERLAY_TYPES = [
     id: 'mail_icon',
     name: 'Mail Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 3',
     description: 'Gold mail envelope icon with glow',
     prompt: 'A single luxury gold mail envelope icon, elegant and minimal, with soft warm glow. Gold metallic finish with small wax seal detail. Luxury fashion notification icon. Isolated on plain background. No text.',
@@ -109,6 +119,7 @@ const OVERLAY_TYPES = [
     id: 'voice_icon',
     name: 'Voice Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 4',
     description: 'Voice activation microphone — Lala speaks',
     prompt: 'A luxury gold microphone icon with elegant soundwave lines. Minimal, modern, fashion-forward. Gold metallic finish. Smooth flowing soundwave lines, not jagged. Luxury tech meets fashion house. Isolated on plain background. No text.',
@@ -117,6 +128,7 @@ const OVERLAY_TYPES = [
     id: 'perfume_icon',
     name: 'Perfume Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 8',
     description: 'Perfume bottle icon — fragrance selection',
     prompt: 'A luxury gold perfume bottle icon, elegant and minimal. Classic fluted glass bottle silhouette with gold cap and subtle mist/spray detail. High-end fragrance aesthetic. Isolated on plain background. No text.',
@@ -125,6 +137,7 @@ const OVERLAY_TYPES = [
     id: 'outfit_icon',
     name: 'Outfit Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 8',
     description: 'Dress/outfit icon — clothing selection',
     prompt: 'A luxury gold dress silhouette icon, elegant cocktail dress shape. Minimal, clean lines, gold metallic finish. Fashion illustration style — not detailed, just the silhouette. Isolated on plain background. No text.',
@@ -133,6 +146,7 @@ const OVERLAY_TYPES = [
     id: 'shoes_icon',
     name: 'Shoes Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 8',
     description: 'High heel shoe icon — footwear selection',
     prompt: 'A luxury gold high heel stiletto shoe icon, elegant side profile silhouette. Minimal, clean lines, gold metallic finish. Fashion illustration style. Isolated on plain background. No text.',
@@ -141,6 +155,7 @@ const OVERLAY_TYPES = [
     id: 'accessories_icon',
     name: 'Accessories Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 8',
     description: 'Accessories icon — bag/jewelry selection',
     prompt: 'A luxury gold handbag icon, elegant clutch or designer bag silhouette. Minimal, clean lines, gold metallic finish with small clasp detail. Fashion illustration style. Isolated on plain background. No text.',
@@ -149,6 +164,7 @@ const OVERLAY_TYPES = [
     id: 'location_icon',
     name: 'Location Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 10',
     description: 'Map pin — event location / travel',
     prompt: 'A luxury gold map pin location icon, classic teardrop shape with small circle inside. Gold metallic finish with subtle motion lines suggesting travel. Minimal, clean. Isolated on plain background. No text.',
@@ -157,6 +173,7 @@ const OVERLAY_TYPES = [
     id: 'reminder_icon',
     name: 'Reminder Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 9',
     description: 'Clock/alarm — urgency notification',
     prompt: 'A luxury gold alarm clock icon, elegant round clock face with gold hands. Small urgency pulse rings emanating outward. Minimal, clean design. Luxury watch brand aesthetic. Isolated on plain background. No text.',
@@ -165,6 +182,7 @@ const OVERLAY_TYPES = [
     id: 'dm_icon',
     name: 'DM Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 14',
     description: 'Mysterious DM notification — dark intrigue',
     prompt: 'A dark mysterious chat bubble notification icon. Dark navy/charcoal rounded rectangle with subtle gold edge glow. Small anonymous silhouette avatar. Message area blurred suggesting mystery. Isolated on plain background. No text.',
@@ -173,6 +191,7 @@ const OVERLAY_TYPES = [
     id: 'exit_icon',
     name: 'Exit Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Various',
     description: 'Exit/close button — X mark',
     prompt: 'A luxury gold X close button icon, elegant thin crossed lines forming an X. Gold metallic finish with subtle circle border. Minimal, clean, luxury app close button. Isolated on plain background.',
@@ -181,6 +200,7 @@ const OVERLAY_TYPES = [
     id: 'minimize_icon',
     name: 'Minimize Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Various',
     description: 'Minimize/collapse button — dash mark',
     prompt: 'A luxury gold minimize button icon, elegant thin horizontal line (dash). Gold metallic finish with subtle circle border. Minimal, clean, luxury app minimize button. Isolated on plain background.',
@@ -189,6 +209,7 @@ const OVERLAY_TYPES = [
     id: 'headphones_icon',
     name: 'Headphones Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 1',
     description: 'Opening Ritual — headphones on, sacred moment',
     prompt: 'A luxury gold over-ear headphones icon, elegant silhouette with gold metallic finish. Premium audio headphones, sleek curves, minimal detail. The sacred opening ritual icon. Isolated on plain background. No text.',
@@ -197,6 +218,7 @@ const OVERLAY_TYPES = [
     id: 'brand_deal_icon',
     name: 'Brand Deal Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 7',
     description: 'Brand deal / partnership notification — handshake',
     prompt: 'A luxury gold handshake icon, two elegant hands meeting in a professional handshake. Gold metallic finish, minimal clean lines. Business partnership and brand collaboration aesthetic. Isolated on plain background. No text.',
@@ -205,6 +227,7 @@ const OVERLAY_TYPES = [
     id: 'deadline_icon',
     name: 'Deadline Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Beat 9',
     description: 'Final countdown — red urgency, maximum pressure',
     prompt: 'A dramatic red and gold countdown timer icon, circular clock face with red accent glow and gold hands pointing to 12. Urgent pulse rings in red emanating outward. Maximum urgency aesthetic — the deadline is NOW. Isolated on plain background. No text.',
@@ -213,6 +236,7 @@ const OVERLAY_TYPES = [
     id: 'phone_icon',
     name: 'Phone Icon',
     category: 'icon',
+    lifecycle: 'permanent',
     beat: 'Various',
     description: 'Phone tap icon — opens phone screen overlay',
     prompt: 'A luxury gold smartphone icon, elegant front-facing phone silhouette with thin gold bezels and rounded corners. Small notification dot in gold at top right. Minimal, clean lines, gold metallic finish. Luxury tech aesthetic — premium device icon. Isolated on plain background. No text.',
@@ -327,7 +351,7 @@ async function uploadOverlayToS3(buffer, overlayTypeId, showId, contentType) {
 // ── GENERATE ALL OVERLAYS FOR SHOW ───────────────────────────────────────────
 
 async function generateAllOverlays(showId, models, options = {}) {
-  const { skipExisting = true, batchSize = 3 } = options;
+  const { skipExisting = true, batchSize = 3, episodeId = null } = options;
   const results = [];
 
   // Check which overlays already exist
@@ -339,7 +363,21 @@ async function generateAllOverlays(showId, models, options = {}) {
 
   // Include both hardcoded and custom overlay types
   const allTypes = await getAllOverlayTypes(showId, models);
-  const toGenerate = allTypes.filter(ot => !existingTypes.has(ot.id));
+
+  // Lifecycle-aware filtering:
+  // - permanent: skip if already generated (regardless of episode)
+  // - per_episode: always regenerate when episodeId provided, skip show-level generate
+  // - variant: skip if base frame exists (variants are filled at episode level)
+  const toGenerate = allTypes.filter(ot => {
+    const lifecycle = ot.lifecycle || 'permanent';
+    if (existingTypes.has(ot.id)) {
+      // Already exists — only regenerate if per_episode with a specific episodeId
+      return lifecycle === 'per_episode' && episodeId;
+    }
+    // Doesn't exist yet — generate if permanent/variant, or per_episode with episodeId
+    if (lifecycle === 'per_episode') return !!episodeId;
+    return true; // permanent and variant base frames
+  });
   console.log(`[UIOverlay] Generating ${toGenerate.length} overlays (${existingTypes.size} already exist, batch size ${batchSize})`);
 
   // Process in parallel batches
@@ -351,18 +389,37 @@ async function generateAllOverlays(showId, models, options = {}) {
         const { url, bg_removed } = await generateOverlay(overlayType, showId);
 
         // Save asset via raw SQL (avoid model column mismatch)
+        const lifecycle = overlayType.lifecycle || 'permanent';
         let assetId = null;
         try {
           const assetUuid = uuidv4();
+          // Per-episode overlays: soft-delete old version for this episode first
+          if (lifecycle === 'per_episode' && episodeId) {
+            await models.sequelize.query(
+              `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+               AND episode_id = :episodeId AND metadata::text LIKE :typePattern AND deleted_at IS NULL`,
+              { replacements: { showId, episodeId, typePattern: `%"overlay_type": "${overlayType.id}"%` } }
+            );
+          }
           await models.sequelize.query(
-            `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-             VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :metadata, NOW(), NOW())`,
+            `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, episode_id, metadata, created_at, updated_at)
+             VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :episodeId, :metadata, NOW(), NOW())`,
             { replacements: {
               id: assetUuid,
               name: `UI Overlay: ${overlayType.name}`,
               url,
               showId,
-              metadata: JSON.stringify({ source: 'ui-overlay-generator', overlay_type: overlayType.id, overlay_beat: overlayType.beat, overlay_category: overlayType.category, bg_removed, generated_at: new Date().toISOString() }),
+              episodeId: (lifecycle === 'per_episode' ? episodeId : null),
+              metadata: JSON.stringify({
+                source: 'ui-overlay-generator',
+                overlay_type: overlayType.id,
+                overlay_beat: overlayType.beat,
+                overlay_category: overlayType.category,
+                overlay_lifecycle: lifecycle,
+                episode_id: (lifecycle === 'per_episode' ? episodeId : null),
+                bg_removed,
+                generated_at: new Date().toISOString(),
+              }),
             } }
           );
           assetId = assetUuid;

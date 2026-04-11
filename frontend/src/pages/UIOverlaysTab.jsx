@@ -624,6 +624,16 @@ export default function UIOverlaysTab() {
                     padding: '2px 6px', borderRadius: 4, fontSize: 8,
                     fontFamily: "'DM Mono', monospace", background: '#f3e8ff', color: '#7c3aed',
                   }}>CUSTOM</span>}
+                  {overlay.lifecycle && overlay.lifecycle !== 'permanent' && (
+                    <span style={{
+                      padding: '2px 6px', borderRadius: 4, fontSize: 8,
+                      fontFamily: "'DM Mono', monospace",
+                      background: overlay.lifecycle === 'per_episode' ? '#fef3c7' : '#e0f2fe',
+                      color: overlay.lifecycle === 'per_episode' ? '#92400e' : '#0369a1',
+                    }}>
+                      {overlay.lifecycle === 'per_episode' ? 'PER EPISODE' : 'VARIANT'}
+                    </span>
+                  )}
                 </div>
                 {/* Hover overlay with action hint */}
                 {overlay.generated && (
