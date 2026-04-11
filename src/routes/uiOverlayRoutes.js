@@ -33,23 +33,25 @@ router.get('/:showId', optionalAuth, async (req, res) => {
   }
 });
 
-// POST /api/v1/ui-overlays/:showId/generate-all — generate all missing overlays
+// POST /api/v1/ui-overlays/:showId/generate-all — start generating all missing overlays (async)
 router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { generateAllOverlays } = require('../services/uiOverlayService');
+    const showId = req.params.showId;
 
     if (!process.env.FAL_KEY && !process.env.OPENAI_API_KEY) {
       return res.status(503).json({ success: false, error: 'No image generation API configured' });
     }
 
-    const results = await generateAllOverlays(req.params.showId, models);
+    // Return immediately — run generation in background
+    res.json({ success: true, message: 'Generation started — refresh to see progress' });
 
-    return res.json({
-      success: true,
-      data: results,
-      generated: results.filter(r => r.url).length,
-      failed: results.filter(r => r.error).length,
+    // Generate in background
+    generateAllOverlays(showId, models).then(results => {
+      console.log(`[UIOverlay] Background generation complete: ${results.filter(r => r.url).length} generated`);
+    }).catch(err => {
+      console.error('[UIOverlay] Background generation failed:', err.message);
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
