@@ -269,7 +269,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     scene_plan: { action: () => window.location.href = `/episodes/${episode.id}/plan`, label: 'Generate' },
     wardrobe_ready: { action: () => window.location.href = `/shows/${showId}/world?tab=wardrobe`, label: 'Upload' },
     outfit_picked: { action: () => window.location.href = `/shows/${showId}/world?tab=events`, label: 'Pick outfit' },
-    overlays_generated: { action: () => window.location.href = `/scene-library`, label: 'Generate' },
+    overlays_generated: { action: () => window.location.href = `/scene-library?tab=overlays`, label: 'Generate' },
     character_state: { action: () => window.location.href = `/shows/${showId}/world?tab=overview`, label: 'Set up' },
   };
 
