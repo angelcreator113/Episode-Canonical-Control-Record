@@ -337,7 +337,9 @@ async function generateAllOverlays(showId, models, options = {}) {
     existingTypes = new Set(existing.map(e => e.overlay_type));
   }
 
-  const toGenerate = OVERLAY_TYPES.filter(ot => !existingTypes.has(ot.id));
+  // Include both hardcoded and custom overlay types
+  const allTypes = await getAllOverlayTypes(showId, models);
+  const toGenerate = allTypes.filter(ot => !existingTypes.has(ot.id));
   console.log(`[UIOverlay] Generating ${toGenerate.length} overlays (${existingTypes.size} already exist, batch size ${batchSize})`);
 
   // Process in parallel batches
@@ -436,23 +438,61 @@ async function getCustomOverlayTypes(showId, models) {
 
 async function getShowOverlays(showId, models) {
   try {
+    // Primary query: look for overlay assets stored with asset_type = 'UI_OVERLAY'
     const [rows] = await models.sequelize.query(
       `SELECT id, name, s3_url_processed, s3_url_raw, metadata, approval_status
        FROM assets WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL
        ORDER BY name ASC`,
       { replacements: { showId } }
     );
-    return (rows || []).map(r => {
+
+    // Fallback: also check for overlays stored with asset_role containing 'UI.OVERLAY'
+    // or name matching 'UI Overlay:' pattern (covers upload and manual creation variants)
+    let fallbackRows = [];
+    if (!rows || rows.length === 0) {
+      try {
+        const [fb] = await models.sequelize.query(
+          `SELECT id, name, s3_url_processed, s3_url_raw, metadata, approval_status, asset_role
+           FROM assets
+           WHERE show_id = :showId AND deleted_at IS NULL
+           AND (
+             asset_role LIKE 'UI.OVERLAY.%'
+             OR asset_type = 'ui_overlay'
+             OR LOWER(asset_type) = 'ui_overlay'
+             OR name LIKE 'UI Overlay:%'
+             OR (metadata IS NOT NULL AND metadata::text LIKE '%overlay_type%')
+           )
+           ORDER BY name ASC`,
+          { replacements: { showId } }
+        );
+        fallbackRows = fb || [];
+        if (fallbackRows.length > 0) {
+          console.log(`[UIOverlay] Found ${fallbackRows.length} overlays via fallback query (asset_role/name match)`);
+        }
+      } catch (fbErr) {
+        console.error('[UIOverlay] Fallback query failed:', fbErr.message);
+      }
+    }
+
+    const allRows = (rows && rows.length > 0) ? rows : fallbackRows;
+
+    return allRows.map(r => {
       const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {});
+      // Derive overlay_type from multiple sources for resilient matching
+      const overlayType = meta.overlay_type
+        || (r.asset_role ? r.asset_role.replace('UI.OVERLAY.', '').toLowerCase() : null)
+        || (r.name ? r.name.replace('UI Overlay: ', '').toLowerCase().replace(/\s+/g, '_') : null)
+        || r.name;
       return {
         ...r,
         metadata: meta,
-        overlay_type: meta.overlay_type || r.name,
+        overlay_type: overlayType,
         beat: meta.overlay_beat || '',
         url: r.s3_url_processed || r.s3_url_raw,
       };
     });
-  } catch {
+  } catch (err) {
+    console.error('[UIOverlay] getShowOverlays failed:', err.message);
     return [];
   }
 }
