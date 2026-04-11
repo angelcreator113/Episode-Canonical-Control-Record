@@ -5,22 +5,12 @@ const router = express.Router();
 const multer = require('multer');
 const { optionalAuth } = require('../middleware/auth');
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-
-// ── In-memory generation status tracking per show ──
-// Tracks progress/errors so the frontend can display feedback
-const generationStatus = {};
-
-// GET /api/v1/ui-overlays/:showId — list existing overlays (hardcoded + custom)
+// GET /api/v1/ui-overlays/:showId — list existing overlays
 router.get('/:showId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { getShowOverlays, getAllOverlayTypes } = require('../services/uiOverlayService');
-    const showId = req.params.showId;
-
-    // Merge hardcoded defaults + custom overlay types from DB
-    const allTypes = await getAllOverlayTypes(showId, models);
-    const existing = await getShowOverlays(showId, models);
+    const { getShowOverlays, OVERLAY_TYPES } = require('../services/uiOverlayService');
+    const existing = await getShowOverlays(req.params.showId, models);
 
     // Map all overlay types to show which are generated vs missing
     const status = allTypes.map(ot => {
@@ -35,14 +25,11 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       };
     });
 
-    const genStatus = generationStatus[showId] || null;
-
     return res.json({
       success: true,
       data: status,
       generated_count: status.filter(s => s.generated).length,
-      total: allTypes.length,
-      generation_status: genStatus,
+      total: OVERLAY_TYPES.length,
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -57,51 +44,17 @@ router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
     const showId = req.params.showId;
 
     if (!process.env.FAL_KEY && !process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ success: false, error: 'No image generation API configured. Set FAL_KEY or OPENAI_API_KEY in your environment.' });
+      return res.status(503).json({ success: false, error: 'No image generation API configured' });
     }
-
-    // Check if generation is already running for this show
-    if (generationStatus[showId]?.status === 'generating') {
-      return res.json({ success: true, message: 'Generation already in progress' });
-    }
-
-    // Initialize status tracking
-    generationStatus[showId] = {
-      status: 'generating',
-      started_at: new Date().toISOString(),
-      completed: 0,
-      failed: 0,
-      total: 0,
-      errors: [],
-    };
 
     // Return immediately — run generation in background
-    res.json({ success: true, message: 'Generation started — polling for progress' });
+    res.json({ success: true, message: 'Generation started — refresh to see progress' });
 
-    // Generate in background with progress tracking
-    generateAllOverlays(showId, models, {
-      onProgress: (completed, failed, total, error) => {
-        generationStatus[showId].completed = completed;
-        generationStatus[showId].failed = failed;
-        generationStatus[showId].total = total;
-        if (error) generationStatus[showId].errors.push(error);
-      },
-    }).then(results => {
-      const successCount = results.filter(r => r.url).length;
-      const failCount = results.filter(r => r.error).length;
-      console.log(`[UIOverlay] Background generation complete: ${successCount} generated, ${failCount} failed`);
-      generationStatus[showId].status = failCount > 0 && successCount === 0 ? 'failed' : 'done';
-      generationStatus[showId].finished_at = new Date().toISOString();
-      generationStatus[showId].completed = successCount;
-      generationStatus[showId].failed = failCount;
-      // Clear status after 2 minutes so it doesn't persist forever
-      setTimeout(() => { delete generationStatus[showId]; }, 120000);
+    // Generate in background
+    generateAllOverlays(showId, models).then(results => {
+      console.log(`[UIOverlay] Background generation complete: ${results.filter(r => r.url).length} generated`);
     }).catch(err => {
       console.error('[UIOverlay] Background generation failed:', err.message);
-      generationStatus[showId].status = 'failed';
-      generationStatus[showId].errors.push(err.message);
-      generationStatus[showId].finished_at = new Date().toISOString();
-      setTimeout(() => { delete generationStatus[showId]; }, 120000);
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -136,7 +89,7 @@ router.post('/:showId/generate/:overlayType', optionalAuth, async (req, res) => 
       const assetUuid = uuidv4();
       await models.sequelize.query(
         `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-         VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
+         VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :metadata, NOW(), NOW())`,
         { replacements: {
           id: assetUuid,
           name: `UI Overlay: ${overlayType.name}`,
