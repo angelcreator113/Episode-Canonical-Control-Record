@@ -149,14 +149,43 @@ router.get('/:showId/debug', optionalAuth, async (req, res) => {
       { replacements: { showId } }
     );
 
+    // Also search across ALL shows for any overlay assets (in case show_id mismatch)
+    let globalOverlays = [];
+    if (allAssets.length === 0) {
+      const [global] = await models.sequelize.query(
+        `SELECT id, name, asset_type, asset_role, show_id, s3_url_processed, s3_url_raw,
+                CASE WHEN metadata IS NOT NULL THEN substring(metadata::text, 1, 200) ELSE NULL END as metadata_preview,
+                created_at
+         FROM assets
+         WHERE deleted_at IS NULL
+         AND (asset_type IN ('UI_OVERLAY', 'ui_overlay') OR asset_role LIKE 'UI.OVERLAY.%' OR name LIKE 'UI Overlay:%' OR name LIKE '%overlay%')
+         ORDER BY created_at DESC LIMIT 30`
+      );
+      globalOverlays = global || [];
+    }
+
+    // Check total asset count for this show to make sure show_id is valid
+    const [showAssetCount] = await models.sequelize.query(
+      'SELECT COUNT(*) as count FROM assets WHERE show_id = :showId AND deleted_at IS NULL',
+      { replacements: { showId } }
+    );
+
     return res.json({
       success: true,
       show_id: showId,
+      total_assets_for_show: parseInt(showAssetCount?.[0]?.count || 0),
       overlay_assets_found: allAssets.length,
       assets: allAssets,
       asset_type_counts: typeCounts,
+      global_overlay_search: globalOverlays.length > 0 ? {
+        found: globalOverlays.length,
+        assets: globalOverlays,
+        note: 'These overlay assets exist in OTHER shows — they may need to be re-linked to your current show_id',
+      } : null,
       hint: allAssets.length === 0
-        ? 'No overlay assets found for this show_id. Check if assets were uploaded with a different show_id or asset_type.'
+        ? globalOverlays.length > 0
+          ? `No overlay assets for this show_id, but found ${globalOverlays.length} in other shows. The show_id might be wrong.`
+          : 'No overlay assets found anywhere. They may need to be regenerated.'
         : `Found ${allAssets.length} overlay assets. Check metadata.overlay_type values match the type definitions.`,
     });
   } catch (err) {
