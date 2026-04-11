@@ -21,7 +21,7 @@ const axios = require('axios');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const _OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const REMOVEBG_API_KEY = process.env.REMOVEBG_API_KEY;
 const S3_BUCKET      = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION     = process.env.AWS_REGION || 'us-east-1';

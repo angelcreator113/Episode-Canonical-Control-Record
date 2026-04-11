@@ -64,8 +64,7 @@ router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
 // POST /api/v1/ui-overlays/:showId/generate/:overlayType — generate (or regenerate) single overlay
 router.post('/:showId/generate/:overlayType', optionalAuth, async (req, res) => {
   try {
-    const models = require('../models');
-    const { generateOverlay, getAllOverlayTypes } = require('../services/uiOverlayService');
+    const { generateOverlay, OVERLAY_TYPES } = require('../services/uiOverlayService');
     const { v4: uuidv4 } = require('uuid');
     const showId = req.params.showId;
     const customPrompt = req.body?.prompt || null;

@@ -319,7 +319,6 @@ async function uploadOverlayToS3(buffer, overlayTypeId, showId, contentType) {
 // ── GENERATE ALL OVERLAYS FOR SHOW ───────────────────────────────────────────
 
 async function generateAllOverlays(showId, models, options = {}) {
-  const { Asset } = models;
   const { skipExisting = true, batchSize = 3 } = options;
   const results = [];
 
