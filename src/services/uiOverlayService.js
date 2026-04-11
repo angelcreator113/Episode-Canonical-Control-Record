@@ -248,8 +248,7 @@ async function generateOverlay(overlayType, showId) {
 // ── GENERATE ALL OVERLAYS FOR SHOW ───────────────────────────────────────────
 
 async function generateAllOverlays(showId, models, options = {}) {
-  const { Asset } = models;
-  const { skipExisting = true, batchSize = 3 } = options;
+  const { skipExisting = true, batchSize = 3, onProgress } = options;
   const results = [];
 
   // Check which overlays already exist
@@ -261,6 +260,9 @@ async function generateAllOverlays(showId, models, options = {}) {
 
   const toGenerate = OVERLAY_TYPES.filter(ot => !existingTypes.has(ot.id));
   console.log(`[UIOverlay] Generating ${toGenerate.length} overlays (${existingTypes.size} already exist, batch size ${batchSize})`);
+
+  // Report initial total to progress callback
+  if (onProgress) onProgress(0, 0, toGenerate.length, null);
 
   // Process in parallel batches
   for (let i = 0; i < toGenerate.length; i += batchSize) {
@@ -276,7 +278,7 @@ async function generateAllOverlays(showId, models, options = {}) {
           const assetUuid = uuidv4();
           await models.sequelize.query(
             `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-             VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :metadata, NOW(), NOW())`,
+             VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
             { replacements: {
               id: assetUuid,
               name: `UI Overlay: ${overlayType.name}`,
@@ -307,12 +309,19 @@ async function generateAllOverlays(showId, models, options = {}) {
         results.push(result.value);
       } else {
         const failedType = batch[batchResults.indexOf(result)];
-        console.error(`[UIOverlay] Failed: ${failedType?.name}:`, result.reason?.message);
-        results.push({ overlay_type: failedType?.id, name: failedType?.name, error: result.reason?.message });
+        const errorMsg = result.reason?.message || 'Unknown error';
+        console.error(`[UIOverlay] Failed: ${failedType?.name}:`, errorMsg);
+        results.push({ overlay_type: failedType?.id, name: failedType?.name, error: errorMsg });
       }
     }
 
-    console.log(`[UIOverlay] Batch ${Math.floor(i / batchSize) + 1} complete (${results.filter(r => r.url).length} total generated)`);
+    // Report progress after each batch
+    const successCount = results.filter(r => r.url).length;
+    const failCount = results.filter(r => r.error).length;
+    const lastError = results.filter(r => r.error).slice(-1)[0];
+    if (onProgress) onProgress(successCount, failCount, toGenerate.length, lastError ? `${lastError.name}: ${lastError.error}` : null);
+
+    console.log(`[UIOverlay] Batch ${Math.floor(i / batchSize) + 1} complete (${successCount} generated, ${failCount} failed)`);
   }
 
   console.log(`[UIOverlay] Done: ${results.filter(r => r.url).length}/${toGenerate.length} generated`);
@@ -324,7 +333,7 @@ async function generateAllOverlays(showId, models, options = {}) {
 async function getShowOverlays(showId, models) {
   try {
     const [rows] = await models.sequelize.query(
-      `SELECT id, name, s3_url_processed, s3_url_raw, metadata, approval_status
+      `SELECT id, name, s3_url_processed, s3_url_raw, metadata
        FROM assets WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL
        ORDER BY name ASC`,
       { replacements: { showId } }
@@ -339,7 +348,8 @@ async function getShowOverlays(showId, models) {
         url: r.s3_url_processed || r.s3_url_raw,
       };
     });
-  } catch {
+  } catch (err) {
+    console.error('[UIOverlay] getShowOverlays query failed:', err.message);
     return [];
   }
 }
