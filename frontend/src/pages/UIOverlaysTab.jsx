@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Loader, CheckCircle2, Image, Layout, AlertTriangle, RefreshCw, X, Download, Upload, Eraser, RotateCcw, Eye, Edit3 } from 'lucide-react';
+import { Sparkles, Loader, CheckCircle2, Image, Layout, AlertTriangle, RefreshCw, X, Download, Upload, Eraser, RotateCcw, Eye, Edit3, Plus, Trash2 } from 'lucide-react';
 import api from '../services/api';
 
 // ── Overlay Detail Modal ────────────────────────────────────────────────────
@@ -9,9 +9,24 @@ function OverlayModal({ overlay, showId, onClose, onUpdate }) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState(null);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const fileInputRef = useRef(null);
+
+  const handleDeleteCustom = async () => {
+    if (!overlay.custom || !overlay.custom_id) return;
+    if (!confirm(`Delete custom overlay "${overlay.name}"? This cannot be undone.`)) return;
+    setIsDeleting(true);
+    try {
+      await api.delete(`/api/v1/ui-overlays/${showId}/types/${overlay.custom_id}`);
+      onUpdate();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+    setIsDeleting(false);
+  };
 
   const handleRegenerate = async (prompt) => {
     setIsRegenerating(true);
@@ -70,7 +85,7 @@ function OverlayModal({ overlay, showId, onClose, onUpdate }) {
     document.body.removeChild(link);
   };
 
-  const busy = isRegenerating || isRemovingBg || isUploading;
+  const busy = isRegenerating || isRemovingBg || isUploading || isDeleting;
 
   return (
     <div style={{
@@ -164,6 +179,10 @@ function OverlayModal({ overlay, showId, onClose, onUpdate }) {
                   onClick={() => fileInputRef.current?.click()} color="#2C2C2C" />
               </>
             )}
+            {overlay.custom && (
+              <ActionBtn icon={Trash2} label="Delete Overlay Type" loading={isDeleting} disabled={busy}
+                onClick={handleDeleteCustom} color="#dc2626" />
+            )}
           </div>
 
           {/* Edit prompt section */}
@@ -239,6 +258,117 @@ function ActionBtn({ icon: Icon, label, onClick, disabled, loading, color }) {
   );
 }
 
+// ── Create New Overlay Modal ────────────────────────────────────────────────
+
+function CreateOverlayModal({ showId, onClose, onCreated }) {
+  const [form, setForm] = useState({ name: '', category: 'icon', beat: '', description: '', prompt: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.prompt.trim()) {
+      setError('Name and prompt are required');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await api.post(`/api/v1/ui-overlays/${showId}/types`, form);
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+    setSaving(false);
+  };
+
+  const fieldStyle = {
+    width: '100%', padding: '8px 12px', border: '1px solid #e0d9cc',
+    borderRadius: 8, fontSize: 12, fontFamily: "'DM Mono', monospace",
+    boxSizing: 'border-box', background: '#faf9f6', color: '#2C2C2C',
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 20,
+    }} onClick={onClose}>
+      <div style={{
+        background: '#fff', borderRadius: 16, maxWidth: 480, width: '100%',
+        maxHeight: '90vh', overflow: 'auto',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#2C2C2C' }}>New UI Overlay Type</h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4 }}>
+            <X size={18} color="#999" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: '16px 24px 24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Name *</label>
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g., Shopping Cart Icon" style={fieldStyle} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Category</label>
+                <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                  style={{ ...fieldStyle, cursor: 'pointer' }}>
+                  <option value="icon">Icon</option>
+                  <option value="frame">Frame</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Beat</label>
+                <input value={form.beat} onChange={e => setForm(f => ({ ...f, beat: e.target.value }))}
+                  placeholder="e.g., Beat 5" style={fieldStyle} />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Description</label>
+              <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Brief description of this overlay" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Generation Prompt *</label>
+              <textarea value={form.prompt} onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))}
+                rows={4} placeholder="Describe the image to generate... (the luxury style prefix is added automatically)"
+                style={{ ...fieldStyle, resize: 'vertical', lineHeight: 1.5 }} />
+            </div>
+          </div>
+
+          {error && (
+            <div style={{
+              marginTop: 12, padding: '8px 12px', borderRadius: 6,
+              background: '#fef2f2', border: '1px solid #fecaca', fontSize: 11,
+              color: '#991b1b', fontFamily: "'DM Mono', monospace",
+            }}>{error}</div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button type="button" onClick={onClose} style={{
+              padding: '8px 16px', border: '1px solid #e0d9cc', borderRadius: 8,
+              background: '#fff', fontSize: 12, cursor: 'pointer', color: '#666',
+            }}>Cancel</button>
+            <button type="submit" disabled={saving} style={{
+              padding: '8px 20px', border: 'none', borderRadius: 8,
+              background: '#B8962E', color: '#fff', fontSize: 12, fontWeight: 600,
+              cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.5 : 1,
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              {saving ? <Loader size={12} className="spin" /> : <Plus size={12} />}
+              Create Overlay Type
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Tab Component ──────────────────────────────────────────────────────
 
 export default function UIOverlaysTab() {
@@ -251,6 +381,7 @@ export default function UIOverlaysTab() {
   const [filter, setFilter] = useState('all');
   const [genProgress, setGenProgress] = useState(null);
   const [selectedOverlay, setSelectedOverlay] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const pollRef = useRef(null);
 
   // Load shows
@@ -366,6 +497,18 @@ export default function UIOverlaysTab() {
           >
             {generating ? <><Loader size={14} className="spin" /> Generating all...</> : <><Sparkles size={14} /> Generate All ({overlays.length - generatedCount} missing)</>}
           </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            disabled={!showId}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '8px 14px', border: '1px solid #e0d9cc', borderRadius: 8,
+              background: '#fff', color: '#2C2C2C', fontSize: 12,
+              fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            <Plus size={14} /> New Overlay
+          </button>
         </div>
       </div>
 
@@ -470,14 +613,17 @@ export default function UIOverlaysTab() {
                     <CheckCircle2 size={16} style={{ color: '#16a34a' }} />
                   </div>
                 )}
-                <div style={{
-                  position: 'absolute', top: 6, left: 6,
-                  padding: '2px 6px', borderRadius: 4, fontSize: 8,
-                  fontFamily: "'DM Mono', monospace", textTransform: 'uppercase',
-                  background: overlay.category === 'frame' ? '#dbeafe' : '#fef3c7',
-                  color: overlay.category === 'frame' ? '#1e40af' : '#92400e',
-                }}>
-                  {overlay.category}
+                <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', gap: 3 }}>
+                  <span style={{
+                    padding: '2px 6px', borderRadius: 4, fontSize: 8,
+                    fontFamily: "'DM Mono', monospace", textTransform: 'uppercase',
+                    background: overlay.category === 'frame' ? '#dbeafe' : '#fef3c7',
+                    color: overlay.category === 'frame' ? '#1e40af' : '#92400e',
+                  }}>{overlay.category}</span>
+                  {overlay.custom && <span style={{
+                    padding: '2px 6px', borderRadius: 4, fontSize: 8,
+                    fontFamily: "'DM Mono', monospace", background: '#f3e8ff', color: '#7c3aed',
+                  }}>CUSTOM</span>}
                 </div>
                 {/* Hover overlay with action hint */}
                 {overlay.generated && (
@@ -537,6 +683,15 @@ export default function UIOverlaysTab() {
           showId={showId}
           onClose={() => setSelectedOverlay(null)}
           onUpdate={loadOverlays}
+        />
+      )}
+
+      {/* Create Overlay Type Modal */}
+      {showCreateModal && (
+        <CreateOverlayModal
+          showId={showId}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={loadOverlays}
         />
       )}
     </div>

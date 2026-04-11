@@ -201,6 +201,14 @@ const OVERLAY_TYPES = [
     description: 'Final countdown — red urgency, maximum pressure',
     prompt: 'A dramatic red and gold countdown timer icon, circular clock face with red accent glow and gold hands pointing to 12. Urgent pulse rings in red emanating outward. Maximum urgency aesthetic — the deadline is NOW. Isolated on plain background. No text.',
   },
+  {
+    id: 'phone_icon',
+    name: 'Phone Icon',
+    category: 'icon',
+    beat: 'Various',
+    description: 'Phone tap icon — opens phone screen overlay',
+    prompt: 'A luxury gold smartphone icon, elegant front-facing phone silhouette with thin gold bezels and rounded corners. Small notification dot in gold at top right. Minimal, clean lines, gold metallic finish. Luxury tech aesthetic — premium device icon. Isolated on plain background. No text.',
+  },
 ];
 
 // ── SHARED STYLE PREFIX ──────────────────────────────────────────────────────
@@ -391,6 +399,41 @@ async function generateAllOverlays(showId, models, options = {}) {
   return results;
 }
 
+// ── GET ALL OVERLAY TYPES (hardcoded + custom from DB) ──────────────────────
+
+async function getAllOverlayTypes(showId, models) {
+  const customTypes = await getCustomOverlayTypes(showId, models);
+  // Custom types override hardcoded ones with same id/type_key
+  const customKeys = new Set(customTypes.map(c => c.id));
+  const defaults = OVERLAY_TYPES.filter(ot => !customKeys.has(ot.id));
+  return [...defaults, ...customTypes];
+}
+
+async function getCustomOverlayTypes(showId, models) {
+  try {
+    const [rows] = await models.sequelize.query(
+      `SELECT id, type_key, name, category, beat, description, prompt, sort_order
+       FROM ui_overlay_types WHERE show_id = :showId AND deleted_at IS NULL
+       ORDER BY sort_order ASC, name ASC`,
+      { replacements: { showId } }
+    );
+    return (rows || []).map(r => ({
+      id: r.type_key,
+      name: r.name,
+      category: r.category || 'icon',
+      beat: r.beat || '',
+      description: r.description || '',
+      prompt: r.prompt,
+      sort_order: r.sort_order,
+      custom: true,
+      custom_id: r.id,
+    }));
+  } catch (err) {
+    console.error('[UIOverlay] getCustomOverlayTypes failed:', err.message);
+    return [];
+  }
+}
+
 // ── GET EXISTING OVERLAYS FOR SHOW ───────────────────────────────────────────
 
 async function getShowOverlays(showId, models) {
@@ -422,6 +465,8 @@ module.exports = {
   STYLE_PREFIX,
   generateOverlay,
   generateAllOverlays,
+  getAllOverlayTypes,
+  getCustomOverlayTypes,
   getShowOverlays,
   removeBackgroundFromAsset,
   uploadOverlayToS3,

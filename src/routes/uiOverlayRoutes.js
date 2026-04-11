@@ -11,16 +11,19 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // Tracks progress/errors so the frontend can display feedback
 const generationStatus = {};
 
-// GET /api/v1/ui-overlays/:showId — list existing overlays
+// GET /api/v1/ui-overlays/:showId — list existing overlays (hardcoded + custom)
 router.get('/:showId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { getShowOverlays, OVERLAY_TYPES } = require('../services/uiOverlayService');
+    const { getShowOverlays, getAllOverlayTypes } = require('../services/uiOverlayService');
     const showId = req.params.showId;
+
+    // Merge hardcoded defaults + custom overlay types from DB
+    const allTypes = await getAllOverlayTypes(showId, models);
     const existing = await getShowOverlays(showId, models);
 
-    // Map overlay types to show which are generated vs missing
-    const status = OVERLAY_TYPES.map(ot => {
+    // Map all overlay types to show which are generated vs missing
+    const status = allTypes.map(ot => {
       const found = existing.find(e => e.overlay_type === ot.id || e.metadata?.overlay_type === ot.id);
       return {
         ...ot,
@@ -32,14 +35,13 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       };
     });
 
-    // Include generation status if a generation job is active or recently finished
     const genStatus = generationStatus[showId] || null;
 
     return res.json({
       success: true,
       data: status,
       generated_count: status.filter(s => s.generated).length,
-      total: OVERLAY_TYPES.length,
+      total: allTypes.length,
       generation_status: genStatus,
     });
   } catch (err) {
@@ -110,12 +112,13 @@ router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
 router.post('/:showId/generate/:overlayType', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { generateOverlay, OVERLAY_TYPES } = require('../services/uiOverlayService');
+    const { generateOverlay, getAllOverlayTypes } = require('../services/uiOverlayService');
     const { v4: uuidv4 } = require('uuid');
     const showId = req.params.showId;
     const customPrompt = req.body?.prompt || null;
 
-    const overlayType = OVERLAY_TYPES.find(ot => ot.id === req.params.overlayType);
+    const allTypes = await getAllOverlayTypes(showId, models);
+    const overlayType = allTypes.find(ot => ot.id === req.params.overlayType);
     if (!overlayType) return res.status(404).json({ success: false, error: `Unknown overlay type: ${req.params.overlayType}` });
 
     // Soft-delete existing asset for this overlay type (regeneration)
@@ -179,11 +182,12 @@ router.post('/:showId/remove-bg/:assetId', optionalAuth, async (req, res) => {
 router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image'), async (req, res) => {
   try {
     const models = require('../models');
-    const { OVERLAY_TYPES, uploadOverlayToS3 } = require('../services/uiOverlayService');
+    const { getAllOverlayTypes, uploadOverlayToS3 } = require('../services/uiOverlayService');
     const { v4: uuidv4 } = require('uuid');
     const showId = req.params.showId;
 
-    const overlayType = OVERLAY_TYPES.find(ot => ot.id === req.params.overlayType);
+    const allTypes = await getAllOverlayTypes(showId, models);
+    const overlayType = allTypes.find(ot => ot.id === req.params.overlayType);
     if (!overlayType) return res.status(404).json({ success: false, error: `Unknown overlay type: ${req.params.overlayType}` });
     if (!req.file) return res.status(400).json({ success: false, error: 'No image file uploaded' });
 
@@ -222,6 +226,98 @@ router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image')
     }
 
     return res.json({ success: true, data: { ...overlayType, url, asset_id: assetId, generated: true } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── CUSTOM OVERLAY TYPE CRUD ────────────────────────────────────────────────
+
+// POST /api/v1/ui-overlays/:showId/types — create a custom overlay type
+router.post('/:showId/types', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { v4: uuidv4 } = require('uuid');
+    const showId = req.params.showId;
+    const { name, category, beat, description, prompt, type_key } = req.body;
+
+    if (!name || !prompt) {
+      return res.status(400).json({ success: false, error: 'name and prompt are required' });
+    }
+
+    // Generate type_key from name if not provided
+    const key = type_key || name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+
+    // Check for duplicate key
+    const [existing] = await models.sequelize.query(
+      `SELECT id FROM ui_overlay_types WHERE show_id = :showId AND type_key = :key AND deleted_at IS NULL`,
+      { replacements: { showId, key } }
+    );
+    if (existing?.length) {
+      return res.status(409).json({ success: false, error: `Overlay type "${key}" already exists` });
+    }
+
+    const id = uuidv4();
+    await models.sequelize.query(
+      `INSERT INTO ui_overlay_types (id, show_id, type_key, name, category, beat, description, prompt, sort_order, created_at, updated_at)
+       VALUES (:id, :showId, :key, :name, :category, :beat, :description, :prompt, :sortOrder, NOW(), NOW())`,
+      { replacements: {
+        id, showId, key, name,
+        category: category || 'icon',
+        beat: beat || 'Various',
+        description: description || '',
+        prompt,
+        sortOrder: req.body.sort_order || 100,
+      } }
+    );
+
+    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'icon', beat: beat || 'Various', description, prompt } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/ui-overlays/:showId/types/:typeId — update a custom overlay type
+router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { name, category, beat, description, prompt, sort_order } = req.body;
+
+    const sets = [];
+    const replacements = { typeId: req.params.typeId, showId: req.params.showId };
+
+    if (name !== undefined) { sets.push('name = :name'); replacements.name = name; }
+    if (category !== undefined) { sets.push('category = :category'); replacements.category = category; }
+    if (beat !== undefined) { sets.push('beat = :beat'); replacements.beat = beat; }
+    if (description !== undefined) { sets.push('description = :description'); replacements.description = description; }
+    if (prompt !== undefined) { sets.push('prompt = :prompt'); replacements.prompt = prompt; }
+    if (sort_order !== undefined) { sets.push('sort_order = :sortOrder'); replacements.sortOrder = sort_order; }
+
+    if (sets.length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
+
+    sets.push('updated_at = NOW()');
+    await models.sequelize.query(
+      `UPDATE ui_overlay_types SET ${sets.join(', ')} WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements }
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/v1/ui-overlays/:showId/types/:typeId — soft-delete a custom overlay type
+router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    await models.sequelize.query(
+      `UPDATE ui_overlay_types SET deleted_at = NOW() WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { typeId: req.params.typeId, showId: req.params.showId } }
+    );
+    return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
