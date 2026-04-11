@@ -336,12 +336,16 @@ async function getShowOverlays(showId, models) {
        ORDER BY name ASC`,
       { replacements: { showId } }
     );
-    return (rows || []).map(r => ({
-      ...r,
-      overlay_type: r.metadata?.overlay_type || r.name,
-      beat: r.metadata?.overlay_beat || '',
-      url: r.s3_url_processed || r.s3_url_raw,
-    }));
+    return (rows || []).map(r => {
+      const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {});
+      return {
+        ...r,
+        metadata: meta,
+        overlay_type: meta.overlay_type || r.name,
+        beat: meta.overlay_beat || '',
+        url: r.s3_url_processed || r.s3_url_raw,
+      };
+    });
   } catch {
     return [];
   }
