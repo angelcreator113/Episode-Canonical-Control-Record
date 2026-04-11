@@ -37,11 +37,26 @@ export default function UIOverlaysTab() {
     setGenerating(true);
     try {
       await api.post(`/api/v1/ui-overlays/${showId}/generate-all`);
-      loadOverlays();
+      // Poll for progress every 8 seconds
+      const poll = setInterval(() => {
+        api.get(`/api/v1/ui-overlays/${showId}`)
+          .then(r => {
+            const data = r.data?.data || [];
+            setOverlays(data);
+            const done = data.filter(o => o.generated).length;
+            if (done >= data.length) {
+              clearInterval(poll);
+              setGenerating(false);
+            }
+          })
+          .catch(() => {});
+      }, 8000);
+      // Stop polling after 5 minutes max
+      setTimeout(() => { clearInterval(poll); setGenerating(false); }, 300000);
     } catch (err) {
       alert('Generation failed: ' + (err.response?.data?.error || err.message));
+      setGenerating(false);
     }
-    setGenerating(false);
   };
 
   const handleGenerateOne = async (overlayId) => {
