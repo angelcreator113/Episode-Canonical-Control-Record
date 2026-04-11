@@ -88,18 +88,31 @@ async function uploadToS3(buffer, folder, suffix) {
 
 async function generateVenueImages(event, models) {
   const identity = buildVenueIdentity(event);
+  const auto = event.canon_consequences?.automation || {};
+  const venueTheme = auto.venue_theme || event.location_hint || null;
 
   console.log(`[VenueGen] Generating venue for: ${identity.venueName} (prestige ${identity.prestige}, ${identity.category})`);
+  if (venueTheme) console.log(`[VenueGen] Using venue theme: ${venueTheme.slice(0, 80)}...`);
 
-  // Build a single interior prompt — the event space is what matters for the show
-  const sharedStyle = `Architectural style: ${identity.aesthetic}. Located in ${identity.neighborhood}. Mood: ${identity.mood}. Prestige level: ${identity.prestige}/10.`;
-
-  const venuePrompt = `Photorealistic interior photograph of "${identity.venueName}", a ${identity.category} venue.
+  let venuePrompt;
+  if (venueTheme) {
+    // Use the specific venue theme from the template
+    venuePrompt = `Photorealistic interior photograph of a luxury event venue.
+Theme: ${venueTheme}
+Prestige level: ${identity.prestige}/10. Mood: ${identity.mood}.
+The space is decorated and ready for an exclusive event during ${identity.timeOfDay}.
+This is a fantasy dream world venue in the LalaVerse — make it feel magical, aspirational, and unique.
+No text, no logos, no people. Luxury interior design photography. Landscape orientation.`;
+  } else {
+    // Fallback to generic venue generation
+    const sharedStyle = `Architectural style: ${identity.aesthetic}. Located in ${identity.neighborhood}. Mood: ${identity.mood}. Prestige level: ${identity.prestige}/10.`;
+    venuePrompt = `Photorealistic interior photograph of "${identity.venueName}", a ${identity.category} venue.
 ${sharedStyle}
 Show the main event space decorated and ready for guests during ${identity.timeOfDay}.
 Include: ambient lighting, seating arrangement, decorative details, atmosphere that communicates the venue's personality.
 This is where fashion creators and influencers gather — make it feel alive and aspirational.
 No text, no logos, no people. Interior design photography. Landscape orientation.`;
+  }
 
   // Generate single image
   console.log('[VenueGen] Generating venue image...');
