@@ -8,7 +8,7 @@
  *   - Story content saved explicitly via postMessage from the app
  */
 
-const CACHE_NAME = 'lalaverse-v3';
+const CACHE_NAME = 'lalaverse-v4';
 const STORY_CACHE = 'lalaverse-stories-v1';
 
 // ── Install: skip waiting to activate immediately ──────────────────────
@@ -82,6 +82,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Hashed static assets (/assets/*): cache-first (Vite content-hashes these)
+  // If a cached asset returns 404 from network, the build has changed — purge
+  // stale cache and tell the client to reload with the fresh index.html.
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
       caches.match(request)
@@ -92,6 +94,12 @@ self.addEventListener('fetch', (event) => {
             if (res.ok) {
               const clone = res.clone();
               caches.open(CACHE_NAME).then((c) => c.put(request, clone)).catch(() => {});
+              return res;
+            }
+            // Asset 404 means a new build deployed with different hashes —
+            // purge the stale asset cache so the next navigation loads fresh.
+            if (res.status === 404) {
+              caches.delete(CACHE_NAME).catch(() => {});
             }
             return res;
           });
