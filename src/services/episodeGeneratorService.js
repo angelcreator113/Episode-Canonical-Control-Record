@@ -291,11 +291,11 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     // Column may not exist, skip check
   }
 
-  // Get next episode number (only count non-deleted episodes)
+  // Get next episode number (include deleted episodes so numbers are never reused)
   let nextNumber = 1;
   try {
     const [rows] = await models.sequelize.query(
-      `SELECT COALESCE(MAX(episode_number), 0) + 1 as next_num FROM episodes WHERE show_id = :showId AND deleted_at IS NULL`,
+      `SELECT COALESCE(MAX(episode_number), 0) + 1 as next_num FROM episodes WHERE show_id = :showId`,
       { replacements: { showId } }
     );
     nextNumber = parseInt(rows?.[0]?.next_num) || 1;
@@ -304,6 +304,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
       where: { show_id: showId },
       order: [['episode_number', 'DESC']],
       attributes: ['episode_number'],
+      paranoid: false,
     });
     nextNumber = (lastEpisode?.episode_number || 0) + 1;
   }
