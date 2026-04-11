@@ -1600,6 +1600,15 @@ try {
   console.error('✗ Failed to load UI Overlay routes:', e.message);
 }
 
+// Feed-to-Event Pipeline — connects feed → opportunities → events
+try {
+  const feedPipelineRoutes = require('./routes/feedPipelineRoutes');
+  app.use('/api/v1/feed-pipeline', feedPipelineRoutes);
+  console.log('✓ Feed Pipeline loaded at /api/v1/feed-pipeline');
+} catch (e) {
+  console.error('✗ Failed to load Feed Pipeline routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({

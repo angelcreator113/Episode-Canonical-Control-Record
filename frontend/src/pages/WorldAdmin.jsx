@@ -1370,10 +1370,25 @@ The revised event should feel like a completely different experience from the si
             );
           })()}
 
-          {/* Current season context */}
+          {/* ── Pipeline: Opportunities → Events ── */}
           <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 6 }}>
-              Event Templates — {['January','February','March','April','May','June','July','August','September','October','November','December'][new Date().getMonth()]}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E' }}>
+                Pipeline — Feed → Opportunities → Events
+              </div>
+              <button onClick={async () => {
+                setToast('Scanning feed for opportunities...');
+                try {
+                  const res = await api.post(`/api/v1/feed-pipeline/${showId}/generate-opportunities`);
+                  if (res.data.success) {
+                    setToast(`${res.data.count} opportunities generated from feed profiles`);
+                    loadData();
+                  }
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                setTimeout(() => setToast(null), 3000);
+              }} style={{ ...S.smBtn, background: '#B8962E', color: '#fff', border: 'none', fontSize: 10 }}>
+                🔍 Scan Feed for Opportunities
+              </button>
             </div>
             <div style={{ fontSize: 12, color: '#666' }}>
               Pick a template to create a new event. It will appear as a draft above until you mark it ready.
