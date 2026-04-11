@@ -270,32 +270,25 @@ async function generateAllOverlays(showId, models, options = {}) {
         console.log(`[UIOverlay] Generating: ${overlayType.name}...`);
         const { url, bg_removed } = await generateOverlay(overlayType, showId);
 
-        let asset = null;
-        if (Asset) {
-          try {
-            asset = await Asset.create({
-              id: uuidv4(),
+        // Save asset via raw SQL (avoid model column mismatch)
+        let assetId = null;
+        try {
+          const assetUuid = uuidv4();
+          await models.sequelize.query(
+            `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
+             VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :metadata, NOW(), NOW())`,
+            { replacements: {
+              id: assetUuid,
               name: `UI Overlay: ${overlayType.name}`,
-              asset_type: 'UI_OVERLAY',
-              asset_role: `UI.OVERLAY.${overlayType.id.toUpperCase()}`,
-              asset_group: 'SHOW',
-              asset_scope: 'SHOW',
-              approval_status: 'approved',
-              s3_url_raw: url,
-              s3_url_processed: url,
-              show_id: showId,
-              metadata: {
-                source: 'ui-overlay-generator',
-                overlay_type: overlayType.id,
-                overlay_beat: overlayType.beat,
-                overlay_category: overlayType.category,
-                bg_removed,
-                generated_at: new Date().toISOString(),
-              },
-            });
-          } catch (assetErr) {
-            console.warn(`[UIOverlay] Asset creation failed for ${overlayType.name}:`, assetErr.message);
-          }
+              url,
+              showId,
+              metadata: JSON.stringify({ source: 'ui-overlay-generator', overlay_type: overlayType.id, overlay_beat: overlayType.beat, overlay_category: overlayType.category, bg_removed, generated_at: new Date().toISOString() }),
+            } }
+          );
+          assetId = assetUuid;
+          console.log(`[UIOverlay] Asset saved: ${overlayType.name} → ${assetUuid}`);
+        } catch (assetErr) {
+          console.error(`[UIOverlay] Asset save FAILED for ${overlayType.name}:`, assetErr.message);
         }
 
         return {
@@ -304,7 +297,7 @@ async function generateAllOverlays(showId, models, options = {}) {
           beat: overlayType.beat,
           url,
           bg_removed,
-          asset_id: asset?.id || null,
+          asset_id: assetId,
         };
       })
     );
@@ -336,12 +329,16 @@ async function getShowOverlays(showId, models) {
        ORDER BY name ASC`,
       { replacements: { showId } }
     );
-    return (rows || []).map(r => ({
-      ...r,
-      overlay_type: r.metadata?.overlay_type || r.name,
-      beat: r.metadata?.overlay_beat || '',
-      url: r.s3_url_processed || r.s3_url_raw,
-    }));
+    return (rows || []).map(r => {
+      const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {});
+      return {
+        ...r,
+        metadata: meta,
+        overlay_type: meta.overlay_type || r.name,
+        beat: meta.overlay_beat || '',
+        url: r.s3_url_processed || r.s3_url_raw,
+      };
+    });
   } catch {
     return [];
   }
