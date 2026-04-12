@@ -8,7 +8,7 @@
   border: none;
   border-radius: 8px;
   color: #fff;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -64,7 +64,7 @@
   border: none;
   text-align: left;
   color: rgba(255, 255, 255, 0.9);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
@@ -75,7 +75,7 @@
 }
 
 .export-dropdown-item .edi {
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   width: 24px;
   text-align: center;
   flex-shrink: 0;
@@ -109,7 +109,7 @@
 }
 
 .export-dropdown-item.primary .item-desc {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(255, 255, 255, 0.5);
   font-weight: 400;
 }

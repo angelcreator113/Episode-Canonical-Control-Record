@@ -29,7 +29,7 @@
 }
 
 .gallery-header h1 {
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   font-weight: 700;
   color: #fff;
   margin: 0;
@@ -52,7 +52,7 @@
 .search-icon {
   position: absolute;
   left: 16px;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -63,7 +63,7 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   color: #fff;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
 }
 
@@ -139,7 +139,7 @@
   backdrop-filter: blur(10px);
   padding: 8px 12px;
   border-radius: 8px;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
 }
 
 /* Quick Actions Overlay */
@@ -172,7 +172,7 @@
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 10px;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -202,7 +202,7 @@
 
 .episode-title {
   flex: 1;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 600;
   color: #fff;
   margin: 0;
@@ -233,7 +233,7 @@
 .info-meta {
   display: flex;
   gap: 16px;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(255, 255, 255, 0.5);
 }
 

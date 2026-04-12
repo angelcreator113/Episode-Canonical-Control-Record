@@ -26,13 +26,13 @@
   padding: 8px 14px;
   cursor: pointer;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #2C2C2C;
 }
 
 .efd-title { flex: 1; }
-.efd-title h1 { font-size: var(--text-2xl); font-weight: 600; color: #2C2C2C; margin: 0; }
-.efd-subtitle { font-family: 'DM Mono', monospace; font-size: var(--text-xs); color: #888; margin: 2px 0 0; }
+.efd-title h1 { font-size: var(--text-3xl); font-weight: 600; color: #2C2C2C; margin: 0; }
+.efd-subtitle { font-family: 'DM Mono', monospace; font-size: var(--text-sm); color: #888; margin: 2px 0 0; }
 
 .efd-refresh {
   display: flex;
@@ -43,7 +43,7 @@
   border-radius: 8px;
   background: white;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -63,7 +63,7 @@
   border-radius: 8px;
   margin-bottom: 14px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
 }
 
 /* ── Summary Bar ── */
@@ -83,13 +83,13 @@
   border-radius: 10px;
   padding: 12px 14px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #666;
 }
 
 .efd-summary-item strong {
   margin-left: auto;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: #2C2C2C;
 }
 
@@ -110,7 +110,7 @@
   border: none;
   background: none;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #888;
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -166,7 +166,7 @@
 }
 
 .efd-event-header h4 {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 600;
   color: #2C2C2C;
   margin: 0;
@@ -185,7 +185,7 @@
   display: flex;
   gap: 14px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #666;
   margin-bottom: 10px;
 }
@@ -243,14 +243,14 @@
 
 .efd-chain-type {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #2C2C2C;
   text-transform: capitalize;
 }
 
 .efd-chain-reason {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #666;
 }
 
@@ -293,7 +293,7 @@
 
 .efd-trending-topic {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 600;
   color: #6366f1;
 }
@@ -322,7 +322,7 @@
 
 .efd-tag {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   padding: 2px 8px;
   border-radius: 10px;
   background: #f3f4f6;
@@ -352,7 +352,7 @@
   padding: 3px 10px;
   border-radius: 12px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: white;
   font-weight: 600;
   margin-bottom: 10px;
@@ -375,13 +375,13 @@
   align-items: center;
   justify-content: center;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
 .efd-viral-handle {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   color: #2C2C2C;
   display: block;
@@ -396,13 +396,13 @@
 .efd-sentiment-badge {
   margin-left: auto;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   padding: 3px 10px;
   border-radius: 12px;
 }
 
 .efd-viral-text {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1.5;
   color: #2C2C2C;
   margin: 0 0 10px;
@@ -412,7 +412,7 @@
   display: flex;
   gap: 14px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #666;
 }
 
@@ -473,7 +473,7 @@
   background: none;
   border: none;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #888;
   cursor: pointer;
   margin-bottom: 14px;
@@ -498,7 +498,7 @@
 }
 
 .efd-chain-list-item:hover { border-color: #B8962E; }
-.efd-chain-list-name { display: block; font-weight: 600; font-size: var(--text-sm); color: #2C2C2C; }
+.efd-chain-list-name { display: block; font-weight: 600; font-size: var(--text-base); color: #2C2C2C; }
 .efd-chain-list-type { font-family: 'DM Mono', monospace; font-size: var(--text-xs); color: #888; }
 
 /* ── Chain Timeline View ── */
@@ -506,7 +506,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: #2C2C2C;
   margin: 0 0 16px;
 }
@@ -555,7 +555,7 @@
 
 .efd-chain-name {
   font-weight: 600;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #2C2C2C;
 }
 
@@ -579,7 +579,7 @@
 .efd-status.draft { background: #f3f4f6; color: #9ca3af; }
 
 .efd-chain-node-reason {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #666;
   margin: 6px 0 0;
   font-style: italic;
@@ -595,7 +595,7 @@
 .efd-empty p {
   margin: 8px 0;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
 }
 
 /* ── Mobile ── */

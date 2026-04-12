@@ -22,14 +22,14 @@
 
 .sp-title {
   font-family: 'Syne', sans-serif;
-  font-size: var(--text-3xl);
+  font-size: var(--text-5xl);
   font-weight: 700;
   color: #d4789a;
   margin: 0 0 0.35rem;
 }
 
 .sp-subtitle {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #999;
   margin: 0;
 }
@@ -52,7 +52,7 @@
   border-radius: 8px 8px 0 0;
   background: transparent;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   color: #777;
   cursor: pointer;
@@ -92,7 +92,7 @@
 }
 
 .sp-intro {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: #555;
   margin: 0 0 1.5rem;
   line-height: 1.6;
@@ -135,7 +135,7 @@
 }
 
 .sp-card-body {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1.55;
   margin: 0.35rem 0;
 }
@@ -179,7 +179,7 @@
   display: inline-block;
   padding: 0.2rem 0.6rem;
   border-radius: 6px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -206,7 +206,7 @@
 .sp-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .sp-table th {
@@ -215,7 +215,7 @@
   border-bottom: 2px solid #ece8f1;
   font-family: 'Syne', sans-serif;
   font-weight: 600;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #d4789a;
   white-space: nowrap;
 }
@@ -255,7 +255,7 @@
 
 .sp-jaw-name {
   font-family: 'Syne', sans-serif;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: #d4789a;
 }
@@ -276,7 +276,7 @@
 .sp-jaw-label {
   width: 140px;
   flex-shrink: 0;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   color: #555;
 }
@@ -299,7 +299,7 @@
 .sp-jaw-val {
   width: 28px;
   text-align: right;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 700;
   color: #d4789a;
 }
@@ -311,7 +311,7 @@
 }
 
 .sp-jaw-notes li {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1.6;
   color: #444;
   padding: 0.2rem 0;
@@ -330,6 +330,6 @@
 .sp-footer {
   text-align: center;
   margin-top: 2.5rem;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #bbb;
 }

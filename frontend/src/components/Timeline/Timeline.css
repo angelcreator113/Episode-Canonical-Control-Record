@@ -190,7 +190,7 @@
   justify-content: center;
   height: 100%;
   color: rgba(255, 255, 255, 0.3);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-style: italic;
 }
 
@@ -252,11 +252,11 @@
 }
 
 .track-icon {
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
 }
 
 .track-name {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
 }
@@ -306,7 +306,7 @@
 /* Drag handle */
 .scene-drag-handle {
   flex-shrink: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: rgba(255, 255, 255, 0.4);
   cursor: grab;
   line-height: 1;
@@ -322,7 +322,7 @@
 }
 
 .scene-title {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   color: #fff;
   white-space: nowrap;
@@ -384,7 +384,7 @@
   border: none;
   border-radius: 4px;
   color: #fff;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: bold;
   cursor: pointer;
   display: none;
@@ -448,7 +448,7 @@
   border: none;
   border-radius: 3px;
   color: #fff;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: bold;
   cursor: pointer;
   display: flex;
@@ -474,7 +474,7 @@
   padding: 8px 12px;
   display: flex;
   align-items: center;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #fff;
   cursor: pointer;
@@ -496,7 +496,7 @@
   padding: 8px 12px;
   display: flex;
   align-items: center;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #fff;
   cursor: pointer;
@@ -544,7 +544,7 @@
   padding: 4px 8px;
   background: rgba(0, 0, 0, 0.8);
   border-radius: 4px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #fff;
   white-space: nowrap;
@@ -598,7 +598,7 @@
 }
 
 .marker-notes {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   margin-left: 4px;
   cursor: help;
 }

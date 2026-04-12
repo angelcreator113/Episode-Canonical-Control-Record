@@ -29,13 +29,13 @@
 }
 
 .sp-header-icon {
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   color: var(--st-gold);
 }
 
 .sp-title {
   font-family: var(--st-serif);
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: 600;
   color: var(--st-ink);
   margin: 0;
@@ -44,7 +44,7 @@
 
 .sp-subtitle {
   font-family: var(--st-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--st-muted);
   margin: 2px 0 0;
 }
@@ -65,7 +65,7 @@
   border-radius: 6px;
   cursor: pointer;
   font-family: var(--st-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--st-muted);
   transition: all 0.15s ease;
@@ -94,7 +94,7 @@
   border-radius: 8px;
   margin-bottom: 20px;
   font-family: var(--st-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--st-red);
 }
 
@@ -103,7 +103,7 @@
   border: none;
   cursor: pointer;
   color: var(--st-red);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   padding: 2px 6px;
 }
 
@@ -121,7 +121,7 @@
 
 .sp-generate-intro p {
   font-family: var(--st-body);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: var(--st-ink-light);
   line-height: 1.7;
   margin: 0;
@@ -143,7 +143,7 @@
 
 .sp-form-group label {
   font-family: var(--st-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
@@ -167,7 +167,7 @@
   border-radius: 8px;
   background: var(--st-surface);
   font-family: var(--st-body);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height: 1.7;
   color: var(--st-ink);
   resize: vertical;
@@ -190,7 +190,7 @@
   border-radius: 6px;
   background: var(--st-surface);
   font-family: var(--st-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--st-ink);
   transition: border-color 0.15s ease;
 }
@@ -218,7 +218,7 @@
   border: none;
   cursor: pointer;
   font-family: var(--st-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   transition: all 0.15s ease;
 }
@@ -255,7 +255,7 @@
   border: none;
   cursor: pointer;
   font-family: var(--st-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 500;
   transition: all 0.15s ease;
 }
@@ -297,7 +297,7 @@
 
 .sp-plan-title {
   font-family: var(--st-serif);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--st-gold);
   margin: 0;
@@ -334,14 +334,14 @@
 
 .sp-plan-part-title {
   font-family: var(--st-serif);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--st-ink);
 }
 
 .sp-plan-part-theme {
   font-family: var(--st-body);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-style: italic;
   color: var(--st-muted);
 }
@@ -364,7 +364,7 @@
 
 .sp-plan-chapter-type {
   font-family: var(--st-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -377,7 +377,7 @@
 
 .sp-plan-chapter-title {
   font-family: var(--st-serif);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 500;
   color: var(--st-ink);
 }
@@ -385,7 +385,7 @@
 .sp-plan-chapter-goal,
 .sp-plan-chapter-arc {
   font-family: var(--st-body);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--st-ink-light);
   line-height: 1.6;
   margin-bottom: 4px;
@@ -459,14 +459,14 @@
 
 .sp-plan-section-title {
   font-family: var(--st-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--st-ink);
 }
 
 .sp-plan-section-desc {
   font-family: var(--st-body);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--st-ink-light);
   line-height: 1.6;
   padding-left: 0;
@@ -474,7 +474,7 @@
 
 .sp-plan-section-beat {
   font-family: var(--st-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--st-pink);
   margin-top: 4px;
 }
@@ -518,14 +518,14 @@
 
 .sp-part-title {
   font-family: var(--st-serif);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--st-ink);
 }
 
 .sp-part-count {
   font-family: var(--st-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--st-muted);
 }
 
@@ -559,14 +559,14 @@
 
 .sp-chapter-num {
   font-family: var(--st-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--st-muted);
   width: 28px;
 }
 
 .sp-chapter-title {
   font-family: var(--st-serif);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 500;
   color: var(--st-ink);
 }
@@ -592,13 +592,13 @@
 
 .sp-chapter-words {
   font-family: var(--st-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--st-muted);
 }
 
 .sp-chapter-section-count {
   font-family: var(--st-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--st-gold);
   font-weight: 600;
 }
@@ -606,7 +606,7 @@
 .sp-chapter-goal {
   padding: 0 18px 10px;
   font-family: var(--st-body);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--st-muted);
   font-style: italic;
   line-height: 1.6;
@@ -646,7 +646,7 @@
 
 .sp-section-title {
   font-family: var(--st-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--st-ink);
   flex: 1;
@@ -657,7 +657,7 @@
   border: none;
   cursor: pointer;
   color: var(--st-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   padding: 2px 6px;
   opacity: 0;
   transition: all 0.15s ease;
@@ -674,7 +674,7 @@
 
 .sp-section-desc {
   font-family: var(--st-body);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--st-muted);
   line-height: 1.5;
   padding-left: 0;
@@ -705,7 +705,7 @@
   border-radius: 4px;
   background: var(--st-surface);
   font-family: var(--st-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--st-ink);
   min-width: 0;
   flex: 1;
@@ -722,7 +722,7 @@
   border-radius: 4px;
   background: var(--st-surface);
   font-family: var(--st-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--st-ink);
   cursor: pointer;
 }
@@ -734,21 +734,21 @@
 }
 
 .sp-empty-icon {
-  font-size: var(--text-4xl);
+  font-size: var(--text-5xl);
   color: var(--st-gold);
   margin-bottom: 16px;
 }
 
 .sp-empty h3 {
   font-family: var(--st-serif);
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: var(--st-ink);
   margin: 0 0 8px;
 }
 
 .sp-empty p {
   font-family: var(--st-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--st-muted);
   margin: 0;
 }
@@ -768,14 +768,14 @@
 }
 
 .sp-loading-spinner {
-  font-size: var(--text-4xl);
+  font-size: var(--text-5xl);
   color: var(--st-gold);
   animation: spSpin 2s linear infinite;
 }
 
 .sp-loading-text {
   font-family: var(--st-sans);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: var(--st-muted);
   font-weight: 500;
 }

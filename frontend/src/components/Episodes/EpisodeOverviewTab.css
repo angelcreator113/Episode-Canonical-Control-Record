@@ -15,7 +15,7 @@
 
 .overview-header h2 {
   margin: 0;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   color: #1e293b;
 }
 
@@ -59,7 +59,7 @@
 
 .episode-title {
   margin: 0 0 1rem 0;
-  font-size: var(--text-4xl);
+  font-size: var(--text-5xl);
   font-weight: 700;
   color: #1e293b;
   line-height: 1.2;
@@ -67,7 +67,7 @@
 
 .episode-logline {
   margin: 0;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: #64748b;
   line-height: 1.6;
   max-width: 800px;
@@ -91,7 +91,7 @@
 
 .meta-label {
   display: block;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -100,7 +100,7 @@
 }
 
 .meta-value {
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: #1e293b;
   font-weight: 600;
 }
@@ -144,7 +144,7 @@
 
 .intent-text {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: #78350f;
   font-weight: 600;
   font-style: italic;
@@ -185,7 +185,7 @@
   justify-content: center;
   color: #1e293b;
   font-weight: 700;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   white-space: nowrap;
   z-index: 1;
   pointer-events: none;
@@ -211,7 +211,7 @@
   color: #ffffff;
   background: #10b981;
   font-weight: 700;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -222,7 +222,7 @@
 }
 
 .check-label {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #1e293b;
   font-weight: 500;
 }
@@ -260,7 +260,7 @@
 .empty-prompt p {
   margin: 0 0 1.5rem 0;
   color: #64748b;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
 }
 
 /* EDIT MODE */
@@ -287,12 +287,12 @@
   }
 
   .overview-header h2 {
-    font-size: var(--text-lg);
+    font-size: var(--text-xl);
   }
 
   .btn-edit {
     padding: 0.4rem 0.9rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
     border-width: 1.5px;
     border-radius: 6px;
   }
@@ -313,12 +313,12 @@
   }
 
   .episode-title {
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
     margin-bottom: 0.5rem;
   }
 
   .episode-logline {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
     line-height: 1.5;
   }
 
@@ -333,12 +333,12 @@
   }
 
   .meta-label {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     margin-bottom: 0.375rem;
   }
 
   .meta-value {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   .intent-section {
@@ -348,7 +348,7 @@
   }
 
   .intent-text {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   .episode-overview-tab .progress-bar {
@@ -358,7 +358,7 @@
   }
 
   .episode-overview-tab .progress-label {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
 
   .notes-section {
@@ -367,7 +367,7 @@
   }
 
   .notes-content {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     line-height: 1.6;
   }
 }
@@ -393,11 +393,11 @@
   }
   
   .episode-title {
-    font-size: var(--text-3xl);
+    font-size: var(--text-4xl);
   }
   
   .episode-logline {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
   
   .cover-meta-grid {
@@ -411,12 +411,12 @@
   }
 
   .meta-label {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
     margin-bottom: 0.5rem;
   }
 
   .meta-value {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   .intent-section {
@@ -424,7 +424,7 @@
   }
 
   .intent-text {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   .episode-overview-tab .progress-bar {
@@ -433,7 +433,7 @@
   }
 
   .episode-overview-tab .progress-label {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
   
   .progress-checklist {
@@ -471,12 +471,12 @@
   }
 
   .overview-header h2 {
-    font-size: var(--text-xl);
+    font-size: var(--text-2xl);
   }
 
   .btn-edit {
     padding: 0.5rem 1rem;
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     border-radius: 6px;
   }
 
@@ -495,12 +495,12 @@
   }
 
   .episode-title {
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
     line-height: 1.25;
   }
 
   .episode-logline {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     line-height: 1.5;
   }
 
@@ -515,18 +515,18 @@
   }
 
   .meta-label {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     margin-bottom: 0.375rem;
     letter-spacing: 0.3px;
   }
 
   .meta-value {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
 
   .show-link {
     padding: 0.375rem 0.75rem;
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     border-radius: 6px;
   }
 
@@ -537,7 +537,7 @@
   }
 
   .intent-text {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     line-height: 1.5;
   }
 
@@ -551,7 +551,7 @@
   }
 
   .episode-overview-tab .progress-label {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .progress-checklist {
@@ -565,11 +565,11 @@
   }
 
   .check-icon {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   .check-label {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 
   .notes-section {
@@ -578,7 +578,7 @@
   }
 
   .notes-content {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     line-height: 1.6;
   }
 
@@ -588,7 +588,7 @@
   }
 
   .empty-prompt p {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
 
   .overview-form {

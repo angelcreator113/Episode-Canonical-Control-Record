@@ -53,7 +53,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   color: rgba(255, 255, 255, 0.85);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -79,7 +79,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   color: rgba(255, 255, 255, 0.8);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -91,14 +91,14 @@
 }
 
 .episode-info h1 {
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: #fff;
   margin: 0 0 4px 0;
 }
 
 .episode-meta {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: rgba(255, 255, 255, 0.6);
 }
 
@@ -119,11 +119,11 @@
 }
 
 .hint-icon {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
 }
 
 .hint-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(255, 255, 255, 0.7);
   font-weight: 500;
 }
@@ -134,7 +134,7 @@
   border: none;
   border-radius: 8px;
   color: #fff;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -199,7 +199,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   color: rgba(255, 255, 255, 0.8);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -213,12 +213,12 @@
 .control-btn.fit-btn {
   width: auto;
   padding: 0 16px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
 .zoom-display {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: rgba(255, 255, 255, 0.7);
   font-weight: 600;
   min-width: 50px;
@@ -231,7 +231,7 @@
   border: none;
   border-radius: 6px;
   color: #fff;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -253,7 +253,7 @@
   border-radius: 9px;
   background: rgba(251, 191, 36, 0.9);
   color: #000;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 700;
   line-height: 1;
 }
@@ -278,7 +278,7 @@
 }
 
 .timecode {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   letter-spacing: 0.5px;
 }
@@ -289,12 +289,12 @@
 
 .timecode.total {
   color: rgba(255, 255, 255, 0.45);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
 }
 
 .timecode-separator {
   color: rgba(255, 255, 255, 0.3);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   margin: 0 2px;
 }
 
@@ -315,7 +315,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   color: rgba(255, 255, 255, 0.8);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   transition: all 0.15s;
   padding: 0;
@@ -330,7 +330,7 @@
 .transport-btn.play-btn {
   width: 38px;
   height: 38px;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   background: rgba(102, 126, 234, 0.2);
   border-color: rgba(102, 126, 234, 0.4);
 }
@@ -369,7 +369,7 @@
 .control-btn.sm {
   width: 28px;
   height: 28px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .control-btn.fit-btn.sm {
@@ -380,7 +380,7 @@
 }
 
 .control-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(255, 255, 255, 0.7);
   font-weight: 500;
 }
@@ -391,7 +391,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   color: rgba(255, 255, 255, 0.9);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -408,7 +408,7 @@
 }
 
 .loop-btn {
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
 }
 
 .loop-btn.active {

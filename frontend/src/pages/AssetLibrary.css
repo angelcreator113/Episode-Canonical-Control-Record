@@ -22,14 +22,14 @@
 
 .asset-library-header h1 {
   margin: 0 0 0.25rem 0;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   color: #1e293b;
 }
 
 .asset-library-header .header-subtitle {
   margin: 0;
   color: #64748b;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .btn-upload-main {
@@ -42,7 +42,7 @@
   border: none;
   border-radius: 10px;
   font-weight: 600;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -72,7 +72,7 @@
 }
 
 .filter-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   color: #475569;
   white-space: nowrap;
@@ -82,7 +82,7 @@
   padding: 0.375rem 0.75rem;
   border: 1px solid #e8e5de;
   border-radius: 6px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   background: white;
   color: #1a1a2e;
   min-width: 160px;
@@ -103,7 +103,7 @@
   border: 2px solid transparent;
   border-radius: 8px;
   cursor: pointer;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   transition: all 0.15s ease;
 }
 
@@ -117,11 +117,11 @@
 }
 
 .cat-icon {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
 }
 
 .cat-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .cat-count {
@@ -139,7 +139,7 @@
   padding: 0.5rem 0.75rem;
   border: 1px solid #e8e5de;
   border-radius: 8px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #1a1a2e;
   background: #fff;
   min-width: 180px;
@@ -169,7 +169,7 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: #94a3b8;
   transition: all 0.15s ease;
 }
@@ -210,7 +210,7 @@
 .asset-library-empty h3 {
   margin: 0 0 0.5rem 0;
   color: #1e293b;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
 }
 
 .asset-library-empty p {
@@ -230,7 +230,7 @@
   border: none;
   color: #b0922e;
   cursor: pointer;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   text-decoration: underline;
 }
 
@@ -326,7 +326,7 @@
 
 .asset-name {
   margin: 0 0 0.375rem 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
@@ -338,7 +338,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.25rem;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #94a3b8;
 }
 
@@ -365,7 +365,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: #64748b;
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -403,7 +403,7 @@
   border: none;
   text-align: left;
   cursor: pointer;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #475569;
   transition: background 0.1s ease;
 }
@@ -466,12 +466,12 @@
 
   .category-btn {
     padding: 0.5rem 0.75rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
     flex-shrink: 0;
   }
 
   .cat-label {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .controls-right {
@@ -492,7 +492,7 @@
   .view-btn {
     width: 36px;
     height: 36px;
-    font-size: var(--text-lg);
+    font-size: var(--text-xl);
   }
 
   .asset-library-container.view-grid {
@@ -505,7 +505,7 @@
   }
 
   .asset-name {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 }
 

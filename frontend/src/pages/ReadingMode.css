@@ -22,12 +22,12 @@
   }
 
   .rm-book-title {
-    font-size: var(--text-3xl) !important;
+    font-size: var(--text-4xl) !important;
     line-height: 1.2 !important;
   }
 
   .rm-book-description {
-    font-size: var(--text-sm) !important;
+    font-size: var(--text-base) !important;
     max-width: 100% !important;
   }
 
@@ -36,7 +36,7 @@
   }
 
   .rm-chapter-title {
-    font-size: var(--text-xl) !important;
+    font-size: var(--text-2xl) !important;
   }
 
   .rm-chapter-header {
@@ -45,12 +45,12 @@
   }
 
   .rm-line {
-    font-size: var(--text-base) !important;
+    font-size: var(--text-lg) !important;
     line-height: 1.75 !important;
   }
 
   .rm-lala-line {
-    font-size: var(--text-base) !important;
+    font-size: var(--text-lg) !important;
     margin: 20px 0 20px 16px !important;
     padding-left: 12px !important;
   }
@@ -69,7 +69,7 @@
   }
 
   .rm-top-title {
-    font-size: var(--text-xs) !important;
+    font-size: var(--text-sm) !important;
     max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -121,11 +121,11 @@
   }
 
   .rm-book-title {
-    font-size: var(--text-2xl) !important;
+    font-size: var(--text-3xl) !important;
   }
 
   .rm-book-description {
-    font-size: var(--text-xs) !important;
+    font-size: var(--text-md) !important;
   }
 
   .rm-book-header {
@@ -134,7 +134,7 @@
   }
 
   .rm-chapter-title {
-    font-size: var(--text-lg) !important;
+    font-size: var(--text-xl) !important;
   }
 
   .rm-chapter-header {
@@ -144,13 +144,13 @@
   }
 
   .rm-line {
-    font-size: var(--text-base) !important;
+    font-size: var(--text-lg) !important;
     line-height: 1.7 !important;
     margin-bottom: 16px !important;
   }
 
   .rm-lala-line {
-    font-size: var(--text-sm) !important;
+    font-size: var(--text-base) !important;
     margin: 16px 0 16px 8px !important;
     padding-left: 10px !important;
   }
@@ -177,7 +177,7 @@
   }
 
   .rm-toc-chapter-title {
-    font-size: var(--text-xs) !important;
+    font-size: var(--text-md) !important;
   }
 
   .rm-fm-epigraph {
@@ -187,7 +187,7 @@
   /* Ensure input font >= 16px to prevent iOS zoom */
   .rm-shell input,
   .rm-shell textarea {
-    font-size: var(--text-base) !important;
+    font-size: var(--text-lg) !important;
   }
 }
 
@@ -198,15 +198,15 @@
   }
 
   .rm-book-title {
-    font-size: var(--text-2xl) !important;
+    font-size: var(--text-3xl) !important;
   }
 
   .rm-line {
-    font-size: var(--text-sm) !important;
+    font-size: var(--text-base) !important;
     line-height: 1.65 !important;
   }
 
   .rm-drop-cap {
-    font-size: var(--text-4xl) !important;
+    font-size: var(--text-5xl) !important;
   }
 }

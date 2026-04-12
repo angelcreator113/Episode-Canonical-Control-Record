@@ -34,14 +34,14 @@
 
 .eim-header h3 {
   margin: 0;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: #0f0c14;
 }
 
 .eim-close {
   background: none;
   border: none;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   cursor: pointer;
   color: #7a7088;
   line-height: 1;
@@ -71,7 +71,7 @@
   padding: 8px 10px;
   border: 1px solid #e8e4f0;
   border-radius: 6px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-family: inherit;
   color: #0f0c14;
   background: #fff;
@@ -103,7 +103,7 @@
   padding: 8px 20px;
   border-radius: 6px;
   border: none;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -140,7 +140,7 @@
   border-radius: 6px;
   border: 1px solid #e8e4f0;
   background: #fff;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -159,7 +159,7 @@
 }
 
 .eim-saving {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #c9a84c;
   font-weight: 600;
 }
@@ -193,7 +193,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   transition: all 0.2s;
   box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
@@ -218,7 +218,7 @@
   border-radius: 8px;
   background: transparent;
   color: #7a7088;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;

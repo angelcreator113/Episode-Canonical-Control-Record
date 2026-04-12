@@ -22,7 +22,7 @@
   border: none;
   border-bottom: 2px solid transparent;
   padding: 10px 16px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   color: #6c757d;
   cursor: pointer;
@@ -41,7 +41,7 @@
 .modal-header h2 {
   margin: 0;
   color: #2c3e50;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
 }
 
 .modal-body {
@@ -73,7 +73,7 @@
 .preview-info h3 {
   margin: 0 0 0.5rem 0;
   color: #2c3e50;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
 }
 
 .item-type {
@@ -81,7 +81,7 @@
   border: 1px solid #dee2e6;
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #495057;
   width: fit-content;
 }
@@ -89,12 +89,12 @@
 .form-section h3 {
   margin: 0 0 0.5rem 0;
   color: #495057;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
 }
 
 .help-text {
   color: #6c757d;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   margin-bottom: 1.5rem;
 }
 

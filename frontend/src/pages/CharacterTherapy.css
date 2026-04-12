@@ -44,7 +44,7 @@
 }
 
 .therapy-sidebar-title {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #3a2e2e;
   font-weight: 300;
   letter-spacing: 0.5px;
@@ -83,7 +83,7 @@
 }
 
 .therapy-char-btn .char-icon {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   flex-shrink: 0;
 }
 
@@ -112,7 +112,7 @@
   background: #fff;
   border: 1px solid #f0ddd8;
   color: #c45c5c;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(180,120,120,0.15);
   align-items: center;
@@ -172,7 +172,7 @@
 }
 
 .therapy-header-name {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #3a2e2e;
   font-weight: 300;
   white-space: nowrap;
@@ -256,7 +256,7 @@
 .therapy-msg-bubble {
   padding: 14px 18px;
   border-radius: 6px;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.7;
   letter-spacing: 0.2px;
 }
@@ -375,7 +375,7 @@
   border: 1px solid #e8d0cc;
   background: transparent;
   color: #7a6565;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 1.5px;
@@ -426,7 +426,7 @@
   border: 1px solid rgba(200, 100, 100, 0.3);
   background: rgba(200, 100, 100, 0.06);
   color: #c45c5c;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 1.5px;
@@ -647,7 +647,7 @@
   color: #3a2e2e;
   padding: 12px;
   border-radius: 4px;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-family: inherit;
   resize: vertical;
   min-height: 80px;
@@ -707,7 +707,7 @@
   border-radius: 4px;
   background: transparent;
   color: #7a6565;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
   min-height: 44px;
 }
@@ -718,7 +718,7 @@
   border-radius: 4px;
   background: rgba(160, 120, 80, 0.08);
   color: #8b6513;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -778,19 +778,19 @@
 }
 
 .therapy-empty-icon {
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   opacity: 0.4;
 }
 
 .therapy-empty-title {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 2px;
   text-transform: uppercase;
   color: #a08080;
 }
 
 .therapy-empty-sub {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #bba0a0;
   max-width: 260px;
   text-align: center;
@@ -882,7 +882,7 @@
   }
 
   .therapy-header-name {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 
   /* Chat */
@@ -897,7 +897,7 @@
 
   .therapy-msg-bubble {
     padding: 12px 14px;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 
   /* Input area */
@@ -913,7 +913,7 @@
   .therapy-event-input {
     min-width: unset;
     width: 100%;
-    font-size: var(--text-base); /* prevent iOS zoom */
+    font-size: var(--text-lg); /* prevent iOS zoom */
     min-height: 48px;
   }
 
@@ -928,7 +928,7 @@
   }
 
   .therapy-respond-input {
-    font-size: var(--text-base); /* prevent iOS zoom */
+    font-size: var(--text-lg); /* prevent iOS zoom */
     min-height: 48px;
   }
 
@@ -951,7 +951,7 @@
   .therapy-action-btn {
     flex: 1;
     min-height: 44px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
     text-align: center;
   }
 
@@ -991,7 +991,7 @@
   }
 
   .therapy-reveal-textarea {
-    font-size: var(--text-base); /* prevent iOS zoom */
+    font-size: var(--text-lg); /* prevent iOS zoom */
   }
 
   .therapy-reveal-type-row {
@@ -1021,11 +1021,11 @@
 
   .therapy-msg-bubble {
     padding: 10px 12px;
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
 
   .therapy-empty-icon {
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
   }
 
   .therapy-empty-title {
@@ -1033,7 +1033,7 @@
   }
 
   .therapy-empty-sub {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 }
 
@@ -1056,7 +1056,7 @@
   .therapy-event-input,
   .therapy-respond-input,
   .therapy-reveal-textarea {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
     touch-action: manipulation;
   }
 }

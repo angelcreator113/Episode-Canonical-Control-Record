@@ -22,7 +22,7 @@
 
 .wi-header h1 {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: var(--text-2xl);
+  font-size: var(--text-4xl);
   font-weight: 700;
   letter-spacing: -0.5px;
   color: #0f0c14;
@@ -30,7 +30,7 @@
 }
 
 .wi-header p {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #7a7088;
   margin: 0 0 18px;
   letter-spacing: 0.2px;
@@ -46,7 +46,7 @@
 .wi-tab {
   padding: 10px 18px;
   font-family: 'DM Sans', 'Segoe UI', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   color: #7a7088;
   background: transparent;
@@ -83,14 +83,14 @@
 /* ─── Section Headers ─── */
 .wi-section-title {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 700;
   margin: 0 0 6px;
   color: #0f0c14;
 }
 
 .wi-section-desc {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #7a7088;
   margin: 0 0 24px;
   line-height: 1.5;
@@ -129,7 +129,7 @@
   margin-bottom: 8px;
 }
 
-.wi-city-icon { font-size: var(--text-2xl); }
+.wi-city-icon { font-size: var(--text-3xl); }
 
 .wi-city-capital {
   font-size: var(--text-xs);
@@ -140,14 +140,14 @@
 
 .wi-city-name {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 700;
   margin: 0 0 6px;
   color: #0f0c14;
 }
 
 .wi-city-famous {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #7a7088;
   line-height: 1.5;
   margin: 0;
@@ -163,13 +163,13 @@
 }
 
 .wi-city-row {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
 .wi-city-label {
   display: block;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -191,14 +191,14 @@
 }
 
 .wi-city-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #3d3548;
   margin: 0;
   line-height: 1.5;
 }
 
 .wi-city-energy {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #a889c8;
   margin: 0;
   line-height: 1.5;
@@ -230,18 +230,18 @@
   margin-bottom: 12px;
 }
 
-.wi-uni-icon { font-size: var(--text-2xl); }
+.wi-uni-icon { font-size: var(--text-4xl); }
 
 .wi-uni-name {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 700;
   margin: 0 0 2px;
   color: #0f0c14;
 }
 
 .wi-uni-city {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.2px;
 }
@@ -261,7 +261,7 @@
 }
 
 .wi-uni-sig {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #a889c8;
   line-height: 1.5;
   margin: 0;
@@ -302,7 +302,7 @@
   margin-bottom: 8px;
 }
 
-.wi-corp-icon { font-size: var(--text-2xl); }
+.wi-corp-icon { font-size: var(--text-3xl); }
 
 .wi-corp-industry {
   font-size: var(--text-xs);
@@ -313,14 +313,14 @@
 
 .wi-corp-name {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   margin: 0 0 6px;
   color: #0f0c14;
 }
 
 .wi-corp-known {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #7a7088;
   line-height: 1.5;
   margin: 0;
@@ -335,11 +335,11 @@
   gap: 10px;
 }
 
-.wi-corp-row { font-size: var(--text-xs); line-height: 1.5; }
+.wi-corp-row { font-size: var(--text-sm); line-height: 1.5; }
 
 .wi-corp-label {
   display: block;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -348,14 +348,14 @@
 }
 
 .wi-corp-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #3d3548;
   margin: 0;
   line-height: 1.5;
 }
 
 .wi-corp-story {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #a889c8;
   margin: 0;
   line-height: 1.5;
@@ -378,7 +378,7 @@
   gap: 6px;
   padding: 7px 14px;
   font-family: 'DM Sans', 'Segoe UI', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #7a7088;
   background: #ffffff;
@@ -402,7 +402,7 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 700;
   border-radius: 50%;
   background: #e8e4f0;
@@ -431,7 +431,7 @@
 
 .wi-legend-role {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   margin: 0 0 6px;
   color: #0f0c14;
@@ -446,14 +446,14 @@
 }
 
 .wi-legend-fn {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #3d3548;
   line-height: 1.5;
   margin: 0 0 8px;
 }
 
 .wi-legend-sig {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #a889c8;
   line-height: 1.5;
   margin: 0;
@@ -489,28 +489,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   color: #b8b0c8;
   padding: 0 8px;
   flex-shrink: 0;
 }
 
 .wi-loop-icon {
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   display: block;
   margin-bottom: 6px;
 }
 
 .wi-loop-layer {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   margin: 0 0 6px;
   color: #0f0c14;
 }
 
 .wi-loop-does {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #7a7088;
   line-height: 1.5;
   margin: 0 0 10px;
@@ -523,7 +523,7 @@
 
 .wi-loop-label {
   display: block;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -532,7 +532,7 @@
 }
 
 .wi-loop-into {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #3d3548;
   line-height: 1.5;
   margin: 0;
@@ -548,7 +548,7 @@
 
 .wi-loop-summary-title {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 800;
   letter-spacing: 1.5px;
   text-transform: uppercase;
@@ -557,7 +557,7 @@
 }
 
 .wi-loop-summary-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #3d3548;
   line-height: 1.7;
   margin: 0;
@@ -585,7 +585,7 @@
   .wi-content { padding: 20px; }
   .wi-city-grid { grid-template-columns: 1fr; }
   .wi-corp-grid { grid-template-columns: 1fr; }
-  .wi-tab { padding: 8px 12px; font-size: var(--text-xs); }
+  .wi-tab { padding: 8px 12px; font-size: var(--text-sm); }
   .wi-legend-groups { gap: 6px; }
   .wi-legend-group-btn { padding: 5px 10px; font-size: var(--text-xs); }
 }
