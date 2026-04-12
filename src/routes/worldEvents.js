@@ -2722,6 +2722,78 @@ router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', option
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// FINANCIAL TRANSACTION PIPELINE — execute, query, and display finances
+// ═══════════════════════════════════════════════════════════════════════
+
+// POST /world/:showId/episodes/:episodeId/finalize-financials
+router.post('/world/:showId/episodes/:episodeId/finalize-financials', optionalAuth, async (req, res) => {
+  try {
+    const { showId, episodeId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { finalizeEpisodeFinancials } = require('../services/financialTransactionService');
+
+    const result = await finalizeEpisodeFinancials(episodeId, showId, models.sequelize);
+
+    return res.json({
+      success: true,
+      message: result.already_finalized
+        ? 'Episode already finalized'
+        : `${result.transactions.length} transactions executed — balance: ${result.balance_after}`,
+      data: result,
+    });
+  } catch (err) {
+    console.error('[Financials] Finalize error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/:showId/financial-ledger — running ledger across all episodes
+router.get('/world/:showId/financial-ledger', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { episode_id, limit = 100 } = req.query;
+    const models = req.app?.get?.('models') || require('../models');
+    const { getFinancialLedger } = require('../services/financialTransactionService');
+
+    const result = await getFinancialLedger(showId, models.sequelize, {
+      episodeId: episode_id || null,
+      limit: parseInt(limit),
+    });
+
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[Financials] Ledger error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/:showId/balance — current coin balance
+router.get('/world/:showId/balance', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { getCurrentBalance } = require('../services/financialTransactionService');
+    const { checkAffordability } = require('../services/financialPressureService');
+
+    const balance = await getCurrentBalance(models.sequelize, showId);
+
+    // Get pending event (next ready event) for affordability check
+    let affordability = null;
+    try {
+      const [nextEvent] = await models.sequelize.query(
+        `SELECT * FROM world_events WHERE show_id = :showId AND status = 'ready' ORDER BY created_at LIMIT 1`,
+        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
+      );
+      if (nextEvent) affordability = checkAffordability(nextEvent, balance);
+    } catch { /* non-blocking */ }
+
+    return res.json({ success: true, balance, affordability });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/:eventId/generate-lists — generate wardrobe + career lists from event
 router.post('/world/:showId/events/:eventId/generate-lists', optionalAuth, async (req, res) => {
   try {

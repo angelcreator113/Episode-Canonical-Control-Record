@@ -2912,6 +2912,34 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           </div>
                         </div>
                         <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 4 }}>Estimates based on prestige {p} tier. Actual costs depend on wardrobe selection.</div>
+                        {/* Finalize Financials button — executes real transactions */}
+                        {md.used_in_episode_id && (
+                          <button
+                            onClick={async (e) => {
+                              const btn = e.target;
+                              btn.disabled = true;
+                              btn.textContent = 'Finalizing...';
+                              try {
+                                const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/finalize-financials`);
+                                if (res.data.success) {
+                                  const d = res.data.data;
+                                  if (d.already_finalized) {
+                                    setToast(`Already finalized — balance: ${d.balance}`);
+                                  } else {
+                                    setToast(`${d.transactions.length} transactions executed — balance: ${d.balance_after} coins (${d.summary.net_profit >= 0 ? '+' : ''}${d.summary.net_profit} net)`);
+                                  }
+                                }
+                              } catch (err) {
+                                setToast('Failed: ' + (err.response?.data?.error || err.message));
+                              }
+                              btn.disabled = false;
+                              btn.textContent = 'Finalize Financials';
+                            }}
+                            style={{ marginTop: 8, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
+                          >
+                            Finalize Financials
+                          </button>
+                        )}
                       </div>
                     );
                   })()}
