@@ -1,38 +1,49 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   SidebarProgress.jsx — Setup-Wizard progress tracker for the Sidebar
-   Shows 5 onboarding steps with a progress bar, collapsible, and
-   a "next action" button that navigates to /setup if incomplete.
+   SidebarProgress.jsx — Show Production Progress
+   Tracks real production metrics: events, wardrobe, episodes, overlays,
+   distribution. Replaces the old 5-step onboarding wizard.
    ──────────────────────────────────────────────────────────────────────────── */
 
 import React, { useState, useEffect, useCallback } from 'react';
 
 const API_BASE = '/api/v1';
 
-const STEPS = [
-  { key: 'universe',      icon: '◎', label: 'Universe' },
-  { key: 'protagonist',   icon: '♛', label: 'Protagonist' },
-  { key: 'core_cast',     icon: '◉', label: 'Core Cast' },
-  { key: 'relationships', icon: '⊕', label: 'Relationship Web' },
-  { key: 'first_book',    icon: '📖', label: 'First Book' },
-];
-
 function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
-  const [status, setStatus]     = useState(null);
-  const [open, setOpen]         = useState(true);
-  const [loading, setLoading]   = useState(false);
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const fetchStatus = useCallback(async () => {
+  const fetchProgress = useCallback(async () => {
     if (!showId) return;
     setLoading(true);
     try {
       const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/onboarding/status/${showId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      // Fetch multiple data sources in parallel
+      const [eventsRes, wardrobeRes, episodesRes, overlaysRes] = await Promise.allSettled([
+        fetch(`${API_BASE}/world/${showId}/events?limit=100`, { headers }).then(r => r.json()).catch(() => ({})),
+        fetch(`${API_BASE}/wardrobe?show_id=${showId}&limit=200`, { headers }).then(r => r.json()).catch(() => ({})),
+        fetch(`${API_BASE}/episodes?show_id=${showId}&limit=100`, { headers }).then(r => r.json()).catch(() => ({})),
+        fetch(`${API_BASE}/ui-overlays/${showId}`, { headers }).then(r => r.json()).catch(() => ({})),
+      ]);
+
+      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value?.events || []) : [];
+      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value?.data || []) : [];
+      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value?.data || episodesRes.value || []) : [];
+      const overlays = overlaysRes.status === 'fulfilled' ? (overlaysRes.value?.data || []) : [];
+
+      const readyEvents = events.filter(e => e.status !== 'draft').length;
+      const overlayGenerated = overlays.filter(o => o.generated || o.url || o.asset_id).length;
+      const scriptedEpisodes = episodes.filter(e => e.script_content || e.status === 'published').length;
+      const completedEpisodes = episodes.filter(e => e.evaluation_status === 'accepted').length;
+
+      setData({
+        events: { count: events.length, ready: readyEvents },
+        wardrobe: { count: wardrobe.length },
+        episodes: { count: episodes.length, scripted: scriptedEpisodes, completed: completedEpisodes },
+        overlays: { generated: overlayGenerated, total: overlays.length },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setStatus(data);
-      }
     } catch {
       /* silent */
     } finally {
@@ -40,47 +51,59 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
     }
   }, [showId]);
 
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+  useEffect(() => { fetchProgress(); }, [fetchProgress]);
 
-  // Derive step completion from the steps array or flat fields
-  const stepsArr = status?.steps || [];
-  const stepMap = {};
-  stepsArr.forEach(s => { stepMap[s.id] = s.complete; });
+  if (!showId || !data) return null;
 
-  const stepDone = {
-    universe:      stepMap.universe ?? !!status?.universe,
-    protagonist:   stepMap.protagonist ?? (status?.characters || 0) > 0,
-    core_cast:     stepMap.cast ?? (status?.characters || 0) >= 3,
-    relationships: stepMap.web ?? (status?.relationships || 0) > 0,
-    first_book:    stepMap.book ?? (status?.books || 0) > 0,
-  };
+  // Build progress steps from real data
+  const steps = [
+    {
+      icon: '💌', label: 'Events',
+      done: data.events.count > 0,
+      detail: data.events.count > 0 ? `${data.events.ready} ready` : 'Create events',
+      route: `/shows/${showId}/world?tab=events`,
+    },
+    {
+      icon: '👗', label: 'Wardrobe',
+      done: data.wardrobe.count >= 5,
+      detail: data.wardrobe.count > 0 ? `${data.wardrobe.count} items` : 'Add items',
+      route: `/shows/${showId}/world?tab=wardrobe`,
+    },
+    {
+      icon: '✨', label: 'Overlays',
+      done: data.overlays.generated >= 10,
+      detail: `${data.overlays.generated}/${data.overlays.total}`,
+      route: `/shows/${showId}/scene-library?tab=overlays`,
+    },
+    {
+      icon: '📝', label: 'Episodes',
+      done: data.episodes.scripted > 0,
+      detail: data.episodes.count > 0 ? `${data.episodes.scripted} scripted` : 'Generate episodes',
+      route: `/shows/${showId}/world?tab=episodes`,
+    },
+    {
+      icon: '👑', label: 'Completed',
+      done: data.episodes.completed > 0,
+      detail: data.episodes.completed > 0 ? `${data.episodes.completed} finished` : 'Complete an episode',
+      route: `/shows/${showId}/world?tab=episodes`,
+    },
+  ];
 
-  const doneCount  = Object.values(stepDone).filter(Boolean).length;
-  const totalSteps = STEPS.length;
-  const pct        = Math.round((doneCount / totalSteps) * 100);
+  const doneCount = steps.filter(s => s.done).length;
+  const pct = Math.round((doneCount / steps.length) * 100);
+  const nextStep = steps.find(s => !s.done);
+  const priorityColor = pct === 100 ? '#2E8B57' : pct >= 60 ? '#b0922e' : '#C0392B';
 
-  // Find next incomplete step for the action button
-  const nextStep = STEPS.find(s => !stepDone[s.key]);
-
-  // Priority color
-  const priorityColor = pct === 100 ? '#2E8B57' : pct >= 40 ? '#b0922e' : '#C0392B';
-
-  // Don't render if no showId, no data, or setup fully complete
-  if (!showId || !status) return null;
+  // Hide when fully complete
   if (pct === 100) return null;
 
-  // If sidebar is collapsed, show a minimal pip
+  // Collapsed sidebar — minimal pip
   if (sidebarCollapsed) {
     return (
       <div
-        style={{
-          padding: '10px 0',
-          display: 'flex',
-          justifyContent: 'center',
-          cursor: 'pointer',
-        }}
-        title={`Setup: ${pct}% complete`}
-        onClick={() => window.location.href = '/setup'}
+        style={{ padding: '10px 0', display: 'flex', justifyContent: 'center', cursor: 'pointer' }}
+        title={`Production: ${pct}% complete`}
+        onClick={() => { if (nextStep) window.location.href = nextStep.route; }}
       >
         <div style={{
           width: 28, height: 28, borderRadius: '50%',
@@ -105,7 +128,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
       fontFamily: 'DM Sans, sans-serif',
       fontSize: 12,
     }}>
-      {/* Header — collapsible */}
+      {/* Header */}
       <div
         onClick={() => setOpen(o => !o)}
         style={{
@@ -114,7 +137,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
         }}
       >
         <span style={{ fontWeight: 600, color: '#1C1814', fontSize: 11, letterSpacing: '0.04em' }}>
-          SETUP PROGRESS
+          SHOW PROGRESS
         </span>
         <span style={{ fontSize: 10, color: '#7A7268' }}>
           {open ? '▾' : '▸'} {pct}%
@@ -124,75 +147,59 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
       {/* Progress bar */}
       <div style={{ height: 3, background: '#E0D9CC', margin: '0 10px 6px 10px', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{
-          height: '100%',
-          width: `${pct}%`,
-          background: priorityColor,
-          borderRadius: 2,
+          height: '100%', width: `${pct}%`,
+          background: priorityColor, borderRadius: 2,
           transition: 'width 0.4s ease',
         }} />
       </div>
 
-      {/* Step list (collapsible) */}
+      {/* Step list */}
       {open && (
         <div style={{ padding: '0 10px 8px 10px' }}>
-          {STEPS.map(step => {
-            const done = stepDone[step.key];
-            return (
-              <div key={step.key} style={{
+          {steps.map(step => (
+            <div key={step.label}
+              onClick={() => { if (!step.done && step.route) window.location.href = step.route; }}
+              style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '3px 0',
-                color: done ? '#2E8B57' : '#B8AFA2',
+                color: step.done ? '#2E8B57' : '#B8AFA2',
                 fontSize: 11,
+                cursor: step.done ? 'default' : 'pointer',
+              }}
+            >
+              <span style={{ width: 16, textAlign: 'center', fontSize: 12 }}>
+                {step.done ? '✓' : step.icon}
+              </span>
+              <span style={{
+                flex: 1,
+                textDecoration: step.done ? 'line-through' : 'none',
+                opacity: step.done ? 0.6 : 1,
               }}>
-                <span style={{ width: 16, textAlign: 'center', fontSize: 12 }}>
-                  {done ? '✓' : step.icon}
-                </span>
-                <span style={{
-                  textDecoration: done ? 'line-through' : 'none',
-                  opacity: done ? 0.6 : 1,
-                }}>
-                  {step.label}
-                </span>
-              </div>
-            );
-          })}
+                {step.label}
+              </span>
+              <span style={{ fontSize: 9, color: step.done ? '#2E8B57' : '#B8AFA2', fontWeight: 600 }}>
+                {step.detail}
+              </span>
+            </div>
+          ))}
 
-          {/* Next-action button */}
+          {/* Next action button */}
           {nextStep && (
             <button
-              onClick={() => window.location.href = '/setup'}
+              onClick={() => window.location.href = nextStep.route}
               style={{
-                width: '100%',
-                marginTop: 8,
-                padding: '6px 0',
-                border: 'none',
-                borderRadius: 6,
-                background: priorityColor,
-                color: '#fff',
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: 'pointer',
-                letterSpacing: '0.02em',
-                fontFamily: 'DM Sans, sans-serif',
+                width: '100%', marginTop: 8, padding: '6px 0',
+                border: 'none', borderRadius: 6,
+                background: priorityColor, color: '#fff',
+                fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                letterSpacing: '0.02em', fontFamily: 'DM Sans, sans-serif',
                 transition: 'opacity 0.15s',
               }}
               onMouseEnter={e => e.target.style.opacity = '0.85'}
               onMouseLeave={e => e.target.style.opacity = '1'}
             >
-              Continue: {nextStep.label}
+              Next: {nextStep.label}
             </button>
-          )}
-
-          {pct === 100 && (
-            <div style={{
-              textAlign: 'center',
-              marginTop: 6,
-              fontSize: 11,
-              color: '#2E8B57',
-              fontWeight: 500,
-            }}>
-              ✓ Setup complete
-            </div>
           )}
         </div>
       )}
