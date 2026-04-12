@@ -1262,8 +1262,9 @@ router.post('/world/:showId/events/batch-generate-invitations', optionalAuth, as
       return res.json({ success: true, message: 'No events need invitations', results: [] });
     }
 
-    // Cap at 10 per batch to avoid runaway costs
-    const capped = targetIds.slice(0, 10);
+    // Cap at 3 per batch to control image API costs
+    const MAX_BATCH = parseInt(process.env.IMAGE_CALLS_PER_OPERATION) || 3;
+    const capped = targetIds.slice(0, MAX_BATCH);
 
     console.log(`[InviteGen] Batch generating ${capped.length} invitations for show ${showId}`);
 

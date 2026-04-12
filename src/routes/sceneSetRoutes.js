@@ -2015,9 +2015,11 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), optionalAuth, a
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
 
+    const MAX_BATCH = parseInt(process.env.IMAGE_CALLS_PER_OPERATION) || 3;
     const pendingAngles = await SceneAngle.findAll({
       where: { scene_set_id: set.id, generation_status: 'pending' },
       order: [['sort_order', 'ASC']],
+      limit: MAX_BATCH,
     });
 
     if (pendingAngles.length === 0) {

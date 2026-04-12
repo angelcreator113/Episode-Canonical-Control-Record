@@ -262,7 +262,8 @@ async function generateOverlay(overlayType, showId, options = {}) {
   const prompt = STYLE_PREFIX + customPrompt;
   const size = overlayType.size || (overlayType.category === 'icon' ? 'square' : 'portrait');
   const skipBgRemoval = options.skipBgRemoval || false;
-  const imageUrl = await generateImageUrl(prompt, { size, quality: 'hd' });
+  const useCase = overlayType.category === 'icon' ? 'icon' : 'overlay';
+  const imageUrl = await generateImageUrl(prompt, { size, quality: 'hd', useCase });
 
   if (!imageUrl) throw new Error(`Failed to generate ${overlayType.name}`);
 

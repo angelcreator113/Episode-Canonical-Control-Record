@@ -116,7 +116,7 @@ No text, no logos, no people. Interior design photography. Landscape orientation
 
   // Generate single image
   console.log('[VenueGen] Generating venue image...');
-  const imageUrl = await generateImageUrl(venuePrompt, { size: 'landscape', quality: 'hd' });
+  const imageUrl = await generateImageUrl(venuePrompt, { size: 'landscape', quality: 'hd', useCase: 'venue' });
 
   if (!imageUrl) throw new Error('Image generation failed — no URL returned');
 
