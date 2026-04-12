@@ -2359,7 +2359,7 @@ router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', opti
             );
             hostProfile = rows?.[0] || null;
           }
-          socialTasks = buildSocialTasks(event.event_type || 'invite', hostProfile);
+          socialTasks = buildSocialTasks(event.event_type || 'invite', hostProfile, outfitPieces);
         } catch { socialTasks = []; }
       }
       tasks = socialTasks;

@@ -20,12 +20,20 @@
  * @param {number} currentBalance - Lala's current coin balance
  * @returns {object} { affordable, totalCost, breakdown, pressure_level, narrative }
  */
-function checkAffordability(event, currentBalance) {
+function checkAffordability(event, currentBalance, wardrobeItems = []) {
   const prestige = event.prestige || 5;
   const entryCost = parseFloat(event.cost_coins) || 0;
 
-  // Estimate outfit cost based on prestige tier
-  const outfitCost = prestige >= 8 ? 400 : prestige >= 6 ? 250 : prestige >= 4 ? 120 : 50;
+  // Use actual wardrobe cost if pieces are selected, otherwise estimate from prestige
+  let outfitCost;
+  if (wardrobeItems.length > 0) {
+    outfitCost = wardrobeItems.reduce((sum, item) => {
+      if (item.acquisition_type === 'gifted' || item.acquisition_type === 'borrowed' || item.is_owned) return sum;
+      return sum + (parseFloat(item.coin_cost) || parseFloat(item.price) || 0);
+    }, 0);
+  } else {
+    outfitCost = prestige >= 8 ? 400 : prestige >= 6 ? 250 : prestige >= 4 ? 120 : 50;
+  }
 
   // Transport/styling extras
   const extras = prestige >= 7 ? 100 : prestige >= 4 ? 50 : 20;
