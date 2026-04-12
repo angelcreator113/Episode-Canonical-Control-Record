@@ -27,7 +27,6 @@ function buildNav(shows) {
     {
       zone: 'CREATE SHOW',
       items: [
-        { icon: '🏠', label: 'Properties', route: '/property-manager', hint: 'Multi-room homes' },
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
           { icon: '🎞️', label: 'Scene Sets', route: `/shows/${showId}/world?tab=scene-sets` },
