@@ -2506,8 +2506,14 @@ The revised event should feel like a completely different experience from the si
                 {/* Location banner */}
                 {linkedScene?.base_still_url && (
                   <div style={{ height: 140, overflow: 'hidden', position: 'relative', borderRadius: '16px 16px 0 0' }}>
-                    <img src={linkedScene.base_still_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <div style={{ position: 'absolute', bottom: 8, left: 12, fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '3px 10px', borderRadius: 6 }}>📍 {linkedScene.name}</div>
+                    {linkedScene.video_clip_url ? (
+                      <video src={linkedScene.video_clip_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} autoPlay loop muted playsInline />
+                    ) : (
+                      <img src={linkedScene.base_still_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )}
+                    <div style={{ position: 'absolute', bottom: 8, left: 12, fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '3px 10px', borderRadius: 6 }}>
+                      📍 {linkedScene.name} {linkedScene.video_clip_url && '🎬'}
+                    </div>
                     <button onClick={() => updateField('scene_set_id', null)} style={{ position: 'absolute', bottom: 8, right: 12, fontSize: 9, color: '#fff', background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Change</button>
                   </div>
                 )}
@@ -2574,13 +2580,42 @@ The revised event should feel like a completely different experience from the si
                       {linkedScene && (
                           <div style={{ background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0', marginBottom: 6, overflow: 'hidden' }}>
                             {linkedScene.base_still_url && (
-                              <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: '100%', height: 80, objectFit: 'cover' }} />
+                              <div style={{ position: 'relative' }}>
+                                {linkedScene.video_clip_url ? (
+                                  <video src={linkedScene.video_clip_url} style={{ width: '100%', height: 80, objectFit: 'cover' }} autoPlay loop muted playsInline />
+                                ) : (
+                                  <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: '100%', height: 80, objectFit: 'cover' }} />
+                                )}
+                              </div>
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px' }}>
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>✓ {linkedScene.name}</div>
                                 <div style={{ fontSize: 10, color: '#64748b' }}>{linkedScene.scene_type?.replace(/_/g, ' ')}</div>
                               </div>
+                              {linkedScene.base_still_url && !linkedScene.video_clip_url && (
+                                <button onClick={async (e) => {
+                                  const btn = e.currentTarget;
+                                  btn.disabled = true; btn.textContent = '⏳ Finding exterior...';
+                                  try {
+                                    // Find the ESTABLISHING (exterior) angle for this scene set
+                                    const anglesRes = await api.get(`/api/v1/scene-sets/${linkedScene.id}`);
+                                    const angles = anglesRes.data?.data?.angles || anglesRes.data?.angles || [];
+                                    const exterior = angles.find(a => a.angle_label === 'ESTABLISHING') || angles[0];
+                                    if (!exterior) { setToast('No exterior angle found — generate venue images first'); btn.disabled = false; btn.textContent = '🎬 Video'; return; }
+                                    btn.textContent = '⏳ Generating video...';
+                                    const res = await api.post(`/api/v1/scene-sets/${linkedScene.id}/angles/${exterior.id}/generate-video`);
+                                    if (res.data.success) setToast('Exterior video generation started (~1 min)');
+                                    else setToast(res.data.error || 'Failed');
+                                  } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                                  btn.disabled = false; btn.textContent = '🎬 Video';
+                                }} style={{ ...S.smBtn, fontSize: 9, padding: '2px 8px', background: '#faf5ea', borderColor: '#e8d9b8', color: '#B8962E' }}>
+                                  🎬 Video
+                                </button>
+                              )}
+                              {linkedScene.video_clip_url && (
+                                <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: '#dbeafe', color: '#1e40af' }}>🎬 Video</span>
+                              )}
                               <button onClick={() => updateField('scene_set_id', null)} style={{ ...S.smBtn, fontSize: 10, padding: '2px 8px' }}>✕ Remove</button>
                             </div>
                             {!linkedScene.base_still_url && (
