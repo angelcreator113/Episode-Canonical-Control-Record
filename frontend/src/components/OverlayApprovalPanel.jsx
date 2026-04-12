@@ -114,6 +114,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
         overlayType,
       });
       setImageUrl(res.data.imageUrl);
+      if (res.data.assetId) setPendingAssetId(res.data.assetId);
       const updatedTasks = editTasks.map(t => ({ ...t }));
       setTasks(updatedTasks);
       setEditTasks(updatedTasks.map(t => ({ ...t })));

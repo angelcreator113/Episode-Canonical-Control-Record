@@ -1,301 +1,243 @@
-// frontend/src/components/Episodes/EpisodeAssetsTab.jsx - ENHANCED
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { assetService } from '../../services/assetService';
-import AssetUploader from '../Assets/AssetUploader';
-import AssetLinkModal from '../Assets/AssetLinkModal';
-import LoadingSkeleton from '../LoadingSkeleton';
-import './EpisodeAssetsTab.css';
+import api from '../../services/api';
 
 /**
- * EpisodeAssetsTab - Two-section asset management
- * 
- * Section 1: From Show Library (linked, reusable)
- * Section 2: Episode Only (unique to episode)
- * 
- * Features: Link, Unlink, Upload, Promote, Bulk operations
+ * EpisodeAssetsTab — Production Readiness Checklist
+ *
+ * Shows every production asset needed for this episode with status:
+ * - Title Card, Invitation, Venue, Outfit, Wardrobe List,
+ *   Social Tasks, Career List, Stats Panel, Feed Posts, Script
+ *
+ * Each item shows: generated/approved/missing status, thumbnail, quick action
  */
 
-// Map asset type/role to UI category
-const mapAssetTypeToCategory = (assetType) => {
-  if (!assetType) return 'other';
-  const type = assetType.toUpperCase();
-  if (type.includes('LOGO') || type.includes('BRAND')) return 'logos';
-  if (type.includes('INTRO')) return 'intros';
-  if (type.includes('OUTRO')) return 'outros';
-  if (type.includes('MUSIC') || type.includes('AUDIO')) return 'music';
-  if (type.includes('WARDROBE') || type.includes('OUTFIT')) return 'wardrobe';
-  if (type.includes('THUMBNAIL')) return 'thumbnail';
-  return 'other';
-};
-
-// Generate placeholder thumbnail for assets without one
-const generatePlaceholderThumbnail = (category) => {
-  const icons = {
-    logos: '🎬',
-    intros: '🎵',
-    outros: '🎬',
-    music: '🎵',
-    wardrobe: '👗',
-    thumbnail: '🖼️',
-    other: '📎'
-  };
-  const icon = icons[category] || '📎';
-  return `data:image/svg+xml,${encodeURIComponent(`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="#64748b"/><text x="50%" y="50%" font-size="80" text-anchor="middle" dy=".3em">${icon}</text></svg>`)}`;
+const STATUS_STYLES = {
+  approved: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', icon: '✅', label: 'Approved' },
+  generated: { bg: '#eef2ff', color: '#6366f1', border: '#c7d2fe', icon: '🔵', label: 'Generated' },
+  pending: { bg: '#fef3c7', color: '#92400e', border: '#fde68a', icon: '⏳', label: 'Pending' },
+  missing: { bg: '#f8f8f8', color: '#94a3b8', border: '#e2e8f0', icon: '⬜', label: 'Not generated' },
 };
 
 function EpisodeAssetsTab({ episode, show }) {
   const navigate = useNavigate();
-  const [linkedAssets, setLinkedAssets] = useState([]);
-  const [episodeAssets, setEpisodeAssets] = useState([]);
-  const [showUploader, setShowUploader] = useState(false);
-  const [showLinkModal, setShowLinkModal] = useState(false);
-  const [selectedAssets, setSelectedAssets] = useState([]);
-  const [loading, setLoading] = useState(false);
-  
-  // Safety check
-  if (!episode || !show) {
-    return <div className="episode-assets-loading">Loading episode and show data...</div>;
-  }
-  
+  const [checklist, setChecklist] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [readiness, setReadiness] = useState({ ready: 0, total: 0 });
+
+  const showId = show?.id || episode?.show_id || episode?.showId;
+  const episodeId = episode?.id;
+
   useEffect(() => {
-    if (episode?.id) {
-      fetchEpisodeAssets();
-    }
-  }, [episode?.id]);
-  
-  const fetchEpisodeAssets = async () => {
+    if (episodeId && showId) loadChecklist();
+  }, [episodeId, showId]);
+
+  const loadChecklist = async () => {
     setLoading(true);
     try {
-      // Fetch assets linked to this episode via the junction table
-      const response = await assetService.getEpisodeAssets(episode.id);
-      
-      const assetsArray = response.data?.assets || response.data || [];
-      
-      // Separate linked (show) assets from episode-only assets
-      const linked = [];
-      const epOnly = [];
-      
-      assetsArray.forEach(asset => {
-        const category = mapAssetTypeToCategory(asset.asset_type || asset.asset_role);
-        const mappedAsset = {
-          id: asset.id,
-          name: asset.name || asset.file_name || 'Untitled Asset',
-          type: asset.media_type || (asset.content_type?.startsWith('video') ? 'video' : 'image'),
-          category: category,
-          url: asset.s3_url_raw || asset.url,
-          thumbnail_url: asset.metadata?.thumbnail_url || asset.s3_url_raw || generatePlaceholderThumbnail(category),
-          source: asset.asset_scope || 'EPISODE'
-        };
-        
-        if (asset.asset_scope === 'SHOW' || asset.show_id) {
-          linked.push(mappedAsset);
-        } else {
-          epOnly.push(mappedAsset);
-        }
-      });
-      
-      setLinkedAssets(linked);
-      setEpisodeAssets(epOnly);
-      console.log(`✅ EpisodeAssetsTab: Loaded ${linked.length} linked, ${epOnly.length} episode-only assets`);
-    } catch (error) {
-      console.error('Error fetching episode assets:', error);
-      setLinkedAssets([]);
-      setEpisodeAssets([]);
+      // Load all data sources in parallel
+      const [eventRes, todoRes, assetsRes, scriptRes, feedRes] = await Promise.allSettled([
+        api.get(`/api/v1/world/${showId}/events`).then(r => {
+          const events = r.data?.events || [];
+          return events.find(e => e.used_in_episode_id === episodeId) || null;
+        }),
+        api.get(`/api/v1/episodes/${episodeId}/todo`).catch(() => ({ data: null })),
+        api.get(`/api/v1/assets?episode_id=${episodeId}&limit=100`).catch(() => ({ data: { data: [] } })),
+        api.get(`/api/v1/episodes/${episodeId}`).catch(() => ({ data: {} })),
+        api.get(`/api/v1/feed-posts?episode_id=${episodeId}&limit=50`).catch(() => ({ data: { data: [] } })),
+      ]);
+
+      const event = eventRes.status === 'fulfilled' ? eventRes.value : null;
+      const todoList = todoRes.status === 'fulfilled' ? (todoRes.value.data?.data || null) : null;
+      const assets = assetsRes.status === 'fulfilled' ? (assetsRes.value.data?.data || []) : [];
+      const epData = scriptRes.status === 'fulfilled' ? (scriptRes.value.data?.data || scriptRes.value.data || {}) : {};
+      const feedPosts = feedRes.status === 'fulfilled' ? (feedRes.value.data?.data || []) : [];
+
+      // Parse event data
+      let cc = event?.canon_consequences;
+      if (typeof cc === 'string') try { cc = JSON.parse(cc); } catch { cc = {}; }
+      const auto = cc?.automation || {};
+
+      let outfitPieces = event?.outfit_pieces;
+      if (typeof outfitPieces === 'string') try { outfitPieces = JSON.parse(outfitPieces); } catch { outfitPieces = []; }
+      if (!Array.isArray(outfitPieces)) outfitPieces = [];
+
+      let socialTasks = todoList?.social_tasks;
+      if (typeof socialTasks === 'string') try { socialTasks = JSON.parse(socialTasks); } catch { socialTasks = []; }
+      if (!Array.isArray(socialTasks)) socialTasks = [];
+      const socialCompleted = socialTasks.filter(t => t.completed).length;
+
+      // Find specific assets
+      const findAsset = (role) => assets.find(a => (a.asset_role || '').includes(role));
+      const titleAsset = findAsset('EPISODE_TITLE');
+      const invitationAsset = findAsset('INVITATION');
+      const wardrobeOverlay = findAsset('WARDROBE_LIST');
+      const socialOverlay = findAsset('SOCIAL');
+      const careerOverlay = findAsset('CAREER_LIST');
+      const statsOverlay = findAsset('STATS');
+
+      // Build checklist
+      const items = [
+        {
+          id: 'title_card', icon: '🎬', name: 'Episode Title Card',
+          status: titleAsset ? 'approved' : 'missing',
+          detail: titleAsset ? 'Generated' : 'Generate from event panel',
+          thumbnail: titleAsset?.s3_url_processed || titleAsset?.s3_url_raw,
+          action: event ? { label: 'Generate', url: `/shows/${showId}/world?tab=events` } : null,
+        },
+        {
+          id: 'invitation', icon: '💌', name: 'Invitation',
+          status: invitationAsset || event?.invitation_asset_id ? 'approved' : event ? 'missing' : 'missing',
+          detail: invitationAsset ? 'Approved' : event ? 'Generate from event panel' : 'No event linked',
+          thumbnail: invitationAsset?.s3_url_processed || event?.invitation_url,
+          action: event ? { label: 'Event Panel', url: `/shows/${showId}/world?tab=events` } : null,
+        },
+        {
+          id: 'venue', icon: '📍', name: 'Venue Images',
+          status: event?.scene_set_id ? 'approved' : event ? 'missing' : 'missing',
+          detail: event?.scene_set_id ? `Scene set linked` : 'Generate venue from event panel',
+          action: { label: 'Scene Library', url: `/shows/${showId}/scene-library` },
+        },
+        {
+          id: 'outfit', icon: '👗', name: 'Outfit',
+          status: outfitPieces.length > 0 ? 'approved' : 'missing',
+          detail: outfitPieces.length > 0
+            ? `${outfitPieces.length} pieces ($${outfitPieces.reduce((s, p) => s + (parseFloat(p.price) || 0), 0).toLocaleString()})`
+            : 'Pick outfit from event panel',
+          thumbnail: outfitPieces[0]?.image_url,
+          action: event ? { label: 'Pick Outfit', url: `/shows/${showId}/world?tab=events` } : null,
+        },
+        {
+          id: 'wardrobe_list', icon: '📋', name: 'Wardrobe Shopping List',
+          status: wardrobeOverlay || auto.wardrobe_overlay_url ? 'approved' : todoList?.tasks ? 'generated' : 'missing',
+          detail: wardrobeOverlay ? 'Overlay approved' : todoList?.tasks ? `${(typeof todoList.tasks === 'string' ? JSON.parse(todoList.tasks) : todoList.tasks).length} tasks` : 'Generate from event panel',
+          thumbnail: auto.wardrobe_overlay_url || wardrobeOverlay?.s3_url_processed,
+        },
+        {
+          id: 'social_tasks', icon: '📱', name: 'Social Tasks',
+          status: socialOverlay || auto.social_checklist_url ? 'approved' : socialTasks.length > 0 ? 'generated' : 'missing',
+          detail: socialTasks.length > 0 ? `${socialCompleted}/${socialTasks.length} completed` : 'Generate from event panel',
+          thumbnail: auto.social_checklist_url || socialOverlay?.s3_url_processed,
+        },
+        {
+          id: 'career_list', icon: '🎯', name: 'Career Checklist',
+          status: careerOverlay ? 'approved' : 'missing',
+          detail: careerOverlay ? 'Overlay approved' : 'Optional — generate from event panel',
+        },
+        {
+          id: 'stats_panel', icon: '🪙', name: 'Stats Panel',
+          status: statsOverlay ? 'approved' : 'missing',
+          detail: statsOverlay ? 'Generated' : 'Optional — shows financial reveal',
+        },
+        {
+          id: 'script', icon: '📝', name: 'Script',
+          status: epData.script_content ? 'approved' : 'missing',
+          detail: epData.script_content ? 'Script written' : 'Write from episode detail',
+          action: { label: 'Write Script', url: `/episodes/${episodeId}?tab=scripts` },
+        },
+        {
+          id: 'feed_posts', icon: '👥', name: 'Feed Posts',
+          status: feedPosts.length > 0 ? 'approved' : 'missing',
+          detail: feedPosts.length > 0 ? `${feedPosts.length} posts generated` : 'Generate after script is written',
+        },
+      ];
+
+      setChecklist(items);
+      const readyCount = items.filter(i => i.status === 'approved' || i.status === 'generated').length;
+      setReadiness({ ready: readyCount, total: items.length });
+    } catch (err) {
+      console.error('[EpisodeAssets] Load error:', err);
     } finally {
       setLoading(false);
     }
   };
-  
-  // Map category to asset type (must match backend VALID_ASSET_TYPES)
-  const categoryToAssetType = (category) => {
-    const mapping = {
-      thumbnail: 'THUMBNAIL',
-      guest_photo: 'GUEST_PHOTO',
-      custom_graphic: 'CUSTOM_GRAPHIC',
-      b_roll: 'B_ROLL',
-      other: 'EPISODE_FRAME'
-    };
-    return mapping[category] || 'EPISODE_FRAME';
-  };
-  
-  // Handle file upload
-  const handleUpload = async (files, category, destination) => {
-    try {
-      console.log('Uploading episode assets:', files, 'Category:', category, 'Destination:', destination);
-      
-      for (const file of files) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('assetType', categoryToAssetType(category));
-        formData.append('metadata', JSON.stringify({
-          episodeId: episode.id,
-          episode_id: episode.id,
-          asset_scope: 'EPISODE',
-          purpose: category,
-          uploadedFrom: 'EpisodeAssetsTab'
-        }));
-        
-        await assetService.uploadAsset(formData);
-        console.log(`✅ Uploaded: ${file.name}`);
-      }
-      
-      // Refresh assets
-      await fetchEpisodeAssets();
-      
-      setShowUploader(false);
-      alert(`Successfully uploaded ${files.length} asset(s) to episode!`);
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Failed to upload assets: ' + error.message);
-    }
-  };
-  
-  const handleLinkAssets = async (assetIds) => {
-    if (!assetIds || assetIds.length === 0) return;
-    
-    try {
-      await assetService.linkAssetsToEpisode(episode.id, assetIds);
-      console.log(`✅ Linked ${assetIds.length} assets to episode`);
-      await fetchEpisodeAssets();
-      setShowLinkModal(false);
-    } catch (error) {
-      console.error('Error linking assets:', error);
-      alert('Failed to link assets. Please try again.');
-    }
-  };
-  
-  const handlePromoteToShow = async (asset) => {
-    if (!confirm(`Promote "${asset.name}" to Show Library?`)) return;
-    
-    const replaceWithLink = confirm(
-      'Replace episode copy with link to show asset?\n\nYes = Linked (saves space)\nNo = Keep both'
-    );
-    
-    if (replaceWithLink) {
-      setEpisodeAssets(episodeAssets.filter(a => a.id !== asset.id));
-      setLinkedAssets([...linkedAssets, { ...asset, source: 'show' }]);
-    }
-    
-    alert('Asset promoted to Show Library!');
-  };
-  
-  if (loading) return <div className="episode-assets-loading"><LoadingSkeleton variant="card" count={3} /></div>;
-  
+
+  if (!episode) {
+    return <div style={{ padding: 24, color: '#94a3b8' }}>Loading episode...</div>;
+  }
+
+  if (loading) {
+    return <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading production checklist...</div>;
+  }
+
+  const pct = readiness.total > 0 ? Math.round((readiness.ready / readiness.total) * 100) : 0;
+
   return (
-    <div className="episode-assets-tab">
-      {/* FROM SHOW LIBRARY */}
-      <section className="linked-assets-section">
-        <div className="section-header">
-          <div className="header-left">
-            <h3><span className="section-icon">🔗</span> From Show Library</h3>
-            <p className="section-subtitle">Reusable assets from {show.name}</p>
-          </div>
-          <button className="btn-link-asset" onClick={() => setShowLinkModal(true)}>
-            + Link Show Asset
-          </button>
+    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Production Readiness</h2>
+          <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8' }}>
+            {readiness.ready}/{readiness.total} assets ready — {pct}% complete
+          </p>
         </div>
-        
-        {linkedAssets.length === 0 ? (
-          <div className="empty-section">
-            <div className="empty-icon">🔗</div>
-            <p>No show assets linked</p>
-            <button className="btn-primary" onClick={() => setShowLinkModal(true)}>
-              + Link Show Asset
-            </button>
+        <div style={{
+          width: 48, height: 48, borderRadius: '50%',
+          background: `conic-gradient(${pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626'} ${pct * 3.6}deg, #f1f5f9 0deg)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: '50%', background: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 800, color: pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626',
+          }}>
+            {pct}%
           </div>
-        ) : (
-          <div className="assets-grid">
-            {linkedAssets.map(asset => (
-              <div key={asset.id} className="asset-card linked-asset">
-                <div className="asset-badge linked-badge">🔗 Linked</div>
-                <div className="asset-thumbnail">
-                  {asset.type === 'image' ? (
-                    <img src={asset.url} alt={asset.name} />
-                  ) : (
-                    <img src={asset.thumbnail_url} alt={asset.name} />
-                  )}
-                </div>
-                <div className="asset-info">
-                  <div className="asset-category-badge" style={{ background: '#10b981' }}>
-                    🔗 {asset.category || 'Asset'}
-                  </div>
-                  <h4 className="asset-name">{asset.name}</h4>
-                  <div className="asset-meta">
-                    <span>{asset.type}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-      
-      {/* EPISODE ONLY */}
-      <section className="episode-assets-section">
-        <div className="section-header">
-          <div className="header-left">
-            <h3><span className="section-icon">📎</span> Episode Only</h3>
-            <p className="section-subtitle">Unique to this episode</p>
-          </div>
-          <button className="btn-upload" onClick={() => setShowUploader(true)}>
-            + Upload New
-          </button>
         </div>
-        
-        {episodeAssets.length === 0 ? (
-          <div className="empty-section">
-            <div className="empty-icon">📎</div>
-            <p>No episode assets</p>
-            <button className="btn-primary" onClick={() => setShowUploader(true)}>
-              + Upload Asset
-            </button>
-          </div>
-        ) : (
-          <div className="assets-grid">
-            {episodeAssets.map(asset => (
-              <div key={asset.id} className="asset-card episode-asset">
-                <div className="asset-badge episode-badge">📎 Episode</div>
-                <div className="asset-thumbnail">
-                  <img src={asset.url || asset.thumbnail_url} alt={asset.name} />
-                </div>
-                <div className="asset-info">
-                  <div className="asset-category-badge" style={{ background: '#8b5cf6' }}>
-                    📎 {asset.category || 'Asset'}
-                  </div>
-                  <h4 className="asset-name">{asset.name}</h4>
-                  <div className="asset-meta">
-                    <span>{asset.type}</span>
-                    <button
-                      className="btn-promote-inline"
-                      onClick={(e) => { e.stopPropagation(); handlePromoteToShow(asset); }}
-                    >
-                      ⬆️ Promote
-                    </button>
-                  </div>
-                </div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ height: 4, background: '#f1f5f9', borderRadius: 2, marginBottom: 16, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', borderRadius: 2, transition: 'width 0.3s',
+          width: `${pct}%`,
+          background: pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626',
+        }} />
+      </div>
+
+      {/* Checklist */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {checklist.map(item => {
+          const st = STATUS_STYLES[item.status] || STATUS_STYLES.missing;
+
+          return (
+            <div key={item.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+              background: st.bg, borderRadius: 8, border: `1px solid ${st.border}`,
+            }}>
+              {/* Status icon + item icon */}
+              <span style={{ fontSize: 14, flexShrink: 0 }}>{st.icon}</span>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
+
+              {/* Name + detail */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{item.name}</div>
+                <div style={{ fontSize: 10, color: st.color }}>{item.detail}</div>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
-      
-      {showUploader && (
-        <AssetUploader
-          context="episode"
-          onUpload={handleUpload}
-          onClose={() => setShowUploader(false)}
-        />
-      )}
-      
-      {showLinkModal && (
-        <AssetLinkModal
-          show={show}
-          episode={episode}
-          onLink={handleLinkAssets}
-          onClose={() => setShowLinkModal(false)}
-        />
-      )}
+
+              {/* Thumbnail */}
+              {item.thumbnail && (
+                <img src={item.thumbnail} alt="" style={{
+                  width: 32, height: 32, borderRadius: 6, objectFit: 'cover',
+                  border: '1px solid #e2e8f0', flexShrink: 0,
+                }} onError={e => e.target.style.display = 'none'} />
+              )}
+
+              {/* Action button */}
+              {item.action && item.status === 'missing' && (
+                <button onClick={() => navigate(item.action.url)} style={{
+                  fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 6,
+                  border: '1px solid #c7d2fe', background: '#eef2ff', color: '#6366f1',
+                  cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                  {item.action.label}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

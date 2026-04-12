@@ -251,14 +251,19 @@ Return ONLY the JSON. Every description must reference SPECIFIC data from above 
 
   const generated = JSON.parse(match[0]);
 
-  // Build distribution_metadata structure
+  // Build distribution_metadata structure with length validation
+  const TITLE_LIMITS = { youtube: 100, tiktok: 150, instagram: 0, facebook: 255 };
+  const DESC_LIMITS = { youtube: 5000, tiktok: 2200, instagram: 2200, facebook: 63206 };
+
   const metadata = {};
   for (const platform of platforms) {
     const gen = generated[platform] || {};
     const defaults = showDefaults[platform] || {};
+    const titleLimit = TITLE_LIMITS[platform] || 255;
+    const descLimit = DESC_LIMITS[platform] || 5000;
     metadata[platform] = {
-      title: gen.title || '',
-      description: gen.description || '',
+      title: titleLimit > 0 ? (gen.title || '').slice(0, titleLimit) : '',
+      description: (gen.description || '').slice(0, descLimit),
       hashtags: gen.hashtags || [],
       tags: gen.tags || [],
       status: 'draft',

@@ -2945,27 +2945,131 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   })()}
 
                   {/* ═══ Overlay Command Center ═══ */}
+                  {/* ═══ Overlay Command Center ═══ */}
                   <div style={{ borderTop: '2px solid #f1f5f9', paddingTop: 14, marginTop: 12, marginBottom: 4 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <div style={{ fontSize: 12, fontWeight: 800, color: '#1a1a2e' }}>Episode Overlays</div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={async () => {
+                          setOutfitPickerEvent(md);
+                          setOutfitSelected(new Set());
+                          setOutfitScore(null);
+                          try {
+                            const res = await api.get(`/api/v1/world/${showId}/events/${md.id}/wardrobe-options`);
+                            setOutfitOptions(res.data.items || []);
+                            const existing = await api.get(`/api/v1/world/${showId}/events/${md.id}/outfit`);
+                            if (existing.data.pieces?.length > 0) {
+                              setOutfitSelected(new Set(existing.data.pieces.map(p => p.id)));
+                              setOutfitScore(existing.data.score);
+                            }
+                          } catch { setOutfitOptions([]); }
+                        }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                          👗 Pick Outfit
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Show-level overlays (always present) */}
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Show Overlays (always on)</div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {['show_title', 'login_screen', 'phone_screen', 'icon_holder', 'cursor', 'exit_icon', 'minimize_icon'].map(id => (
+                          <span key={id} style={{ padding: '2px 8px', background: '#f0fdf4', color: '#16a34a', borderRadius: 6, fontSize: 9, fontWeight: 600 }}>
+                            ✓ {id.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Episode-level overlays (selectable) */}
+                    {(() => {
+                      const episodeOverlays = [
+                        { id: 'episode_title', name: 'Episode Title', icon: '🎬' },
+                        { id: 'mail_panel', name: 'Mail Panel', icon: '💌' },
+                        { id: 'wardrobe_list', name: 'Wardrobe List', icon: '👗' },
+                        { id: 'closet_ui', name: 'Closet UI', icon: '🚪' },
+                        { id: 'career_list', name: 'Career List', icon: '📋' },
+                        { id: 'social_tasks', name: 'Social Tasks', icon: '📱' },
+                        { id: 'stats_panel', name: 'Stats Panel', icon: '🪙' },
+                      ];
+                      // Parse current selections or auto-suggest
+                      let selections = auto.required_ui_overlays || md.required_ui_overlays;
+                      if (typeof selections === 'string') try { selections = JSON.parse(selections); } catch { selections = null; }
+                      if (!Array.isArray(selections)) {
+                        // Auto-suggest based on event type
+                        selections = [];
+                        const type = md.event_type || 'invite';
+                        if (md.used_in_episode_id) selections.push('episode_title');
+                        if (['invite', 'upgrade', 'brand_deal'].includes(type)) selections.push('mail_panel');
+                        if ((md.prestige || 5) >= 4) selections.push('wardrobe_list', 'closet_ui');
+                        if (['brand_deal', 'deliverable'].includes(type) || (md.prestige || 5) >= 6) selections.push('career_list');
+                        if (auto.social_tasks?.length > 0) selections.push('social_tasks');
+                        if (md.is_paid || (md.prestige || 5) >= 7) selections.push('stats_panel');
+                      }
+
+                      return (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Episode Overlays (select for this episode)</div>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {episodeOverlays.map(o => {
+                              const selected = selections.includes(o.id);
+                              return (
+                                <button key={o.id} onClick={async () => {
+                                  const newSelections = selected ? selections.filter(s => s !== o.id) : [...selections, o.id];
+                                  try {
+                                    await api.put(`/api/v1/world/${showId}/events/${md.id}/overlay-selections`, { selected_overlays: newSelections });
+                                    setEventDetailModal(prev => prev ? { ...prev, required_ui_overlays: newSelections } : prev);
+                                    setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, required_ui_overlays: newSelections } : ev));
+                                  } catch { /* non-blocking */ }
+                                }} style={{
+                                  padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                                  background: selected ? '#eef2ff' : '#f8f8f8',
+                                  color: selected ? '#6366f1' : '#94a3b8',
+                                  border: `1px solid ${selected ? '#c7d2fe' : '#e2e8f0'}`,
+                                }}>
+                                  {o.icon} {o.name} {selected ? '✓' : ''}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Episode Title + Custom Overlay Actions */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {md.used_in_episode_id && (
+                        <button onClick={async (e) => {
+                          const btn = e.currentTarget;
+                          btn.disabled = true; btn.textContent = '⏳ Generating...';
+                          try {
+                            const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/generate-title-overlay`);
+                            if (res.data.success) setToast(`Title overlay: "${res.data.data.title}"`);
+                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                          btn.disabled = false; btn.textContent = '🎬 Generate Episode Title';
+                        }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                          🎬 Generate Episode Title
+                        </button>
+                      )}
                       <button onClick={async () => {
-                        setOutfitPickerEvent(md);
-                        setOutfitSelected(new Set());
-                        setOutfitScore(null);
+                        const name = window.prompt('Custom overlay name (e.g., "Sponsor Logo", "Transition Card"):');
+                        if (!name) return;
+                        const prompt = window.prompt('Describe the overlay for AI generation:');
+                        if (!prompt) return;
+                        const scope = window.confirm('Is this a SHOW-level overlay (appears in every episode)?\n\nOK = Show level\nCancel = Episode level only') ? 'show' : 'episode';
+                        const category = window.confirm('Is this a frame (large panel)?\n\nOK = Frame\nCancel = Icon') ? 'frame' : 'icon';
                         try {
-                          const res = await api.get(`/api/v1/world/${showId}/events/${md.id}/wardrobe-options`);
-                          setOutfitOptions(res.data.items || []);
-                          const existing = await api.get(`/api/v1/world/${showId}/events/${md.id}/outfit`);
-                          if (existing.data.pieces?.length > 0) {
-                            setOutfitSelected(new Set(existing.data.pieces.map(p => p.id)));
-                            setOutfitScore(existing.data.score);
-                          }
-                        } catch { setOutfitOptions([]); }
-                      }} style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}>
-                        👗 Pick Outfit
+                          const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, {
+                            name, prompt, category,
+                            description: `Custom ${scope}-level ${category}: ${name}`,
+                            beat: scope === 'show' ? 'Various' : 'Custom',
+                          });
+                          if (res.data.success) setToast(`Custom overlay "${name}" created — go to Scene Library → Overlays to generate it`);
+                        } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                      }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px dashed #94a3b8', background: '#fff', color: '#64748b', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                        + Add Custom Overlay
                       </button>
                     </div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>Select wardrobe items first, then generate overlays. Or generate with AI.</div>
                   </div>
 
                   {/* Wardrobe Shopping List Overlay */}
