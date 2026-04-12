@@ -93,6 +93,13 @@ module.exports = (sequelize, DataTypes = require('sequelize').DataTypes) => {
         comment: 'Additional metadata (ratings, awards, etc)',
       },
 
+      distribution_defaults: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: {},
+        comment: 'Platform distribution config: per-platform templates, hashtags, accounts, brand guidelines',
+      },
+
       isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,

@@ -489,6 +489,7 @@ module.exports = {
       categories: true,
       script_content: true,
       thumbnail_url: true,
+      distribution_metadata: true,
     };
 
     const updateData = {};
