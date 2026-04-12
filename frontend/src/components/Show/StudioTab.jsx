@@ -66,12 +66,12 @@ function StudioTab({ show, episodes = [] }) {
 
   const S = {
     card: { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 16px' },
-    statNum: { fontSize: 22, fontWeight: 800, color: '#1a1a2e', lineHeight: 1 },
-    statLabel: { fontSize: 10, color: '#94a3b8', marginTop: 2, fontWeight: 500 },
+    statNum: { fontSize: 28, fontWeight: 800, color: '#1a1a2e', lineHeight: 1 },
+    statLabel: { fontSize: 12, color: '#94a3b8', marginTop: 4, fontWeight: 500 },
   };
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* Stats Row */}
       {stats && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
@@ -123,10 +123,10 @@ function StudioTab({ show, episodes = [] }) {
         <div style={{ ...S.card, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
                 {isNew ? 'Getting Started' : 'Production Pipeline'}
               </div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>{doneCount}/{gettingStarted.length} steps · {pct}%</div>
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>{doneCount}/{gettingStarted.length} steps · {pct}%</div>
             </div>
             {nextStep && (
               <button onClick={() => navigate(nextStep.route)} style={{
@@ -156,11 +156,11 @@ function StudioTab({ show, episodes = [] }) {
                 onMouseEnter={e => { if (!step.done) e.currentTarget.style.background = '#f8fafc'; }}
                 onMouseLeave={e => { if (!step.done) e.currentTarget.style.background = 'transparent'; }}
               >
-                <span style={{ fontSize: 14, width: 20, textAlign: 'center' }}>{step.done ? '✅' : step.icon}</span>
-                <span style={{ flex: 1, fontSize: 12, fontWeight: step.done ? 400 : 600, color: step.done ? '#16a34a' : '#1a1a2e', textDecoration: step.done ? 'line-through' : 'none', opacity: step.done ? 0.7 : 1 }}>
+                <span style={{ fontSize: 16, width: 24, textAlign: 'center' }}>{step.done ? '✅' : step.icon}</span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: step.done ? 400 : 600, color: step.done ? '#16a34a' : '#1a1a2e', textDecoration: step.done ? 'line-through' : 'none', opacity: step.done ? 0.7 : 1 }}>
                   {step.label}
                 </span>
-                <span style={{ fontSize: 10, color: step.done ? '#16a34a' : '#94a3b8', fontWeight: 600 }}>{step.detail}</span>
+                <span style={{ fontSize: 12, color: step.done ? '#16a34a' : '#94a3b8', fontWeight: 600 }}>{step.detail}</span>
               </div>
             ))}
           </div>
@@ -182,8 +182,8 @@ function StudioTab({ show, episodes = [] }) {
             onMouseEnter={e => { e.currentTarget.style.borderColor = '#c7d2fe'; e.currentTarget.style.background = '#fafafe'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#fff'; }}
           >
-            <span style={{ fontSize: 20 }}>{action.icon}</span>
-            <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b' }}>{action.label}</span>
+            <span style={{ fontSize: 24 }}>{action.icon}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{action.label}</span>
           </button>
         ))}
       </div>

@@ -165,7 +165,7 @@ function EpisodeAssetsTab({ episode, show }) {
   const pct = readiness.total > 0 ? Math.round((readiness.ready / readiness.total) * 100) : 0;
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
