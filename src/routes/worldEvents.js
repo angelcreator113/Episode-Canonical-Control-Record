@@ -2283,6 +2283,346 @@ router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// OVERLAY APPROVAL WORKFLOW — generate → preview → edit → approve/reject
+// Supports: wardrobe (UI.OVERLAY.WARDROBE_LIST), social (UI.OVERLAY.SOCIAL_TASKS)
+// ═══════════════════════════════════════════════════════════════════════
+
+// POST /world/:showId/events/:eventId/generate-overlay/:overlayType
+router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId, overlayType } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { sequelize, Asset } = models;
+
+    // Load event
+    const [event] = await sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    if (typeof event.canon_consequences === 'string') {
+      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    let tasks, buffer, assetUrl, assetRole, assetName, listType;
+
+    if (overlayType === 'wardrobe') {
+      const { generateTasks, renderTodoAsset } = require('../services/todoListService');
+      tasks = await generateTasks(event);
+      buffer = renderTodoAsset(tasks, event, { listType: 'wardrobe' });
+      assetRole = 'UI.OVERLAY.WARDROBE_LIST';
+      assetName = `${event.name} — Wardrobe List`;
+      listType = 'wardrobe';
+    } else if (overlayType === 'social') {
+      const socialChecklistService = require('../services/socialChecklistService');
+      // Get tasks from existing or generate new
+      let socialTasks = event.canon_consequences?.automation?.social_tasks || [];
+      if (!Array.isArray(socialTasks) || socialTasks.length === 0) {
+        try {
+          const { buildSocialTasks } = require('../services/episodeGeneratorService');
+          const auto = event.canon_consequences?.automation || {};
+          let hostProfile = null;
+          if (auto.host_profile_id) {
+            const [rows] = await sequelize.query(
+              'SELECT platform, content_category, archetype FROM social_profiles WHERE id = :id LIMIT 1',
+              { replacements: { id: auto.host_profile_id } }
+            );
+            hostProfile = rows?.[0] || null;
+          }
+          socialTasks = buildSocialTasks(event.event_type || 'invite', hostProfile);
+        } catch { socialTasks = []; }
+      }
+      tasks = socialTasks;
+      buffer = socialChecklistService.renderSocialChecklist(tasks, event);
+      assetRole = 'UI.OVERLAY.SOCIAL_TASKS';
+      assetName = `${event.name} — Social Tasks`;
+      listType = 'social';
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid overlay type. Use "wardrobe" or "social".' });
+    }
+
+    // Upload to S3
+    const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+    const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
+    const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+    const s3 = new S3Client({ region: AWS_REGION });
+    const s3Key = `overlays/${eventId}/${overlayType}-${uuidv4()}.png`;
+
+    if (S3_BUCKET && buffer) {
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: buffer,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      assetUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    }
+
+    // Count existing versions
+    const [versionRows] = await sequelize.query(
+      `SELECT COUNT(*) as cnt FROM assets WHERE metadata->>'event_id' = :eventId AND asset_role = :assetRole AND deleted_at IS NULL`,
+      { replacements: { eventId, assetRole } }
+    );
+    const version = (parseInt(versionRows?.[0]?.cnt) || 0) + 1;
+
+    // Create Asset in pending_review state
+    const asset = await Asset.create({
+      id: uuidv4(),
+      name: assetName,
+      asset_type: overlayType === 'wardrobe' ? 'TODO_LIST' : 'SOCIAL_CHECKLIST',
+      asset_role: assetRole,
+      asset_group: 'EPISODE',
+      asset_scope: 'SHOW',
+      purpose: 'MAIN',
+      category: 'overlay',
+      entity_type: 'prop',
+      s3_url_raw: assetUrl,
+      s3_url_processed: assetUrl,
+      show_id: showId,
+      episode_id: event.used_in_episode_id || null,
+      approval_status: 'pending_review',
+      metadata: {
+        source: `${listType}-overlay-generator`,
+        list_type: listType,
+        event_id: eventId,
+        event_name: event.name,
+        task_count: tasks.length,
+        version,
+        tasks: JSON.stringify(tasks),
+        generated_at: new Date().toISOString(),
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: { assetId: asset.id, imageUrl: assetUrl, tasks, version },
+      message: `${overlayType} overlay generated — pending approval`,
+    });
+  } catch (err) {
+    console.error(`[OverlayGen] ${req.params.overlayType} error:`, err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /world/:showId/events/:eventId/approve-overlay
+router.post('/world/:showId/events/:eventId/approve-overlay', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const { assetId } = req.body;
+    if (!assetId) return res.status(400).json({ success: false, error: 'assetId required' });
+
+    const models = req.app?.get?.('models') || require('../models');
+    const { sequelize } = models;
+
+    // Load event to get episode link
+    const [event] = await sequelize.query(
+      'SELECT id, used_in_episode_id, canon_consequences FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Load asset
+    const [asset] = await sequelize.query(
+      'SELECT id, asset_role, s3_url_processed, metadata FROM assets WHERE id = :assetId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { assetId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
+
+    const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});
+
+    // Update asset: approved + link to episode
+    await sequelize.query(
+      `UPDATE assets SET approval_status = 'approved', asset_scope = 'EPISODE',
+       episode_id = :episodeId, updated_at = NOW() WHERE id = :assetId`,
+      { replacements: { assetId, episodeId: event.used_in_episode_id || null } }
+    );
+
+    // Store reference on event canon_consequences
+    if (typeof event.canon_consequences === 'string') {
+      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+    }
+    const auto = event.canon_consequences?.automation || {};
+    if (asset.asset_role === 'UI.OVERLAY.WARDROBE_LIST') {
+      auto.wardrobe_overlay_asset_id = assetId;
+      auto.wardrobe_overlay_url = asset.s3_url_processed;
+      if (meta.tasks) auto.wardrobe_tasks = typeof meta.tasks === 'string' ? JSON.parse(meta.tasks) : meta.tasks;
+    } else if (asset.asset_role === 'UI.OVERLAY.SOCIAL_TASKS') {
+      auto.social_checklist_asset_id = assetId;
+      auto.social_checklist_url = asset.s3_url_processed;
+      if (meta.tasks) auto.social_tasks = typeof meta.tasks === 'string' ? JSON.parse(meta.tasks) : meta.tasks;
+    }
+
+    await sequelize.query(
+      'UPDATE world_events SET canon_consequences = :cc, updated_at = NOW() WHERE id = :id',
+      { replacements: { cc: JSON.stringify({ ...event.canon_consequences, automation: auto }), id: eventId } }
+    );
+
+    // If linked to episode, upsert episode_todo_lists for wardrobe
+    if (event.used_in_episode_id && asset.asset_role === 'UI.OVERLAY.WARDROBE_LIST') {
+      try {
+        const tasks = meta.tasks ? (typeof meta.tasks === 'string' ? JSON.parse(meta.tasks) : meta.tasks) : [];
+        const [existing] = await sequelize.query(
+          'SELECT id FROM episode_todo_lists WHERE episode_id = :episodeId LIMIT 1',
+          { replacements: { episodeId: event.used_in_episode_id }, type: sequelize.QueryTypes.SELECT }
+        );
+        if (existing) {
+          await sequelize.query(
+            `UPDATE episode_todo_lists SET tasks = :tasks, asset_id = :assetId, asset_url = :assetUrl, event_id = :eventId, status = 'generated', updated_at = NOW() WHERE episode_id = :episodeId`,
+            { replacements: { tasks: JSON.stringify(tasks), assetId, assetUrl: asset.s3_url_processed, eventId, episodeId: event.used_in_episode_id } }
+          );
+        } else {
+          const { v4: uuidv4 } = require('uuid');
+          await sequelize.query(
+            `INSERT INTO episode_todo_lists (id, episode_id, show_id, event_id, tasks, asset_id, asset_url, status, generated_by, created_at, updated_at)
+             VALUES (:id, :episodeId, :showId, :eventId, :tasks, :assetId, :assetUrl, 'generated', 'ai', NOW(), NOW())`,
+            { replacements: { id: uuidv4(), episodeId: event.used_in_episode_id, showId, eventId, tasks: JSON.stringify(tasks), assetId, assetUrl: asset.s3_url_processed } }
+          );
+        }
+      } catch (err) { console.warn('[OverlayApprove] episode_todo_lists upsert error:', err.message); }
+    }
+
+    return res.json({ success: true, message: 'Overlay approved', episodeId: event.used_in_episode_id });
+  } catch (err) {
+    console.error('[OverlayApprove] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /world/:showId/events/:eventId/reject-overlay
+router.post('/world/:showId/events/:eventId/reject-overlay', optionalAuth, async (req, res) => {
+  try {
+    const { assetId } = req.body;
+    if (!assetId) return res.status(400).json({ success: false, error: 'assetId required' });
+
+    const models = req.app?.get?.('models') || require('../models');
+    await models.sequelize.query(
+      `UPDATE assets SET approval_status = 'rejected', deleted_at = NOW(), updated_at = NOW() WHERE id = :assetId`,
+      { replacements: { assetId } }
+    );
+
+    return res.json({ success: true, message: 'Overlay rejected' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /world/:showId/events/:eventId/re-render-overlay
+router.post('/world/:showId/events/:eventId/re-render-overlay', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const { tasks, overlayType } = req.body;
+    if (!tasks || !Array.isArray(tasks)) return res.status(400).json({ success: false, error: 'tasks array required' });
+    if (!overlayType) return res.status(400).json({ success: false, error: 'overlayType required' });
+
+    const models = req.app?.get?.('models') || require('../models');
+    const { sequelize } = models;
+
+    // Load event for context
+    const [event] = await sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Re-render with edited tasks
+    let buffer;
+    if (overlayType === 'wardrobe') {
+      const { renderTodoAsset } = require('../services/todoListService');
+      buffer = renderTodoAsset(tasks, event, { listType: 'wardrobe' });
+    } else if (overlayType === 'social') {
+      const { renderSocialChecklist } = require('../services/socialChecklistService');
+      buffer = renderSocialChecklist(tasks, event);
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid overlayType' });
+    }
+
+    // Upload re-rendered PNG
+    const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+    const { v4: uuidv4 } = require('uuid');
+    const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
+    const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+    const s3 = new S3Client({ region: AWS_REGION });
+    const s3Key = `overlays/${eventId}/${overlayType}-rerender-${uuidv4()}.png`;
+
+    let imageUrl = null;
+    if (S3_BUCKET && buffer) {
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: buffer,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      imageUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    }
+
+    return res.json({ success: true, imageUrl, message: 'Overlay re-rendered with edited tasks' });
+  } catch (err) {
+    console.error('[OverlayRerender] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/:showId/events/:eventId/overlay-tasks/:overlayType
+router.get('/world/:showId/events/:eventId/overlay-tasks/:overlayType', optionalAuth, async (req, res) => {
+  try {
+    const { eventId, overlayType } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { sequelize } = models;
+
+    const assetRole = overlayType === 'wardrobe' ? 'UI.OVERLAY.WARDROBE_LIST' : 'UI.OVERLAY.SOCIAL_TASKS';
+
+    // Find most recent pending or approved asset for this overlay type
+    const [asset] = await sequelize.query(
+      `SELECT metadata FROM assets WHERE metadata->>'event_id' = :eventId AND asset_role = :assetRole AND deleted_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      { replacements: { eventId, assetRole }, type: sequelize.QueryTypes.SELECT }
+    );
+
+    if (!asset) return res.json({ success: true, tasks: null });
+
+    const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});
+    let tasks = meta.tasks;
+    if (typeof tasks === 'string') tasks = JSON.parse(tasks);
+
+    return res.json({ success: true, tasks: tasks || null });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/:showId/events/:eventId/overlay-history/:overlayType
+router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', optionalAuth, async (req, res) => {
+  try {
+    const { eventId, overlayType } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { sequelize } = models;
+
+    const assetRole = overlayType === 'wardrobe' ? 'UI.OVERLAY.WARDROBE_LIST' : 'UI.OVERLAY.SOCIAL_TASKS';
+
+    const [rows] = await sequelize.query(
+      `SELECT id, s3_url_processed as image_url, approval_status, metadata, created_at
+       FROM assets WHERE metadata->>'event_id' = :eventId AND asset_role = :assetRole AND deleted_at IS NULL
+       ORDER BY created_at DESC`,
+      { replacements: { eventId, assetRole } }
+    );
+
+    const data = (rows || []).map((r, i) => {
+      const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {});
+      return {
+        id: r.id,
+        image_url: r.image_url,
+        approval_status: r.approval_status,
+        version: meta.version || (rows.length - i),
+        task_count: meta.task_count,
+        created_at: r.created_at,
+      };
+    });
+
+    return res.json({ success: true, data, count: data.length });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/:eventId/generate-lists — generate wardrobe + career lists from event
 router.post('/world/:showId/events/:eventId/generate-lists', optionalAuth, async (req, res) => {
   try {

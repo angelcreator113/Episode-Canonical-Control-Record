@@ -20,6 +20,7 @@ import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
+import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import './WorldAdmin.css';
 
@@ -2915,89 +2916,43 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     );
                   })()}
 
-                  {/* Social Tasks */}
-                  {(() => {
-                    const savedTasks = auto.social_tasks || [];
-                    const TIMING_COLORS = { before: '#f59e0b', during: '#6366f1', after: '#16a34a' };
-                    const TIMING_LABELS = { before: 'Before', during: 'During', after: 'After' };
-                    const checklistUrl = auto.social_checklist_url;
-                    const requiredCount = savedTasks.filter(t => t.required).length;
+                  {/* ═══ Overlay Command Center ═══ */}
+                  <div style={{ borderTop: '2px solid #f1f5f9', paddingTop: 14, marginTop: 12, marginBottom: 4 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#1a1a2e', marginBottom: 4 }}>Episode Overlays</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>Generate, preview, edit, and approve per-episode overlay assets from this command center.</div>
+                  </div>
 
-                    // Group by timing
-                    const grouped = {};
-                    savedTasks.forEach(t => {
-                      const k = t.timing || 'during';
-                      if (!grouped[k]) grouped[k] = [];
-                      grouped[k].push(t);
-                    });
+                  {/* Wardrobe Shopping List Overlay */}
+                  <OverlayApprovalPanel
+                    event={md}
+                    showId={showId}
+                    overlayType="wardrobe"
+                    existingUrl={auto.wardrobe_overlay_url || null}
+                    existingAssetId={auto.wardrobe_overlay_asset_id || null}
+                    existingTasks={auto.wardrobe_tasks || []}
+                    onGenerated={(url, assetId, tasks) => {
+                      const newAuto = { ...auto, wardrobe_overlay_url: url, wardrobe_overlay_asset_id: assetId, wardrobe_tasks: tasks };
+                      const updated = { ...eventDetailModal, canon_consequences: { ...eventDetailModal.canon_consequences, automation: newAuto } };
+                      setEventDetailModal(updated);
+                      setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
+                    }}
+                  />
 
-                    return (
-                      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>
-                            Social Tasks {savedTasks.length > 0 ? `(${savedTasks.length} tasks, ${requiredCount} required)` : ''}
-                          </div>
-                          <button
-                            onClick={async (e) => {
-                              const btn = e.target;
-                              btn.disabled = true;
-                              btn.textContent = 'Generating...';
-                              try {
-                                const res = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-social-checklist`);
-                                if (res.data.success) {
-                                  // Update the event modal with new tasks + checklist URL
-                                  const newAuto = { ...auto, social_tasks: res.data.data.tasks, social_checklist_url: res.data.data.assetUrl };
-                                  const updated = { ...eventDetailModal, canon_consequences: { ...eventDetailModal.canon_consequences, automation: newAuto } };
-                                  setEventDetailModal(updated);
-                                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
-                                  setToast(`Checklist generated — ${res.data.data.tasks.length} tasks`);
-                                }
-                              } catch (err) {
-                                setToast('Failed: ' + (err.response?.data?.error || err.message));
-                              }
-                              btn.disabled = false;
-                              btn.textContent = checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist';
-                            }}
-                            style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
-                          >
-                            {checklistUrl ? 'Regenerate Checklist' : 'Generate Checklist'}
-                          </button>
-                        </div>
-
-                        {/* Checklist image preview */}
-                        {checklistUrl && (
-                          <div style={{ marginBottom: 10, textAlign: 'center' }}>
-                            <img src={checklistUrl} alt="Social Checklist" style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 10, border: '1px solid #e8e0d0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }} />
-                          </div>
-                        )}
-
-                        {/* Task list */}
-                        {savedTasks.length > 0 ? (
-                          <div>
-                            {['before', 'during', 'after'].filter(p => grouped[p]).map(phase => (
-                              <div key={phase} style={{ marginBottom: 6 }}>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: TIMING_COLORS[phase], textTransform: 'uppercase', marginBottom: 3 }}>{TIMING_LABELS[phase]}</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 3 }}>
-                                  {grouped[phase].map(t => (
-                                    <div key={t.slot} style={{ padding: '3px 8px', background: '#f8f8f8', borderRadius: 5, borderLeft: `3px solid ${TIMING_COLORS[phase]}`, fontSize: 10 }}>
-                                      <span style={{ fontWeight: 600, color: '#333' }}>{t.label}</span>
-                                      <span style={{ color: '#aaa', marginLeft: 4 }}>{t.platform}</span>
-                                      {t.required && <span style={{ color: TIMING_COLORS[phase], marginLeft: 4, fontSize: 8, fontWeight: 700 }}>req</span>}
-                                      {t.source && <span style={{ color: t.source === 'platform' ? '#6366f1' : '#16a34a', marginLeft: 4, fontSize: 8 }}>{t.source}</span>}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
-                            No tasks generated yet. Click "Generate Checklist" to create tasks and a visual asset.
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  {/* Social Tasks Overlay */}
+                  <OverlayApprovalPanel
+                    event={md}
+                    showId={showId}
+                    overlayType="social"
+                    existingUrl={auto.social_checklist_url || null}
+                    existingAssetId={auto.social_checklist_asset_id || null}
+                    existingTasks={auto.social_tasks || []}
+                    onGenerated={(url, assetId, tasks) => {
+                      const newAuto = { ...auto, social_checklist_url: url, social_checklist_asset_id: assetId, social_tasks: tasks };
+                      const updated = { ...eventDetailModal, canon_consequences: { ...eventDetailModal.canon_consequences, automation: newAuto } };
+                      setEventDetailModal(updated);
+                      setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
+                    }}
+                  />
 
                   {/* Episode linking */}
                   <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8 }}>

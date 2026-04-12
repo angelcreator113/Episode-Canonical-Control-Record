@@ -39,10 +39,10 @@ export default function FeedViewContent({
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>selectProfile(p)}>{p.display_name||d.display_name||p.handle}</span>
+                            <span style={{fontSize:14,fontWeight:700,color:C.ink,cursor:'pointer'}} onClick={()=>selectProfile(p)}>{p.creator_name||d.creator_name||p.display_name||d.display_name||p.handle}</span>
                             {sc&&<span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:8,background:sc.bg,color:sc.color}}>{sc.label}</span>}
                           </div>
-                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {p.platform} · {p.follower_count_approx||d.follower_count_approx}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
+                          <div style={{fontSize:12,color:C.inkLight}}>{p.handle} · {p.platform}{(p.creator_name||d.creator_name)&&(p.display_name||d.display_name)&&(p.creator_name||d.creator_name)!==(p.display_name||d.display_name)?` · ${p.display_name||d.display_name}`:''} · {p.follower_count_approx||d.follower_count_approx}{feedLayer==='lalaverse'&&p.feed_layer==='real_world'&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:6,background:C.blueLight,color:C.blue}}>◈ Following</span>}</div>
                         </div>
                         <span style={{fontSize:10,fontWeight:700,color:score>=7?C.lavender:score>=4?C.blue:C.inkLight}}>✦{score}</span>
                       </div>
@@ -225,8 +225,8 @@ export default function FeedViewContent({
                     const followers=p.followers||[];
                     return (
                       <div key={p.id} onClick={()=>selectProfile(p)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',background:C.surface,borderRadius:C.radiusSm,border:`1px solid ${C.border}`,cursor:'pointer'}}>
-                        <span style={{fontSize:13,fontWeight:700,color:C.ink,minWidth:120}}>{p.handle}</span>
-                        <span style={{fontSize:11,color:C.inkLight,flex:1}}>{p.display_name||d.display_name||''}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:C.ink,minWidth:120}}>{p.creator_name||d.creator_name||p.handle}</span>
+                        <span style={{fontSize:11,color:C.inkLight,flex:1}}>{p.handle}{(p.display_name||d.display_name)&&(p.creator_name||d.creator_name)&&(p.display_name||d.display_name)!==(p.creator_name||d.creator_name)?` · ${p.display_name||d.display_name}`:!p.creator_name&&!d.creator_name&&(p.display_name||d.display_name)?` · ${p.display_name||d.display_name}`:''}</span>
                         <div style={{display:'flex',gap:4}}>
                           {PROTAGONISTS.map(pr=>{
                             const f=followers.find(fl=>fl.character_key===pr.key);

@@ -60,7 +60,7 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
         series_id: null, // Filter will be by show context
         status: ['generated', 'finalized', 'crossed'],
       },
-      attributes: ['id', 'handle', 'display_name', 'platform', 'vibe_sentence',
+      attributes: ['id', 'handle', 'display_name', 'creator_name', 'platform', 'vibe_sentence',
                    'archetype', 'posting_voice', 'follow_motivation', 'follow_emotion',
                    'lala_relevance_score', 'celebrity_tier', 'content_category',
                    'follower_tier', 'aesthetic_dna', 'career_pressure'],
@@ -84,7 +84,7 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
   // Build prompt
   const profileContext = profiles.slice(0, 12).map(p => {
     const d = p.toJSON();
-    return `@${d.handle} (${d.display_name || d.handle})
+    return `@${d.handle} (${d.display_name || d.handle})${d.creator_name ? ` — real name: ${d.creator_name}` : ''}
   Platform: ${d.platform} | Archetype: ${d.archetype} | Tier: ${d.follower_tier}
   Voice: ${d.posting_voice || d.vibe_sentence}
   Lala's follow motivation: ${d.follow_motivation || 'none'}
@@ -154,6 +154,7 @@ For each post, return JSON array:
 [{
   "poster_handle": "@handle",
   "poster_display_name": "Display Name",
+  "poster_creator_name": "Their real full name (e.g. Jessica Chen)",
   "poster_platform": "instagram",
   "post_type": "post",
   "content_text": "caption text with hashtags (include 1-3 relevant hashtags)",
@@ -216,10 +217,11 @@ Return ONLY the JSON array.`;
 
     // Find matching social profile
     let profileId = null;
+    let matchedProfile = null;
     if (post.poster_handle) {
       const handle = post.poster_handle.replace('@', '');
-      const match = profiles.find(p => p.handle === handle);
-      if (match) profileId = match.id;
+      matchedProfile = profiles.find(p => p.handle === handle);
+      if (matchedProfile) profileId = matchedProfile.id;
     }
 
     try {
@@ -238,6 +240,7 @@ Return ONLY the JSON array.`;
         social_profile_id: profileId,
         poster_handle: (post.poster_handle || 'unknown').replace('@', ''),
         poster_display_name: post.poster_display_name || null,
+        poster_creator_name: post.poster_creator_name || matchedProfile?.creator_name || null,
         poster_platform: post.poster_platform || 'instagram',
         post_type: post.post_type || 'post',
         content_text: post.content_text || '',

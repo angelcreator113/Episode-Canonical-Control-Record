@@ -20,13 +20,13 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
       )}
       <div style={{ padding: '12px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4, gap: 6 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{p.handle}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{p.creator_name || d.creator_name || p.handle}</span>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {sc && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: sc.bg, color: sc.color }}>{sc.label}</span>}
             <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: stc.bg, color: stc.color }}>{STATUS_LABELS[p.status] || p.status}</span>
           </div>
         </div>
-        {(p.display_name || d.display_name) && <div style={{ fontSize: 12, color: C.inkMid, marginBottom: 2 }}>{p.display_name || d.display_name}</div>}
+        <div style={{ fontSize: 12, color: C.inkMid, marginBottom: 2 }}>{p.handle}{(p.display_name || d.display_name) && (p.creator_name || d.creator_name) && (p.display_name || d.display_name) !== (p.creator_name || d.creator_name) ? ` · ${p.display_name || d.display_name}` : !p.creator_name && !d.creator_name && (p.display_name || d.display_name) ? ` · ${p.display_name || d.display_name}` : ''}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 8, background: C.blueLight, color: C.blue }}>{p.platform}</span>
           {/* Multi-platform badges */}

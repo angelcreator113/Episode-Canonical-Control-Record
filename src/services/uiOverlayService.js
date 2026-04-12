@@ -60,6 +60,15 @@ const OVERLAY_TYPES = [
     prompt: 'A luxury career checklist panel UI overlay. Soft lavender/cool white background with indigo border frame. 5 empty checkbox rows with thin indigo lines. Each row has an empty square checkbox on the left and a horizontal line for text. Indigo decorative header reading "Career Checklist" at top. Small star or briefcase icon at top. No actual text in rows — empty template only. Professional luxury planner aesthetic. Isolated on plain background.',
   },
   {
+    id: 'social_tasks',
+    name: 'Social Tasks Checklist',
+    category: 'frame',
+    lifecycle: 'per_episode',
+    beat: 'Beat 5, 9',
+    description: 'Social media task checklist — regenerated each episode with platform-specific content tasks grouped by timing (before/during/after).',
+    prompt: 'A luxury social media checklist panel UI overlay. Warm parchment/cream background with gold border frame. Three sections labeled BEFORE, DURING, AFTER with 3-4 empty checkbox rows each. Each row has a small square checkbox and horizontal line for text. Gold decorative header reading "Social Media Checklist". Small phone/camera icon at top. Phase headers in different accent colors. No actual text in rows — empty template only. Luxury content planner aesthetic. Isolated on plain background.',
+  },
+  {
     id: 'closet_ui',
     name: 'Closet UI',
     category: 'frame',
