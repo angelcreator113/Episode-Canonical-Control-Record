@@ -214,11 +214,18 @@ function ShowDetail() {
           {show.description && (
             <p className="show-description">{show.description}</p>
           )}
-          
-          <div className="show-actions">
-            <Link to={`/shows/${showId}/edit`} className="btn-secondary">
-              ✏️ Edit Show
+
+          <div className="show-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Link to={`/shows/${showId}/edit`} className="btn-secondary" style={{ fontSize: 11, padding: '4px 12px' }}>
+              ✏️ Edit
             </Link>
+            <Link to={`/shows/${showId}/world?tab=overview`} className="btn-secondary" style={{ fontSize: 11, padding: '4px 12px', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff' }}>
+              🎭 Producer Mode
+            </Link>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', marginLeft: 4 }}>
+              {episodes.length} episode{episodes.length !== 1 ? 's' : ''}
+              {show.premiereDate && ` · Premiered ${new Date(show.premiereDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`}
+            </span>
           </div>
         </div>
       </div>
