@@ -216,13 +216,13 @@ function ShowDetail() {
           )}
 
           <div className="show-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Link to={`/shows/${showId}/edit`} className="btn-secondary" style={{ fontSize: 11, padding: '4px 12px' }}>
+            <Link to={`/shows/${showId}/edit`} className="btn-secondary" style={{ fontSize: 11, padding: '5px 14px', background: 'rgba(184,150,46,0.15)', border: '1px solid rgba(184,150,46,0.3)', color: '#B8962E', borderRadius: 6 }}>
               ✏️ Edit
             </Link>
-            <Link to={`/shows/${showId}/world?tab=overview`} className="btn-secondary" style={{ fontSize: 11, padding: '4px 12px', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff' }}>
+            <Link to={`/shows/${showId}/world?tab=overview`} className="btn-secondary" style={{ fontSize: 11, padding: '5px 14px', background: 'rgba(250,247,240,0.1)', border: '1px solid rgba(250,247,240,0.2)', color: '#FAF7F0', borderRadius: 6 }}>
               🎭 Producer Mode
             </Link>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', marginLeft: 4 }}>
+            <span style={{ fontSize: 10, color: 'rgba(250,247,240,0.45)', marginLeft: 4 }}>
               {episodes.length} episode{episodes.length !== 1 ? 's' : ''}
               {show.premiereDate && ` · Premiered ${new Date(show.premiereDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`}
             </span>
@@ -235,12 +235,12 @@ function ShowDetail() {
         <button
           className={`tab-button ${activeTab === 'studio' ? 'active' : ''}`}
           onClick={() => setActiveTab('studio')}
-          title="Studio (Ctrl+1)"
+          title="Dashboard (Ctrl+1)"
         >
-          <span className="tab-icon">🎬</span>
-          <span className="tab-label">Studio</span>
+          <span className="tab-icon">📊</span>
+          <span className="tab-label">Dashboard</span>
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'episodes' ? 'active' : ''}`}
           onClick={() => setActiveTab('episodes')}
@@ -248,18 +248,18 @@ function ShowDetail() {
         >
           <span className="tab-icon">📺</span>
           <span className="tab-label">Episodes</span>
-          <span className="tab-count">{episodes.length}</span>
+          {episodes.length > 0 && <span className="tab-count">{episodes.length}</span>}
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'assets' ? 'active' : ''}`}
           onClick={() => setActiveTab('assets')}
-          title="Assets (Ctrl+3)"
+          title="Production (Ctrl+3)"
         >
-          <span className="tab-icon">📁</span>
-          <span className="tab-label">Assets</span>
+          <span className="tab-icon">🎬</span>
+          <span className="tab-label">Production</span>
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'wardrobe' ? 'active' : ''}`}
           onClick={() => setActiveTab('wardrobe')}
@@ -268,7 +268,7 @@ function ShowDetail() {
           <span className="tab-icon">👗</span>
           <span className="tab-label">Wardrobe</span>
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'distribution' ? 'active' : ''}`}
           onClick={() => setActiveTab('distribution')}
@@ -277,13 +277,13 @@ function ShowDetail() {
           <span className="tab-icon">🚀</span>
           <span className="tab-label">Distribution</span>
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'insights' ? 'active' : ''}`}
           onClick={() => setActiveTab('insights')}
           title="Insights (Ctrl+6)"
         >
-          <span className="tab-icon">📊</span>
+          <span className="tab-icon">📈</span>
           <span className="tab-label">Insights</span>
         </button>
       </div>

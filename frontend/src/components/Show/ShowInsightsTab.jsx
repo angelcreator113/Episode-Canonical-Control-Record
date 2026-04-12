@@ -1,369 +1,299 @@
 // frontend/src/components/Show/ShowInsightsTab.jsx
 import React, { useState, useEffect } from 'react';
-import './ShowInsightsTab.css';
+import api from '../../services/api';
 
 /**
- * ShowInsightsTab - Analytics Dashboard for Show
- * 
- * Features:
- * - Total episodes, views, engagement metrics
- * - Platform breakdown (YouTube, TikTok, Instagram, Facebook)
- * - Top performing episodes table
- * - Growth trends chart
- * - Asset/wardrobe usage stats
- * - AI-powered insights
- * - Recent activity timeline
+ * ShowInsightsTab — Real Show Intelligence Dashboard
+ *
+ * All data from actual APIs — no mock data:
+ * - Character state (coins, reputation, brand_trust, influence, stress)
+ * - Financial ledger (income, expenses, net P&L across episodes)
+ * - Episode evaluation tiers (SLAY/PASS/SAFE/FAIL distribution)
+ * - Wardrobe stats (items, tiers, most worn)
+ * - Production progress (overlays, scenes, scripts)
  */
 
+const STAT_COLORS = {
+  coins: '#B8962E',
+  reputation: '#6366f1',
+  brand_trust: '#16a34a',
+  influence: '#0ea5e9',
+  stress: '#dc2626',
+};
+
+const TIER_CONFIG = {
+  slay: { color: '#FFD700', bg: '#FFFBEB', emoji: '👑', label: 'SLAY' },
+  pass: { color: '#22c55e', bg: '#f0fdf4', emoji: '✨', label: 'PASS' },
+  safe: { color: '#eab308', bg: '#fefce8', emoji: '😐', label: 'SAFE' },
+  fail: { color: '#dc2626', bg: '#fef2f2', emoji: '💔', label: 'FAIL' },
+};
+
 function ShowInsightsTab({ show }) {
-  const [timeRange, setTimeRange] = useState('30d'); // 7d, 30d, 90d, all
-  const [metrics, setMetrics] = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+  const showId = show?.id;
+
   useEffect(() => {
-    loadInsights();
-  }, [show.id, timeRange]);
-  
+    if (showId) loadInsights();
+  }, [showId]);
+
   const loadInsights = async () => {
     setLoading(true);
     try {
-      // TODO: Replace with actual API call
-      // const response = await insightsService.getShowInsights(show.id, timeRange);
-      
-      // Mock data
-      setMetrics({
-        overview: {
-          totalEpisodes: 24,
-          publishedEpisodes: 18,
-          draftEpisodes: 4,
-          scheduledEpisodes: 2,
-          totalViews: 156789,
-          totalLikes: 12456,
-          totalComments: 3421,
-          totalShares: 1876,
-          avgViewsPerEpisode: 8710,
-          engagementRate: 11.2
-        },
-        platformBreakdown: [
-          { platform: 'YouTube', views: 89234, percentage: 56.9, color: '#FF0000' },
-          { platform: 'TikTok', views: 42156, percentage: 26.9, color: '#25F4EE' },
-          { platform: 'Instagram', views: 18765, percentage: 12.0, color: '#E4405F' },
-          { platform: 'Facebook', views: 6634, percentage: 4.2, color: '#1877F2' }
-        ],
-        topEpisodes: [
-          { 
-            id: '1', 
-            title: "LaLa's Princess Fair Adventure", 
-            views: 23456, 
-            likes: 2345, 
-            engagement: 12.5,
-            platform: 'YouTube',
-            publishedDate: '2026-01-15'
-          },
-          { 
-            id: '2', 
-            title: 'Fall Fashion Haul 2026', 
-            views: 18932, 
-            likes: 2109, 
-            engagement: 11.8,
-            platform: 'TikTok',
-            publishedDate: '2026-01-10'
-          },
-          { 
-            id: '3', 
-            title: 'Behind the Scenes: Studio Tour', 
-            views: 15678, 
-            likes: 1876, 
-            engagement: 10.2,
-            platform: 'YouTube',
-            publishedDate: '2026-01-05'
-          }
-        ],
-        assetUsage: {
-          mostUsedAssets: [
-            { name: 'Show Logo', type: 'logo', usageCount: 18 },
-            { name: 'Intro Music', type: 'audio', usageCount: 16 },
-            { name: 'Studio Background', type: 'background', usageCount: 12 }
-          ],
-          mostUsedWardrobe: [
-            { name: 'Pink Blazer', category: 'top', wornCount: 8 },
-            { name: 'Classic Pumps', category: 'shoes', wornCount: 7 },
-            { name: 'Statement Necklace', category: 'jewelry', wornCount: 6 }
-          ]
-        },
-        growthTrend: [
-          { date: '2026-01-01', views: 1200, episodes: 1 },
-          { date: '2026-01-08', views: 3400, episodes: 2 },
-          { date: '2026-01-15', views: 5800, episodes: 3 },
-          { date: '2026-01-22', views: 8200, episodes: 4 },
-          { date: '2026-01-29', views: 11500, episodes: 5 }
-        ],
-        aiInsights: [
-          {
-            type: 'trend',
-            icon: '📈',
-            title: 'Growing Audience',
-            message: 'Your viewership has increased 45% in the last 30 days. Keep up the great content!'
-          },
-          {
-            type: 'recommendation',
-            icon: '💡',
-            title: 'Best Publishing Time',
-            message: 'Episodes published on Tuesdays at 2 PM get 23% more views on average.'
-          },
-          {
-            type: 'achievement',
-            icon: '🏆',
-            title: 'Consistency Win',
-            message: "You've published 4 episodes this month. Consistency drives growth!"
-          }
-        ],
-        recentActivity: [
-          { type: 'publish', message: 'Episode "Princess Fair" published', time: '2 hours ago' },
-          { type: 'milestone', message: 'Reached 150,000 total views!', time: '5 hours ago' },
-          { type: 'upload', message: 'New asset "Winter Background" uploaded', time: '1 day ago' },
-          { type: 'schedule', message: 'Episode "Valentine Special" scheduled', time: '2 days ago' }
-        ]
+      const [charRes, ledgerRes, episodesRes, wardrobeRes, eventsRes, overlaysRes] = await Promise.allSettled([
+        api.get(`/api/v1/world/${showId}/balance`).catch(() => ({ data: {} })),
+        api.get(`/api/v1/world/${showId}/financial-ledger?limit=200`).catch(() => ({ data: { data: {} } })),
+        api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).catch(() => ({ data: [] })),
+        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=500`).catch(() => ({ data: {} })),
+        api.get(`/api/v1/world/${showId}/events?limit=100`).catch(() => ({ data: {} })),
+        api.get(`/api/v1/ui-overlays/${showId}`).catch(() => ({ data: {} })),
+      ]);
+
+      // Character state
+      const balance = charRes.status === 'fulfilled' ? charRes.value.data : {};
+
+      // Financial ledger
+      const ledger = ledgerRes.status === 'fulfilled' ? (ledgerRes.value.data?.data || {}) : {};
+      const transactions = ledger.transactions || [];
+      const episodeSummary = ledger.episode_summary || [];
+
+      // Episodes
+      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.data?.data || episodesRes.value.data || []) : [];
+
+      // Wardrobe
+      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [];
+
+      // Events
+      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : [];
+
+      // Overlays
+      const overlays = overlaysRes.status === 'fulfilled' ? (overlaysRes.value.data?.data || []) : [];
+
+      // Compute tier distribution
+      const tiers = { slay: 0, pass: 0, safe: 0, fail: 0 };
+      const scores = [];
+      episodes.forEach(ep => {
+        const evalJson = ep.evaluation_json ? (typeof ep.evaluation_json === 'string' ? JSON.parse(ep.evaluation_json) : ep.evaluation_json) : null;
+        if (evalJson?.tier_final) tiers[evalJson.tier_final] = (tiers[evalJson.tier_final] || 0) + 1;
+        if (evalJson?.score) scores.push({ episode: ep.episode_number, score: evalJson.score, tier: evalJson.tier_final, title: ep.title });
       });
-    } catch (error) {
-      console.error('Error loading insights:', error);
+
+      // Financial totals
+      const totalIncome = transactions.filter(t => t.type === 'income' || t.type === 'reward').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+      const totalExpenses = transactions.filter(t => t.type === 'expense' || t.type === 'deduction').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+
+      // Wardrobe stats
+      const tierDist = { basic: 0, mid: 0, luxury: 0, elite: 0 };
+      const brandCounts = {};
+      wardrobe.forEach(w => {
+        if (w.tier) tierDist[w.tier] = (tierDist[w.tier] || 0) + 1;
+        if (w.brand) brandCounts[w.brand] = (brandCounts[w.brand] || 0) + 1;
+      });
+      const topBrands = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+      setData({
+        balance: balance.balance ?? null,
+        affordability: balance.affordability,
+        totalIncome,
+        totalExpenses,
+        netProfit: totalIncome - totalExpenses,
+        episodes: episodes.length,
+        completed: episodes.filter(e => e.evaluation_status === 'accepted').length,
+        tiers,
+        scores,
+        wardrobe: wardrobe.length,
+        wardrobeTiers: tierDist,
+        wardrobeValue: wardrobe.reduce((s, w) => s + (parseFloat(w.price) || 0), 0),
+        topBrands,
+        events: events.length,
+        eventsReady: events.filter(e => e.status !== 'draft').length,
+        overlaysGenerated: overlays.filter(o => o.generated || o.url || o.asset_id).length,
+        overlaysTotal: overlays.length,
+        episodeSummary,
+      });
+    } catch (err) {
+      console.error('[Insights] Load error:', err);
     } finally {
       setLoading(false);
     }
   };
-  
-  const formatNumber = (num) => {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
+
+  if (loading) return <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading insights...</div>;
+  if (!data) return <div style={{ padding: 24, color: '#94a3b8' }}>No data available.</div>;
+
+  const S = {
+    card: { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 18px' },
+    sectionTitle: { fontSize: 14, fontWeight: 700, color: '#1a1a2e', marginBottom: 10 },
   };
-  
-  const formatPercentage = (num) => {
-    return num.toFixed(1) + '%';
-  };
-  
-  if (loading) {
-    return (
-      <div className="insights-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading insights...</p>
-      </div>
-    );
-  }
-  
-  if (!metrics) {
-    return (
-      <div className="insights-error">
-        <p>Failed to load insights. Please try again.</p>
-      </div>
-    );
-  }
-  
+
   return (
-    <div className="show-insights-tab">
-      {/* Header */}
-      <div className="insights-header">
-        <div className="header-left">
-          <h2>📊 Show Insights</h2>
-          <p className="header-subtitle">Analytics for {show.name}</p>
-        </div>
-        <div className="header-actions">
-          <select
-            className="time-range-select"
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
-          >
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-            <option value="all">All time</option>
-          </select>
-          <button className="btn-export">
-            📥 Export Report
-          </button>
-        </div>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Show Intelligence</h2>
+
+      {/* Row 1: Character Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
+        {[
+          { key: 'coins', label: 'Coins', value: data.balance !== null ? data.balance.toLocaleString() : '—', icon: '🪙' },
+          { key: 'reputation', label: 'Episodes', value: data.episodes, icon: '📺' },
+          { key: 'brand_trust', label: 'Completed', value: data.completed, icon: '👑' },
+          { key: 'influence', label: 'Events', value: data.events, icon: '💌' },
+          { key: 'stress', label: 'Wardrobe', value: data.wardrobe, icon: '👗' },
+        ].map(stat => (
+          <div key={stat.key} style={S.card}>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>{stat.icon} {stat.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: STAT_COLORS[stat.key] || '#1a1a2e' }}>{stat.value}</div>
+          </div>
+        ))}
       </div>
-      
-      {/* Metrics Grid */}
-      <div className="metrics-grid">
-        <div className="metric-card primary">
-          <div className="metric-icon">📺</div>
-          <div className="metric-content">
-            <div className="metric-value">{metrics.overview.totalEpisodes}</div>
-            <div className="metric-label">Total Episodes</div>
-            <div className="metric-breakdown">
-              {metrics.overview.publishedEpisodes} published · {metrics.overview.draftEpisodes} draft
+
+      {/* Row 2: Financial P&L + Tier Distribution */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        {/* Financial P&L */}
+        <div style={S.card}>
+          <div style={S.sectionTitle}>💰 Financial Summary</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>INCOME</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a' }}>{data.totalIncome.toLocaleString()}</div>
             </div>
-          </div>
-        </div>
-        
-        <div className="metric-card success">
-          <div className="metric-icon">👁️</div>
-          <div className="metric-content">
-            <div className="metric-value">{formatNumber(metrics.overview.totalViews)}</div>
-            <div className="metric-label">Total Views</div>
-            <div className="metric-breakdown">
-              {formatNumber(metrics.overview.avgViewsPerEpisode)} avg per episode
+            <div>
+              <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 600 }}>EXPENSES</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#dc2626' }}>{data.totalExpenses.toLocaleString()}</div>
             </div>
-          </div>
-        </div>
-        
-        <div className="metric-card warning">
-          <div className="metric-icon">💬</div>
-          <div className="metric-content">
-            <div className="metric-value">{formatPercentage(metrics.overview.engagementRate)}</div>
-            <div className="metric-label">Engagement Rate</div>
-            <div className="metric-breakdown">
-              {formatNumber(metrics.overview.totalLikes)} likes · {formatNumber(metrics.overview.totalComments)} comments
-            </div>
-          </div>
-        </div>
-        
-        <div className="metric-card info">
-          <div className="metric-icon">📤</div>
-          <div className="metric-content">
-            <div className="metric-value">{formatNumber(metrics.overview.totalShares)}</div>
-            <div className="metric-label">Total Shares</div>
-            <div className="metric-breakdown">
-              Across all platforms
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Platform Breakdown */}
-      <div className="insights-section">
-        <h3 className="section-title">Platform Breakdown</h3>
-        <div className="platform-breakdown">
-          <div className="platform-chart">
-            {metrics.platformBreakdown.map(platform => (
-              <div
-                key={platform.platform}
-                className="platform-bar"
-                style={{
-                  width: `${platform.percentage}%`,
-                  backgroundColor: platform.color
-                }}
-                title={`${platform.platform}: ${formatNumber(platform.views)} views (${formatPercentage(platform.percentage)})`}
-              >
-                <span className="bar-label">{platform.platform}</span>
+            <div>
+              <div style={{ fontSize: 10, color: data.netProfit >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>NET P&L</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: data.netProfit >= 0 ? '#16a34a' : '#dc2626' }}>
+                {data.netProfit >= 0 ? '+' : ''}{data.netProfit.toLocaleString()}
               </div>
-            ))}
+            </div>
           </div>
-          <div className="platform-stats">
-            {metrics.platformBreakdown.map(platform => (
-              <div key={platform.platform} className="platform-stat">
-                <div className="stat-header">
-                  <span
-                    className="stat-color"
-                    style={{ backgroundColor: platform.color }}
-                  ></span>
-                  <span className="stat-name">{platform.platform}</span>
-                </div>
-                <div className="stat-values">
-                  <span className="stat-views">{formatNumber(platform.views)}</span>
-                  <span className="stat-percentage">{formatPercentage(platform.percentage)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      {/* Top Episodes */}
-      <div className="insights-section">
-        <h3 className="section-title">Top Performing Episodes</h3>
-        <div className="top-episodes-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Episode</th>
-                <th>Platform</th>
-                <th>Views</th>
-                <th>Likes</th>
-                <th>Engagement</th>
-                <th>Published</th>
-              </tr>
-            </thead>
-            <tbody>
-              {metrics.topEpisodes.map((episode, index) => (
-                <tr key={episode.id}>
-                  <td>
-                    <div className="episode-cell">
-                      <span className="episode-rank">#{index + 1}</span>
-                      <span className="episode-title">{episode.title}</span>
+          {data.episodeSummary.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>Per Episode</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {data.episodeSummary.slice(0, 8).map((ep, i) => {
+                  const net = (parseFloat(ep.total_income) || 0) - (parseFloat(ep.total_expenses) || 0);
+                  return (
+                    <div key={i} style={{
+                      padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                      background: net >= 0 ? '#f0fdf4' : '#fef2f2',
+                      color: net >= 0 ? '#16a34a' : '#dc2626',
+                    }}>
+                      Ep{ep.episode_number}: {net >= 0 ? '+' : ''}{net}
                     </div>
-                  </td>
-                  <td>
-                    <span className="platform-badge">{episode.platform}</span>
-                  </td>
-                  <td className="number-cell">{formatNumber(episode.views)}</td>
-                  <td className="number-cell">{formatNumber(episode.likes)}</td>
-                  <td className="number-cell">{formatPercentage(episode.engagement)}</td>
-                  <td className="date-cell">{new Date(episode.publishedDate).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      
-      {/* AI Insights */}
-      <div className="insights-section">
-        <h3 className="section-title">AI-Powered Insights</h3>
-        <div className="ai-insights-grid">
-          {metrics.aiInsights.map((insight, index) => (
-            <div key={index} className={`ai-insight-card ${insight.type}`}>
-              <div className="insight-icon">{insight.icon}</div>
-              <div className="insight-content">
-                <h4 className="insight-title">{insight.title}</h4>
-                <p className="insight-message">{insight.message}</p>
+                  );
+                })}
               </div>
             </div>
-          ))}
+          )}
+        </div>
+
+        {/* Tier Distribution */}
+        <div style={S.card}>
+          <div style={S.sectionTitle}>🎯 Episode Tiers</div>
+          {data.completed > 0 ? (
+            <div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {Object.entries(TIER_CONFIG).map(([tier, cfg]) => (
+                  <div key={tier} style={{ flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 8, background: cfg.bg }}>
+                    <div style={{ fontSize: 20 }}>{cfg.emoji}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: cfg.color }}>{data.tiers[tier] || 0}</div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: cfg.color }}>{cfg.label}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Score history */}
+              {data.scores.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, alignItems: 'end', height: 40 }}>
+                  {data.scores.map((s, i) => (
+                    <div key={i} title={`Ep${s.episode}: ${s.score}/100 (${s.tier})`} style={{
+                      flex: 1, height: `${s.score * 0.4}px`, minHeight: 4,
+                      background: TIER_CONFIG[s.tier]?.color || '#94a3b8',
+                      borderRadius: '3px 3px 0 0', cursor: 'pointer',
+                    }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8', fontSize: 12 }}>
+              Complete episodes to see tier distribution
+            </div>
+          )}
         </div>
       </div>
-      
-      {/* Asset & Wardrobe Usage */}
-      <div className="insights-section">
-        <h3 className="section-title">Most Used Assets & Wardrobe</h3>
-        <div className="usage-grid">
-          <div className="usage-card">
-            <h4>📁 Top Assets</h4>
-            <div className="usage-list">
-              {metrics.assetUsage.mostUsedAssets.map((asset, index) => (
-                <div key={index} className="usage-item">
-                  <span className="usage-name">{asset.name}</span>
-                  <span className="usage-badge">{asset.usageCount} uses</span>
+
+      {/* Row 3: Wardrobe Intelligence + Production Progress */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {/* Wardrobe */}
+        <div style={S.card}>
+          <div style={S.sectionTitle}>👗 Wardrobe Intelligence</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#94a3b8' }}>Total Items</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>{data.wardrobe}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#94a3b8' }}>Total Value</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#B8962E' }}>${data.wardrobeValue.toLocaleString()}</div>
+            </div>
+          </div>
+
+          {/* Tier breakdown */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>By Tier</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[
+                { tier: 'elite', color: '#ec4899', icon: '👑' },
+                { tier: 'luxury', color: '#eab308', icon: '💎' },
+                { tier: 'mid', color: '#6366f1', icon: '👠' },
+                { tier: 'basic', color: '#94a3b8', icon: '👟' },
+              ].map(t => (
+                <div key={t.tier} style={{ flex: 1, textAlign: 'center', padding: '4px 0', borderRadius: 6, background: '#f8f8f8' }}>
+                  <div style={{ fontSize: 12 }}>{t.icon}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: t.color }}>{data.wardrobeTiers[t.tier] || 0}</div>
+                  <div style={{ fontSize: 8, color: '#94a3b8', textTransform: 'uppercase' }}>{t.tier}</div>
                 </div>
               ))}
             </div>
           </div>
-          <div className="usage-card">
-            <h4>👗 Top Wardrobe</h4>
-            <div className="usage-list">
-              {metrics.assetUsage.mostUsedWardrobe.map((item, index) => (
-                <div key={index} className="usage-item">
-                  <span className="usage-name">{item.name}</span>
-                  <span className="usage-badge">{item.wornCount} times</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Recent Activity */}
-      <div className="insights-section">
-        <h3 className="section-title">Recent Activity</h3>
-        <div className="activity-timeline">
-          {metrics.recentActivity.map((activity, index) => (
-            <div key={index} className="activity-item">
-              <div className={`activity-dot ${activity.type}`}></div>
-              <div className="activity-content">
-                <p className="activity-message">{activity.message}</p>
-                <span className="activity-time">{activity.time}</span>
+
+          {/* Top brands */}
+          {data.topBrands.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>Top Brands</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {data.topBrands.map(([brand, count]) => (
+                  <span key={brand} style={{ padding: '2px 8px', background: '#f0f0f0', borderRadius: 6, fontSize: 10, fontWeight: 600, color: '#333' }}>
+                    {brand} ({count})
+                  </span>
+                ))}
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Production Progress */}
+        <div style={S.card}>
+          <div style={S.sectionTitle}>🎬 Production Progress</div>
+          {[
+            { label: 'Events', value: data.events, sub: `${data.eventsReady} ready`, color: '#f59e0b' },
+            { label: 'UI Overlays', value: data.overlaysGenerated, sub: `of ${data.overlaysTotal}`, color: '#B8962E', pct: data.overlaysTotal > 0 ? Math.round((data.overlaysGenerated / data.overlaysTotal) * 100) : 0 },
+            { label: 'Episodes', value: data.episodes, sub: `${data.completed} completed`, color: '#6366f1' },
+            { label: 'Wardrobe Items', value: data.wardrobe, sub: `$${data.wardrobeValue.toLocaleString()} value`, color: '#ec4899' },
+          ].map(item => (
+            <div key={item.label} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{item.label}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: item.color }}>
+                  {item.value} <span style={{ fontSize: 10, fontWeight: 400, color: '#94a3b8' }}>{item.sub}</span>
+                </span>
+              </div>
+              {item.pct !== undefined && (
+                <div style={{ height: 4, background: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${item.pct}%`, background: item.color, borderRadius: 2 }} />
+                </div>
+              )}
             </div>
           ))}
         </div>
