@@ -2649,26 +2649,40 @@ router.post('/world/:showId/events/:eventId/re-render-overlay', optionalAuth, as
 // GET /world/:showId/events/:eventId/overlay-tasks/:overlayType
 router.get('/world/:showId/events/:eventId/overlay-tasks/:overlayType', optionalAuth, async (req, res) => {
   try {
-    const { eventId, overlayType } = req.params;
+    const { showId, eventId, overlayType } = req.params;
     const models = req.app?.get?.('models') || require('../models');
     const { sequelize } = models;
 
     const assetRole = overlayType === 'wardrobe' ? 'UI.OVERLAY.WARDROBE_LIST' : 'UI.OVERLAY.SOCIAL_TASKS';
 
-    // Find most recent pending or approved asset for this overlay type
+    // Find most recent asset for this overlay type
     const [asset] = await sequelize.query(
       `SELECT metadata FROM assets WHERE metadata->>'event_id' = :eventId AND asset_role = :assetRole AND deleted_at IS NULL
        ORDER BY created_at DESC LIMIT 1`,
       { replacements: { eventId, assetRole }, type: sequelize.QueryTypes.SELECT }
     );
 
-    if (!asset) return res.json({ success: true, tasks: null });
+    if (asset) {
+      const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});
+      let tasks = meta.tasks;
+      if (typeof tasks === 'string') tasks = JSON.parse(tasks);
+      if (tasks) return res.json({ success: true, tasks });
+    }
 
-    const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});
-    let tasks = meta.tasks;
-    if (typeof tasks === 'string') tasks = JSON.parse(tasks);
+    // Fallback: load from event canon_consequences
+    const [event] = await sequelize.query(
+      'SELECT canon_consequences FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (event) {
+      let cc = event.canon_consequences;
+      if (typeof cc === 'string') try { cc = JSON.parse(cc); } catch { cc = {}; }
+      const auto = cc?.automation || {};
+      const fallbackTasks = overlayType === 'wardrobe' ? auto.wardrobe_tasks : auto.social_tasks;
+      if (fallbackTasks?.length > 0) return res.json({ success: true, tasks: fallbackTasks });
+    }
 
-    return res.json({ success: true, tasks: tasks || null });
+    return res.json({ success: true, tasks: null });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

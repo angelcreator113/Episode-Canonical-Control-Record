@@ -244,8 +244,11 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
                     style={{ width: '100%', maxHeight: 520, objectFit: 'contain', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
                   />
                   {tasks.length > 0 && (
-                    <div style={{ marginTop: 14, fontSize: 11, color: '#888' }}>
-                      {tasks.length} tasks{tasks.filter(t => t.required).length > 0 && ` · ${tasks.filter(t => t.required).length} required`}
+                    <div style={{ marginTop: 14, fontSize: 11, color: '#888', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <span>{tasks.length} tasks{tasks.filter(t => t.required).length > 0 && ` · ${tasks.filter(t => t.required).length} required`}</span>
+                      {isWardrobe && tasks.some(t => t.wardrobe_id) && (
+                        <span style={{ padding: '1px 8px', background: '#eef2ff', color: '#6366f1', borderRadius: 6, fontWeight: 600 }}>From outfit picker</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -457,19 +460,43 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
           );
         })()}
 
-        {tasks.length > 0 && isWardrobe && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 3 }}>
-            {tasks.map(t => (
-              <div key={t.slot} style={{
-                padding: '3px 8px', background: '#f8f8f8', borderRadius: 5,
-                borderLeft: `3px solid ${accentColor}`, fontSize: 10,
-              }}>
-                <span style={{ fontWeight: 600, color: '#333' }}>{t.label}</span>
-                {t.required && <span style={{ color: accentColor, marginLeft: 4, fontSize: 8, fontWeight: 700 }}>req</span>}
+        {tasks.length > 0 && isWardrobe && (() => {
+          const hasRealPieces = tasks.some(t => t.wardrobe_id || t.price > 0);
+          const ownedCount = tasks.filter(t => t.completed).length;
+          const totalCost = tasks.reduce((sum, t) => sum + (parseFloat(t.price) || 0), 0);
+          return (
+            <div>
+              {hasRealPieces && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 10 }}>
+                  <span style={{ padding: '2px 8px', background: '#f0fdf4', color: '#16a34a', borderRadius: 6, fontWeight: 600 }}>
+                    {ownedCount}/{tasks.length} owned
+                  </span>
+                  {totalCost > 0 && (
+                    <span style={{ padding: '2px 8px', background: '#fef3c7', color: '#92400e', borderRadius: 6, fontWeight: 600 }}>
+                      Total: {totalCost.toLocaleString()} coins
+                    </span>
+                  )}
+                  <span style={{ padding: '2px 8px', background: '#eef2ff', color: '#6366f1', borderRadius: 6, fontWeight: 600 }}>
+                    From outfit picker
+                  </span>
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 3 }}>
+                {tasks.map(t => (
+                  <div key={t.slot || t.order} style={{
+                    padding: '4px 8px', background: t.completed ? '#f0fdf4' : '#f8f8f8', borderRadius: 5,
+                    borderLeft: `3px solid ${t.completed ? '#16a34a' : accentColor}`, fontSize: 10,
+                  }}>
+                    <span style={{ fontWeight: 600, color: '#333' }}>{t.label}</span>
+                    {t.description && <span style={{ color: '#999', marginLeft: 4 }}>{t.description}</span>}
+                    {t.required && <span style={{ color: accentColor, marginLeft: 4, fontSize: 8, fontWeight: 700 }}>req</span>}
+                    {t.completed && <span style={{ color: '#16a34a', marginLeft: 4, fontSize: 8, fontWeight: 700 }}>owned</span>}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
         {tasks.length === 0 && !displayUrl && (
           <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
