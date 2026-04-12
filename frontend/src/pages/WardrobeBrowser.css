@@ -42,7 +42,7 @@
 
 .drag-overlay-content p {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   color: #1a1a2e;
   font-weight: 500;
 }
@@ -61,7 +61,7 @@
 }
 
 .header-title-section h1 {
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   margin: 0;
   color: #1a1a2e;
   font-weight: 700;
@@ -70,7 +70,7 @@
 .header-title-section p {
   margin: 0.25rem 0 0 0;
   color: #7a7a8a;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .back-button {
@@ -79,7 +79,7 @@
   border: 1px solid #e8e5de;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: #1a1a2e;
   margin-bottom: 0.75rem;
   transition: all 0.2s;
@@ -118,7 +118,7 @@
 }
 
 .stat-value {
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: #1a1a2e;
   line-height: 1.2;
@@ -129,7 +129,7 @@
 }
 
 .stat-label {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: #7a7a8a;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -171,7 +171,7 @@
   padding: 0.5rem 2rem 0.5rem 2.25rem;
   border: 1px solid #e8e5de;
   border-radius: 10px;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   background: #fafafa;
   transition: all 0.2s;
   color: #1a1a2e;
@@ -191,7 +191,7 @@
   transform: translateY(-50%);
   background: none;
   border: none;
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   color: #9ca3af;
   cursor: pointer;
   padding: 0 0.25rem;
@@ -217,7 +217,7 @@
   background: #ffffff;
   border-radius: 10px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: #1a1a2e;
   transition: all 0.2s;
@@ -254,7 +254,7 @@
   justify-content: center;
   background: #C9A84C;
   color: #ffffff;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   width: 18px;
   height: 18px;
@@ -270,7 +270,7 @@
   padding: 0.5rem 0.75rem;
   border: 1px solid #e8e5de;
   border-radius: 10px;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   cursor: pointer;
   background: #ffffff;
   transition: all 0.2s;
@@ -331,7 +331,7 @@
   padding: 0.375rem 0.625rem;
   border: 1px solid #e8e5de;
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   cursor: pointer;
   background: #ffffff;
   color: #1a1a2e;
@@ -350,7 +350,7 @@
   border: 1px solid #fecaca;
   border-radius: 8px;
   color: #dc2626;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -375,7 +375,7 @@
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: #7a7a8a;
   transition: all 0.2s;
@@ -395,7 +395,7 @@
 }
 
 .tab-count {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   background: #f0eee8;
   color: #7a7a8a;
   padding: 0.125rem 0.5rem;
@@ -441,7 +441,7 @@
 
 .filter-header h3 {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #7a7a8a;
   text-transform: uppercase;
@@ -453,7 +453,7 @@
   border: none;
   color: #C9A84C;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   transition: opacity 0.2s;
 }
@@ -468,7 +468,7 @@
 
 .filter-section label {
   display: block;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #1a1a2e;
   margin-bottom: 0.375rem;
@@ -481,7 +481,7 @@
   padding: 0.375rem 0.5rem;
   border: 1px solid #e8e5de;
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   cursor: pointer;
   background: #ffffff;
 }
@@ -506,7 +506,7 @@
   border-radius: 10px;
   margin-bottom: 1rem;
   border: 1px solid #e8dbb8;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: #1a1a2e;
 }
 
@@ -520,7 +520,7 @@
   border: 1px solid #e8e5de;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   background: #ffffff;
   transition: all 0.2s;
   color: #1a1a2e;
@@ -545,7 +545,7 @@
 .results-info {
   margin-bottom: 0.75rem;
   color: #7a7a8a;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
 }
 
 /* ---- Items Grid ---- */
@@ -647,7 +647,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   z-index: 5;
 }
 
@@ -659,7 +659,7 @@
   color: white;
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -675,7 +675,7 @@
   color: #ffffff;
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   z-index: 5;
 }
@@ -730,7 +730,7 @@
 
 .item-name {
   margin: 0 0 0.375rem 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: #1a1a2e;
   font-weight: 600;
   line-height: 1.3;
@@ -750,7 +750,7 @@
 .category-badge {
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
-  font-size: 0.65rem;
+  font-size: var(--text-2xs);
   font-weight: 500;
 }
 
@@ -777,7 +777,7 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.125rem 0.375rem;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   color: #4b5563;
   background: #f3f4f6;
   border-radius: 4px;
@@ -809,7 +809,7 @@
   padding: 0.1rem 0.35rem;
   background: #f3f4f6;
   border-radius: 3px;
-  font-size: 0.625rem;
+  font-size: var(--text-2xs);
   color: #6b7280;
   text-transform: capitalize;
 }
@@ -822,7 +822,7 @@
 }
 
 .usage-info {
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   color: #6b7280;
 }
 
@@ -871,7 +871,7 @@
   color: #ffffff;
   border: none;
   border-radius: 10px;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.25s;
@@ -894,7 +894,7 @@
 }
 
 .wardrobe-welcome h3 {
-  font-size: 1.35rem;
+  font-size: var(--text-xl);
   color: #1a1a2e;
   font-weight: 700;
   margin-bottom: 0.5rem;
@@ -902,7 +902,7 @@
 
 .wardrobe-welcome > p {
   color: #7a7a8a;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   max-width: 420px;
   margin: 0 auto 1.5rem;
   line-height: 1.5;
@@ -924,12 +924,12 @@
   background: #fafaf8;
   border: 1px solid #e8e5de;
   border-radius: 10px;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: #1a1a2e;
 }
 
 .feature-icon {
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
 }
 
 /* ---- Loading ---- */
@@ -953,7 +953,7 @@
   background: #ffffff;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   transition: all 0.2s;
   color: #1a1a2e;
 }
@@ -980,7 +980,7 @@
   background: #ffffff;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   min-width: 2rem;
   text-align: center;
   transition: all 0.2s;
@@ -1035,7 +1035,7 @@
 
 .modal-header h2 {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: #1f2937;
 }
@@ -1043,7 +1043,7 @@
 .modal-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   cursor: pointer;
   color: #9ca3af;
   width: 32px;
@@ -1093,7 +1093,7 @@
 
 .upload-placeholder p {
   margin: 0.5rem 0 0 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: #9ca3af;
 }
 
@@ -1119,7 +1119,7 @@
   color: white;
   border: none;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: var(--text-base);
   line-height: 1;
   display: flex;
   align-items: center;
@@ -1131,7 +1131,7 @@
   font-weight: 500;
   color: #374151;
   margin-bottom: 0.375rem;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
 }
 
 .form-section input[type="text"],
@@ -1143,7 +1143,7 @@
   padding: 0.5rem 0.625rem;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   transition: border-color 0.15s;
   background: white;
 }
@@ -1174,7 +1174,7 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: white;
   transition: all 0.15s;
@@ -1186,13 +1186,13 @@
 
 .warning-text {
   color: #dc2626;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   margin-top: 0.5rem;
 }
 
 /* ---- Usage Details ---- */
 .usage-details {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .usage-summary {
@@ -1216,7 +1216,7 @@
 
 .show-usage h4 {
   margin: 0.375rem 0;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: #374151;
 }
 
@@ -1229,7 +1229,7 @@
 .show-usage li {
   padding: 0.375rem 0;
   border-bottom: 1px solid #f3f4f6;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 /* ---- Responsive ---- */
@@ -1288,7 +1288,7 @@
   }
   
   .stat-value {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
   }
 }
 
@@ -1303,7 +1303,7 @@
   }
   
   .item-name {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
   
   .overlay-action {

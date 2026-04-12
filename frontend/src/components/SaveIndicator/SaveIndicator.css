@@ -14,7 +14,7 @@
   gap: 6px;
   padding: 5px 12px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 600;
   transition: all 0.3s ease;
   white-space: nowrap;
@@ -28,7 +28,7 @@
 }
 
 .save-indicator.saved .save-icon {
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 
 /* -- Saving state */
@@ -46,7 +46,7 @@
 }
 
 .save-indicator.unsaved .save-icon {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   animation: pulse-dot 1.5s infinite;
 }
 
@@ -81,13 +81,13 @@
 .save-time {
   color: rgba(255, 255, 255, 0.4);
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--text-xs);
   margin-left: 2px;
 }
 
 /* Error tooltip */
 .save-error-tip {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #f87171;
   max-width: 150px;
   overflow: hidden;
@@ -103,7 +103,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   color: rgba(255, 255, 255, 0.85);
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;

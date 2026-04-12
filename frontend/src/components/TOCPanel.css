@@ -12,7 +12,7 @@
 
 .tocp-bookTitle{
   font-family: "Playfair Display", serif;
-  font-size: 17px;
+  font-size: var(--text-lg);
   font-style: italic;
   line-height: 1.25;
   margin-bottom: 4px;
@@ -21,7 +21,7 @@
 
 .tocp-bookSub{
   font-family: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: .10em;
   margin-bottom: 10px;
   color: var(--panel-sub, rgba(26,21,16,0.55));
@@ -54,13 +54,13 @@
   min-width: 40px;
   text-align:right;
   font-family: "DM Mono", ui-monospace, monospace;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--panel-accent, #C9A84C);
 }
 
 .tocp-overallLabel{
   font-family: "DM Mono", ui-monospace, monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: .08em;
   color: var(--panel-sub, rgba(26,21,16,0.5));
 }
@@ -72,7 +72,7 @@
 
 .tocp-empty{
   font-family: "DM Mono", ui-monospace, monospace;
-  font-size: 12px;
+  font-size: var(--text-xs);
   letter-spacing: .06em;
   color: var(--panel-sub, rgba(26,21,16,0.5));
 }
@@ -115,7 +115,7 @@
   flex-shrink:0;
   padding-top: 2px;
   font-family: "DM Mono", ui-monospace, monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: .10em;
   color: rgba(201,168,76,0.85);
 }
@@ -124,7 +124,7 @@
 
 .tocp-title{
   font-family: "Playfair Display", serif;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-style: italic;
   line-height: 1.25;
   margin-bottom: 4px;
@@ -133,7 +133,7 @@
 
 .tocp-arc{
   font-family: "DM Mono", ui-monospace, monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: .06em;
   margin-bottom: 6px;
   color: var(--panel-sub, rgba(26,21,16,0.45));
@@ -163,7 +163,7 @@
   align-items:center;
   gap: 10px;
   font-family: "DM Mono", ui-monospace, monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: .06em;
 }
 
@@ -193,7 +193,7 @@
   }
 
   .tocp-bookTitle {
-    font-size: 15px;
+    font-size: var(--text-base);
   }
 
   .tocp-row {
@@ -202,16 +202,16 @@
   }
 
   .tocp-title {
-    font-size: 13px;
+    font-size: var(--text-xs);
   }
 
   .tocp-counts {
     gap: 6px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
 
   .tocp-num {
     width: 22px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
 }

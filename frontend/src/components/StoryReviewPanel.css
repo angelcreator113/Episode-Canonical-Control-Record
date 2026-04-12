@@ -25,7 +25,7 @@
   padding: 10px 16px;
   background: rgba(240, 237, 230, 0.5);
   border-bottom: 1px solid rgba(224, 220, 212, 0.5);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .se-review-status-left {
@@ -46,7 +46,7 @@
   align-items: center;
   padding: 3px 10px;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -72,7 +72,7 @@
 /* ── Save status indicators ──────────────────────────────────────────────────── */
 .se-review-saving {
   color: #A09A92;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-style: italic;
   animation: se-review-pulse 1.2s ease-in-out infinite;
 }
@@ -84,7 +84,7 @@
 
 .se-review-saved-flash {
   color: #0d9668;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   animation: se-review-flash 2s ease-out forwards;
 }
@@ -97,13 +97,13 @@
 
 .se-review-error {
   color: #c0392b;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
 .se-review-wc {
   color: #6B6560;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -122,7 +122,7 @@
   background: #FFFFFF;
   color: #1C1814;
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: var(--text-xs);
   line-height: 1.5;
   resize: vertical;
   min-height: 60px;
@@ -155,7 +155,7 @@
   background: transparent;
   color: #1C1814;
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
@@ -170,7 +170,7 @@
 
 .se-review-btn-notes {
   color: #6B6560;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .se-review-btn-notes:hover {
   color: #1C1814;
@@ -222,7 +222,7 @@
   background: #fff;
   color: #1C1814;
   font-family: 'DM Sans', sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
@@ -239,7 +239,7 @@
 
 .se-review-page-indicator {
   font-family: 'DM Sans', sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: #6B6560;
   font-variant-numeric: tabular-nums;
@@ -294,12 +294,12 @@
 
   .se-review-page-btn {
     padding: 4px 8px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     min-height: 28px;
   }
 
   .se-review-page-indicator {
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
 
   .se-review-status-right {
@@ -307,11 +307,11 @@
   }
 
   .se-review-wc {
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
 
   .se-review-badge {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     padding: 2px 8px;
   }
 
@@ -322,7 +322,7 @@
 
   .se-review-btn {
     padding: 8px 12px;
-    font-size: 11px;
+    font-size: var(--text-xs);
     min-height: 40px;
   }
 
@@ -331,7 +331,7 @@
   }
 
   .se-review-notes-input {
-    font-size: 16px; /* prevent iOS zoom */
+    font-size: var(--text-base); /* prevent iOS zoom */
     min-height: 48px;
   }
 }
@@ -344,18 +344,18 @@
   }
 
   .se-review-badge {
-    font-size: 9px;
+    font-size: var(--text-2xs);
     padding: 2px 6px;
   }
 
   .se-review-page-btn {
     padding: 3px 6px;
-    font-size: 9px;
+    font-size: var(--text-2xs);
     min-height: 32px;
   }
 
   .se-review-page-indicator {
-    font-size: 9px;
+    font-size: var(--text-2xs);
   }
 
   .se-review-actions {
@@ -364,7 +364,7 @@
 
   .se-review-btn {
     padding: 6px 10px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     min-height: 36px;
   }
 }

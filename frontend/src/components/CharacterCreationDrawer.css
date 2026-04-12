@@ -23,17 +23,17 @@
   border-bottom: 1px solid #f0ecf5;
 }
 .ccd-eyebrow {
-  font-size: 10px; letter-spacing: 0.14em;
+  font-size: var(--text-2xs); letter-spacing: 0.14em;
   color: #a889c8; margin-bottom: 6px;
 }
 .ccd-title {
-  font-size: 22px; font-weight: 600; color: #1a1520; margin: 0 0 6px;
+  font-size: var(--text-2xl); font-weight: 600; color: #1a1520; margin: 0 0 6px;
 }
 .ccd-subtitle {
-  font-size: 13px; color: #888; margin: 0; line-height: 1.5;
+  font-size: var(--text-xs); color: #888; margin: 0; line-height: 1.5;
 }
 .ccd-close {
-  background: none; border: none; font-size: 22px;
+  background: none; border: none; font-size: var(--text-2xl);
   color: #bbb; cursor: pointer; padding: 0; line-height: 1;
   flex-shrink: 0; margin-top: 2px;
 }
@@ -47,14 +47,14 @@
 }
 .ccd-field { display: flex; flex-direction: column; gap: 8px; }
 .ccd-label {
-  font-size: 10px; letter-spacing: 0.12em;
+  font-size: var(--text-2xs); letter-spacing: 0.12em;
   color: #a889c8; font-weight: 600;
 }
 .ccd-input {
   border: 1.5px solid #e8e0f0;
   border-radius: 8px;
   padding: 12px 14px;
-  font-size: 14px; color: #1a1520;
+  font-size: var(--text-sm); color: #1a1520;
   outline: none; transition: border-color 0.15s;
   font-family: inherit;
   background: #fdfcff;
@@ -84,17 +84,17 @@
   background: #f5f0fb;
 }
 .ccd-role-label {
-  font-size: 13px; font-weight: 600; color: #1a1520;
+  font-size: var(--text-xs); font-weight: 600; color: #1a1520;
   margin-bottom: 2px;
 }
 .ccd-role-btn.ccd-role-selected .ccd-role-label { color: #7b55b0; }
 .ccd-role-hint {
-  font-size: 11px; color: #999; line-height: 1.4;
+  font-size: var(--text-xs); color: #999; line-height: 1.4;
 }
 .ccd-role-btn.ccd-role-selected .ccd-role-hint { color: #a889c8; }
 
 .ccd-error {
-  font-size: 12px; color: #c0527a;
+  font-size: var(--text-xs); color: #c0527a;
   background: #fdf0f4; border: 1px solid #f0c8d8;
   border-radius: 6px; padding: 10px 12px;
 }
@@ -106,14 +106,14 @@
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
 .ccd-footer-note {
-  font-size: 11px; color: #aaa; margin: 0; line-height: 1.4; flex: 1;
+  font-size: var(--text-xs); color: #aaa; margin: 0; line-height: 1.4; flex: 1;
 }
 .ccd-generate-btn {
   background: #d4789a;
   color: #fff;
   border: none; border-radius: 8px;
   padding: 12px 24px;
-  font-size: 14px; font-weight: 600;
+  font-size: var(--text-sm); font-weight: 600;
   cursor: pointer; white-space: nowrap;
   transition: background 0.15s, opacity 0.15s;
   font-family: inherit;

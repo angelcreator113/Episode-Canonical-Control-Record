@@ -15,7 +15,7 @@
 }
 
 .wlu-header h1 {
-  font-size: 20px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: #2C2C2C;
   margin: 0;
@@ -31,7 +31,7 @@
   padding: 6px 12px;
   cursor: pointer;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #888;
 }
 
@@ -41,7 +41,7 @@
   padding: 10px 14px;
   border-radius: 8px;
   margin-bottom: 14px;
-  font-size: 13px;
+  font-size: var(--text-xs);
 }
 
 .wlu-form {
@@ -133,12 +133,12 @@
 
 .wlu-placeholder span {
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 .wlu-hint {
   color: #ccc !important;
-  font-size: 10px !important;
+  font-size: var(--text-2xs) !important;
 }
 
 .wlu-analyze-btn {
@@ -153,7 +153,7 @@
   background: #B8962E;
   color: white;
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: opacity 0.2s;
@@ -172,7 +172,7 @@
 
 .wlu-ai-label {
   font-family: 'DM Mono', monospace;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.4px;
   color: #B8962E;
   margin-bottom: 4px;
@@ -180,7 +180,7 @@
 }
 
 .wlu-ai-notes {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #666;
   margin: 0 0 8px;
   line-height: 1.5;
@@ -195,7 +195,7 @@
 
 .wlu-chip {
   font-family: 'DM Mono', monospace;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   padding: 2px 8px;
   border-radius: 10px;
   background: #f3f1ec;
@@ -222,7 +222,7 @@
 
 .wlu-field label {
   font-family: 'DM Mono', monospace;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: #aaa;
   letter-spacing: 0.2px;
 }
@@ -234,7 +234,7 @@
   border: 1px solid #e0d9cc;
   border-radius: 6px;
   font-family: 'Lora', serif;
-  font-size: 14px;
+  font-size: var(--text-sm);
   color: #2C2C2C;
   background: #fdfcfa;
   transition: border-color 0.2s;
@@ -285,7 +285,7 @@
   background: white;
   color: #888;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
@@ -299,7 +299,7 @@
   background: #2C2C2C;
   color: white;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
@@ -324,7 +324,7 @@
   border-radius: 50%;
   background: #16a34a;
   color: white;
-  font-size: 24px;
+  font-size: var(--text-2xl);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -333,14 +333,14 @@
 
 .wlu-success h2 {
   color: #16a34a;
-  font-size: 18px;
+  font-size: var(--text-lg);
   margin: 0 0 6px;
 }
 
 .wlu-success p {
   color: #aaa;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }

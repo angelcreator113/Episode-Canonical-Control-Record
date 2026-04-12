@@ -25,7 +25,7 @@
 }
 .mb-legend-title {
   font-family: var(--st-serif, 'Playfair Display', serif);
-  font-size: 18px;
+  font-size: var(--text-lg);
   color: var(--st-ink, #2c2c2c);
   font-style: italic;
   font-weight: 400;
@@ -36,13 +36,13 @@
   align-items: center;
   gap: 5px;
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   color: var(--st-muted, #666);
   white-space: nowrap;
 }
 .mb-legend-icon {
-  font-size: 12px;
+  font-size: var(--text-xs);
   width: 16px;
   text-align: center;
   flex-shrink: 0;
@@ -66,7 +66,7 @@
   border: 1px solid var(--st-border-light, rgba(0,0,0,0.08));
   border-radius: 3px;
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   color: var(--st-muted, #666);
   padding: 5px 12px;
@@ -96,7 +96,7 @@
   border: 1px solid var(--st-border-light, rgba(0,0,0,0.08));
   border-radius: 3px;
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   color: var(--st-muted, #666);
   padding: 5px 10px;
@@ -155,7 +155,7 @@
 }
 .mb-cluster-name {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--st-ink-light, #444);
@@ -163,12 +163,12 @@
 }
 .mb-cluster-count {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--st-muted, #666);
   margin-left: auto;
 }
 .mb-cluster-arrow {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--st-muted, #666);
   transition: transform 0.2s ease;
   flex-shrink: 0;
@@ -201,7 +201,7 @@
 .mb-memory-status {
   width: 18px;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--text-xs);
   flex-shrink: 0;
   padding-top: 2px;
   line-height: 1;
@@ -212,7 +212,7 @@
 }
 .mb-memory-statement {
   font-family: var(--st-serif, 'Playfair Display', serif);
-  font-size: 14px;
+  font-size: var(--text-sm);
   color: var(--st-ink, #2c2c2c);
   line-height: 1.55;
   margin: 0;
@@ -231,7 +231,7 @@
 }
 .mb-memory-char {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   color: var(--st-muted, #666);
   display: flex;
@@ -247,7 +247,7 @@
 }
 .mb-memory-confidence {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.04em;
 }
 .mb-memory-confidence.high    { color: #5a9a5a; }
@@ -255,7 +255,7 @@
 .mb-memory-confidence.low     { color: #b05040; }
 .mb-memory-chapter {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--st-muted, #666);
   letter-spacing: 0.04em;
   opacity: 0.75;
@@ -267,7 +267,7 @@
 }
 .mb-memory-tag {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.04em;
   color: var(--st-muted, #666);
   background: rgba(0,0,0,0.04);
@@ -290,12 +290,12 @@
   user-select: none;
 }
 .mb-tensions-icon {
-  font-size: 13px;
+  font-size: var(--text-xs);
   flex-shrink: 0;
 }
 .mb-tensions-label {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #B85C38;
@@ -303,7 +303,7 @@
 }
 .mb-tensions-count {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--st-muted, #666);
   margin-left: auto;
 }
@@ -324,7 +324,7 @@
 }
 .mb-tension-type {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #B85C38;
@@ -337,7 +337,7 @@
 }
 .mb-tension-item {
   font-family: var(--st-serif, 'Playfair Display', serif);
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: var(--st-ink-light, #444);
   line-height: 1.45;
 }
@@ -366,13 +366,13 @@
   text-align: center;
 }
 .mb-detail-empty-icon {
-  font-size: 24px;
+  font-size: var(--text-2xl);
   opacity: 0.3;
   margin-bottom: 12px;
 }
 .mb-detail-empty-text {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--st-muted, #666);
   letter-spacing: 0.06em;
   line-height: 1.6;
@@ -393,7 +393,7 @@
 }
 .mb-detail-status-badge {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 500;
@@ -425,7 +425,7 @@
 }
 .mb-detail-type-badge {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 2px 8px;
@@ -434,7 +434,7 @@
 }
 .mb-detail-statement {
   font-family: var(--st-serif, 'Playfair Display', serif);
-  font-size: 16px;
+  font-size: var(--text-base);
   color: var(--st-ink, #2c2c2c);
   line-height: 1.65;
   margin: 0 0 16px;
@@ -442,7 +442,7 @@
 }
 .mb-detail-statement-edit {
   font-family: var(--st-serif, 'Playfair Display', serif);
-  font-size: 16px;
+  font-size: var(--text-base);
   color: var(--st-ink, #2c2c2c);
   line-height: 1.65;
   width: 100%;
@@ -473,7 +473,7 @@
 }
 .mb-detail-section-label {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--st-muted, #666);
@@ -481,7 +481,7 @@
 }
 .mb-detail-section-value {
   font-family: var(--st-sans, 'DM Sans', sans-serif);
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: var(--st-ink-light, #444);
   line-height: 1.5;
 }
@@ -515,7 +515,7 @@
 }
 .mb-detail-confidence-label {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   flex-shrink: 0;
   min-width: 28px;
@@ -528,7 +528,7 @@
 }
 .mb-detail-tag {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--st-muted, #666);
   background: rgba(0,0,0,0.04);
   border-radius: 2px;
@@ -542,13 +542,13 @@
 }
 .mb-detail-source-chapter {
   font-family: var(--st-serif, 'Playfair Display', serif);
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: var(--st-ink-light, #444);
   font-style: italic;
 }
 .mb-detail-source-line {
   font-family: var(--st-sans, 'DM Sans', sans-serif);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--st-muted, #666);
   line-height: 1.5;
 }
@@ -565,7 +565,7 @@
   border: 1px solid var(--st-border-light, rgba(0,0,0,0.1));
   border-radius: 3px;
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   color: var(--st-ink-light, #444);
   padding: 5px 12px;
@@ -627,7 +627,7 @@
   border: 1px solid rgba(26,21,16,0.12);
   border-radius: 3px;
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: all 0.12s;
@@ -682,7 +682,7 @@
 }
 .mb-evolution-text {
   font-family: var(--st-serif, 'Playfair Display', serif);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--st-ink-light, #444);
   line-height: 1.5;
 }
@@ -692,7 +692,7 @@
 }
 .mb-evolution-date {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--st-muted, #666);
   margin-top: 2px;
 }
@@ -703,20 +703,20 @@
   padding: 48px 24px;
 }
 .mb-empty-icon {
-  font-size: 28px;
+  font-size: var(--text-3xl);
   opacity: 0.25;
   margin-bottom: 14px;
 }
 .mb-empty-title {
   font-family: var(--st-serif, 'Playfair Display', serif);
-  font-size: 16px;
+  font-size: var(--text-base);
   color: var(--st-ink-light, #444);
   font-style: italic;
   margin-bottom: 8px;
 }
 .mb-empty-text {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--st-muted, #666);
   letter-spacing: 0.04em;
   line-height: 1.6;
@@ -729,7 +729,7 @@
 }
 .mb-loading-text {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--st-muted, #666);
   letter-spacing: 0.08em;
 }
@@ -760,7 +760,7 @@
 }
 .mb-error-text {
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #B85C38;
   letter-spacing: 0.04em;
 }
@@ -791,17 +791,17 @@
     padding: 10px 0;
   }
   .mb-legend-title {
-    font-size: 16px;
+    font-size: var(--text-base);
   }
   .mb-legend-item {
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
   .mb-filters {
     gap: 4px;
   }
   .mb-filter-btn {
     padding: 4px 8px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
   .mb-char-select {
     min-width: 0;
@@ -819,23 +819,23 @@
     gap: 8px;
   }
   .mb-memory-statement {
-    font-size: 13px;
+    font-size: var(--text-xs);
   }
   .mb-detail-card {
     padding: 14px;
   }
   .mb-detail-statement {
-    font-size: 14px;
+    font-size: var(--text-sm);
   }
   .mb-detail-statement-edit {
-    font-size: 16px; /* prevent iOS zoom */
+    font-size: var(--text-base); /* prevent iOS zoom */
   }
   .mb-detail-actions {
     gap: 4px;
   }
   .mb-action-btn {
     padding: 6px 10px;
-    font-size: 10px;
+    font-size: var(--text-2xs);
     min-height: 36px;
   }
   .mb-tension-pair {
@@ -852,7 +852,7 @@
   border: 1px solid #C9A84C;
   color: #C9A84C;
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 12px;
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
@@ -874,7 +874,7 @@
   border: 1px solid #C9A84C55;
   color: #C9A84C;
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   cursor: pointer;
   transition: background 0.2s, color 0.2s, border-color 0.2s;
@@ -892,7 +892,7 @@
 .mb-extract-msg {
   margin-top: 8px;
   font-family: var(--st-mono, 'DM Mono', monospace);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #888;
   letter-spacing: 0.04em;
 }

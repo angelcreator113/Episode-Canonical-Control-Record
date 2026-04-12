@@ -97,15 +97,30 @@
   /* === TYPOGRAPHY === */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-  
-  /* Font Sizes */
+  --font-prose: 'Lora', Georgia, 'Times New Roman', serif;
+  --font-ui: 'DM Mono', 'SF Mono', Monaco, Consolas, monospace;
+
+  /* Font Sizes — Standardized Scale
+     Use ONLY these tokens for font-size across the app.
+     ───────────────────────────────────────────────────
+     --text-2xs  10px   micro badges, tiny labels
+     --text-xs   12px   small labels, captions, table headers
+     --text-sm   14px   secondary text, UI labels, descriptions
+     --text-base 16px   standard body, inputs, buttons
+     --text-lg   18px   section headings, emphasis
+     --text-xl   20px   page sub-headings
+     --text-2xl  24px   page headings
+     --text-3xl  28px   large titles
+     --text-4xl  36px   hero / display
+  */
+  --text-2xs: 0.625rem;    /* 10px */
   --text-xs: 0.75rem;      /* 12px */
   --text-sm: 0.875rem;     /* 14px */
   --text-base: 1rem;       /* 16px */
   --text-lg: 1.125rem;     /* 18px */
   --text-xl: 1.25rem;      /* 20px */
   --text-2xl: 1.5rem;      /* 24px */
-  --text-3xl: 1.875rem;    /* 30px */
+  --text-3xl: 1.75rem;     /* 28px */
   --text-4xl: 2.25rem;     /* 36px */
   
   /* Font Weights */

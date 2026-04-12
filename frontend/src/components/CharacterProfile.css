@@ -31,7 +31,7 @@
 
 .back-btn {
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #999;
   background: none;
   border: none;
@@ -51,7 +51,7 @@
   align-items: center;
   justify-content: center;
   font-family: 'Cormorant Garamond', serif;
-  font-size: 20px;
+  font-size: var(--text-xl);
   font-weight: 500;
   color: #a889c8;
   margin-bottom: 4px;
@@ -59,7 +59,7 @@
 
 .sidebar-name {
   font-family: 'Cormorant Garamond', serif;
-  font-size: 20px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: #2a1f2d;
   margin: 0;
@@ -67,7 +67,7 @@
 }
 
 .sidebar-role {
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #aaa;
@@ -81,7 +81,7 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
   letter-spacing: 0.02em;
 }
@@ -110,7 +110,7 @@
   border: none;
   border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: opacity 0.15s, transform 0.1s;
@@ -129,7 +129,7 @@
   border: 1px solid #e8dff0;
   border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: var(--text-xs);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -143,7 +143,7 @@
   background: #fdf6ee;
   border: 1px solid #f0e4d0;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #d4a574;
   cursor: pointer;
   display: flex;
@@ -152,7 +152,7 @@
   transition: background 0.15s;
 }
 .ghost-indicator:hover { background: #faeee0; }
-.ghost-num { font-weight: 600; font-size: 13px; }
+.ghost-num { font-weight: 600; font-size: var(--text-xs); }
 
 /* ── Sidebar Meta ──────────────────────────────────────────────────────────── */
 .sidebar-meta-item {
@@ -164,7 +164,7 @@
 
 .mobility-badge,
 .time-badge-sm {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #888;
   text-transform: capitalize;
 }
@@ -195,7 +195,7 @@
   border: none;
   border-bottom: 2px solid transparent;
   font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 400;
   color: #aaa;
   cursor: pointer;
@@ -248,7 +248,7 @@
 
 .section-title {
   font-family: 'DM Sans', sans-serif;
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #bbb;
@@ -259,7 +259,7 @@
 }
 
 .author-badge {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   padding: 2px 8px;
   background: #f0e4d0;
   color: #d4a574;
@@ -273,14 +273,14 @@
 .prose-overview {
   font-family: 'Cormorant Garamond', serif;
   font-style: italic;
-  font-size: 18px;
+  font-size: var(--text-lg);
   line-height: 1.65;
   color: #3a2d3f;
   margin: 0;
 }
 
 .arc-text {
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: #a889c8;
   margin: 0;
@@ -300,14 +300,14 @@
 }
 
 .meta-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #bbb;
 }
 
 .meta-value {
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: #444;
   font-weight: 500;
   text-transform: capitalize;
@@ -327,7 +327,7 @@
 }
 .want-tier p {
   margin: 6px 0 0;
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   color: #444;
 }
@@ -336,7 +336,7 @@
 .want-tier.forbidden{ background: #fdf0f4; border-color: #d4789a; }
 
 .want-label {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #aaa;
@@ -344,20 +344,20 @@
 
 /* ── Wound ─────────────────────────────────────────────────────────────────── */
 .wound-description {
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: #3a2d3f;
   margin: 0 0 12px;
 }
 
 .wound-meta {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #aaa;
   margin: 0 0 8px;
 }
 
 .wound-effects {
-  font-size: 13px;
+  font-size: var(--text-xs);
   line-height: 1.55;
   color: #666;
   margin: 0 0 12px;
@@ -371,7 +371,7 @@
 }
 
 .dim-tag {
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 3px 8px;
   background: #f5f0fb;
   color: #a889c8;
@@ -381,7 +381,7 @@
 
 /* ── Mask ──────────────────────────────────────────────────────────────────── */
 .mask-block p {
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: #444;
   margin: 0 0 12px;
@@ -390,7 +390,7 @@
 .divergence-list { margin-top: 12px; }
 
 .divergence-item {
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: #888;
   line-height: 1.5;
   margin: 4px 0;
@@ -399,7 +399,7 @@
 /* ── Dilemma ───────────────────────────────────────────────────────────────── */
 .dilemma-tension {
   font-family: 'Cormorant Garamond', serif;
-  font-size: 17px;
+  font-size: var(--text-lg);
   line-height: 1.5;
   color: #3a2d3f;
   margin: 0 0 20px;
@@ -423,7 +423,7 @@
 
 .option-label {
   display: block;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #d4789a;
@@ -432,19 +432,19 @@
 
 .dilemma-option p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-xs);
   line-height: 1.5;
   color: #555;
 }
 
 .dilemma-vs {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #ccc;
   text-align: center;
 }
 
 .dilemma-cost {
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: #aaa;
   font-style: italic;
   margin: 0;
@@ -464,14 +464,14 @@
 }
 
 .interior-field p {
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: #444;
   margin: 0;
 }
 
 .blind-spot-text {
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: #888;
   font-style: italic;
@@ -503,7 +503,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #a889c8;
   flex-shrink: 0;
@@ -517,20 +517,20 @@
 }
 
 .rel-name {
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: #333;
 }
 
 .rel-type {
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #bbb;
 }
 
 .tension-badge {
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 3px 8px;
   border-radius: 20px;
   text-transform: capitalize;
@@ -555,19 +555,19 @@
 .belonging-item:last-child { border-bottom: none; }
 
 .belonging-name {
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: #333;
 }
 
 .belonging-type {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #bbb;
   text-transform: capitalize;
 }
 
 .belonging-why {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #aaa;
   font-style: italic;
   margin: 0;
@@ -590,7 +590,7 @@
   align-items: center;
   justify-content: center;
   font-family: 'Cormorant Garamond', serif;
-  font-size: 20px;
+  font-size: var(--text-xl);
   color: #7ab3d4;
   flex-shrink: 0;
 }
@@ -603,18 +603,18 @@
 }
 
 .feed-handle {
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: #333;
 }
 
 .feed-display {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #888;
 }
 
 .feed-platform {
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #bbb;
@@ -623,7 +623,7 @@
 .state-badge {
   padding: 4px 12px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -631,7 +631,7 @@
 .feed-bio {
   font-family: 'Cormorant Garamond', serif;
   font-style: italic;
-  font-size: 15px;
+  font-size: var(--text-base);
   color: #555;
   line-height: 1.5;
   margin: 0 0 14px;
@@ -645,7 +645,7 @@
 }
 
 .vibe-tag {
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 3px 10px;
   background: #eef5fb;
   color: #7ab3d4;
@@ -664,20 +664,20 @@
 }
 
 .stat-num {
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: #333;
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #aaa;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .gap-text {
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: #888;
   font-style: italic;
@@ -685,7 +685,7 @@
 }
 
 .mask-note {
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: #d4789a;
   margin: 0;
@@ -705,7 +705,7 @@
 }
 
 .living-field p {
-  font-size: 14px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: #444;
   margin: 0;
@@ -717,14 +717,14 @@
   background: #eef5fb;
   color: #7ab3d4;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
   text-transform: capitalize;
 }
 
 /* ── Ghost Characters ──────────────────────────────────────────────────────── */
 .ghost-note {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #aaa;
   margin: 0 0 12px;
   font-style: italic;
@@ -732,7 +732,7 @@
 
 .ghost-count {
   margin-left: 8px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 2px 8px;
   background: #fdf6ee;
   color: #d4a574;
@@ -757,20 +757,20 @@
 .ghost-item.promoted { opacity: 0.5; }
 
 .ghost-name {
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: #333;
   flex: 1;
 }
 
 .ghost-relation {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #bbb;
   text-transform: capitalize;
 }
 
 .btn-promote {
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 3px 10px;
   background: linear-gradient(135deg, #d4789a, #a889c8);
   color: #fff;
@@ -782,13 +782,13 @@
 .btn-promote:hover { opacity: 0.85; }
 
 .promoted-badge {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #6a9e60;
 }
 
 /* ── Family ────────────────────────────────────────────────────────────────── */
 .generational-wound {
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-style: italic;
   color: #888;
   margin: 0 0 16px;
@@ -815,19 +815,19 @@
 .family-member:last-child { border-bottom: none; }
 
 .member-name {
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: #333;
 }
 
 .member-relation {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #bbb;
   text-transform: capitalize;
 }
 
 .member-sketch {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #888;
   font-style: italic;
   margin: 0;
@@ -856,25 +856,25 @@
 }
 
 .dp-icon {
-  font-size: 15px;
+  font-size: var(--text-base);
   flex-shrink: 0;
 }
 
 .dp-label {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: #444;
   text-transform: capitalize;
 }
 
 .dp-chevron {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #bbb;
 }
 
 .dp-content {
-  font-size: 13px;
+  font-size: var(--text-xs);
   line-height: 1.65;
   color: #555;
   margin: 0;
@@ -892,7 +892,7 @@
 }
 
 .empty-label {
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: #bbb;
   margin: 0;
 }
@@ -904,7 +904,7 @@
   border: 1px solid #e8dff0;
   border-radius: 20px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
@@ -942,7 +942,7 @@
   gap: 16px;
   min-height: 300px;
   color: #aaa;
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 
 .profile-error button {
@@ -951,6 +951,6 @@
   border: 1px solid #ede8e3;
   border-radius: 20px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: #888;
 }
