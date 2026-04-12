@@ -137,7 +137,7 @@ Output: Edge-to-edge card surface, no outer background, suitable for text overla
 const { generateImageUrl } = require('./imageGenerationService');
 
 async function callDallE3(prompt) {
-  return generateImageUrl(prompt, { size: 'portrait', quality: 'hd' });
+  return generateImageUrl(prompt, { size: 'portrait', quality: 'hd', useCase: 'invitation' });
 }
 
 // ─── S3 HELPERS ───────────────────────────────────────────────────────────────

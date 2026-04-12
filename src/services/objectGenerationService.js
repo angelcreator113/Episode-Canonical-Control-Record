@@ -119,7 +119,7 @@ const { generateImage: generateImageUnified } = require('./imageGenerationServic
 
 async function callDallE3(prompt, size = '1024x1024') {
   const sizeKey = size === '1024x1024' ? 'square' : size === '1792x1024' ? 'landscape' : 'square';
-  const result = await generateImageUnified(prompt, { size: sizeKey, quality: 'standard' });
+  const result = await generateImageUnified(prompt, { size: sizeKey, quality: 'standard', useCase: 'object' });
   // Return in DALL-E response shape for backwards compat
   return { url: result.url, revised_prompt: prompt };
 }

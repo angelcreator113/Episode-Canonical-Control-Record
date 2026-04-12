@@ -419,7 +419,7 @@ async function generateDallEStill(prompt, referenceImageUrl = null, angleLabel =
 
     // No reference image — use unified image generation service (Flux or DALL-E)
     const { generateImageUrl } = require('./imageGenerationService');
-    const url = await generateImageUrl(dallePrompt, { size: 'landscape', quality: 'hd' });
+    const url = await generateImageUrl(dallePrompt, { size: 'landscape', quality: 'hd', useCase: 'scene' });
     console.log(`[SceneGen] Image generated: ${url ? 'got URL' : 'no URL'}`);
     return url;
   } catch (err) {

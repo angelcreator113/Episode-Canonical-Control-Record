@@ -1,38 +1,123 @@
 'use strict';
 
 /**
- * Unified Image Generation Service
+ * Unified Image Generation Service — Hybrid Provider Routing
  *
- * Single entry point for all AI image generation across the platform.
- * Primary: Flux Pro via fal.ai (~$0.005/image — 90% cheaper than DALL-E)
- * Fallback: DALL-E 3 via OpenAI (if FAL_KEY not configured)
+ * Routes image generation to the best provider per use case:
  *
- * Usage:
- *   const { generateImage } = require('./imageGenerationService');
- *   const url = await generateImage(prompt, { size: 'landscape', quality: 'hd' });
+ *   DALL-E 3 (quality matters, text rendering):
+ *     - Invitations (text rendering required)
+ *     - Scene sets / venue images (photorealistic, atmospheric)
+ *     - Character hero shots
+ *
+ *   Flux Pro (90% cheaper, great for non-text assets):
+ *     - UI overlays (icons, frames — no text needed)
+ *     - Wardrobe item images
+ *     - Object generation
+ *
+ * Cost model:
+ *   Flux Dev:  $0.003/image
+ *   Flux Pro:  $0.005/image
+ *   DALL-E 3:  $0.04 (standard) / $0.08 (HD)
+ *
+ * Caps:
+ *   IMAGE_CALLS_PER_OPERATION (env, default: 3) — max calls per batch
+ *   AI_DAILY_IMAGE_BUDGET_USD (env, default: 10) — daily spend cap
  *
  * Environment variables:
- *   FAL_KEY         — fal.ai API key (primary)
- *   OPENAI_API_KEY  — OpenAI key (fallback only)
- *   IMAGE_PROVIDER  — force a provider: 'flux' | 'dalle' (auto-detects by default)
+ *   FAL_KEY              — fal.ai API key (for Flux)
+ *   OPENAI_API_KEY       — OpenAI key (for DALL-E)
+ *   IMAGE_PROVIDER       — force a provider globally: 'flux' | 'dalle'
+ *   IMAGE_CALLS_PER_OPERATION — max calls per batch (default: 3)
+ *   AI_DAILY_IMAGE_BUDGET_USD — daily image budget in USD (default: 10)
  */
 
 const axios = require('axios');
 
+// ── USE-CASE → PROVIDER ROUTING ─────────────────────────────────────────────
+// Maps use case tags to preferred provider
+
+const USE_CASE_PROVIDERS = {
+  // DALL-E preferred — quality matters, text rendering, photorealism
+  invitation:    'dalle',
+  scene:         'dalle',
+  venue:         'dalle',
+  character:     'dalle',
+  hero:          'dalle',
+
+  // Flux preferred — cheaper, no text needed
+  overlay:       'flux',
+  icon:          'flux',
+  frame:         'flux',
+  wardrobe:      'flux',
+  object:        'flux',
+  thumbnail:     'flux',
+};
+
 // ── PROVIDER DETECTION ───────────────────────────────────────────────────────
 
-function getProvider() {
+function getProvider(useCase) {
+  // Force via env
   const forced = process.env.IMAGE_PROVIDER?.toLowerCase();
   if (forced === 'dalle') return 'dalle';
   if (forced === 'flux') return 'flux';
-  // Auto-detect: prefer Flux if FAL_KEY exists
+
+  // Use-case routing (only when both providers available)
+  if (useCase && process.env.FAL_KEY && process.env.OPENAI_API_KEY) {
+    const preferred = USE_CASE_PROVIDERS[useCase];
+    if (preferred) return preferred;
+  }
+
+  // Auto-detect: prefer Flux if FAL_KEY exists (cheaper default)
   if (process.env.FAL_KEY) return 'flux';
   if (process.env.OPENAI_API_KEY) return 'dalle';
   return null;
 }
 
+// ── DAILY IMAGE BUDGET TRACKING ─────────────────────────────────────────────
+
+let dailyImageSpend = 0;
+let dailyImageDate = new Date().toISOString().slice(0, 10);
+let dailyImageCalls = 0;
+const DAILY_IMAGE_BUDGET = parseFloat(process.env.AI_DAILY_IMAGE_BUDGET_USD) || 10;
+const MAX_CALLS_PER_OP = parseInt(process.env.IMAGE_CALLS_PER_OPERATION) || 3;
+
+function checkImageBudget(estimatedCost) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== dailyImageDate) {
+    dailyImageSpend = 0;
+    dailyImageCalls = 0;
+    dailyImageDate = today;
+  }
+  return (dailyImageSpend + estimatedCost) <= DAILY_IMAGE_BUDGET;
+}
+
+function recordImageSpend(cost) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== dailyImageDate) {
+    dailyImageSpend = 0;
+    dailyImageCalls = 0;
+    dailyImageDate = today;
+  }
+  dailyImageSpend += cost;
+  dailyImageCalls += 1;
+  if (dailyImageSpend >= DAILY_IMAGE_BUDGET * 0.8) {
+    console.warn(`[ImageGen] Daily image spend $${dailyImageSpend.toFixed(2)} / $${DAILY_IMAGE_BUDGET} (${Math.round(dailyImageSpend / DAILY_IMAGE_BUDGET * 100)}%) — ${dailyImageCalls} calls`);
+  }
+}
+
+function getImageBudgetStatus() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== dailyImageDate) return { spend: 0, calls: 0, budget: DAILY_IMAGE_BUDGET, remaining: DAILY_IMAGE_BUDGET };
+  return {
+    spend: dailyImageSpend,
+    calls: dailyImageCalls,
+    budget: DAILY_IMAGE_BUDGET,
+    remaining: Math.max(0, DAILY_IMAGE_BUDGET - dailyImageSpend),
+  };
+}
+
 // ── SIZE MAPPING ─────────────────────────────────────────────────────────────
-// Normalize size names to provider-specific dimensions
 
 const FLUX_SIZES = {
   landscape:  'landscape_16_9',
@@ -73,9 +158,8 @@ async function generateFlux(prompt, options = {}) {
     ? 'fal-ai/flux/dev'
     : 'fal-ai/flux-pro/v1.1';
 
-  console.log(`[ImageGen] Flux ${options.quality === 'standard' ? 'dev' : 'pro'} | ${imageSize} | prompt: ${prompt.slice(0, 80)}...`);
+  console.log(`[ImageGen] Flux ${options.quality === 'standard' ? 'dev' : 'pro'} | ${imageSize} | use: ${options.useCase || 'default'} | prompt: ${prompt.slice(0, 80)}...`);
 
-  // fal.ai synchronous endpoint — returns result directly
   const response = await axios.post(
     `https://fal.run/${model}`,
     {
@@ -101,13 +185,16 @@ async function generateFlux(prompt, options = {}) {
     throw new Error(`Flux returned no image. Status: ${response.status}. Keys: ${Object.keys(response.data || {}).join(',')}`);
   }
 
+  const cost = options.quality === 'standard' ? 0.003 : 0.005;
+  recordImageSpend(cost);
+
   console.log(`[ImageGen] Flux success: ${imageUrl.slice(0, 80)}...`);
   return {
     url: imageUrl,
     provider: 'flux',
     model,
     seed: response.data?.images?.[0]?.seed || null,
-    cost_estimate: options.quality === 'standard' ? 0.003 : 0.005,
+    cost_estimate: cost,
   };
 }
 
@@ -121,7 +208,7 @@ async function generateDallE(prompt, options = {}) {
   const dalleSize = DALLE_SIZES[size] || DALLE_SIZES.landscape;
   const quality = options.quality === 'standard' ? 'standard' : 'hd';
 
-  console.log(`[ImageGen] DALL-E 3 ${quality} | ${dalleSize} | prompt: ${prompt.slice(0, 80)}...`);
+  console.log(`[ImageGen] DALL-E 3 ${quality} | ${dalleSize} | use: ${options.useCase || 'default'} | prompt: ${prompt.slice(0, 80)}...`);
 
   const response = await axios.post(
     'https://api.openai.com/v1/images/generations',
@@ -146,13 +233,16 @@ async function generateDallE(prompt, options = {}) {
   const imageUrl = response.data?.data?.[0]?.url;
   if (!imageUrl) throw new Error('DALL-E 3 returned no image');
 
+  const cost = quality === 'hd' ? 0.08 : 0.04;
+  recordImageSpend(cost);
+
   console.log(`[ImageGen] DALL-E success (URL expires in ~1hr)`);
   return {
     url: imageUrl,
     provider: 'dalle',
     model: 'dall-e-3',
     seed: null,
-    cost_estimate: quality === 'hd' ? 0.08 : 0.04,
+    cost_estimate: cost,
     expires: true, // DALL-E URLs expire — caller must persist to S3
   };
 }
@@ -164,15 +254,23 @@ async function generateDallE(prompt, options = {}) {
  *
  * @param {string} prompt — Image generation prompt
  * @param {object} options
- * @param {string} options.size — 'landscape' | 'portrait' | 'square' | 'wide' | '1024x1024'
+ * @param {string} options.size — 'landscape' | 'portrait' | 'square' | 'wide'
  * @param {string} options.quality — 'hd' (default) | 'standard'
  * @param {string} options.style — DALL-E only: 'natural' | 'vivid'
  * @param {number} options.seed — Flux only: reproducibility seed
  * @param {string} options.provider — Force provider: 'flux' | 'dalle'
+ * @param {string} options.useCase — Route to best provider: 'invitation' | 'scene' | 'venue' | 'overlay' | 'icon' | 'wardrobe' | 'object'
  * @returns {{ url, provider, model, seed, cost_estimate, expires? }}
  */
 async function generateImage(prompt, options = {}) {
-  const provider = options.provider || getProvider();
+  // Budget check
+  const estimatedCost = options.provider === 'flux' || (!options.provider && getProvider(options.useCase) === 'flux')
+    ? 0.005 : 0.08;
+  if (!checkImageBudget(estimatedCost)) {
+    throw new Error(`Daily image budget exceeded ($${dailyImageSpend.toFixed(2)} / $${DAILY_IMAGE_BUDGET}). Try again tomorrow or increase AI_DAILY_IMAGE_BUDGET_USD.`);
+  }
+
+  const provider = options.provider || getProvider(options.useCase);
 
   if (!provider) {
     throw new Error('No image generation API configured. Set FAL_KEY (for Flux) or OPENAI_API_KEY (for DALL-E).');
@@ -207,7 +305,7 @@ async function generateImage(prompt, options = {}) {
 }
 
 /**
- * Quick helper — generate and return just the URL (matches old DALL-E function signatures).
+ * Quick helper — generate and return just the URL.
  */
 async function generateImageUrl(prompt, options = {}) {
   const result = await generateImage(prompt, options);
@@ -220,4 +318,7 @@ module.exports = {
   generateFlux,
   generateDallE,
   getProvider,
+  getImageBudgetStatus,
+  MAX_CALLS_PER_OP,
+  USE_CASE_PROVIDERS,
 };
