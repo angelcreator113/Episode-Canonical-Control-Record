@@ -37,6 +37,7 @@ module.exports = {
         name,
         character,
         clothingCategory,
+        description,
         brand,
         price,
         purchaseLink,
@@ -45,6 +46,7 @@ module.exports = {
         size,
         season,
         occasion,
+        tier,
         outfitSetId,
         outfitSetName,
         sceneDescription,
@@ -108,11 +110,21 @@ module.exports = {
       }
 
       // Create wardrobe item
+      // Parse tags — could be JSON array, comma-separated string, or already an array
+      let parsedTags = [];
+      if (tags) {
+        if (Array.isArray(tags)) parsedTags = tags;
+        else if (typeof tags === 'string') {
+          try { parsedTags = JSON.parse(tags); } catch { parsedTags = tags.split(',').map(s => s.trim()).filter(Boolean); }
+        }
+      }
+
       const wardrobeItem = await Wardrobe.create({
         name: resolvedName,
         character, // Required field
         character_id: resolvedCharacterId,
         clothing_category: resolvedCategory,
+        description: description || null,
         show_id: showId || null, // Primary show ownership
         s3_key: s3Key,
         s3_url: s3Url,
@@ -124,12 +136,13 @@ module.exports = {
         size: size || null,
         season: season || null,
         occasion: occasion || null,
+        tier: tier || null,
         outfit_set_id: outfitSetId || null,
         outfit_set_name: outfitSetName || null,
         scene_description: sceneDescription || null,
         outfit_notes: outfitNotes || null,
         is_favorite: isFavorite === 'true' || isFavorite === true,
-        tags: tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : [],
+        tags: parsedTags,
       });
 
       // Auto background removal — runs async, updates the record when done
