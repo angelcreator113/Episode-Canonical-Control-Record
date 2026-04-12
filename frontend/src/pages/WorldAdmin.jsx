@@ -2596,10 +2596,16 @@ The revised event should feel like a completely different experience from the si
                               {linkedScene.base_still_url && !linkedScene.video_clip_url && (
                                 <button onClick={async (e) => {
                                   const btn = e.currentTarget;
-                                  btn.disabled = true; btn.textContent = '⏳ Generating...';
+                                  btn.disabled = true; btn.textContent = '⏳ Finding exterior...';
                                   try {
-                                    const res = await api.post(`/api/v1/scene-sets/${linkedScene.id}/angles/${linkedScene.id}/generate-video`);
-                                    if (res.data.success) setToast('Video generation started — check back in ~1 min');
+                                    // Find the ESTABLISHING (exterior) angle for this scene set
+                                    const anglesRes = await api.get(`/api/v1/scene-sets/${linkedScene.id}`);
+                                    const angles = anglesRes.data?.data?.angles || anglesRes.data?.angles || [];
+                                    const exterior = angles.find(a => a.angle_label === 'ESTABLISHING') || angles[0];
+                                    if (!exterior) { setToast('No exterior angle found — generate venue images first'); btn.disabled = false; btn.textContent = '🎬 Video'; return; }
+                                    btn.textContent = '⏳ Generating video...';
+                                    const res = await api.post(`/api/v1/scene-sets/${linkedScene.id}/angles/${exterior.id}/generate-video`);
+                                    if (res.data.success) setToast('Exterior video generation started (~1 min)');
                                     else setToast(res.data.error || 'Failed');
                                   } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
                                   btn.disabled = false; btn.textContent = '🎬 Video';
