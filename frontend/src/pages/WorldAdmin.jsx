@@ -3873,22 +3873,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button onClick={async () => {
-                const name = window.prompt('Transition scene name (e.g., City Streets, Taxi Ride, Subway):');
-                if (!name) return;
-                try {
-                  await api.post(`/api/v1/scene-sets`, { name, scene_type: 'TRANSITION', show_id: showId, canonical_description: `${name} — transition/travel scene between locations` });
-                  setToast(`Transition "${name}" created`); loadData();
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, background: '#eef2ff', borderColor: '#c7d2fe', color: '#6366f1' }}>
-                🚗 Transition
-              </button>
-              <button onClick={async () => {
                 const name = window.prompt("Homebase name (e.g., Lala's Apartment, The Studio):");
                 if (!name) return;
                 try {
                   const rooms = ['Living Room', 'Bedroom', "Lala's Closet", 'Vanity / Makeup Station', 'Kitchen', 'Bathroom'];
                   const res = await api.post(`/api/v1/scene-sets`, {
-                    name, scene_type: 'HOMEBASE', show_id: showId,
+                    name, scene_type: 'HOME_BASE', show_id: showId,
                     canonical_description: `${name} — Lala's home base. Rooms: ${rooms.join(', ')}`,
                   });
                   const setId = res.data?.data?.id || res.data?.id;
@@ -3905,10 +3895,28 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   }
                 } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
               }} style={{ ...S.smBtn, background: '#faf5ea', borderColor: '#e8d9b8', color: '#B8962E' }}>
-                🏠 Create Homebase
+                🏠 Homebase
+              </button>
+              <button onClick={async () => {
+                try {
+                  await api.post(`/api/v1/scene-sets`, { name: "Lala's Closet", scene_type: 'CLOSET', show_id: showId, canonical_description: "Lala's walk-in closet — the heart of the show. Where outfit selection happens." });
+                  setToast("Lala's Closet created"); loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, background: '#fce7f3', borderColor: '#f9a8d4', color: '#ec4899' }}>
+                👗 Closet
+              </button>
+              <button onClick={async () => {
+                const name = window.prompt('Transition name (e.g., City Streets, Taxi Ride, Subway):');
+                if (!name) return;
+                try {
+                  await api.post(`/api/v1/scene-sets`, { name, scene_type: 'TRANSITION', show_id: showId, canonical_description: `${name} — transition scene between locations` });
+                  setToast(`Transition "${name}" created`); loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, background: '#eef2ff', borderColor: '#c7d2fe', color: '#6366f1' }}>
+                🚗 Transition
               </button>
               <button onClick={() => navigate(`/shows/${showId}/scene-library`)} style={S.primaryBtn}>
-                Open Scene Library →
+                Scene Library →
               </button>
             </div>
           </div>
@@ -3925,7 +3933,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
                 {[
                   { type: null, label: 'All', icon: '📍' },
-                  { type: 'HOMEBASE', label: 'Homebase', icon: '🏠' },
+                  { type: 'HOME_BASE', label: 'Homebase', icon: '🏠' },
+                  { type: 'CLOSET', label: 'Closet', icon: '👗' },
                   { type: 'EVENT_LOCATION', label: 'Venues', icon: '🎭' },
                   { type: 'TRANSITION', label: 'Transitions', icon: '🚗' },
                 ].map(f => {
@@ -3964,7 +3973,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <div style={{ padding: '10px 14px' }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{ss.name}</div>
                     <div style={{ fontSize: 10, color: '#94a3b8' }}>
-                      {ss.scene_type === 'HOMEBASE' ? '🏠 Homebase' : ss.scene_type?.replace(/_/g, ' ')}
+                      {ss.scene_type === 'HOME_BASE' ? '🏠 Homebase' : ss.scene_type === 'CLOSET' ? '👗 Closet' : ss.scene_type === 'TRANSITION' ? '🚗 Transition' : ss.scene_type?.replace(/_/g, ' ')}
                       {ss.generation_status === 'complete' && <span style={{ marginLeft: 6, color: '#16a34a' }}>✓</span>}
                     </div>
                   </div>
