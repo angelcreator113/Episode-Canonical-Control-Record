@@ -115,6 +115,7 @@ function WorldAdmin() {
   const [sceneSets, setSceneSets] = useState([]);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
+  const [overlayData, setOverlayData] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
   const [oppQuickForm, setOppQuickForm] = useState(null);
   const [worldLocations, setWorldLocations] = useState([]);
@@ -250,6 +251,7 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(() => setDecisions([])),
         api.get(`/api/v1/world/${showId}/events`).then(r => { console.log('[LoadData] Events loaded:', r.data?.events?.length || 0); setWorldEvents(r.data?.events || []); }).catch(err => { console.error('[LoadData] Events load FAILED:', err.response?.status, err.response?.data || err.message); setWorldEvents([]); }),
         api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
+        api.get(`/api/v1/ui-overlays/${showId}`).then(r => setOverlayData(r.data?.data || [])).catch(() => setOverlayData([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
         api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
         api.get(`/api/v1/opportunities/${showId}`).then(r => setOpportunities(r.data?.opportunities || [])).catch(() => setOpportunities([])),
@@ -3866,15 +3868,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             <div>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Scene Sets</h2>
               <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
-                {sceneSets.length} venue{sceneSets.length !== 1 ? 's' : ''} — exteriors, interiors, and camera angles
+                {sceneSets.length} location{sceneSets.length !== 1 ? 's' : ''} — homebase, venues, transitions
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={async () => {
+                const name = window.prompt('Transition scene name (e.g., City Streets, Taxi Ride, Subway):');
+                if (!name) return;
+                try {
+                  await api.post(`/api/v1/scene-sets`, { name, scene_type: 'TRANSITION', show_id: showId, canonical_description: `${name} — transition/travel scene between locations` });
+                  setToast(`Transition "${name}" created`); loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, background: '#eef2ff', borderColor: '#c7d2fe', color: '#6366f1' }}>
+                🚗 Transition
+              </button>
               <button onClick={async () => {
                 const name = window.prompt("Homebase name (e.g., Lala's Apartment, The Studio):");
                 if (!name) return;
                 try {
-                  const rooms = ['Living Room', 'Bedroom', 'Closet / Vanity', 'Kitchen', 'Bathroom'];
+                  const rooms = ['Living Room', 'Bedroom', "Lala's Closet", 'Vanity / Makeup Station', 'Kitchen', 'Bathroom'];
                   const res = await api.post(`/api/v1/scene-sets`, {
                     name, scene_type: 'HOMEBASE', show_id: showId,
                     canonical_description: `${name} — Lala's home base. Rooms: ${rooms.join(', ')}`,
@@ -3908,6 +3920,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               <p style={{ fontSize: 12, color: '#94a3b8' }}>Generate venue images from events, or create scenes in the Scene Library.</p>
             </div>
           ) : (
+            <div>
+              {/* Type filter chips */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                {[
+                  { type: null, label: 'All', icon: '📍' },
+                  { type: 'HOMEBASE', label: 'Homebase', icon: '🏠' },
+                  { type: 'EVENT_LOCATION', label: 'Venues', icon: '🎭' },
+                  { type: 'TRANSITION', label: 'Transitions', icon: '🚗' },
+                ].map(f => {
+                  const count = f.type ? sceneSets.filter(s => s.scene_type === f.type).length : sceneSets.length;
+                  return (
+                    <span key={f.label} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: '#f1f5f9', color: '#64748b', cursor: 'default' }}>
+                      {f.icon} {f.label} ({count})
+                    </span>
+                  );
+                })}
+              </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
               {sceneSets.map(ss => (
                 <div key={ss.id} onClick={() => navigate(`/shows/${showId}/scene-library?scene=${ss.id}`)}
@@ -3942,6 +3971,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 </div>
               ))}
             </div>
+            </div>
           )}
         </div>
       )}
@@ -3972,12 +4002,9 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           </div>
 
           {/* Overlay Grid */}
-          {(() => {
-            const [overlayData, setOverlayData] = React.useState(null);
-            React.useEffect(() => {
-              api.get(`/api/v1/ui-overlays/${showId}`).then(res => setOverlayData(res.data?.data || [])).catch(() => setOverlayData([]));
-            }, []);
-            if (!overlayData) return <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>Loading overlays...</div>;
+          {!overlayData ? (
+            <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>Loading overlays...</div>
+          ) : (() => {
             const generated = overlayData.filter(o => o.url || o.generated || o.asset_id);
             const missing = overlayData.filter(o => !o.url && !o.generated && !o.asset_id);
             const pct = overlayData.length > 0 ? Math.round((generated.length / overlayData.length) * 100) : 0;
