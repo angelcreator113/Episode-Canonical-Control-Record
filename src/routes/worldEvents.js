@@ -2724,6 +2724,71 @@ router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', option
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// OVERLAY SELECTION — show-level vs episode-level, auto-suggestions
+// ═══════════════════════════════════════════════════════════════════════
+
+// GET /world/:showId/events/:eventId/overlay-suggestions
+router.get('/world/:showId/events/:eventId/overlay-suggestions', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+
+    const [event] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    if (typeof event.canon_consequences === 'string') {
+      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+    }
+    if (typeof event.outfit_pieces === 'string') {
+      try { event.outfit_pieces = JSON.parse(event.outfit_pieces); } catch { event.outfit_pieces = []; }
+    }
+
+    const { SHOW_OVERLAYS, EPISODE_OVERLAYS, suggestOverlaysForEvent } = require('../services/uiOverlayService');
+    const suggestions = suggestOverlaysForEvent(event);
+
+    // Get current selections from required_ui_overlays
+    let currentSelections = event.required_ui_overlays;
+    if (typeof currentSelections === 'string') try { currentSelections = JSON.parse(currentSelections); } catch { currentSelections = null; }
+
+    return res.json({
+      success: true,
+      data: {
+        show_overlays: SHOW_OVERLAYS.map(o => ({ id: o.id, name: o.name, category: o.category })),
+        episode_overlays: EPISODE_OVERLAYS.map(o => {
+          const suggestion = suggestions.find(s => s.id === o.id);
+          const selected = currentSelections ? currentSelections.includes(o.id) : !!suggestion;
+          return { id: o.id, name: o.name, category: o.category, selected, suggested: !!suggestion, reason: suggestion?.reason || null };
+        }),
+        current_selections: currentSelections,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /world/:showId/events/:eventId/overlay-selections — save selected overlays
+router.put('/world/:showId/events/:eventId/overlay-selections', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const { selected_overlays } = req.body;
+    const models = req.app?.get?.('models') || require('../models');
+
+    await models.sequelize.query(
+      `UPDATE world_events SET required_ui_overlays = :overlays, updated_at = NOW() WHERE id = :eventId AND show_id = :showId`,
+      { replacements: { overlays: JSON.stringify(selected_overlays), eventId, showId } }
+    );
+
+    return res.json({ success: true, message: `${selected_overlays.length} overlays selected` });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // DISTRIBUTION — platform-specific descriptions, hashtags, scheduling
 // ═══════════════════════════════════════════════════════════════════════
 
