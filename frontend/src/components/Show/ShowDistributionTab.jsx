@@ -83,7 +83,7 @@ function ShowDistributionTab({ show, onUpdate }) {
   const enabledCount = PLATFORMS.filter(p => defaults[p.id]?.enabled).length;
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div>

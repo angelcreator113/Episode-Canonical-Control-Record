@@ -93,7 +93,7 @@ function ShowAssetsTab({ show }) {
   const totalAssets = Object.values(counts).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0) - (counts.overlays_total || 0);
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
