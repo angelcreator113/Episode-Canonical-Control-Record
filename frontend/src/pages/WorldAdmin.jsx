@@ -3111,6 +3111,26 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       Mark Ready
                     </button>
                   )}
+                  {md.used_in_episode_id && md.status !== 'draft' && (
+                    <button onClick={async () => {
+                      if (!window.confirm(`Complete "${md.name}"?\n\nThis will:\n• Evaluate the episode (outfit + event + character state)\n• Apply social task bonuses (reputation, influence)\n• Finalize all financial transactions\n• Update Lala's character stats\n• Mark event as filmed`)) return;
+                      try {
+                        const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/complete`);
+                        if (res.data.success) {
+                          const d = res.data.data;
+                          if (d.already_completed) {
+                            setToast(`Already completed — ${d.evaluation?.tier?.toUpperCase()} (${d.evaluation?.score}/100)`);
+                          } else {
+                            setToast(`${d.evaluation.tier.toUpperCase()} (${d.evaluation.score}/100) — ${d.evaluation.narrative}`);
+                            setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'filmed' } : ev));
+                            setEventDetailModal(prev => prev ? { ...prev, status: 'filmed' } : prev);
+                          }
+                        }
+                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                    }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      👑 Complete Episode
+                    </button>
+                  )}
                   <div style={{ flex: 1 }} />
                   <button onClick={async () => {
                     const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id','venue_name','venue_address','event_date','event_time'];

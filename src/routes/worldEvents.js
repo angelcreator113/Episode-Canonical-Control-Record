@@ -2724,6 +2724,32 @@ router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', option
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// UNIFIED EPISODE COMPLETION — evaluate + financials + social + wardrobe in one
+// ═══════════════════════════════════════════════════════════════════════
+
+// POST /world/:showId/episodes/:episodeId/complete
+router.post('/world/:showId/episodes/:episodeId/complete', optionalAuth, async (req, res) => {
+  try {
+    const { showId, episodeId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { completeEpisode } = require('../services/episodeCompletionService');
+
+    const result = await completeEpisode(episodeId, showId, models.sequelize);
+
+    return res.json({
+      success: true,
+      message: result.already_completed
+        ? 'Episode already completed'
+        : `${result.evaluation.tier.toUpperCase()} (${result.evaluation.score}/100) — ${result.transactions} transactions, ${result.social_tasks?.completed || 0} social tasks`,
+      data: result,
+    });
+  } catch (err) {
+    console.error('[CompleteEpisode] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // FINANCIAL TRANSACTION PIPELINE — execute, query, and display finances
 // ═══════════════════════════════════════════════════════════════════════
 
