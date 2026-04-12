@@ -68,13 +68,32 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
     loadDistributionData();
   }, [episode.id]);
   
-  const loadDistributionData = () => {
+  const loadDistributionData = async () => {
     try {
+      // Try loading from episode prop first
+      let data = null;
       if (episode.distribution_metadata) {
-        const parsed = typeof episode.distribution_metadata === 'string'
+        data = typeof episode.distribution_metadata === 'string'
           ? JSON.parse(episode.distribution_metadata)
           : episode.distribution_metadata;
-        setDistributionData(parsed);
+      }
+
+      // If no data on episode, try fetching from API
+      if (!data || Object.keys(data).length === 0) {
+        try {
+          const showId = episode?.show_id || episode?.showId;
+          if (showId) {
+            const res = await fetch(`/api/v1/world/${showId}/episodes/${episode.id}/distribution`);
+            const json = await res.json();
+            if (json.success && json.data && Object.keys(json.data).length > 0) {
+              data = json.data;
+            }
+          }
+        } catch { /* fall through to defaults */ }
+      }
+
+      if (data && Object.keys(data).length > 0) {
+        setDistributionData(data);
       } else {
         // Initialize with defaults
         const defaults = {};
@@ -100,10 +119,20 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
   
   const handleSave = async () => {
     try {
-      await onUpdate({
-        distribution_metadata: JSON.stringify(distributionData)
-      });
-      
+      // Try dedicated distribution endpoint first, fall back to generic update
+      const showId = episode?.show_id || episode?.showId;
+      try {
+        await fetch(`/api/v1/world/${showId}/episodes/${episode.id}/distribution`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ distribution_metadata: distributionData }),
+        });
+      } catch {
+        await onUpdate({
+          distribution_metadata: JSON.stringify(distributionData)
+        });
+      }
+
       setHasChanges(false);
       alert('Distribution settings saved successfully!');
     } catch (error) {

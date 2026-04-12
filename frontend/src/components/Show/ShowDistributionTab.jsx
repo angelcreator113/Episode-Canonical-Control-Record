@@ -54,13 +54,30 @@ function ShowDistributionTab({ show, onUpdate }) {
     loadDistributionDefaults();
   }, [show.id]);
   
-  const loadDistributionDefaults = () => {
+  const loadDistributionDefaults = async () => {
     try {
+      let data = null;
+
+      // Try from show prop first
       if (show.distribution_defaults) {
-        const parsed = typeof show.distribution_defaults === 'string'
+        data = typeof show.distribution_defaults === 'string'
           ? JSON.parse(show.distribution_defaults)
           : show.distribution_defaults;
-        setDistributionDefaults(parsed);
+      }
+
+      // If no data, try fetching from API
+      if (!data || Object.keys(data).length === 0) {
+        try {
+          const res = await fetch(`/api/v1/world/${show.id}/distribution-defaults`);
+          const json = await res.json();
+          if (json.success && json.data && Object.keys(json.data).length > 0) {
+            data = json.data;
+          }
+        } catch { /* fall through to defaults */ }
+      }
+
+      if (data && Object.keys(data).length > 0) {
+        setDistributionDefaults(data);
       } else {
         // Initialize with defaults
         const defaults = {};
@@ -88,10 +105,19 @@ function ShowDistributionTab({ show, onUpdate }) {
   
   const handleSave = async () => {
     try {
-      await onUpdate({
-        distribution_defaults: JSON.stringify(distributionDefaults)
-      });
-      
+      // Try dedicated distribution endpoint first, fall back to generic update
+      try {
+        await fetch(`/api/v1/world/${show.id}/distribution-defaults`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ distribution_defaults: distributionDefaults }),
+        });
+      } catch {
+        await onUpdate({
+          distribution_defaults: JSON.stringify(distributionDefaults)
+        });
+      }
+
       setHasChanges(false);
       alert('Distribution defaults saved successfully!');
     } catch (error) {
