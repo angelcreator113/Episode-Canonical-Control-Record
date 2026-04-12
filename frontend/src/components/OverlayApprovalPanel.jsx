@@ -467,7 +467,9 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
 
         {tasks.length === 0 && !imageUrl && (
           <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
-            No {title.toLowerCase()} generated yet. Click "Generate {title}" to create tasks and a visual overlay.
+            {isWardrobe
+              ? 'Pick wardrobe items via the outfit picker first, then generate the shopping list. Or generate with AI-written tasks.'
+              : `No ${title.toLowerCase()} generated yet. Click "Generate ${title}" to create tasks and a visual overlay.`}
           </div>
         )}
       </div>
