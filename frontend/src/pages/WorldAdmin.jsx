@@ -79,16 +79,23 @@ const EVENT_STATUS_CONFIG = {
 
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
-  { key: 'season', icon: '📖', label: 'Season' },
-  { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
-  { key: 'feed', icon: '👥', label: "Lala's Feed" },
-  { key: 'feed-events', icon: '🎭', label: 'Feed Events' },
-  { key: 'events', icon: '💌', label: 'Events Library' },
-  // Opportunities tab removed — managed from Feed Events now
-  { key: 'goals', icon: '🎯', label: 'Career Goals' },
-  { key: 'wardrobe', icon: '👗', label: 'Wardrobe' },
-  { key: 'characters', icon: '👑', label: 'Characters' },
-  { key: 'decisions', icon: '🧠', label: 'Decision Log' },
+  { key: 'episodes', icon: '📺', label: 'Episodes', subs: [
+    { key: 'season', label: 'Season Arc' },
+    { key: 'episodes-ledger', label: 'Episode Ledger' },
+  ]},
+  { key: 'feed', icon: '🎭', label: 'Feed & Events', subs: [
+    { key: 'feed-timeline', label: "Lala's Feed" },
+    { key: 'feed-events', label: 'Feed Events' },
+    { key: 'events', label: 'Events Library' },
+  ]},
+  { key: 'wardrobe', icon: '👗', label: 'Wardrobe', subs: [
+    { key: 'wardrobe-items', label: 'Wardrobe Library' },
+    { key: 'goals', label: 'Career Goals' },
+  ]},
+  { key: 'characters', icon: '👑', label: 'Characters', subs: [
+    { key: 'characters-list', label: 'Character Stats' },
+    { key: 'decisions', label: 'Decision Log' },
+  ]},
 ];
 
 function WorldAdmin() {
@@ -129,6 +136,38 @@ function WorldAdmin() {
   const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [subTab, setSubTab] = useState(null);
+
+  // Map old tab keys to new structure for URL backwards compat
+  const resolveTab = (tab) => {
+    const oldToNew = {
+      'season': ['episodes', 'season'],
+      'episodes': ['episodes', 'episodes-ledger'],
+      'feed': ['feed', 'feed-timeline'],
+      'feed-events': ['feed', 'feed-events'],
+      'events': ['feed', 'events'],
+      'goals': ['wardrobe', 'goals'],
+      'wardrobe': ['wardrobe', 'wardrobe-items'],
+      'characters': ['characters', 'characters-list'],
+      'decisions': ['characters', 'decisions'],
+    };
+    return oldToNew[tab] || [tab, null];
+  };
+
+  // On mount, resolve initial tab
+  useEffect(() => {
+    const [main, sub] = resolveTab(initialTab);
+    if (main !== initialTab) {
+      setActiveTab(main);
+      if (sub) setSubTab(sub);
+    }
+  }, []);
+
+  const switchTab = (tabKey) => {
+    setActiveTab(tabKey);
+    const tab = TABS.find(t => t.key === tabKey);
+    setSubTab(tab?.subs?.[0]?.key || null);
+  };
   const [expandedEpisode, setExpandedEpisode] = useState(null);
   const [episodeBlueprint, setEpisodeBlueprint] = useState(null); // holds generated episode data for modal
 
@@ -899,11 +938,31 @@ The revised event should feel like a completely different experience from the si
       {/* ─── TABS ─── */}
       <div className="wa-tab-bar" style={S.tabBar}>
         {TABS.map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab}>
+          <button key={t.key} onClick={() => switchTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab}>
             {t.icon} {t.label}
           </button>
         ))}
       </div>
+      {/* ─── SUB-TABS ─── */}
+      {(() => {
+        const currentTab = TABS.find(t => t.key === activeTab);
+        if (!currentTab?.subs) return null;
+        return (
+          <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+            {currentTab.subs.map(s => (
+              <button key={s.key} onClick={() => setSubTab(s.key)} style={{
+                padding: '6px 14px', background: 'transparent', border: 'none',
+                borderBottom: subTab === s.key ? '2px solid #6366f1' : '2px solid transparent',
+                color: subTab === s.key ? '#6366f1' : '#94a3b8',
+                fontSize: 12, fontWeight: subTab === s.key ? 600 : 500,
+                cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+              }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* ════════════════════════ OVERVIEW ════════════════════════ */}
       {activeTab === 'overview' && (
@@ -1008,12 +1067,12 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {/* ════════════════════════ SEASON ════════════════════════ */}
-      {activeTab === 'season' && (
+      {activeTab === 'episodes' && subTab === 'season' && (
         <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
-      {activeTab === 'episodes' && (
+      {activeTab === 'episodes' && subTab === 'episodes-ledger' && (
         <div style={S.content}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>Episode Ledger</h2>
@@ -1340,14 +1399,14 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
-      {activeTab === 'feed' && (
+      {activeTab === 'feed' && subTab === 'feed-timeline' && (
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
           <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" onNavigateToTab={(tab, ev) => { setActiveTab(tab); if (ev) setEventDetailModal(ev); }} />
         </Suspense>
       )}
 
       {/* ════════════════════════ FEED EVENTS ════════════════════════ */}
-      {activeTab === 'feed-events' && (
+      {activeTab === 'feed' && subTab === 'feed-events' && (
         <div style={S.content}>
           <div style={{ marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Feed Events</h2>
@@ -1636,7 +1695,7 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
-      {activeTab === 'events' && (
+      {activeTab === 'feed' && subTab === 'events' && (
         <div style={S.content}>
           {/* Header — simplified with primary auto-fill action */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
@@ -3358,7 +3417,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
 
       {/* ════════════════════════ CAREER GOALS ════════════════════════ */}
-      {activeTab === 'goals' && (
+      {activeTab === 'wardrobe' && subTab === 'goals' && (
         <div style={S.content}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>🎯 Career Goals</h2>
@@ -3796,7 +3855,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       )}
 
       {/* ════════════════════════ WARDROBE ════════════════════════ */}
-      {activeTab === 'wardrobe' && (() => {
+      {activeTab === 'wardrobe' && subTab === 'wardrobe-items' && (() => {
         // Group items by type for summary
         const typeGroups = {};
         wardrobeItems.forEach(item => {
@@ -4280,7 +4339,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       })()}
 
       {/* ════════════════════════ CHARACTERS ════════════════════════ */}
-      {activeTab === 'characters' && (
+      {activeTab === 'characters' && subTab === 'characters-list' && (
         <div style={S.content}>
           {/* Lala */}
           <div style={S.card}>
@@ -4392,7 +4451,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       )}
 
       {/* ════════════════════════ DECISIONS ════════════════════════ */}
-      {activeTab === 'decisions' && (
+      {activeTab === 'characters' && subTab === 'decisions' && (
         <div style={S.content}>
           <div style={S.card}>
             <h2 style={S.cardTitle}>🧠 Decision Log</h2>
