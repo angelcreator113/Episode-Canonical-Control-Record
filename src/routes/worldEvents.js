@@ -2393,7 +2393,7 @@ router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', opti
         { replacements: { eventId, assetRole } }
       );
       version = (parseInt(versionRows?.[0]?.cnt) || 0) + 1;
-    } catch { /* non-blocking */ }
+    } catch (vErr) { console.warn('[OverlayGen] Version count error:', vErr.message); }
 
     // Create Asset — raw SQL to avoid missing column errors
     const assetId = uuidv4();
@@ -2614,7 +2614,32 @@ router.post('/world/:showId/events/:eventId/re-render-overlay', optionalAuth, as
       imageUrl = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
     }
 
-    return res.json({ success: true, imageUrl, message: 'Overlay re-rendered with edited tasks' });
+    // Persist re-rendered asset to DB so it appears in history and survives refresh
+    const assetId = uuidv4();
+    const assetRole = overlayType === 'wardrobe' ? 'UI.OVERLAY.WARDROBE_LIST' : 'UI.OVERLAY.SOCIAL_TASKS';
+    try {
+      await sequelize.query(
+        `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, purpose, category, entity_type,
+         s3_url_raw, s3_url_processed, show_id, episode_id, metadata, created_at, updated_at)
+         VALUES (:id, :name, :assetType, :assetRole, 'EPISODE', 'SHOW', 'MAIN', 'overlay', 'prop',
+         :url, :url, :showId, :episodeId, :metadata, NOW(), NOW())`,
+        { replacements: {
+          id: assetId,
+          name: `${event.name} — ${overlayType === 'wardrobe' ? 'Wardrobe List' : 'Social Tasks'} (edited)`,
+          assetType: overlayType === 'wardrobe' ? 'TODO_LIST' : 'SOCIAL_CHECKLIST',
+          assetRole, url: imageUrl, showId, episodeId: event.used_in_episode_id || null,
+          metadata: JSON.stringify({
+            source: `${overlayType}-overlay-rerender`,
+            list_type: overlayType === 'wardrobe' ? 'wardrobe' : 'social',
+            event_id: eventId, event_name: event.name,
+            task_count: tasks.length, tasks: JSON.stringify(tasks),
+            rerendered: true, generated_at: new Date().toISOString(),
+          }),
+        }}
+      );
+    } catch (err) { console.warn('[OverlayRerender] Asset persist failed (non-blocking):', err.message); }
+
+    return res.json({ success: true, imageUrl, assetId, message: 'Overlay re-rendered with edited tasks' });
   } catch (err) {
     console.error('[OverlayRerender] Error:', err);
     return res.status(500).json({ success: false, error: err.message });

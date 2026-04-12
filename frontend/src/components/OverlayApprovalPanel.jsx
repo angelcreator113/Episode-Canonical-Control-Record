@@ -41,13 +41,17 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
   }, [existingUrl]);
 
   useEffect(() => {
-    if (existingTasks?.length > 0) setTasks(existingTasks);
+    if (existingTasks?.length > 0) {
+      setTasks(existingTasks);
+      setEditTasks(existingTasks.map(t => ({ ...t })));
+    }
   }, [existingTasks]);
 
   const isWardrobe = overlayType === 'wardrobe';
   const title = isWardrobe ? 'Wardrobe Shopping List' : 'Social Tasks';
   const accentColor = isWardrobe ? '#B8962E' : '#6366f1';
-  const hasOverlay = !!existingAssetId || !!imageUrl;
+  const displayUrl = imageUrl || existingUrl;
+  const hasOverlay = !!existingAssetId || !!displayUrl;
   const isPending = !!pendingAssetId;
 
   // ─── Generate ──────────────────────────────────────────────────────
@@ -110,7 +114,9 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
         overlayType,
       });
       setImageUrl(res.data.imageUrl);
-      setTasks(editTasks.map(t => ({ ...t })));
+      const updatedTasks = editTasks.map(t => ({ ...t }));
+      setTasks(updatedTasks);
+      setEditTasks(updatedTasks.map(t => ({ ...t })));
       setModalTab('preview');
       showToast('Overlay re-rendered with your edits');
     } catch (err) {
@@ -184,7 +190,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
       )}
 
       {/* ═══ Full-screen Preview Modal ═══ */}
-      {showPreview && imageUrl && (
+      {showPreview && displayUrl && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -233,7 +239,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
               {modalTab === 'preview' && (
                 <div>
                   <img
-                    src={imageUrl}
+                    src={displayUrl}
                     alt={`${title} overlay`}
                     style={{ width: '100%', maxHeight: 520, objectFit: 'contain', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
                   />
@@ -408,10 +414,10 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
         </div>
 
         {/* Inline image preview (small) */}
-        {imageUrl && (
+        {displayUrl && (
           <div style={{ marginBottom: 10, textAlign: 'center', cursor: 'pointer' }} onClick={() => { setModalTab('preview'); setShowPreview(true); }}>
             <img
-              src={imageUrl}
+              src={displayUrl}
               alt={title}
               style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 10, border: '1px solid #e8e0d0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
             />
@@ -465,7 +471,7 @@ export default function OverlayApprovalPanel({ event, showId, overlayType, onGen
           </div>
         )}
 
-        {tasks.length === 0 && !imageUrl && (
+        {tasks.length === 0 && !displayUrl && (
           <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
             {isWardrobe
               ? 'Pick wardrobe items via the outfit picker first, then generate the shopping list. Or generate with AI-written tasks.'
