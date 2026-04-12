@@ -37,7 +37,7 @@
 }
 
 .se-identity-label {
-  font-size: 8px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.22em;
   color: #B8963F;
@@ -46,7 +46,7 @@
 
 .se-identity-title {
   font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: 600;
   color: #1a1a2e;
   margin: 0;
@@ -64,7 +64,7 @@
 }
 
 .se-identity-tag {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #7C7266;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -88,7 +88,7 @@
 
 .se-identity-stat-val {
   display: block;
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: #1a1a2e;
   line-height: 1.2;
@@ -96,7 +96,7 @@
 
 .se-identity-stat-lbl {
   display: block;
-  font-size: 8px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: #94a3b8;
   text-transform: uppercase;
@@ -159,7 +159,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   color: #64748b;
-  font-size: 15px;
+  font-size: var(--text-lg);
   cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
@@ -178,7 +178,7 @@
   border-radius: 8px;
   background: #fff;
   color: #1e293b;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   outline: none;
@@ -206,7 +206,7 @@
   align-items: center;
   padding: 3px 10px;
   border-radius: 20px;
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -235,7 +235,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   color: #64748b;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -254,7 +254,7 @@
   border: none;
   border-radius: 8px;
   color: #78350f;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -279,7 +279,7 @@
   border: none;
   border-radius: 8px;
   color: #fff;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -316,7 +316,7 @@
 }
 
 .se-save-indicator {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #94a3b8;
   transition: all 0.3s ease;
   white-space: nowrap;
@@ -337,7 +337,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 7px;
   color: #64748b;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -380,7 +380,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   color: #94a3b8;
-  font-size: 16px;
+  font-size: var(--text-lg);
   cursor: pointer;
   transition: all 0.15s ease;
   position: relative;
@@ -421,7 +421,7 @@
   border: none;
   border-radius: 8px;
   color: #334155;
-  font-size: 13px;
+  font-size: var(--text-md);
   cursor: pointer;
   text-align: left;
   transition: background 0.1s;
@@ -432,7 +432,7 @@
 }
 
 .se-overflow-item .se-overflow-icon {
-  font-size: 15px;
+  font-size: var(--text-lg);
   width: 22px;
   text-align: center;
 }
@@ -445,7 +445,7 @@
 
 .se-overflow-shortcut {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: #94a3b8;
   font-family: monospace;
   background: #f1f5f9;
@@ -495,7 +495,7 @@
 }
 
 .se-outline-title {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
@@ -503,7 +503,7 @@
 }
 
 .se-outline-beat-count {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #94a3b8;
   font-weight: 500;
 }
@@ -532,7 +532,7 @@
 }
 
 .se-outline-progress-label {
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: #94a3b8;
   font-weight: 500;
   white-space: nowrap;
@@ -545,7 +545,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #334155;
   outline: none;
   width: calc(100% - 24px);
@@ -585,7 +585,7 @@
 
 .se-outline-group {
   padding: 10px 10px 5px;
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
@@ -598,7 +598,7 @@
 }
 
 .se-outline-group-count {
-  font-size: 9px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   color: #94a3b8;
   background: #e2e8f0;
@@ -642,14 +642,14 @@
 }
 
 .se-outline-beat-icon {
-  font-size: 14px;
+  font-size: var(--text-base);
   flex-shrink: 0;
   width: 18px;
   text-align: center;
 }
 
 .se-outline-beat-label {
-  font-size: 12.5px;
+  font-size: var(--text-md);
   font-weight: 500;
   color: #334155;
   flex: 1;
@@ -666,7 +666,7 @@
 
 /* Beat status indicators */
 .se-outline-indicator {
-  font-size: 10px;
+  font-size: var(--text-xs);
   flex-shrink: 0;
 }
 
@@ -687,7 +687,7 @@
   padding: 24px 16px;
   text-align: center;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
 }
 
@@ -738,7 +738,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   color: #94a3b8;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -758,7 +758,7 @@
 }
 
 .se-editor-beat-title {
-  font-size: 18px;
+  font-size: var(--text-xl);
   font-weight: 700;
   color: #1a1a2e;
   margin: 0;
@@ -771,11 +771,11 @@
 }
 
 .se-beat-title-icon {
-  font-size: 20px;
+  font-size: var(--text-2xl);
 }
 
 .se-beat-act-tag {
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 10px;
@@ -792,7 +792,7 @@
 }
 
 .se-editor-meta-item {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #94a3b8;
   display: flex;
   align-items: center;
@@ -822,7 +822,7 @@
 }
 
 .se-quick-insert-label {
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #94a3b8;
   text-transform: uppercase;
@@ -838,7 +838,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   color: #475569;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.12s ease;
@@ -863,19 +863,19 @@
 }
 
 .se-empty-icon {
-  font-size: 48px;
+  font-size: var(--text-5xl);
   margin-bottom: 8px;
 }
 
 .se-empty-title {
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: #1e293b;
   margin: 0 0 6px;
 }
 
 .se-empty-desc {
-  font-size: 14px;
+  font-size: var(--text-base);
   color: #94a3b8;
   margin: 0 0 20px;
 }
@@ -918,7 +918,7 @@
 }
 
 .se-empty-action-icon {
-  font-size: 24px;
+  font-size: var(--text-3xl);
   flex-shrink: 0;
 }
 
@@ -928,13 +928,13 @@
 }
 
 .se-empty-action-btn strong {
-  font-size: 14px;
+  font-size: var(--text-base);
   color: #1e293b;
   font-weight: 600;
 }
 
 .se-empty-action-btn small {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #94a3b8;
   margin-top: 2px;
 }
@@ -970,7 +970,7 @@
   justify-content: flex-end;
   padding-right: 12px;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #cbd5e1;
   line-height: 25.2px;
 }
@@ -982,7 +982,7 @@
   border: none;
   color: #1e293b;
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.8;
   padding: 16px 20px;
   resize: none;
@@ -994,7 +994,7 @@
 .se-editor-textarea::placeholder {
   color: #cbd5e1;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.7;
 }
 
@@ -1020,7 +1020,7 @@
 }
 
 .se-collapsible-title {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -1040,13 +1040,13 @@
   background: #FDF6E3;
   color: #B8963F;
   border-radius: 9px;
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
 .se-collapsible-arrow {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: var(--text-sm);
   transition: transform 0.2s ease;
 }
 
@@ -1072,7 +1072,7 @@
   padding: 5px 8px;
   margin-bottom: 2px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
@@ -1083,14 +1083,14 @@
 .se-ui-action-type {
   color: #16a34a;
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--text-xs);
   min-width: 80px;
   text-transform: uppercase;
 }
 
 .se-ui-action-target {
   color: #475569;
-  font-size: 12px;
+  font-size: var(--text-sm);
   flex: 1;
 }
 
@@ -1100,12 +1100,12 @@
   align-items: center;
   gap: 8px;
   padding: 4px 0;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .se-meta-label {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: var(--text-sm);
   min-width: 100px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -1127,7 +1127,7 @@
   border-top: 1px solid #E8E0D4;
   background: linear-gradient(180deg, #FDFCFA 0%, #F9F7F4 100%);
   color: #94a3b8;
-  font-size: 11px;
+  font-size: var(--text-xs);
   flex-shrink: 0;
   min-height: 32px;
 }
@@ -1153,7 +1153,7 @@
   align-items: center;
   gap: 3px;
   color: #b0b8c4;
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 .se-shortcut-hint kbd {
@@ -1163,7 +1163,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 3px;
   font-family: monospace;
-  font-size: 9px;
+  font-size: var(--text-2xs);
   color: #94a3b8;
   line-height: 1.4;
 }
@@ -1217,7 +1217,7 @@
 }
 
 .se-drawer-title {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: #1a1a2e;
 }
@@ -1232,7 +1232,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   color: #94a3b8;
-  font-size: 14px;
+  font-size: var(--text-base);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -1255,7 +1255,7 @@
   border: none;
   border-bottom: 2px solid transparent;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1282,7 +1282,7 @@
 }
 
 .se-drawer-section-title {
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 700;
   color: #94a3b8;
   text-transform: uppercase;
@@ -1303,7 +1303,7 @@
   border: 1px solid #e5e7eb;
   border-radius: 7px;
   color: #475569;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
@@ -1334,13 +1334,13 @@
 }
 
 .se-template-card-label {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: #334155;
 }
 
 .se-template-card-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #94a3b8;
   margin-top: 3px;
 }
@@ -1385,7 +1385,7 @@
   padding: 16px 20px;
   border: none;
   border-bottom: 1px solid #f0f0f3;
-  font-size: 15px;
+  font-size: var(--text-lg);
   color: #1e293b;
   outline: none;
   box-sizing: border-box;
@@ -1417,20 +1417,20 @@
 }
 
 .se-cmd-item-icon {
-  font-size: 16px;
+  font-size: var(--text-lg);
   width: 24px;
   text-align: center;
   flex-shrink: 0;
 }
 
 .se-cmd-item-label {
-  font-size: 14px;
+  font-size: var(--text-base);
   color: #334155;
   flex: 1;
 }
 
 .se-cmd-item-shortcut {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #94a3b8;
   font-family: monospace;
   background: #f1f5f9;
@@ -1442,7 +1442,7 @@
   padding: 24px;
   text-align: center;
   color: #94a3b8;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 /* 
@@ -1457,7 +1457,7 @@
   background: #fef2f2;
   border-bottom: 1px solid #fecaca;
   color: #dc2626;
-  font-size: 13px;
+  font-size: var(--text-md);
   flex-shrink: 0;
 }
 
@@ -1466,7 +1466,7 @@
   border: none;
   color: #dc2626;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-base);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -1499,7 +1499,7 @@
 }
 
 .se-analysis-title {
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 700;
   color: #1a1a2e;
   margin: 0;
@@ -1509,7 +1509,7 @@
   background: none;
   border: 1px solid #e2e8f0;
   color: #94a3b8;
-  font-size: 14px;
+  font-size: var(--text-base);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 6px;
@@ -1537,13 +1537,13 @@
 }
 
 .se-analysis-stat-val {
-  font-size: 18px;
+  font-size: var(--text-xl);
   font-weight: 700;
   color: #1a1a2e;
 }
 
 .se-analysis-stat-lbl {
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1568,7 +1568,7 @@
 }
 
 .se-analysis-section-title {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -1595,13 +1595,13 @@
   gap: 8px;
 }
 
-.se-analysis-beat-conf { font-weight: 700; font-size: 13px; }
+.se-analysis-beat-conf { font-weight: 700; font-size: var(--text-md); }
 .se-analysis-beat-conf.confident { color: #16a34a; }
 .se-analysis-beat-conf.review { color: #ca8a04; }
 .se-analysis-beat-conf.error { color: #dc2626; }
 
-.se-analysis-beat-name { color: #1a1a2e; font-size: 13px; font-weight: 600; flex: 1; }
-.se-analysis-beat-dur { color: #94a3b8; font-size: 12px; }
+.se-analysis-beat-name { color: #1a1a2e; font-size: var(--text-md); font-weight: 600; flex: 1; }
+.se-analysis-beat-dur { color: #94a3b8; font-size: var(--text-sm); }
 
 .se-analysis-beat-meta {
   display: flex;
@@ -1615,7 +1615,7 @@
   border: 1px solid #E8DCC4;
   border-radius: 4px;
   padding: 1px 6px;
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: #96792F;
 }
 
@@ -1638,7 +1638,7 @@
 
 .se-analysis-warning-text {
   color: #92400e;
-  font-size: 12px;
+  font-size: var(--text-sm);
   flex: 1;
 }
 
@@ -1648,7 +1648,7 @@
   border: 1px solid #fbbf24;
   border-radius: 6px;
   color: #92400e;
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
   white-space: nowrap;
   margin-left: 8px;
@@ -1674,7 +1674,7 @@
   border: none;
   border-radius: 8px;
   color: #fff;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -1691,7 +1691,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   color: #475569;
-  font-size: 13px;
+  font-size: var(--text-md);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -1702,7 +1702,7 @@
 
 /* Analysis UI actions */
 .se-analysis-ui-group-title {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -1716,13 +1716,13 @@
   gap: 8px;
   padding: 3px 8px;
   margin-bottom: 2px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .se-analysis-ui-type {
   color: #16a34a;
   font-family: monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   min-width: 80px;
 }
@@ -1734,7 +1734,7 @@
 
 .se-analysis-ui-dur {
   color: #94a3b8;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 
 /* 
@@ -1784,7 +1784,7 @@
   }
 
   .se-identity-title {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   .se-identity-stats {
@@ -1797,7 +1797,7 @@
   }
 
   .se-identity-stat-val {
-    font-size: 13px;
+    font-size: var(--text-md);
   }
 
   /* Root — fill available viewport */
@@ -1884,7 +1884,7 @@
   /* Beat selector: shorter on mobile */
   .se-beat-select {
     max-width: 120px;
-    font-size: 12px;
+    font-size: var(--text-sm);
     padding: 5px 24px 5px 8px;
   }
 
@@ -1905,13 +1905,13 @@
 
   .se-btn-save {
     padding: 5px 8px;
-    font-size: 14px;
+    font-size: var(--text-base);
   }
 
   /* Analyze button → icon-only */
   .se-btn-primary {
     padding: 5px 8px;
-    font-size: 13px;
+    font-size: var(--text-md);
   }
 
   /* Overflow button */
@@ -1941,16 +1941,16 @@
   }
 
   .se-editor-beat-title {
-    font-size: 14px;
+    font-size: var(--text-base);
     gap: 4px;
   }
 
   .se-beat-title-icon {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   .se-beat-act-tag {
-    font-size: 8px;
+    font-size: var(--text-2xs);
     padding: 1px 5px;
   }
 
@@ -1960,12 +1960,12 @@
   }
 
   .se-editor-meta-item {
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   .se-beat-nav-btn {
     padding: 3px 6px;
-    font-size: 10px;
+    font-size: var(--text-xs);
   }
 
   /* Quick insert: scrollable, thinner */
@@ -1975,12 +1975,12 @@
   }
 
   .se-quick-insert-label {
-    font-size: 9px;
+    font-size: var(--text-2xs);
   }
 
   .se-quick-insert-chip {
     padding: 2px 7px;
-    font-size: 10px;
+    font-size: var(--text-xs);
   }
 
   /* Line numbers: hidden on mobile (via JSX) */
@@ -1990,7 +1990,7 @@
 
   /* Textarea */
   .se-editor-textarea {
-    font-size: 13px;
+    font-size: var(--text-md);
     padding: 12px 14px;
     line-height: 1.7;
   }
@@ -2001,15 +2001,15 @@
   }
 
   .se-empty-icon {
-    font-size: 36px;
+    font-size: var(--text-5xl);
   }
 
   .se-empty-title {
-    font-size: 16px;
+    font-size: var(--text-lg);
   }
 
   .se-empty-desc {
-    font-size: 12px;
+    font-size: var(--text-sm);
     margin-bottom: 14px;
   }
 
@@ -2019,15 +2019,15 @@
   }
 
   .se-empty-action-icon {
-    font-size: 20px;
+    font-size: var(--text-2xl);
   }
 
   .se-empty-action-btn strong {
-    font-size: 13px;
+    font-size: var(--text-md);
   }
 
   .se-empty-action-btn small {
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   /* Status bar */
@@ -2037,7 +2037,7 @@
   }
 
   .se-status-left {
-    font-size: 10px;
+    font-size: var(--text-xs);
   }
 
   .se-status-right {
@@ -2081,11 +2081,11 @@
 
   .se-beat-select {
     max-width: 90px;
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   .se-editor-beat-title {
-    font-size: 13px;
+    font-size: var(--text-md);
   }
 
   .se-quick-insert-bar {
@@ -2093,7 +2093,7 @@
   }
 
   .se-editor-textarea {
-    font-size: 12px;
+    font-size: var(--text-sm);
     padding: 10px 10px;
   }
 

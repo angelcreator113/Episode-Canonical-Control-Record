@@ -25,7 +25,7 @@
   padding: 8px 14px;
   cursor: pointer;
   font-family: 'DM Mono', monospace;
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #2C2C2C;
 }
 
@@ -34,7 +34,7 @@
 }
 
 .script-writer-title h1 {
-  font-size: 24px;
+  font-size: var(--text-3xl);
   font-weight: 600;
   color: #2C2C2C;
   margin: 0;
@@ -42,7 +42,7 @@
 
 .script-writer-episode-name {
   font-family: 'DM Mono', monospace;
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #888;
   margin: 4px 0 0;
 }
@@ -61,7 +61,7 @@
   border: none;
   border-radius: 8px;
   font-family: 'DM Mono', monospace;
-  font-size: 13px;
+  font-size: var(--text-md);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -90,7 +90,7 @@
   align-items: center;
   gap: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #B8962E;
   padding: 8px 14px;
   border: 1px solid #B8962E;
@@ -104,7 +104,7 @@
   border-radius: 8px;
   margin-bottom: 16px;
   font-family: 'DM Mono', monospace;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 /* ── Context Panel ── */
@@ -118,7 +118,7 @@
 
 .script-writer-context h3 {
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #888;
@@ -138,7 +138,7 @@
   padding: 6px 12px;
   border-radius: 20px;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .context-chip.ready {
@@ -177,7 +177,7 @@
 
 .script-writer-sidebar h3 {
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   color: #888;
   margin: 0 0 12px;
@@ -185,7 +185,7 @@
 
 .script-writer-empty {
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #aaa;
   text-align: center;
   padding: 20px 0;
@@ -218,14 +218,14 @@
 
 .script-version-num {
   font-family: 'DM Mono', monospace;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: #2C2C2C;
 }
 
 .script-version-status {
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -239,7 +239,7 @@
   display: flex;
   gap: 8px;
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #888;
 }
 
@@ -250,7 +250,7 @@
 
 .script-version-date {
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #aaa;
   margin-top: 2px;
 }
@@ -276,7 +276,7 @@
 .script-writer-empty-state p {
   margin: 8px 0;
   font-family: 'DM Mono', monospace;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .script-writer-toolbar {
@@ -299,7 +299,7 @@
   border-radius: 6px;
   background: white;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -313,7 +313,7 @@
   display: flex;
   gap: 12px;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #888;
 }
 
@@ -353,21 +353,21 @@
   background: #B8962E;
   color: white;
   font-family: 'DM Mono', monospace;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .script-beat-name {
   flex: 1;
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: #2C2C2C;
 }
 
 .script-beat-location {
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #888;
   padding: 2px 8px;
   background: #f3f4f6;
@@ -380,7 +380,7 @@
 
 .script-line {
   padding: 4px 0;
-  font-size: 15px;
+  font-size: var(--text-lg);
   line-height: 1.6;
 }
 
@@ -392,8 +392,8 @@
 
 .script-line-dialogue .script-line-text { color: #2C2C2C; }
 .script-line-action { color: #666; font-style: italic; }
-.script-line-direction { color: #6366f1; font-family: 'DM Mono', monospace; font-size: 13px; }
-.script-line-stat { color: #059669; font-family: 'DM Mono', monospace; font-size: 13px; }
+.script-line-direction { color: #6366f1; font-family: 'DM Mono', monospace; font-size: var(--text-md); }
+.script-line-stat { color: #059669; font-family: 'DM Mono', monospace; font-size: var(--text-md); }
 .script-line-internal { color: #8b5cf6; font-style: italic; }
 .script-line-feed_moment { color: #0ea5e9; }
 
@@ -401,7 +401,7 @@
 .script-writer-raw {
   padding: 20px;
   font-family: 'Lora', serif;
-  font-size: 15px;
+  font-size: var(--text-lg);
   line-height: 1.8;
   white-space: pre-wrap;
   max-height: 800px;
@@ -420,7 +420,7 @@
 
 .script-writer-links a {
   font-family: 'DM Mono', monospace;
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #B8962E;
   text-decoration: none;
 }

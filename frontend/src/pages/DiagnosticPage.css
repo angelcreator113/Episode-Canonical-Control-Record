@@ -12,14 +12,14 @@
 }
 
 .diagnostic-header h1 {
-  font-size: 2rem;
+  font-size: var(--text-5xl);
   color: #1f2937;
   margin-bottom: 0.5rem;
 }
 
 .diagnostic-header p {
   color: #6b7280;
-  font-size: 1rem;
+  font-size: var(--text-lg);
 }
 
 .diagnostic-controls {
@@ -44,7 +44,7 @@
   font-weight: 600;
   color: #374151;
   margin-bottom: 0.5rem;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
 }
 
 .control-group code {
@@ -52,7 +52,7 @@
   background: #f3f4f6;
   padding: 0.75rem;
   border-radius: 4px;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: #1f2937;
   overflow-x: auto;
 }
@@ -62,7 +62,7 @@
   padding: 0.75rem;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   transition: border-color 0.2s;
 }
 
@@ -79,7 +79,7 @@
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -107,7 +107,7 @@
   border-radius: 8px;
   text-align: center;
   color: #6b7280;
-  font-size: 1.1rem;
+  font-size: var(--text-xl);
 }
 
 .test-result {
@@ -138,13 +138,13 @@
 }
 
 .result-icon {
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
 }
 
 .result-name {
   font-weight: 600;
   color: #1f2937;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
 }
 
 .result-badges {
@@ -156,7 +156,7 @@
 .status-badge {
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   color: white;
   text-transform: uppercase;
@@ -167,7 +167,7 @@
   padding: 0.25rem 0.5rem;
   background: #e5e7eb;
   border-radius: 4px;
-  font-size: 0.8rem;
+  font-size: var(--text-md);
   font-weight: 600;
   color: #374151;
   font-family: monospace;
@@ -177,7 +177,7 @@
   padding: 0.25rem 0.5rem;
   background: #f3f4f6;
   border-radius: 4px;
-  font-size: 0.8rem;
+  font-size: var(--text-md);
   color: #6b7280;
   font-family: monospace;
 }
@@ -200,14 +200,14 @@
 .detail-row strong {
   color: #374151;
   min-width: 80px;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
 }
 
 .detail-row code {
   background: #f3f4f6;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   color: #1f2937;
 }
 
@@ -257,7 +257,7 @@
   color: #f9fafb;
   border-radius: 6px;
   overflow-x: auto;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   line-height: 1.6;
   max-height: 400px;
   overflow-y: auto;
@@ -274,7 +274,7 @@
 .diagnostic-footer h3 {
   margin: 0 0 1rem 0;
   color: #1f2937;
-  font-size: 1.2rem;
+  font-size: var(--text-2xl);
 }
 
 .env-info {
@@ -286,7 +286,7 @@
 .env-item {
   display: flex;
   gap: 0.75rem;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
 }
 
 .env-item strong {

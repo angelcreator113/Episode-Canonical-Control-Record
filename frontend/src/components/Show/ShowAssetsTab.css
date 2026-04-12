@@ -29,7 +29,7 @@
 
 .asset-edit-modal h3 {
   margin: 0 0 0.5rem 0;
-  font-size: 1.35rem;
+  font-size: var(--text-2xl);
   color: #1e293b;
   font-weight: 700;
   text-align: center;
@@ -42,7 +42,7 @@
 }
 
 .asset-edit-modal label {
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   color: #64748b;
   font-weight: 600;
 }
@@ -51,7 +51,7 @@
   padding: 0.5rem 0.75rem;
   border: 1.5px solid #cbd5e1;
   border-radius: 7px;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   background: #f8fafc;
   color: #1e293b;
   transition: border 0.2s;
@@ -72,7 +72,7 @@
   padding: 0.5rem 1.25rem;
   border-radius: 7px;
   border: none;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.18s, color 0.18s;
@@ -116,14 +116,14 @@
 
 .show-assets-tab .header-left h2 {
   margin: 0 0 0.25rem 0;
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   color: #1e293b;
 }
 
 .show-assets-tab .header-subtitle {
   margin: 0;
   color: #64748b;
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
 }
 
 .show-assets-tab .header-actions {
@@ -141,7 +141,7 @@
   border: none;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -169,14 +169,14 @@
 
 .show-assets-tab .empty-state-recommended h3 {
   margin: 0 0 0.5rem 0;
-  font-size: 1.75rem;
+  font-size: var(--text-4xl);
   color: #1e293b;
 }
 
 .show-assets-tab .empty-state-recommended p {
   margin: 0 0 2.5rem 0;
   color: #64748b;
-  font-size: 1.05rem;
+  font-size: var(--text-lg);
 }
 
 .show-assets-tab .recommended-grid {
@@ -214,7 +214,7 @@
 
 .show-assets-tab .rec-label {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   color: #1e293b;
   text-align: center;
 }
@@ -246,7 +246,7 @@
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -263,7 +263,7 @@
 }
 
 .show-assets-tab .cat-icon {
-  font-size: 1rem;
+  font-size: var(--text-lg);
 }
 
 .show-assets-tab .cat-label {
@@ -288,7 +288,7 @@
   padding: 0.5rem 0.875rem;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   transition: border-color 0.2s ease;
 }
 
@@ -309,7 +309,7 @@
   background: white;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 1.125rem;
+  font-size: var(--text-xl);
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -379,7 +379,7 @@
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid #e2e8f0;
   border-radius: 6px;
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: #64748b;
   cursor: pointer;
@@ -417,7 +417,7 @@
   background: white;
   border: none;
   text-align: left;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   font-weight: 500;
   color: #1e293b;
   cursor: pointer;
@@ -470,13 +470,13 @@
   padding: 0.25rem 0.5rem;
   color: white;
   border-radius: 6px;
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
 .asset-name {
   margin: 0 0 0.5rem 0;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: #1e293b;
   overflow: hidden;
@@ -488,7 +488,7 @@
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: #64748b;
   overflow: hidden;
   white-space: nowrap;
@@ -554,7 +554,7 @@
   }
   
   .show-assets-tab .header-left h2 {
-    font-size: 1.1rem;
+    font-size: var(--text-xl);
   }
   
   .show-assets-tab .header-actions {
@@ -565,7 +565,7 @@
     width: 100%;
     justify-content: center;
     padding: 0.5rem 1rem;
-    font-size: 0.8125rem;
+    font-size: var(--text-md);
   }
 
   .assets-controls {
@@ -587,7 +587,7 @@
   .show-assets-tab .category-btn {
     flex-shrink: 0;
     padding: 0.375rem 0.625rem;
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
     border-width: 1.5px;
     border-radius: 6px;
   }
@@ -597,7 +597,7 @@
   }
   
   .show-assets-tab .cat-icon {
-    font-size: 0.875rem;
+    font-size: var(--text-base);
   }
   
   .show-assets-tab .controls-right {
@@ -632,12 +632,12 @@
   }
 
   .asset-name {
-    font-size: 0.8rem;
+    font-size: var(--text-md);
     margin-bottom: 0.25rem;
   }
 
   .asset-meta {
-    font-size: 0.675rem;
+    font-size: var(--text-xs);
     gap: 0.25rem;
   }
   
@@ -650,11 +650,11 @@
   }
   
   .show-assets-tab .empty-state-recommended h3 {
-    font-size: 1.25rem;
+    font-size: var(--text-2xl);
   }
   
   .show-assets-tab .empty-state-recommended p {
-    font-size: 0.875rem;
+    font-size: var(--text-base);
     margin-bottom: 1.5rem;
   }
   
@@ -669,11 +669,11 @@
   }
   
   .show-assets-tab .rec-icon {
-    font-size: 2rem;
+    font-size: var(--text-5xl);
   }
   
   .show-assets-tab .rec-label {
-    font-size: 0.8125rem;
+    font-size: var(--text-md);
   }
   
   .view-list .show-asset-card {
@@ -704,12 +704,12 @@
   .show-assets-tab .view-btn {
     width: 38px;
     height: 38px;
-    font-size: 1.125rem;
+    font-size: var(--text-xl);
   }
 
   .show-assets-tab .search-input {
     padding: 0.4rem 0.625rem;
-    font-size: 0.8125rem;
+    font-size: var(--text-md);
   }
   
   .assets-container.view-grid {
@@ -732,19 +732,19 @@
   }
   
   .show-assets-tab .rec-icon {
-    font-size: 1.75rem;
+    font-size: var(--text-4xl);
   }
   
   .show-assets-tab .rec-label {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
   
   .show-assets-tab .category-btn {
     padding: 0.3rem 0.5rem;
-    font-size: 0.6875rem;
+    font-size: var(--text-xs);
   }
   
   .show-assets-tab .cat-label {
-    font-size: 0.6rem;
+    font-size: var(--text-xs);
   }
 }

@@ -22,7 +22,7 @@
 
 .is-header h1 {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 26px;
+  font-size: var(--text-4xl);
   font-weight: 700;
   letter-spacing: -0.5px;
   color: #0f0c14;
@@ -30,7 +30,7 @@
 }
 
 .is-header p {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #7a7088;
   margin: 0 0 18px;
   letter-spacing: 0.2px;
@@ -46,7 +46,7 @@
 .is-tab {
   padding: 10px 18px;
   font-family: 'DM Sans', 'Segoe UI', sans-serif;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: #7a7088;
   background: transparent;
@@ -83,14 +83,14 @@
 /* ─── Section Headers ─── */
 .is-section-title {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 20px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   margin: 0 0 6px;
   color: #0f0c14;
 }
 
 .is-section-desc {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #7a7088;
   margin: 0 0 24px;
   line-height: 1.5;
@@ -135,25 +135,25 @@
 
 .is-archetype-num {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 800;
   letter-spacing: 0.5px;
 }
 
 .is-archetype-icon {
-  font-size: 22px;
+  font-size: var(--text-3xl);
 }
 
 .is-archetype-name {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 700;
   margin: 0 0 6px;
   color: #0f0c14;
 }
 
 .is-archetype-content {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #7a7088;
   line-height: 1.5;
   margin: 0;
@@ -173,7 +173,7 @@
 }
 
 .is-archetype-row {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: #3d3548;
 }
@@ -184,7 +184,7 @@
 
 .is-archetype-label {
   display: block;
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -218,11 +218,11 @@
   margin-bottom: 14px;
 }
 
-.is-rel-icon { font-size: 22px; }
+.is-rel-icon { font-size: var(--text-3xl); }
 
 .is-rel-type {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 17px;
+  font-size: var(--text-xl);
   font-weight: 700;
   margin: 0;
   color: #0f0c14;
@@ -243,7 +243,7 @@
 
 .is-rel-label {
   display: block;
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -252,7 +252,7 @@
 }
 
 .is-rel-cell p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #3d3548;
   line-height: 1.5;
   margin: 0;
@@ -261,7 +261,7 @@
 .is-rel-story {
   padding-top: 10px;
   border-top: 1px dashed #e8e4f0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -289,27 +289,27 @@
 }
 
 .is-economy-icon {
-  font-size: 26px;
+  font-size: var(--text-4xl);
   margin-bottom: 8px;
 }
 
 .is-economy-name {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
   margin: 0 0 8px;
   color: #0f0c14;
 }
 
 .is-economy-what {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #7a7088;
   line-height: 1.5;
   margin: 0 0 10px;
 }
 
 .is-economy-meta {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #3d3548;
   line-height: 1.5;
   margin-bottom: 8px;
@@ -324,7 +324,7 @@
 .is-economy-narrative {
   padding-top: 8px;
   border-top: 1px dashed #e8e4f0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: #a889c8;
 }
@@ -356,7 +356,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: var(--text-3xl);
   color: #b8b0c8;
   padding: 0 8px;
   flex-shrink: 0;
@@ -371,21 +371,21 @@
   border-radius: 50%;
   color: #ffffff;
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 800;
   margin-bottom: 8px;
 }
 
 .is-trend-name {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
   margin: 0 0 10px;
   color: #0f0c14;
 }
 
 .is-trend-row {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #3d3548;
   line-height: 1.5;
   margin-bottom: 6px;
@@ -401,7 +401,7 @@
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px dashed #e8e4f0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: #a889c8;
 }
@@ -432,11 +432,11 @@
   margin-bottom: 10px;
 }
 
-.is-momentum-icon { font-size: 22px; }
+.is-momentum-icon { font-size: var(--text-3xl); }
 
 .is-momentum-event {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 700;
   margin: 0;
   color: #0f0c14;
@@ -444,7 +444,7 @@
 }
 
 .is-momentum-duration {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -456,7 +456,7 @@
 }
 
 .is-momentum-row {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #3d3548;
   line-height: 1.5;
 }
@@ -471,7 +471,7 @@
   margin-top: 6px;
   padding-top: 8px;
   border-top: 1px dashed #e8e4f0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: #a889c8;
 }
@@ -496,27 +496,27 @@
 }
 
 .is-influence-icon {
-  font-size: 28px;
+  font-size: var(--text-4xl);
   margin-bottom: 8px;
 }
 
 .is-influence-name {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 18px;
+  font-size: var(--text-xl);
   font-weight: 700;
   margin: 0 0 8px;
   color: #0f0c14;
 }
 
 .is-influence-def {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #7a7088;
   line-height: 1.5;
   margin: 0 0 14px;
 }
 
 .is-influence-row {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #3d3548;
   line-height: 1.5;
   margin-bottom: 6px;
@@ -531,7 +531,7 @@
 
 .is-influence-label {
   display: block;
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -565,18 +565,18 @@
   margin-bottom: 8px;
 }
 
-.is-legacy-icon { font-size: 22px; }
+.is-legacy-icon { font-size: var(--text-3xl); }
 
 .is-legacy-signal {
   font-family: 'Syne', 'Helvetica Neue', sans-serif;
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 700;
   margin: 0;
   color: #0f0c14;
 }
 
 .is-legacy-looks {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #3d3548;
   line-height: 1.5;
   margin: 0 0 8px;
@@ -585,7 +585,7 @@
 .is-legacy-story {
   padding-top: 8px;
   border-top: 1px dashed #e8e4f0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: #a889c8;
 }
@@ -608,5 +608,5 @@
   .is-content { padding: 20px; }
   .is-archetype-grid { grid-template-columns: 1fr; }
   .is-economy-grid { grid-template-columns: 1fr; }
-  .is-tab { padding: 8px 12px; font-size: 12px; }
+  .is-tab { padding: 8px 12px; font-size: var(--text-sm); }
 }

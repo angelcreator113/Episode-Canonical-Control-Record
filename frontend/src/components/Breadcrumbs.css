@@ -19,7 +19,7 @@
   display: flex;
   align-items: center;
   font-family: 'DM Sans', sans-serif;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
 }
 
 .breadcrumb-link {
@@ -41,7 +41,7 @@
 .breadcrumb-sep {
   margin: 0 0.4rem;
   color: rgba(107, 101, 96, 0.4);
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
 }
 
 .breadcrumb-current {

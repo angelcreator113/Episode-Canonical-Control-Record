@@ -26,14 +26,14 @@
 
 .template-header h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: var(--text-5xl);
   color: #333;
 }
 
 .template-subtitle {
   margin: 0.5rem 0 0 0;
   color: #666;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
 }
 
 .template-header .btn-primary {
@@ -53,7 +53,7 @@
 .template-form-container h2 {
   margin: 0 0 1.5rem 0;
   color: #333;
-  font-size: 1.5rem;
+  font-size: var(--text-3xl);
 }
 
 .template-form {
@@ -68,7 +68,7 @@
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   font-family: inherit;
   transition: border-color 0.2s ease;
 }
@@ -113,7 +113,7 @@
   align-items: center;
   gap: 0.5rem;
   color: #667eea;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
 }
 
 .category-remove {
@@ -121,7 +121,7 @@
   border: none;
   color: #667eea;
   cursor: pointer;
-  font-size: 1.2rem;
+  font-size: var(--text-2xl);
   padding: 0;
   line-height: 1;
   transition: opacity 0.2s ease;
@@ -142,13 +142,13 @@
 .templates-list h2 {
   margin: 0 0 1.5rem 0;
   color: #333;
-  font-size: 1.3rem;
+  font-size: var(--text-2xl);
 }
 
 .empty-text {
   color: #bbb;
   margin-top: 0.5rem !important;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
 }
 
 .templates-grid {
@@ -181,7 +181,7 @@
 .template-card h3 {
   margin: 0;
   color: #333;
-  font-size: 1.1rem;
+  font-size: var(--text-xl);
 }
 
 .template-actions {
@@ -194,7 +194,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1.2rem;
+  font-size: var(--text-2xl);
   transition: opacity 0.2s ease;
   padding: 0.25rem;
 }
@@ -207,7 +207,7 @@
 .template-desc {
   margin: 0.5rem 0 1rem 0;
   color: #666;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
   line-height: 1.4;
 }
 
@@ -225,7 +225,7 @@
 
 .categories-label {
   margin: 0 0 0.5rem 0;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   color: #999;
   font-weight: 600;
   text-transform: uppercase;
@@ -242,7 +242,7 @@
   color: #667eea;
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 0.8rem;
+  font-size: var(--text-md);
   border: 1px solid #667eea;
 }
 
@@ -250,7 +250,7 @@
   border-top: 1px solid #e0e0e0;
   padding-top: 1rem;
   color: #999;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
 }
 
 /* Responsive Design */
@@ -281,6 +281,6 @@
   }
 
   .template-header h1 {
-    font-size: 1.5rem;
+    font-size: var(--text-3xl);
   }
 }

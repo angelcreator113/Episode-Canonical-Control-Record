@@ -15,14 +15,14 @@
 }
 
 .ewt-header h2 {
-  font-size: 22px;
+  font-size: var(--text-3xl);
   font-weight: 700;
   color: #1a1a2e;
   margin: 0 0 4px 0;
 }
 
 .ewt-subtitle {
-  font-size: 14px;
+  font-size: var(--text-base);
   color: #64748b;
   margin: 0;
 }
@@ -44,7 +44,7 @@
   padding: 6px 12px;
   background: transparent;
   border: none;
-  font-size: 16px;
+  font-size: var(--text-lg);
   cursor: pointer;
   color: #94a3b8;
   transition: all 0.15s;
@@ -61,7 +61,7 @@
   border: none;
   border-radius: 8px;
   color: #fff;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -90,13 +90,13 @@
 
 .ewt-stat-value {
   display: block;
-  font-size: 28px;
+  font-size: var(--text-4xl);
   font-weight: 700;
   color: #667eea;
 }
 
 .ewt-stat-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -110,7 +110,7 @@
   color: #dc2626;
   border-radius: 8px;
   margin-bottom: 16px;
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 
 /* Filters */
@@ -126,7 +126,7 @@
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 20px;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
   color: #64748b;
   cursor: pointer;
@@ -156,14 +156,14 @@
 }
 
 .ewt-empty h3 {
-  font-size: 18px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: #1a1a2e;
   margin: 0 0 8px;
 }
 
 .ewt-empty p {
-  font-size: 14px;
+  font-size: var(--text-base);
   color: #64748b;
   margin: 0 0 24px;
 }
@@ -216,18 +216,18 @@
 }
 
 .ewt-char-avatar {
-  font-size: 22px;
+  font-size: var(--text-3xl);
 }
 
 .ewt-char-header h3 {
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: #1a1a2e;
   margin: 0;
 }
 
 .ewt-char-count {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #94a3b8;
   background: #f1f5f9;
   padding: 2px 10px;
@@ -276,7 +276,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 40px;
+  font-size: var(--text-5xl);
   color: #cbd5e1;
 }
 
@@ -285,7 +285,7 @@
 }
 
 .ewt-card-name {
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: #1a1a2e;
   margin-bottom: 4px;
@@ -295,13 +295,13 @@
 }
 
 .ewt-card-character {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #667eea;
   margin-bottom: 2px;
 }
 
 .ewt-card-category {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #94a3b8;
 }
 
@@ -318,7 +318,7 @@
   border: none;
   border-radius: 50%;
   color: #fff;
-  font-size: 14px;
+  font-size: var(--text-base);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s;
@@ -370,7 +370,7 @@
 }
 
 .ewt-drawer-header h3 {
-  font-size: 18px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: #1a1a2e;
   margin: 0;
@@ -384,7 +384,7 @@
   justify-content: center;
   background: transparent;
   border: none;
-  font-size: 22px;
+  font-size: var(--text-3xl);
   color: #64748b;
   cursor: pointer;
   border-radius: 8px;
@@ -428,13 +428,13 @@
 }
 
 .ewt-detail-label {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #64748b;
   font-weight: 500;
 }
 
 .ewt-detail-value {
-  font-size: 13px;
+  font-size: var(--text-md);
   color: #1a1a2e;
   font-weight: 600;
 }
@@ -471,7 +471,7 @@
 
 .ewt-picker-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-xl);
   font-weight: 600;
   color: #1a1a2e;
 }
@@ -479,7 +479,7 @@
 .ewt-picker-close {
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: var(--text-3xl);
   color: #64748b;
   cursor: pointer;
   padding: 4px 8px;
@@ -536,7 +536,7 @@
 }
 
 .ewt-picker-thumb .ewt-placeholder {
-  font-size: 40px;
+  font-size: var(--text-5xl);
 }
 
 .ewt-picker-info {
@@ -546,7 +546,7 @@
 }
 
 .ewt-picker-name {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: #1a1a2e;
   white-space: nowrap;
@@ -555,7 +555,7 @@
 }
 
 .ewt-picker-type {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: #64748b;
   text-transform: capitalize;
 }

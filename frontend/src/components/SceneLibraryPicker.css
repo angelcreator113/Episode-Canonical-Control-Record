@@ -60,13 +60,13 @@
 .modal-header h3 {
   margin: 0 0 0.75rem 0;
   color: #1a1a1a;
-  font-size: 1.5rem;
+  font-size: var(--text-3xl);
 }
 
 .modal-header p {
   margin: 0;
   color: #666;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 
 /* Tab Navigation */
@@ -82,7 +82,7 @@
   border: 2px solid transparent;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: #6b7280;
   cursor: pointer;
   transition: all 0.2s;
@@ -135,7 +135,7 @@
 .filter-tags label {
   font-weight: 600;
   color: #374151;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 
 .tags-list {
@@ -149,7 +149,7 @@
   background: white;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: #374151;
   cursor: pointer;
@@ -211,26 +211,26 @@
 .empty-state-cta h3 {
   margin: 0 0 0.75rem 0;
   color: #1a1a1a;
-  font-size: 1.5rem;
+  font-size: var(--text-3xl);
 }
 
 .empty-description {
   color: #666;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   margin: 0 0 2rem 0;
   line-height: 1.5;
 }
 
 .btn-large {
   padding: 1rem 2rem;
-  font-size: 1.1rem;
+  font-size: var(--text-xl);
   font-weight: 600;
   gap: 0.5rem;
 }
 
 .empty-hint {
   margin-top: 1.5rem;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: #9ca3af;
 }
 
@@ -252,13 +252,13 @@
 .upload-header h3 {
   margin: 0;
   color: #1a1a1a;
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
 }
 
 .upload-subtitle {
   margin: 0;
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 
 .upload-container h3 {
@@ -299,7 +299,7 @@
 }
 
 .dropzone-title {
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   font-weight: 600;
   color: #1a1a1a;
   margin: 0 0 0.5rem 0;
@@ -319,7 +319,7 @@
 }
 
 .dropzone-hint {
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: #9ca3af;
   margin: 1rem 0 0 0;
 }
@@ -364,19 +364,19 @@
 }
 
 .file-icon {
-  font-size: 2.5rem;
+  font-size: var(--text-5xl);
 }
 
 .file-details h4 {
   margin: 0 0 0.25rem 0;
   color: #1a1a1a;
-  font-size: 1rem;
+  font-size: var(--text-lg);
 }
 
 .file-details p {
   margin: 0;
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 
 .upload-progress {
@@ -412,7 +412,7 @@
 
 .upload-progress p {
   text-align: center;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: #6b7280;
   margin: 0;
 }
@@ -426,7 +426,7 @@
 
 .upload-note {
   text-align: center;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: #6b7280;
   margin: 1rem 0 0 0;
   padding: 0.75rem;
@@ -438,7 +438,7 @@
   background: none;
   border: none;
   color: #3b82f6;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   cursor: pointer;
   padding: 0.5rem;
   margin-top: 1rem;
@@ -527,7 +527,7 @@
   color: white;
   padding: 0.375rem 0.75rem;
   border-radius: 4px;
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   white-space: nowrap;
   backdrop-filter: blur(8px);
@@ -554,7 +554,7 @@
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   opacity: 0;
@@ -579,7 +579,7 @@
   background: rgba(0, 0, 0, 0.8);
   color: white;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   font-family: 'Courier New', monospace;
 }
@@ -602,7 +602,7 @@
 
 .check-icon {
   color: white;
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   font-weight: bold;
 }
 
@@ -613,7 +613,7 @@
 
 .picker-info h4 {
   margin: 0 0 0.5rem 0;
-  font-size: 0.9375rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: #1a1a1a;
   overflow: hidden;
@@ -623,7 +623,7 @@
 
 .picker-info p {
   margin: 0 0 0.5rem 0;
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   color: #666;
   display: -webkit-box;
   -webkit-line-clamp: 2;

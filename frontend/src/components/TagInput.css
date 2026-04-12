@@ -36,7 +36,7 @@
   background: none;
   border: none;
   color: white;
-  font-size: 1.3rem;
+  font-size: var(--text-2xl);
   line-height: 1;
   cursor: pointer;
   padding: 0;
@@ -67,7 +67,7 @@
   min-width: 120px;
   border: none;
   outline: none;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   padding: 0.25rem;
   background: transparent;
   font-family: inherit;
@@ -86,7 +86,7 @@
 .tag-input-hint {
   display: block;
   color: #666;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   padding: 0 0.75rem;
 }
 
@@ -108,7 +108,7 @@ kbd {
   border: 1px solid #ccc;
   border-radius: 3px;
   font-family: 'Courier New', monospace;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: bold;
   color: #333;
   margin: 0 0.2rem;

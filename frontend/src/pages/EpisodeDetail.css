@@ -51,7 +51,7 @@
   }
 
   .ed-back-btn {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
     padding: 0.2rem 0.4rem;
   }
 
@@ -62,7 +62,7 @@
   }
 
   .ed-header-title {
-    font-size: 1.125rem;
+    font-size: var(--text-xl);
   }
 
   .ed-header-meta {
@@ -71,23 +71,23 @@
 
   .ed-show-link {
     padding: 0.2rem 0.45rem;
-    font-size: 0.7rem;
+    font-size: var(--text-sm);
   }
 
   .ed-meta-item {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   .ed-status-badge {
     padding: 0.2rem 0.5rem;
-    font-size: 0.7rem;
+    font-size: var(--text-sm);
     box-shadow: none;
     border-width: 1.5px;
   }
 
   .ed-working-badge {
     padding: 0.2rem 0.5rem;
-    font-size: 0.675rem;
+    font-size: var(--text-xs);
   }
 
   .ed-header-actions {
@@ -99,7 +99,7 @@
     width: 32px;
     height: 32px;
     border-radius: 8px;
-    font-size: 1.1rem;
+    font-size: var(--text-xl);
   }
 
   /* Desktop: slim tabs */
@@ -113,7 +113,7 @@
 
   .ed-tab {
     padding: 0.375rem 0.75rem;
-    font-size: 0.8rem;
+    font-size: var(--text-md);
     border-radius: 8px;
     border-width: 1.5px;
     gap: 0.35rem;
@@ -125,11 +125,11 @@
   }
 
   .ed-tab-icon {
-    font-size: 0.85rem;
+    font-size: var(--text-base);
   }
 
   .ed-tab-label {
-    font-size: 0.8rem;
+    font-size: var(--text-md);
   }
 
   /* Desktop: tighter content */
@@ -174,7 +174,7 @@
 }
 
 .ed-error-icon{
-  font-size: 2rem;
+  font-size: var(--text-5xl);
 }
 
 /* spinner */
@@ -231,7 +231,7 @@
   border: none;
   color: var(--ed-primary);
   font-weight: 700;
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -259,7 +259,7 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  font-size: 1.375rem;
+  font-size: var(--text-3xl);
   line-height: 1.2;
   margin: 0;
   letter-spacing: -0.02em;
@@ -281,7 +281,7 @@
   color: white;
   border-radius: 5px;
   text-decoration: none;
-  font-size: 0.775rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   transition: all 0.2s;
   box-shadow: 0 1px 3px rgba(102, 126, 234, 0.2);
@@ -294,7 +294,7 @@
 }
 
 .ed-show-icon {
-  font-size: 1rem;
+  font-size: var(--text-lg);
   line-height: 1;
 }
 
@@ -306,7 +306,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.8rem;
+  font-size: var(--text-md);
 }
 
 .ed-meta-label{
@@ -323,7 +323,7 @@
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
   font-weight: 700;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   text-transform: capitalize;
   display: inline-flex;
   align-items: center;
@@ -346,7 +346,7 @@
 
 .ed-status-published::before {
   content: '✓';
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 
 .ed-status-draft{
@@ -357,7 +357,7 @@
 
 .ed-status-draft::before {
   content: '○';
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 
 .ed-status-pending{
@@ -368,7 +368,7 @@
 
 .ed-status-pending::before {
   content: '⏱';
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 
 /* Working Episode badge */
@@ -378,7 +378,7 @@
   gap: 4px;
   padding: 0.3rem 0.75rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   background: linear-gradient(135deg, #eef2ff, #e0e7ff);
   color: #4338ca;
@@ -403,7 +403,7 @@
   border-radius: 10px;
   padding: 0.75rem 1.25rem;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -425,7 +425,7 @@
 }
 
 .ed-btn-icon {
-  font-size: 1.1rem;
+  font-size: var(--text-xl);
   line-height: 1;
 }
 
@@ -441,7 +441,7 @@
   }
 
   .ed-header-title {
-    font-size: 1.5rem;
+    font-size: var(--text-3xl);
   }
 
   .ed-header-actions {
@@ -450,7 +450,7 @@
 
   .ed-btn-primary-action {
     padding: 0.75rem 1.25rem;
-    font-size: 0.85rem;
+    font-size: var(--text-base);
   }
 
   .ed-stats-light {
@@ -463,7 +463,7 @@
 @media (max-width: 768px) {
   .ed-btn-thumbnail {
     padding: 0.65rem 1rem;
-    font-size: 0.85rem;
+    font-size: var(--text-base);
   }
   
   .ed-btn-text {
@@ -471,7 +471,7 @@
   }
   
   .ed-btn-icon {
-    font-size: 1.25rem;
+    font-size: var(--text-2xl);
   }
 }
 
@@ -530,7 +530,7 @@
   border: 1.5px solid rgba(229,231,235,0.8);
   background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
   color: #6b7280;
-  font-size: 1.375rem;
+  font-size: var(--text-3xl);
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
@@ -586,7 +586,7 @@
   color: var(--ed-text);
   cursor: pointer;
   transition: all 0.15s ease;
-  font-size: 0.9375rem;
+  font-size: var(--text-lg);
   text-align: left;
   position: relative;
   pointer-events: auto;
@@ -668,7 +668,7 @@
 }
 
 .ed-stat-label{
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--ed-muted);
   text-transform: uppercase;
@@ -676,7 +676,7 @@
 }
 
 .ed-stat-value{
-  font-size: 1rem;
+  font-size: var(--text-lg);
   font-weight: 800;
   color: var(--ed-text);
 }
@@ -725,7 +725,7 @@
   border: 1.5px solid transparent;
   padding: 0.4rem 0.75rem;
   font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   color: var(--ed-muted);
   cursor: pointer;
   position: relative;
@@ -773,19 +773,19 @@
   color: #8A7420;
 }
 .ed-tab-launch-arrow {
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   margin-left: 2px;
   opacity: 0.6;
 }
 
 .ed-tab-icon{
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   line-height: 1;
   flex-shrink: 0;
 }
 
 .ed-tab-label{
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
 }
 
 /* Tablet: ensure tabs scroll smoothly */
@@ -802,11 +802,11 @@
 
   .ed-tab {
     padding: 0.5rem 0.875rem;
-    font-size: 0.825rem;
+    font-size: var(--text-md);
   }
 
   .ed-tab-label {
-    font-size: 0.8rem;
+    font-size: var(--text-md);
   }
 }
 
@@ -835,11 +835,11 @@
   
   .ed-tab-label {
     display: inline;
-    font-size: 0.8125rem;
+    font-size: var(--text-md);
   }
   
   .ed-tab-icon {
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
   
   /* Stronger active state for mobile */
@@ -887,7 +887,7 @@
 .ed-title{
   font-weight: 950;
   color: var(--ed-text);
-  font-size: 1.02rem;
+  font-size: var(--text-lg);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -896,7 +896,7 @@
 }
 
 @media (min-width: 769px){
-  .ed-title{ max-width: 64vw; font-size: 1.1rem; }
+  .ed-title{ max-width: 64vw; font-size: var(--text-xl); }
 }
 
 .ed-subrow{
@@ -905,7 +905,7 @@
   gap: 0.5rem;
   color: var(--ed-muted);
   font-weight: 800;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
 }
 
 .ed-subtext{ color: var(--ed-muted); }
@@ -952,7 +952,7 @@
 }
 
 .ed-btn-full{ width: 100%; }
-.ed-btn-lg{ padding: 0.95rem 1.15rem; border-radius: 16px; font-size: 1rem; }
+.ed-btn-lg{ padding: 0.95rem 1.15rem; border-radius: 16px; font-size: var(--text-lg); }
 
 .ed-btn-primary{
   background: var(--ed-primary);
@@ -993,7 +993,7 @@
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
   font-weight: 950;
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   border: 1px solid transparent;
 }
 
@@ -1060,21 +1060,21 @@
 
 .ed-landscape-prompt-inner h3 {
   margin: 0 0 0.75rem;
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   font-weight: 800;
   color: #1e293b;
 }
 
 .ed-landscape-prompt-inner p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
   line-height: 1.6;
   color: #64748b;
 }
 
 /* Landscape badge on tab button */
 .ed-tab-landscape-badge {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   opacity: 0.6;
   margin-left: -0.125rem;
 }
@@ -1150,7 +1150,7 @@
 }
 
 .ed-chip .k{
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--ed-muted);
   font-weight: 950;
   text-transform: uppercase;
@@ -1160,7 +1160,7 @@
 .ed-chip .v{
   color: var(--ed-text);
   font-weight: 900;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
 }
 
 .ed-quickactions{
@@ -1183,7 +1183,7 @@
 }
 
 .ed-progress-label {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1219,7 +1219,7 @@
 }
 
 .ed-indicator-icon {
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   font-weight: 900;
 }
 
@@ -1232,7 +1232,7 @@
 }
 
 .ed-indicator-text {
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   font-weight: 700;
   color: #374151;
 }
@@ -1415,7 +1415,7 @@
 .ed-cardtitle,
 .ed-section-title{
   margin: 0;
-  font-size: 1.125rem;
+  font-size: var(--text-xl);
   font-weight: 800;
   color: var(--ed-text);
   padding-bottom: 0.5rem;
@@ -1424,7 +1424,7 @@
 }
 
 .ed-section-title {
-  font-size: 1rem;
+  font-size: var(--text-lg);
   margin-bottom: 0.875rem;
 }
 
@@ -1444,7 +1444,7 @@
   color: #4b5563;
   line-height: 1.7;
   font-weight: 650;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
 }
 
 /* stats */
@@ -1466,7 +1466,7 @@
 }
 
 .ed-stat .k{
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--ed-muted);
   font-weight: 950;
   text-transform: uppercase;
@@ -1514,7 +1514,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   font-weight: 900;
   border-radius: 50%;
   background: white;
@@ -1537,21 +1537,21 @@
 }
 
 .ed-checklist-title {
-  font-size: 0.9375rem;
+  font-size: var(--text-lg);
   font-weight: 900;
   color: #111827;
   margin-bottom: 0.25rem;
 }
 
 .ed-checklist-desc {
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   color: #6b7280;
   font-weight: 600;
 }
 
 .ed-btn-sm {
   padding: 0.5rem 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   white-space: nowrap;
 }
 
@@ -1569,7 +1569,7 @@
   border: 1.5px solid #e5e7eb;
   color: #374151;
   font-weight: 700;
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   transition: all 0.25s ease;
   cursor: default;
   box-shadow: 0 1px 2px rgba(0,0,0,0.04);
@@ -1604,7 +1604,7 @@
   min-width: 0;
 }
 .ed-info .k{
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--ed-muted);
   font-weight: 950;
   text-transform: uppercase;
@@ -1619,7 +1619,7 @@
 }
 .ed-mono{
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
 }
 
 /* empty */
@@ -1633,7 +1633,7 @@
 }
 .ed-empty-tight{ margin-top: 0; }
 .ed-empty-ic{
-  font-size: 2.25rem;
+  font-size: var(--text-5xl);
   opacity: 0.6;
   margin-bottom: 0.25rem;
 }
@@ -1686,7 +1686,7 @@
   padding: 0.85rem;
 }
 .ed-meta .k{
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--ed-muted);
   font-weight: 950;
   text-transform: uppercase;
@@ -1707,7 +1707,7 @@
 .ed-codebox pre{
   margin: 0;
   color: #a5f3fc;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   line-height: 1.55;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
@@ -1734,7 +1734,7 @@
 }
 .ed-timeitem .body{ min-width: 0; }
 .ed-timeitem .t{
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   color: var(--ed-muted);
   font-weight: 850;
 }
@@ -1777,12 +1777,12 @@
   }
 
   .ed-title {
-    font-size: 1.5rem;
+    font-size: var(--text-3xl);
     max-width: none;
   }
 
   .ed-subrow {
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
 
   .ed-topbar-actions {
@@ -1797,7 +1797,7 @@
   .ed-btn {
     padding: 0.75rem 1.25rem;
     gap: 0.5rem;
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
 
   .ed-iconbtn {
@@ -1827,11 +1827,11 @@
   }
 
   .ed-chip .k {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   .ed-chip .v {
-    font-size: 1.1rem;
+    font-size: var(--text-xl);
   }
 
   /* Quick actions in row on desktop */
@@ -1876,11 +1876,11 @@
   }
 
   .ed-cardtitle {
-    font-size: 1.25rem;
+    font-size: var(--text-2xl);
   }
 
   .ed-bodytext {
-    font-size: 1rem;
+    font-size: var(--text-lg);
     line-height: 1.8;
   }
 
@@ -1901,12 +1901,12 @@
   }
 
   .ed-stat .k {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
     margin-bottom: 0.4rem;
   }
 
   .ed-stat .v {
-    font-size: 1.5rem;
+    font-size: var(--text-3xl);
   }
 
   /* Info grids - 4 columns */
@@ -1920,11 +1920,11 @@
   }
 
   .ed-info .k {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   .ed-info .v {
-    font-size: 1rem;
+    font-size: var(--text-lg);
   }
 
   /* Meta grids - 3 columns */
@@ -1944,7 +1944,7 @@
 
   .ed-tag {
     padding: 0.45rem 0.9rem;
-    font-size: 0.9rem;
+    font-size: var(--text-base);
   }
 
   /* Empty states */
@@ -1957,11 +1957,11 @@
   }
 
   .ed-empty h3 {
-    font-size: 1.25rem;
+    font-size: var(--text-2xl);
   }
 
   .ed-empty p {
-    font-size: 1rem;
+    font-size: var(--text-lg);
   }
 
   /* Callouts */
@@ -1970,7 +1970,7 @@
   }
 
   .ed-callout h4 {
-    font-size: 1.1rem;
+    font-size: var(--text-xl);
   }
 
   /* Timeline */
@@ -1988,11 +1988,11 @@
   }
 
   .ed-timeitem .t {
-    font-size: 0.9rem;
+    font-size: var(--text-base);
   }
 
   .ed-timeitem .d {
-    font-size: 1rem;
+    font-size: var(--text-lg);
   }
 
   /* Code boxes */
@@ -2002,19 +2002,19 @@
   }
 
   .ed-codebox pre {
-    font-size: 0.9rem;
+    font-size: var(--text-base);
   }
 
   /* Badge sizes */
   .ed-badge {
     padding: 0.3rem 0.85rem;
-    font-size: 0.8rem;
+    font-size: var(--text-md);
   }
 
   /* Button sizes */
   .ed-btn-lg {
     padding: 1.1rem 1.75rem;
-    font-size: 1.05rem;
+    font-size: var(--text-lg);
   }
 }
 
@@ -2030,7 +2030,7 @@
   }
 
   .ed-title {
-    font-size: 1.75rem;
+    font-size: var(--text-4xl);
   }
 
   .ed-summary {
@@ -2046,7 +2046,7 @@
   }
 
   .ed-cardtitle {
-    font-size: 1.35rem;
+    font-size: var(--text-2xl);
   }
 }
 /* =========================================================
@@ -2105,7 +2105,7 @@
     padding: 0.6rem 1rem;
     gap: 0.35rem;
     font-weight: 700;
-    font-size: 0.9rem;
+    font-size: var(--text-base);
   }
 
   /* Optional: hide thumbnail button completely on smallest screens */
@@ -2140,11 +2140,11 @@
   }
 
   .ed-chip .k {
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
   }
 
   .ed-chip .v {
-    font-size: 0.9rem;
+    font-size: var(--text-base);
   }
 
   /* Compact quick actions - single column */
@@ -2158,7 +2158,7 @@
     background: transparent;
     border: 1px solid #fee2e2;
     color: #dc2626;
-    font-size: 0.85rem;
+    font-size: var(--text-base);
     padding: 0.6rem 0.85rem;
   }
 
@@ -2192,7 +2192,7 @@
   }
 
   .ed-cardtitle {
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
 
   /* Compact stats - horizontal scroll */
@@ -2215,7 +2215,7 @@
   }
 
   .ed-stat .v {
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
 
   /* Compact info grids */
@@ -2234,14 +2234,14 @@
   /* Smaller buttons */
   .ed-btn {
     padding: 0.6rem 0.85rem;
-    font-size: 0.9rem;
+    font-size: var(--text-base);
     border-radius: 10px;
   }
 
   .ed-btn-lg {
     padding: 0.75rem 1rem;
     border-radius: 12px;
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
 
   /* Compact empty states */
@@ -2250,15 +2250,15 @@
   }
 
   .ed-empty-ic {
-    font-size: 1.75rem;
+    font-size: var(--text-4xl);
   }
 
   .ed-empty h3 {
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
 
   .ed-empty p {
-    font-size: 0.85rem;
+    font-size: var(--text-base);
   }
 
   /* Reduce vertical spacing in callouts */
@@ -2269,7 +2269,7 @@
 
   .ed-callout h4 {
     margin-bottom: 0.5rem;
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
 }
 
@@ -2356,7 +2356,7 @@
   color: white;
   border-radius: 6px;
   font-weight: 700;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   z-index: 1;
 }
@@ -2377,7 +2377,7 @@
 
 .scene-info h4 {
   margin: 0 0 0.5rem 0;
-  font-size: 0.9375rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--ed-text);
   overflow: hidden;
@@ -2390,7 +2390,7 @@
   gap: 0.75rem;
   align-items: center;
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: var(--ed-muted);
 }
 
@@ -2403,7 +2403,7 @@
   background: #f3f4f6;
   border-radius: 4px;
   font-weight: 600;
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
 }
 
 /* Card Footer - Actions */
@@ -2427,7 +2427,7 @@
   color: var(--ed-muted);
   padding: 0.375rem 0.5rem;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -2481,7 +2481,7 @@
   color: var(--ed-muted);
   cursor: pointer;
   padding: 0.5rem;
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   line-height: 1;
   transition: color 0.2s;
 }
@@ -2506,7 +2506,7 @@
 
 .preview-details h4 {
   margin: 0 0 1rem 0;
-  font-size: 1.125rem;
+  font-size: var(--text-xl);
   font-weight: 600;
 }
 
@@ -2517,7 +2517,7 @@
 }
 
 .detail-item .label {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   color: var(--ed-muted);
   font-weight: 600;
   text-transform: uppercase;
@@ -2525,7 +2525,7 @@
 }
 
 .detail-item .value {
-  font-size: 0.9375rem;
+  font-size: var(--text-lg);
   color: var(--ed-text);
   font-weight: 600;
 }
@@ -2536,7 +2536,7 @@
 
 .trim-controls h4 {
   margin: 0 0 0.75rem 0;
-  font-size: 0.9375rem;
+  font-size: var(--text-lg);
   font-weight: 600;
 }
 
@@ -2554,7 +2554,7 @@
 }
 
 .trim-input-group label {
-  font-size: 0.8125rem;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--ed-text);
 }
@@ -2563,7 +2563,7 @@
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--ed-border);
   border-radius: 6px;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   transition: all 0.2s;
 }
 
@@ -2607,7 +2607,7 @@
 }
 
 .ed-next-icon {
-  font-size: 2rem;
+  font-size: var(--text-5xl);
   font-weight: 700;
   color: var(--ed-primary);
   flex-shrink: 0;
@@ -2620,14 +2620,14 @@
 
 .ed-next-title {
   margin: 0 0 0.25rem 0;
-  font-size: 1.1rem;
+  font-size: var(--text-xl);
   font-weight: 800;
   color: var(--ed-text);
 }
 
 .ed-next-desc {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
   color: var(--ed-muted);
   font-weight: 500;
 }
@@ -2643,7 +2643,7 @@
   gap: 0.5rem;
   cursor: pointer;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
   color: var(--ed-text);
   transition: opacity 0.2s;
 }
@@ -2660,12 +2660,12 @@
 .ed-expand-count {
   color: var(--ed-muted);
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
 }
 
 .ed-expand-arrow {
   color: var(--ed-muted);
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   transition: transform 0.2s;
 }
 
@@ -2699,7 +2699,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -2714,7 +2714,7 @@
 
 .ed-step-text {
   flex: 1;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--ed-text);
   display: flex;
@@ -2727,7 +2727,7 @@
   color: var(--ed-muted);
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -2738,7 +2738,7 @@
   padding: 0.35rem 0.75rem;
   border-radius: 8px;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -2755,7 +2755,7 @@
 
 .ed-section-title {
   margin: 0 0 0.75rem 0;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ed-text);
 }
@@ -2763,7 +2763,7 @@
 /* Tighter button sizing */
 .ed-btn-sm {
   padding: 0.5rem 0.9rem;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   border-radius: 10px;
 }
 
@@ -2788,7 +2788,7 @@
 
 .ed-cardtitle {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ed-text);
 }
@@ -2813,7 +2813,7 @@
 .ed-stat .k,
 .ed-info .k,
 .ed-meta .k {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: var(--ed-muted);
   font-weight: 600;
   text-transform: uppercase;
@@ -2823,21 +2823,21 @@
 .ed-stat .v,
 .ed-info .v,
 .ed-meta .v {
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ed-text);
 }
 
 .ed-mono {
   font-family: 'Courier New', monospace;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
 }
 
 .ed-bodytext {
   margin: 0;
   line-height: 1.6;
   color: #4b5563;
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
 }
 
 .ed-tags {
@@ -2851,7 +2851,7 @@
   color: #374151;
   padding: 0.35rem 0.75rem;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   font-weight: 600;
   border: 1px solid #e5e7eb;
 }
@@ -2862,7 +2862,7 @@
   padding: 1rem;
   border-radius: 8px;
   overflow-x: auto;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
 }
 
 .ed-codebox pre {
@@ -2882,20 +2882,20 @@
 }
 
 .ed-empty-ic {
-  font-size: 2rem;
+  font-size: var(--text-5xl);
   margin-bottom: 0.5rem;
 }
 
 .ed-empty h3 {
   margin: 0.5rem 0 0.25rem;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ed-text);
 }
 
 .ed-empty p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
 }
 
 /* =========================================================
@@ -2921,7 +2921,7 @@
   /* Hide "Back to Show" text, keep small arrow */
   .ed-back-btn {
     padding: 0.125rem 0.25rem;
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   .ed-header-info {
@@ -2929,7 +2929,7 @@
   }
 
   .ed-header-title {
-    font-size: 0.9rem;
+    font-size: var(--text-base);
     line-height: 1.15;
     white-space: nowrap;
     overflow: hidden;
@@ -2945,17 +2945,17 @@
   }
 
   .ed-meta-item {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   .ed-status-badge {
-    font-size: 0.7rem;
+    font-size: var(--text-sm);
     padding: 0.2rem 0.5rem;
   }
 
   .ed-show-link {
     padding: 0.2rem 0.5rem;
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   .ed-header-actions {
@@ -2964,7 +2964,7 @@
 
   .ed-btn-primary-action {
     padding: 0.3rem 0.625rem;
-    font-size: 0.7rem;
+    font-size: var(--text-sm);
     min-height: 30px;
     border-radius: 6px;
     box-shadow: 0 2px 6px rgba(59,130,246,0.15);
@@ -2974,12 +2974,12 @@
     width: 30px;
     height: 30px;
     border-radius: 6px;
-    font-size: 0.9rem;
+    font-size: var(--text-base);
   }
 
   .ed-btn-thumbnail {
     padding: 0.25rem 0.4rem;
-    font-size: 0.7rem;
+    font-size: var(--text-sm);
     border-radius: 6px;
   }
 
@@ -3014,7 +3014,7 @@
   }
 
   .ed-header-title {
-    font-size: 0.95rem;
+    font-size: var(--text-lg);
   }
 
   /* Hide show link on very small phones */
@@ -3026,21 +3026,21 @@
   }
 
   .ed-back-btn {
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
     padding: 0.2rem 0.25rem;
   }
 
   .ed-meta-item {
-    font-size: 0.7rem;
+    font-size: var(--text-sm);
   }
 
   .ed-status-badge {
-    font-size: 0.65rem;
+    font-size: var(--text-xs);
     padding: 0.15rem 0.4rem;
   }
 
   .ed-status-badge::before {
-    font-size: 0.7rem;
+    font-size: var(--text-sm);
   }
 
   /* Tabs: compact with labels on small phones */
@@ -3056,17 +3056,17 @@
     min-height: 36px;
     border-radius: 8px;
     white-space: nowrap;
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
     gap: 0.25rem;
   }
 
   .ed-tab-label {
     display: inline;
-    font-size: 0.7rem;
+    font-size: var(--text-sm);
   }
 
   .ed-tab-icon {
-    font-size: 0.9rem;
+    font-size: var(--text-base);
   }
 
   /* Tighter content on small phones */
