@@ -149,7 +149,7 @@ const CATEGORY_TASKS = {
 
 // ─── BUILD SOCIAL TASKS (event type + platform + category) ──────────────────
 
-function buildSocialTasks(eventType, hostProfile = null) {
+function buildSocialTasks(eventType, hostProfile = null, outfitPieces = []) {
   // 1. Start with event-type base tasks
   const base = SOCIAL_TASK_TEMPLATES[eventType] || SOCIAL_TASK_TEMPLATES.default;
   const tasks = [
@@ -157,6 +157,25 @@ function buildSocialTasks(eventType, hostProfile = null) {
     ...base.during.map(t => ({ ...t, completed: false })),
     ...base.after.map(t => ({ ...t, completed: false })),
   ];
+
+  // 1b. Make tasks outfit-aware — reference actual pieces in descriptions
+  if (outfitPieces.length > 0) {
+    const mainPiece = outfitPieces.find(p => ['dress', 'top'].includes(p.category || p.clothing_category)) || outfitPieces[0];
+    const brands = [...new Set(outfitPieces.map(p => p.brand).filter(Boolean))];
+    const brandTag = brands.length > 0 ? brands.map(b => `@${b.toLowerCase().replace(/\s+/g, '')}`).join(' ') : '';
+
+    for (const task of tasks) {
+      if (task.slot === 'grwm' && mainPiece) {
+        task.description = `Film getting ready — feature the ${mainPiece.name}${mainPiece.brand ? ` by ${mainPiece.brand}` : ''}`;
+      } else if (task.slot === 'outfit_reveal' && mainPiece) {
+        task.description = `Post outfit details: ${outfitPieces.map(p => p.name).join(', ')}${brandTag ? ` — tag ${brandTag}` : ''}`;
+      } else if (task.slot === 'arrival') {
+        task.description = `Film arrival in the ${mainPiece?.name || 'outfit'} — full look reveal at the venue`;
+      } else if (task.slot === 'recap') {
+        task.description = `Carousel: outfit flat lay + event moments + ${outfitPieces.length} pieces styled`;
+      }
+    }
+  }
 
   if (!hostProfile) return tasks;
 
@@ -326,11 +345,17 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
       const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
       const prestige = eventData.prestige || 5;
+      const brands = outfitPieces.length > 0 ? [...new Set(outfitPieces.map(p => p.brand).filter(Boolean))] : [];
+      const totalOutfitCost = outfitPieces.reduce((s, p) => s + (parseFloat(p.price) || 0), 0);
       const outfitContext = outfitPieces.length > 0
-        ? `Outfit: ${outfitPieces.map(p => `${p.name} (${p.tier}, $${p.price})`).join(', ')}`
+        ? `Outfit (${outfitPieces.length} pieces, $${totalOutfitCost} total): ${outfitPieces.map(p => `${p.name}${p.brand ? ` by ${p.brand}` : ''} (${p.tier || 'basic'}, $${p.price || 0})`).join(', ')}${brands.length > 0 ? `\nBrands worn: ${brands.join(', ')}` : ''}`
         : 'No outfit picked yet';
       const moodContext = outfitScore?.narrative_mood || 'neutral';
-      const financialContext = autoData.payment_amount ? `Paid event: $${autoData.payment_amount}` : `Costs ${eventData.cost_coins || 0} coins`;
+      const dressCode = eventData.dress_code ? `Dress code: ${eventData.dress_code}` : '';
+      const financialContext = [
+        autoData.payment_amount ? `Paid event: $${autoData.payment_amount}` : `Costs ${eventData.cost_coins || 0} coins`,
+        dressCode,
+      ].filter(Boolean).join('\n');
 
       const response = await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
@@ -480,7 +505,7 @@ Return ONLY JSON.` }],
         hostProfile = rows?.[0] || null;
       }
     } catch { /* non-blocking */ }
-    socialTasks = buildSocialTasks(eventType, hostProfile);
+    socialTasks = buildSocialTasks(eventType, hostProfile, outfitPieces);
   }
 
   // Wardrobe tasks (the standard 7 slots)

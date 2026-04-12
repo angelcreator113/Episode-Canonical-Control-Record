@@ -34,8 +34,8 @@ const EVENT_TYPES = ['invite', 'upgrade', 'guest', 'fail_test', 'deliverable', '
 const BIAS_OPTIONS = ['balanced', 'glam', 'cozy', 'couture', 'trendy', 'romantic'];
 const WARDROBE_TIER_COLORS = { basic: '#94a3b8', mid: '#6366f1', luxury: '#eab308', elite: '#ec4899' };
 const WARDROBE_TIER_ICONS = { basic: '👟', mid: '👠', luxury: '💎', elite: '👑' };
-const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear'];
-const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessory: '🎀', jewelry: '💍', bag: '👜', outerwear: '🧥' };
+const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'];
+const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessory: '🎀', jewelry: '💍', bag: '👜', outerwear: '🧥', perfume: '🌸' };
 
 const EMPTY_EVENT = {
   name: '', event_type: 'invite', host: '', host_brand: '', description: '',
@@ -3111,6 +3111,26 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       Mark Ready
                     </button>
                   )}
+                  {md.used_in_episode_id && md.status !== 'draft' && (
+                    <button onClick={async () => {
+                      if (!window.confirm(`Complete "${md.name}"?\n\nThis will:\n• Evaluate the episode (outfit + event + character state)\n• Apply social task bonuses (reputation, influence)\n• Finalize all financial transactions\n• Update Lala's character stats\n• Mark event as filmed`)) return;
+                      try {
+                        const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/complete`);
+                        if (res.data.success) {
+                          const d = res.data.data;
+                          if (d.already_completed) {
+                            setToast(`Already completed — ${d.evaluation?.tier?.toUpperCase()} (${d.evaluation?.score}/100)`);
+                          } else {
+                            setToast(`${d.evaluation.tier.toUpperCase()} (${d.evaluation.score}/100) — ${d.evaluation.narrative}`);
+                            setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'filmed' } : ev));
+                            setEventDetailModal(prev => prev ? { ...prev, status: 'filmed' } : prev);
+                          }
+                        }
+                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                    }} style={{ padding: '6px 20px', borderRadius: 8, border: '2px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      👑 Complete Episode
+                    </button>
+                  )}
                   <div style={{ flex: 1 }} />
                   <button onClick={async () => {
                     const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id','venue_name','venue_address','event_date','event_time'];
@@ -3665,15 +3685,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           setWardrobeForm({
             name: item.name || '',
             description: item.description || '',
-            itemType: item.itemType || item.item_type || '',
+            itemType: item.clothing_category || item.itemType || item.item_type || '',
             color: item.color || '',
-            defaultSeason: item.defaultSeason || item.default_season || '',
-            defaultOccasion: item.defaultOccasion || item.default_occasion || '',
-            defaultCharacter: item.defaultCharacter || item.default_character || '',
-            vendor: item.vendor || '',
+            defaultSeason: item.season || item.defaultSeason || item.default_season || '',
+            defaultOccasion: item.occasion || item.defaultOccasion || item.default_occasion || '',
+            defaultCharacter: item.character || item.defaultCharacter || item.default_character || 'Lala',
+            vendor: item.brand || item.vendor || '',
             price: item.price || '',
-            website: item.website || '',
-            tags: Array.isArray(item.tags) ? item.tags.join(', ') : '',
+            website: item.website || item.purchase_link || '',
+            tags: Array.isArray(item.tags) ? item.tags.join(', ') : (typeof item.tags === 'string' ? item.tags : ''),
           });
         };
 
@@ -3798,8 +3818,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <label style={S.fLabel}>Type</label>
                     <select value={wf.itemType} onChange={e => setWf('itemType', e.target.value)} style={S.sel}>
                       <option value="">Select...</option>
-                      {['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear'].map(c => (
-                        <option key={c} value={c}>{c}</option>
+                      {['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'].map(c => (
+                        <option key={c} value={c}>{CAT_ICONS[c] || '🏷️'} {c}</option>
                       ))}
                     </select>
                   </div>
@@ -3858,6 +3878,48 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button onClick={async (e) => {
+                    const btn = e.currentTarget;
+                    btn.disabled = true;
+                    btn.textContent = '⏳ Enhancing...';
+                    try {
+                      const imgUrl = editingWardrobeItem.s3_url_processed || editingWardrobeItem.s3_url || editingWardrobeItem.thumbnail_url;
+                      if (!imgUrl) { setToast('No image to analyze'); btn.disabled = false; btn.textContent = '✨ AI Enhance'; return; }
+                      // Download image and send to analyzer
+                      const imgRes = await fetch(imgUrl);
+                      const blob = await imgRes.blob();
+                      const fd = new FormData();
+                      fd.append('image', blob, 'wardrobe-item.jpg');
+                      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+                      const res = await fetch('/api/v1/wardrobe-library/analyze-image', { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+                      const data = await res.json();
+                      if (data.success && data.data) {
+                        const ai = data.data;
+                        const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
+                        // Only fill empty fields
+                        setWardrobeForm(prev => ({
+                          ...prev,
+                          name: prev.name || ai.name || '',
+                          itemType: prev.itemType || catMap[ai.item_type?.toLowerCase()] || '',
+                          color: prev.color || ai.color || '',
+                          vendor: prev.vendor || ai.brand_guess || '',
+                          price: prev.price || (ai.price_estimate ? parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')) || '' : ''),
+                          description: prev.description || ai.description || '',
+                          defaultSeason: prev.defaultSeason || ai.season || '',
+                          defaultOccasion: prev.defaultOccasion || ai.occasion || '',
+                          tags: prev.tags || (ai.aesthetic_tags || []).join(', '),
+                          defaultCharacter: prev.defaultCharacter || 'Lala',
+                        }));
+                        const filled = [!wf.description && ai.description ? 'description' : null, !wf.defaultSeason && ai.season ? 'season' : null, !wf.defaultOccasion && ai.occasion ? 'occasion' : null, !wf.tags && ai.aesthetic_tags?.length ? 'tags' : null].filter(Boolean);
+                        setToast(filled.length > 0 ? `AI filled: ${filled.join(', ')}` : 'All fields already filled');
+                      }
+                    } catch (err) { setToast('AI enhance failed: ' + err.message); }
+                    btn.disabled = false;
+                    btn.textContent = '✨ AI Enhance';
+                  }} style={{ ...S.secBtn, background: '#FAF7F0', borderColor: '#D4AF37', color: '#B8962E' }}>
+                    ✨ AI Enhance
+                  </button>
+                  <div style={{ flex: 1 }} />
                   <button onClick={() => setEditingWardrobeItem(null)} style={S.secBtn}>Cancel</button>
                   <button onClick={saveWardrobeItem} disabled={savingWardrobe} style={S.primaryBtn}>
                     {savingWardrobe ? 'Saving...' : 'Save Changes'}
@@ -3992,10 +4054,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         const data = await res.json();
                         if (data.success && data.data) {
                           const ai = data.data;
-                          const catMap = { dress: 'Dresses', top: 'Tops', bottom: 'Bottoms', shoes: 'Shoes', accessory: 'Accessories', jewelry: 'Jewelry', bag: 'Accessories', outerwear: 'Outerwear', skirt: 'Bottoms', pants: 'Bottoms', shirt: 'Tops', blouse: 'Tops' };
+                          const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
                           let aiPrice = '';
                           if (ai.price_estimate) { const n = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')); aiPrice = n && n >= 150 ? n.toFixed(2) : '150.00'; }
-                          setWardrobeUploadForm(prev => ({ ...prev, name: ai.name || prev.name, clothingCategory: catMap[ai.item_type?.toLowerCase()] || prev.clothingCategory, color: ai.color || prev.color, brand: ai.brand_guess || prev.brand, price: aiPrice || prev.price }));
+                          setWardrobeUploadForm(prev => ({
+                            ...prev,
+                            name: ai.name || prev.name,
+                            clothingCategory: catMap[ai.item_type?.toLowerCase()] || prev.clothingCategory,
+                            color: ai.color || prev.color,
+                            brand: ai.brand_guess || prev.brand,
+                            price: aiPrice || prev.price,
+                            description: ai.description || prev.description || '',
+                            season: ai.season || prev.season || '',
+                            occasion: ai.occasion || prev.occasion || '',
+                            tags: (ai.aesthetic_tags || []).join(', ') || prev.tags || '',
+                            tier: ai.tier || prev.tier || '',
+                            character: 'Lala',
+                          }));
                         }
                       } catch (err) { console.error('Analyze failed:', err); }
                       setWardrobeAnalyzing(false);
@@ -4010,14 +4085,18 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>name *</label><input value={wardrobeUploadForm.name} onChange={e => setWardrobeUploadForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Floral Mini Dress" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label><input value={wardrobeUploadForm.brand} onChange={e => setWardrobeUploadForm(p => ({ ...p, brand: e.target.value }))} placeholder="e.g., Zara" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label><select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Select...</option>{['Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Accessories', 'Jewelry'].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label><select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Select...</option>{['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'].map(c => <option key={c} value={c}>{CAT_ICONS[c] || '🏷️'} {c}</option>)}</select></div>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>color</label><input value={wardrobeUploadForm.color} onChange={e => setWardrobeUploadForm(p => ({ ...p, color: e.target.value }))} placeholder="e.g., blush pink" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tier</label><select value={wardrobeUploadForm.tier || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tier: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Auto</option>{['basic', 'mid', 'luxury', 'elite'].map(t => <option key={t} value={t}>{WARDROBE_TIER_ICONS[t]} {t}</option>)}</select></div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>price</label><input type="number" value={wardrobeUploadForm.price} onChange={e => setWardrobeUploadForm(p => ({ ...p, price: e.target.value }))} placeholder="650.00" step="0.01" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>size</label><input value={wardrobeUploadForm.size} onChange={e => setWardrobeUploadForm(p => ({ ...p, size: e.target.value }))} placeholder="M" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>season</label><select value={wardrobeUploadForm.season || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, season: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Any</option>{['spring', 'summer', 'fall', 'winter', 'all-season'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>occasion</label><input value={wardrobeUploadForm.occasion || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, occasion: e.target.value }))} placeholder="gala, casual..." style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
                     </div>
+                    <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>description</label><textarea value={wardrobeUploadForm.description || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, description: e.target.value }))} placeholder="Material, style, fit, notable details..." rows={2} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa', resize: 'vertical', boxSizing: 'border-box' }} /></div>
+                    <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tags (comma-separated)</label><input value={wardrobeUploadForm.tags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tags: e.target.value }))} placeholder="elegant, evening, silk" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
                   </div>
 
                   {/* Actions */}
@@ -4035,6 +4114,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         if (wardrobeUploadForm.price) fd.append('price', wardrobeUploadForm.price);
                         if (wardrobeUploadForm.color) fd.append('color', wardrobeUploadForm.color);
                         if (wardrobeUploadForm.size) fd.append('size', wardrobeUploadForm.size);
+                        if (wardrobeUploadForm.description) fd.append('description', wardrobeUploadForm.description);
+                        if (wardrobeUploadForm.season) fd.append('season', wardrobeUploadForm.season);
+                        if (wardrobeUploadForm.occasion) fd.append('occasion', wardrobeUploadForm.occasion);
+                        if (wardrobeUploadForm.tags) fd.append('tags', wardrobeUploadForm.tags);
+                        if (wardrobeUploadForm.tier) fd.append('tier', wardrobeUploadForm.tier);
                         fd.append('showId', showId);
                         const res = await fetch('/api/v1/wardrobe', { method: 'POST', body: fd });
                         if (res.ok) {

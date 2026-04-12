@@ -100,9 +100,24 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
     ? `Financial: ${script.financial_context.pressure_level} ($${script.financial_context.balance} balance)`
     : '';
 
-  const wardrobeContext = script?.wardrobe_locked?.length > 0
-    ? `Outfit: ${script.wardrobe_locked.map(w => w.name).join(', ')}`
-    : '';
+  // Build rich wardrobe context — outfit details, brands, tiers, cost for realistic feed reactions
+  let wardrobeContext = '';
+  if (script?.wardrobe_locked?.length > 0) {
+    const pieces = script.wardrobe_locked;
+    const totalCost = pieces.reduce((s, w) => s + (parseFloat(w.price) || 0), 0);
+    const brands = [...new Set(pieces.map(w => w.brand).filter(Boolean))];
+    const tiers = [...new Set(pieces.map(w => w.tier).filter(Boolean))];
+    const styleNote = pieces[0]?.description ? `\n  Style: ${pieces[0].description.slice(0, 100)}` : '';
+    wardrobeContext = `LALA'S OUTFIT (${pieces.length} pieces, ~$${totalCost} total):
+${pieces.map(w => `  - ${w.name} (${w.clothing_category || 'piece'}${w.brand ? `, ${w.brand}` : ''}${w.tier ? `, ${w.tier} tier` : ''}${w.price ? `, $${w.price}` : ''})`).join('\n')}
+${brands.length > 0 ? `  Brands: ${brands.join(', ')}` : ''}
+${tiers.includes('elite') ? '  → She came to KILL. Elite-tier outfit — expect jealousy, compliments, and "who styled her?" posts.' : tiers.includes('luxury') ? '  → Luxury look — creators will notice the pieces and comment on her taste.' : '  → Accessible look — relatable, followers can actually shop this.'}${styleNote}`;
+  } else if (event?.outfit_pieces) {
+    let outfitPieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
+    if (outfitPieces?.length > 0) {
+      wardrobeContext = `LALA'S OUTFIT: ${outfitPieces.map(p => `${p.name}${p.brand ? ` (${p.brand})` : ''}`).join(', ')}`;
+    }
+  }
 
   const scriptSummary = script?.script_text
     ? script.script_text.slice(0, 800)
@@ -149,6 +164,8 @@ Generate 6-10 feed posts that appear in the timeline after this episode. Mix of:
 6. **Brand content** — if there was a brand involved, they might post about it
 7. **Thread starters** — posts designed to spark reply chains and drama threads
 8. **Viral contenders** — at least one post with breakout potential (high engagement, shareable hook)
+
+IMPORTANT: If Lala's outfit is described above, REFERENCE SPECIFIC PIECES by name in posts. Characters should comment on what she wore ("the corset dress was EVERYTHING"), tag brands, compare outfits, or shade her choices. The outfit drives feed reactions.
 
 For each post, return JSON array:
 [{

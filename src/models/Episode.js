@@ -136,6 +136,12 @@ module.exports = (sequelize) => {
         field: 'formula_version',
         comment: 'Version of the scoring formula used',
       },
+      distribution_metadata: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'distribution_metadata',
+        comment: 'Per-platform distribution: titles, descriptions, hashtags, schedule per platform',
+      },
       browse_pool_json: {
         type: DataTypes.JSONB,
         allowNull: true,

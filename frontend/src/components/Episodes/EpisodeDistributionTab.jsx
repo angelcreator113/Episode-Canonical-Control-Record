@@ -162,6 +162,43 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
             <span className="unsaved-indicator">● Unsaved changes</span>
           )}
           <button
+            className="btn-generate"
+            onClick={async (e) => {
+              const btn = e.currentTarget;
+              btn.disabled = true;
+              btn.textContent = '⏳ Generating...';
+              try {
+                const showId = episode?.show_id || episode?.showId;
+                const res = await fetch(`/api/v1/world/${showId}/episodes/${episode.id}/generate-distribution`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (data.success && data.data?.platforms) {
+                  // Merge generated data into current state
+                  const generated = data.data.platforms;
+                  setDistributionData(prev => {
+                    const merged = { ...prev };
+                    for (const [platform, content] of Object.entries(generated)) {
+                      merged[platform] = { ...merged[platform], ...content, enabled: true };
+                    }
+                    return merged;
+                  });
+                  setHasChanges(true);
+                  alert(`Generated for ${Object.keys(generated).length} platforms from episode data. Review and save.`);
+                } else {
+                  alert(data.error || 'Generation failed');
+                }
+              } catch (err) { alert('Failed: ' + err.message); }
+              btn.disabled = false;
+              btn.textContent = '✨ Generate from Episode';
+            }}
+            style={{ marginRight: 8, padding: '8px 16px', borderRadius: 8, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+          >
+            ✨ Generate from Episode
+          </button>
+          <button
             className="btn-save"
             onClick={handleSave}
             disabled={!hasChanges}

@@ -2359,7 +2359,7 @@ router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', opti
             );
             hostProfile = rows?.[0] || null;
           }
-          socialTasks = buildSocialTasks(event.event_type || 'invite', hostProfile);
+          socialTasks = buildSocialTasks(event.event_type || 'invite', hostProfile, outfitPieces);
         } catch { socialTasks = []; }
       }
       tasks = socialTasks;
@@ -2719,6 +2719,130 @@ router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', option
 
     return res.json({ success: true, data, count: data.length });
   } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// DISTRIBUTION — platform-specific descriptions, hashtags, scheduling
+// ═══════════════════════════════════════════════════════════════════════
+
+// POST /world/:showId/episodes/:episodeId/generate-distribution
+router.post('/world/:showId/episodes/:episodeId/generate-distribution', optionalAuth, async (req, res) => {
+  try {
+    const { showId, episodeId } = req.params;
+    const { platforms } = req.body; // optional: ['youtube', 'tiktok', 'instagram', 'facebook']
+    const models = req.app?.get?.('models') || require('../models');
+    const { generateDistribution } = require('../services/distributionService');
+
+    const result = await generateDistribution(episodeId, showId, models.sequelize, { platforms });
+
+    return res.json({
+      success: true,
+      message: `Distribution generated for ${Object.keys(result.platforms).length} platforms`,
+      data: result,
+    });
+  } catch (err) {
+    console.error('[Distribution] Generate error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/:showId/episodes/:episodeId/distribution
+router.get('/world/:showId/episodes/:episodeId/distribution', optionalAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+
+    const [episode] = await models.sequelize.query(
+      `SELECT distribution_metadata FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { episodeId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+
+    let metadata = episode?.distribution_metadata;
+    if (typeof metadata === 'string') try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+
+    return res.json({ success: true, data: metadata || {} });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /world/:showId/episodes/:episodeId/distribution
+router.put('/world/:showId/episodes/:episodeId/distribution', optionalAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const { distribution_metadata } = req.body;
+    const models = req.app?.get?.('models') || require('../models');
+
+    await models.sequelize.query(
+      `UPDATE episodes SET distribution_metadata = :metadata, updated_at = NOW() WHERE id = :episodeId`,
+      { replacements: { metadata: JSON.stringify(distribution_metadata), episodeId } }
+    );
+
+    return res.json({ success: true, message: 'Distribution metadata saved' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /world/:showId/distribution-defaults — save show-level platform config
+router.put('/world/:showId/distribution-defaults', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { distribution_defaults } = req.body;
+    const models = req.app?.get?.('models') || require('../models');
+    const { saveShowDefaults } = require('../services/distributionService');
+
+    const saved = await saveShowDefaults(showId, distribution_defaults, models.sequelize);
+    return res.json({ success: true, data: saved, message: 'Show distribution defaults saved' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/:showId/distribution-defaults
+router.get('/world/:showId/distribution-defaults', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+
+    const [show] = await models.sequelize.query(
+      `SELECT distribution_defaults FROM shows WHERE id = :showId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
+    );
+
+    let defaults = show?.distribution_defaults;
+    if (typeof defaults === 'string') try { defaults = JSON.parse(defaults); } catch { defaults = {}; }
+
+    return res.json({ success: true, data: defaults || {} });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// UNIFIED EPISODE COMPLETION — evaluate + financials + social + wardrobe in one
+// ═══════════════════════════════════════════════════════════════════════
+
+// POST /world/:showId/episodes/:episodeId/complete
+router.post('/world/:showId/episodes/:episodeId/complete', optionalAuth, async (req, res) => {
+  try {
+    const { showId, episodeId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { completeEpisode } = require('../services/episodeCompletionService');
+
+    const result = await completeEpisode(episodeId, showId, models.sequelize);
+
+    return res.json({
+      success: true,
+      message: result.already_completed
+        ? 'Episode already completed'
+        : `${result.evaluation.tier.toUpperCase()} (${result.evaluation.score}/100) — ${result.transactions} transactions, ${result.social_tasks?.completed || 0} social tasks`,
+      data: result,
+    });
+  } catch (err) {
+    console.error('[CompleteEpisode] Error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
