@@ -204,9 +204,9 @@ module.exports = {
 
       const where = { deleted_at: null };
 
-      // Filter by show
+      // Filter by show — include items belonging to this show OR unscoped (null show_id)
       if (show_id) {
-        where.show_id = show_id;
+        where.show_id = { [Op.or]: [show_id, null] };
       }
 
       // Filter by character
