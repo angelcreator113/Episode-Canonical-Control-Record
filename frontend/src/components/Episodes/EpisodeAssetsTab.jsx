@@ -95,7 +95,9 @@ function EpisodeAssetsTab({ episode, show }) {
         {
           id: 'venue', icon: '📍', name: 'Venue Images',
           status: event?.scene_set_id ? 'approved' : event ? 'missing' : 'missing',
-          detail: event?.scene_set_id ? `Scene set linked` : 'Generate venue from event panel',
+          detail: event?.scene_set_id
+            ? `Scene set linked${event?.video_clip_url ? ' + video' : ''}`
+            : 'Generate venue from event panel',
           action: { label: 'Scene Library', url: `/shows/${showId}/scene-library` },
         },
         {
