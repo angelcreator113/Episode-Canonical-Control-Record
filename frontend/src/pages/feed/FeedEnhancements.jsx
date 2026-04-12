@@ -194,6 +194,28 @@ Make reactions feel real — jealousy, aspiration, self-comparison, motivation. 
 
 // ─── 3. EVENT INVITE PREVIEW ────────────────────────────────────────────────
 
+const INVITATION_TYPES = {
+  invite:     { label: 'Social Invite', icon: '🥂', color: '#B8962E', bg: '#faf5ea' },
+  brand_deal: { label: 'Brand Deal', icon: '🤝', color: '#6366f1', bg: '#eef2ff' },
+  upgrade:    { label: 'Upgrade', icon: '⭐', color: '#22c55e', bg: '#f0fdf4' },
+  guest:      { label: 'Guest List', icon: '💌', color: '#ec4899', bg: '#fdf2f8' },
+  fail_test:  { label: 'Challenge', icon: '🔥', color: '#ef4444', bg: '#fef2f2' },
+  deliverable:{ label: 'Deliverable', icon: '📋', color: '#0ea5e9', bg: '#f0f9ff' },
+};
+
+// Map event_type + opportunity_type to a viewer-friendly invitation category
+function getInvitationType(event) {
+  const etype = event.event_type || 'invite';
+  const auto = event.canon_consequences?.automation || {};
+  const oppType = auto.opportunity_type || '';
+
+  if (oppType === 'runway' || oppType === 'casting_call' || oppType === 'editorial') return { label: 'Modeling Gig', icon: '👗', color: '#B8962E', bg: '#faf5ea' };
+  if (oppType === 'podcast' || oppType === 'interview') return { label: 'Press Invite', icon: '🎙️', color: '#8b5cf6', bg: '#f5f3ff' };
+  if (oppType === 'award_show') return { label: 'Award Show', icon: '🏆', color: '#B8962E', bg: '#faf5ea' };
+  if (etype === 'brand_deal' || oppType === 'brand_deal' || oppType === 'campaign' || oppType === 'ambassador') return INVITATION_TYPES.brand_deal;
+  return INVITATION_TYPES[etype] || INVITATION_TYPES.invite;
+}
+
 export function EventInvitePreview({ event, hostProfile }) {
   if (!event) return null;
   const auto = event.canon_consequences?.automation || {};
@@ -202,6 +224,7 @@ export function EventInvitePreview({ event, hostProfile }) {
   const motivation = auto.follow_motivation || host.follow_motivation;
   const hostName = auto.host_display_name || event.host || 'Someone';
   const venueName = auto.venue_name || event.venue_name || '';
+  const inviteType = getInvitationType(event);
 
   // Script lines based on excitement — these go to the voice actor, not on screen
   const SCRIPT_LINES = {
@@ -227,12 +250,15 @@ export function EventInvitePreview({ event, hostProfile }) {
 
   return (
     <div style={{ maxWidth: 380, margin: '0 auto' }}>
-      {/* On-Screen Notification Overlay — bright, branded, what the viewer sees */}
+      {/* On-Screen Notification Overlay — what the viewer sees when mail icon is tapped */}
       <div style={{ background: 'linear-gradient(135deg, #FAF7F0, #fff8e7)', borderRadius: 16, padding: '14px 18px', marginBottom: 12, boxShadow: '0 4px 20px rgba(184, 150, 46, 0.15)', border: '2px solid #B8962E30' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #B8962E, #daa520)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, boxShadow: '0 2px 8px rgba(184, 150, 46, 0.3)' }}>💌</div>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${inviteType.color}, ${inviteType.color}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, boxShadow: `0 2px 8px ${inviteType.color}40` }}>{inviteType.icon}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, color: '#B8962E', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>New Invitation</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: inviteType.color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{inviteType.label}</span>
+              <span style={{ fontSize: 8, padding: '1px 6px', borderRadius: 4, background: inviteType.bg, color: inviteType.color, fontWeight: 600 }}>UI.OVERLAY.INVITATION</span>
+            </div>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.3, marginBottom: 4 }}>{event.name}</div>
             <div style={{ fontSize: 12, color: '#666', lineHeight: 1.4 }}>
               Hosted by <strong style={{ color: '#1a1a2e' }}>{hostName}</strong>
@@ -243,10 +269,6 @@ export function EventInvitePreview({ event, hostProfile }) {
               {event.prestige && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>Prestige {event.prestige}</span>}
             </div>
           </div>
-        </div>
-        {/* Tap hint */}
-        <div style={{ textAlign: 'center', marginTop: 10 }}>
-          <span style={{ fontSize: 9, color: '#B8962E80', fontStyle: 'italic' }}>JustAWoman taps to open invitation</span>
         </div>
       </div>
 
@@ -272,7 +294,7 @@ export function EventInvitePreview({ event, hostProfile }) {
 
       {/* Flow indicator */}
       <div style={{ textAlign: 'center', padding: '8px 0', color: '#B8962E', fontSize: 11 }}>
-        Notification → <strong>Voice Icon</strong> (Lala speaks) → <strong>Tap</strong> → Invitation Opens
+        <strong>Mail Icon</strong> → <strong>Voice Icon</strong> (Lala speaks) → <strong>Tap</strong> → <strong>Invitation Opens</strong> (UI.OVERLAY.INVITATION)
       </div>
     </div>
   );

@@ -108,12 +108,29 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
     ? script.script_text.slice(0, 800)
     : episode.description || '';
 
+  // Load arc context — what phase we're in affects feed tone
+  let arcContext = '';
+  try {
+    const { getArcContext } = require('./arcProgressionService');
+    const arc = await getArcContext(showId, { sequelize: models.sequelize });
+    if (arc) {
+      arcContext = `\nSEASON CONTEXT:
+Phase: ${arc.current_phase.title} — "${arc.current_phase.tagline}"
+Emotional Temperature: ${arc.emotional_temperature}
+Feed Tone: ${arc.feed_behavior?.feed_tone || 'neutral'}
+Follow Bias: ${arc.feed_behavior?.follow_bias || 'balanced'}`;
+      if (arc.narrative_debt?.length > 0) {
+        arcContext += `\nNarrative Debt (emotional weight Lala carries): ${arc.narrative_debt.map(d => d.weight).join(' ')}`;
+      }
+    }
+  } catch { /* arc system not available — continue without */ }
+
   const prompt = `You are generating social media feed posts that appear AFTER an episode of "Styling Adventures with Lala."
 
 EPISODE: ${episode.title || `Episode ${episode.episode_number}`}
 ${eventContext}
 ${financialContext}
-${wardrobeContext}
+${wardrobeContext}${arcContext}
 
 WHAT HAPPENED (script excerpt):
 ${scriptSummary}

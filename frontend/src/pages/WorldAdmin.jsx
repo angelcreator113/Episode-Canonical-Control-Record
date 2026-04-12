@@ -78,6 +78,7 @@ const EVENT_STATUS_CONFIG = {
 
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
+  { key: 'season', icon: '📖', label: 'Season' },
   { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
   { key: 'feed', icon: '👥', label: "Lala's Feed" },
   { key: 'feed-events', icon: '🎭', label: 'Feed Events' },
@@ -1003,6 +1004,11 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
         </div>
+      )}
+
+      {/* ════════════════════════ SEASON ════════════════════════ */}
+      {activeTab === 'season' && (
+        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
@@ -4216,6 +4222,367 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 }
 
 // ─── STYLES ───
+// ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
+function SeasonTab({ showId, api, S, episodes, setToast }) {
+  const [arc, setArc] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
+  const [extending, setExtending] = useState(false);
+  const [warning, setWarning] = useState(null);
+  const [goals, setGoals] = useState([]);
+  const [rhythm, setRhythm] = useState(null);
+
+  const loadArc = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/api/v1/world/${showId}/arc`);
+      setArc(r.data.arc);
+    } catch { setArc(null); }
+
+    try {
+      const r = await api.get(`/api/v1/world/${showId}/goals?status=active`);
+      setGoals(r.data.goals || []);
+    } catch { /* skip */ }
+
+    try {
+      const r = await api.get(`/api/v1/season-rhythm/season-health/${showId}`);
+      setRhythm(r.data);
+    } catch { /* skip */ }
+
+    setLoading(false);
+  }, [showId]);
+
+  useEffect(() => { loadArc(); }, [loadArc]);
+
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      await api.post(`/api/v1/world/${showId}/arc/seed`);
+      await loadArc();
+      if (setToast) setToast('Season seeded');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setSeeding(false);
+  };
+
+  const handleAdvance = async () => {
+    setAdvancing(true);
+    try {
+      const r = await api.post(`/api/v1/world/${showId}/arc/advance`);
+      if (r.data.data?.needs_confirmation) {
+        setWarning(r.data.data);
+        setAdvancing(false);
+        return;
+      }
+      setWarning(null);
+      await loadArc();
+      if (setToast) setToast('Phase advanced');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setAdvancing(false);
+  };
+
+  const handleConfirmAdvance = async () => {
+    setAdvancing(true);
+    try {
+      await api.post(`/api/v1/world/${showId}/arc/advance/confirm`);
+      setWarning(null);
+      await loadArc();
+      if (setToast) setToast('Phase advanced (with narrative debt)');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setAdvancing(false);
+  };
+
+  const handleExtend = async () => {
+    setExtending(true);
+    try {
+      await api.post(`/api/v1/world/${showId}/arc/extend`, { extend_by: 2, reason: 'Showrunner extension' });
+      await loadArc();
+      if (setToast) setToast('Phase extended by 2 episodes');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message);
+    }
+    setExtending(false);
+  };
+
+  if (loading) return <div style={S.center}>Loading season data...</div>;
+
+  // No arc seeded yet
+  if (!arc) return (
+    <div style={S.content}>
+      <div style={{ ...S.card, textAlign: 'center', padding: 40 }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>📖</div>
+        <h2 style={{ ...S.cardTitle, margin: '0 0 8px' }}>No Season Set Up Yet</h2>
+        <p style={S.muted}>Seed Season 1 to set up the arc structure, phases, and career goal activation.</p>
+        <p style={{ ...S.muted, marginBottom: 20 }}>
+          Season 1: <strong>Soft Luxury Ascension</strong> — 24 episodes, 3 phases
+        </p>
+        <button onClick={handleSeed} disabled={seeding} style={S.primaryBtn}>
+          {seeding ? 'Seeding...' : 'Seed Season 1'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const phases = arc.phases || [];
+  const currentPhase = phases.find(p => p.phase === arc.current_phase) || phases[0];
+  const debt = arc.narrative_debt || [];
+  const log = arc.progression_log || [];
+
+  const TEMP_CONFIG = {
+    unstoppable: { color: '#B8962E', bg: '#faf5ea', label: 'Unstoppable' },
+    confident:   { color: '#22c55e', bg: '#f0fdf4', label: 'Confident' },
+    rising:      { color: '#6366f1', bg: '#eef2ff', label: 'Rising' },
+    anxious:     { color: '#f59e0b', bg: '#fffbeb', label: 'Anxious' },
+    desperate:   { color: '#ef4444', bg: '#fef2f2', label: 'Desperate' },
+    broken:      { color: '#dc2626', bg: '#fef2f2', label: 'Broken' },
+  };
+  const tempCfg = TEMP_CONFIG[arc.emotional_temperature] || TEMP_CONFIG.rising;
+
+  const PHASE_STATUS_COLORS = {
+    active: { bg: '#f0fdf4', color: '#22c55e', border: '#bbf7d0' },
+    completed: { bg: '#f8fafc', color: '#94a3b8', border: '#e2e8f0' },
+    upcoming: { bg: '#faf5ea', color: '#B8962E', border: 'rgba(184,150,46,0.2)' },
+  };
+
+  // Goals grouped by phase
+  const phaseGoals = (phase) => goals.filter(g => {
+    const range = typeof g.episode_range === 'string' ? JSON.parse(g.episode_range) : g.episode_range;
+    if (!range) return false;
+    return range[0] >= phase.episode_start && range[0] <= phase.episode_end;
+  });
+
+  const completedEpisodes = episodes.filter(e => e.status === 'accepted' || e.status === 'published').length;
+
+  return (
+    <div style={S.content}>
+      {/* Season Header */}
+      <div style={S.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h2 style={{ ...S.cardTitle, margin: '0 0 4px', fontSize: 18 }}>
+              📖 Season 1: {arc.title}
+            </h2>
+            <p style={{ ...S.muted, margin: 0 }}>{arc.tagline}</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: tempCfg.bg, color: tempCfg.color }}>
+              {tempCfg.label}
+            </span>
+            <span style={{ padding: '4px 12px', borderRadius: 8, fontSize: 12, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0' }}>
+              Ep {arc.current_episode || 0} / {arc.episode_end}
+            </span>
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+          <div style={S.statBox}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>{completedEpisodes}</div>
+            <div style={S.statLbl}>Episodes Done</div>
+          </div>
+          <div style={S.statBox}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>{goals.filter(g => g.status === 'completed').length}</div>
+            <div style={S.statLbl}>Goals Hit</div>
+          </div>
+          <div style={S.statBox}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: debt.length > 0 ? '#dc2626' : '#1a1a2e' }}>{debt.length}</div>
+            <div style={S.statLbl}>Narrative Debt</div>
+          </div>
+          <div style={S.statBox}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#B8962E' }}>{arc.current_phase}</div>
+            <div style={S.statLbl}>Current Phase</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Phase Cards */}
+      <div style={{ display: 'grid', gap: 12 }}>
+        {phases.map(phase => {
+          const statusCfg = PHASE_STATUS_COLORS[phase.status] || PHASE_STATUS_COLORS.upcoming;
+          const pGoals = phaseGoals(phase);
+          const isCurrent = phase.phase === arc.current_phase;
+
+          return (
+            <div key={phase.phase} style={{
+              ...S.card,
+              borderColor: isCurrent ? '#B8962E' : statusCfg.border,
+              borderWidth: isCurrent ? 2 : 1,
+              borderStyle: 'solid',
+              background: isCurrent ? '#fffef9' : '#fff',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>
+                    Phase {phase.phase}: {phase.title}
+                    {isCurrent && <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', background: '#f0fdf4', color: '#22c55e', borderRadius: 4, fontWeight: 700 }}>ACTIVE</span>}
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
+                    &ldquo;{phase.tagline}&rdquo; &middot; Episodes {phase.episode_start}-{phase.episode_end}
+                  </p>
+                </div>
+                <span style={{
+                  padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                  background: statusCfg.bg, color: statusCfg.color,
+                }}>{phase.status}</span>
+              </div>
+
+              {/* Emotional arc */}
+              {phase.emotional_arc && (
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+                  <strong>Emotional arc:</strong> {phase.emotional_arc}
+                </div>
+              )}
+
+              {/* Feed behavior */}
+              {phase.feed_behavior && (
+                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10, padding: '6px 10px', background: '#f8fafc', borderRadius: 6 }}>
+                  <strong>Feed:</strong> {phase.feed_behavior.feed_tone || `Follow bias: ${phase.feed_behavior.follow_bias}`}
+                  {phase.feed_behavior.event_prestige_max && <span> &middot; Max prestige: {phase.feed_behavior.event_prestige_max}</span>}
+                </div>
+              )}
+
+              {/* Phase goals */}
+              {pGoals.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: 6 }}>
+                    Goals ({pGoals.filter(g => g.status === 'completed').length}/{pGoals.length} complete)
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {pGoals.map(g => (
+                      <span key={g.id} style={{
+                        padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        background: g.status === 'completed' ? '#f0fdf4' : g.status === 'failed' ? '#fef2f2' : g.status === 'paused' ? '#f8fafc' : '#eef2ff',
+                        color: g.status === 'completed' ? '#16a34a' : g.status === 'failed' ? '#dc2626' : g.status === 'paused' ? '#94a3b8' : '#4338ca',
+                        textDecoration: g.status === 'failed' ? 'line-through' : 'none',
+                      }}>
+                        {g.icon || '🎯'} {g.title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Goal summary for completed phases */}
+              {phase.goal_summary && phase.status === 'completed' && (
+                <div style={{ marginTop: 8, fontSize: 11, color: '#64748b' }}>
+                  Results: {phase.goal_summary.completed} completed, {phase.goal_summary.failed} failed
+                  {phase.goal_summary.carried > 0 && <span style={{ color: '#dc2626' }}>, {phase.goal_summary.carried} carried as debt</span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Phase Controls */}
+      <div style={S.card}>
+        <h3 style={{ ...S.cardTitle, margin: '0 0 12px' }}>Phase Controls</h3>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={handleAdvance} disabled={advancing} style={S.primaryBtn}>
+            {advancing ? 'Advancing...' : `Advance to Phase ${arc.current_phase + 1}`}
+          </button>
+          <button onClick={handleExtend} disabled={extending} style={S.secBtn}>
+            {extending ? 'Extending...' : 'Extend Current Phase (+2 episodes)'}
+          </button>
+        </div>
+        <p style={{ ...S.muted, marginTop: 8, fontSize: 11 }}>
+          Advancing will finalize current phase goals and activate the next phase. You&apos;ll get a warning if goals are incomplete.
+        </p>
+      </div>
+
+      {/* Warning Modal */}
+      {warning && (
+        <div style={{ ...S.card, borderColor: '#f59e0b', borderWidth: 2, borderStyle: 'solid', background: '#fffbeb' }}>
+          <h3 style={{ ...S.cardTitle, margin: '0 0 8px', color: '#92400e' }}>⚠️ Advance Warning</h3>
+          <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 12px', lineHeight: 1.5 }}>
+            {warning.warning}
+          </p>
+          {warning.goal_status?.goals?.filter(g => g.status === 'active' || g.type === 'primary').length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {warning.goal_status.goals.filter(g => g.status !== 'completed').map((g, i) => (
+                <div key={i} style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.7)', borderRadius: 6, marginBottom: 4, fontSize: 12, color: '#92400e' }}>
+                  {g.icon} <strong>{g.title}</strong> — {g.current_value}/{g.target_value} {g.target_metric}
+                  {g.type === 'primary' && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#dc2626' }}>PRIMARY</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          <p style={{ fontSize: 11, color: '#92400e', margin: '0 0 12px' }}>
+            Advancing will mark incomplete goals as <strong>narrative debt</strong> — emotional weight that affects scripts, feed, and events.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={handleConfirmAdvance} disabled={advancing} style={{ ...S.primaryBtn, background: '#f59e0b' }}>
+              {advancing ? 'Advancing...' : 'Advance Anyway'}
+            </button>
+            <button onClick={() => setWarning(null)} style={S.secBtn}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Narrative Debt */}
+      {debt.length > 0 && (
+        <div style={S.card}>
+          <h3 style={{ ...S.cardTitle, margin: '0 0 12px', color: '#dc2626' }}>
+            Narrative Debt ({debt.length})
+          </h3>
+          <p style={{ ...S.muted, marginBottom: 12 }}>
+            Failed goals that carry emotional weight. These feed into AI-generated scripts, feed posts, and event stakes.
+          </p>
+          {debt.map((d, i) => (
+            <div key={i} style={{
+              padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca',
+              borderRadius: 8, marginBottom: 8,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#991b1b', marginBottom: 4 }}>
+                {d.goal_title} <span style={{ fontWeight: 400, fontSize: 11 }}>({d.achieved}/{d.target} {d.target_metric})</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#7f1d1d', fontStyle: 'italic' }}>
+                {d.narrative_weight}
+              </div>
+              <div style={{ fontSize: 10, color: '#b91c1c', marginTop: 4 }}>
+                From Phase: {d.phase} &middot; Affects: {(d.affects || []).join(', ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Progression Log */}
+      {log.length > 0 && (
+        <div style={S.card}>
+          <h3 style={{ ...S.cardTitle, margin: '0 0 12px' }}>Progression Log</h3>
+          {log.slice().reverse().map((entry, i) => (
+            <div key={i} style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+              padding: '8px 0', borderBottom: i < log.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none',
+            }}>
+              <span style={{
+                padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+                background: entry.triggered_by === 'manual' ? '#fef3c7' : '#eef2ff',
+                color: entry.triggered_by === 'manual' ? '#92400e' : '#4338ca',
+                flexShrink: 0,
+              }}>{entry.triggered_by}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: '#1a1a2e' }}>{entry.trigger_reason}</div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                  {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ''}
+                  {entry.goals_carried > 0 && <span style={{ color: '#dc2626' }}> &middot; {entry.goals_carried} goals carried</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const S = {
   page: { maxWidth: 1200, margin: '0 auto', padding: '20px 24px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
   center: { textAlign: 'center', padding: 60, color: '#94a3b8' },
