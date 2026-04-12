@@ -90,6 +90,7 @@ const TABS = [
   ]},
   { key: 'wardrobe', icon: '🎬', label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
+    { key: 'overlays-tab', label: 'UI Overlays' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
     { key: 'goals', label: 'Career Goals' },
   ]},
@@ -148,6 +149,8 @@ function WorldAdmin() {
       'feed-events': ['feed', 'feed-events'],
       'events': ['feed', 'events'],
       'scene-sets': ['wardrobe', 'scene-sets'],
+      'overlays': ['wardrobe', 'overlays-tab'],
+      'overlays-tab': ['wardrobe', 'overlays-tab'],
       'goals': ['wardrobe', 'goals'],
       'wardrobe': ['wardrobe', 'scene-sets'],
       'characters': ['characters', 'characters-list'],
@@ -3866,9 +3869,36 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {sceneSets.length} venue{sceneSets.length !== 1 ? 's' : ''} — exteriors, interiors, and camera angles
               </p>
             </div>
-            <button onClick={() => navigate(`/shows/${showId}/scene-library`)} style={S.primaryBtn}>
-              Open Scene Library →
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={async () => {
+                const name = window.prompt("Homebase name (e.g., Lala's Apartment, The Studio):");
+                if (!name) return;
+                try {
+                  const rooms = ['Living Room', 'Bedroom', 'Closet / Vanity', 'Kitchen', 'Bathroom'];
+                  const res = await api.post(`/api/v1/scene-sets`, {
+                    name, scene_type: 'HOMEBASE', show_id: showId,
+                    canonical_description: `${name} — Lala's home base. Rooms: ${rooms.join(', ')}`,
+                  });
+                  const setId = res.data?.data?.id || res.data?.id;
+                  if (setId) {
+                    for (let i = 0; i < rooms.length; i++) {
+                      await api.post(`/api/v1/scene-sets/${setId}/angles`, {
+                        angle_name: `${name} — ${rooms[i]}`,
+                        angle_label: rooms[i].toUpperCase().replace(/[^A-Z]/g, '_'),
+                        sort_order: i + 1,
+                      }).catch(() => {});
+                    }
+                    setToast(`Homebase "${name}" created with ${rooms.length} rooms`);
+                    loadData();
+                  }
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, background: '#faf5ea', borderColor: '#e8d9b8', color: '#B8962E' }}>
+                🏠 Create Homebase
+              </button>
+              <button onClick={() => navigate(`/shows/${showId}/scene-library`)} style={S.primaryBtn}>
+                Open Scene Library →
+              </button>
+            </div>
           </div>
 
           {sceneSets.length === 0 ? (
@@ -3905,7 +3935,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <div style={{ padding: '10px 14px' }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{ss.name}</div>
                     <div style={{ fontSize: 10, color: '#94a3b8' }}>
-                      {ss.scene_type?.replace(/_/g, ' ')}
+                      {ss.scene_type === 'HOMEBASE' ? '🏠 Homebase' : ss.scene_type?.replace(/_/g, ' ')}
                       {ss.generation_status === 'complete' && <span style={{ marginLeft: 6, color: '#16a34a' }}>✓</span>}
                     </div>
                   </div>
@@ -3913,6 +3943,91 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ════════════════════════ UI OVERLAYS ════════════════════════ */}
+      {activeTab === 'wardrobe' && subTab === 'overlays-tab' && (
+        <div style={S.content}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>UI Overlays</h2>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
+                Show-level frames, icons, and episode overlays
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={async () => {
+                try {
+                  const res = await api.post(`/api/v1/ui-overlays/${showId}/generate-all`);
+                  setToast(res.data?.message || 'Overlay generation started');
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, background: '#faf5ea', borderColor: '#e8d9b8', color: '#B8962E' }}>
+                ✨ Generate All
+              </button>
+              <button onClick={() => navigate(`/shows/${showId}/scene-library?tab=overlays`)} style={S.primaryBtn}>
+                Manage Overlays →
+              </button>
+            </div>
+          </div>
+
+          {/* Overlay Grid */}
+          {(() => {
+            const [overlayData, setOverlayData] = React.useState(null);
+            React.useEffect(() => {
+              api.get(`/api/v1/ui-overlays/${showId}`).then(res => setOverlayData(res.data?.data || [])).catch(() => setOverlayData([]));
+            }, []);
+            if (!overlayData) return <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>Loading overlays...</div>;
+            const generated = overlayData.filter(o => o.url || o.generated || o.asset_id);
+            const missing = overlayData.filter(o => !o.url && !o.generated && !o.asset_id);
+            const pct = overlayData.length > 0 ? Math.round((generated.length / overlayData.length) * 100) : 0;
+            return (
+              <div>
+                {/* Progress */}
+                <div style={{ ...S.card, marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{generated.length}/{overlayData.length} generated</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#B8962E' }}>{pct}%</span>
+                  </div>
+                  <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, #B8962E, #D4AF37)', borderRadius: 3, transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+
+                {/* Generated overlays */}
+                {generated.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Generated ({generated.length})</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {generated.map(o => (
+                        <div key={o.id} style={{ position: 'relative' }}>
+                          <img src={o.url} alt={o.name} style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid #e2e8f0' }}
+                            onError={e => e.target.style.display = 'none'} />
+                          <div style={{ fontSize: 8, color: '#64748b', textAlign: 'center', marginTop: 2, maxWidth: 56, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {o.name?.replace(/ Icon| Screen| Panel/g, '')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Missing overlays */}
+                {missing.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Not Generated ({missing.length})</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {missing.map(o => (
+                        <span key={o.id} style={{ padding: '4px 10px', background: '#f8f8f8', border: '1px dashed #d1d5db', borderRadius: 6, fontSize: 10, color: '#94a3b8' }}>
+                          {o.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
