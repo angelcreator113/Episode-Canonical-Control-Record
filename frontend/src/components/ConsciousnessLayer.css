@@ -44,11 +44,11 @@
   gap: 10px;
   padding: 32px;
   color: var(--cl-ink-dim);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .cl-loading-icon {
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: var(--cl-gold);
   animation: cl-pulse 1.5s ease infinite;
 }
@@ -79,7 +79,7 @@
 }
 
 .cl-header-icon {
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   color: var(--cl-gold);
   line-height: 1;
   margin-top: 2px;
@@ -87,7 +87,7 @@
 
 .cl-title {
   font-family: var(--cl-serif);
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 600;
   color: var(--cl-ink);
   margin: 0 0 2px;
@@ -95,7 +95,7 @@
 }
 
 .cl-subtitle {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--cl-ink-dim);
   margin: 0;
   font-style: italic;
@@ -113,7 +113,7 @@
    ═══════════════════════════════════════ */
 .cl-btn {
   font-family: var(--cl-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.5px;
   padding: 8px 16px;
@@ -184,7 +184,7 @@
   border: 1px solid rgba(212, 58, 42, 0.2);
   color: var(--cl-red);
   border-radius: 4px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   margin-bottom: 16px;
 }
 
@@ -194,7 +194,7 @@
   border: 1px solid rgba(61, 158, 66, 0.2);
   color: var(--cl-green);
   border-radius: 4px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   margin-bottom: 16px;
   animation: cl-fadeIn 0.3s ease;
 }
@@ -215,7 +215,7 @@
 }
 
 .cl-empty-icon {
-  font-size: var(--text-4xl);
+  font-size: var(--text-5xl);
   color: var(--cl-gold);
   opacity: 0.4;
   margin-bottom: 12px;
@@ -223,14 +223,14 @@
 
 .cl-empty h4 {
   font-family: var(--cl-serif);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--cl-ink);
   margin: 0 0 8px;
 }
 
 .cl-empty p {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1.6;
   max-width: 480px;
   margin: 0 auto;
@@ -279,14 +279,14 @@
 }
 
 .cl-card-icon {
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: var(--cl-gold);
   flex-shrink: 0;
 }
 
 .cl-card-title {
   font-family: var(--cl-serif);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--cl-ink);
   margin: 0;
@@ -316,7 +316,7 @@
 
 .cl-field-key {
   font-family: var(--cl-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.8px;
   text-transform: uppercase;
   color: var(--cl-gold-dim);
@@ -324,7 +324,7 @@
 }
 
 .cl-field-val {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--cl-ink);
   line-height: 1.55;
 }
@@ -336,7 +336,7 @@
 }
 
 .cl-field-list li {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--cl-ink);
   line-height: 1.55;
   padding-left: 14px;
@@ -374,7 +374,7 @@
 }
 
 .cl-engine-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--cl-ink-dim);
   line-height: 1.55;
   font-style: italic;
@@ -405,7 +405,7 @@
 }
 
 .cl-inherited-icon {
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   color: var(--cl-violet);
   line-height: 1;
   margin-top: 2px;
@@ -413,14 +413,14 @@
 
 .cl-inherited-title {
   font-family: var(--cl-serif);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--cl-violet);
   margin: 0 0 2px;
 }
 
 .cl-inherited-subtitle {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--cl-ink-dim);
   margin: 0;
   font-style: italic;
@@ -481,13 +481,13 @@
 }
 
 .cl-triggers-icon {
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: var(--cl-gold);
 }
 
 .cl-triggers-title {
   font-family: var(--cl-serif);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--cl-ink);
   margin: 0;
@@ -502,7 +502,7 @@
   text-align: center;
   padding: 24px 16px;
   color: var(--cl-ink-faint);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.6;
   background: var(--cl-surface2);
   border-radius: 6px;
@@ -566,7 +566,7 @@
 
 .cl-trigger-dilemma {
   font-family: var(--cl-serif);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--cl-ink);
   margin: 0 0 10px;
@@ -609,7 +609,7 @@
   align-items: center;
   gap: 8px;
   font-family: var(--cl-serif);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--cl-ink);
   flex: 1;
@@ -627,7 +627,7 @@
 
 .cl-interview-field {
   font-family: var(--cl-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 1px;
   color: var(--cl-gold-dim);
   text-transform: uppercase;
@@ -667,7 +667,7 @@
   max-width: 80%;
   padding: 10px 14px;
   border-radius: 10px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.55;
 }
 
@@ -705,7 +705,7 @@
   flex: 1;
   resize: none;
   font-family: var(--cl-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--cl-ink);
   background: var(--cl-bg);
   border: 1px solid var(--cl-border);

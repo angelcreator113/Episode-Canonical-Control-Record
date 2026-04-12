@@ -135,7 +135,7 @@
 }
 .sw-conversation-title {
   font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 500;
   color: var(--sw-text);
   letter-spacing: 0.02em;
@@ -192,7 +192,7 @@
   max-width: 520px;
   padding: 14px 18px;
   border-radius: 12px;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height: 1.65;
 }
 .sw-message-assistant .sw-message-bubble {
@@ -201,7 +201,7 @@
   color: var(--sw-text);
   border-radius: 4px 12px 12px 12px;
   font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   box-shadow: 0 1px 3px rgba(28, 24, 20, 0.06);
 }
 .sw-message-user .sw-message-bubble {
@@ -209,7 +209,7 @@
   border: 1px solid color-mix(in srgb, var(--sw-gold) 20%, var(--sw-border));
   color: var(--sw-text);
   border-radius: 12px 4px 12px 12px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 /* Typing indicator */
@@ -247,7 +247,7 @@
 .sw-input {
   flex: 1;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1.5;
   padding: 12px 16px;
   background: var(--sw-surface2);
@@ -268,7 +268,7 @@
   border: 1px solid var(--sw-gold);
   background: color-mix(in srgb, var(--sw-gold) 10%, white);
   color: var(--sw-gold);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -290,7 +290,7 @@
 }
 .sw-confirm-prompt {
   font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: var(--sw-text);
   margin-bottom: 14px;
   text-align: center;
@@ -303,7 +303,7 @@
 
 .sw-btn {
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   padding: 10px 20px;
   border-radius: 8px;
@@ -338,7 +338,7 @@
 }
 
 .sw-build-header {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -347,7 +347,7 @@
 }
 
 .sw-build-empty {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--sw-dim);
   text-align: center;
   padding: 40px 20px;
@@ -384,7 +384,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   flex-shrink: 0;
 }
 .sw-build-type-universe     { color: var(--sw-gold); }
@@ -395,7 +395,7 @@
 .sw-build-type-book         { color: var(--sw-gold); }
 
 .sw-build-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--sw-text);
 }
 
@@ -422,14 +422,14 @@
   margin-bottom: 3px;
 }
 .sw-extracted-value {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--sw-text);
   line-height: 1.45;
 }
 .sw-italic {
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-style: italic;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 /* ── Building state ──────────────────────────────────────────────────────────── */
@@ -452,11 +452,11 @@
 @keyframes sw-spin { to { transform: rotate(360deg); } }
 .sw-building-title {
   font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   color: var(--sw-text);
 }
 .sw-building-sub {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--sw-muted);
 }
 
@@ -508,7 +508,7 @@
   align-items: center;
   gap: 10px;
   font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   color: var(--sw-muted);
   font-style: italic;
 }
@@ -532,11 +532,11 @@
   box-shadow: 0 1px 3px rgba(28, 24, 20, 0.04);
 }
 .sw-launcher-cast-name {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--sw-text);
 }
 .sw-launcher-cast-role {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--sw-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -551,7 +551,7 @@
   box-shadow: 0 1px 4px rgba(28, 24, 20, 0.06);
 }
 .sw-launcher-next-label {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -560,13 +560,13 @@
 }
 .sw-launcher-next-action {
   font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: var(--sw-text);
 }
 
 .sw-launcher-btn {
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 700;
   padding: 14px 36px;
   border-radius: 10px;

@@ -12,7 +12,7 @@
 
 .tocp-bookTitle{
   font-family: "Playfair Display", serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-style: italic;
   line-height: 1.25;
   margin-bottom: 4px;
@@ -54,7 +54,7 @@
   min-width: 40px;
   text-align:right;
   font-family: "DM Mono", ui-monospace, monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--panel-accent, #C9A84C);
 }
 
@@ -72,7 +72,7 @@
 
 .tocp-empty{
   font-family: "DM Mono", ui-monospace, monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   letter-spacing: .06em;
   color: var(--panel-sub, rgba(26,21,16,0.5));
 }
@@ -124,7 +124,7 @@
 
 .tocp-title{
   font-family: "Playfair Display", serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-style: italic;
   line-height: 1.25;
   margin-bottom: 4px;
@@ -193,7 +193,7 @@
   }
 
   .tocp-bookTitle {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   .tocp-row {
@@ -202,16 +202,16 @@
   }
 
   .tocp-title {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 
   .tocp-counts {
     gap: 6px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
   }
 
   .tocp-num {
     width: 22px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
   }
 }

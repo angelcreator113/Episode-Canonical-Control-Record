@@ -19,7 +19,7 @@
 
 .studio-header .header-content h1 {
   margin: 0 0 0.375rem 0;
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   font-weight: 700;
   color: #111827;
 }
@@ -27,7 +27,7 @@
 .studio-header .header-content p {
   margin: 0;
   color: #6b7280;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .btn-create-new {
@@ -36,7 +36,7 @@
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
@@ -68,7 +68,7 @@
 .filter-group label {
   font-weight: 600;
   color: #6b7280;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
 }
 
 .filter-tabs-group {
@@ -95,7 +95,7 @@
   background: transparent;
   border-right: 1px solid #e5e7eb;
   cursor: pointer;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 500;
   color: #6b7280;
   transition: all 0.15s;
@@ -140,7 +140,7 @@
   padding: 0 0.875rem;
   border: 1.5px solid #e5e7eb;
   border-radius: 6px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   background: white;
   cursor: pointer;
   transition: border-color 0.2s;
@@ -243,7 +243,7 @@
 }
 
 .identity-name {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: #111827;
   line-height: 1.3;
@@ -253,7 +253,7 @@
 }
 
 .identity-subtitle {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 400;
   color: #6b7280;
   line-height: 1.4;
@@ -318,23 +318,23 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #374151;
 }
 
 .capability-item.capability-primary {
   font-weight: 600;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #111827;
 }
 
 .capability-item.capability-muted {
   color: #6b7280;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .cap-icon {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   flex-shrink: 0;
   opacity: 0.9;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
@@ -360,7 +360,7 @@
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -402,7 +402,7 @@
   color: #667eea;
   border: 1.5px solid #667eea;
   border-radius: 6px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -423,7 +423,7 @@
   color: #6b7280;
   border: none;
   border-radius: 6px;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -495,7 +495,7 @@
   }
 
   .studio-header h1 {
-    font-size: var(--text-xl);
+    font-size: var(--text-2xl);
   }
 
   .template-card {

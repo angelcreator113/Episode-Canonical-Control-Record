@@ -94,7 +94,7 @@
 .wm-back-btn {
   background: none;
   border: none;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: #1C1814;
   cursor: pointer;
   padding: 6px 8px;
@@ -112,7 +112,7 @@
 
 .wm-chapter-title {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   color: #1C1814;
   white-space: nowrap;
@@ -142,7 +142,7 @@
 
 .wm-word-count {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.08em;
   color: rgba(184,150,46,0.72);
   background: rgba(184,150,46,0.06);
@@ -155,7 +155,7 @@
 
 .wm-save-status {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   color: #B8962E;
   min-width: 60px;
@@ -165,7 +165,7 @@
 
 .wm-mode-btn {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.12em;
   color: #1C1814;
   border: 1px solid rgba(28,24,20,0.1);
@@ -197,7 +197,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   color: rgba(28,24,20,0.35);
   transition: all 0.25s ease;
@@ -263,7 +263,7 @@
 
 .wm-toc-header-title {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(28,24,20,0.35);
@@ -305,7 +305,7 @@
 }
 
 .wm-toc-drag {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: rgba(28,24,20,0.15);
   cursor: grab;
   flex-shrink: 0;
@@ -325,7 +325,7 @@
 }
 
 .wm-toc-type-badge {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #C9A84C;
   margin-right: 2px;
   flex-shrink: 0;
@@ -357,7 +357,7 @@
 .wm-toc-title {
   flex: 1;
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #1C1814;
   white-space: nowrap;
   overflow: hidden;
@@ -382,7 +382,7 @@
 .wm-toc-edit-input {
   flex: 1;
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #1C1814;
   background: rgba(255,255,255,0.7);
   border: 1px solid rgba(184,150,46,0.25);
@@ -406,7 +406,7 @@
   border: 1px dashed rgba(28,24,20,0.1);
   border-radius: 6px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   color: rgba(28,24,20,0.28);
   cursor: pointer;
@@ -424,7 +424,7 @@
 .wm-toc-add-input {
   width: 100%;
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #1C1814;
   background: rgba(255,255,255,0.6);
   border: 1px solid rgba(184,150,46,0.25);
@@ -451,7 +451,7 @@
   border: 1px solid rgba(28,24,20,0.08);
   border-radius: 6px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   color: rgba(28,24,20,0.4);
   cursor: pointer;
@@ -471,7 +471,7 @@
 .wm-toc-expand {
   background: none;
   border: none;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(28,24,20,0.2);
   cursor: pointer;
   padding: 2px 3px;
@@ -537,7 +537,7 @@
 }
 .wm-toc-sec-item.is-header .wm-toc-sec-text {
   font-weight: 600;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .wm-toc-sec-item.is-divider {
@@ -611,7 +611,7 @@
 .wm-toc-sec-actions button {
   background: none;
   border: none;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(28,24,20,0.25);
   cursor: pointer;
   padding: 2px 3px;
@@ -715,7 +715,7 @@
 
 .wm-ctx-header-title {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(28,24,20,0.35);
@@ -755,7 +755,7 @@
 }
 
 .wm-ctx-loading {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(28,24,20,0.3);
   animation: wmSpin 1s linear infinite;
   margin-left: auto;
@@ -781,7 +781,7 @@
 
 .wm-ctx-value {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.6;
   color: #1C1814;
   cursor: pointer;
@@ -810,7 +810,7 @@
 .wm-ctx-input {
   width: 100%;
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.5;
   color: #1C1814;
   background: rgba(255,255,255,0.6);
@@ -839,7 +839,7 @@
 }
 .wm-ctx-arc-point {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #1C1814;
   background: rgba(184,150,46,0.05);
   border: 1px solid rgba(184,150,46,0.1);
@@ -858,7 +858,7 @@
 }
 .wm-ctx-arc-arrow {
   color: rgba(184,150,46,0.35);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   flex-shrink: 0;
 }
 
@@ -876,7 +876,7 @@
 }
 .wm-ctx-prev-excerpt {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: rgba(28,24,20,0.45);
   font-style: italic;
@@ -897,7 +897,7 @@
   border: 1px solid rgba(28,24,20,0.08);
   border-radius: 6px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   color: rgba(28,24,20,0.35);
   cursor: pointer;
@@ -933,7 +933,7 @@
   border-color: rgba(184,150,46,0.3);
   background: rgba(184,150,46,0.06);
 }
-.wm-tpl-icon { font-size: var(--text-base); }
+.wm-tpl-icon { font-size: var(--text-lg); }
 .wm-tpl-name {
   font-family: 'DM Mono', monospace;
   font-size: var(--text-2xs);
@@ -1127,7 +1127,7 @@
 }
 .wm-chapter-heading {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: 600;
   color: #1C1814;
   letter-spacing: 0.02em;
@@ -1161,7 +1161,7 @@
 }
 .wm-cs-h2 {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 600;
   color: #1C1814;
   margin: 0;
@@ -1175,7 +1175,7 @@
 }
 .wm-cs-h3 {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 600;
   color: rgba(28,24,20,0.82);
   margin: 0;
@@ -1189,7 +1189,7 @@
 }
 .wm-cs-h4 {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   font-style: italic;
   color: rgba(28,24,20,0.68);
@@ -1212,7 +1212,7 @@
 }
 .wm-cs-body {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: rgba(28,24,20,0.60);
   margin: 0;
   padding: 6px 80px;
@@ -1222,7 +1222,7 @@
 }
 .wm-cs-quote {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: rgba(28,24,20,0.5);
   margin: 0;
   padding: 10px 80px 10px 100px;
@@ -1233,7 +1233,7 @@
 }
 .wm-cs-reflection {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(184,150,46,0.55);
   margin: 6px 80px;
   padding: 8px 14px;
@@ -1259,7 +1259,7 @@
 .wm-cs-divider::before {
   content: '·  ·  ·';
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: rgba(184,150,46,0.30);
   letter-spacing: 0.25em;
 }
@@ -1273,7 +1273,7 @@
   border: none;
   resize: none;
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   line-height: 2.0;
   color: #1C1814;
   caret-color: #B8962E;
@@ -1355,7 +1355,7 @@
   border: 1px solid rgba(184,150,46,0.1);
   color: rgba(184,150,46,0.35);
   font-family: 'Lora', serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
@@ -1428,7 +1428,7 @@
 
 .wm-generating-label {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.14em;
   color: rgba(28,24,20,0.38);
   white-space: nowrap;
@@ -1465,7 +1465,7 @@
 
 .wm-hint-text {
   font-family: 'Lora', serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-style: italic;
   color: rgba(28,24,20,0.5);
   line-height: 1.5;
@@ -1512,7 +1512,7 @@
 .wm-hint-log-close {
   background: none;
   border: none;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: rgba(28,24,20,0.3);
   cursor: pointer;
   padding: 0 2px;
@@ -1551,7 +1551,7 @@
 
 .wm-transcript-text {
   font-family: 'Lora', serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-style: italic;
   color: rgba(28,24,20,0.45);
   max-width: 640px;
@@ -1574,7 +1574,7 @@
 
 .wm-edit-label {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(28,24,20,0.32);
@@ -1593,7 +1593,7 @@
   border: 1px solid rgba(28,24,20,0.08);
   border-radius: 10px;
   font-family: 'Lora', serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-style: italic;
   color: #1C1814;
   resize: none;
@@ -1616,7 +1616,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   flex-shrink: 0;
   transition: background 0.2s, border-color 0.2s;
 }
@@ -1656,7 +1656,7 @@
   text-align: center;
   padding: 8px 16px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.06em;
   color: #B85C38;
   background: rgba(184,92,56,0.06);
@@ -1700,7 +1700,7 @@
   background: rgba(255,255,255,0.25);
   color: rgba(90,74,30,0.7);
   font-family: 'Lora', serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -1752,7 +1752,7 @@
 }
 
 .wm-ai-icon {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height: 1;
 }
 
@@ -1763,7 +1763,7 @@
   text-align: center;
   font-family: 'Lora', Georgia, serif;
   font-style: italic;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(28, 24, 20, 0.35);
   padding: 4px 0 0;
   line-height: 1.6;
@@ -1773,7 +1773,7 @@
   font-weight: 600;
   font-style: normal;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   letter-spacing: 0.04em;
 }
 
@@ -1812,7 +1812,7 @@
   background: rgba(28,24,20,0.03);
   color: rgba(28,24,20,0.45);
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 500;
   letter-spacing: 0.04em;
   cursor: pointer;
@@ -1848,7 +1848,7 @@
   border-radius: 14px;
   color: #5A4A1E;
   font-family: 'Lora', serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-style: italic;
   line-height: 1.6;
   animation: wm-nudge-in 0.35s cubic-bezier(0.4,0,0.2,1);
@@ -1862,7 +1862,7 @@
 }
 
 .wm-nudge-icon {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   flex-shrink: 0;
   margin-top: 1px;
 }
@@ -1873,7 +1873,7 @@
   background: none;
   border: none;
   color: #5A4A1E;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   cursor: pointer;
   padding: 0 2px;
   opacity: 0.4;
@@ -1900,7 +1900,7 @@
   background: rgba(184,150,46,0.08);
   color: #5A4A1E;
   font-family: 'Lora', serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -1956,7 +1956,7 @@
   background: rgba(255,255,255,0.5);
   color: #1C1814;
   font-family: 'Lora', serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1.5;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1975,7 +1975,7 @@
   border: none;
   background: none;
   color: rgba(28,24,20,0.3);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   cursor: pointer;
   padding: 4px;
   line-height: 1;
@@ -2069,7 +2069,7 @@
 
 .wm-bottom-hint {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.1em;
   color: rgba(28,24,20,0.3);
   flex: 1;
@@ -2082,7 +2082,7 @@
   border-radius: 20px;
   flex-shrink: 0;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.1em;
   color: #1C1814;
   padding: 10px 18px;
@@ -2130,7 +2130,7 @@
 }
 .wm-sync-action {
   margin-left: auto;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   opacity: 0.7;
 }
 
@@ -2142,7 +2142,7 @@
 }
 .wm-preview-prose {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height: 1.85;
   color: #2C2C2C;
   padding: 16px 20px;
@@ -2190,13 +2190,13 @@
 .wm-modal-title {
   font-family: 'Lora', Georgia, serif;
   font-style: italic;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: #1C1814;
 }
 
 .wm-modal-sub {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.08em;
   color: rgba(28,24,20,0.35);
   line-height: 1.65;
@@ -2284,7 +2284,7 @@
   }
   .wm-prose-area {
     padding: 36px 80px 160px;
-    font-size: var(--text-lg);
+    font-size: var(--text-xl);
     line-height: 2.1;
   }
   .wm-manuscript-page::after {
@@ -2320,11 +2320,11 @@
   }
   .wm-prose-area {
     padding: 40px 90px 180px;
-    font-size: var(--text-xl);
+    font-size: var(--text-2xl);
     line-height: 2.15;
   }
   .wm-chapter-heading {
-    font-size: var(--text-3xl);
+    font-size: var(--text-4xl);
   }
   .wm-manuscript-page::after {
     left: 90px;
@@ -2350,7 +2350,7 @@
   }
   .wm-ai-btn {
     padding: 9px 20px;
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
 }
 
@@ -2490,7 +2490,7 @@
     min-width: 0;
   }
   .wm-chapter-title {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
   .wm-book-title {
     display: none;
@@ -2516,7 +2516,7 @@
   .wm-sidebar-toggle {
     width: 28px;
     height: 28px;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
   .wm-mode-btn {
     font-size: var(--text-2xs);
@@ -2544,7 +2544,7 @@
   }
   .wm-center-tab {
     padding: 8px 16px 7px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
     flex: 1;
     text-align: center;
     justify-content: center;
@@ -2572,7 +2572,7 @@
     text-align: left;
   }
   .wm-chapter-heading {
-    font-size: var(--text-lg);
+    font-size: var(--text-xl);
     margin: 0 0 4px;
     text-align: left;
   }
@@ -2589,16 +2589,16 @@
   }
   .wm-prose-area {
     padding: 12px 16px 100px;
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
     line-height: 1.9;
     text-indent: 1.5em;
   }
   .wm-canvas-sections {
     padding: 4px 0 0;
   }
-  .wm-cs-h2 { font-size: var(--text-lg); padding: 18px 16px 6px; border-top-color: rgba(28,24,20,0.04); }
-  .wm-cs-h3 { font-size: var(--text-sm); padding: 14px 16px 4px; margin-left: 16px; }
-  .wm-cs-h4 { font-size: var(--text-xs); padding: 12px 16px 3px 26px; }
+  .wm-cs-h2 { font-size: var(--text-xl); padding: 18px 16px 6px; border-top-color: rgba(28,24,20,0.04); }
+  .wm-cs-h3 { font-size: var(--text-base); padding: 14px 16px 4px; margin-left: 16px; }
+  .wm-cs-h4 { font-size: var(--text-md); padding: 12px 16px 3px 26px; }
   .wm-section-prose { padding: 6px 16px 30px !important; min-height: 80px !important; }
   .wm-cs-body { padding: 4px 16px; }
   .wm-cs-quote { padding: 8px 16px 8px 36px; margin-left: 16px; }
@@ -2614,12 +2614,12 @@
   }
   .wm-ai-btn {
     padding: 6px 10px;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     gap: 4px;
     border-radius: 16px;
   }
   .wm-ai-icon {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
   /* Hide paragraph mode on mobile — too complex for phone UX */
   .wm-para-mode-btn {
@@ -2629,7 +2629,7 @@
   /* Sentence/paragraph toggle */
   .wm-len-toggle {
     padding: 6px 12px;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     border-radius: 16px;
     background: rgba(184,150,46,0.08);
     border-color: rgba(184,150,46,0.2);
@@ -2677,7 +2677,7 @@
   .wm-nudge {
     margin: 0 10px;
     padding: 10px 12px;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
     border-radius: 12px;
   }
 
@@ -2686,17 +2686,17 @@
     padding: 10px 12px 12px;
   }
   .wm-edit-input {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
     padding: 8px 12px;
   }
   .wm-edit-mic-btn {
     width: 38px;
     height: 38px;
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
   .wm-apply-btn {
     padding: 10px 16px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
   }
 
   /* ── Generating overlay: compact ── */
@@ -2710,7 +2710,7 @@
     padding: 8px 14px;
   }
   .wm-transcript-text {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 
   /* ── Scene interview wrap — tighter ── */
@@ -2727,11 +2727,11 @@
     gap: 4px;
   }
   .wm-chapter-title {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
   .wm-ai-btn {
     padding: 5px 8px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
   }
   .wm-mic-btn {
     width: 40px;
@@ -2746,14 +2746,14 @@
     gap: 8px;
   }
   .wm-prose-area {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
     padding: 10px 12px 80px;
   }
   .wm-chapter-opening {
     padding: 12px 12px 2px;
   }
   .wm-chapter-heading {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 }
 
@@ -2830,7 +2830,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2852,7 +2852,7 @@
   color: #1C1814;
   border-radius: 6px;
   padding: 4px 8px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;
 }
@@ -2873,13 +2873,13 @@
   align-items: center;
   gap: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(28, 24, 20, 0.5);
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
 .wm-timer-icon {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 .wm-timer-value {
   min-width: 40px;
@@ -2909,13 +2909,13 @@
 }
 .wm-goal-label {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(28, 24, 20, 0.4);
   white-space: nowrap;
 }
 .wm-goal-fraction {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(28, 24, 20, 0.35);
 }
 
@@ -2931,7 +2931,7 @@
 }
 .wm-goal-input-label {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(28, 24, 20, 0.5);
   white-space: nowrap;
 }
@@ -2941,7 +2941,7 @@
   border: 1px solid rgba(28, 24, 20, 0.15);
   border-radius: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   background: #FAF7F0;
   color: #1C1814;
 }
@@ -2953,7 +2953,7 @@
   background: none;
   border: none;
   color: #B8962E;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   cursor: pointer;
   padding: 2px 6px;
 }
@@ -2972,7 +2972,7 @@
   border-radius: 6px;
   padding: 4px 8px;
   cursor: pointer;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #1C1814;
   transition: background 0.2s;
 }
@@ -3004,7 +3004,7 @@
   padding: 8px 14px;
   cursor: pointer;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #1C1814;
   transition: background 0.15s;
 }
@@ -3016,7 +3016,7 @@
   font-weight: 600;
 }
 .wm-quick-char-option-icon {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
 }
 
 /* ── HISTORY BUTTON ────────────────────────────────────────────────── */
@@ -3027,7 +3027,7 @@
   border: 1px solid rgba(28, 24, 20, 0.12);
   border-radius: 6px;
   padding: 4px 8px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   color: #1C1814;
   transition: background 0.2s;
@@ -3088,7 +3088,7 @@
 }
 .wm-history-title {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   color: #1C1814;
   text-transform: uppercase;
@@ -3097,7 +3097,7 @@
 .wm-history-close {
   background: none;
   border: none;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: rgba(28, 24, 20, 0.4);
   cursor: pointer;
 }
@@ -3108,7 +3108,7 @@
   padding: 40px 20px;
   text-align: center;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(28, 24, 20, 0.4);
   line-height: 1.6;
 }
@@ -3132,7 +3132,7 @@
 }
 .wm-history-item-label {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #B8962E;
   text-transform: uppercase;
@@ -3140,12 +3140,12 @@
 }
 .wm-history-item-meta {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(28, 24, 20, 0.35);
 }
 .wm-history-item-preview {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: rgba(28, 24, 20, 0.55);
   line-height: 1.55;
   margin-bottom: 8px;
@@ -3155,7 +3155,7 @@
   border: 1px solid rgba(184, 150, 46, 0.3);
   color: #B8962E;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   padding: 4px 12px;
   border-radius: 4px;
   cursor: pointer;
@@ -3199,7 +3199,7 @@
 .wm-para-block p {
   margin: 0;
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height: 1.7;
   color: #1C1814;
 }
@@ -3211,7 +3211,7 @@
 }
 .wm-para-actions button {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   padding: 5px 14px;
   border-radius: 5px;
   border: 1px solid rgba(28, 24, 20, 0.15);
@@ -3242,7 +3242,7 @@
   border: none !important;
   background: none !important;
   color: rgba(28, 24, 20, 0.4) !important;
-  font-size: var(--text-sm) !important;
+  font-size: var(--text-base) !important;
   padding: 4px 8px !important;
 }
 .wm-para-cancel:hover {
@@ -3258,7 +3258,7 @@
 .wm-para-custom-input {
   flex: 1;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   padding: 5px 10px;
   border-radius: 5px;
   border: 1px solid rgba(28, 24, 20, 0.15);
@@ -3271,7 +3271,7 @@
 }
 .wm-para-custom-go {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   padding: 5px 12px;
   border-radius: 5px;
   border: 1px solid #B8962E;
@@ -3344,7 +3344,7 @@
 }
 
 .wm-mob-char-icon {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   flex-shrink: 0;
 }
 .wm-mob-char-name {
@@ -3390,7 +3390,7 @@
   background: transparent;
   padding: 8px 12px;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #1C1814;
   cursor: pointer;
   text-align: left;
@@ -3404,7 +3404,7 @@
   font-weight: 600;
 }
 .wm-mob-char-opt-icon {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   width: 20px;
   text-align: center;
   flex-shrink: 0;
@@ -3425,7 +3425,7 @@
   border-radius: 6px;
   background: transparent;
   color: #b0922e;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 700;
   cursor: pointer;
   display: flex;
@@ -3444,7 +3444,7 @@
 
 .wm-mob-nav-label {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(28,24,20,0.5);
   padding: 0 2px;
   white-space: nowrap;
@@ -3489,7 +3489,7 @@
     gap: 6px;
   }
   .wm-para-actions button {
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
     padding: 4px 10px;
   }
   .wm-focus-mode .wm-prose-wrap {
@@ -3525,7 +3525,7 @@
   border-bottom:    2px solid transparent;
   padding:          8px 10px 7px;
   font-family:      'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing:   0.1em;
   color:            rgba(28, 24, 20, 0.4);
   cursor:           pointer;
@@ -3641,7 +3641,7 @@
   border-radius:    16px;
   padding:          6px 14px;
   font-family:      'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight:      500;
   color:            #5A4A1E;
   cursor:           pointer;
@@ -3701,14 +3701,14 @@
 }
 
 .wm-review-empty-icon {
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   color:            rgba(28, 24, 20, 0.15);
 }
 
 .wm-review-empty-text {
   font-family:      'Lora', Georgia, serif;
   font-style:       italic;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color:            rgba(28, 24, 20, 0.4);
   max-width:        380px;
   line-height:      1.7;
@@ -3730,7 +3730,7 @@
   padding:          32px 16px;
   font-family:      'Lora', Georgia, serif;
   font-style:       italic;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color:            rgba(28, 24, 20, 0.4);
 }
 
@@ -3776,7 +3776,7 @@
 
 .wm-review-line-text {
   font-family:      'Lora', Georgia, serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height:      1.8;
   margin:           0;
   word-break:       break-word;
@@ -3789,7 +3789,7 @@
   border-radius:    3px;
   padding:          10px 12px;
   font-family:      'Lora', Georgia, serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height:      1.8;
   color:            #1C1814;
   background:       #FAF7F0;
@@ -3836,7 +3836,7 @@
 .wm-welcome-title {
   font-family: 'Lora', Georgia, serif;
   font-style: italic;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: rgba(28, 24, 20, 0.65);
   letter-spacing: -0.01em;
 }
@@ -3870,14 +3870,14 @@
 }
 
 .wm-welcome-option-icon {
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   line-height: 1;
 }
 
 .wm-welcome-option-label {
   font-family: 'Lora', Georgia, serif;
   font-weight: 600;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #1C1814;
 }
 
@@ -3902,7 +3902,7 @@
 
 .wm-welcome-step {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: rgba(28, 24, 20, 0.5);
@@ -3911,12 +3911,12 @@
 
 .wm-welcome-arrow {
   color: rgba(184, 150, 46, 0.4);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .wm-welcome-tip {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   color: rgba(28, 24, 20, 0.35);
   line-height: 1.6;
@@ -3934,7 +3934,7 @@
 
 .wm-ai-btn-desc {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   color: rgba(90, 74, 30, 0.45);
   margin-left: 2px;
@@ -3957,7 +3957,7 @@
   align-items: center;
   justify-content: center;
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -3984,7 +3984,7 @@
   right: 16px;
   background: none;
   border: none;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   color: rgba(28, 24, 20, 0.3);
   cursor: pointer;
   padding: 4px;
@@ -4025,18 +4025,18 @@
 
 .wm-help-flow-step {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #1C1814;
 }
 
 .wm-help-flow-arrow {
   color: #B8962E;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .wm-help-note {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(28, 24, 20, 0.4);
   text-align: center;
   margin-top: 8px;
@@ -4051,7 +4051,7 @@
 
 .wm-help-tool {
   font-family: 'Lora', Georgia, serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(28, 24, 20, 0.7);
   line-height: 1.6;
   padding-left: 4px;
@@ -4082,7 +4082,7 @@
 
 .wm-help-shortcut kbd {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   background: rgba(28, 24, 20, 0.05);
   border: 1px solid rgba(28, 24, 20, 0.1);
   border-radius: 4px;
@@ -4095,7 +4095,7 @@
 
 .wm-help-shortcut span {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(28, 24, 20, 0.55);
   letter-spacing: 0.02em;
 }
@@ -4116,7 +4116,7 @@
   }
 
   .wm-welcome-option-icon {
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
     flex-shrink: 0;
   }
 
@@ -4158,7 +4158,7 @@
   justify-content:  center;
   border-radius:    3px;
   cursor:           pointer;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   transition:       all 0.1s ease;
 }
 
@@ -4205,7 +4205,7 @@
     min-width: 0;
   }
   .wm-chapter-title {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
   .wm-session-timer {
     display: none;
@@ -4268,10 +4268,10 @@
     padding: 12px 12px 2px;
   }
   .wm-chapter-heading {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
   .wm-prose-area {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
     line-height: 1.75;
     padding: 8px 12px 80px;
     min-height: 40vh;
@@ -4284,7 +4284,7 @@
     justify-content: center;
   }
   .wm-ai-btn {
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
     padding: 5px 8px;
   }
   .wm-len-toggle {
@@ -4297,10 +4297,10 @@
     gap: 8px;
   }
   .wm-bottom-hint {
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
   }
   .wm-send-btn {
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
     padding: 6px 12px;
   }
 
@@ -4308,7 +4308,7 @@
     padding: 12px;
   }
   .wm-review-line-text {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     line-height: 1.7;
   }
   .wm-review-header {
@@ -4335,7 +4335,7 @@
   /* TOC compact */
   .wm-toc-item {
     padding: 6px 8px;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
   .wm-toc-drag {
     display: none;
@@ -4359,7 +4359,7 @@
   }
   .wm-center-tab {
     padding: 10px 10px 9px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
   }
 
   .wm-hub-layout {
@@ -4389,7 +4389,7 @@
     min-height: auto;
   }
   .wm-prose-area {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
     min-height: 45vh;
     overflow: hidden;
     flex: none;
@@ -4441,7 +4441,7 @@
     gap: 12px;
   }
   .wm-review-line-text {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   /* Hide action buttons until hover on desktop */
@@ -4553,7 +4553,7 @@
 }
 
 .wm-beat-icon {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1;
 }
 
@@ -4700,7 +4700,7 @@
   }
 
   .wm-beat-icon {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .wm-arc-compass-labels {
@@ -4737,7 +4737,7 @@
   border: 1px solid rgba(184,150,46,0.3);
   border-radius: 6px;
   padding: 4px 8px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   color: #2C2C2C;
   transition: background 0.2s, border-color 0.2s;
@@ -4774,7 +4774,7 @@
   padding: 16px 20px;
   margin: 0;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: #B8962E;
@@ -4798,7 +4798,7 @@
   gap: 10px;
   margin-bottom: 6px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #888;
 }
 .wm-ai-history-meta strong {
@@ -4808,7 +4808,7 @@
 }
 .wm-ai-history-text {
   font-family: 'Lora', serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.6;
   color: #2C2C2C;
   max-height: 80px;
@@ -4822,7 +4822,7 @@
   border-radius: 4px;
   padding: 3px 10px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #B8962E;
   cursor: pointer;
   transition: background 0.2s;
@@ -4860,7 +4860,7 @@
   border-radius: 5px;
   padding: 5px 8px;
   font-family: 'Lora', serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   background: #fff;
   color: #2C2C2C;
   outline: none;
@@ -4870,7 +4870,7 @@
 }
 .wm-find-count {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #888;
   min-width: 40px;
   text-align: center;
@@ -4881,7 +4881,7 @@
   border-radius: 5px;
   padding: 4px 10px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #B8962E;
   cursor: pointer;
   transition: background 0.2s;
@@ -4892,7 +4892,7 @@
 .wm-find-close {
   background: none;
   border: none;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   cursor: pointer;
   color: #888;
   padding: 2px 6px;
@@ -4926,7 +4926,7 @@
 }
 .wm-synopsis-text {
   font-family: 'Lora', serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.65;
   color: #2C2C2C;
   padding: 10px 14px;
@@ -4986,7 +4986,7 @@
 }
 .wm-transition-hint {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #999;
   margin-top: 4px;
 }
@@ -5021,7 +5021,7 @@
   padding: 14px 18px;
   border-bottom: 1px solid rgba(184,150,46,0.2);
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: #B8962E;
@@ -5029,7 +5029,7 @@
 .wm-reference-close {
   background: none;
   border: none;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   cursor: pointer;
   color: #888;
   padding: 2px 6px;
@@ -5042,7 +5042,7 @@
   overflow-y: auto;
   padding: 20px;
   font-family: 'Lora', serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1.75;
   color: #2C2C2C;
   white-space: pre-wrap;
@@ -5066,7 +5066,7 @@
   border: 1px solid rgba(184,150,46,0.3);
   border-radius: 6px;
   padding: 4px 8px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   color: #2C2C2C;
   transition: background 0.2s, border-color 0.2s;
@@ -5095,7 +5095,7 @@
 .wm-stats-inner h3 {
   margin: 0 0 16px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: #B8962E;
@@ -5112,7 +5112,7 @@
 }
 .wm-stats-row div:first-child {
   font-family: 'Lora', serif;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: 600;
   color: #B8962E;
 }
@@ -5169,7 +5169,7 @@
   min-height: 300px;
   padding: 32px 20px;
   font-family: 'Lora', serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   line-height: 1.85;
   color: #2C2C2C;
   cursor: pointer;
@@ -5186,7 +5186,7 @@
 .wm-prose-preview-hint {
   text-align: center;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #aaa;
   margin-top: 24px;
   padding-top: 12px;

@@ -17,7 +17,7 @@
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 500;
   transition: background 0.2s;
 }
@@ -31,7 +31,7 @@
   color: white;
   padding: 0.25rem 0.5rem;
   border-radius: 12px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   margin-left: 0.5rem;
 }
 
@@ -67,7 +67,7 @@
   padding: 0.5rem;
   border: 1px solid #ced4da;
   border-radius: 4px;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
 }
 
 .date-range {

@@ -29,7 +29,7 @@
   padding: 0.6rem 1.5rem;
   background: white;
   border-bottom: 1px solid #e2e8f0;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #64748b;
   pointer-events: auto;
   position: relative;
@@ -95,7 +95,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   background: rgba(255, 255, 255, 0.2);
 }
 
@@ -108,7 +108,7 @@
 
 .show-info h1 {
   margin: 0 0 0.25rem 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 700;
   line-height: 1.2;
   color: #ffffff;
@@ -139,7 +139,7 @@
 .show-description {
   margin: 0 0 0.5rem 0 !important;
   line-height: 1.4;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(255, 255, 255, 0.9) !important;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   max-width: 700px;
@@ -209,7 +209,7 @@
   border: 2px solid transparent;
   color: #64748b;
   font-weight: 600;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
@@ -240,13 +240,13 @@
 }
 
 .tab-icon {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1;
   flex-shrink: 0;
 }
 
 .tab-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
@@ -311,13 +311,13 @@
 
 .episodes-title {
   margin: 0;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-weight: 600;
   color: #0f172a;
 }
 
 .episodes-count {
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   color: #94a3b8;
   font-weight: 400;
 }
@@ -346,7 +346,7 @@
   background: transparent;
   border-radius: 0.5rem;
   cursor: pointer;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   color: #64748b;
   transition: all 0.2s ease;
@@ -398,18 +398,18 @@
 
 .coming-soon-card h3 {
   margin: 0 0 0.75rem 0;
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   color: #1e293b;
 }
 
 .coming-soon-card p {
   margin: 0 0 1rem 0;
   color: #64748b;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
 }
 
 .feature-description {
-  font-size: var(--text-base) !important;
+  font-size: var(--text-lg) !important;
   line-height: 1.6;
   color: #94a3b8 !important;
 }
@@ -435,7 +435,7 @@
   /* Breadcrumb clickable */
   .breadcrumb {
     padding: 0.75rem 1rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
   
   .breadcrumb a {
@@ -466,14 +466,14 @@
   }
   
   .show-info h1 {
-    font-size: var(--text-xl);
+    font-size: var(--text-2xl);
     margin-bottom: 0.375rem;
   }
   
   .show-meta {
     flex-wrap: wrap;
     gap: 0.5rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     margin-bottom: 0.5rem;
   }
   
@@ -490,7 +490,7 @@
   
   .show-actions .btn-secondary {
     padding: 0.5rem 1rem;
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     pointer-events: auto;
     cursor: pointer;
   }
@@ -511,17 +511,17 @@
   
   .tab-button {
     padding: 0.5rem 0.875rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
     gap: 0.375rem;
     border-radius: 10px;
   }
   
   .tab-icon {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
   
   .tab-label {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
   
   /* Stronger active state for mobile */
@@ -536,7 +536,7 @@
   .tab-count {
     min-width: 18px;
     height: 18px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
     padding: 0 4px;
   }
   
@@ -577,7 +577,7 @@
 @media (max-width: 480px) {
   .breadcrumb {
     padding: 0.625rem 0.75rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .breadcrumb a {
@@ -601,7 +601,7 @@
   }
   
   .show-info h1 {
-    font-size: var(--text-lg);
+    font-size: var(--text-xl);
     line-height: 1.2;
   }
   
@@ -632,7 +632,7 @@
   
   .tab-button {
     padding: 0.5rem 0.75rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     gap: 0.25rem;
     border-radius: 20px;
     flex-shrink: 0;
@@ -641,12 +641,12 @@
   }
   
   .tab-icon {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
   
   .tab-label {
     display: inline;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .tab-button.active {
@@ -700,18 +700,18 @@
   }
 
   .show-info h1 {
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
     margin-bottom: 0.35rem;
   }
 
   .show-meta {
     margin-bottom: 0.5rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     gap: 0.5rem;
   }
 
   .show-description {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     margin-bottom: 1rem !important;
     -webkit-line-clamp: 2;
   }
@@ -722,6 +722,6 @@
 
   .breadcrumb {
     padding: 1rem 1.5rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 }

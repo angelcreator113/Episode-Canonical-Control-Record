@@ -22,7 +22,7 @@
 
 .wl-title {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   font-weight: 600;
   margin: 0 0 4px;
   letter-spacing: -0.3px;
@@ -30,7 +30,7 @@
 }
 
 .wl-subtitle {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #999;
   margin: 0;
 }
@@ -46,7 +46,7 @@
 
 .wl-form-heading {
   font-weight: 600;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   margin-bottom: 12px;
   color: #333;
 }
@@ -59,7 +59,7 @@
 
 .wl-input, .wl-select {
   font-family: inherit;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   padding: 8px 12px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 6px;
@@ -86,7 +86,7 @@
 /* ── Buttons ─────────────────────────────────────── */
 .wl-btn {
   font-family: inherit;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 500;
   padding: 6px 14px;
   border-radius: 6px;
@@ -128,7 +128,7 @@
 
 .wl-btn-icon {
   background: transparent;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   padding: 3px 7px;
   color: #999;
   border-radius: 4px;
@@ -169,7 +169,7 @@
 
 .wl-card-name {
   font-weight: 600;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .wl-card-meta {
@@ -184,7 +184,7 @@
 }
 
 .wl-card-desc {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #666;
   margin-top: 8px;
   line-height: 1.5;
@@ -224,7 +224,7 @@
 .wl-search {
   width: 100%;
   font-family: inherit;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   padding: 9px 12px 9px 34px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
@@ -241,7 +241,7 @@
 }
 .wl-filter-chip {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   padding: 4px 10px;
   border: 1px solid rgba(0,0,0,0.08);
   border-radius: 20px;
@@ -383,7 +383,7 @@
   color: #333;
 }
 .wl-event-date {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #999;
   font-family: 'DM Mono', monospace;
 }
@@ -397,7 +397,7 @@
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #333;
   margin-bottom: 10px;
   padding-bottom: 6px;
@@ -405,7 +405,7 @@
 }
 .wl-section-count {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #999;
   background: #f0f0f0;
   padding: 1px 6px;
@@ -417,7 +417,7 @@
   text-align: center;
   color: #999;
   padding: 48px 20px;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 /* ── Toast ───────────────────────────────────────── */
@@ -430,7 +430,7 @@
   color: #fff;
   padding: 10px 20px;
   border-radius: 8px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   z-index: 9999;
   animation: wl-fade-in 0.2s;
 }

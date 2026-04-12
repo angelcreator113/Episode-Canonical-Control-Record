@@ -197,12 +197,12 @@ body.page-story-engine .app-content {
 .page-wrapper h1 {
   color: #1e293b;
   margin-bottom: 1rem;
-  font-size: var(--text-3xl);
+  font-size: var(--text-5xl);
 }
 
 .page-wrapper p {
   color: #64748b;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height: 1.6;
 }
 
@@ -221,7 +221,7 @@ body.page-story-engine .app-content {
 
 .app-footer p {
   margin: 0;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   letter-spacing: 0.02em;
 }
 
@@ -247,16 +247,16 @@ body.page-story-engine .app-content {
   }
 
   .page-wrapper h1 {
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
   }
 
   .app-footer {
     padding: 0.75rem 1rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .app-footer p {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 }
 

@@ -28,20 +28,20 @@
 }
 
 .missing-icon-large {
-  font-size: var(--text-4xl);
+  font-size: var(--text-5xl);
   margin-bottom: 12px;
   opacity: 0.6;
 }
 
 .missing-title {
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: #666;
   margin: 0 0 8px 0;
 }
 
 .missing-description {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #888;
   margin: 0 0 8px 0;
   max-width: 200px;
@@ -51,7 +51,7 @@
 }
 
 .missing-hint {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #aaa;
   font-style: italic;
   margin: 0;
@@ -89,12 +89,12 @@
 }
 
 .missing-icon {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   opacity: 0.7;
 }
 
 .missing-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: #666;
   font-weight: 500;
 }
@@ -112,14 +112,14 @@
   }
 
   .missing-icon-large {
-    font-size: var(--text-4xl);
+    font-size: var(--text-5xl);
   }
 
   .missing-title {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   .missing-description {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 }

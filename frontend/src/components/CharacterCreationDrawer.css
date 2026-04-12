@@ -23,17 +23,17 @@
   border-bottom: 1px solid #f0ecf5;
 }
 .ccd-eyebrow {
-  font-size: var(--text-2xs); letter-spacing: 0.14em;
+  font-size: var(--text-xs); letter-spacing: 0.14em;
   color: #a889c8; margin-bottom: 6px;
 }
 .ccd-title {
-  font-size: var(--text-2xl); font-weight: 600; color: #1a1520; margin: 0 0 6px;
+  font-size: var(--text-3xl); font-weight: 600; color: #1a1520; margin: 0 0 6px;
 }
 .ccd-subtitle {
-  font-size: var(--text-xs); color: #888; margin: 0; line-height: 1.5;
+  font-size: var(--text-md); color: #888; margin: 0; line-height: 1.5;
 }
 .ccd-close {
-  background: none; border: none; font-size: var(--text-2xl);
+  background: none; border: none; font-size: var(--text-3xl);
   color: #bbb; cursor: pointer; padding: 0; line-height: 1;
   flex-shrink: 0; margin-top: 2px;
 }
@@ -47,14 +47,14 @@
 }
 .ccd-field { display: flex; flex-direction: column; gap: 8px; }
 .ccd-label {
-  font-size: var(--text-2xs); letter-spacing: 0.12em;
+  font-size: var(--text-xs); letter-spacing: 0.12em;
   color: #a889c8; font-weight: 600;
 }
 .ccd-input {
   border: 1.5px solid #e8e0f0;
   border-radius: 8px;
   padding: 12px 14px;
-  font-size: var(--text-sm); color: #1a1520;
+  font-size: var(--text-base); color: #1a1520;
   outline: none; transition: border-color 0.15s;
   font-family: inherit;
   background: #fdfcff;
@@ -84,7 +84,7 @@
   background: #f5f0fb;
 }
 .ccd-role-label {
-  font-size: var(--text-xs); font-weight: 600; color: #1a1520;
+  font-size: var(--text-md); font-weight: 600; color: #1a1520;
   margin-bottom: 2px;
 }
 .ccd-role-btn.ccd-role-selected .ccd-role-label { color: #7b55b0; }
@@ -94,7 +94,7 @@
 .ccd-role-btn.ccd-role-selected .ccd-role-hint { color: #a889c8; }
 
 .ccd-error {
-  font-size: var(--text-xs); color: #c0527a;
+  font-size: var(--text-sm); color: #c0527a;
   background: #fdf0f4; border: 1px solid #f0c8d8;
   border-radius: 6px; padding: 10px 12px;
 }
@@ -113,7 +113,7 @@
   color: #fff;
   border: none; border-radius: 8px;
   padding: 12px 24px;
-  font-size: var(--text-sm); font-weight: 600;
+  font-size: var(--text-base); font-weight: 600;
   cursor: pointer; white-space: nowrap;
   transition: background 0.15s, opacity 0.15s;
   font-family: inherit;

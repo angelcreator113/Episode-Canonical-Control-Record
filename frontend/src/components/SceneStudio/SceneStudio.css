@@ -111,7 +111,7 @@
 }
 
 .scene-studio-zoom-label {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #666;
   min-width: 30px;
   text-align: center;
@@ -129,7 +129,7 @@
   background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.12);
   color: #2C2C2C;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   padding: 5px 10px;
   border-radius: 5px;
   cursor: pointer;
@@ -144,7 +144,7 @@
   padding: 6px 12px;
   border: none;
   border-radius: 6px;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all 150ms ease;
@@ -270,7 +270,7 @@
   align-items: center;
   gap: 6px;
   padding: 10px 12px;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -400,7 +400,7 @@
   border: none;
   background: transparent;
   color: #B8962E;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   cursor: pointer;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
@@ -430,7 +430,7 @@
   background: transparent;
   border: none;
   color: #2C2C2C;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   outline: none;
 }
 
@@ -457,7 +457,7 @@
   border: none;
   background: transparent;
   color: #777;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
@@ -543,7 +543,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #888;
   text-transform: uppercase;
@@ -565,7 +565,7 @@
 }
 
 .scene-studio-input-row label {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #777;
   min-width: 16px;
 }
@@ -624,7 +624,7 @@
 }
 
 .scene-studio-slider-value {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #666;
   min-width: 30px;
   text-align: right;
@@ -645,7 +645,7 @@
   border: 1px solid rgba(0, 0, 0, 0.1);
   background: #fff;
   color: #555;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   border-radius: 4px;
   cursor: pointer;
   transition: all 100ms ease;
@@ -667,7 +667,7 @@
   border: 1px solid rgba(0, 0, 0, 0.1);
   background: transparent;
   color: #888;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   border-radius: 4px;
   cursor: pointer;
 }
@@ -760,7 +760,7 @@
 .scene-studio-info-row {
   display: flex;
   justify-content: space-between;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   margin-bottom: 3px;
 }
 
@@ -870,7 +870,7 @@
 /* ── Section Label ── */
 
 .scene-studio-section-label {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -931,7 +931,7 @@
   margin-top: 6px;
   background: rgba(220, 53, 53, 0.08);
   color: #dc3535;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   border-radius: 4px;
 }
 
@@ -1044,7 +1044,7 @@
   background: transparent;
   color: #888;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
@@ -1162,7 +1162,7 @@
   justify-content: space-between;
   padding: 6px 8px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #666;
   text-transform: uppercase;
@@ -1177,7 +1177,7 @@
   gap: 6px;
   padding: 16px 8px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #999;
 }
 
@@ -1310,7 +1310,7 @@
   border-radius: 6px;
   background: #fff;
   color: #2C2C2C;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-family: 'DM Mono', monospace;
   resize: none;
   outline: none;
@@ -1364,7 +1364,7 @@
   margin-top: 6px;
   background: rgba(220, 53, 53, 0.08);
   color: #dc3535;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   border-radius: 4px;
 }
 
@@ -1670,7 +1670,7 @@
 }
 
 .scene-studio-gen-results-header span {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #2C2C2C;
 }
@@ -1716,14 +1716,14 @@
 
 .scene-studio-gen-empty-title {
   margin: 0 0 6px 0;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #2C2C2C;
 }
 
 .scene-studio-gen-empty-text {
   margin: 0 0 12px 0;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #888;
   line-height: 1.5;
 }
@@ -1874,7 +1874,7 @@
 }
 
 .scene-studio-toolbar-title-input {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   color: #2C2C2C;
   font-family: 'DM Mono', monospace;
@@ -1919,7 +1919,7 @@
 
 .scene-studio-overlay-title {
   font-family: 'Lora', serif;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: rgba(255, 255, 255, 0.9);
   margin: 0 0 16px;
   font-weight: 400;
@@ -2013,7 +2013,7 @@
   color: #fff;
   border: none;
   border-radius: 20px;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   font-family: 'DM Mono', monospace;
   cursor: pointer;
@@ -2050,7 +2050,7 @@
   border: none;
   background: transparent;
   color: #555;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-family: 'DM Mono', monospace;
   cursor: pointer;
   border-radius: 6px;
@@ -2075,7 +2075,7 @@
   border: 1px solid rgba(184, 150, 46, 0.25);
   border-radius: 6px;
   color: #B8962E;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-family: 'DM Mono', monospace;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -2241,7 +2241,7 @@
   align-items: center;
   gap: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   color: #B8962E;
   text-transform: uppercase;
@@ -2387,7 +2387,7 @@
 
 .scene-studio-blend-select {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   padding: 2px 4px;
   border: 1px solid #d6d0c4;
   border-radius: 4px;
@@ -2428,14 +2428,14 @@
   border: 1px solid #d6d0c4;
   border-radius: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   background: #fff;
   color: #2C2C2C;
 }
 
 .scene-studio-state-input.inline {
   padding: 2px 4px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 
 .scene-studio-state-list {
@@ -2468,7 +2468,7 @@
   border: none;
   background: transparent;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #2C2C2C;
   cursor: pointer;
   padding: 4px 6px;
@@ -2625,7 +2625,7 @@
 .scene-studio-erase-notice {
   width: 100%;
   margin-top: 2px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #8a6f1f;
   background: #fff8e1;
   border: 1px solid #e8d8a8;
@@ -2650,7 +2650,7 @@
   border: 1px solid #d6d0c4;
   border-radius: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   width: 100%;
   min-width: 180px;
   background: #fff;
@@ -2903,7 +2903,7 @@
   background: transparent;
   color: #666;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
@@ -2964,7 +2964,7 @@
 }
 
 .erase-brush-size-value {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #888;
   min-width: 32px;
   text-align: right;
@@ -2984,7 +2984,7 @@
   background: rgba(255, 255, 255, 0.5);
   color: #666;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -3084,7 +3084,7 @@
   background: #fff;
   color: #666;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -3118,7 +3118,7 @@
   align-items: center;
   justify-content: center;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: bold;
   pointer-events: none;
   z-index: 5;
@@ -3186,7 +3186,7 @@
   background: #fff;
   color: #888;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
@@ -3234,7 +3234,7 @@
 .erase-brush-slider-group label {
   display: flex;
   justify-content: space-between;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 500;
   color: #666;
 }
@@ -3312,7 +3312,7 @@
   border-radius: 14px;
   background: transparent;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #666;
   cursor: pointer;
   white-space: nowrap;
@@ -3331,7 +3331,7 @@
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #666;
   white-space: nowrap;
 }
@@ -3418,7 +3418,7 @@
 
 .erase-image-menu-loading {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #999;
   padding: 8px 6px;
   text-align: center;
@@ -3602,7 +3602,7 @@
 /* ── Processing + shortcuts ── */
 
 .erase-brush-progress {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #B8962E;
   text-align: center;
   padding: 2px 0;
@@ -3640,7 +3640,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #aaa;
   white-space: nowrap;
   transition: color 0.3s ease;
@@ -3696,7 +3696,7 @@
   background: transparent;
   color: #888;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
@@ -3723,7 +3723,7 @@
   background: rgba(44, 44, 44, 0.75);
   color: #fff;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   padding: 3px 12px;
   border-radius: 12px;
@@ -3857,7 +3857,7 @@
 
 .scene-studio-export-panel h3 {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   margin: 0 0 16px 0;
   color: #2C2C2C;
@@ -3928,7 +3928,7 @@
 }
 
 .scene-studio-template-icon {
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   flex-shrink: 0;
 }
 
@@ -3991,14 +3991,14 @@
 .scene-picker-header h3 {
   margin: 0;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
 .scene-picker-close {
   background: none;
   border: none;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   cursor: pointer;
   color: #999;
 }
@@ -4018,7 +4018,7 @@
   text-align: center;
   padding: 32px;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #999;
 }
 
@@ -4156,7 +4156,7 @@
 
   .scene-studio-toolbar-title {
     max-width: 120px;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .scene-studio-toolbar-left,
@@ -4298,7 +4298,7 @@
 
   .scene-studio-toolbar-title {
     max-width: 180px;
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
 
   .scene-studio-action-bar {
@@ -4345,7 +4345,7 @@
   }
 
   .scene-studio-zoom-label {
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     min-width: 44px;
   }
 

@@ -7,7 +7,7 @@
   }
 
   .ncc-header h1 {
-    font-size: var(--text-2xl) !important;
+    font-size: var(--text-3xl) !important;
   }
 
   .ncc-tab-bar {
@@ -27,7 +27,7 @@
     white-space: nowrap;
     flex-shrink: 0;
     padding: 6px 10px !important;
-    font-size: var(--text-xs) !important;
+    font-size: var(--text-sm) !important;
   }
 
   .ncc-beats-inputs {
@@ -46,11 +46,11 @@
   }
 
   .ncc-header h1 {
-    font-size: var(--text-xl) !important;
+    font-size: var(--text-2xl) !important;
   }
 
   .ncc-header p {
-    font-size: var(--text-xs) !important;
+    font-size: var(--text-sm) !important;
   }
 
   .ncc-tab-bar button {
@@ -79,11 +79,11 @@
   }
 
   .ncc-header h1 {
-    font-size: var(--text-lg) !important;
+    font-size: var(--text-xl) !important;
   }
 
   .ncc-tab-bar button {
     padding: 4px 6px !important;
-    font-size: var(--text-2xs) !important;
+    font-size: var(--text-xs) !important;
   }
 }

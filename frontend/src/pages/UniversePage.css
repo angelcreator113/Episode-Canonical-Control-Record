@@ -33,7 +33,7 @@
 
 .up-hero-compact-title {
   font-family: 'Playfair Display', 'Lora', serif;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 500;
   font-style: italic;
   color: #1a1a2e;
@@ -43,7 +43,7 @@
 
 .up-hero-compact-slug {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: rgba(26, 26, 46, 0.3);
   white-space: nowrap;
 }
@@ -65,7 +65,7 @@
 
 .up-compact-val {
   font-weight: 700;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #1a1a2e;
   margin-right: 3px;
 }
@@ -83,7 +83,7 @@
   background: none;
   border: none;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 500;
   letter-spacing: 0.04em;
   padding: 10px 20px;
@@ -131,7 +131,7 @@
   border: none;
   border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: 0.06em;
   color: #ffffff;
@@ -157,7 +157,7 @@
   border: 1px solid #ddd8ce;
   border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 500;
   letter-spacing: 0.04em;
   color: rgba(26, 26, 46, 0.6);
@@ -179,7 +179,7 @@
   color: rgba(220, 38, 38, 0.55);
   padding: 6px 10px;
   cursor: pointer;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-family: 'DM Sans', sans-serif;
   transition: all 0.2s;
 }
@@ -198,7 +198,7 @@
   padding: 5px 9px;
   cursor: pointer;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   transition: all 0.15s;
 }
 
@@ -215,7 +215,7 @@
 
 .up-preview-title {
   font-family: 'Playfair Display', serif;
-  font-size: var(--text-3xl);
+  font-size: var(--text-5xl);
   font-style: italic;
   color: #b0922e;
   font-weight: 400;
@@ -248,7 +248,7 @@
 
 .up-preview-body {
   font-family: 'Playfair Display', serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height: 1.8;
   color: rgba(26, 26, 46, 0.72);
   white-space: pre-wrap;
@@ -258,7 +258,7 @@
 .up-theme-chip {
   display: inline-block;
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: #b0922e;
   background: rgba(201, 168, 76, 0.1);
   border: 1px solid rgba(201, 168, 76, 0.2);
@@ -295,7 +295,7 @@
 
 .up-field-hint {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(26, 26, 46, 0.32);
   letter-spacing: 0.06em;
 }
@@ -305,7 +305,7 @@
   border: 1px solid #ddd8ce;
   border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: #1a1a2e;
   padding: 12px 14px;
   outline: none;
@@ -324,7 +324,7 @@
   border: 1px solid #ddd8ce;
   border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: rgba(26, 26, 46, 0.85);
   padding: 12px 14px;
   outline: none;
@@ -373,7 +373,7 @@
 
 .up-series-name {
   font-family: 'Playfair Display', serif;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-style: italic;
   color: #1a1a2e;
   margin-bottom: 4px;
@@ -381,7 +381,7 @@
 
 .up-series-desc {
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: rgba(26, 26, 46, 0.48);
   letter-spacing: 0.02em;
   line-height: 1.6;
@@ -427,7 +427,7 @@
 
 .up-book-title {
   font-family: 'Playfair Display', serif;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: rgba(26, 26, 46, 0.8);
   margin-bottom: 3px;
 }
@@ -490,7 +490,7 @@
 
 .up-empty-books {
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: rgba(26, 26, 46, 0.35);
   padding-top: 10px;
   letter-spacing: 0.04em;
@@ -573,7 +573,7 @@
 
 .up-timeline-label {
   font-family: 'Playfair Display', serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-style: italic;
   color: rgba(26, 26, 46, 0.65);
   text-align: center;
@@ -582,7 +582,7 @@
 
 .up-timeline-era {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: #b0922e;
   letter-spacing: 0.04em;
   text-align: center;
@@ -590,7 +590,7 @@
 
 .up-timeline-pos {
   font-family: 'DM Mono', monospace;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: rgba(26, 26, 46, 0.3);
   letter-spacing: 0.04em;
   text-align: center;
@@ -641,7 +641,7 @@
 
 .up-modal-title {
   font-family: 'Playfair Display', serif;
-  font-size: var(--text-2xl);
+  font-size: var(--text-3xl);
   font-style: italic;
   color: #1a1a2e;
 }
@@ -654,7 +654,7 @@
 
 .up-modal-hint {
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: rgba(26, 26, 46, 0.48);
   letter-spacing: 0.02em;
   line-height: 1.7;
@@ -674,7 +674,7 @@
   background: none;
   border: none;
   color: rgba(26, 26, 46, 0.35);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   cursor: pointer;
   padding: 4px;
   transition: color 0.15s;
@@ -692,7 +692,7 @@
   transform: translateX(-50%);
   color: white;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   padding: 12px 24px;
   border-radius: 10px;
   letter-spacing: 0.04em;
@@ -720,7 +720,7 @@
   padding: 80px 0;
   text-align: center;
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: rgba(26, 26, 46, 0.4);
   letter-spacing: 0.08em;
 }
@@ -732,7 +732,7 @@
 
 .up-error-msg {
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: #dc2626;
   margin-bottom: 16px;
 }
@@ -744,7 +744,7 @@
 
 .up-empty-title {
   font-family: 'Playfair Display', serif;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-style: italic;
   color: rgba(26, 26, 46, 0.45);
   margin-bottom: 10px;
@@ -752,7 +752,7 @@
 
 .up-empty-hint {
   font-family: 'DM Sans', sans-serif;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: rgba(26, 26, 46, 0.3);
   letter-spacing: 0.04em;
 }
@@ -779,15 +779,15 @@
   }
 
   .up-hero-compact-title {
-    font-size: var(--text-base);
+    font-size: var(--text-lg);
   }
 
   .up-hero-compact-stats {
     gap: 10px;
   }
 
-  .up-compact-stat { font-size: var(--text-2xs); }
-  .up-compact-val { font-size: var(--text-xs); }
+  .up-compact-stat { font-size: var(--text-xs); }
+  .up-compact-val { font-size: var(--text-sm); }
 
   .up-tab-bar {
     padding: 8px 12px;
@@ -823,7 +823,7 @@
   }
 
   .up-preview-title {
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
   }
 
   .up-preview-section {
@@ -837,7 +837,7 @@
   .up-btn-primary,
   .up-btn-secondary {
     padding: 8px 14px;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .up-form-shell {
@@ -901,7 +901,7 @@
 
   .utb-tab {
     padding: 8px 8px !important;
-    font-size: var(--text-2xs) !important;
+    font-size: var(--text-xs) !important;
     gap: 3px !important;
     letter-spacing: 0 !important;
   }
@@ -911,7 +911,7 @@
   }
 
   .utb-tab-label {
-    font-size: var(--text-2xs) !important;
+    font-size: var(--text-xs) !important;
   }
 
   .utb-divider {
@@ -930,11 +930,11 @@
   }
 
   .fb-header h2 {
-    font-size: var(--text-lg) !important;
+    font-size: var(--text-xl) !important;
   }
 
   .fb-header button {
-    font-size: var(--text-xs) !important;
+    font-size: var(--text-sm) !important;
     padding: 6px 12px !important;
   }
 

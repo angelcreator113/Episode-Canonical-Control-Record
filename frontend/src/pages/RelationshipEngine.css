@@ -93,7 +93,7 @@
 
 .rw-node-initials {
   font-family: var(--ps-font);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 700;
   pointer-events: none;
   user-select: none;
@@ -129,7 +129,7 @@
 .cg-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-family: var(--ps-font);
 }
 
@@ -165,7 +165,7 @@
   padding: 7px 10px;
   border-radius: var(--ps-radius-sm);
   border: 1.5px solid var(--ps-border);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink);
   font-family: var(--ps-font);
   background: var(--ps-surface);
@@ -183,7 +183,7 @@
   padding: 7px 10px;
   border-radius: var(--ps-radius-sm);
   border: 1.5px solid var(--ps-border);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink);
   font-family: var(--ps-font);
   background: var(--ps-surface);
@@ -323,7 +323,7 @@
 .cg-tab-btn {
   padding: 6px 14px;
   border-radius: 20px;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   border: 1.5px solid transparent;
   background: transparent;
@@ -351,7 +351,7 @@
   background: var(--ps-pink);
   color: #fff;
   border-radius: 10px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   padding: 1px 6px;
   font-weight: 700;
 }
@@ -360,7 +360,7 @@
 .cg-btn-primary {
   padding: 8px 18px;
   border-radius: var(--ps-radius-sm);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 700;
   background: var(--ps-lavender);
   color: #fff;
@@ -376,7 +376,7 @@
 .cg-btn-secondary {
   padding: 8px 18px;
   border-radius: var(--ps-radius-sm);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   background: transparent;
   color: var(--ps-lavender);
@@ -391,7 +391,7 @@
 .cg-btn-ghost {
   padding: 8px 18px;
   border-radius: var(--ps-radius-sm);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   background: transparent;
   color: var(--ps-ink-mid);
@@ -406,7 +406,7 @@
 .cg-btn-danger {
   padding: 8px 18px;
   border-radius: var(--ps-radius-sm);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   background: transparent;
   color: var(--ps-pink);
@@ -422,7 +422,7 @@
 .cg-toast {
   padding: 10px 16px;
   border-radius: var(--ps-radius-sm);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   box-shadow: var(--ps-shadow-md);
   pointer-events: auto;
@@ -454,13 +454,13 @@
   gap: 8px;
 }
 .re-wordmark {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ps-ink);
 }
 .re-badge {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 6px;
@@ -512,7 +512,7 @@
   padding: 24px 12px;
   text-align: center;
   color: var(--ink-faint, #aaa);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 .re-canvas {
   flex: 1;
@@ -531,13 +531,13 @@
   flex-shrink: 0;
 }
 .re-sub-title {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ps-ink);
   margin-right: 10px;
 }
 .re-sub-stats {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink-light);
 }
 .re-sub-actions {
@@ -575,7 +575,7 @@
   min-width: 0;
 }
 .re-char-name {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--ps-ink);
   white-space: nowrap;
@@ -583,7 +583,7 @@
   text-overflow: ellipsis;
 }
 .re-char-role {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--ps-ink-light);
 }
 .re-char-layer-dot {
@@ -617,16 +617,16 @@
   text-align: center;
 }
 .re-error-icon {
-  font-size: var(--text-4xl);
+  font-size: var(--text-5xl);
   color: var(--ps-pink);
 }
 .re-error-title {
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 700;
   color: var(--ps-ink);
 }
 .re-error-msg {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--ps-ink-light);
   max-width: 400px;
 }
@@ -635,7 +635,7 @@
    PRIMITIVES
    ═══════════════════════════════════════════════════════════════════════ */
 .re-label {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -650,14 +650,14 @@
   padding: 4px 0;
 }
 .re-field-label {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--ps-ink-light);
 }
 .re-field-value {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--ps-ink);
 }
 .re-pill {
@@ -679,7 +679,7 @@
   text-align: left;
   cursor: pointer;
   font-family: var(--ps-font);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink-mid);
   transition: background 0.1s ease, border-color 0.1s ease;
 }
@@ -701,7 +701,7 @@
   flex: 1;
 }
 .re-lf-count {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--ps-ink-light);
   font-weight: 600;
 }
@@ -714,7 +714,7 @@
   gap: 12px;
 }
 .re-spinner-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink-light);
 }
 .re-empty {
@@ -727,17 +727,17 @@
   text-align: center;
 }
 .re-empty-icon {
-  font-size: var(--text-4xl);
+  font-size: var(--text-5xl);
   color: var(--ps-lavender);
   opacity: 0.5;
 }
 .re-empty-title {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ps-ink);
 }
 .re-empty-desc {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink-light);
   max-width: 280px;
 }
@@ -800,7 +800,7 @@
   justify-content: center;
   background: rgba(253, 232, 232, 0.85);
   color: #8a2020;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 600;
   z-index: 10;
 }
@@ -837,13 +837,13 @@
   position: relative;
 }
 .re-webview-info-name {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ps-ink);
   margin-bottom: 2px;
 }
 .re-webview-info-role {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   margin-bottom: 6px;
 }
@@ -872,7 +872,7 @@
 .re-webview-tooltip-header {
   display: flex;
   gap: 4px;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   margin-bottom: 2px;
   align-items: center;
@@ -883,7 +883,7 @@
   margin-top: 2px;
 }
 .re-webview-tooltip-unaware {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--ps-pink);
   font-style: italic;
   margin-top: 2px;
@@ -912,7 +912,7 @@
   border-radius: 6px;
   border: 1.5px solid var(--ps-border);
   background: var(--ps-surface);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -933,7 +933,7 @@
   position: absolute;
   bottom: 10px;
   left: 10px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--ps-ink-light);
   background: rgba(255, 255, 255, 0.85);
   padding: 3px 8px;
@@ -998,12 +998,12 @@
 }
 .re-family-card-name {
   font-weight: 700;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--ps-ink);
 }
 .re-family-card-arrow {
   color: var(--ps-ink-light);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 .re-family-card-meta {
   display: flex;
@@ -1011,14 +1011,14 @@
   gap: 6px;
 }
 .re-family-card-role {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 .re-family-card-edit-btn {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink-light);
   padding: 2px 4px;
   transition: color 0.1s;
@@ -1083,12 +1083,12 @@
 }
 .re-candidate-name {
   font-weight: 700;
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   color: var(--ps-ink);
 }
 .re-candidate-arrow {
   color: var(--ps-lavender);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
 }
 .re-candidate-type {
   font-size: var(--text-xs);
@@ -1099,7 +1099,7 @@
   margin-bottom: 6px;
 }
 .re-candidate-situation {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink-mid);
   margin-bottom: 8px;
   line-height: 1.5;
@@ -1140,7 +1140,7 @@
 }
 .re-list-dim {
   color: var(--ps-ink-light);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1163,7 +1163,7 @@
   margin-bottom: 10px;
 }
 .re-inspector-title {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--ps-ink);
   text-transform: uppercase;
@@ -1190,11 +1190,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 .re-inspector-char-name {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   text-align: center;
   color: var(--ps-ink);
@@ -1205,7 +1205,7 @@
   align-items: center;
 }
 .re-inspector-arrow {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: var(--ps-lavender);
 }
 .re-inspector-body {
@@ -1249,12 +1249,12 @@
   gap: 8px;
 }
 .re-inspector-empty-icon {
-  font-size: var(--text-4xl);
+  font-size: var(--text-5xl);
   color: var(--ps-lavender);
   opacity: 0.35;
 }
 .re-inspector-empty-title {
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--ps-ink);
 }
@@ -1286,7 +1286,7 @@
 .re-close-btn {
   background: none;
   border: none;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   color: var(--ps-ink-light);
   cursor: pointer;
   padding: 2px 6px;
@@ -1304,7 +1304,7 @@
   padding: 14px 18px 10px;
 }
 .re-modal-title {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ps-ink);
 }
@@ -1336,7 +1336,7 @@
   margin: 8px 0 10px;
 }
 .re-gen-desc {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--ps-ink-mid);
   margin-bottom: 12px;
   line-height: 1.55;
@@ -1509,14 +1509,14 @@
     gap: 6px;
   }
   .re-sub-title {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
   .cg-table {
     font-size: var(--text-xs);
   }
   .cg-table thead th {
     padding: 6px 8px;
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
   }
   .cg-table td {
     padding: 8px;
