@@ -235,12 +235,12 @@ function ShowDetail() {
         <button
           className={`tab-button ${activeTab === 'studio' ? 'active' : ''}`}
           onClick={() => setActiveTab('studio')}
-          title="Studio (Ctrl+1)"
+          title="Dashboard (Ctrl+1)"
         >
-          <span className="tab-icon">🎬</span>
-          <span className="tab-label">Studio</span>
+          <span className="tab-icon">📊</span>
+          <span className="tab-label">Dashboard</span>
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'episodes' ? 'active' : ''}`}
           onClick={() => setActiveTab('episodes')}
@@ -248,18 +248,18 @@ function ShowDetail() {
         >
           <span className="tab-icon">📺</span>
           <span className="tab-label">Episodes</span>
-          <span className="tab-count">{episodes.length}</span>
+          {episodes.length > 0 && <span className="tab-count">{episodes.length}</span>}
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'assets' ? 'active' : ''}`}
           onClick={() => setActiveTab('assets')}
-          title="Assets (Ctrl+3)"
+          title="Production (Ctrl+3)"
         >
-          <span className="tab-icon">📁</span>
-          <span className="tab-label">Assets</span>
+          <span className="tab-icon">🎬</span>
+          <span className="tab-label">Production</span>
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'wardrobe' ? 'active' : ''}`}
           onClick={() => setActiveTab('wardrobe')}
@@ -268,7 +268,7 @@ function ShowDetail() {
           <span className="tab-icon">👗</span>
           <span className="tab-label">Wardrobe</span>
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'distribution' ? 'active' : ''}`}
           onClick={() => setActiveTab('distribution')}
@@ -277,13 +277,13 @@ function ShowDetail() {
           <span className="tab-icon">🚀</span>
           <span className="tab-label">Distribution</span>
         </button>
-        
+
         <button
           className={`tab-button ${activeTab === 'insights' ? 'active' : ''}`}
           onClick={() => setActiveTab('insights')}
           title="Insights (Ctrl+6)"
         >
-          <span className="tab-icon">📊</span>
+          <span className="tab-icon">📈</span>
           <span className="tab-label">Insights</span>
         </button>
       </div>
