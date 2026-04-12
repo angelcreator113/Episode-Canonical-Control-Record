@@ -2912,14 +2912,60 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           </div>
                         </div>
                         <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 4 }}>Estimates based on prestige {p} tier. Actual costs depend on wardrobe selection.</div>
+                        {/* Finalize Financials button — executes real transactions */}
+                        {md.used_in_episode_id && (
+                          <button
+                            onClick={async (e) => {
+                              const btn = e.target;
+                              btn.disabled = true;
+                              btn.textContent = 'Finalizing...';
+                              try {
+                                const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/finalize-financials`);
+                                if (res.data.success) {
+                                  const d = res.data.data;
+                                  if (d.already_finalized) {
+                                    setToast(`Already finalized — balance: ${d.balance}`);
+                                  } else {
+                                    setToast(`${d.transactions.length} transactions executed — balance: ${d.balance_after} coins (${d.summary.net_profit >= 0 ? '+' : ''}${d.summary.net_profit} net)`);
+                                  }
+                                }
+                              } catch (err) {
+                                setToast('Failed: ' + (err.response?.data?.error || err.message));
+                              }
+                              btn.disabled = false;
+                              btn.textContent = 'Finalize Financials';
+                            }}
+                            style={{ marginTop: 8, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
+                          >
+                            Finalize Financials
+                          </button>
+                        )}
                       </div>
                     );
                   })()}
 
                   {/* ═══ Overlay Command Center ═══ */}
                   <div style={{ borderTop: '2px solid #f1f5f9', paddingTop: 14, marginTop: 12, marginBottom: 4 }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: '#1a1a2e', marginBottom: 4 }}>Episode Overlays</div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>Generate, preview, edit, and approve per-episode overlay assets from this command center.</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#1a1a2e' }}>Episode Overlays</div>
+                      <button onClick={async () => {
+                        setOutfitPickerEvent(md);
+                        setOutfitSelected(new Set());
+                        setOutfitScore(null);
+                        try {
+                          const res = await api.get(`/api/v1/world/${showId}/events/${md.id}/wardrobe-options`);
+                          setOutfitOptions(res.data.items || []);
+                          const existing = await api.get(`/api/v1/world/${showId}/events/${md.id}/outfit`);
+                          if (existing.data.pieces?.length > 0) {
+                            setOutfitSelected(new Set(existing.data.pieces.map(p => p.id)));
+                            setOutfitScore(existing.data.score);
+                          }
+                        } catch { setOutfitOptions([]); }
+                      }} style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}>
+                        👗 Pick Outfit
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>Select wardrobe items first, then generate overlays. Or generate with AI.</div>
                   </div>
 
                   {/* Wardrobe Shopping List Overlay */}
