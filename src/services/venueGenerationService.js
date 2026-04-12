@@ -114,11 +114,27 @@ This is where fashion creators and influencers gather — make it feel alive and
 No text, no logos, no people. Interior design photography. Landscape orientation.`;
   }
 
-  // Generate single image
-  console.log('[VenueGen] Generating venue image...');
+  // Generate single interior image
+  console.log('[VenueGen] Generating interior image...');
   const imageUrl = await generateImageUrl(venuePrompt, { size: 'landscape', quality: 'hd', useCase: 'venue' });
 
   if (!imageUrl) throw new Error('Image generation failed — no URL returned');
+
+  // Generate exterior image
+  const exteriorPrompt = `Photorealistic exterior photograph of "${identity.venueName}", a ${identity.category} venue.
+Located at ${identity.venueAddress || identity.neighborhood}. Architectural style: ${identity.aesthetic}.
+Show the building facade, entrance, and street view during ${identity.timeOfDay}.
+${identity.prestige >= 7 ? 'Luxury venue entrance with elegant signage, valet area, dramatic architectural facade.' : 'Stylish building exterior with distinctive entrance, street-level view, urban context.'}
+This is a fantasy dream world venue in the LalaVerse — make it feel cinematic and aspirational.
+No text, no logos, no people. Architectural exterior photography. Landscape orientation.`;
+
+  let exteriorUrl = null;
+  try {
+    console.log('[VenueGen] Generating exterior image...');
+    exteriorUrl = await generateImageUrl(exteriorPrompt, { size: 'landscape', quality: 'hd', useCase: 'venue' });
+  } catch (err) {
+    console.warn('[VenueGen] Exterior generation failed (non-blocking):', err.message);
+  }
 
   // Download and upload to S3
   const buffer = await downloadImage(imageUrl);
@@ -132,7 +148,19 @@ No text, no logos, no people. Interior design photography. Landscape orientation
     s3Url = imageUrl;
   }
 
-  // Create Scene Set with single angle
+  // Upload exterior to S3
+  let exteriorS3Url = null;
+  if (exteriorUrl && S3_BUCKET) {
+    try {
+      const extBuffer = await downloadImage(exteriorUrl);
+      exteriorS3Url = await uploadToS3(extBuffer, eventFolder, 'exterior');
+      console.log('[VenueGen] Uploaded exterior to S3');
+    } catch { exteriorS3Url = exteriorUrl; }
+  } else {
+    exteriorS3Url = exteriorUrl;
+  }
+
+  // Create Scene Set with interior + exterior angles
   let sceneSet = null;
   if (models.SceneSet) {
     try {
@@ -146,6 +174,21 @@ No text, no logos, no people. Interior design photography. Landscape orientation
       });
 
       if (models.SceneAngle) {
+        // Exterior establishing shot (for video generation)
+        if (exteriorS3Url) {
+          await models.SceneAngle.create({
+            scene_set_id: sceneSet.id,
+            angle_name: `${identity.venueName} — Exterior`,
+            angle_label: 'ESTABLISHING',
+            still_image_url: exteriorS3Url,
+            generation_status: 'complete',
+            camera_motion: 'slow_pan_right',
+            video_duration: 10,
+            sort_order: 0,
+          });
+        }
+
+        // Interior wide shot
         await models.SceneAngle.create({
           scene_set_id: sceneSet.id,
           angle_name: `${identity.venueName} — Event Space`,
@@ -156,7 +199,7 @@ No text, no logos, no people. Interior design photography. Landscape orientation
         });
       }
 
-      console.log(`[VenueGen] Scene set created: ${sceneSet.id} — ${identity.venueName}`);
+      console.log(`[VenueGen] Scene set created: ${sceneSet.id} — ${identity.venueName} (${exteriorS3Url ? 'exterior + interior' : 'interior only'})`);
     } catch (err) {
       console.warn('[VenueGen] Scene set creation failed:', err.message);
     }
@@ -185,6 +228,7 @@ No text, no logos, no people. Interior design photography. Landscape orientation
 
   return {
     venue_url: s3Url,
+    exterior_url: exteriorS3Url,
     scene_set_id: sceneSet?.id || null,
     venue_identity: identity,
   };
