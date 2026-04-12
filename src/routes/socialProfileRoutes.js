@@ -130,6 +130,7 @@ IMPORTANT:
 Respond ONLY in valid JSON:
 {
   "display_name": "How their name appears on the platform",
+  "creator_name": "Their real full name — the actual person behind the handle. e.g. 'Jessica Chen', 'Marcus Rivera'. Every creator has a real name.",
 
   "follower_tier": "micro|mid|macro|mega",
   "follower_count_approx": "e.g. 2.3k or 47k or 1.2M — realistic for this creator type on this platform",
@@ -361,6 +362,7 @@ Lala does not know she was built. The world she lives in feels complete and self
       full_profile:    generated,
       // Flatten key fields for querying
       display_name:          generated.display_name,
+      creator_name:          generated.creator_name || null,
       follower_tier:         safeFollowerTier,
       follower_count_approx: generated.follower_count_approx,
       content_category:      generated.content_category,

@@ -17,6 +17,7 @@ module.exports = (sequelize) => {
     social_profile_id: { type: DataTypes.INTEGER, allowNull: true },
     poster_handle: { type: DataTypes.STRING(100), allowNull: false },
     poster_display_name: { type: DataTypes.STRING(200), allowNull: true },
+    poster_creator_name: { type: DataTypes.STRING(200), allowNull: true },  // Real name of the creator
     poster_platform: { type: DataTypes.STRING(30), allowNull: true, defaultValue: 'instagram' },
 
     post_type: {

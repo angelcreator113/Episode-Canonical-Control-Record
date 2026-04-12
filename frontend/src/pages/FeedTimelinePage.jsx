@@ -48,9 +48,11 @@ function FeedPostCard({ post, onDelete }) {
         </div>
         <div className="feed-post-user">
           <span className="feed-post-display-name">
-            {post.poster_display_name || post.poster_handle}
+            {post.poster_creator_name || post.poster_display_name || post.poster_handle}
           </span>
-          <span className="feed-post-handle">@{post.poster_handle}</span>
+          <span className="feed-post-handle">
+            @{post.poster_handle}{post.poster_creator_name && post.poster_display_name && post.poster_display_name !== post.poster_creator_name ? ` · ${post.poster_display_name}` : ''}
+          </span>
           <span className="feed-post-platform">{post.poster_platform}</span>
         </div>
         {post.narrative_function && (

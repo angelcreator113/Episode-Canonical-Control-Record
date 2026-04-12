@@ -68,9 +68,10 @@ function ViralPostCard({ post }) {
       )}
       <div className="efd-viral-header">
         <div className="efd-viral-avatar">
-          {(post.poster_handle || '?')[0].toUpperCase()}
+          {(post.poster_creator_name || post.poster_handle || '?')[0].toUpperCase()}
         </div>
         <div>
+          {post.poster_creator_name && <span className="efd-viral-name" style={{ fontWeight: 700, fontSize: 13, display: 'block' }}>{post.poster_creator_name}</span>}
           <span className="efd-viral-handle">@{post.poster_handle}</span>
           <span className="efd-viral-platform">{post.poster_platform}</span>
         </div>

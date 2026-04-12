@@ -30,6 +30,7 @@ module.exports = (sequelize, DataTypes) => {
     platform:              { type: DataTypes.ENUM('tiktok','instagram','youtube','twitter','onlyfans','twitch','substack','multi'), allowNull: false },
     vibe_sentence:         { type: DataTypes.TEXT, allowNull: false },
     display_name:          { type: DataTypes.STRING(200), allowNull: true },
+    creator_name:          { type: DataTypes.STRING(200), allowNull: true },  // Real name behind the handle �� e.g. "Jessica Chen"
     follower_tier:         { type: DataTypes.ENUM('micro','mid','macro','mega'), allowNull: true },
     follower_count_approx: { type: DataTypes.STRING(50), allowNull: true },
     content_category:      { type: DataTypes.STRING(100), allowNull: true },
