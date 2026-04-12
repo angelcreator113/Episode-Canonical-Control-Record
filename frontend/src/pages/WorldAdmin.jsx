@@ -88,8 +88,9 @@ const TABS = [
     { key: 'feed-events', label: 'Feed Events' },
     { key: 'events', label: 'Events Library' },
   ]},
-  { key: 'wardrobe', icon: '👗', label: 'Wardrobe', subs: [
-    { key: 'wardrobe-items', label: 'Wardrobe Library' },
+  { key: 'wardrobe', icon: '🎬', label: 'Assets', subs: [
+    { key: 'scene-sets', label: 'Scene Sets' },
+    { key: 'wardrobe-items', label: 'Wardrobe' },
     { key: 'goals', label: 'Career Goals' },
   ]},
   { key: 'characters', icon: '👑', label: 'Characters', subs: [
@@ -146,8 +147,9 @@ function WorldAdmin() {
       'feed': ['feed', 'feed-timeline'],
       'feed-events': ['feed', 'feed-events'],
       'events': ['feed', 'events'],
+      'scene-sets': ['wardrobe', 'scene-sets'],
       'goals': ['wardrobe', 'goals'],
-      'wardrobe': ['wardrobe', 'wardrobe-items'],
+      'wardrobe': ['wardrobe', 'scene-sets'],
       'characters': ['characters', 'characters-list'],
       'decisions': ['characters', 'decisions'],
     };
@@ -3852,6 +3854,66 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           </div>
         </div>,
         document.body
+      )}
+
+      {/* ════════════════════════ SCENE SETS ════════════════════════ */}
+      {activeTab === 'wardrobe' && subTab === 'scene-sets' && (
+        <div style={S.content}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Scene Sets</h2>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
+                {sceneSets.length} venue{sceneSets.length !== 1 ? 's' : ''} — exteriors, interiors, and camera angles
+              </p>
+            </div>
+            <button onClick={() => navigate(`/shows/${showId}/scene-library`)} style={S.primaryBtn}>
+              Open Scene Library →
+            </button>
+          </div>
+
+          {sceneSets.length === 0 ? (
+            <div style={{ ...S.card, textAlign: 'center', padding: 40 }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📍</div>
+              <p style={{ fontSize: 14, color: '#94a3b8', marginBottom: 16 }}>No scene sets yet</p>
+              <p style={{ fontSize: 12, color: '#94a3b8' }}>Generate venue images from events, or create scenes in the Scene Library.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
+              {sceneSets.map(ss => (
+                <div key={ss.id} onClick={() => navigate(`/shows/${showId}/scene-library?scene=${ss.id}`)}
+                  style={{
+                    ...S.card, padding: 0, overflow: 'hidden', cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+                >
+                  {ss.base_still_url ? (
+                    <div style={{ position: 'relative' }}>
+                      {ss.video_clip_url ? (
+                        <video src={ss.video_clip_url} style={{ width: '100%', height: 140, objectFit: 'cover' }} autoPlay loop muted playsInline />
+                      ) : (
+                        <img src={ss.base_still_url} alt={ss.name} style={{ width: '100%', height: 140, objectFit: 'cover' }} />
+                      )}
+                      {ss.video_clip_url && (
+                        <span style={{ position: 'absolute', top: 8, right: 8, padding: '2px 8px', background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 4, fontSize: 9, fontWeight: 600 }}>🎬 Video</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ width: '100%', height: 140, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 32 }}>📍</div>
+                  )}
+                  <div style={{ padding: '10px 14px' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{ss.name}</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                      {ss.scene_type?.replace(/_/g, ' ')}
+                      {ss.generation_status === 'complete' && <span style={{ marginLeft: 6, color: '#16a34a' }}>✓</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ════════════════════════ WARDROBE ════════════════════════ */}
