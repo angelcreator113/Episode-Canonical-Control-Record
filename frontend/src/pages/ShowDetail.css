@@ -170,10 +170,11 @@
 .tab-navigation {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 0.4rem 1.25rem;
-  background: #fff;
+  gap: 0.35rem;
+  border-bottom: 2px solid rgba(243,232,255,0.6);
+  padding: 0.5rem 1.25rem;
+  background: linear-gradient(135deg, rgba(253,242,248,0.95) 0%, rgba(252,231,243,0.95) 100%);
+  backdrop-filter: blur(8px);
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
@@ -181,6 +182,7 @@
   scrollbar-color: #d1d5db transparent;
   position: relative;
   z-index: 10;
+  box-shadow: 0 2px 8px rgba(236,72,153,0.08);
   margin-top: 0;
 }
 
@@ -204,33 +206,37 @@
   gap: 0.35rem;
   padding: 0.4rem 0.75rem;
   background: transparent;
-  border: 1px solid transparent;
+  border: 2px solid transparent;
   color: #64748b;
   font-weight: 600;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   position: relative;
-  border-radius: 6px;
+  border-radius: 10px;
   flex-shrink: 0;
 }
 
 .tab-button:hover {
   color: #1e293b;
-  background: #f1f5f9;
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(236,72,153,0.2);
+  transform: translateY(-1px);
 }
 
 .tab-button.active {
-  color: #6366f1 !important;
-  background: #eef2ff !important;
+  color: #ec4899 !important;
+  background: linear-gradient(135deg, #ffffff 0%, #fdf2f8 100%) !important;
   font-weight: 700;
-  border-color: #c7d2fe !important;
+  border-color: rgba(236,72,153,0.3) !important;
+  box-shadow: 0 3px 10px rgba(236, 72, 153, 0.15);
+  transform: translateY(-1px);
 }
 
 .tab-button.active:hover {
-  color: #6366f1 !important;
-  background: #eef2ff !important;
+  color: #ec4899 !important;
+  background: #ffffff !important;
 }
 
 .tab-icon {
