@@ -67,6 +67,17 @@ const OVERLAY_TYPES = [
 
   // ── EPISODE-LEVEL FRAMES (selected per episode based on content) ──
   {
+    id: 'episode_title',
+    name: 'Episode Title Card',
+    category: 'frame',
+    lifecycle: 'per_episode',
+    scope: 'episode',
+    beat: 'Intro',
+    description: 'Episode title card — generated from the episode title, event name, and prestige. Uses DALL-E for text rendering.',
+    prompt: 'A luxury episode title card overlay. Elegant dark background with gold border frame. Center text showing the episode title in refined serif typography with gold foil effect. Below the title, a thin gold line with episode number. Subtle gold sparkle particles. The text must be clearly readable. Luxury fashion show episode card. Isolated on plain background.',
+    useCase: 'invitation', // DALL-E — needs text rendering
+  },
+  {
     id: 'mail_panel',
     name: 'Mail Panel',
     category: 'frame',

@@ -2724,6 +2724,83 @@ router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', option
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// EPISODE TITLE OVERLAY — generates title card with actual episode title
+// ═══════════════════════════════════════════════════════════════════════
+
+// POST /world/:showId/episodes/:episodeId/generate-title-overlay
+router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', optionalAuth, async (req, res) => {
+  try {
+    const { showId, episodeId } = req.params;
+    const models = req.app?.get?.('models') || require('../models');
+    const { sequelize } = models;
+
+    // Load episode
+    const [episode] = await sequelize.query(
+      `SELECT id, title, episode_number FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
+
+    // Load event for context
+    const [event] = await sequelize.query(
+      `SELECT name, prestige, host_brand FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    ).catch(() => []);
+
+    const { STYLE_PREFIX } = require('../services/uiOverlayService');
+    const { generateImageUrl } = require('../services/imageGenerationService');
+
+    const title = episode.title || `Episode ${episode.episode_number}`;
+    const prompt = `${STYLE_PREFIX}A luxury episode title card overlay. Elegant dark background (#1A1A1A) with thin gold (#B8962E) border frame. Center text reading "${title}" in refined gold serif typography. Below: "Episode ${episode.episode_number}" in smaller gold text. Subtle gold sparkle particles around text. The text MUST be clearly readable — this is a title card. Luxury fashion show episode intro. Isolated on dark background.`;
+
+    const imageUrl = await generateImageUrl(prompt, { size: 'landscape', quality: 'hd', useCase: 'invitation' });
+
+    // Upload to S3 and create asset
+    const { v4: uuidv4 } = require('uuid');
+    const axios = require('axios');
+    const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+    const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
+    const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+
+    let s3Url = imageUrl;
+    if (S3_BUCKET && imageUrl) {
+      const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const s3 = new S3Client({ region: AWS_REGION });
+      const s3Key = `overlays/episode-title/${episodeId}/${uuidv4()}.png`;
+      await s3.send(new PutObjectCommand({
+        Bucket: S3_BUCKET, Key: s3Key, Body: imgRes.data,
+        ContentType: 'image/png', CacheControl: 'max-age=31536000',
+      }));
+      s3Url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+    }
+
+    // Create asset record
+    const assetId = uuidv4();
+    try {
+      await sequelize.query(
+        `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, purpose, category, entity_type,
+         s3_url_raw, s3_url_processed, show_id, episode_id, metadata, created_at, updated_at)
+         VALUES (:id, :name, 'UI_OVERLAY', 'UI.OVERLAY.EPISODE_TITLE', 'EPISODE', 'EPISODE', 'MAIN', 'overlay', 'prop',
+         :url, :url, :showId, :episodeId, :metadata, NOW(), NOW())`,
+        { replacements: {
+          id: assetId, name: `${title} — Title Card`, url: s3Url, showId, episodeId,
+          metadata: JSON.stringify({ source: 'episode-title-generator', episode_title: title, episode_number: episode.episode_number }),
+        }}
+      );
+    } catch { /* non-blocking */ }
+
+    return res.json({
+      success: true,
+      data: { assetId, imageUrl: s3Url, title },
+      message: `Episode title overlay generated: "${title}"`,
+    });
+  } catch (err) {
+    console.error('[EpisodeTitleOverlay] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // OVERLAY SELECTION — show-level vs episode-level, auto-suggestions
 // ═══════════════════════════════════════════════════════════════════════
 

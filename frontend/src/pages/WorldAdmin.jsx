@@ -2984,6 +2984,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {/* Episode-level overlays (selectable) */}
                     {(() => {
                       const episodeOverlays = [
+                        { id: 'episode_title', name: 'Episode Title', icon: '🎬' },
                         { id: 'mail_panel', name: 'Mail Panel', icon: '💌' },
                         { id: 'wardrobe_list', name: 'Wardrobe List', icon: '👗' },
                         { id: 'closet_ui', name: 'Closet UI', icon: '🚪' },
@@ -2998,6 +2999,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         // Auto-suggest based on event type
                         selections = [];
                         const type = md.event_type || 'invite';
+                        if (md.used_in_episode_id) selections.push('episode_title');
                         if (['invite', 'upgrade', 'brand_deal'].includes(type)) selections.push('mail_panel');
                         if ((md.prestige || 5) >= 4) selections.push('wardrobe_list', 'closet_ui');
                         if (['brand_deal', 'deliverable'].includes(type) || (md.prestige || 5) >= 6) selections.push('career_list');
@@ -3033,6 +3035,41 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         </div>
                       );
                     })()}
+
+                    {/* Episode Title + Custom Overlay Actions */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {md.used_in_episode_id && (
+                        <button onClick={async (e) => {
+                          const btn = e.currentTarget;
+                          btn.disabled = true; btn.textContent = '⏳ Generating...';
+                          try {
+                            const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/generate-title-overlay`);
+                            if (res.data.success) setToast(`Title overlay: "${res.data.data.title}"`);
+                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                          btn.disabled = false; btn.textContent = '🎬 Generate Episode Title';
+                        }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                          🎬 Generate Episode Title
+                        </button>
+                      )}
+                      <button onClick={async () => {
+                        const name = window.prompt('Custom overlay name (e.g., "Sponsor Logo", "Transition Card"):');
+                        if (!name) return;
+                        const prompt = window.prompt('Describe the overlay for AI generation:');
+                        if (!prompt) return;
+                        const scope = window.confirm('Is this a SHOW-level overlay (appears in every episode)?\n\nOK = Show level\nCancel = Episode level only') ? 'show' : 'episode';
+                        const category = window.confirm('Is this a frame (large panel)?\n\nOK = Frame\nCancel = Icon') ? 'frame' : 'icon';
+                        try {
+                          const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, {
+                            name, prompt, category,
+                            description: `Custom ${scope}-level ${category}: ${name}`,
+                            beat: scope === 'show' ? 'Various' : 'Custom',
+                          });
+                          if (res.data.success) setToast(`Custom overlay "${name}" created — go to Scene Library → Overlays to generate it`);
+                        } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                      }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px dashed #94a3b8', background: '#fff', color: '#64748b', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
+                        + Add Custom Overlay
+                      </button>
+                    </div>
                   </div>
 
                   {/* Wardrobe Shopping List Overlay */}
