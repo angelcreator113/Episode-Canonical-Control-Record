@@ -19,20 +19,20 @@
 
 .header-left h2 {
   margin: 0 0 0.25rem 0;
-  font-size: 1.75rem;
+  font-size: var(--text-3xl);
   color: #1e293b;
 }
 
 .header-subtitle {
   margin: 0;
   color: #64748b;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
 }
 
 .unsaved-indicator {
   color: #f59e0b;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .btn-save {
@@ -69,13 +69,13 @@
 }
 
 .help-icon {
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   flex-shrink: 0;
 }
 
 .help-content {
   color: #78350f;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   line-height: 1.6;
 }
 
@@ -107,12 +107,12 @@
 
 .section-header h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   color: #1e293b;
 }
 
 .section-hint {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: #64748b;
   font-style: italic;
 }
@@ -124,7 +124,7 @@
   border: none;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -170,7 +170,7 @@
   color: white;
   border-radius: 50%;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   flex-shrink: 0;
 }
 
@@ -191,7 +191,7 @@
 }
 
 .block-field label {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -202,7 +202,7 @@
   padding: 0.75rem;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 600;
   color: #1e293b;
   transition: border-color 0.2s ease;
@@ -222,7 +222,7 @@
   padding: 0.75rem;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: #1e293b;
   line-height: 1.6;
   font-family: inherit;
@@ -254,7 +254,7 @@
   background: white;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: var(--text-base);
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -289,7 +289,7 @@
   padding: 1rem;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   color: #1e293b;
   line-height: 1.6;
   font-family: inherit;
@@ -312,7 +312,7 @@
 
 .description-hints p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   color: #475569;
   line-height: 1.6;
 }
@@ -329,7 +329,7 @@
 .empty-script p {
   margin: 0 0 1.5rem 0;
   color: #64748b;
-  font-size: 1.05rem;
+  font-size: var(--text-base);
 }
 
 /* PREVIEW - hidden by default, shows at bottom */
@@ -348,7 +348,7 @@
   margin: 0 0 1rem 0;
   padding-bottom: 1rem;
   border-bottom: 1px solid #e2e8f0;
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   color: #1e293b;
 }
 
@@ -370,14 +370,14 @@
 .preview-character {
   font-weight: 700;
   color: #667eea;
-  font-size: 1rem;
+  font-size: var(--text-base);
   white-space: nowrap;
 }
 
 .preview-dialogue {
   color: #1e293b;
   line-height: 1.6;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
 }
 
 .preview-empty {
@@ -404,7 +404,7 @@
 }
 
 .reminder-icon {
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
 }
 
 .save-reminder span {
@@ -461,11 +461,11 @@
   }
   
   .header-left h2 {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
   }
 
   .header-subtitle {
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
   }
 
   .help-banner {
@@ -476,11 +476,11 @@
   }
 
   .help-icon {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
   }
 
   .help-content {
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     line-height: 1.5;
   }
 
@@ -504,7 +504,7 @@
   }
 
   .section-header h3 {
-    font-size: 1.05rem;
+    font-size: var(--text-base);
   }
 
   .dialogue-block {
@@ -555,7 +555,7 @@
   }
 
   .script-preview h3 {
-    font-size: 1.05rem;
+    font-size: var(--text-base);
   }
 
   .preview-block {
@@ -583,16 +583,16 @@
   }
 
   .header-left h2 {
-    font-size: 1.1rem;
+    font-size: var(--text-lg);
   }
 
   .header-subtitle {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
 
   .btn-save {
     padding: 0.5rem 1rem;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     border-radius: 6px;
   }
 
@@ -605,11 +605,11 @@
   }
 
   .help-icon {
-    font-size: 1rem;
+    font-size: var(--text-base);
   }
 
   .help-content {
-    font-size: 0.78rem;
+    font-size: var(--text-xs);
     line-height: 1.4;
   }
 
@@ -631,12 +631,12 @@
   }
 
   .section-header h3 {
-    font-size: 0.95rem;
+    font-size: var(--text-base);
   }
 
   .btn-add-block {
     padding: 0.375rem 0.75rem;
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
     border-radius: 6px;
   }
 
@@ -654,22 +654,22 @@
   .block-number {
     width: 30px;
     height: 30px;
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
   }
 
   .block-field label {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
 
   .character-input {
     padding: 0.5rem 0.625rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     border-radius: 6px;
   }
 
   .dialogue-textarea {
     padding: 0.5rem 0.625rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     border-radius: 6px;
   }
 
@@ -680,7 +680,7 @@
   .btn-block-action {
     width: 32px;
     height: 32px;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     border-radius: 6px;
   }
 
@@ -692,7 +692,7 @@
   }
 
   .script-preview h3 {
-    font-size: 0.95rem;
+    font-size: var(--text-base);
     margin-bottom: 0.75rem;
     padding-bottom: 0.625rem;
   }
@@ -707,17 +707,17 @@
   }
 
   .preview-character {
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
 
   .preview-dialogue {
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     line-height: 1.5;
   }
 
   .youtube-description {
     padding: 0.625rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     border-radius: 6px;
   }
 
@@ -727,7 +727,7 @@
   }
 
   .description-hints p {
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
     line-height: 1.5;
   }
 
@@ -736,7 +736,7 @@
   }
 
   .empty-script p {
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
   }
 
   .save-reminder {
@@ -747,12 +747,12 @@
   }
 
   .save-reminder span {
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
 
   .btn-save-reminder {
     padding: 0.375rem 0.75rem;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     border-radius: 6px;
   }
 }

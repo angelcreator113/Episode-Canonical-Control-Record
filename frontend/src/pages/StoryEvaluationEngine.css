@@ -134,6 +134,6 @@
 
   /* Step bar — hide text, show only progress dots */
   .see-step-bar span {
-    font-size: 7px !important;
+    font-size: var(--text-2xs) !important;
   }
 }

@@ -26,7 +26,7 @@
   background: #ffffff;
   border: 2px solid #e8e5de;
   border-radius: 10px;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #1a1a2e;
   cursor: pointer;
@@ -45,7 +45,7 @@
 
 .wardrobe-title {
   margin: 0;
-  font-size: 1.75rem;
+  font-size: var(--text-3xl);
   font-weight: 700;
   color: #1a1a2e;
   display: flex;
@@ -55,7 +55,7 @@
 
 .wardrobe-subtitle {
   margin: 0.25rem 0 0 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   color: #7a7a8a;
 }
 
@@ -65,7 +65,7 @@
   color: #ffffff;
   border: none;
   border-radius: 10px;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.25s;
@@ -101,7 +101,7 @@
   background: transparent;
   border: none;
   border-radius: 10px;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: #7a7a8a;
   cursor: pointer;
@@ -120,7 +120,7 @@
 }
 
 .wardrobe-unified .tab-icon {
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   line-height: 1;
 }
 
@@ -161,7 +161,7 @@
 
   .wardrobe-tab {
     padding: 0.6rem 0.5rem;
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
   }
 
   .wardrobe-unified .tab-label {
@@ -173,7 +173,7 @@
   }
 
   .wardrobe-unified .tab-icon {
-    font-size: 1.35rem;
+    font-size: var(--text-xl);
   }
 }
 
@@ -183,7 +183,7 @@
   }
 
   .wardrobe-header h1 {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
   }
 
   .wardrobe-tabs {

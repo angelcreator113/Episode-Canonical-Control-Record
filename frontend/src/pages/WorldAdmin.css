@@ -12,7 +12,7 @@
   }
 
   .wa-header h1 {
-    font-size: 22px !important;
+    font-size: var(--text-2xl) !important;
   }
 
   .wa-tab-bar {
@@ -22,7 +22,7 @@
 
   .wa-tab-bar button {
     padding: 8px 12px !important;
-    font-size: 12px !important;
+    font-size: var(--text-xs) !important;
   }
 
   /* Collapse 4+ column grids to 2 columns */
@@ -49,12 +49,12 @@
   }
 
   .wa-header h1 {
-    font-size: 20px !important;
+    font-size: var(--text-xl) !important;
   }
 
   .wa-tab-bar button {
     padding: 6px 10px !important;
-    font-size: 11px !important;
+    font-size: var(--text-xs) !important;
   }
 
   /* Collapse all multi-column grids to single column */
@@ -73,11 +73,11 @@
   }
 
   .wa-header h1 {
-    font-size: 18px !important;
+    font-size: var(--text-lg) !important;
   }
 
   .wa-tab-bar button {
     padding: 5px 8px !important;
-    font-size: 10px !important;
+    font-size: var(--text-2xs) !important;
   }
 }

@@ -70,7 +70,7 @@
 .item-info h1 {
   margin: 0 0 1rem 0;
   color: #2c3e50;
-  font-size: 2rem;
+  font-size: var(--text-3xl);
 }
 
 .description {
@@ -84,12 +84,12 @@
   padding: 0.75rem;
   border: 1px solid #ced4da;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: var(--text-base);
   margin-bottom: 1rem;
 }
 
 .edit-title {
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   font-weight: 600;
 }
 
@@ -119,7 +119,7 @@
 }
 
 .metadata-item label {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   color: #6c757d;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -129,7 +129,7 @@
 
 .metadata-item span {
   color: #2c3e50;
-  font-size: 1rem;
+  font-size: var(--text-base);
 }
 
 .tags-list {
@@ -179,7 +179,7 @@
 
 .btn-large {
   padding: 1rem 2rem;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   width: 100%;
 }
 
@@ -203,7 +203,7 @@
 .usage-history-card h3 {
   margin: 0 0 1.5rem 0;
   color: #2c3e50;
-  font-size: 1.2rem;
+  font-size: var(--text-xl);
   padding-bottom: 1rem;
   border-bottom: 1px solid #e9ecef;
 }
@@ -221,13 +221,13 @@
 .stat-label {
   color: #6c757d;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .stat-value {
   color: #2c3e50;
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
 }
 
 .show-list {
@@ -255,7 +255,7 @@
 
 .show-count {
   color: #6c757d;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .usage-table {
@@ -272,7 +272,7 @@
   padding: 0.75rem 0.5rem;
   border-bottom: 2px solid #dee2e6;
   color: #6c757d;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -281,7 +281,7 @@
   padding: 0.75rem 0.5rem;
   border-bottom: 1px solid #e9ecef;
   color: #495057;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .usage-table tr:last-child td {
@@ -384,7 +384,7 @@
   }
   
   .usage-table {
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
   }
   
   .usage-table th,

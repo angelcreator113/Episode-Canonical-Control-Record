@@ -20,14 +20,14 @@
 
 .outfit-header h1 {
   margin: 0.5rem 0;
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   font-weight: 700;
 }
 
 .outfit-header p {
   margin: 0.5rem 0 0 0;
   opacity: 0.9;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
 }
 
 /* Controls */
@@ -48,7 +48,7 @@
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -72,7 +72,7 @@
   padding: 0.5rem 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.5);
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   background: white;
   transition: border-color 0.3s ease;
 }
@@ -102,7 +102,7 @@
   border: none;
   padding: 0.875rem 2rem;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.3s ease;
@@ -141,7 +141,7 @@
 
 .outfit-set-header h3 {
   margin: 0;
-  font-size: 1.3rem;
+  font-size: var(--text-xl);
   color: #333;
   flex: 1;
 }
@@ -154,7 +154,7 @@
 .btn-icon {
   background: transparent;
   border: none;
-  font-size: 1.2rem;
+  font-size: var(--text-xl);
   cursor: pointer;
   padding: 0.25rem;
   transition: transform 0.2s ease;
@@ -166,7 +166,7 @@
 
 .outfit-description {
   color: #666;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   margin: 0 0 1rem 0;
   line-height: 1.5;
 }
@@ -181,7 +181,7 @@
 .meta-tag {
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   text-transform: capitalize;
 }
@@ -233,7 +233,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   background: #e0e0e0;
 }
 
@@ -241,12 +241,12 @@
   color: #999;
   font-style: italic;
   margin: 0 0 0.75rem 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .items-count {
   color: #666;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 
@@ -278,14 +278,14 @@
 
 .modal-header h2 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   color: #333;
 }
 
 .modal-close {
   background: transparent;
   border: none;
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   cursor: pointer;
   color: #999;
   padding: 0;
@@ -316,7 +316,7 @@
   padding: 0.75rem;
   border: 2px solid #e0e0e0;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-family: inherit;
   transition: border-color 0.3s ease;
 }
@@ -378,7 +378,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
 }
 
 .selector-info {
@@ -396,13 +396,13 @@
 }
 
 .selector-meta {
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   color: #888;
   text-transform: capitalize;
 }
 
 .selector-check {
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   color: #f5576c;
   font-weight: bold;
 }
@@ -413,7 +413,7 @@
   align-items: center;
   justify-content: center;
   min-height: 100dvh;
-  font-size: 1.2rem;
+  font-size: var(--text-xl);
   color: white;
   background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
 }
@@ -421,7 +421,7 @@
 /* Responsive Design */
 @media (max-width: 768px) {
   .outfit-header h1 {
-    font-size: 1.5rem;
+    font-size: var(--text-2xl);
   }
   
   .outfit-controls {
@@ -445,7 +445,7 @@
 
 @media (max-width: 480px) {
   .outfit-header h1 {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
   }
 
   .outfit-sets-grid {

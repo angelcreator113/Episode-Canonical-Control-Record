@@ -61,7 +61,7 @@
 }
 
 .ss-loading-text {
-  font-size: 14px;
+  font-size: var(--text-sm);
   color: var(--ink-faint);
   letter-spacing: 0.5px;
 }
@@ -72,13 +72,13 @@
   padding: 4rem 2rem;
 }
 .ss-error h2 {
-  font-size: 20px;
+  font-size: var(--text-xl);
   color: var(--ink);
   margin-bottom: 0.5rem;
 }
 .ss-error p {
   color: var(--ink-faint);
-  font-size: 14px;
+  font-size: var(--text-sm);
   margin-bottom: 1.5rem;
 }
 
@@ -95,7 +95,7 @@
 }
 
 .ss-greeting {
-  font-size: 26px;
+  font-size: var(--text-2xl);
   font-weight: 600;
   color: var(--ink);
   margin: 0 0 0.4rem;
@@ -104,7 +104,7 @@
 }
 
 .ss-subtitle {
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: var(--ink-faint);
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -129,13 +129,13 @@
 }
 
 .ss-stat-value {
-  font-size: 22px;
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--gold);
 }
 
 .ss-stat-label {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--ink-faint);
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -147,7 +147,7 @@
 }
 
 .ss-section-title {
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--ink);
   margin-bottom: 1rem;
@@ -157,7 +157,7 @@
 }
 
 .ss-section-icon {
-  font-size: 18px;
+  font-size: var(--text-lg);
 }
 
 /* ── Cards Grid ── */
@@ -194,7 +194,7 @@
 }
 
 .ss-card-badge {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--gold);
   background: var(--gold-bg);
@@ -209,12 +209,12 @@
 .ss-badge-status[data-status="locked"]    { color: #3d8e42; background: rgba(61, 142, 66, 0.1); }
 
 .ss-card-time {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--ink-faint);
 }
 
 .ss-card-title {
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--ink);
   margin: 0 0 0.3rem;
@@ -222,13 +222,13 @@
 }
 
 .ss-card-meta {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--ink-dim);
   margin: 0;
 }
 
 .ss-card-character {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--gold);
   margin: 0.25rem 0 0;
   opacity: 0.8;
@@ -236,7 +236,7 @@
 
 .ss-card-words {
   margin-top: 0.5rem;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: #5570d2;
   font-weight: 500;
 }
@@ -257,7 +257,7 @@
   gap: 0.4rem;
   padding: 0.7rem 1.4rem;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -307,7 +307,7 @@
   gap: 0.5rem;
   padding: 1rem 2.5rem;
   border-radius: 10px;
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 700;
   cursor: pointer;
   border: none;
@@ -324,7 +324,7 @@
 }
 
 .ss-primary-hint {
-  font-size: 13px;
+  font-size: var(--text-xs);
   color: var(--ink-faint);
   margin: 0.6rem 0 0;
 }
@@ -356,7 +356,7 @@
   border-radius: 50%;
   background: var(--gold-bg);
   color: var(--gold);
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -365,18 +365,18 @@
 }
 
 .ss-flow-name {
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 700;
   color: var(--ink);
 }
 
 .ss-flow-desc {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--ink-faint);
 }
 
 .ss-flow-arrow {
-  font-size: 20px;
+  font-size: var(--text-xl);
   color: var(--gold);
   font-weight: 300;
   margin-top: -10px;
@@ -384,7 +384,7 @@
 
 /* ── Section Badge ── */
 .ss-section-badge {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--ink-faint);
   background: var(--surface2);
@@ -400,7 +400,7 @@
   }
 
   .ss-greeting {
-    font-size: 22px;
+    font-size: var(--text-2xl);
   }
 
   .ss-stats-row {
@@ -408,7 +408,7 @@
   }
 
   .ss-stat-value {
-    font-size: 18px;
+    font-size: var(--text-lg);
   }
 
   .ss-cards {
@@ -434,17 +434,17 @@
   }
 
   .ss-flow-name {
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 
   .ss-flow-desc {
-    font-size: 10px;
+    font-size: var(--text-2xs);
   }
 
   .ss-btn-hero {
     width: 100%;
     justify-content: center;
-    font-size: 16px;
+    font-size: var(--text-base);
     padding: 0.9rem 1.5rem;
   }
 }

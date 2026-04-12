@@ -27,7 +27,7 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 600;
   background: #8b5cf6;
   color: #fff;
@@ -58,7 +58,7 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-xs);
   font-weight: 500;
   background: transparent;
   color: #6b7280;
@@ -98,7 +98,7 @@
   padding: 4px 10px;
   border-radius: 6px;
   border: none;
-  font-size: 12px;
+  font-size: var(--text-xs);
   cursor: pointer;
   transition: opacity 0.15s;
 }
@@ -124,7 +124,7 @@
   background: transparent;
   color: #6b7280;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-xs);
   transition: background 0.15s, border-color 0.15s;
 }
 .so-rerun-btn:hover:not(:disabled) {
