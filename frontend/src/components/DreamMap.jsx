@@ -1,167 +1,108 @@
 /**
- * DreamMap.jsx — Interactive LalaVerse Map
+ * DreamMap.jsx — Interactive LalaVerse World Map
  *
- * 5 cities positioned to spell D·R·E·A·M
- * Each city zone shows venue pins with scene set thumbnails.
- * Pan/zoom via mouse wheel + drag. Click venue → detail panel.
+ * Rendered world map image with interactive city zone hotspots.
+ * Pan/zoom via mouse wheel + drag. Click zones → location details.
  *
  * Props:
- *   locations    — array of WorldLocation objects (with sceneSets, events, childLocations)
- *   profiles     — array of { city, count } for feed profile distribution
- *   onSelectLocation(loc) — callback when a venue pin is clicked
- *   lalaPosition — { locationId } for Lala's current story position
+ *   locations       — array of WorldLocation objects (with sceneSets, events)
+ *   profiles        — array of { city, count } for feed profile distribution
+ *   onSelectLocation(loc) — callback when a location pin is clicked
+ *   lalaPosition    — { locationId } for Lala's current position
+ *   mapImageUrl     — custom map image URL (optional, falls back to default)
  */
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 
-// ── DREAM City Definitions ──────────────────────────────────────────────────
+// ── DREAM City Zone Definitions ─────────────────────────────────────────────
+// Positions are % of the map image (x%, y%) for each city zone center
 const DREAM_CITIES = [
   {
-    letter: 'D', key: 'dazzle_district', name: 'Dazzle District',
+    key: 'dazzle_district', letter: 'D', name: 'Dazzle District',
     subtitle: 'Fashion & Luxury', icon: '👗',
-    color: '#d4789a', lightColor: '#fdf2f6',
-    culture: 'Couture houses, runway shows, designer studios. Every sidewalk is a runway.',
-    x: 0, y: 0,
+    color: '#d4789a', glow: 'rgba(212,120,154,0.3)',
+    // Top-left area — pink blossom district with modern buildings
+    x: 18, y: 32,
+    pins: [
+      { x: 12, y: 22, label: 'Runway Quarter' },
+      { x: 22, y: 28, label: 'Boutique Row' },
+      { x: 15, y: 40, label: 'Atelier Circle' },
+      { x: 24, y: 38, label: 'Dazzle Academy' },
+    ],
   },
   {
-    letter: 'R', key: 'radiance_row', name: 'Radiance Row',
+    key: 'radiance_row', letter: 'R', name: 'Radiance Row',
     subtitle: 'Beauty & Wellness', icon: '✨',
-    color: '#a889c8', lightColor: '#f6f0fc',
-    culture: 'Skincare labs, salons, beauty schools. Reinvention is the local religion.',
-    x: 220, y: 0,
+    color: '#a889c8', glow: 'rgba(168,137,200,0.3)',
+    // Center-left — the glowing purple tower area
+    x: 42, y: 25,
+    pins: [
+      { x: 38, y: 18, label: 'Salon Strip' },
+      { x: 45, y: 22, label: 'Glow Labs HQ' },
+      { x: 40, y: 32, label: 'Radiance Institute' },
+      { x: 48, y: 30, label: 'Spa Quarter' },
+    ],
   },
   {
-    letter: 'E', key: 'echo_park', name: 'Echo Park',
+    key: 'echo_park', letter: 'E', name: 'Echo Park',
     subtitle: 'Entertainment & Nightlife', icon: '🎵',
-    color: '#c9a84c', lightColor: '#fdf8ee',
-    culture: 'Music studios, comedy clubs, creator houses. Something here becomes a meme by morning.',
-    x: 440, y: 0,
+    color: '#c9a84c', glow: 'rgba(201,168,76,0.3)',
+    // Center — the main tower/entertainment complex
+    x: 52, y: 38,
+    pins: [
+      { x: 48, y: 42, label: 'Music Row' },
+      { x: 55, y: 35, label: 'Comedy Quarter' },
+      { x: 50, y: 48, label: 'Club District' },
+      { x: 58, y: 42, label: 'Nova Studios' },
+    ],
   },
   {
-    letter: 'A', key: 'ascent_tower', name: 'Ascent Tower',
+    key: 'ascent_tower', letter: 'A', name: 'Ascent Tower',
     subtitle: 'Tech & Innovation', icon: '🔮',
-    color: '#6bba9a', lightColor: '#e8f5ee',
-    culture: 'Digital platforms, creator economy tools, startups. Building the tools everyone uses.',
-    x: 660, y: 0,
+    color: '#6bba9a', glow: 'rgba(107,186,154,0.3)',
+    // Right side — the tall white tower district
+    x: 72, y: 22,
+    pins: [
+      { x: 68, y: 18, label: 'Innovation Hub' },
+      { x: 75, y: 15, label: 'Ascent Tech Institute' },
+      { x: 70, y: 28, label: 'Startup Alley' },
+      { x: 78, y: 25, label: 'Platform HQ' },
+    ],
   },
   {
-    letter: 'M', key: 'maverick_harbor', name: 'Maverick Harbor',
+    key: 'maverick_harbor', letter: 'M', name: 'Maverick Harbor',
     subtitle: 'Creator Economy & Counter-culture', icon: '⚓',
-    color: '#7ab3d4', lightColor: '#eef6fb',
-    culture: 'Content houses, podcast networks, underground scenes. Fame is suspicious here.',
-    x: 880, y: 0,
+    color: '#7ab3d4', glow: 'rgba(122,179,212,0.3)',
+    // Bottom-right — the harbor/dock area
+    x: 82, y: 55,
+    pins: [
+      { x: 78, y: 50, label: 'Creator Studios' },
+      { x: 85, y: 48, label: 'Podcast Row' },
+      { x: 80, y: 60, label: 'The Underground' },
+      { x: 88, y: 58, label: 'Harbor Docks' },
+    ],
   },
 ];
 
-// ── Letter path data for each DREAM letter ──────────────────────────────────
-// Each letter is drawn as a stylized zone shape (simplified SVG paths)
-const LETTER_PATHS = {
-  D: 'M 20 10 L 20 150 L 80 150 Q 160 150 160 80 Q 160 10 80 10 Z',
-  R: 'M 20 10 L 20 150 M 20 10 L 100 10 Q 140 10 140 45 Q 140 80 100 80 L 20 80 M 80 80 L 140 150',
-  E: 'M 120 10 L 20 10 L 20 80 L 100 80 M 20 80 L 20 150 L 120 150',
-  A: 'M 10 150 L 80 10 L 150 150 M 45 80 L 115 80',
-  M: 'M 20 150 L 20 10 L 80 80 L 140 10 L 140 150',
-};
-
-// ── Venue pin positions within each letter zone ─────────────────────────────
-// Positions are relative to the letter zone's origin
-function getVenuePinsForLetter(letter) {
-  const pins = {
-    D: [
-      { x: 50, y: 40, label: 'Runway Quarter' },
-      { x: 90, y: 80, label: 'Boutique Row' },
-      { x: 60, y: 120, label: 'Atelier Circle' },
-      { x: 110, y: 50, label: 'Design Studios' },
-    ],
-    R: [
-      { x: 50, y: 30, label: 'Salon Strip' },
-      { x: 100, y: 45, label: 'Glow Labs' },
-      { x: 40, y: 80, label: 'Beauty Schools' },
-      { x: 90, y: 120, label: 'Spa Quarter' },
-    ],
-    E: [
-      { x: 50, y: 30, label: 'Music Row' },
-      { x: 80, y: 75, label: 'Comedy Quarter' },
-      { x: 40, y: 120, label: 'Club District' },
-      { x: 100, y: 130, label: 'Neon Strip' },
-    ],
-    A: [
-      { x: 80, y: 30, label: 'Innovation Hub' },
-      { x: 45, y: 80, label: 'Startup Alley' },
-      { x: 115, y: 80, label: 'Platform HQ' },
-      { x: 80, y: 130, label: 'Incubator Row' },
-    ],
-    M: [
-      { x: 30, y: 40, label: 'Creator Studios' },
-      { x: 80, y: 60, label: 'Collab Space' },
-      { x: 130, y: 40, label: 'Podcast Row' },
-      { x: 50, y: 120, label: 'Underground' },
-      { x: 110, y: 120, label: 'Harbor Docks' },
-    ],
-  };
-  return pins[letter] || [];
-}
-
-// ── Styles ──────────────────────────────────────────────────────────────────
-const S = {
-  container: {
-    position: 'relative',
-    width: '100%',
-    height: 520,
-    background: '#FAF7F0',
-    borderRadius: 12,
-    border: '1px solid #e8e0d0',
-    overflow: 'hidden',
-    cursor: 'grab',
-    userSelect: 'none',
-  },
-  header: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-    padding: '12px 16px',
-    background: 'linear-gradient(180deg, rgba(250,247,240,0.95) 0%, rgba(250,247,240,0) 100%)',
-    zIndex: 10, pointerEvents: 'none',
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  },
-  controls: {
-    position: 'absolute', bottom: 12, right: 12,
-    display: 'flex', gap: 4, zIndex: 10,
-  },
-  controlBtn: {
-    width: 32, height: 32, borderRadius: 8,
-    background: '#fff', border: '1px solid #e8e0d0',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', fontSize: 16, color: '#2C2C2C',
-  },
-  legend: {
-    position: 'absolute', bottom: 12, left: 12,
-    display: 'flex', gap: 8, zIndex: 10,
-    background: 'rgba(255,255,255,0.9)', borderRadius: 8,
-    padding: '6px 10px', border: '1px solid #e8e0d0',
-  },
-  legendItem: {
-    display: 'flex', alignItems: 'center', gap: 4,
-    fontSize: 10, fontFamily: "'DM Mono', monospace", color: '#666',
-  },
-  tooltip: {
-    position: 'absolute', zIndex: 20,
-    background: '#fff', borderRadius: 10,
-    padding: 14, boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-    border: '1px solid #e8e0d0', maxWidth: 280,
-    pointerEvents: 'auto',
-  },
-};
+// Default map — gradient placeholder until real image is uploaded
+const DEFAULT_MAP_GRADIENT = `linear-gradient(135deg,
+  #e8d5b7 0%, #c4a87c 15%, #8fb8d4 30%,
+  #7a9cb8 45%, #9b8ec4 55%, #c4a87c 70%,
+  #8fb8d4 85%, #6a9bb5 100%)`;
 
 export default function DreamMap({
   locations = [],
   profiles = [],
   onSelectLocation,
   lalaPosition,
+  mapImageUrl,
 }) {
   const containerRef = useRef(null);
-  const [transform, setTransform] = useState({ x: 40, y: 60, scale: 1 });
+  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [hoveredCity, setHoveredCity] = useState(null);
   const [hoveredPin, setHoveredPin] = useState(null);
-  const [selectedCity, setSelectedCity] = useState(null);
+  const [activeCity, setActiveCity] = useState(null);
 
   // Group locations by city
   const locationsByCity = useMemo(() => {
@@ -169,61 +110,42 @@ export default function DreamMap({
     DREAM_CITIES.forEach(c => { map[c.key] = []; });
     locations.forEach(loc => {
       const cityKey = (loc.city || '').toLowerCase().replace(/ /g, '_');
-      // Match by key or by name
       const match = DREAM_CITIES.find(c =>
-        c.key === cityKey ||
-        c.name.toLowerCase() === (loc.city || '').toLowerCase()
+        c.key === cityKey || c.name.toLowerCase() === (loc.city || '').toLowerCase()
       );
       if (match) map[match.key].push(loc);
     });
     return map;
   }, [locations]);
 
-  // Profile counts by city
+  // Profile counts
   const profilesByCity = useMemo(() => {
     const map = {};
     DREAM_CITIES.forEach(c => { map[c.key] = 0; });
-    profiles.forEach(p => {
-      if (map[p.city] !== undefined) map[p.city] = p.count;
-    });
+    profiles.forEach(p => { if (map[p.city] !== undefined) map[p.city] = p.count; });
     return map;
   }, [profiles]);
 
-  // ── Pan handling ────────────────────────────────────────────────────────
-  const handleMouseDown = useCallback((e) => {
-    if (e.target.closest('[data-pin]') || e.target.closest('[data-city]')) return;
+  // ── Pan ──
+  const onMouseDown = useCallback((e) => {
+    if (e.target.closest('[data-pin]') || e.target.closest('[data-zone]')) return;
     setDragging(true);
     setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
   }, [transform]);
 
-  const handleMouseMove = useCallback((e) => {
+  const onMouseMove = useCallback((e) => {
     if (!dragging) return;
-    setTransform(prev => ({
-      ...prev,
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y,
-    }));
+    setTransform(p => ({ ...p, x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }));
   }, [dragging, dragStart]);
 
-  const handleMouseUp = useCallback(() => {
-    setDragging(false);
-  }, []);
+  const onMouseUp = useCallback(() => setDragging(false), []);
 
-  // ── Zoom handling ───────────────────────────────────────────────────────
+  // ── Zoom ──
   const handleWheel = useCallback((e) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setTransform(prev => ({
-      ...prev,
-      scale: Math.max(0.3, Math.min(3, prev.scale + delta)),
-    }));
+    setTransform(p => ({ ...p, scale: Math.max(0.5, Math.min(4, p.scale + (e.deltaY > 0 ? -0.1 : 0.1))) }));
   }, []);
 
-  const zoomIn = () => setTransform(prev => ({ ...prev, scale: Math.min(3, prev.scale + 0.2) }));
-  const zoomOut = () => setTransform(prev => ({ ...prev, scale: Math.max(0.3, prev.scale - 0.2) }));
-  const resetView = () => setTransform({ x: 40, y: 60, scale: 1 });
-
-  // Attach wheel listener with passive: false
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -231,305 +153,412 @@ export default function DreamMap({
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
+  const zoomIn = () => setTransform(p => ({ ...p, scale: Math.min(4, p.scale + 0.3) }));
+  const zoomOut = () => setTransform(p => ({ ...p, scale: Math.max(0.5, p.scale - 0.3) }));
+  const resetView = () => setTransform({ x: 0, y: 0, scale: 1 });
+
   return (
-    <div
-      ref={containerRef}
-      style={{ ...S.container, cursor: dragging ? 'grabbing' : 'grab' }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    >
-      {/* Header overlay */}
-      <div style={S.header}>
-        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, color: '#B8962E', letterSpacing: 2 }}>
-          THE LALAVERSE
-        </span>
-        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: '#999' }}>
-          {locations.length} locations · {profiles.reduce((s, p) => s + p.count, 0)} creators
-        </span>
-      </div>
-
-      {/* Zoom controls */}
-      <div style={S.controls}>
-        <button style={S.controlBtn} onClick={zoomIn} title="Zoom in">+</button>
-        <button style={S.controlBtn} onClick={zoomOut} title="Zoom out">-</button>
-        <button style={{ ...S.controlBtn, fontSize: 12 }} onClick={resetView} title="Reset">
-          <span style={{ fontFamily: "'DM Mono', monospace" }}>1:1</span>
-        </button>
-      </div>
-
-      {/* Legend */}
-      <div style={S.legend}>
-        <div style={S.legendItem}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#B8962E' }} />
-          <span>Venue</span>
-        </div>
-        <div style={S.legendItem}>
-          <div style={{ width: 8, height: 8, borderRadius: 2, background: '#7ab3d4' }} />
-          <span>Scene Set</span>
-        </div>
-        <div style={S.legendItem}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#d4789a', border: '2px solid #fff', boxShadow: '0 0 0 1px #d4789a' }} />
-          <span>Lala</span>
-        </div>
-      </div>
-
-      {/* Map canvas */}
-      <svg
+    <div style={{ position: 'relative' }}>
+      {/* Map container */}
+      <div
+        ref={containerRef}
         style={{
-          width: '100%', height: '100%',
-          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-          transformOrigin: '0 0',
-          transition: dragging ? 'none' : 'transform 0.15s ease-out',
+          position: 'relative', width: '100%', height: 560,
+          borderRadius: 12, overflow: 'hidden',
+          border: '1px solid #e8e0d0',
+          cursor: dragging ? 'grabbing' : 'grab',
+          userSelect: 'none',
+          background: '#1a2a3a',
         }}
-        viewBox="0 0 1100 200"
-        preserveAspectRatio="xMidYMid meet"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
       >
-        {/* Connection lines between cities */}
-        {DREAM_CITIES.slice(0, -1).map((city, i) => {
-          const next = DREAM_CITIES[i + 1];
-          return (
-            <line
-              key={`conn-${i}`}
-              x1={city.x + 80} y1={85}
-              x2={next.x + 80} y2={85}
-              stroke="#e8e0d0" strokeWidth={1.5} strokeDasharray="6 4"
-            />
-          );
-        })}
-
-        {/* City zones */}
-        {DREAM_CITIES.map((city) => {
-          const cityLocs = locationsByCity[city.key] || [];
-          const profileCount = profilesByCity[city.key] || 0;
-          const isSelected = selectedCity === city.key;
-          const venuePins = getVenuePinsForLetter(city.letter);
-
-          return (
-            <g key={city.key} transform={`translate(${city.x}, ${city.y})`}>
-              {/* Letter background shape */}
-              <path
-                d={LETTER_PATHS[city.letter]}
-                fill={isSelected ? city.color + '20' : city.lightColor}
-                stroke={city.color}
-                strokeWidth={isSelected ? 2.5 : 1.5}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                style={{ cursor: 'pointer', transition: 'all 0.2s' }}
-                data-city={city.key}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedCity(isSelected ? null : city.key);
-                }}
-              />
-
-              {/* City label */}
-              <text
-                x={80} y={175}
-                textAnchor="middle"
-                style={{
-                  fontSize: 11, fontWeight: 700,
-                  fontFamily: "'DM Mono', monospace",
-                  fill: city.color, cursor: 'pointer',
-                }}
-                data-city={city.key}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedCity(isSelected ? null : city.key);
-                }}
-              >
-                {city.name}
-              </text>
-              <text x={80} y={188} textAnchor="middle" style={{ fontSize: 8, fill: '#999', fontFamily: "'DM Mono', monospace" }}>
-                {city.subtitle}
-              </text>
-
-              {/* Stats badges */}
-              <g transform="translate(40, 195)">
-                {cityLocs.length > 0 && (
-                  <g>
-                    <rect x={0} y={0} width={36} height={14} rx={4} fill={city.color + '15'} />
-                    <text x={18} y={10} textAnchor="middle" style={{ fontSize: 8, fill: city.color, fontWeight: 600, fontFamily: "'DM Mono', monospace" }}>
-                      {cityLocs.length} loc
-                    </text>
-                  </g>
-                )}
-                {profileCount > 0 && (
-                  <g transform={`translate(${cityLocs.length > 0 ? 40 : 0}, 0)`}>
-                    <rect x={0} y={0} width={30} height={14} rx={4} fill={city.color + '15'} />
-                    <text x={15} y={10} textAnchor="middle" style={{ fontSize: 8, fill: city.color, fontWeight: 600, fontFamily: "'DM Mono', monospace" }}>
-                      {profileCount}
-                    </text>
-                  </g>
-                )}
-              </g>
-
-              {/* Venue pins inside letter shape */}
-              {venuePins.map((pin, pi) => {
-                // Match to actual location if one exists
-                const matchedLoc = cityLocs[pi] || null;
-                const hasSceneSet = matchedLoc?.sceneSets?.length > 0;
-                const isLalaHere = lalaPosition?.locationId && matchedLoc?.id === lalaPosition.locationId;
-                const pinId = `${city.key}-${pi}`;
-
-                return (
-                  <g
-                    key={pi}
-                    transform={`translate(${pin.x}, ${pin.y})`}
-                    data-pin={pinId}
-                    style={{ cursor: 'pointer' }}
-                    onMouseEnter={() => setHoveredPin({ ...pin, city, matchedLoc, pinId, screenX: city.x + pin.x, screenY: city.y + pin.y })}
-                    onMouseLeave={() => setHoveredPin(null)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (matchedLoc && onSelectLocation) onSelectLocation(matchedLoc);
-                    }}
-                  >
-                    {/* Scene set indicator (square behind pin) */}
-                    {hasSceneSet && (
-                      <rect x={-6} y={-6} width={12} height={12} rx={2}
-                        fill="#7ab3d4" opacity={0.3} />
-                    )}
-
-                    {/* Pin dot */}
-                    <circle r={matchedLoc ? 5 : 3}
-                      fill={matchedLoc ? city.color : city.color + '40'}
-                      stroke="#fff" strokeWidth={1.5}
-                    />
-
-                    {/* Lala marker */}
-                    {isLalaHere && (
-                      <>
-                        <circle r={9} fill="none" stroke="#d4789a" strokeWidth={1.5}
-                          strokeDasharray="3 2">
-                          <animate attributeName="r" from="8" to="14" dur="1.5s" repeatCount="indefinite" />
-                          <animate attributeName="opacity" from="1" to="0" dur="1.5s" repeatCount="indefinite" />
-                        </circle>
-                        <text y={-12} textAnchor="middle" style={{ fontSize: 8, fill: '#d4789a', fontWeight: 700 }}>LALA</text>
-                      </>
-                    )}
-
-                    {/* Pin label (only when zoomed in enough or city selected) */}
-                    {(isSelected || transform.scale > 1.3) && (
-                      <text x={8} y={3}
-                        style={{ fontSize: 7, fill: '#666', fontFamily: "'DM Mono', monospace" }}>
-                        {matchedLoc?.name || pin.label}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-
-              {/* Extra location pins for locations beyond the default pin count */}
-              {cityLocs.slice(venuePins.length).map((loc, i) => {
-                const angle = ((i + venuePins.length) / (cityLocs.length)) * Math.PI * 2;
-                const px = 80 + Math.cos(angle) * 50;
-                const py = 80 + Math.sin(angle) * 40;
-                return (
-                  <circle
-                    key={`extra-${i}`}
-                    cx={px} cy={py} r={3}
-                    fill={city.color + '60'}
-                    stroke="#fff" strokeWidth={1}
-                    style={{ cursor: 'pointer' }}
-                    data-pin={`${city.key}-extra-${i}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onSelectLocation) onSelectLocation(loc);
-                    }}
-                  />
-                );
-              })}
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* Hover tooltip */}
-      {hoveredPin && (
+        {/* Map image layer */}
         <div style={{
-          ...S.tooltip,
-          left: Math.min(
-            (hoveredPin.screenX * transform.scale + transform.x + 20),
-            (containerRef.current?.clientWidth || 800) - 290
-          ),
-          top: Math.min(
-            (hoveredPin.screenY * transform.scale + transform.y - 10),
-            (containerRef.current?.clientHeight || 500) - 180
-          ),
+          position: 'absolute', inset: 0,
+          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+          transformOrigin: 'center center',
+          transition: dragging ? 'none' : 'transform 0.15s ease-out',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <span style={{ fontSize: 14 }}>{hoveredPin.city.icon}</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C' }}>
-                {hoveredPin.matchedLoc?.name || hoveredPin.label}
-              </div>
-              <div style={{ fontSize: 10, color: hoveredPin.city.color, fontFamily: "'DM Mono', monospace" }}>
-                {hoveredPin.city.name}
+          {mapImageUrl ? (
+            <img
+              src={mapImageUrl}
+              alt="LalaVerse DREAM Map"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+              draggable={false}
+            />
+          ) : (
+            <div style={{
+              width: '100%', height: '100%',
+              background: DEFAULT_MAP_GRADIENT,
+              position: 'relative',
+            }}>
+              {/* Water texture overlay */}
+              <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 70% 60%, rgba(100,160,200,0.4) 0%, transparent 60%)' }} />
+              <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 20% 70%, rgba(100,160,200,0.3) 0%, transparent 50%)' }} />
+              {/* Land masses */}
+              <div style={{ position: 'absolute', left: '5%', top: '15%', width: '35%', height: '55%', background: 'radial-gradient(ellipse, rgba(200,180,140,0.6) 0%, rgba(180,160,120,0.3) 60%, transparent 80%)', borderRadius: '40%' }} />
+              <div style={{ position: 'absolute', left: '35%', top: '10%', width: '40%', height: '50%', background: 'radial-gradient(ellipse, rgba(190,170,130,0.5) 0%, rgba(170,150,110,0.3) 60%, transparent 80%)', borderRadius: '30%' }} />
+              <div style={{ position: 'absolute', left: '60%', top: '20%', width: '35%', height: '60%', background: 'radial-gradient(ellipse, rgba(180,200,160,0.4) 0%, rgba(160,180,140,0.2) 60%, transparent 80%)', borderRadius: '35%' }} />
+              {/* Upload prompt */}
+              <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.5)', borderRadius: 8, padding: '8px 16px', color: '#fff', fontSize: 11, fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>
+                Upload a custom map image in Settings
               </div>
             </div>
-          </div>
-
-          {hoveredPin.matchedLoc ? (
-            <>
-              {hoveredPin.matchedLoc.description && (
-                <p style={{ fontSize: 11, color: '#666', margin: '4px 0 8px', lineHeight: 1.4 }}>
-                  {hoveredPin.matchedLoc.description.slice(0, 120)}{hoveredPin.matchedLoc.description.length > 120 ? '...' : ''}
-                </p>
-              )}
-
-              {/* Scene set thumbnails */}
-              {hoveredPin.matchedLoc.sceneSets?.length > 0 && (
-                <div style={{ marginTop: 6 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 4 }}>
-                    SCENE SETS ({hoveredPin.matchedLoc.sceneSets.length})
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, overflow: 'hidden' }}>
-                    {hoveredPin.matchedLoc.sceneSets.slice(0, 3).map(ss => (
-                      <div key={ss.id} style={{ width: 56, flexShrink: 0 }}>
-                        {ss.base_still_url ? (
-                          <img src={ss.base_still_url} alt={ss.name}
-                            style={{ width: 56, height: 36, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee' }} />
-                        ) : (
-                          <div style={{ width: 56, height: 36, borderRadius: 4, background: '#f0eee8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#aaa' }}>
-                            No img
-                          </div>
-                        )}
-                        <div style={{ fontSize: 8, color: '#888', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {ss.name}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Events at location */}
-              {hoveredPin.matchedLoc.events?.length > 0 && (
-                <div style={{ marginTop: 6 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
-                    EVENTS ({hoveredPin.matchedLoc.events.length})
-                  </div>
-                  {hoveredPin.matchedLoc.events.slice(0, 2).map(ev => (
-                    <div key={ev.id} style={{ fontSize: 10, color: '#666', marginTop: 2 }}>
-                      {ev.name} · <span style={{ color: '#999' }}>{ev.event_type}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ fontSize: 9, color: '#B8962E', marginTop: 8, fontFamily: "'DM Mono', monospace", fontWeight: 600 }}>
-                Click to view details
-              </div>
-            </>
-          ) : (
-            <p style={{ fontSize: 11, color: '#999', margin: '4px 0 0' }}>
-              No location created yet — add one in the Locations tab
-            </p>
           )}
+
+          {/* City zone hotspots */}
+          {DREAM_CITIES.map(city => {
+            const cityLocs = locationsByCity[city.key] || [];
+            const profCount = profilesByCity[city.key] || 0;
+            const isActive = activeCity === city.key;
+            const isHovered = hoveredCity === city.key;
+
+            return (
+              <div key={city.key}>
+                {/* City zone circle */}
+                <div
+                  data-zone={city.key}
+                  style={{
+                    position: 'absolute',
+                    left: `${city.x}%`, top: `${city.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                    width: isActive ? 140 : 100, height: isActive ? 140 : 100,
+                    borderRadius: '50%',
+                    background: isActive ? city.glow : isHovered ? city.glow : 'rgba(255,255,255,0.08)',
+                    border: `2px solid ${isActive ? city.color : isHovered ? city.color + '80' : 'rgba(255,255,255,0.15)'}`,
+                    cursor: 'pointer',
+                    transition: 'all 0.25s ease',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    backdropFilter: 'blur(4px)',
+                    zIndex: isActive ? 5 : 2,
+                  }}
+                  onMouseEnter={() => setHoveredCity(city.key)}
+                  onMouseLeave={() => setHoveredCity(null)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveCity(isActive ? null : city.key);
+                  }}
+                >
+                  <span style={{ fontSize: isActive ? 22 : 18 }}>{city.icon}</span>
+                  <span style={{
+                    fontSize: 18, fontWeight: 900, color: '#fff',
+                    fontFamily: "'DM Mono', monospace",
+                    textShadow: `0 0 12px ${city.color}, 0 2px 4px rgba(0,0,0,0.5)`,
+                    lineHeight: 1,
+                  }}>{city.letter}</span>
+                  <span style={{
+                    fontSize: 8, fontWeight: 700, color: '#fff',
+                    textShadow: '0 1px 3px rgba(0,0,0,0.7)',
+                    fontFamily: "'DM Mono', monospace",
+                    letterSpacing: 0.5, marginTop: 2,
+                    opacity: isActive || isHovered ? 1 : 0.7,
+                  }}>{city.name.toUpperCase()}</span>
+
+                  {/* Stats badges */}
+                  <div style={{ display: 'flex', gap: 3, marginTop: 4 }}>
+                    {cityLocs.length > 0 && (
+                      <span style={{ fontSize: 7, padding: '1px 4px', background: 'rgba(0,0,0,0.5)', color: '#fff', borderRadius: 3, fontWeight: 600 }}>
+                        {cityLocs.length} loc
+                      </span>
+                    )}
+                    {profCount > 0 && (
+                      <span style={{ fontSize: 7, padding: '1px 4px', background: 'rgba(0,0,0,0.5)', color: city.color, borderRadius: 3, fontWeight: 600 }}>
+                        {profCount} creators
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Location pins — shown when city is active */}
+                {isActive && city.pins.map((pin, pi) => {
+                  const matchedLoc = cityLocs[pi] || null;
+                  const hasSceneSet = matchedLoc?.sceneSets?.length > 0;
+                  const isLalaHere = lalaPosition?.locationId && matchedLoc?.id === lalaPosition.locationId;
+                  const isPinHovered = hoveredPin === `${city.key}-${pi}`;
+
+                  return (
+                    <div
+                      key={pi}
+                      data-pin={`${city.key}-${pi}`}
+                      style={{
+                        position: 'absolute',
+                        left: `${pin.x}%`, top: `${pin.y}%`,
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: isPinHovered ? 10 : 3,
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={() => setHoveredPin(`${city.key}-${pi}`)}
+                      onMouseLeave={() => setHoveredPin(null)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (matchedLoc && onSelectLocation) onSelectLocation(matchedLoc);
+                      }}
+                    >
+                      {/* Pin marker */}
+                      <div style={{
+                        width: matchedLoc ? 14 : 10,
+                        height: matchedLoc ? 14 : 10,
+                        borderRadius: hasSceneSet ? 3 : '50%',
+                        background: matchedLoc ? city.color : city.color + '60',
+                        border: '2px solid #fff',
+                        boxShadow: `0 0 8px ${city.glow}, 0 2px 6px rgba(0,0,0,0.3)`,
+                        transition: 'all 0.15s',
+                        transform: isPinHovered ? 'scale(1.4)' : 'scale(1)',
+                      }} />
+
+                      {/* Lala pulse */}
+                      {isLalaHere && (
+                        <div style={{
+                          position: 'absolute', top: -6, left: -6,
+                          width: 26, height: 26, borderRadius: '50%',
+                          border: '2px solid #d4789a',
+                          animation: 'dreamMapPulse 1.5s infinite',
+                        }} />
+                      )}
+
+                      {/* Pin label */}
+                      <div style={{
+                        position: 'absolute', top: '100%', left: '50%',
+                        transform: 'translateX(-50%)',
+                        marginTop: 4, whiteSpace: 'nowrap',
+                        fontSize: 8, fontWeight: 600, color: '#fff',
+                        fontFamily: "'DM Mono', monospace",
+                        textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+                        opacity: isPinHovered ? 1 : 0.8,
+                      }}>
+                        {matchedLoc?.name || pin.label}
+                      </div>
+
+                      {/* Scene set thumbnail on hover */}
+                      {isPinHovered && matchedLoc?.sceneSets?.length > 0 && (
+                        <div style={{
+                          position: 'absolute', bottom: '100%', left: '50%',
+                          transform: 'translateX(-50%)',
+                          marginBottom: 8, display: 'flex', gap: 3,
+                          background: 'rgba(0,0,0,0.8)', borderRadius: 6,
+                          padding: 4, border: `1px solid ${city.color}40`,
+                        }}>
+                          {matchedLoc.sceneSets.slice(0, 2).map(ss => (
+                            <div key={ss.id}>
+                              {ss.base_still_url ? (
+                                <img src={ss.base_still_url} alt={ss.name}
+                                  style={{ width: 48, height: 32, objectFit: 'cover', borderRadius: 3 }} />
+                              ) : (
+                                <div style={{ width: 48, height: 32, borderRadius: 3, background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: '#666' }}>
+                                  No img
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Extra location pins beyond defaults */}
+                {isActive && cityLocs.slice(city.pins.length).map((loc, i) => {
+                  const angle = ((i + city.pins.length) / Math.max(cityLocs.length, 1)) * Math.PI * 2;
+                  const px = city.x + Math.cos(angle) * 8;
+                  const py = city.y + Math.sin(angle) * 6;
+                  return (
+                    <div
+                      key={`extra-${i}`}
+                      data-pin={`${city.key}-extra-${i}`}
+                      style={{
+                        position: 'absolute',
+                        left: `${px}%`, top: `${py}%`,
+                        transform: 'translate(-50%, -50%)',
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: city.color + '80',
+                        border: '1.5px solid #fff',
+                        cursor: 'pointer', zIndex: 3,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onSelectLocation) onSelectLocation(loc);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
-      )}
+
+        {/* Header overlay */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          padding: '12px 16px',
+          background: 'linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%)',
+          zIndex: 10, pointerEvents: 'none',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 700, color: '#B8962E', letterSpacing: 3 }}>
+              THE LALAVERSE
+            </div>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+              {locations.length} locations · {profiles.reduce((s, p) => s + p.count, 0)} creators · 5 cities
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 3 }}>
+            {DREAM_CITIES.map(c => (
+              <span key={c.key} style={{
+                fontSize: 16, fontWeight: 900, color: c.color,
+                fontFamily: "'DM Mono', monospace",
+                textShadow: `0 0 8px ${c.glow}`,
+                opacity: activeCity === c.key ? 1 : 0.5,
+              }}>{c.letter}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Zoom controls */}
+        <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 4, zIndex: 10 }}>
+          {[
+            { label: '+', fn: zoomIn },
+            { label: '−', fn: zoomOut },
+            { label: '1:1', fn: resetView },
+          ].map(b => (
+            <button key={b.label} onClick={b.fn} style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)',
+              color: '#fff', fontSize: b.label === '1:1' ? 10 : 16,
+              fontFamily: "'DM Mono', monospace",
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', backdropFilter: 'blur(4px)',
+            }}>{b.label}</button>
+          ))}
+        </div>
+
+        {/* Legend */}
+        <div style={{
+          position: 'absolute', bottom: 12, left: 12, zIndex: 10,
+          display: 'flex', gap: 10,
+          background: 'rgba(0,0,0,0.6)', borderRadius: 8,
+          padding: '6px 12px', backdropFilter: 'blur(4px)',
+          border: '1px solid rgba(255,255,255,0.1)',
+        }}>
+          {[
+            { shape: 'circle', color: '#B8962E', label: 'Venue' },
+            { shape: 'square', color: '#7ab3d4', label: 'Scene Set' },
+            { shape: 'pulse', color: '#d4789a', label: 'Lala' },
+          ].map(l => (
+            <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: "'DM Mono', monospace" }}>
+              <div style={{
+                width: 8, height: 8,
+                borderRadius: l.shape === 'square' ? 2 : '50%',
+                background: l.color,
+                boxShadow: l.shape === 'pulse' ? `0 0 6px ${l.color}` : 'none',
+              }} />
+              {l.label}
+            </div>
+          ))}
+        </div>
+
+        {/* City sidebar — shown when a city is active */}
+        {activeCity && (() => {
+          const city = DREAM_CITIES.find(c => c.key === activeCity);
+          const cityLocs = locationsByCity[activeCity] || [];
+          const profCount = profilesByCity[activeCity] || 0;
+          return (
+            <div style={{
+              position: 'absolute', top: 0, right: 0, bottom: 0, width: 280,
+              background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
+              borderLeft: `2px solid ${city.color}40`,
+              zIndex: 15, overflowY: 'auto',
+              padding: 16,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: city.color, fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+                    {city.icon} {city.letter} — {city.subtitle.toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginTop: 2 }}>
+                    {city.name}
+                  </div>
+                </div>
+                <button onClick={() => setActiveCity(null)} style={{
+                  background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6,
+                  color: '#999', fontSize: 14, cursor: 'pointer', width: 28, height: 28,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>x</button>
+              </div>
+
+              {/* Stats */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: city.color }}>{cityLocs.length}</div>
+                  <div style={{ fontSize: 8, color: '#888', fontFamily: "'DM Mono', monospace" }}>LOCATIONS</div>
+                </div>
+                <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: 6, padding: '8px 10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: city.color }}>{profCount}</div>
+                  <div style={{ fontSize: 8, color: '#888', fontFamily: "'DM Mono', monospace" }}>CREATORS</div>
+                </div>
+              </div>
+
+              {/* Location list */}
+              {cityLocs.length > 0 ? cityLocs.map(loc => (
+                <div
+                  key={loc.id}
+                  onClick={() => onSelectLocation && onSelectLocation(loc)}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 8, padding: 10, marginBottom: 6,
+                    cursor: 'pointer', transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{loc.name}</div>
+                  <div style={{ fontSize: 9, color: '#888' }}>
+                    {loc.location_type}{loc.venue_type ? ` · ${loc.venue_type}` : ''}
+                  </div>
+                  {loc.sceneSets?.length > 0 && (
+                    <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
+                      {loc.sceneSets.slice(0, 3).map(ss => (
+                        <div key={ss.id}>
+                          {ss.base_still_url ? (
+                            <img src={ss.base_still_url} alt={ss.name}
+                              style={{ width: 44, height: 28, objectFit: 'cover', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)' }} />
+                          ) : (
+                            <div style={{ width: 44, height: 28, borderRadius: 4, background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: '#555' }}>
+                              {ss.scene_type || 'set'}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {loc.events?.length > 0 && (
+                    <div style={{ fontSize: 9, color: city.color, marginTop: 4, fontWeight: 600 }}>
+                      {loc.events.length} event{loc.events.length > 1 ? 's' : ''}
+                    </div>
+                  )}
+                </div>
+              )) : (
+                <div style={{ color: '#666', fontSize: 11, textAlign: 'center', padding: 20 }}>
+                  No locations in {city.name} yet
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Pulse animation */}
+      <style>{`
+        @keyframes dreamMapPulse {
+          0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }
