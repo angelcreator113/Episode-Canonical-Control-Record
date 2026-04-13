@@ -3593,13 +3593,10 @@ router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async 
     try {
       const PageContent = models.PageContent;
       if (PageContent) {
-        const [row, created] = await PageContent.findOrCreate({
-          where: { page_name: 'world_foundation', constant_key: 'MAP_IMAGE_URL' },
-          defaults: { data: url },
-        });
-        if (!created) {
-          await row.update({ data: url });
-        }
+        await PageContent.upsert(
+          { page_name: 'world_foundation', constant_key: 'MAP_IMAGE_URL', data: url },
+          { conflictFields: ['page_name', 'constant_key'], returning: true }
+        );
         dbSaved = true;
       }
     } catch (dbErr) {
@@ -3646,11 +3643,10 @@ router.put('/world/map/positions', optionalAuth, async (req, res) => {
     if (!positions || typeof positions !== 'object') return res.status(400).json({ error: 'positions required' });
     const PageContent = models.PageContent;
     if (!PageContent) return res.status(500).json({ error: 'PageContent model not available' });
-    const [row, created] = await PageContent.findOrCreate({
-      where: { page_name: 'world_foundation', constant_key: 'MAP_CITY_POSITIONS' },
-      defaults: { data: positions },
-    });
-    if (!created) await row.update({ data: positions });
+    await PageContent.upsert(
+      { page_name: 'world_foundation', constant_key: 'MAP_CITY_POSITIONS', data: positions },
+      { conflictFields: ['page_name', 'constant_key'], returning: true }
+    );
     res.json({ success: true });
   } catch (err) {
     console.error('[world-map] PUT positions failed:', err);
