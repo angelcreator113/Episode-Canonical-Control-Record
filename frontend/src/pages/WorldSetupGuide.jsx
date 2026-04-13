@@ -96,14 +96,14 @@ export default function WorldSetupGuide() {
 
         // Check infrastructure
         try {
-          const r = await fetch(`${API}/page-data/world_infrastructure`);
+          const r = await fetch(`${API}/page-content/world_infrastructure`);
           const d = await r.json();
           checks.infrastructure = d?.data && Object.keys(d.data).length > 0;
         } catch { checks.infrastructure = false; }
 
         // Check influencer systems
         try {
-          const r = await fetch(`${API}/page-data/influencer_systems`);
+          const r = await fetch(`${API}/page-content/influencer_systems`);
           const d = await r.json();
           checks.influencer = d?.data && Object.keys(d.data).length > 0;
         } catch { checks.influencer = false; }
@@ -117,7 +117,7 @@ export default function WorldSetupGuide() {
 
         // Check cultural memory
         try {
-          const r = await fetch(`${API}/page-data/cultural_memory`);
+          const r = await fetch(`${API}/page-content/cultural_memory`);
           const d = await r.json();
           checks.memory = d?.data && Object.keys(d.data).length > 0;
         } catch { checks.memory = false; }

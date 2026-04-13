@@ -49,17 +49,31 @@ export default function WorldDashboard() {
   const [tensionPairs, setTensionPairs] = useState([]);
   const [tensionLoading, setTensionLoading] = useState(false);
 
-  // Check setup status
+  // Check setup status — safe fetch that returns null on 404/error
+  const safeFetch = async (url) => {
+    try { const r = await fetch(url); if (!r.ok) return null; return await r.json(); }
+    catch { return null; }
+  };
+
   useEffect(() => {
     (async () => {
       const checks = {};
-      try { const r = await fetch(`${API}/page-data/world_infrastructure`); const d = await r.json(); checks.infrastructure = d?.data && Object.keys(d.data).length > 0; } catch { checks.infrastructure = false; }
-      try { const r = await fetch(`${API}/page-data/influencer_systems`); const d = await r.json(); checks.influencer = d?.data && Object.keys(d.data).length > 0; } catch { checks.influencer = false; }
-      try { const r = await fetch(`${API}/calendar/events?event_type=lalaverse_cultural`); const d = await r.json(); checks.calendar = (d.events||[]).length > 0; } catch { checks.calendar = false; }
-      try { const r = await fetch(`${API}/page-data/cultural_memory`); const d = await r.json(); checks.memory = d?.data && Object.keys(d.data).length > 0; } catch { checks.memory = false; }
-      try { const r = await fetch(`${API}/world/locations`); const d = await r.json(); checks.locations = (d.locations||[]).length > 0; } catch { checks.locations = false; }
-      try { const r = await fetch(`${API}/social-profiles?feed_layer=lalaverse&limit=1`); const d = await r.json(); checks.feed = (d.count||0) > 0; } catch { checks.feed = false; }
-      try { const r = await fetch(`${API}/shows`); const ss = await r.json(); const sid = (ss.data||[])[0]?.id; if (sid) { const er = await fetch(`${API}/world/${sid}/events?status=draft`); const ed = await er.json(); checks.events = (ed.events||[]).length > 0; } else checks.events = false; } catch { checks.events = false; }
+      const infra = await safeFetch(`${API}/page-content/world_infrastructure`);
+      checks.infrastructure = infra?.data && Object.keys(infra.data).length > 0;
+      const infl = await safeFetch(`${API}/page-content/influencer_systems`);
+      checks.influencer = infl?.data && Object.keys(infl.data).length > 0;
+      const cal = await safeFetch(`${API}/calendar/events?event_type=lalaverse_cultural`);
+      checks.calendar = (cal?.events || []).length > 0;
+      const mem = await safeFetch(`${API}/page-content/cultural_memory`);
+      checks.memory = mem?.data && Object.keys(mem.data).length > 0;
+      const loc = await safeFetch(`${API}/world/locations`);
+      checks.locations = (loc?.locations || []).length > 0;
+      const feed = await safeFetch(`${API}/social-profiles?feed_layer=lalaverse&limit=1`);
+      checks.feed = (feed?.count || 0) > 0;
+      const ss = await safeFetch(`${API}/shows`);
+      const sid = (ss?.data || [])[0]?.id;
+      if (sid) { const ev = await safeFetch(`${API}/world/${sid}/events?status=draft`); checks.events = (ev?.events || []).length > 0; }
+      else checks.events = false;
       setStatus(checks); setStatusLoading(false);
     })();
   }, []);

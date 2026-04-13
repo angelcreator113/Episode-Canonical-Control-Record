@@ -2,7 +2,7 @@
  * WorldFoundation — Map + Locations + Loop
  * Merges: WorldInfrastructure + WorldLocations
  */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 import PushToBrain from '../components/PushToBrain';
@@ -119,6 +119,30 @@ export default function WorldFoundation() {
       }).catch(() => {});
   }, []);
 
+  // Map image
+  const [mapImageUrl, setMapImageUrl] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const mapFileRef = useRef(null);
+
+  useEffect(() => {
+    fetch(`${API}/world/map`).then(r => r.json()).then(d => { if (d.url) setMapImageUrl(d.url); }).catch(() => {});
+  }, []);
+
+  const handleMapUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const r = await fetch(`${API}/world/map/upload`, { method: 'POST', body: fd });
+      const d = await r.json();
+      if (d.success && d.url) { setMapImageUrl(d.url); flash('Map image uploaded'); }
+      else flash(d.error || 'Upload failed', 'error');
+    } catch { flash('Upload failed', 'error'); }
+    finally { setUploading(false); if (mapFileRef.current) mapFileRef.current.value = ''; }
+  }, [flash]);
+
   return (
     <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
@@ -142,7 +166,16 @@ export default function WorldFoundation() {
       {/* ── MAP TAB ── */}
       {tab === 'map' && (
         <div>
-          <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} />
+          <DreamMap locations={locations} profiles={profileCounts} onSelectLocation={loc => setSelectedLoc(loc)} mapImageUrl={mapImageUrl} />
+
+          {/* Map image upload */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <input ref={mapFileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleMapUpload} style={{ display: 'none' }} />
+            <button onClick={() => mapFileRef.current?.click()} disabled={uploading} style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 6, cursor: 'pointer', color: '#666' }}>
+              {uploading ? 'Uploading...' : mapImageUrl ? 'Change Map Image' : 'Upload Map Image'}
+            </button>
+            {mapImageUrl && <span style={{ fontSize: 10, color: '#16a34a' }}>Custom map active</span>}
+          </div>
 
           {/* Selected location detail */}
           {selectedLoc && (
