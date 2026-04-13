@@ -149,10 +149,12 @@ export default function StoriesPage() {
               <span style={{ padding: '2px 8px', background: fmt.color + '15', borderRadius: 4, fontSize: 10, fontWeight: 600, color: fmt.color }}>{fmt.icon} {fmt.label}</span>
               <span style={{ padding: '2px 8px', background: '#f1f5f9', borderRadius: 4, fontSize: 10, fontWeight: 600, color: st.color }}>{st.label}</span>
               <span style={{ fontSize: 10, color: '#94a3b8' }}>{wc.toLocaleString()} words</span>
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>~{Math.max(1, Math.ceil(wc / 250))} min read</span>
               {selectedStory.pov_character && <span style={{ fontSize: 10, color: '#94a3b8' }}>POV: {selectedStory.pov_character}</span>}
+              {selectedStory.created_at && <span style={{ fontSize: 10, color: '#94a3b8' }}>Created {new Date(selectedStory.created_at).toLocaleDateString()}</span>}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
             {editing ? (
               <>
                 <button onClick={() => setEditing(false)} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
@@ -161,6 +163,18 @@ export default function StoriesPage() {
             ) : (
               <>
                 <button onClick={() => setEditing(true)} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>✏️ Edit</button>
+                <button onClick={() => {
+                  const blob = new Blob([selectedStory.content || ''], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a'); a.href = url;
+                  a.download = `${(selectedStory.title || 'story').replace(/[^a-z0-9]/gi, '-')}.txt`;
+                  a.click(); URL.revokeObjectURL(url);
+                }} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
+                  📥 Export
+                </button>
+                <button onClick={() => { navigator.clipboard.writeText(selectedStory.content || ''); showToast('Copied to clipboard'); }} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
+                  📋 Copy
+                </button>
                 {selectedStory.status !== 'published' && (
                   <button onClick={() => handlePublish(selectedStory.id)} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Publish</button>
                 )}
@@ -171,11 +185,17 @@ export default function StoriesPage() {
 
         {/* Content */}
         {editing ? (
-          <textarea value={editContent} onChange={e => setEditContent(e.target.value)} style={{
-            width: '100%', minHeight: 500, padding: 20, border: '1px solid #e2e8f0', borderRadius: 10,
-            fontSize: 15, lineHeight: 1.8, fontFamily: "'Lora', Georgia, serif", resize: 'vertical',
-            outline: 'none', boxSizing: 'border-box', color: '#1a1a2e',
-          }} />
+          <div>
+            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} style={{
+              width: '100%', minHeight: 500, padding: 20, border: '1px solid #e2e8f0', borderRadius: '10px 10px 0 0',
+              fontSize: 15, lineHeight: 1.8, fontFamily: "'Lora', Georgia, serif", resize: 'vertical',
+              outline: 'none', boxSizing: 'border-box', color: '#1a1a2e',
+            }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 10px 10px', fontSize: 10, color: '#94a3b8' }}>
+              <span>{wc.toLocaleString()} words · {editContent.length.toLocaleString()} characters · ~{Math.max(1, Math.ceil(wc / 250))} min read</span>
+              <span>{saving ? 'Saving...' : 'Editing'}</span>
+            </div>
+          </div>
         ) : (
           <div style={{
             background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '28px 32px',
