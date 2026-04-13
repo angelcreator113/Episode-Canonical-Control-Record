@@ -3588,23 +3588,11 @@ router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async 
 
     const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 
-    // Store URL in page_content for world_foundation
+    // Store URL in page_content using the model
     try {
-      // Try upsert
-      const [existing] = await sequelize.query(
-        `SELECT id FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_IMAGE_URL' LIMIT 1`,
-        { type: sequelize.QueryTypes.SELECT }
-      );
-      if (existing) {
-        await sequelize.query(
-          `UPDATE page_content SET data = :data, updated_at = NOW() WHERE id = :id`,
-          { replacements: { data: JSON.stringify(url), id: existing.id } }
-        );
-      } else {
-        await sequelize.query(
-          `INSERT INTO page_content (page_name, constant_key, data, created_at, updated_at) VALUES ('world_foundation', 'MAP_IMAGE_URL', :data, NOW(), NOW())`,
-          { replacements: { data: JSON.stringify(url) } }
-        );
+      const PageContent = models.PageContent;
+      if (PageContent) {
+        await PageContent.upsert({ page_name: 'world_foundation', constant_key: 'MAP_IMAGE_URL', data: url });
       }
     } catch (dbErr) {
       console.warn('[world-map] page_content save failed (non-blocking):', dbErr?.message);
@@ -3620,12 +3608,10 @@ router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async 
 // GET /world/map — get current map image URL
 router.get('/world/map', optionalAuth, async (req, res) => {
   try {
-    const [row] = await sequelize.query(
-      `SELECT data FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_IMAGE_URL' LIMIT 1`,
-      { type: sequelize.QueryTypes.SELECT }
-    );
-    const url = row ? JSON.parse(row.data) : null;
-    res.json({ url });
+    const PageContent = models.PageContent;
+    if (!PageContent) return res.json({ url: null });
+    const row = await PageContent.findOne({ where: { page_name: 'world_foundation', constant_key: 'MAP_IMAGE_URL' } });
+    res.json({ url: row?.data || null });
   } catch (err) {
     console.warn('[world-map] GET map failed:', err?.message);
     res.json({ url: null });
@@ -3635,11 +3621,10 @@ router.get('/world/map', optionalAuth, async (req, res) => {
 // GET /world/map/positions — get saved city positions
 router.get('/world/map/positions', optionalAuth, async (req, res) => {
   try {
-    const [row] = await sequelize.query(
-      `SELECT data FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_CITY_POSITIONS' LIMIT 1`,
-      { type: sequelize.QueryTypes.SELECT }
-    );
-    res.json({ positions: row ? JSON.parse(row.data) : {} });
+    const PageContent = models.PageContent;
+    if (!PageContent) return res.json({ positions: {} });
+    const row = await PageContent.findOne({ where: { page_name: 'world_foundation', constant_key: 'MAP_CITY_POSITIONS' } });
+    res.json({ positions: row?.data || {} });
   } catch (err) {
     console.warn('[world-map] GET positions failed:', err?.message);
     res.json({ positions: {} });
@@ -3651,17 +3636,9 @@ router.put('/world/map/positions', optionalAuth, async (req, res) => {
   try {
     const { positions } = req.body;
     if (!positions || typeof positions !== 'object') return res.status(400).json({ error: 'positions required' });
-    const data = JSON.stringify(positions);
-
-    const [existing] = await sequelize.query(
-      `SELECT id FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_CITY_POSITIONS' LIMIT 1`,
-      { type: sequelize.QueryTypes.SELECT }
-    );
-    if (existing) {
-      await sequelize.query(`UPDATE page_content SET data = :data, updated_at = NOW() WHERE id = :id`, { replacements: { data, id: existing.id } });
-    } else {
-      await sequelize.query(`INSERT INTO page_content (page_name, constant_key, data, created_at, updated_at) VALUES ('world_foundation', 'MAP_CITY_POSITIONS', :data, NOW(), NOW())`, { replacements: { data } });
-    }
+    const PageContent = models.PageContent;
+    if (!PageContent) return res.status(500).json({ error: 'PageContent model not available' });
+    await PageContent.upsert({ page_name: 'world_foundation', constant_key: 'MAP_CITY_POSITIONS', data: positions });
     res.json({ success: true });
   } catch (err) {
     console.error('[world-map] PUT positions failed:', err);
