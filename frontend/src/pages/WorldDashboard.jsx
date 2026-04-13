@@ -58,13 +58,13 @@ export default function WorldDashboard() {
   useEffect(() => {
     (async () => {
       const checks = {};
-      const infra = await safeFetch(`${API}/page-data/world_infrastructure`);
+      const infra = await safeFetch(`${API}/page-content/world_infrastructure`);
       checks.infrastructure = infra?.data && Object.keys(infra.data).length > 0;
-      const infl = await safeFetch(`${API}/page-data/influencer_systems`);
+      const infl = await safeFetch(`${API}/page-content/influencer_systems`);
       checks.influencer = infl?.data && Object.keys(infl.data).length > 0;
       const cal = await safeFetch(`${API}/calendar/events?event_type=lalaverse_cultural`);
       checks.calendar = (cal?.events || []).length > 0;
-      const mem = await safeFetch(`${API}/page-data/cultural_memory`);
+      const mem = await safeFetch(`${API}/page-content/cultural_memory`);
       checks.memory = mem?.data && Object.keys(mem.data).length > 0;
       const loc = await safeFetch(`${API}/world/locations`);
       checks.locations = (loc?.locations || []).length > 0;
