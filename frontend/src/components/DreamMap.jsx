@@ -204,7 +204,7 @@ export default function DreamMap({
               <div style={{ position: 'absolute', left: '60%', top: '20%', width: '35%', height: '60%', background: 'radial-gradient(ellipse, rgba(180,200,160,0.4) 0%, rgba(160,180,140,0.2) 60%, transparent 80%)', borderRadius: '35%' }} />
               {/* Upload prompt */}
               <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.5)', borderRadius: 8, padding: '8px 16px', color: '#fff', fontSize: 11, fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>
-                Upload a custom map image in Settings
+                Upload your rendered DREAM map below
               </div>
             </div>
           )}
